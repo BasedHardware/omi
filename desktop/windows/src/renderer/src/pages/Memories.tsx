@@ -8,10 +8,26 @@ import { useMemoryGraph } from '../hooks/useMemoryGraph'
 import { toast } from '../lib/toast'
 import { fetchAllMemories, deleteMemoriesPaced } from '../lib/memoriesBulk'
 import { isAppIndexMemory } from '../lib/memoryCleanup'
+import {
+  DATE_RANGE_LABELS,
+  SOURCE_LABELS,
+  filterMemories,
+  hasActiveFilter,
+  sourceCounts,
+  type DateRange,
+  type MemorySourceKind
+} from '../lib/memoryProvenance'
+import { FilterChip, ProvenanceLine } from '../components/memories/provenanceUi'
+import { SOURCE_ICONS } from '../components/memories/sourceIcons'
+import { KnowsBand } from '../components/memories/KnowsBand'
+import { ForgetPreviewPanel, ForgetProgressPanel } from '../components/memories/ForgetPanels'
+import { MemoryAuditDetail } from '../components/memories/MemoryAuditDetail'
 
 // Cap how many cards render at once so a multi-thousand list stays responsive;
 // selection still operates on the full (filtered) set, not just what's rendered.
 const RENDER_CAP = 400
+
+const DATE_RANGES: DateRange[] = ['any', 'today', '7d', '30d']
 
 export function Memories(): React.JSX.Element {
   const { memories, loading, error, createMemory, refresh } = useMemories()
@@ -23,13 +39,24 @@ export function Memories(): React.JSX.Element {
   const [draft, setDraft] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // Audit filters: text, source, and date compose (lib/memoryProvenance) and
+  // apply in both the audit view and manage mode.
+  const [filter, setFilter] = useState('')
+  const [srcFilter, setSrcFilter] = useState<MemorySourceKind | 'all'>('all')
+  const [dateFilter, setDateFilter] = useState<DateRange>('any')
+
+  // Audit detail: a memory opened from a card (in-page, like a detail route).
+  const [detail, setDetail] = useState<Memory | null>(null)
+
   // Manage mode: load ALL memories, multi-select, and delete the selection.
   const [manage, setManage] = useState(false)
   const [all, setAll] = useState<Memory[] | null>(null) // full set, owned locally so deletes can drop rows
   const [loadingAll, setLoadingAll] = useState(false)
-  const [filter, setFilter] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [confirming, setConfirming] = useState(false) // consequence preview open
   const [deleting, setDeleting] = useState(false)
+  const [deleteTotal, setDeleteTotal] = useState(0)
+  const [waitSeconds, setWaitSeconds] = useState(0) // active rate-limit pause
   const [tally, setTally] = useState({ deleted: 0, failed: 0 })
   const stopRef = useRef({ stop: false }).current
 
@@ -43,7 +70,10 @@ export function Memories(): React.JSX.Element {
     if (!text || saving) return
     setSaving(true)
     try {
-      await createMemory(text)
+      // category 'manual' is the provenance stamp: the backend derives
+      // manually_added from it (createMemoryBody defaults it too — explicit
+      // here because this compose box is exactly the user-typed path).
+      await createMemory(text, { category: 'manual' })
       toast('Memory created', { tone: 'info' })
       closeCompose()
     } catch (e) {
@@ -53,30 +83,40 @@ export function Memories(): React.JSX.Element {
     }
   }
 
-  const enterManage = async (): Promise<void> => {
+  const enterManage = async (): Promise<Memory[]> => {
     setManage(true)
-    if (all === null) {
-      setLoadingAll(true)
-      try {
-        setAll(await fetchAllMemories())
-      } catch (e) {
-        toast('Could not load all memories', { tone: 'error', body: (e as Error).message })
-      } finally {
-        setLoadingAll(false)
-      }
+    if (all !== null) return all
+    setLoadingAll(true)
+    try {
+      const list = await fetchAllMemories()
+      setAll(list)
+      return list
+    } catch (e) {
+      toast('Could not load all memories', { tone: 'error', body: (e as Error).message })
+      return []
+    } finally {
+      setLoadingAll(false)
     }
   }
 
   const exitManage = (): void => {
     setManage(false)
     setSelected(new Set())
+    setConfirming(false)
     setFilter('')
+    setSrcFilter('all')
+    setDateFilter('any')
   }
 
   const source = manage ? (all ?? []) : memories
-  const q = filter.trim().toLowerCase()
-  const filtered = q ? source.filter((m) => m.content?.toLowerCase().includes(q)) : source
+  const filters = { text: filter, source: srcFilter, range: dateFilter }
+  const filtered = filterMemories(source, filters)
   const rendered = filtered.slice(0, RENDER_CAP)
+  const filterActive = hasActiveFilter(filters)
+  // Source chip counts reflect what clicking each chip would show (text + date
+  // filters applied, source not).
+  const chipCounts = sourceCounts(filterMemories(source, { text: filter, range: dateFilter }))
+  const selectedMemories = source.filter((m) => selected.has(m.id))
 
   const toggle = (id: string): void =>
     setSelected((s) => {
@@ -89,17 +129,16 @@ export function Memories(): React.JSX.Element {
   const selectJunk = (): void => setSelected(new Set(source.filter(isAppIndexMemory).map((m) => m.id)))
   const clearSel = (): void => setSelected(new Set())
 
+  // Runs after the consequence preview is confirmed — the preview replaced the
+  // old window.confirm, the paced delete machinery is unchanged.
   const deleteSelected = async (): Promise<void> => {
     const ids = [...selected]
     if (ids.length === 0 || deleting) return
-    if (
-      !window.confirm(
-        `Delete ${ids.length} selected memories? The server allows ~60 deletes/hour, so this pauses when the limit is hit (you can stop and resume anytime). This cannot be undone.`
-      )
-    )
-      return
+    setConfirming(false)
     setDeleting(true)
     stopRef.stop = false
+    setDeleteTotal(ids.length)
+    setWaitSeconds(0)
     setTally({ deleted: 0, failed: 0 })
     const res = await deleteMemoriesPaced(
       ids,
@@ -114,23 +153,68 @@ export function Memories(): React.JSX.Element {
           })
         }
       },
-      () => stopRef.stop
+      () => stopRef.stop,
+      (seconds) => setWaitSeconds(seconds)
     )
     setDeleting(false)
-    toast(`Deleted ${res.deleted} of ${ids.length}`, {
+    setWaitSeconds(0)
+    toast(`Forgot ${res.deleted} of ${ids.length}`, {
       tone: res.failed ? 'warn' : 'success',
       body: res.failed ? `${res.failed} failed${res.firstError ? ` — ${res.firstError}` : ''}.` : undefined
     })
     await refresh()
   }
 
+  // Scope escalators from the audit detail: enter manage mode with the scope
+  // pre-applied (filter-as-selection), then let the consequence preview gate
+  // the actual delete.
+  const forgetConversation = async (ids: string[]): Promise<void> => {
+    setDetail(null)
+    const list = await enterManage()
+    const known = new Set(list.map((m) => m.id))
+    setSelected(new Set(ids.filter((id) => known.has(id))))
+    setConfirming(true)
+  }
+
+  const forgetSource = async (kind: MemorySourceKind): Promise<void> => {
+    setDetail(null)
+    setSrcFilter(kind)
+    const list = await enterManage()
+    setSelected(new Set(filterMemories(list, { source: kind }).map((m) => m.id)))
+  }
+
+  const forgottenFromDetail = (id: string): void => {
+    setDetail(null)
+    setAll((prev) => (prev ? prev.filter((m) => m.id !== id) : prev))
+    void refresh()
+  }
+
+  if (detail) {
+    return (
+      <MemoryAuditDetail
+        key={detail.id}
+        memory={detail}
+        all={source}
+        onBack={() => setDetail(null)}
+        onOpenMemory={setDetail}
+        onForgotten={forgottenFromDetail}
+        onForgetConversation={(ids) => void forgetConversation(ids)}
+        onForgetSource={(kind) => void forgetSource(kind)}
+      />
+    )
+  }
+
   const headerCount = manage
     ? loadingAll
       ? 'Loading all…'
-      : `${filtered.length} shown${selected.size ? ` · ${selected.size} selected` : ''}`
+      : `Forget mode · ${filtered.length} of ${source.length} match${
+          selected.size ? ` · ${selected.size} selected` : ''
+        }`
     : loading
       ? 'Loading…'
-      : `${memories.length} memor${memories.length === 1 ? 'y' : 'ies'}`
+      : `${memories.length} memor${memories.length === 1 ? 'y' : 'ies'}${
+          filterActive ? ` · ${filtered.length} match your filter` : ''
+        }`
 
   return (
     <div className="flex h-full flex-col">
@@ -145,7 +229,7 @@ export function Memories(): React.JSX.Element {
             </button>
           ) : (
             <div className="flex items-center gap-2">
-              <button onClick={enterManage} className="btn-ghost px-3 py-2" title="Select & delete memories">
+              <button onClick={() => void enterManage()} className="btn-ghost px-3 py-2" title="Select & forget memories">
                 <CheckSquare className="h-4 w-4" />
                 Select
               </button>
@@ -158,41 +242,63 @@ export function Memories(): React.JSX.Element {
         }
       />
 
+      <div className="flex flex-wrap items-center gap-2 border-b border-white/5 px-6 py-3 lg:px-10">
+        <input
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Filter by text…"
+          className="input-field max-w-xs flex-1 py-1.5 text-sm"
+        />
+        <span className="ml-1 text-[11px] font-medium tracking-wide text-white/35">SOURCE</span>
+        <FilterChip
+          label="All"
+          count={filterMemories(source, { text: filter, range: dateFilter }).length}
+          active={srcFilter === 'all'}
+          onClick={() => setSrcFilter('all')}
+          disabled={deleting}
+        />
+        {chipCounts.map(({ kind, count }) => (
+          <FilterChip
+            key={kind}
+            label={SOURCE_LABELS[kind]}
+            icon={SOURCE_ICONS[kind]}
+            count={count}
+            active={srcFilter === kind}
+            onClick={() => setSrcFilter(srcFilter === kind ? 'all' : kind)}
+            disabled={deleting}
+          />
+        ))}
+        <span className="ml-1 text-[11px] font-medium tracking-wide text-white/35">WHEN</span>
+        {DATE_RANGES.map((range) => (
+          <FilterChip
+            key={range}
+            label={DATE_RANGE_LABELS[range]}
+            active={dateFilter === range}
+            onClick={() => setDateFilter(range)}
+            disabled={deleting}
+          />
+        ))}
+      </div>
+
       {manage && (
         <div className="flex flex-wrap items-center gap-2 border-b border-white/5 px-6 py-3 lg:px-10">
-          <input
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter by text (e.g. local projects include)…"
-            className="input-field max-w-xs flex-1 py-1.5 text-sm"
-          />
           <button onClick={selectJunk} className="btn-ghost px-3 py-1.5 text-sm" disabled={deleting}>
             Select file-index junk
           </button>
           <button onClick={selectAllFiltered} className="btn-ghost px-3 py-1.5 text-sm" disabled={deleting}>
-            Select all {q ? 'matching' : ''} ({filtered.length})
+            Select all {filterActive ? 'matching' : ''} ({filtered.length})
           </button>
           <button onClick={clearSel} className="btn-ghost px-3 py-1.5 text-sm" disabled={deleting || !selected.size}>
             Clear
           </button>
           <div className="ml-auto flex items-center gap-2">
-            {deleting && (
-              <>
-                <span className="text-sm text-text-tertiary">
-                  Deleting {tally.deleted}/{selected.size + tally.deleted}…
-                </span>
-                <button onClick={() => (stopRef.stop = true)} className="btn-ghost px-3 py-1.5 text-sm">
-                  Stop
-                </button>
-              </>
-            )}
             <button
-              onClick={deleteSelected}
+              onClick={() => setConfirming(true)}
               disabled={deleting || selected.size === 0}
               className="btn-primary px-4 py-1.5 text-sm disabled:opacity-40"
             >
               {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              Delete selected ({selected.size})
+              Forget selected ({selected.size})
             </button>
           </div>
         </div>
@@ -203,7 +309,7 @@ export function Memories(): React.JSX.Element {
           <div className="glass-subtle mb-5 px-4 py-3 text-sm text-white/60">Failed to load memories: {error}</div>
         )}
 
-        {!manage && brainGraph.nodes.length > 0 && (
+        {!manage && !filterActive && brainGraph.nodes.length > 0 && (
           <div className="mx-auto mb-6 max-w-4xl">
             {/* Flat background (no .glass backdrop-filter): layering a WebGL
                 canvas over a blurred surface forces the compositor to re-blend
@@ -219,6 +325,29 @@ export function Memories(): React.JSX.Element {
               />
             </div>
           </div>
+        )}
+
+        {!manage && !loading && (
+          <KnowsBand memories={memories} activeSource={srcFilter} onPickSource={setSrcFilter} />
+        )}
+
+        {manage && confirming && !deleting && !loadingAll && (
+          <ForgetPreviewPanel
+            selected={selectedMemories}
+            filters={filters}
+            onCancel={() => setConfirming(false)}
+            onConfirm={() => void deleteSelected()}
+          />
+        )}
+
+        {manage && deleting && (
+          <ForgetProgressPanel
+            deleted={tally.deleted}
+            failed={tally.failed}
+            total={deleteTotal}
+            waitSeconds={waitSeconds}
+            onStop={() => (stopRef.stop = true)}
+          />
         )}
 
         {composing && (
@@ -267,10 +396,9 @@ export function Memories(): React.JSX.Element {
             return (
               <li
                 key={m.id}
-                onClick={manage ? () => toggle(m.id) : undefined}
-                className={`surface-card-interactive p-5 ${manage ? 'cursor-pointer' : ''} ${
-                  isSel ? 'ring-2 ring-white/40' : ''
-                }`}
+                onClick={manage ? () => toggle(m.id) : () => setDetail(m)}
+                title={manage ? undefined : 'See where this memory came from'}
+                className={`surface-card-interactive cursor-pointer p-5 ${isSel ? 'ring-2 ring-white/40' : ''}`}
               >
                 <div className="flex items-start gap-3">
                   {manage && (
@@ -289,13 +417,7 @@ export function Memories(): React.JSX.Element {
                     {m.headline && (
                       <p className="mt-2.5 line-clamp-3 text-sm leading-relaxed text-text-tertiary">{m.content}</p>
                     )}
-                    <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-text-quaternary">
-                      <time>{new Date(m.created_at).toLocaleString()}</time>
-                      {m.category && <span className="badge text-text-tertiary">{m.category}</span>}
-                      {m.tags && m.tags.length > 0 && (
-                        <span className="truncate text-text-quaternary">{m.tags.join(' · ')}</span>
-                      )}
-                    </div>
+                    <ProvenanceLine memory={m} />
                   </div>
                 </div>
               </li>
@@ -304,8 +426,8 @@ export function Memories(): React.JSX.Element {
         </ul>
         {manage && filtered.length > RENDER_CAP && (
           <p className="mx-auto mt-4 max-w-4xl text-center text-sm text-text-tertiary">
-            Showing first {RENDER_CAP} of {filtered.length}. Selection and delete still apply to all{' '}
-            {q ? 'matching' : ''} {filtered.length}.
+            Showing first {RENDER_CAP} of {filtered.length}. Selection and forget still apply to all{' '}
+            {filterActive ? 'matching' : ''} {filtered.length}.
           </p>
         )}
       </div>

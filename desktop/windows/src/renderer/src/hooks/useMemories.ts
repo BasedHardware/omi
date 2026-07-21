@@ -1,6 +1,24 @@
 import { useEffect, useState } from 'react'
 import { omiApi } from '../lib/apiClient'
 
+// One provenance record on a memory. Written by the backend's Evidence model
+// (models/memories.py); every field below survives the legacy GET serializer
+// (memory_api_contract strips only internal + canonical-lifecycle fields).
+// Older Firestore docs predate evidence entirely, so everything is optional.
+export type MemoryEvidence = {
+  evidence_id?: string
+  source_id?: string | null
+  source_type?: string
+  source_signal?: string
+  extractor_id?: string
+  extractor_version?: string
+  capture_confidence?: number | null
+  independence_group?: string | null
+  redaction_status?: string
+  created_at?: string
+  client_device_id?: string | null
+}
+
 export type Memory = {
   id: string
   uid: string
@@ -12,6 +30,15 @@ export type Memory = {
   created_at: string
   updated_at: string
   conversation_id?: string | null
+  // Provenance fields (all served by GET /v3/memories today; optional because
+  // memories created before the evidence pipeline lack them).
+  manually_added?: boolean
+  app_id?: string | null
+  reviewed?: boolean
+  user_review?: boolean | null
+  capture_confidence?: number | null
+  uncertainty_reasons?: string[]
+  evidence?: MemoryEvidence[]
 }
 
 const cache = {
@@ -36,9 +63,24 @@ function extractList(data: unknown): Memory[] {
 }
 
 // Optional extra fields for a created memory. `tags` carries provenance (e.g.
-// 'omi-app-index'); `category` is sent best-effort — the server may ignore or
-// reassign it, so UI coloring must not depend on it.
+// 'omi-app-index'); `category` carries provenance too — see createMemoryBody.
 export type CreateMemoryExtra = { category?: string; tags?: string[] }
+
+// The POST /v3/memories body for a memory created through this hook. The
+// category defaults to 'manual', and that default is load-bearing provenance:
+// the backend honors a client-supplied category and DERIVES manually_added
+// from category === 'manual'; without it the record stores category
+// 'interesting', manually_added false, and an evidence source_signal of
+// 'transcription' (backend/routers/memories.py create_memory +
+// models/memories.py MemoryDB.from_memory) — which would make the provenance
+// UI label a user-typed memory "Heard in a conversation". Importers creating
+// non-manual memories pass their own category in `extra`.
+export function createMemoryBody(
+  content: string,
+  extra?: CreateMemoryExtra
+): { content: string } & CreateMemoryExtra {
+  return { content, ...extra, category: extra?.category ?? 'manual' }
+}
 
 // Match the server KG's build budget (it's built from up to 500 memories), so
 // the brain map can scope itself to roughly the same memory set the graph was
@@ -109,7 +151,7 @@ export function useMemories(): {
   const createMemory = async (content: string, extra?: CreateMemoryExtra): Promise<void> => {
     const text = content.trim()
     if (!text) return
-    await omiApi.post('/v3/memories', { content: text, ...extra })
+    await omiApi.post('/v3/memories', createMemoryBody(text, extra))
     publish(await fetchMemories())
   }
 
