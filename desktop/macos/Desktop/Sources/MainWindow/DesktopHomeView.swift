@@ -43,14 +43,6 @@ struct DesktopHomeView: View {
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
   @State private var highlightedSettingId: String? = nil
   @State private var showTryAskingPopup = false
-  /// Second Brain persistent ask-bar text.
-  @State private var sbAskText = ""
-  /// ⌘K command palette visibility.
-  @State private var showSBPalette = false
-  /// Second Brain settings landing (redesigned entry point) visibility.
-  @State private var sbSettingsLanding = false
-  /// Native Second Brain Account & Billing page visibility.
-  @State private var sbAccountPage = false
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
   @State private var lastActivationRefresh = Date.distantPast
@@ -436,17 +428,17 @@ struct DesktopHomeView: View {
     }
     .background(OmiColors.backgroundPrimary)
     .frame(minWidth: minimumWindowWidth, minHeight: minimumWindowHeight)
-    .withSecondBrainTheme()
+    .preferredColorScheme(.dark)
     .tint(OmiColors.accent)
     .onAppear {
-      // Register bundled Geist / Geist Mono fonts (idempotent; kept out of the
-      // frozen OmiApp.swift per the product-file line-count ratchet).
-      OmiFontRegistration.registerAll()
-      // Drive the notch "moments" (live receipts + conversation-end) off real state.
-      NotchMomentsCoordinator.shared.start(appState: appState)
       log(
         "DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)"
       )
+      // Register Geist/Geist Mono for the sign-in + conversational onboarding surfaces.
+      // (Kept out of OmiApp to respect the product-file line-count ratchet.)
+      OmiFontRegistration.registerAll()
+      // Drive the notch "moments" (live receipts + conversation-end) off real state.
+      NotchMomentsCoordinator.shared.start(appState: appState)
       // Force dark appearance and disable minSize computation on NSHostingView.
       // By default, every @Published change triggers
       // updateWindowContentSizeExtremaIfNecessary() → minSize() → sizeThatFits()
@@ -902,7 +894,6 @@ struct DesktopHomeView: View {
 
   private var mainContent: some View {
     HStack(spacing: 0) {
-      if isInSettings {
       // Sidebar slot: settings sidebar overlays main sidebar
       // IMPORTANT: SidebarView is kept alive (but hidden) when in settings to prevent
       // EXC_BAD_ACCESS crash in SwiftUI's tooltip system. When the view is conditionally
@@ -1006,11 +997,7 @@ struct DesktopHomeView: View {
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
       .padding(OmiSpacing.md)
-      } else {
-        secondBrainShell
-      }
     }
-    .onExitCommand { navigateHomeOnEscapeIfNeeded() }
     .overlay {
       // Goal completion celebration overlay
       GoalCelebrationView()
@@ -1097,12 +1084,6 @@ struct DesktopHomeView: View {
       }
       // Only auto-refresh stores when their pages are visible
       updateStoreActivity(for: newValue)
-      // Any navigation dismisses the Second Brain settings landing / account page.
-      sbSettingsLanding = false
-      sbAccountPage = false
-      // Shell tabs/overflow expose every page; enforce tier gating on navigation
-      // (the legacy sidebar filtered these; redirect keeps locked pages unreachable).
-      redirectIfPageHidden()
     }
     .onChange(of: useLegacyHomeDesign) { _, newValue in
       OmiMotion.withGated(.easeInOut(duration: 0.2)) {
@@ -1126,133 +1107,6 @@ struct DesktopHomeView: View {
     OmiMotion.withGated(Self.pageNavigationAnimation) {
       selectedIndex = SidebarNavItem.dashboard.rawValue
     }
-  }
-
-  // MARK: - Second Brain shell (non-settings content)
-
-  @ViewBuilder private var secondBrainShell: some View {
-    SecondBrainShell(
-      selectedIndex: $selectedIndex,
-      isWorking: appState.isTranscribing,
-      askText: $sbAskText,
-      onSubmitAsk: submitSBAsk,
-      onOpenChats: { selectedIndex = SidebarNavItem.chat.rawValue },
-      onVoice: { FloatingControlBarManager.shared.toggleAIInput() },
-      onOpenPalette: { showSBPalette = true },
-      onOpenSettings: {
-        sbAccountPage = false
-        sbSettingsLanding = true
-      },
-      onTabNavigate: {
-        sbSettingsLanding = false
-        sbAccountPage = false
-      }
-    ) {
-      secondBrainPageBody
-    }
-    .overlay {
-      if showSBPalette {
-        SBPalette(
-          appState: appState,
-          tasks: viewModelContainer.tasksStore,
-          onClose: { showSBPalette = false },
-          onOpenConversation: { _ in selectedIndex = SidebarNavItem.conversations.rawValue },
-          onNavigate: { idx in selectedIndex = idx }
-        )
-      }
-    }
-    .background(
-      Button("") { showSBPalette.toggle() }
-        .keyboardShortcut("k", modifiers: .command)
-        .opacity(0)
-    )
-  }
-
-  /// Today is Second-Brain-native; other content pages render inside the shell frame
-  /// (rebuilt in later phases). Settings never reaches here — it keeps its two-pane.
-  @ViewBuilder private var secondBrainPageBody: some View {
-    if sbAccountPage {
-      SBAccountPage(
-        appState: appState,
-        onBack: {
-          sbAccountPage = false
-          sbSettingsLanding = true
-        },
-        onManagePlan: { openLegacyAccount() },
-        onDelete: { openLegacyAccount() }
-      )
-    } else if sbSettingsLanding {
-      SBSettingsLanding(
-        appState: appState,
-        onOpenSection: { section in
-          selectedSettingsSection = section
-          sbSettingsLanding = false
-          selectedIndex = SidebarNavItem.settings.rawValue
-        },
-        onNavigate: { idx in
-          sbSettingsLanding = false
-          selectedIndex = idx
-        },
-        onOpenAccount: {
-          sbSettingsLanding = false
-          sbAccountPage = true
-        },
-        onReplayOnboarding: {
-          sbSettingsLanding = false
-          appState.hasCompletedOnboarding = false
-        }
-      )
-    } else if selectedIndex == SidebarNavItem.dashboard.rawValue {
-      SBTodayContainer(
-        appState: appState,
-        dashboardViewModel: viewModelContainer.dashboardViewModel,
-        onOpenConversation: { _ in selectedIndex = SidebarNavItem.conversations.rawValue },
-        onNavigate: { idx in selectedIndex = idx },
-        onAsk: askFromSecondBrain
-      )
-    } else if selectedIndex == SidebarNavItem.conversations.rawValue {
-      SBConversationsContainer(appState: appState)
-    } else if selectedIndex == SidebarNavItem.tasks.rawValue {
-      SBFollowUpsContainer(
-        onOpenSettings: { selectedIndex = SidebarNavItem.settings.rawValue }
-      )
-    } else if selectedIndex == SidebarNavItem.chat.rawValue {
-      SBAskView(chat: viewModelContainer.chatProvider)
-    } else if selectedIndex == SidebarNavItem.memories.rawValue {
-      SBMemoriesContainer(memoriesViewModel: viewModelContainer.memoriesViewModel)
-    } else if selectedIndex == SidebarNavItem.permissions.rawValue {
-      SBPermissionsPage(appState: appState)
-    } else if selectedIndex == SidebarNavItem.apps.rawValue {
-      SBAppsContainer(appProvider: viewModelContainer.appProvider)
-    } else {
-      PageContentView(
-        selectedIndex: selectedIndex,
-        appState: appState,
-        viewModelContainer: viewModelContainer,
-        selectedSettingsSection: $selectedSettingsSection,
-        highlightedSettingId: $highlightedSettingId,
-        selectedTabIndex: $selectedIndex
-      )
-    }
-  }
-
-  private func submitSBAsk() {
-    let q = sbAskText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !q.isEmpty else { return }
-    sbAskText = ""
-    askFromSecondBrain(q)
-  }
-
-  private func askFromSecondBrain(_ query: String) {
-    selectedIndex = SidebarNavItem.chat.rawValue
-    Task { _ = await viewModelContainer.chatProvider.sendMainDraft(query) }
-  }
-
-  /// Billing management + account deletion use the tested legacy account flow.
-  private func openLegacyAccount() {
-    sbAccountPage = false
-    selectedSettingsSection = .account
-    selectedIndex = SidebarNavItem.settings.rawValue
   }
 }
 
