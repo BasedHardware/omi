@@ -19,11 +19,12 @@ pub(crate) fn bounded_client(total_timeout: Duration) -> reqwest::Client {
         .connect_timeout(CONNECT_TIMEOUT)
         .timeout(total_timeout)
         .build()
-        .unwrap_or_default()
+        .expect("bounded_client: reqwest builder misconfigured")
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use std::time::Instant;
     use tokio::io::AsyncReadExt;

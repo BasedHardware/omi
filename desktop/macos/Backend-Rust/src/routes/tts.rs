@@ -14,6 +14,7 @@ use std::time::Duration;
 
 use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::byok;
+use crate::services::http::bounded_client;
 use crate::AppState;
 
 use super::rate_limit::requires_server_metering;
@@ -142,11 +143,7 @@ async fn tts_synthesize(
         response_format: "mp3",
     };
 
-    let client = reqwest::Client::builder()
-        .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(30))
-        .build()
-        .unwrap_or_default();
+    let client = bounded_client(Duration::from_secs(30));
 
     // Retry the request on transient OpenAI failures (network/429/5xx) so a brief blip
     // doesn't drop the voice reply. The client additionally falls back to the macOS
