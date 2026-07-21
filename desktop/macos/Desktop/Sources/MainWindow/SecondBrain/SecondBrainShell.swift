@@ -23,6 +23,10 @@ struct SecondBrainShell<Content: View>: View {
   var onVoice: () -> Void
   var onOpenPalette: () -> Void
   var onOpenSettings: () -> Void
+  /// Fired on every tab/overflow navigation — even when the index is unchanged — so
+  /// the host can dismiss transient overlays (settings landing / account) that a
+  /// same-tab re-tap would otherwise strand (onChange(selectedIndex) never fires).
+  var onTabNavigate: () -> Void = {}
 
   @ViewBuilder var content: () -> Content
 
@@ -192,6 +196,7 @@ struct SecondBrainShell<Content: View>: View {
   }
 
   private func navigate(to index: Int) {
+    onTabNavigate()
     withAnimation(SBMotion.standard) { selectedIndex = index }
   }
 }

@@ -64,7 +64,16 @@ final class NotchMomentsCoordinator {
     // "Omi is writing this down" moment. Backfilled loads shouldn't spam the pill.
     guard appState?.isTranscribing == true else { return }
     let newIds = currentIds.subtracting(knownTaskIds)
-    guard let newTask = tasks.first(where: { newIds.contains($0.id) }) else { return }
+    guard !newIds.isEmpty else { return }
+    // Only a task that was *just created* is a live receipt. A paginated backfill
+    // or a re-opened old task also adds an id, but its createdAt is stale — skip it
+    // so the pill only shows "✓ Noted" the instant Omi actually writes something down.
+    let freshCutoff = Date().addingTimeInterval(-120)
+    guard
+      let newTask = tasks
+        .filter({ newIds.contains($0.id) && $0.createdAt >= freshCutoff })
+        .max(by: { $0.createdAt < $1.createdAt })
+    else { return }
     lastReceiptTask = newTask
     post(
       title: "✓ Noted — \(newTask.description)", message: "",

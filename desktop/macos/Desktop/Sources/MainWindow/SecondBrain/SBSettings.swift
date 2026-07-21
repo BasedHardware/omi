@@ -41,7 +41,7 @@ struct SBSettingsLanding: View {
   private var groups: [Group] {
     [
       Group(header: "YOU", rows: [
-        Row(name: "Account & Billing", sub: "signed in · Unlimited", value: "Pro") { onOpenAccount() },
+        Row(name: "Account & Billing", sub: "your plan, usage, and data", value: "›") { onOpenAccount() },
         Row(name: "Memory", sub: "everything I know — each fact links to its source", value: "›") {
           onNavigate(SidebarNavItem.memories.rawValue)
         },

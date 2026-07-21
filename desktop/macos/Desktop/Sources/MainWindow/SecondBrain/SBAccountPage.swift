@@ -1,9 +1,11 @@
 import OmiTheme
 import SwiftUI
 
-/// Native Second Brain "Account & Billing" — coherent with the rest of the UI
-/// (no jump to the old settings). Real: name, email, sign out. Manage opens
-/// billing; Delete routes to the tested destructive flow.
+/// Native Second Brain "Account & Billing" — coherent with the rest of the UI.
+/// Real: name, email, sign out. Manage and Delete both open the legacy Account &
+/// Billing section, which holds the working plan controls and the delete-account
+/// confirmation alert (one tap away). Auto-opening the destructive alert directly
+/// is deferred to the legacy-settings blend-in work.
 struct SBAccountPage: View {
   @Environment(\.sbTheme) private var sb
   @ObservedObject var appState: AppState
@@ -45,10 +47,6 @@ struct SBAccountPage: View {
             Text("Manage").geistMono(size: 12.5).foregroundStyle(sb.ink(.w6)).underline()
           }
           .buttonStyle(.plain)
-        }
-
-        SBHairlineRow(title: "Referrals", subtitle: "give a month, get a month") {
-          Text("›").geistMono(size: 12.5).foregroundStyle(sb.ink(.w4))
         }
 
         SBHairlineRow(

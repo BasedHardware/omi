@@ -1139,7 +1139,14 @@ struct DesktopHomeView: View {
       onOpenChats: { selectedIndex = SidebarNavItem.chat.rawValue },
       onVoice: { FloatingControlBarManager.shared.toggleAIInput() },
       onOpenPalette: { showSBPalette = true },
-      onOpenSettings: { sbSettingsLanding = true }
+      onOpenSettings: {
+        sbAccountPage = false
+        sbSettingsLanding = true
+      },
+      onTabNavigate: {
+        sbSettingsLanding = false
+        sbAccountPage = false
+      }
     ) {
       secondBrainPageBody
     }

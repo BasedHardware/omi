@@ -103,7 +103,7 @@ struct SBPalette: View {
       VStack(spacing: 0) {
         HStack(spacing: 10) {
           SBLogo(size: 13, opacity: 0.6)
-          TextField("Search conversations, memories, tasks…", text: $query)
+          TextField("Search conversations, tasks, pages…", text: $query)
             .textFieldStyle(.plain).geist(size: 13.5).foregroundStyle(sb.ink)
             .focused($focused)
             .onSubmit { results.first?.go() }

@@ -146,6 +146,12 @@ struct SBAppsContainer: View {
       }
       .padding(.horizontal, 30).padding(.bottom, 24)
     }
-    .task { await appProvider.fetchEnabledApps() }
+    .task {
+      await appProvider.fetchEnabledApps()
+      // The "Installed" list falls back to the top of the catalog when nothing is
+      // enabled yet — but the catalog is only populated by fetchApps(), so cold
+      // opens would show "No apps installed yet" despite 250+ existing.
+      if appProvider.apps.isEmpty { await appProvider.fetchApps() }
+    }
   }
 }

@@ -313,6 +313,8 @@ final class SBOnboardingModel: ObservableObject {
 
   /// The wow moment: actually ask Omi the tapped question and stream the real
   /// answer into the onboarding thread — a live chat, not a canned line.
+  private var wowTimeout: Task<Void, Never>?
+
   func askWow(_ question: String) {
     guard !wowAsking else { return }
     wowAsking = true
@@ -321,13 +323,18 @@ final class SBOnboardingModel: ObservableObject {
     streamingText = nil
     thread.append(Msg(isOmi: false, text: question))
     typing = true
-    showWidget = false
+    // Keep the widget (and its Continue button) reachable the whole time so a
+    // stalled/empty reply can never trap the user on this step.
+    showWidget = true
+    // Only accept the AI message produced AFTER this send — never a prior greeting
+    // or the previous question's answer (fixes the stale-answer race).
+    let priorAIIds = Set(chatProvider.messages.filter { $0.sender == .ai }.map(\.id))
     Task { _ = await chatProvider.sendMainDraft(question) }
     wowCancellable = chatProvider.$messages
       .receive(on: RunLoop.main)
       .sink { [weak self] messages in
         guard let self else { return }
-        guard let ai = messages.last(where: { $0.sender == .ai }),
+        guard let ai = messages.last(where: { $0.sender == .ai && !priorAIIds.contains($0.id) }),
           !ai.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { return }
         self.typing = false
@@ -338,11 +345,23 @@ final class SBOnboardingModel: ObservableObject {
           self.wowAnswerIndex = self.thread.count - 1
         }
         if !ai.isStreaming {
-          self.wowAsking = false
-          self.showWidget = true
-          self.wowCancellable = nil
+          self.finishWow()
         }
       }
+    // Failure fallback: never leave the step stuck if no answer ever finalizes.
+    wowTimeout = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: 20_000_000_000)
+      guard let self, !Task.isCancelled else { return }
+      self.typing = false
+      self.finishWow()
+    }
+  }
+
+  private func finishWow() {
+    wowAsking = false
+    wowCancellable = nil
+    wowTimeout?.cancel()
+    wowTimeout = nil
   }
 
   func answerWow() {
@@ -396,11 +415,12 @@ final class SBOnboardingModel: ObservableObject {
         ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
       }
     }
-    if startListening {
-      Task { [appState] in
-        appState.startTranscription()
-        await appState.reconcileCapture()
-      }
+    // Always reconcile so the capture engine is armed to the chosen mode — meetings-only
+    // needs this too (otherwise meeting detection never arms); only continuous also
+    // starts transcription immediately.
+    Task { [appState] in
+      if startListening { appState.startTranscription() }
+      await appState.reconcileCapture()
     }
     Task {
       let welcome = "Run omi for two days to start receiving helpful insights"
