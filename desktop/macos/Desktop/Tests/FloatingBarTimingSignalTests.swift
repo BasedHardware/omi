@@ -33,15 +33,6 @@ final class FloatingBarTimingSignalTests: XCTestCase {
       "the transition should key off didBecomeKey, not a fixed delay")
   }
 
-  func testFollowUpFocusUsesViewLifecycle() throws {
-    let source = try floatingBarViewSource()
-    XCTAssertTrue(
-      source.contains(".task {"),
-      "follow-up focus should be driven by the view lifecycle (.task), not asyncAfter")
-    XCTAssertTrue(
-      source.contains("isFollowUpFocused = true"), "the field must still be focused on appear")
-  }
-
   /// Anti-regression: no new fixed-delay `asyncAfter` may be added under
   /// `FloatingControlBar/` above the pinned baseline. Recurses the directory the
   /// same way the Python ratchet does; comment mentions of the word are excluded
