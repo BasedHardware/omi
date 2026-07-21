@@ -6,7 +6,7 @@ use omi_agent_runtime::tool_relay::{Identity, ToolRelay};
 use omi_agent_runtime::{
     emit_line, parse_line, select_execution_mode, ExecutionMode, Message, PROTOCOL_VERSION,
 };
-use rx4::{Agent, Event, ToolCall};
+use rx4::{Agent, Event};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -1572,7 +1572,7 @@ mod tests {
         runtime.authorize_tool_request(ToolRequest {
             request_id: "request".into(),
             client_id: "client".into(),
-            call: ToolCall {
+            call: rx4::ToolCall {
                 id: "invoke-1".into(),
                 name: "search".into(),
                 arguments: r#"{"q":"omi"}"#.into(),
