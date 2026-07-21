@@ -266,15 +266,16 @@ def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_stt_ca
     assert 'Remove failed transcription candidate tag' in manual
     assert (
         'if: ${{ failure() && steps.deploy-backend.outcome == \'success\''
-        ' && github.event.inputs.environment == \'development\' }}' in manual
+        " && (github.event.inputs.environment == 'development'"
+        " || github.event.inputs.deploy_targets == 'cloud-run-only') }}" in manual
     )
     assert manual.index('Gate backend candidate on known audio') < manual.index(
         'Shift Cloud Run traffic to validated revisions'
     )
 
 
-def test_production_traffic_is_blocked_until_an_authenticated_candidate_probe_exists():
-    """The public-tag probe is development-only; prod must fail closed first."""
+def test_production_cloud_run_only_uses_internal_authenticated_candidate_probe():
+    """Prod Cloud Run promotion uses the VPC probe; full-stack prod rejects early."""
     import yaml
 
     root = Path(__file__).resolve().parents[3]
@@ -282,27 +283,27 @@ def test_production_traffic_is_blocked_until_an_authenticated_candidate_probe_ex
     steps = workflow['jobs']['deploy']['steps']
     by_name = {step.get('name'): step for step in steps}
 
-    gate_steps = (
+    public_probe = by_name['Gate backend candidate on known audio']
+    assert public_probe['if'] == "${{ github.event.inputs.environment == 'development' }}"
+
+    internal_probe = by_name['Gate internal production candidate on known audio from Cloud Run VPC']
+    assert "github.event.inputs.environment == 'prod'" in internal_probe['if']
+    assert "github.event.inputs.deploy_targets == 'cloud-run-only'" in internal_probe['if']
+    assert 'probe-transcription-candidate-from-cloud-run.sh' in internal_probe['run']
+
+    for name in (
         'Resolve transcription candidate URL',
-        'Gate backend candidate on known audio',
         'Remove passed transcription candidate tag',
         'Remove failed transcription candidate tag',
-    )
-    for name in gate_steps:
-        assert name in by_name, f'{name} step is missing'
+    ):
         condition = by_name[name].get('if') or ''
-        assert (
-            "github.event.inputs.environment == 'development'" in condition
-        ), f'{name} must be development-only; a production run cannot resolve a tag URL'
+        assert "github.event.inputs.environment == 'development'" in condition
+        assert "github.event.inputs.deploy_targets == 'cloud-run-only'" in condition
 
-    # The tag itself is only requested for development; production never creates one.
     deploy_flags = by_name['Deploy ${{ env.SERVICE }} to Cloud Run']['with']['flags']
-    assert "github.event.inputs.environment == 'development' && format('--tag={0}'" in deploy_flags
-
-    rejection = by_name['Reject production promotion without an authenticated candidate probe']
-    assert "github.event.inputs.environment == 'prod'" in rejection['if']
-    assert rejection['run'].strip().endswith('exit 1')
-    assert steps.index(rejection) < steps.index(by_name['Shift Cloud Run traffic to validated revisions'])
+    assert "github.event.inputs.environment == 'development'" in deploy_flags
+    assert "github.event.inputs.deploy_targets == 'cloud-run-only'" in deploy_flags
+    assert steps.index(internal_probe) < steps.index(by_name['Shift Cloud Run traffic to validated revisions'])
 
 
 def test_static_processed_segment_marker_follows_partial_result_checkpoint():

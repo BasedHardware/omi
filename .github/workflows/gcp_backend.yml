@@ -670,16 +670,10 @@ jobs:
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-live-cloud-run
 
-      # The manual development deployment runs this no-traffic probe before
-      # promotion, making it the required auth and route dry run for production.
-      #
-      # Development-only by construction. The probe reaches the candidate over a
-      # Cloud Run tag URL, which is a run.app URL. Production deliberately serves
-      # no run.app URL (`run.googleapis.com/default-url-disabled=true`, ingress
-      # `internal-and-cloud-load-balancing`), so a production tag resolves to no
-      # HTTPS endpoint and this runner sits outside the VPC that could reach one.
-      # Do not enable these steps for production without first giving the probe a
-      # route that does not depend on a public revision URL.
+      # Development probes the no-traffic tagged revision directly from the
+      # runner. Production cloud-run-only resolves the same immutable tag but
+      # proves it from an ephemeral VPC-connected Cloud Run Job with both Cloud
+      # Run IAM and Firebase authentication before any traffic movement.
       - name: Resolve transcription candidate URL
         id: transcription-candidate
         if: ${{ github.event.inputs.environment == 'development' || github.event.inputs.deploy_targets == 'cloud-run-only' }}
@@ -729,7 +723,7 @@ jobs:
 
       # This is the Cloud Run-only acceptance boundary. GKE config, secrets,
       # and backend-listen stay untouched until every no-traffic revision is
-      # proven ready (and development has passed its known-audio candidate gate).
+      # proven ready and the environment-specific known-audio gate has passed.
       - name: Accept no-traffic Cloud Run candidate
         run: |
           python3 backend/scripts/verify_backend_release_vector.py \
