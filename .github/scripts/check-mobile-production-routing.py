@@ -35,6 +35,7 @@ FORBIDDEN_ROUTING_TOKENS = (
 REQUIRED_PRODUCTION_FRAGMENTS = {
     "desktop/macos/Desktop/Sources/AppBuild.swift": (
         'productionBundleIdentifier = "com.omi.computer-macos"',
+        "externalPreviewBundleIdentifierPrefix",
     ),
     "desktop/macos/Desktop/Sources/GoogleService-Info.plist": (
         "<string>based-hardware</string>",

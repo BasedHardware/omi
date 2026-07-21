@@ -196,6 +196,45 @@ class WorkflowContractTests(unittest.TestCase):
                     )
                 )
 
+    def test_auto_workflow_rejects_scope_bypasses_or_cloud_access(self) -> None:
+        cases = (
+            (
+                "readiness scope dependency",
+                "    needs: scope\n",
+                "",
+                "auto source-admission job must depend on the scope decision",
+            ),
+            (
+                "scope output predicate",
+                "needs.scope.outputs.applies == 'true' &&",
+                "needs.scope.outputs.applies == 'false' &&",
+                "auto source-admission job must use exactly the fail-closed Release Eligibility predicate",
+            ),
+            (
+                "triggering SHA checkout",
+                "ref: ${{ github.event.workflow_run.head_sha }}\n          fetch-depth: 2",
+                "ref: main\n          fetch-depth: 2",
+                "auto backend scope decision must inspect the triggering SHA",
+            ),
+            (
+                "parent diff",
+                'git diff --name-only "$parent_sha" "$RELEASE_SHA"',
+                'git diff --name-only "$parent_sha" HEAD',
+                "auto backend scope decision must diff the triggering SHA against its parent",
+            ),
+            (
+                "cloud authentication",
+                "    runs-on: ubuntu-latest-m\n    outputs:",
+                "    runs-on: ubuntu-latest-m\n    steps:\n      - uses: google-github-actions/auth@v3\n    outputs:",
+                "auto backend scope decision must not authenticate to cloud services",
+            ),
+        )
+        for name, old, new, expected in cases:
+            with self.subTest(name=name):
+                root = self.fixture_root()
+                self.mutate(root, CHECKER.AUTO_WORKFLOW_PATH, old, new)
+                self.assertIn(expected, CHECKER.validate(root))
+
     def test_auto_workflow_rejects_stale_or_unverified_source_admission(self) -> None:
         cases = (
             (
