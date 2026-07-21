@@ -200,9 +200,21 @@ def _get_semaphore(name: str, limit: int) -> asyncio.Semaphore:
     if key not in _semaphores:
         # Prune stale entries from destroyed loops when cache grows large
         if len(_semaphores) > _SEMAPHORE_CACHE_MAX:
-            _semaphores.clear()
+            _evict_foreign_loop_semaphores(id(loop))
         _semaphores[key] = asyncio.Semaphore(limit)
     return _semaphores[key]
+
+
+def _evict_foreign_loop_semaphores(live_loop_id: int) -> None:
+    """Drop semaphores belonging to loops other than the one running now.
+
+    Mirrors _evict_stale_circuit_breakers / _evict_stale_latest_wins: remove only what is
+    stale. A blanket clear() also dropped the running loop's own entry, so the next caller
+    got a fresh Semaphore while in-flight tasks still held permits on the old one — briefly
+    allowing twice the concurrency the limit exists to cap.
+    """
+    for key in [k for k in _semaphores if k[0] != live_loop_id]:
+        del _semaphores[key]
 
 
 def get_webhook_semaphore() -> asyncio.Semaphore:
