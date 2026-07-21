@@ -332,6 +332,40 @@ import XCTest
         ])
     }
 
+    func testVoiceTurnTerminalRecordsReliabilityAndFullAnswerDuration() throws {
+      DesktopDiagnosticsManager.shared.recordVoiceTurnTerminal(
+        turnID: "turn-123",
+        reason: "provider_no_response",
+        route: "hub",
+        intent: "hold",
+        durationMs: 4_250,
+        answerDelivered: false,
+        staleEventCount: 1,
+        invalidTransitionCount: 0)
+
+      let snapshot = try latestSnapshot()
+
+      XCTAssertEqual(snapshot["event"] as? String, "voice_turn_terminal")
+      XCTAssertEqual(snapshot["attempt_id"] as? String, "turn-123")
+      XCTAssertEqual(snapshot["terminal_reason"] as? String, "provider_no_response")
+      XCTAssertEqual(snapshot["outcome"] as? String, "failure")
+      XCTAssertEqual(snapshot["response_outcome"] as? String, "failure")
+      XCTAssertEqual(snapshot["route"] as? String, "hub")
+      XCTAssertEqual(snapshot["intent"] as? String, "hold")
+      XCTAssertEqual(snapshot["duration_ms"] as? Int, 4_250)
+      XCTAssertEqual(snapshot["telemetry_schema_version"] as? Int, 1)
+    }
+
+    func testVoiceTurnOutcomeExcludesUserControlledEnds() {
+      XCTAssertEqual(DesktopDiagnosticsManager.voiceTurnOutcome(for: "success"), "success")
+      XCTAssertEqual(DesktopDiagnosticsManager.voiceTurnOutcome(for: "cancelled"), "excluded")
+      XCTAssertEqual(DesktopDiagnosticsManager.voiceTurnOutcome(for: "too_short"), "excluded")
+      XCTAssertEqual(DesktopDiagnosticsManager.voiceTurnOutcome(for: "playback_failed"), "failure")
+      XCTAssertEqual(
+        DesktopDiagnosticsManager.voiceResponseOutcome(for: "journal_failed", answerDelivered: true),
+        "success")
+    }
+
     private func assertLatestHealthSnapshot(
       event: DesktopHealthEventName,
       contains expected: [String: Any] = [:],
