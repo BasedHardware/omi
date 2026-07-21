@@ -677,6 +677,10 @@ struct AgentSpawnCard: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.88), radius: 16)
+    // The whole card opens the agent (the corner icon is just an affordance).
+    // A spawn card has no competing tap action, so this is safe on every surface.
+    .contentShape(Rectangle())
+    .onTapGesture { openAgent() }
   }
 
   private func openAgent() {
