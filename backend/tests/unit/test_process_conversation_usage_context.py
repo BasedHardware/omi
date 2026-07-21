@@ -1025,3 +1025,81 @@ def test_trigger_apps_preferred_app_without_memories_capability_falls_through():
         process_conversation._trigger_apps("user-persona", conv)
 
     suggestion_mock.assert_called_once()
+
+
+# Regression: the durable write happens before _trigger_apps runs, so the app summary it produces
+# must be written back explicitly (like calendar_event / folder_id / audio_files already are).
+# Without that write-back the LLM output is computed and discarded: the detail view falls back to
+# structured.overview, a preferred summarization app never takes effect, the suggested-apps
+# endpoint stays empty, and PATCH /v1/conversations/{id}/summary has no entry to update.
+
+
+class _FakeAppResult:
+    """Mirrors the AppResult shape the persistence path consumes."""
+
+    def __init__(self, app_id, content):
+        self.app_id = app_id
+        self.content = content
+
+    def dict(self):
+        return {'app_id': self.app_id, 'content': self.content}
+
+
+def test_app_summary_results_reach_the_database(monkeypatch):
+    completed_conversation = Conversation(
+        id='conversation-apps',
+        created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        started_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 21, 0, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title='Title', overview='Overview'),
+        transcript_segments=[],
+        status=ConversationStatus.completed,
+        discarded=False,
+    )
+
+    persisted_payloads = []
+    updates = []
+
+    def persisted(_uid, payload, **_kwargs):
+        persisted_payloads.append(payload)
+        return True
+
+    def update_conversation(_uid, _conversation_id, data):
+        updates.append(data)
+
+    def fake_trigger_apps(_uid, conversation, **_kwargs):
+        # The real _trigger_apps only mutates the in-memory conversation.
+        conversation.suggested_summarization_apps = ['app-1']
+        conversation.apps_results = [_FakeAppResult('app-1', 'APP SUMMARY')]
+
+    input_conversation = MagicMock()
+    input_conversation.source = 'omi'
+    input_conversation.get_person_ids.return_value = []
+
+    monkeypatch.setattr(process_conversation, '_get_structured', lambda *a, **k: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', persisted)
+    monkeypatch.setattr(process_conversation, '_trigger_apps', fake_trigger_apps)
+    monkeypatch.setattr(process_conversation, 'submit_with_context', MagicMock())
+    monkeypatch.setattr(process_conversation.conversations_db, 'update_conversation', update_conversation)
+    monkeypatch.setattr(
+        process_conversation.conversations_db, 'create_audio_files_from_chunks', MagicMock(return_value=[])
+    )
+
+    process_conversation.process_conversation('uid', 'en', input_conversation)
+
+    # Everything that actually reached the database: the durable payload plus every write-back.
+    written = {}
+    for payload in persisted_payloads:
+        if isinstance(payload, dict):
+            written.update(payload)
+    for update in updates:
+        written.update(update)
+
+    results = written.get('apps_results')
+    assert results, 'app summary results never reached the database'
+    assert results[0]['app_id'] == 'app-1'
+    assert results[0]['content'] == 'APP SUMMARY'
+    assert written.get('suggested_summarization_apps') == ['app-1']

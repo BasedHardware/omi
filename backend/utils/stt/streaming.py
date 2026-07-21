@@ -724,6 +724,13 @@ class SafeModulateSocket(STTSocket):
         with self._lock:
             if self._dead or self._closed:
                 return False
+            if not data:
+                # b'' is this socket's shutdown sentinel: _send_loop breaks on it and finish()
+                # uses it to stop the loop. Enqueuing an empty audio frame would therefore end
+                # the send loop mid-session while the socket still reports itself alive, so every
+                # later frame would be queued and never sent. The Parakeet sockets guard the same
+                # way. The header stays pending because _header_sent is only set once it is queued.
+                return True
             prepend_header = not self._header_sent and self._wav_header is not None
             queued_data = (self._wav_header or b'') + data if prepend_header else data
 

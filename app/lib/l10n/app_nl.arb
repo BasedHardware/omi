@@ -3150,5 +3150,10 @@
     "deviceStorageFree": "{free} vrij",
     "deviceStorageNearlyFull": "Apparaat bijna vol — synchroniseer om ruimte vrij te maken.",
     "phoneMicOfflineFallbackMessage": "Geen verbinding — er wordt lokaal opgenomen. Het wordt getranscribeerd zodra je weer online bent.",
-    "dataEncryptedBanner": "Je gegevens zijn standaard beveiligd met sterke versleuteling, en jij bepaalt hoe ze worden opgeslagen en gebruikt."
+    "dataEncryptedBanner": "Je gegevens zijn standaard beveiligd met sterke versleuteling, en jij bepaalt hoe ze worden opgeslagen en gebruikt.",
+    "rayBanMetaMicPickerTitle": "Kies je Ray-Ban Meta-microfoon",
+    "rayBanMetaMicPickerDescription": "Selecteer de Bluetooth-microfoon van je bril. Muziek wordt gepauzeerd terwijl Omi deze gebruikt.",
+    "rayBanMetaMicPickerEmpty": "Geen Bluetooth-microfoons gevonden. Verbind je bril in de iPhone-instellingen en probeer het opnieuw.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth-microfoons konden niet worden geladen. Controleer of Bluetooth aanstaat en probeer het opnieuw.",
+    "rayBanMetaMicPickerConnectError": "Kan geen verbinding maken met die microfoon. Controleer of deze verbonden is in de iPhone-instellingen."
 }

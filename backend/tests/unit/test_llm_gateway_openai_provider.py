@@ -11,6 +11,7 @@ from llm_gateway.gateway.providers import (
     OpenAICompatibleChatCompletionProvider,
     ProviderFailure,
 )
+from llm_gateway.gateway import providers as providers_mod
 from llm_gateway.gateway.schemas import FailureClass, ProviderRef
 
 
@@ -327,3 +328,90 @@ async def test_openai_compatible_provider_maps_byok_auth_and_rate_limit(monkeypa
         )
 
     assert exc_info.value.failure_class == failure_class
+
+
+def _anthropic_payload():
+    return {
+        'id': 'msg_test',
+        'content': [{'type': 'text', 'text': 'ok'}],
+        'stop_reason': 'end_turn',
+    }
+
+
+async def _normalize_anthropic(monkeypatch, payload=None):
+    """Run a real Anthropic response through the provider's OpenAI normalizer."""
+    monkeypatch.setenv('ANTHROPIC_API_KEY', 'test-key')
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload or _anthropic_payload())
+
+    provider = AnthropicMessagesProvider(
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    return await provider.create_chat_completion(
+        {'model': 'claude-sonnet-4-6', 'messages': [{'role': 'user', 'content': 'hello'}]},
+        provider_ref=ProviderRef(provider='anthropic', model='claude-sonnet-4-6'),
+        credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+        timeout_ms=8000,
+    )
+
+
+@pytest.mark.asyncio
+async def test_anthropic_response_is_wrapped_in_an_openai_envelope(monkeypatch):
+    response = await _normalize_anthropic(monkeypatch)
+
+    assert response['object'] == 'chat.completion'
+    assert response['id'] == 'msg_test'
+    assert response['model'] == 'claude-sonnet-4-6'
+    assert response['choices'][0]['message']['content'] == 'ok'
+
+
+@pytest.mark.asyncio
+async def test_anthropic_response_created_tracks_the_clock(monkeypatch):
+    """`created` must be the time the completion was produced, not a fixed constant.
+
+    The Anthropic normalizer returned a hardcoded 1782522000 — the same literal used by
+    the in-module test double fake_success_response — so every completion served by
+    AnthropicMessagesProvider carried an identical, permanently stale timestamp. The
+    sibling Vertex normalizer already used int(time.time()).
+    """
+    monkeypatch.setattr(providers_mod.time, 'time', lambda: 1_800_000_123.9)
+
+    response = await _normalize_anthropic(monkeypatch)
+
+    assert response['created'] == 1_800_000_123
+
+
+@pytest.mark.asyncio
+async def test_anthropic_created_advances_between_calls(monkeypatch):
+    now = {'value': 1_800_000_000.0}
+    monkeypatch.setattr(providers_mod.time, 'time', lambda: now['value'])
+
+    first = await _normalize_anthropic(monkeypatch)
+    now['value'] = 1_800_000_600.0
+    second = await _normalize_anthropic(monkeypatch)
+
+    assert first['created'] == 1_800_000_000
+    assert second['created'] == 1_800_000_600
+    assert second['created'] > first['created']
+
+
+def test_no_provider_normalizer_hardcodes_created():
+    """Only the test double may return a fixed `created` timestamp.
+
+    The Anthropic normalizer shipped with 1782522000 copied from
+    fake_success_response, which is invisible in review because the field is
+    well-formed. Require every other `created` in the providers module to be computed.
+    """
+    import re
+    from pathlib import Path
+
+    source = Path(providers_mod.__file__).read_text(encoding='utf-8')
+    fake_start = source.index('def fake_success_response')
+
+    offenders = [
+        source[: match.start()].count('\n') + 1
+        for match in re.finditer(r"'created':\s*(\d+)", source)
+        if match.start() < fake_start
+    ]
+    assert offenders == [], f'hardcoded chat.completion `created` outside the test double at line(s): {offenders}'

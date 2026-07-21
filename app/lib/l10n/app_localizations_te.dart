@@ -9801,4 +9801,23 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'మీ Ray-Ban Meta మైక్రోఫోన్‌ను ఎంచుకోండి';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'మీ కళ్లద్దాల Bluetooth మైక్రోఫోన్‌ను ఎంచుకోండి. Omi దాన్ని ఉపయోగిస్తున్నప్పుడు సంగీతం పాజ్ అవుతుంది.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Bluetooth మైక్రోఫోన్‌లు ఏవీ కనుగొనబడలేదు. iPhone సెట్టింగ్‌లలో కళ్లద్దాలను కనెక్ట్ చేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth మైక్రోఫోన్‌లను లోడ్ చేయలేకపోయాము. Bluetooth ఆన్‌లో ఉందో చూసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'ఆ మైక్రోఫోన్‌కు కనెక్ట్ కాలేకపోయాము. అది iPhone సెట్టింగ్‌లలో కనెక్ట్ అయిందని నిర్ధారించుకోండి.';
 }

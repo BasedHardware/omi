@@ -9759,4 +9759,23 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'আপনার Ray-Ban Meta মাইক্রোফোন বেছে নিন';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'আপনার চশমার Bluetooth মাইক্রোফোন নির্বাচন করুন। Omi এটি ব্যবহার করার সময় গান থেমে থাকবে।';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'কোনো Bluetooth মাইক্রোফোন পাওয়া যায়নি। iPhone সেটিংসে আপনার চশমা সংযুক্ত করে আবার চেষ্টা করুন।';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth মাইক্রোফোন লোড করা যায়নি। Bluetooth চালু আছে কিনা দেখে আবার চেষ্টা করুন।';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'ওই মাইক্রোফোনে সংযোগ করা যায়নি। iPhone সেটিংসে এটি সংযুক্ত আছে কিনা নিশ্চিত করুন।';
 }

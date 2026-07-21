@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/rayban_meta_bridge.dart';
-import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/utils/logger.dart';
 import 'device_transport.dart';
 
@@ -147,11 +146,10 @@ class RayBanMetaTransport extends DeviceTransport {
         throw Exception('Timed out connecting to Ray-Ban Meta glasses');
       }
 
-      // Audio-only fallback: connected == a Meta-glasses HFP input is present
-      // (matched precisely — any other HFP device must not masquerade as the
-      // glasses on reconnect).
-      final inputs = await _hostAPI.getBluetoothHfpInputNames();
-      if (!inputs.any(RayBanMetaDiscoverer.looksLikeMetaGlasses)) {
+      // Audio-only fallback: the user-selected HFP port UID is authoritative.
+      // Names are renameable and only participate in initial discovery.
+      final inputs = await _hostAPI.getBluetoothHfpInputs();
+      if (!inputs.any((input) => input.uid == _deviceId)) {
         _updateState(DeviceTransportState.disconnected);
         throw Exception('Ray-Ban Meta microphone not available over Bluetooth');
       }
@@ -200,8 +198,8 @@ class RayBanMetaTransport extends DeviceTransport {
         return await _hostAPI.getConnectionState() == 'connected';
       }
       if (mode == 'audio_only') {
-        final inputs = await _hostAPI.getBluetoothHfpInputNames();
-        return inputs.any(RayBanMetaDiscoverer.looksLikeMetaGlasses);
+        final inputs = await _hostAPI.getBluetoothHfpInputs();
+        return inputs.any((input) => input.uid == _deviceId);
       }
       return false;
     } catch (e) {
@@ -266,7 +264,8 @@ class RayBanMetaTransport extends DeviceTransport {
 
   Future<void> startAudioCapture() async {
     try {
-      await _hostAPI.startAudioCapture();
+      final mode = await _hostAPI.getAvailabilityMode();
+      await _hostAPI.startAudioCapture(mode == 'audio_only' ? _deviceId : null);
     } catch (e) {
       Logger.debug('RayBanMeta Transport: Error starting audio capture: $e');
       rethrow;

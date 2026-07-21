@@ -3117,5 +3117,10 @@
     "deviceStorageFree": "{free} متاحة",
     "deviceStorageNearlyFull": "الجهاز ممتلئ تقريبًا — قم بالمزامنة لتحرير مساحة.",
     "phoneMicOfflineFallbackMessage": "لا يوجد اتصال — يتم التسجيل محليًا. سيُفرَّغ نصيًا عند عودة الاتصال بالإنترنت.",
-    "dataEncryptedBanner": "بياناتك محمية افتراضيًا بتشفير قوي، وتظل أنت المتحكم في كيفية تخزينها واستخدامها."
+    "dataEncryptedBanner": "بياناتك محمية افتراضيًا بتشفير قوي، وتظل أنت المتحكم في كيفية تخزينها واستخدامها.",
+    "rayBanMetaMicPickerTitle": "اختر ميكروفون Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "حدد ميكروفون Bluetooth لنظارتك. تتوقف الموسيقى مؤقتًا أثناء استخدام Omi له.",
+    "rayBanMetaMicPickerEmpty": "لم يتم العثور على ميكروفونات Bluetooth. وصّل نظارتك في إعدادات iPhone، ثم حاول مرة أخرى.",
+    "rayBanMetaMicPickerLoadError": "تعذر تحميل ميكروفونات Bluetooth. تأكد من تشغيل Bluetooth، ثم حاول مرة أخرى.",
+    "rayBanMetaMicPickerConnectError": "تعذر الاتصال بهذا الميكروفون. تأكد من أنه متصل في إعدادات iPhone."
 }

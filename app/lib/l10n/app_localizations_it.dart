@@ -9810,4 +9810,23 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Scegli il microfono dei Ray-Ban Meta';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Seleziona il microfono Bluetooth degli occhiali. La musica viene messa in pausa mentre Omi lo usa.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Nessun microfono Bluetooth trovato. Collega gli occhiali nelle Impostazioni dell\'iPhone e riprova.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Impossibile caricare i microfoni Bluetooth. Verifica che il Bluetooth sia attivo e riprova.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Impossibile connettersi a quel microfono. Assicurati che sia connesso nelle Impostazioni dell\'iPhone.';
 }

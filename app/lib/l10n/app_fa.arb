@@ -10728,5 +10728,10 @@
     "deviceStorageFree": "{free} آزاد",
     "deviceStorageNearlyFull": "دستگاه تقریباً پر است — برای آزادسازی فضا همگام‌سازی کنید.",
     "phoneMicOfflineFallbackMessage": "اتصالی نیست — به‌صورت محلی ضبط می‌شود. وقتی دوباره آنلاین شوید رونویسی می‌شود.",
-    "dataEncryptedBanner": "داده‌های شما به‌طور پیش‌فرض با رمزگذاری قوی محافظت می‌شوند و شما کنترل می‌کنید که چگونه ذخیره و استفاده شوند."
+    "dataEncryptedBanner": "داده‌های شما به‌طور پیش‌فرض با رمزگذاری قوی محافظت می‌شوند و شما کنترل می‌کنید که چگونه ذخیره و استفاده شوند.",
+    "rayBanMetaMicPickerTitle": "میکروفون Ray-Ban Meta را انتخاب کنید",
+    "rayBanMetaMicPickerDescription": "میکروفون Bluetooth عینک خود را انتخاب کنید. هنگام استفاده Omi از آن، موسیقی متوقف می‌شود.",
+    "rayBanMetaMicPickerEmpty": "هیچ میکروفون Bluetooth پیدا نشد. عینک را در تنظیمات iPhone متصل کنید و دوباره امتحان کنید.",
+    "rayBanMetaMicPickerLoadError": "میکروفون‌های Bluetooth بارگیری نشدند. روشن بودن Bluetooth را بررسی کنید و دوباره امتحان کنید.",
+    "rayBanMetaMicPickerConnectError": "اتصال به این میکروفون ممکن نشد. مطمئن شوید در تنظیمات iPhone متصل است."
 }

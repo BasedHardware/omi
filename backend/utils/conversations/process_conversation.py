@@ -1218,6 +1218,15 @@ def process_conversation(
         _trigger_apps(
             uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people
         )
+        # _trigger_apps only mutates the in-memory conversation and the durable write above already
+        # happened, so persist its output the same way the calendar_event/folder_id/audio_files
+        # write-backs do. Otherwise the app summary the LLM just produced is discarded.
+        if conversation.apps_results or conversation.suggested_summarization_apps:
+            app_updates = {
+                'apps_results': [result.dict() for result in conversation.apps_results],
+                'suggested_summarization_apps': conversation.suggested_summarization_apps,
+            }
+            conversations_db.update_conversation(uid, conversation.id, app_updates)
         if not is_reprocess:
             submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
             if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
