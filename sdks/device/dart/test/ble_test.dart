@@ -13,10 +13,7 @@ void main() {
       [1, 2],
       [0, 0, 0, 7],
     ];
-    final payloads = raw
-        .map(stripPacketHeader)
-        .where((p) => p.isNotEmpty)
-        .toList();
+    final payloads = raw.map(stripPacketHeader).where((p) => p.isNotEmpty).toList();
     expect(payloads, [
       [9, 8],
       [7],
