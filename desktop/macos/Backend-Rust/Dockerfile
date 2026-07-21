@@ -33,7 +33,8 @@ COPY macos/Backend-Rust/templates ./macos/Backend-Rust/templates
 COPY macos/Backend-Rust/fixtures ./macos/Backend-Rust/fixtures
 
 # Build the application
-RUN touch macos/Backend-Rust/src/main.rs && cargo build --release --locked -p omi-desktop-backend
+RUN touch shared-rust/src/lib.rs macos/Backend-Rust/src/main.rs \
+    && cargo build --release --locked -p omi-desktop-backend
 
 # Runtime stage
 FROM debian:bookworm-slim
