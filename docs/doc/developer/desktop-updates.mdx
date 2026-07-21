@@ -19,7 +19,7 @@ The machine-readable evidence explicitly separates two modalities. `source_quali
 | Qualified Beta | `macos-beta` points at the exact qualified manifest | Omi Beta |
 | Stable | `macos-stable` points at that same release ID/artifact | Omi |
 
-The normal candidate-to-Beta path uses non-cancelling per-tag GitHub concurrency. Qualification evidence and pointer idempotency make bounded dispatch retries safe; there is no separate claim/running/complete release-body state machine and no unqualified emergency route. `desktop_promote_beta.yml` uses GitHub's unreviewed `beta` environment, which must contain `GCP_CREDENTIALS` and `GCP_PROJECT_ID=based-hardware`; repository-scoped Omi Bot secrets remain available without duplication. Stable stays manual-only in the separately protected `prod` environment.
+The normal candidate-to-Beta path uses non-cancelling per-tag GitHub concurrency. Qualification evidence and pointer idempotency make bounded dispatch retries safe; there is no separate claim/running/complete release-body state machine and no unqualified emergency route. `desktop_promote_beta.yml` accepts only trusted `automatic=true` qualification handoffs and uses GitHub's unreviewed `beta` environment. Before activation, that environment must contain a dedicated, least-privileged Beta-scoped `GCP_CREDENTIALS` identity and `GCP_PROJECT_ID=based-hardware`; never copy the protected `prod` credential. Repository-scoped Omi Bot secrets remain available without duplication. Stable stays manual-only in the separately protected `prod` environment.
 
 ## Stable promotion and repoint
 

@@ -3,6 +3,8 @@
 
 from pathlib import Path
 
+import yaml
+
 WORKFLOW = Path(".github/workflows/desktop_promote_prod.yml")
 BETA_WORKFLOW = Path(".github/workflows/desktop_promote_beta.yml")
 
@@ -53,7 +55,6 @@ BETA_REQUIRED = (
     "on:\n  workflow_dispatch:",
     "automatic:",
     "qualification_run_id:",
-    "environment: beta",
     "Validate automatic beta request",
     "desktop-qualification-evidence-${{ inputs.release_tag }}",
     "credentials_json: ${{ secrets.GCP_CREDENTIALS }}",
@@ -75,8 +76,27 @@ def validate(text: str) -> list[str]:
 
 def validate_beta(text: str) -> list[str]:
     errors = [f"missing Beta pointer-promotion guard: {fragment}" for fragment in BETA_REQUIRED if fragment not in text]
-    if "environment: prod" in text:
-        errors.append("Beta pointer promotion must not request the protected prod environment")
+    try:
+        workflow = yaml.safe_load(text)
+    except yaml.YAMLError as error:
+        return [*errors, f"Beta pointer promotion workflow must be valid YAML: {error}"]
+
+    jobs = workflow.get("jobs") if isinstance(workflow, dict) else None
+    promote = jobs.get("promote") if isinstance(jobs, dict) else None
+    if not isinstance(promote, dict):
+        return [*errors, "Beta pointer promotion must define jobs.promote"]
+
+    if promote.get("environment") != "beta":
+        errors.append("Beta pointer promotion must use literal jobs.promote.environment: beta")
+
+    steps = promote.get("steps")
+    first_step = steps[0] if isinstance(steps, list) and steps else None
+    if not isinstance(first_step, dict) or (
+        first_step.get("name") != "Reject nonautomatic beta request"
+        or first_step.get("env", {}).get("AUTOMATIC") != "${{ inputs.automatic }}"
+        or '[[ "${AUTOMATIC,,}" != "true" ]]' not in first_step.get("run", "")
+    ):
+        errors.append("Beta pointer promotion must reject workflow_dispatch automatic=false before promotion")
     return errors
 
 

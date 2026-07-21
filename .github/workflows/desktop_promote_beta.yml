@@ -30,6 +30,16 @@ jobs:
     environment: beta
     runs-on: ubuntu-latest
     steps:
+      - name: Reject nonautomatic beta request
+        env:
+          AUTOMATIC: ${{ inputs.automatic }}
+        run: |
+          set -euo pipefail
+          if [[ "${AUTOMATIC,,}" != "true" ]]; then
+            echo "Beta promotion only accepts trusted automatic=true qualification handoffs." >&2
+            exit 1
+          fi
+
       - name: Checkout promotion controls
         uses: actions/checkout@v7
         with:
@@ -44,7 +54,6 @@ jobs:
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
 
       - name: Validate automatic beta request
-        if: ${{ inputs.automatic }}
         env:
           AUTO_BETA_ENABLED: ${{ vars.DESKTOP_AUTO_BETA_ENABLED }}
           RELEASE_TAG: ${{ inputs.release_tag }}
