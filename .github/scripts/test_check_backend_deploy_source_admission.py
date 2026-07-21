@@ -212,9 +212,15 @@ class WorkflowContractTests(unittest.TestCase):
             ),
             (
                 "triggering SHA checkout",
-                "ref: ${{ github.event.workflow_run.head_sha }}\n          # Full history is required only here: a green no-op is safe only when\n          # the triggering SHA is proven to be an ancestor of current main.\n          fetch-depth: 0",
-                "ref: main\n          # Full history is required only here: a green no-op is safe only when\n          # the triggering SHA is proven to be an ancestor of current main.\n          fetch-depth: 0",
+                "ref: ${{ github.event.workflow_run.head_sha }}\n          # The parent diff is the only local scope proof required here. Current\n          # main/supersession proof below is bounded to read-only GitHub API calls.\n          fetch-depth: 2",
+                "ref: main\n          # The parent diff is the only local scope proof required here. Current\n          # main/supersession proof below is bounded to read-only GitHub API calls.\n          fetch-depth: 2",
                 "auto backend scope decision must inspect the triggering SHA",
+            ),
+            (
+                "full-history checkout",
+                "fetch-depth: 2",
+                "fetch-depth: 0",
+                "auto backend scope decision must shallow-fetch only the triggering parent diff",
             ),
             (
                 "parent diff",
@@ -235,32 +241,50 @@ class WorkflowContractTests(unittest.TestCase):
                 self.mutate(root, CHECKER.AUTO_WORKFLOW_PATH, old, new)
                 self.assertIn(expected, CHECKER.validate(root))
 
-    def test_auto_workflow_rejects_supersession_no_op_bypasses(self) -> None:
-        """Static tripwires for the green no-op decision before privileged jobs."""
+    def test_auto_workflow_rejects_api_supersession_proof_bypasses(self) -> None:
+        """Static tripwires for the bounded read-only green no-op proof."""
         cases = (
             (
-                "current candidate treated as stale",
-                '[[ "$RELEASE_SHA" != "$main_sha" ]] && git merge-base --is-ancestor "$RELEASE_SHA" "$main_sha"',
-                'git merge-base --is-ancestor "$RELEASE_SHA" "$main_sha"',
-                "auto backend scope decision must prove a distinct triggering SHA is already on current main before a superseded no-op",
+                "wrong ref endpoint",
+                '"$api_base/repos/$GITHUB_REPOSITORY/git/ref/heads/main"',
+                '"$api_base/repos/$GITHUB_REPOSITORY/git/ref/heads/release"',
+                "auto backend scope decision must resolve current main through the bounded GitHub ref API",
             ),
             (
-                "no current-main refresh",
-                "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main",
-                "git fetch --no-tags origin +refs/heads/release:refs/remotes/origin/main",
-                "auto backend scope decision must refresh current origin/main before declaring supersession",
+                "wrong compare endpoint",
+                '"$api_base/repos/$GITHUB_REPOSITORY/compare/$RELEASE_SHA...$main_sha"',
+                '"$api_base/repos/$GITHUB_REPOSITORY/compare/$main_sha...$RELEASE_SHA"',
+                "auto backend scope decision must compare the immutable triggering SHA to the resolved main SHA through GitHub",
             ),
             (
-                "unknown main becomes no-op",
-                "could not resolve current origin/main; preserving fail-closed source admission",
-                "triggering SHA $RELEASE_SHA was superseded by current origin/main $main_sha",
-                "auto backend scope decision must treat an unresolved current main as guarded admission, not supersession",
+                "unbound compare identity",
+                '.base_commit.sha == $release_sha and .head_commit.sha == $main_sha',
+                '.base_commit.sha == $main_sha and .head_commit.sha == $release_sha',
+                "auto backend scope decision must bind compare base and head identities",
             ),
             (
-                "ambiguous stale summary",
-                "triggering SHA $RELEASE_SHA was superseded by current origin/main $main_sha",
-                "triggering candidate was superseded",
-                "auto backend scope decision must name both triggering and current SHAs in a superseded summary",
+                "unconfirmed supersession",
+                'if [[ "$comparison" == "behind" ]]; then',
+                'if [[ "$comparison" == "identical" ]]; then',
+                "auto backend scope decision must only no-op after confirmed supersession",
+            ),
+            (
+                "ambiguous API becomes no-op",
+                "supersession API proof was unavailable or ambiguous; preserving fail-closed source admission",
+                "GitHub compare confirmed triggering SHA $RELEASE_SHA is behind current main $main_sha",
+                "auto backend scope decision must treat API or identity ambiguity as guarded admission",
+            ),
+            (
+                "local merge-base proof",
+                "git diff --name-only \"$parent_sha\" \"$RELEASE_SHA\"",
+                "git merge-base --is-ancestor \"$RELEASE_SHA\" \"$main_sha\"\n          git diff --name-only \"$parent_sha\" \"$RELEASE_SHA\"",
+                "auto backend scope decision must not use local merge-base supersession proof",
+            ),
+            (
+                "local main history fetch",
+                "git diff --name-only \"$parent_sha\" \"$RELEASE_SHA\"",
+                "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main\n          git diff --name-only \"$parent_sha\" \"$RELEASE_SHA\"",
+                "auto backend scope decision must not fetch local main history for supersession",
             ),
         )
         for name, old, new, expected in cases:

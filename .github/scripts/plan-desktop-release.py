@@ -180,11 +180,6 @@ def set_output(name: str, value: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repository", required=True)
-    parser.add_argument(
-        "--mode",
-        choices=["auto", "release_now", "force_release", "break_glass"],
-        default="auto",
-    )
     args = parser.parse_args()
 
     latest_tag = latest_desktop_tag()
@@ -193,11 +188,7 @@ def main() -> int:
     set_output("latest_tag", latest_tag or "")
     set_output("source_sha", source_sha)
 
-    forced = args.mode in {"force_release", "break_glass"}
-
-    if not changes and forced:
-        print("No releasable desktop app changes since the latest desktop tag, but force_release was requested.")
-    elif not changes:
+    if not changes:
         set_output("should_release", "false")
         set_output("reason", "No releasable desktop app changes since the latest desktop tag.")
         return 0
@@ -207,45 +198,32 @@ def main() -> int:
         for path in changes:
             print(f"  - {path}")
 
-    if args.mode == "auto":
-        latest_change_age = latest_change_age_seconds(changes)
-        if latest_change_age is None:
-            set_output("should_release", "false")
-            set_output(
-                "reason",
-                "Waiting for desktop release quiet window: could not determine latest releasable change age.",
-            )
-            return 0
-        if latest_change_age < AUTO_RELEASE_QUIET_SECONDS:
-            wait_seconds = AUTO_RELEASE_QUIET_SECONDS - latest_change_age
-            set_output("should_release", "false")
-            set_output(
-                "reason",
-                f"Waiting for desktop release quiet window: latest releasable change is "
-                f"{latest_change_age}s old; need {AUTO_RELEASE_QUIET_SECONDS}s "
-                f"({wait_seconds}s remaining).",
-            )
-            return 0
+    latest_change_age = latest_change_age_seconds(changes)
+    if latest_change_age is None:
+        set_output("should_release", "false")
+        set_output("reason", "Waiting for desktop release quiet window: could not determine latest releasable change age.")
+        return 0
+    if latest_change_age < AUTO_RELEASE_QUIET_SECONDS:
+        wait_seconds = AUTO_RELEASE_QUIET_SECONDS - latest_change_age
+        set_output("should_release", "false")
+        set_output(
+            "reason",
+            f"Waiting for desktop release quiet window: latest releasable change is "
+            f"{latest_change_age}s old; need {AUTO_RELEASE_QUIET_SECONDS}s ({wait_seconds}s remaining).",
+        )
+        return 0
 
     source_check_reason = required_desktop_swift_check_reason(args.repository, source_sha)
     if source_check_reason:
-        # break_glass is the only mode that may cut a candidate over a red or
-        # missing source check. Without it a flaky `Desktop Swift Build & Tests`
-        # blocks candidate creation outright, and every downstream stage with it,
-        # with no recovery short of landing another commit and waiting.
-        if args.mode != "break_glass":
-            set_output("should_release", "false")
-            set_output("reason", f"Desktop candidate source gate blocked: {source_check_reason}.")
-            return 0
-        set_output("source_gate_bypassed", "true")
-        print(f"::warning::Desktop candidate source gate bypassed: {source_check_reason}")
+        set_output("should_release", "false")
+        set_output("reason", f"Desktop candidate source gate blocked: {source_check_reason}.")
+        return 0
 
-    if not forced:
-        active_reason = active_release_reason(args.repository, latest_tag)
-        if active_reason:
-            set_output("should_release", "false")
-            set_output("reason", f"Release already active: {active_reason}.")
-            return 0
+    active_reason = active_release_reason(args.repository, latest_tag)
+    if active_reason:
+        set_output("should_release", "false")
+        set_output("reason", f"Release already active: {active_reason}.")
+        return 0
 
     set_output("should_release", "true")
     set_output("reason", f"Ready to release {len(changes)} changed desktop app file(s).")
