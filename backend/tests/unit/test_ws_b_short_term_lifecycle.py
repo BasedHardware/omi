@@ -120,7 +120,7 @@ from tests.unit.test_ws_i_write_convergence import (
     _trusted_account_generation,
 )
 
-NOW = datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc)
+NOW = datetime.now(timezone.utc)
 
 _WS_B_RUNTIME_MODULE_NAMES = (
     "database.memory_apply_store",
