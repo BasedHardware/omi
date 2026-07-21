@@ -140,6 +140,28 @@ routes:
       deprecation:
         state: active
   - route_type: http
+    method: GET
+    path: /v2/desktop/releases/{release_id}
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - admin_key
+        placement: inline
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: desktop_update
+      visibility: admin
+      data_domain: desktop_updates
+      deprecation:
+        state: active
+  - route_type: http
     method: POST
     path: /v2/desktop/channels/promote
     policy:

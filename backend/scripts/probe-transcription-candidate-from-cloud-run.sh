@@ -35,8 +35,10 @@ done
 [[ "$NAME_SUFFIX" =~ ^[a-z0-9-]+$ ]] || { echo 'ERROR: --name-suffix must contain lowercase letters, digits, and hyphens' >&2; exit 2; }
 [[ -f "$FIREBASE_TOKEN_FILE" ]] || { echo 'ERROR: Firebase token file is missing' >&2; exit 2; }
 
-JOB_NAME="backend-candidate-vpc-probe-${NAME_SUFFIX}"
-SERVICE_ACCOUNT_NAME="backend-candidate-probe-${NAME_SUFFIX}"
+NAME_TOKEN="$(python3 -c 'import hashlib, sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest()[:20])' "$NAME_SUFFIX")"
+JOB_NAME="backend-candidate-vpc-probe-${NAME_TOKEN}"
+SERVICE_ACCOUNT_NAME="bcp-${NAME_TOKEN}"
+[[ ${#SERVICE_ACCOUNT_NAME} -le 30 ]] || { echo 'ERROR: derived service account ID exceeds 30 characters' >&2; exit 2; }
 SERVICE_ACCOUNT="${SERVICE_ACCOUNT_NAME}@${PROJECT}.iam.gserviceaccount.com"
 FIREBASE_TOKEN="$(<"$FIREBASE_TOKEN_FILE")"
 [[ -n "$FIREBASE_TOKEN" ]] || { echo 'ERROR: Firebase token is empty' >&2; exit 2; }
