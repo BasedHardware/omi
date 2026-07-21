@@ -276,6 +276,23 @@ struct CreateReleaseResponse {
     message: String,
 }
 
+fn secret_matches(provided: &str, expected: &str) -> bool {
+    if expected.is_empty() || provided.len() != expected.len() {
+        return false;
+    }
+    provided
+        .bytes()
+        .zip(expected.bytes())
+        .fold(0_u8, |difference, (left, right)| {
+            difference | (left ^ right)
+        })
+        == 0
+}
+
+fn is_beta_release_request(channel: Option<&str>, is_live: bool) -> bool {
+    is_live && channel == Some("beta")
+}
+
 /// POST /updates/releases - Create a new release
 /// Requires RELEASE_SECRET header for authentication
 async fn create_release(
@@ -283,14 +300,19 @@ async fn create_release(
     headers: HeaderMap,
     Json(request): Json<CreateReleaseRequest>,
 ) -> impl IntoResponse {
-    // Check for release secret
-    let expected_secret = std::env::var("RELEASE_SECRET").unwrap_or_default();
+    // The shared stable release secret remains valid for its existing manual flow.
+    // BETA_RELEASE_SECRET can create only a live beta release, never a staging/stable record.
+    let release_secret = std::env::var("RELEASE_SECRET").unwrap_or_default();
+    let beta_release_secret = std::env::var("BETA_RELEASE_SECRET").unwrap_or_default();
     let provided_secret = headers
         .get("X-Release-Secret")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
-    if expected_secret.is_empty() || provided_secret != expected_secret {
+    let authorized = secret_matches(provided_secret, &release_secret)
+        || (is_beta_release_request(request.channel.as_deref(), request.is_live)
+            && secret_matches(provided_secret, &beta_release_secret));
+    if !authorized {
         return (
             StatusCode::UNAUTHORIZED,
             Json(CreateReleaseResponse {
@@ -431,6 +453,14 @@ async fn promote_release(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn beta_release_secret_is_limited_to_live_beta_creation() {
+        assert!(is_beta_release_request(Some("beta"), true));
+        assert!(!is_beta_release_request(Some("stable"), true));
+        assert!(!is_beta_release_request(Some("beta"), false));
+        assert!(!is_beta_release_request(None, true));
+    }
 
     fn make_release(
         version: &str,
