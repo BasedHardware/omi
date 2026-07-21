@@ -453,6 +453,108 @@ import XCTest
       )
     }
 
+    func testFaultHarnessResetClearsAppScopedDefaultOnlyOnce() async {
+      let provider = ChatProvider()
+      let expectedChatID = "default|research"
+      var modelReadinessRequests = 0
+      var clearedSurfaceIDs: [String] = []
+
+      let error: String? = await RuntimeOwnerIdentity.withAutomationOwnerIfMissing(
+        "fault-harness-owner"
+      ) {
+        provider.selectedAppId = "research"
+        provider.isInDefaultChat = true
+        provider.kernelTurnProjection = KernelTurnProjection(
+          host: provider,
+          client: AgentClient.Session(harnessMode: "piMono"),
+          ownerIDProvider: {
+            RuntimeOwnerIdentity.currentOwnerId(allowAutomationOverride: true)
+          },
+          journalListOperation: { _, surface, ownerID, afterTurnSeq, limit in
+            XCTAssertFalse(ownerID.isEmpty)
+            XCTAssertEqual(surface.externalRefId, expectedChatID)
+            XCTAssertEqual(afterTurnSeq, 0)
+            XCTAssertEqual(limit, 1)
+            return self.journalPage(
+              conversationId: "fault-app-scoped-default-conversation",
+              turns: [],
+              generation: 9
+            )
+          },
+          journalClearOperation: { _, surface, _, _ in
+            clearedSurfaceIDs.append(surface.externalRefId)
+            return 1
+          },
+          kernelReadyOperation: {
+            modelReadinessRequests += 1
+            return false
+          }
+        )
+
+        return await provider.performMainChatHarnessResetTransaction()
+      }
+
+      XCTAssertNil(error)
+      XCTAssertEqual(modelReadinessRequests, 0)
+      XCTAssertEqual(clearedSurfaceIDs, [expectedChatID])
+    }
+
+    func testFaultHarnessResetClearsSelectedSessionOnlyOnce() async {
+      let provider = ChatProvider()
+      let session = ChatSession(id: "fault-selected-session")
+      var modelReadinessRequests = 0
+      var clearedSurfaceIDs: [String] = []
+      var replacementSessionRequests = 0
+      var sessionWasCleared = false
+
+      let error: String? = await RuntimeOwnerIdentity.withAutomationOwnerIfMissing(
+        "fault-harness-owner"
+      ) {
+        provider.sessions = [session]
+        provider.currentSession = session
+        provider.isInDefaultChat = false
+        provider.kernelTurnProjection = KernelTurnProjection(
+          host: provider,
+          client: AgentClient.Session(harnessMode: "piMono"),
+          ownerIDProvider: {
+            RuntimeOwnerIdentity.currentOwnerId(allowAutomationOverride: true)
+          },
+          journalListOperation: { _, surface, ownerID, afterTurnSeq, limit in
+            XCTAssertFalse(ownerID.isEmpty)
+            XCTAssertEqual(surface.externalRefId, session.id)
+            XCTAssertEqual(afterTurnSeq, 0)
+            XCTAssertEqual(limit, 1)
+            return self.journalPage(
+              conversationId: "fault-selected-session-conversation",
+              turns: [],
+              generation: 9
+            )
+          },
+          journalClearOperation: { _, surface, _, _ in
+            clearedSurfaceIDs.append(surface.externalRefId)
+            return 1
+          },
+          kernelReadyOperation: {
+            modelReadinessRequests += 1
+            return false
+          }
+        )
+
+        let error = await provider.performMainChatHarnessResetTransaction {
+          replacementSessionRequests += 1
+          return ChatSession(id: "fault-replacement-session")
+        }
+        sessionWasCleared = provider.currentSession == nil
+        return error
+      }
+
+      XCTAssertNil(error)
+      XCTAssertEqual(modelReadinessRequests, 0)
+      XCTAssertEqual(clearedSurfaceIDs, [session.id])
+      XCTAssertEqual(replacementSessionRequests, 1)
+      XCTAssertTrue(sessionWasCleared)
+    }
+
     func testClearOwnerSurfaceStateUsesAuthoritativeJournalControlWhenModelReadinessIsUnavailable() async throws {
       let provider = ChatProvider()
       let surface = provider.mainChatSurfaceReference()
