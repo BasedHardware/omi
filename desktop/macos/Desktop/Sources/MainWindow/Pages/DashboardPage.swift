@@ -2107,7 +2107,7 @@ private enum HomePalette {
   static let faint = Color(red: 0.36, green: 0.35, blue: 0.33)
   static let hairline = Color(red: 0.155, green: 0.155, blue: 0.172)
   static let green = Color(red: 0.17, green: 0.78, blue: 0.38)
-  // Neutral cool-grey key light (INV-UI-1: no purple accents).
+  // Neutral cool-grey key light (INV-UI-1 brand accent rules).
   static let stageGlow = Color(red: 0.72, green: 0.74, blue: 0.78)
   static let glow = stageGlow
 }
