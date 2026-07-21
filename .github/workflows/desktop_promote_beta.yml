@@ -104,7 +104,7 @@ jobs:
             > /tmp/desktop-beta-release.json
           mkdir -p /tmp/desktop-beta-assets
           gh release download "$RELEASE_TAG" --repo "$REPO" \
-            --pattern 'Omi.zip' --pattern 'Omi.dmg' --pattern 'omi.dmg' --pattern 'Omi.Beta.zip' --pattern 'omi-beta.dmg' --dir /tmp/desktop-beta-assets
+            --pattern 'Omi.zip' --pattern 'Omi.dmg' --pattern 'omi.dmg' --dir /tmp/desktop-beta-assets
 
           ZIP_PATH=/tmp/desktop-beta-assets/Omi.zip
           DMG_PATH=$(find /tmp/desktop-beta-assets -maxdepth 1 -type f \( -name Omi.dmg -o -name omi.dmg \) -print -quit)
@@ -112,8 +112,6 @@ jobs:
           test -n "$DMG_PATH"
           ZIP_SHA=$(sha256sum "$ZIP_PATH" | cut -d' ' -f1)
           DMG_SHA=$(sha256sum "$DMG_PATH" | cut -d' ' -f1)
-          BETA_ZIP_SHA=$(sha256sum /tmp/desktop-beta-assets/Omi.Beta.zip | cut -d' ' -f1)
-          BETA_DMG_SHA=$(sha256sum /tmp/desktop-beta-assets/omi-beta.dmg | cut -d' ' -f1)
 
           python3 .github/scripts/prepare-desktop-beta-promotion.py \
             --release-json /tmp/desktop-beta-release.json \
@@ -121,8 +119,6 @@ jobs:
             --target-sha "$TARGET_SHA" \
             --zip-sha256 "$ZIP_SHA" \
             --dmg-sha256 "$DMG_SHA" \
-            --beta-zip-sha256 "$BETA_ZIP_SHA" \
-            --beta-dmg-sha256 "$BETA_DMG_SHA" \
             --qualification-evidence /tmp/desktop-qualification-evidence/qualification-evidence.json \
             --output /tmp/desktop-release-manifest.json
 
@@ -238,18 +234,18 @@ jobs:
               "version": manifest["version"],
               "build_number": manifest["build_number"],
               "tag": manifest["release_id"],
-              "download_url": manifest["beta_dmg_url"],
+              "download_url": manifest["dmg_url"],
               "published_at": manifest["published_at"],
           }, indent=2))
           PY
           python3 - <<'PY' > /tmp/macos-beta-index.html
           import html
           import json
-          url = json.load(open('/tmp/desktop-release-manifest.json'))['beta_dmg_url']
+          url = json.load(open('/tmp/desktop-release-manifest.json'))['dmg_url']
           escaped = html.escape(url, quote=True)
           print(f'<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url={escaped}"><a href="{escaped}">Download Omi Beta</a>')
           PY
-          python3 -c "import json; print(json.load(open('/tmp/desktop-release-manifest.json'))['beta_dmg_url'])" \
+          python3 -c "import json; print(json.load(open('/tmp/desktop-release-manifest.json'))['dmg_url'])" \
             > /tmp/macos-beta-latest-url.txt
           for file in index.html redirect.json latest-url.txt; do
             gcloud storage cp --cache-control='no-store,max-age=0' \

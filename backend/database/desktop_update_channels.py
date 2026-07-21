@@ -111,18 +111,13 @@ def normalize_release_manifest(data: dict[str, Any]) -> dict[str, Any]:
         "build_number": _positive_int(data, "build_number"),
         "zip_url": _https_url(data, "zip_url", required=True),
         "dmg_url": _https_url(data, "dmg_url", required=platform == "macos"),
-        "beta_zip_url": _https_url(data, "beta_zip_url", required=platform == "macos"),
-        "beta_dmg_url": _https_url(data, "beta_dmg_url", required=platform == "macos"),
         "ed_signature": _required_string(data, "ed_signature"),
-        "beta_ed_signature": _required_string(data, "beta_ed_signature"),
         "published_at": published_at,
         "changelog": [item.strip() for item in changelog if item.strip()],
         "mandatory": data.get("mandatory") is True,
         "source_sha": _digest(data, "source_sha", SHA40_RE, required=True),
         "zip_sha256": _digest(data, "zip_sha256", SHA256_RE, required=False),
         "dmg_sha256": _digest(data, "dmg_sha256", SHA256_RE, required=False),
-        "beta_zip_sha256": _digest(data, "beta_zip_sha256", SHA256_RE, required=platform == "macos"),
-        "beta_dmg_sha256": _digest(data, "beta_dmg_sha256", SHA256_RE, required=platform == "macos"),
         "qualification": cast(dict[str, Any], qualification),
     }
     return manifest
