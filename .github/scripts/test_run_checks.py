@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -119,6 +122,44 @@ class ManifestContractTests(unittest.TestCase):
 
 
 class RunnerBehaviorTests(unittest.TestCase):
+    def test_firestore_contention_runner_uses_uv_without_backend_venv(self) -> None:
+        source = REPO_ROOT / "backend/testing/desktop_beta_admission/run.sh"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runner = root / "backend/testing/desktop_beta_admission/run.sh"
+            runner.parent.mkdir(parents=True)
+            shutil.copy2(source, runner)
+            (root / "backend/.python-version").write_text("3.11\n", encoding="utf-8")
+            fake_bin = root / "fake-bin"
+            fake_bin.mkdir()
+            capture = root / "node-args.txt"
+            for name, body in {
+                "uv": "#!/bin/sh\nexit 99\n",
+                "node": f'''#!/bin/sh
+case "$1" in
+  -p) echo 22 ;;
+  -e)
+    case "$2" in
+      *server.listen*) echo 45678 ;;
+      *) printf '{{}}' > "$3" ;;
+    esac
+    ;;
+  -) printf '%s\\n' "$@" > "{capture}" ;;
+esac
+''',
+                "java": "#!/bin/sh\necho '    java.version = 21.0.1' >&2\n",
+            }.items():
+                path = fake_bin / name
+                path.write_text(body, encoding="utf-8")
+                path.chmod(0o755)
+
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}:/usr/bin:/bin"
+            result = subprocess.run(["bash", str(runner)], text=True, capture_output=True, env=env, check=False)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("uv run --no-project", capture.read_text(encoding="utf-8"))
+
     def test_trigger_matching_selects_only_relevant_checks(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         selected = {check.id for check in resolve_checks(manifest, ["app/lib/widgets/example.dart"], "ci")}

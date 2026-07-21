@@ -38,11 +38,6 @@ TOP_LEVEL_FIELDS = frozenset(
         "dmg_url",
         "dmg_sha256",
         "ed_signature",
-        "beta_zip_url",
-        "beta_zip_sha256",
-        "beta_dmg_url",
-        "beta_dmg_sha256",
-        "beta_ed_signature",
         "qualification_evidence_asset",
         "qualification_evidence_sha256",
         "qualification_tier",
@@ -54,6 +49,9 @@ TOP_LEVEL_FIELDS = frozenset(
         "compatibility_contract",
         "environment_contract_version",
         "created_at",
+        "published_at",
+        "changelog",
+        "mandatory",
     }
 )
 REQUIRED_FIELDS = frozenset(
@@ -62,6 +60,9 @@ REQUIRED_FIELDS = frozenset(
         "desktop_backend_source_sha",
         "desktop_backend_oci_index_digest",
         "desktop_backend_platform_digest",
+        "published_at",
+        "changelog",
+        "mandatory",
     }
 )
 BACKEND_FIELDS = frozenset(
@@ -173,6 +174,13 @@ def _require_timestamp(data: dict[str, Any], key: str) -> str:
     return value
 
 
+def _require_changelog(data: dict[str, Any]) -> list[str]:
+    value = data.get("changelog")
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item.strip() for item in value):
+        _fail("changelog must be a list of non-empty strings")
+    return value
+
+
 def _validate_compatibility(manifest: dict[str, Any]) -> None:
     raw = manifest.get("compatibility_contract")
     if not isinstance(raw, dict):
@@ -227,11 +235,6 @@ def validate_manifest(value: object) -> dict[str, Any]:
     _require_release_asset_url(manifest, "dmg_url", release_id=release_id, asset_name="omi.dmg")
     _require_sha256(manifest, "dmg_sha256")
     _require_string(manifest, "ed_signature")
-    _require_release_asset_url(manifest, "beta_zip_url", release_id=release_id, asset_name="Omi.Beta.zip")
-    _require_sha256(manifest, "beta_zip_sha256")
-    _require_release_asset_url(manifest, "beta_dmg_url", release_id=release_id, asset_name="omi-beta.dmg")
-    _require_sha256(manifest, "beta_dmg_sha256")
-    _require_string(manifest, "beta_ed_signature")
 
     evidence_asset = _require_string(manifest, "qualification_evidence_asset")
     if not EVIDENCE_ASSET_RE.fullmatch(evidence_asset):
@@ -262,6 +265,12 @@ def validate_manifest(value: object) -> dict[str, Any]:
     if not ENVIRONMENT_CONTRACT_RE.fullmatch(environment_contract):
         _fail("environment_contract_version must use desktop-backend-env-vN form")
     _require_timestamp(manifest, "created_at")
+    if "published_at" in manifest:
+        _require_timestamp(manifest, "published_at")
+    if "changelog" in manifest:
+        _require_changelog(manifest)
+    if "mandatory" in manifest and not isinstance(manifest.get("mandatory"), bool):
+        _fail("mandatory must be a boolean")
     _validate_compatibility(manifest)
     return manifest
 
