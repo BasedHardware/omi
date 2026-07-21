@@ -46,6 +46,27 @@ final class FloatingBarGeometryTests: XCTestCase {
     )
   }
 
+  func testGlowInflatedRestoreRoundTripPreservesCenterOnlyWithMatchingSize() {
+    let center = NSPoint(x: 700, y: 820)
+    // The restore origin is computed for the glow-INFLATED window (bare 40x14
+    // pill grown by the 22/18 glow outsets → 84x50).
+    let inflated = NSSize(width: 84, height: 50)
+    let origin = FloatingControlBarGeometry.restoreOrigin(center: center, size: inflated)
+
+    // Fixed: snap with the SAME inflated size the origin was computed for →
+    // the recorded center is exactly the original center.
+    XCTAssertEqual(
+      FloatingControlBarGeometry.recordedCenter(afterSnapOrigin: origin, size: inflated),
+      center)
+
+    // Bug: snapping with the bare pill size drifts the recorded center by one
+    // glow outset (22 left, 18 down) — this is what compounded per re-open cycle.
+    let bare = NSSize(width: 40, height: 14)
+    XCTAssertEqual(
+      FloatingControlBarGeometry.recordedCenter(afterSnapOrigin: origin, size: bare),
+      NSPoint(x: center.x - 22, y: center.y - 18))
+  }
+
   func testScreenChangeReconcilesTheFloatingBarPresentationAndFrame() throws {
     // omi-test-quality: source-inspection -- static contract: AppKit delegate callback must retain the reconciliation wiring
     let source = try String(

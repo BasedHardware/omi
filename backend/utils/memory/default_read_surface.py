@@ -142,6 +142,7 @@ def fetch_default_read_vector(
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
     item_formatter: Callable[[MemoryPayload, MemoryAccessPolicy], Any],
+    now: Optional[datetime] = None,
     score_attacher: Optional[Callable[[Any, MemoryPayload, dict[str, float]], Any]] = None,
 ) -> DefaultReadSearchResult:
     if decision.read_decision != MemoryReadDecision.USE_MEMORY:
@@ -171,6 +172,7 @@ def fetch_default_read_vector(
         limit=bounded_limit,
         required_projection_commit_id=projection_commit_id,
         required_account_generation=decision.rollout_capabilities.account_generation,
+        now=now,
     )
     scores_by_memory_id = response.get('scores_by_memory_id', {})
     formatted: list[Any] = []

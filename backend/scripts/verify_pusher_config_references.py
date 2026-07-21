@@ -16,7 +16,7 @@ from typing import Any
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-ENVIRONMENTS = {"dev", "prod"}
+ENVIRONMENTS = {"beta", "dev", "prod"}
 RUNTIME_ENV_MANIFEST = ROOT / "backend/deploy/runtime_env.yaml"
 Reference = tuple[str, str, str | None]
 Binding = tuple[str, str, str]
@@ -55,9 +55,13 @@ def references(value: Any) -> set[Reference]:
     return found
 
 
-def render(environment: str, image_tag: str = "contract-test") -> list[dict[str, Any]]:
+def render(
+    environment: str,
+    image_tag: str = "contract-test",
+    values_file: Path | None = None,
+) -> list[dict[str, Any]]:
     chart = ROOT / "backend/charts/pusher"
-    values = chart / f"{environment}_omi_pusher_values.yaml"
+    values = values_file or chart / f"{environment}_omi_pusher_values.yaml"
     result = subprocess.run(
         [
             "helm",
@@ -78,17 +82,22 @@ def render(environment: str, image_tag: str = "contract-test") -> list[dict[str,
     return [doc for doc in yaml.safe_load_all(result.stdout) if isinstance(doc, dict)]
 
 
-def rendered_pusher_deployment(environment: str) -> dict[str, Any]:
-    deployments = [doc for doc in render(environment) if doc.get("kind") == "Deployment"]
+def rendered_pusher_deployment(environment: str, values_file: Path | None = None) -> dict[str, Any]:
+    rendered = render(environment) if values_file is None else render(environment, values_file=values_file)
+    deployments = [doc for doc in rendered if doc.get("kind") == "Deployment"]
     if len(deployments) != 1:
         raise RuntimeError("pusher render did not contain exactly one Deployment")
     return deployments[0]
 
 
-def pusher_references(environment: str, deployment: dict[str, Any] | None = None) -> set[Reference]:
+def pusher_references(
+    environment: str,
+    deployment: dict[str, Any] | None = None,
+    values_file: Path | None = None,
+) -> set[Reference]:
     expected_configmap = f"{environment}-omi-backend-config"
     expected_secret = f"{environment}-omi-backend-secrets"
-    deployment = deployment or rendered_pusher_deployment(environment)
+    deployment = deployment or rendered_pusher_deployment(environment, values_file=values_file)
     refs = references(deployment.get("spec", {}).get("template", {}).get("spec", {}))
     object_refs = {(kind, name) for kind, name, _key in refs}
     missing = {("configmap", expected_configmap), ("secret", expected_secret)} - object_refs
@@ -290,10 +299,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--environment", required=True, choices=sorted(ENVIRONMENTS))
     parser.add_argument("--namespace", required=True)
+    parser.add_argument("--values-file", type=Path)
     parser.add_argument("--render-only", action="store_true")
     args = parser.parse_args()
-    deployment = rendered_pusher_deployment(args.environment)
-    refs = pusher_references(args.environment, deployment)
+    deployment = rendered_pusher_deployment(args.environment, values_file=args.values_file)
+    refs = pusher_references(args.environment, deployment, values_file=args.values_file)
     failures = validate_dev_pusher_binding_contract(deployment) if args.environment == "dev" else []
     if not args.render_only and not failures:
         failures.extend(verify(args.namespace, refs))

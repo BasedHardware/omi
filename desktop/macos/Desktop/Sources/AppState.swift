@@ -282,6 +282,10 @@ class AppState: ObservableObject {
   @Published var hasNotificationPermission = false
   @Published var notificationAlertStyle: UNAlertStyle = .none  // .none, .banner, or .alert
   @Published var hasScreenRecordingPermission = false
+  /// TCC state captured once at process launch. A grant that arrives while the
+  /// app is running doesn't apply to this process until relaunch
+  /// (see ScreenRecordingPermissionPolicy.needsRelaunchToApply).
+  let screenRecordingGrantedAtLaunch = ScreenCaptureService.checkPermission()
   @Published var hasBluetoothPermission = false
 
   // Track last notification settings for change detection (avoid duplicate analytics)
@@ -783,6 +787,12 @@ class AppState: ObservableObject {
 
 extension Notification.Name {
   static let resetOnboardingRequested = Notification.Name("resetOnboardingRequested")
+  /// Posted by the onboarding arrow-key monitor with a "targetStep" Int in
+  /// userInfo. The mounted OnboardingView applies it to its live @AppStorage —
+  /// the monitor closure must not mutate its own captured copy (writes there
+  /// never reach UserDefaults or the UI on all macOS versions).
+  static let onboardingStepNavigationRequested = Notification.Name(
+    "onboardingStepNavigationRequested")
   /// Posted when the system wakes from sleep
   static let systemDidWake = Notification.Name("systemDidWake")
   /// Posted when the screen is locked

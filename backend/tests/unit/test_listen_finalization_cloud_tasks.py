@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from database import conversation_finalization_jobs as jobs_db
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.conversation_enums import ConversationStatus
 from routers.conversation_finalization import _parse_task_payload
 import routers.conversation_finalization as finalization_router
@@ -120,6 +121,17 @@ def test_required_cloud_tasks_rejects_rest_admission_before_outbox_mutation(monk
         )
 
     create.assert_not_called()
+
+
+def test_durable_finalization_maps_exhausted_firestore_contention_to_retryable_admission_failure(monkeypatch):
+    create = MagicMock(side_effect=FirestoreContentionExhausted('contention'))
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'create_or_get_finalization_intent', create)
+
+    with pytest.raises(lifecycle_service.FinalizationDispatchUnavailable) as raised:
+        lifecycle_service.request_finalization('uid-1', 'conversation-1', has_byok_keys=False)
+
+    assert isinstance(raised.value.__cause__, FirestoreContentionExhausted)
+    create.assert_called_once()
 
 
 def test_listen_finalization_dispatch_configuration_requires_every_static_binding(monkeypatch):
@@ -642,6 +654,35 @@ async def test_pusher_claims_the_durable_job_before_finalizing(monkeypatch):
     )
     completed.assert_called_once_with('job-1', 3, 7)
     assert json.loads(websocket.sent[0][4:]) == {'conversation_id': 'conversation-1', 'success': True}
+
+
+@pytest.mark.anyio
+async def test_pusher_keeps_a_completed_job_terminal_when_source_result_delivery_fails(monkeypatch):
+    """#9995: source disconnect after 104 cannot reclassify durable success."""
+    websocket = _PusherWebSocket()
+
+    async def closed_send(_payload: bytes) -> None:
+        raise RuntimeError('Cannot call send once closed')
+
+    websocket.send_bytes = closed_send
+    completed = MagicMock(return_value=True)
+    retryable = MagicMock()
+    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(
+        jobs_db,
+        'claim_finalization_job',
+        lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 7, 'attempt_count': 1},
+    )
+    monkeypatch.setattr(jobs_db, 'mark_finalization_completed', completed)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
+    monkeypatch.setattr(pusher_router, 'finalize_persisted_conversation', AsyncMock())
+
+    await pusher_router._process_conversation_task(
+        'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
+    )
+
+    completed.assert_called_once_with('job-1', 3, 7)
+    retryable.assert_not_called()
 
 
 @pytest.mark.anyio

@@ -15,6 +15,7 @@ from google.cloud import firestore
 
 from database import conversations as conversations_db
 from database._client import document_id_from_seed, get_firestore_client
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
 CONVERSATIONS_COLLECTION = 'conversations'
 FINALIZATION_JOBS_COLLECTION = 'conversation_finalization_jobs'
@@ -252,19 +253,30 @@ def create_or_get_finalization_intent(
 ) -> FinalizationIntent:
     client = _client(firestore_client)
     conversation_ref = _conversation_ref(client, uid, conversation_id)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_create_or_get_finalization_intent_txn)
-    return transactional(
-        transaction,
-        conversation_ref,
-        client.collection(FINALIZATION_JOBS_COLLECTION),
-        uid,
-        conversation_id,
-        requires_byok,
-        finalization_admission,
-        _now(),
-        force_process=force_process,
-        extra_updates=extra_updates,
+    jobs_collection = client.collection(FINALIZATION_JOBS_COLLECTION)
+
+    def create_intent_in_transaction(transaction: Any) -> FinalizationIntent:
+        # The Firestore SDK's transactional wrapper retains retry state. Build
+        # it for this outer attempt so concurrent REST finalizers always get a
+        # fresh transaction and wrapper after read-time contention.
+        transactional = firestore.transactional(_create_or_get_finalization_intent_txn)
+        return transactional(
+            transaction,
+            conversation_ref,
+            jobs_collection,
+            uid,
+            conversation_id,
+            requires_byok,
+            finalization_admission,
+            _now(),
+            force_process=force_process,
+            extra_updates=extra_updates,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        create_intent_in_transaction,
+        operation_name='conversation_finalization_intent',
     )
 
 

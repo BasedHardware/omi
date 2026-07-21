@@ -54,6 +54,9 @@ struct AIResponseView: View {
         currentContentView
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .overlay(alignment: .bottom) {
+        ChatComposerFade()
+      }
 
       if let shareFeedbackMessage, showShareFeedback {
         shareFeedbackBanner
@@ -204,6 +207,7 @@ struct AIResponseView: View {
         case .toolCalls(_, let calls):
           ToolCallsGroup(
             calls: calls,
+            compact: true,
             onOpenAgent: onOpenAgent,
             onOpenAgentRef: onOpenAgentRef
           )
@@ -448,35 +452,38 @@ struct AIResponseView: View {
         .environment(\.colorScheme, .dark)
       }
 
-      HStack(spacing: OmiSpacing.xs) {
-        Button(action: { shareLink() }) {
-          Image(systemName: showShareFeedback ? "checkmark" : "arrowshape.turn.up.right")
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(showShareFeedback ? .green : .secondary)
-        }
-        .buttonStyle(.plain)
-        .help("Copy share link")
-        .disabled(isSharingLink)
-
-        TextField("Ask follow up...", text: $followUpText)
-          .textFieldStyle(.plain)
-          .scaledFont(size: OmiType.body)
-          .padding(.horizontal, OmiSpacing.sm)
-          .padding(.vertical, OmiSpacing.xs)
-          .background(Color.white.opacity(isDropTargeted ? 0.18 : 0.10))
-          .cornerRadius(OmiChrome.elementRadius)
-          .focused($isFollowUpFocused)
-          .onSubmit {
-            sendFollowUp()
+      VStack(spacing: 0) {
+        HStack(spacing: OmiSpacing.xs) {
+          Button(action: { shareLink() }) {
+            Image(systemName: showShareFeedback ? "checkmark" : "arrowshape.turn.up.right")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(showShareFeedback ? .green : .secondary)
           }
+          .buttonStyle(.plain)
+          .help("Copy share link")
+          .disabled(isSharingLink)
 
-        Button(action: { sendFollowUp() }) {
-          Image(systemName: "arrow.up.circle.fill")
-            .scaledFont(size: OmiType.heading)
-            .foregroundColor(canSendFollowUp ? .white : .secondary)
+          TextField("Ask follow up...", text: $followUpText)
+            .textFieldStyle(.plain)
+            .scaledFont(size: OmiType.body)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.xs)
+            .background(Color.white.opacity(isDropTargeted ? 0.18 : 0.10))
+            .cornerRadius(OmiChrome.elementRadius)
+            .focused($isFollowUpFocused)
+            .onSubmit {
+              sendFollowUp()
+            }
+
+          Button(action: { sendFollowUp() }) {
+            Image(systemName: "arrow.up.circle.fill")
+              .scaledFont(size: OmiType.heading)
+              .foregroundColor(canSendFollowUp ? .white : .secondary)
+          }
+          .disabled(!canSendFollowUp)
+          .buttonStyle(.plain)
         }
-        .disabled(!canSendFollowUp)
-        .buttonStyle(.plain)
+        .chatComposerShell(fill: OmiColors.backgroundSecondary.opacity(0.82))
       }
     }
     .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleAttachmentDrop)

@@ -86,47 +86,8 @@ actor ScreenActivitySyncService {
     do {
       // Query screenshots that have embeddings and are newer than our cursor
       let rowsPayload: ScreenActivityRowsPayload = try await dbPool.read { [lastSyncedId, batchSize] db in
-        let sql = """
-          SELECT id, timestamp, appName, windowTitle, ocrText, embedding
-          FROM screenshots
-          WHERE id > ? AND embedding IS NOT NULL
-          ORDER BY id ASC
-          LIMIT ?
-          """
-        let dbRows = try Row.fetchAll(db, sql: sql, arguments: [lastSyncedId, batchSize])
-
-        let rows = dbRows.compactMap { row -> [String: Any]? in
-          guard let id = row["id"] as? Int64 else { return nil }
-
-          var dict: [String: Any] = ["id": id]
-
-          if let ts = row["timestamp"] as? String {
-            dict["timestamp"] = ts
-          } else if let ts = row["timestamp"] as? Double {
-            let date = Date(timeIntervalSince1970: ts)
-            dict["timestamp"] = ISO8601DateFormatter().string(from: date)
-          }
-
-          dict["appName"] = (row["appName"] as? String) ?? ""
-          dict["windowTitle"] = (row["windowTitle"] as? String) ?? ""
-          dict["ocrText"] = (row["ocrText"] as? String) ?? ""
-
-          // Convert embedding BLOB to [Double] array
-          let blobValue = row["embedding"] as DatabaseValue
-          if case .blob(let data) = blobValue.storage {
-            let floatCount = data.count / MemoryLayout<Float>.size
-            let floats = data.withUnsafeBytes { ptr in
-              Array(
-                UnsafeBufferPointer(
-                  start: ptr.baseAddress?.assumingMemoryBound(to: Float.self),
-                  count: floatCount
-                ))
-            }
-            dict["embedding"] = floats.map { Double($0) }
-          }
-
-          return dict
-        }
+        let dbRows = try Row.fetchAll(db, sql: Self.syncRowsSQL, arguments: [lastSyncedId, batchSize])
+        let rows = dbRows.compactMap(Self.payloadRow)
         return ScreenActivityRowsPayload(rows: rows)
       }
       let rows = rowsPayload.rows
@@ -154,6 +115,48 @@ actor ScreenActivitySyncService {
     } catch {
       log("ScreenActivitySync: read error — \(error.localizedDescription)")
     }
+  }
+
+  static let syncRowsSQL = """
+    SELECT id, timestamp, appName, windowTitle, ocrText, embedding, deviceName, clientDeviceId
+    FROM screenshots
+    WHERE id > ? AND embedding IS NOT NULL
+    ORDER BY id ASC
+    LIMIT ?
+    """
+
+  static func payloadRow(from row: Row) -> [String: Any]? {
+    guard let id = row["id"] as? Int64 else { return nil }
+
+    var dict: [String: Any] = ["id": id]
+    if let ts = row["timestamp"] as? String {
+      dict["timestamp"] = ts
+    } else if let ts = row["timestamp"] as? Double {
+      dict["timestamp"] = ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: ts))
+    }
+    dict["appName"] = (row["appName"] as? String) ?? ""
+    dict["windowTitle"] = (row["windowTitle"] as? String) ?? ""
+    dict["ocrText"] = (row["ocrText"] as? String) ?? ""
+    if let deviceName = row["deviceName"] as? String, !deviceName.isEmpty {
+      dict["deviceName"] = deviceName
+    }
+    if let clientDeviceId = row["clientDeviceId"] as? String, !clientDeviceId.isEmpty {
+      dict["clientDeviceId"] = clientDeviceId
+    }
+
+    let blobValue = row["embedding"] as DatabaseValue
+    if case .blob(let data) = blobValue.storage {
+      let floatCount = data.count / MemoryLayout<Float>.size
+      let floats = data.withUnsafeBytes { ptr in
+        Array(
+          UnsafeBufferPointer(
+            start: ptr.baseAddress?.assumingMemoryBound(to: Float.self),
+            count: floatCount
+          ))
+      }
+      dict["embedding"] = floats.map { Double($0) }
+    }
+    return dict
   }
 
   // MARK: - HTTP push

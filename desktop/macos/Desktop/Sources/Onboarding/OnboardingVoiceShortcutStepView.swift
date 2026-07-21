@@ -5,6 +5,8 @@ import SwiftUI
 struct OnboardingVoiceShortcutStepView: View {
   @ObservedObject var appState: AppState
   @ObservedObject var chatProvider: ChatProvider
+  var stepIndex: Int
+  var totalSteps: Int
   var onComplete: () -> Void
   var onSkip: () -> Void
   var onForceComplete: (() -> Void)?
@@ -40,6 +42,10 @@ struct OnboardingVoiceShortcutStepView: View {
       Divider()
         .background(OmiColors.backgroundTertiary)
 
+      OnboardingProgressBar(stepIndex: stepIndex, totalSteps: totalSteps)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, OmiSpacing.xl)
+
       Spacer()
 
       VStack(spacing: OmiSpacing.xxl) {
@@ -73,21 +79,25 @@ struct OnboardingVoiceShortcutStepView: View {
           }
         }
 
-        if showContinue {
-          Button(action: onComplete) {
-            Text("Continue")
-              .font(.system(size: 15, weight: .semibold))
-              .foregroundColor(.black)
-              .padding(.horizontal, OmiSpacing.xxl)
-              .padding(.vertical, OmiSpacing.md)
-              .background(
-                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-                  .fill(Color.white)
-              )
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          if showContinue {
+            Button(action: onComplete) {
+              Text("Continue")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.black)
+                .padding(.horizontal, OmiSpacing.xxl)
+                .padding(.vertical, OmiSpacing.md)
+                .background(
+                  RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+                    .fill(Color.white)
+                )
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.defaultAction)
+            .transition(.move(edge: .trailing).combined(with: .opacity))
           }
-          .buttonStyle(.plain)
-          .keyboardShortcut(.defaultAction)
-          .transition(.move(edge: .trailing).combined(with: .opacity))
         }
       }
 

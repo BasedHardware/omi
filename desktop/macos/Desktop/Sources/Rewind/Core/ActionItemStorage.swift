@@ -8,10 +8,50 @@ private struct ActionItemMetadataPayload: @unchecked Sendable {
   init(_ value: [String: Any]) { self.value = value }
 }
 
+/// Identity of a task id surfaced to the UI: either a backend id, or
+/// "local_<rowid>" minted by `ActionItemRecord.toTaskActionItem()` for a row
+/// that has not synced to the backend yet (offline creation, failed create
+/// POST). Every storage or API path that receives a surfaced id must resolve
+/// both forms — filtering only on the `backendId` column silently no-ops (or
+/// throws `recordNotFound`) for unsynced rows.
+enum ActionItemTaskIdentity: Equatable {
+  case backend(String)
+  case localRow(Int64)
+
+  init(surfacedId: String) {
+    if surfacedId.hasPrefix("local_"), let rowId = Int64(surfacedId.dropFirst(6)) {
+      self = .localRow(rowId)
+    } else {
+      self = .backend(surfacedId)
+    }
+  }
+
+  /// True when the task exists only in the local database — there is no
+  /// backend row addressable by this id, so backend mutation calls with it
+  /// can only 404.
+  var isLocalOnly: Bool {
+    if case .localRow = self { return true }
+    return false
+  }
+}
+
 /// Actor-based storage manager for action items/tasks with bidirectional sync
 /// Provides local-first caching for fast startup and background sync with backend
 actor ActionItemStorage {
   static let shared = ActionItemStorage()
+
+  /// Resolve a surfaced task id (backend id or "local_<rowid>") to its record.
+  static func fetchRecord(_ database: Database, surfacedId: String) throws -> ActionItemRecord? {
+    switch ActionItemTaskIdentity(surfacedId: surfacedId) {
+    case .localRow(let rowId):
+      return try ActionItemRecord.fetchOne(database, key: rowId)
+    case .backend(let id):
+      return
+        try ActionItemRecord
+        .filter(Column("backendId") == id)
+        .fetchOne(database)
+    }
+  }
 
   private var _dbQueue: DatabasePool?
   private var _dbGeneration = -1
@@ -124,17 +164,12 @@ actor ActionItemStorage {
       }) ?? false
   }
 
-  /// Get a single action item by its backend ID
+  /// Get a single action item by its surfaced id (backend id or "local_<rowid>")
   func getLocalActionItem(byBackendId backendId: String) async throws -> TaskActionItem? {
     let db = try await ensureInitialized()
 
     return try await db.read { database in
-      guard
-        let record =
-          try ActionItemRecord
-          .filter(Column("backendId") == backendId)
-          .fetchOne(database)
-      else {
+      guard let record = try Self.fetchRecord(database, surfacedId: backendId) else {
         return nil
       }
       return record.toTaskActionItem()
@@ -938,12 +973,7 @@ actor ActionItemStorage {
     try await authorization.withCommitLease {
       try await db.write { database in
         try authorization.require()
-        guard
-          var record =
-            try ActionItemRecord
-            .filter(Column("backendId") == backendId)
-            .fetchOne(database)
-        else {
+        guard var record = try Self.fetchRecord(database, surfacedId: backendId) else {
           throw ActionItemStorageError.recordNotFound
         }
         record.completed = completed
@@ -977,12 +1007,7 @@ actor ActionItemStorage {
     try await authorization.withCommitLease {
       try await db.write { database in
         try authorization.require()
-        guard
-          var record =
-            try ActionItemRecord
-            .filter(Column("backendId") == backendId)
-            .fetchOne(database)
-        else {
+        guard var record = try Self.fetchRecord(database, surfacedId: backendId) else {
           throw ActionItemStorageError.recordNotFound
         }
         if let description = description {
@@ -1026,10 +1051,18 @@ actor ActionItemStorage {
       try await db.write { database in
         try authorization.require()
         for update in updates {
-          try database.execute(
-            sql: "UPDATE action_items SET sortOrder = ?, indentLevel = ?, updatedAt = ? WHERE backendId = ?",
-            arguments: [update.sortOrder, update.indentLevel, Date(), update.backendId]
-          )
+          switch ActionItemTaskIdentity(surfacedId: update.backendId) {
+          case .localRow(let rowId):
+            try database.execute(
+              sql: "UPDATE action_items SET sortOrder = ?, indentLevel = ?, updatedAt = ? WHERE id = ?",
+              arguments: [update.sortOrder, update.indentLevel, Date(), rowId]
+            )
+          case .backend(let backendId):
+            try database.execute(
+              sql: "UPDATE action_items SET sortOrder = ?, indentLevel = ?, updatedAt = ? WHERE backendId = ?",
+              arguments: [update.sortOrder, update.indentLevel, Date(), backendId]
+            )
+          }
         }
         try authorization.require()
       }
@@ -1075,10 +1108,9 @@ actor ActionItemStorage {
     try await authorization.withCommitLease {
       try await db.write { database in
         try authorization.require()
-        try database.execute(
-          sql: "DELETE FROM action_items WHERE backendId = ?",
-          arguments: [backendId]
-        )
+        if let record = try Self.fetchRecord(database, surfacedId: backendId) {
+          try record.delete(database)
+        }
         try authorization.require()
       }
     }
@@ -1095,7 +1127,7 @@ actor ActionItemStorage {
     includeCompleted: Bool = true,
     includeDeleted: Bool = false
   ) async throws -> [(
-    id: Int64, description: String, completed: Bool, deleted: Bool, deletedBy: String?, relevanceScore: Int?
+    backendId: String?, description: String, completed: Bool, deleted: Bool, deletedBy: String?, relevanceScore: Int?
   )] {
     let db = try await ensureInitialized()
     // Sanitize FTS5 query: strip special characters that could be misinterpreted
@@ -1106,7 +1138,7 @@ actor ActionItemStorage {
 
     return try await db.read { database in
       var sql = """
-        SELECT a.id, a.description, a.completed, a.deleted, a.deletedBy, a.relevanceScore
+        SELECT a.backendId, a.description, a.completed, a.deleted, a.deletedBy, a.relevanceScore
         FROM action_items a
         JOIN action_items_fts fts ON fts.rowid = a.id
         WHERE action_items_fts MATCH ?
@@ -1125,7 +1157,7 @@ actor ActionItemStorage {
 
       return try Row.fetchAll(database, sql: sql, arguments: StatementArguments(arguments)).map { row in
         (
-          id: row["id"] as Int64,
+          backendId: row["backendId"] as String?,
           description: row["description"] as String,
           completed: row["completed"] as Bool,
           deleted: row["deleted"] as Bool,
@@ -1138,7 +1170,7 @@ actor ActionItemStorage {
 
   /// Get active tasks with the highest relevance (lowest score = most important)
   func getTopRelevanceTasks(limit: Int = 30) async throws -> [(
-    id: Int64, description: String, priority: String?, relevanceScore: Int?
+    backendId: String?, description: String, priority: String?, relevanceScore: Int?
   )] {
     let db = try await ensureInitialized()
 
@@ -1146,13 +1178,13 @@ actor ActionItemStorage {
       try Row.fetchAll(
         database,
         sql: """
-              SELECT id, description, priority, relevanceScore FROM action_items
+              SELECT backendId, description, priority, relevanceScore FROM action_items
               WHERE completed = 0 AND deleted = 0 AND relevanceScore IS NOT NULL
               ORDER BY relevanceScore ASC LIMIT ?
           """, arguments: [limit]
       ).map { row in
         (
-          id: row["id"] as Int64,
+          backendId: row["backendId"] as String?,
           description: row["description"] as String,
           priority: row["priority"] as String?,
           relevanceScore: row["relevanceScore"] as Int?
@@ -1163,7 +1195,7 @@ actor ActionItemStorage {
 
   /// Get most recently created active tasks
   func getRecentActiveTasks(limit: Int = 30) async throws -> [(
-    id: Int64, description: String, priority: String?, relevanceScore: Int?
+    backendId: String?, description: String, priority: String?, relevanceScore: Int?
   )] {
     let db = try await ensureInitialized()
 
@@ -1171,13 +1203,13 @@ actor ActionItemStorage {
       try Row.fetchAll(
         database,
         sql: """
-              SELECT id, description, priority, relevanceScore FROM action_items
+              SELECT backendId, description, priority, relevanceScore FROM action_items
               WHERE completed = 0 AND deleted = 0
               ORDER BY createdAt DESC LIMIT ?
           """, arguments: [limit]
       ).map { row in
         (
-          id: row["id"] as Int64,
+          backendId: row["backendId"] as String?,
           description: row["description"] as String,
           priority: row["priority"] as String?,
           relevanceScore: row["relevanceScore"] as Int?
@@ -1479,18 +1511,7 @@ actor ActionItemStorage {
     try await authorization.withCommitLease {
       try await db.write { database in
         try authorization.require()
-        // Find by backendId, or by local ID (local_<rowid>)
-        var record: ActionItemRecord?
-        if taskId.hasPrefix("local_"), let localId = Int64(taskId.dropFirst(6)) {
-          record = try ActionItemRecord.fetchOne(database, key: localId)
-        } else {
-          record =
-            try ActionItemRecord
-            .filter(Column("backendId") == taskId)
-            .fetchOne(database)
-        }
-
-        guard var rec = record else {
+        guard var rec = try Self.fetchRecord(database, surfacedId: taskId) else {
           log("ActionItemStorage: updateAgentState - record not found for taskId \(taskId)")
           return
         }
@@ -1531,17 +1552,7 @@ actor ActionItemStorage {
     try await authorization.withCommitLease {
       try await db.write { database in
         try authorization.require()
-        var record: ActionItemRecord?
-        if taskId.hasPrefix("local_"), let localId = Int64(taskId.dropFirst(6)) {
-          record = try ActionItemRecord.fetchOne(database, key: localId)
-        } else {
-          record =
-            try ActionItemRecord
-            .filter(Column("backendId") == taskId)
-            .fetchOne(database)
-        }
-
-        guard var rec = record else { return }
+        guard var rec = try Self.fetchRecord(database, surfacedId: taskId) else { return }
 
         rec.agentStatus = nil
         rec.agentSessionName = nil

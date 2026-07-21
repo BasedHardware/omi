@@ -140,24 +140,32 @@ class PhoneMicPigeonPigeonCodec: FlutterStandardMessageCodec, @unchecked Sendabl
 }
 
 
-/// Dart -> native. start(mode) resolves once the engine is running, or throws a
-/// PlatformException with one of: permission_denied, session_config_failed,
-/// format_invalid, converter_init_failed, engine_start_failed. In batch mode it
-/// may additionally throw opus_init_failed (the native opus encoder could not be
-/// created) or batch_dir_unavailable (flutter.batchAudioDir is unset/empty).
+/// Dart -> native. start(mode, sessionId) resolves once the engine is running, or
+/// throws a PlatformException with one of: permission_denied,
+/// session_config_failed, format_invalid, converter_init_failed,
+/// engine_start_failed. In batch mode it may additionally throw opus_init_failed
+/// (the native opus encoder could not be created) or batch_dir_unavailable
+/// (flutter.batchAudioDir is unset/empty).
+///
+/// `sessionId` is a Dart-minted, monotonically increasing identity for this
+/// capture session. Every FlutterApi event carries the id of the session it
+/// belongs to; Dart drops any event whose id does not match its current session.
+/// A start() arriving while a native session is already live ADOPTS the new id
+/// (all future events for that live session carry it) and immediately re-emits the
+/// current state under it — so the caller always converges to the real state even
+/// after a de-sync. The session's mode is fixed at its original start and a late
+/// start() cannot re-select it.
+///
 /// stop() resolves only after teardown is fully drained — no frames or events
 /// arrive after it, and in batch mode the current .bin file is finalized (fsynced
-/// + atomically promoted, so it is ingestable) before stop() resolves.
+/// + atomically promoted, so it is ingestable) before stop() resolves. stop() is
+/// safe to call regardless of session state (it resolves harmlessly when idle).
 ///
 /// Generated protocol from Pigeon that represents a handler of messages from Flutter.
 protocol PhoneMicHostApi {
-  func start(mode: PhoneMicCaptureMode, completion: @escaping (Result<Void, Error>) -> Void)
+  func start(mode: PhoneMicCaptureMode, sessionId: Int64, completion: @escaping (Result<Void, Error>) -> Void)
   func stop(completion: @escaping (Result<Void, Error>) -> Void)
   func isRecording() throws -> Bool
-  /// DEBUG VERIFICATION ONLY — removed before merge. Encodes a 16kHz mono PCM16
-  /// WAV through the batch opus encoder + writer and returns the produced .bin
-  /// path, so the native encode+WAL round-trip can be validated end to end.
-  func debugEncodeWavToBin(wavPath: String, marker: String, completion: @escaping (Result<String, Error>) -> Void)
 }
 
 /// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
@@ -171,7 +179,8 @@ class PhoneMicHostApiSetup {
       startChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
         let modeArg = args[0] as! PhoneMicCaptureMode
-        api.start(mode: modeArg) { result in
+        let sessionIdArg = args[1] as! Int64
+        api.start(mode: modeArg, sessionId: sessionIdArg) { result in
           switch result {
           case .success:
             reply(wrapResult(nil))
@@ -211,45 +220,26 @@ class PhoneMicHostApiSetup {
     } else {
       isRecordingChannel.setMessageHandler(nil)
     }
-    /// DEBUG VERIFICATION ONLY — removed before merge. Encodes a 16kHz mono PCM16
-    /// WAV through the batch opus encoder + writer and returns the produced .bin
-    /// path, so the native encode+WAL round-trip can be validated end to end.
-    let debugEncodeWavToBinChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_phone_mic.PhoneMicHostApi.debugEncodeWavToBin\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
-    if let api = api {
-      debugEncodeWavToBinChannel.setMessageHandler { message, reply in
-        let args = message as! [Any?]
-        let wavPathArg = args[0] as! String
-        let markerArg = args[1] as! String
-        api.debugEncodeWavToBin(wavPath: wavPathArg, marker: markerArg) { result in
-          switch result {
-          case .success(let res):
-            reply(wrapResult(res))
-          case .failure(let error):
-            reply(wrapError(error))
-          }
-        }
-      }
-    } else {
-      debugEncodeWavToBinChannel.setMessageHandler(nil)
-    }
   }
 }
-/// Native -> Dart.
+/// Native -> Dart. Every method carries the `sessionId` of the session the event
+/// belongs to; Dart drops any event whose id does not match its current session.
 ///
 /// Generated protocol from Pigeon that represents Flutter messages that can be called from Swift.
 protocol PhoneMicFlutterApiProtocol {
   /// PCM16 little-endian mono @16kHz. Chunk sizes vary with the input route.
-  /// Stream mode only; batch mode never emits frames.
-  func onAudioFrame(pcm16leMono16k pcm16leMono16kArg: FlutterStandardTypedData, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void)
-  func onStateChanged(state stateArg: PhoneMicCaptureState, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void)
+  /// Stream mode only; batch mode never emits frames. A frame belongs to the
+  /// session that was current when its capture epoch was built.
+  func onAudioFrame(pcm16leMono16k pcm16leMono16kArg: FlutterStandardTypedData, sessionId sessionIdArg: Int64, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void)
+  func onStateChanged(state stateArg: PhoneMicCaptureState, sessionId sessionIdArg: Int64, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void)
   /// Non-fatal runtime failures (capture self-heals): converter_failed,
   /// rebuild_failed, resume_failed, media_services_reset, batch_storage_full.
-  func onCaptureError(code codeArg: String, message messageArg: String, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void)
+  func onCaptureError(code codeArg: String, message messageArg: String, sessionId sessionIdArg: Int64, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void)
   /// Emitted at 1Hz while batch capture runs. Its arrival is the liveness signal
   /// for the Dart batch watchdog; the value is derived from the number of frames
   /// actually written to disk, so mutes and interruptions freeze it while the
   /// event keeps arriving.
-  func onBatchProgress(capturedSeconds capturedSecondsArg: Double, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void)
+  func onBatchProgress(capturedSeconds capturedSecondsArg: Double, sessionId sessionIdArg: Int64, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void)
 }
 class PhoneMicFlutterApi: PhoneMicFlutterApiProtocol {
   private let binaryMessenger: FlutterBinaryMessenger
@@ -262,11 +252,12 @@ class PhoneMicFlutterApi: PhoneMicFlutterApiProtocol {
     return PhoneMicPigeonPigeonCodec.shared
   }
   /// PCM16 little-endian mono @16kHz. Chunk sizes vary with the input route.
-  /// Stream mode only; batch mode never emits frames.
-  func onAudioFrame(pcm16leMono16k pcm16leMono16kArg: FlutterStandardTypedData, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void) {
+  /// Stream mode only; batch mode never emits frames. A frame belongs to the
+  /// session that was current when its capture epoch was built.
+  func onAudioFrame(pcm16leMono16k pcm16leMono16kArg: FlutterStandardTypedData, sessionId sessionIdArg: Int64, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void) {
     let channelName: String = "dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onAudioFrame\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
-    channel.sendMessage([pcm16leMono16kArg] as [Any?]) { response in
+    channel.sendMessage([pcm16leMono16kArg, sessionIdArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return
@@ -281,10 +272,10 @@ class PhoneMicFlutterApi: PhoneMicFlutterApiProtocol {
       }
     }
   }
-  func onStateChanged(state stateArg: PhoneMicCaptureState, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void) {
+  func onStateChanged(state stateArg: PhoneMicCaptureState, sessionId sessionIdArg: Int64, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void) {
     let channelName: String = "dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onStateChanged\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
-    channel.sendMessage([stateArg] as [Any?]) { response in
+    channel.sendMessage([stateArg, sessionIdArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return
@@ -301,10 +292,10 @@ class PhoneMicFlutterApi: PhoneMicFlutterApiProtocol {
   }
   /// Non-fatal runtime failures (capture self-heals): converter_failed,
   /// rebuild_failed, resume_failed, media_services_reset, batch_storage_full.
-  func onCaptureError(code codeArg: String, message messageArg: String, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void) {
+  func onCaptureError(code codeArg: String, message messageArg: String, sessionId sessionIdArg: Int64, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void) {
     let channelName: String = "dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onCaptureError\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
-    channel.sendMessage([codeArg, messageArg] as [Any?]) { response in
+    channel.sendMessage([codeArg, messageArg, sessionIdArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return
@@ -323,10 +314,10 @@ class PhoneMicFlutterApi: PhoneMicFlutterApiProtocol {
   /// for the Dart batch watchdog; the value is derived from the number of frames
   /// actually written to disk, so mutes and interruptions freeze it while the
   /// event keeps arriving.
-  func onBatchProgress(capturedSeconds capturedSecondsArg: Double, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void) {
+  func onBatchProgress(capturedSeconds capturedSecondsArg: Double, sessionId sessionIdArg: Int64, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void) {
     let channelName: String = "dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onBatchProgress\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
-    channel.sendMessage([capturedSecondsArg] as [Any?]) { response in
+    channel.sendMessage([capturedSecondsArg, sessionIdArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return

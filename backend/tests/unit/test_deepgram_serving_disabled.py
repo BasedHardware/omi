@@ -17,11 +17,12 @@ def test_streaming_ignores_a_stale_deepgram_model_configuration(monkeypatch):
     monkeypatch.setattr(streaming, 'is_dg_self_hosted', False)
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.internal')
 
-    service, language, model = streaming.get_stt_service_for_language('en')
+    service, language, model = streaming.get_stt_service_for_language('en', multi_lang_enabled=False)
 
-    assert service == streaming.STTService.parakeet
+    # After #10048 fix: Modulate is the safe primary; Deepgram retirement must be subtractive
+    assert service == streaming.STTService.modulate
     assert language == 'en'
-    assert model == 'parakeet'
+    assert model == 'velma-2'
 
 
 def test_ptt_ignores_a_self_hosted_deepgram_model_configuration(monkeypatch):
@@ -31,9 +32,10 @@ def test_ptt_ignores_a_self_hosted_deepgram_model_configuration(monkeypatch):
 
     service, language, model = streaming.get_stt_service_for_language('en', surface=STTServingSurface.PTT)
 
-    assert service == streaming.STTService.parakeet
+    # After #10048 fix: Modulate is the safe primary for PTT too
+    assert service == streaming.STTService.modulate
     assert language == 'en'
-    assert model == 'parakeet'
+    assert model == 'velma-2'
 
 
 def test_prerecorded_ignores_a_stale_deepgram_model_configuration(monkeypatch):

@@ -2,6 +2,7 @@ replicaCount: 2
 
 image:
   repository: gcr.io/based-hardware/llm-gateway
+  digest: ""
   pullPolicy: Always
   tag: ""
 
@@ -99,6 +100,8 @@ env:
     value: "1"
   - name: LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES
     value: "1000"
+  - name: OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS
+    value: "public_shared_conversation_chat"
 
 resources:
   requests:

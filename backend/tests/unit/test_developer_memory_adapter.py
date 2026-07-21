@@ -6,10 +6,8 @@ from models.memory_search_gateway import SearchMode
 from models.product_memory import MemoryTier, ProcessingState
 from tests.unit.fixtures.memory_adapter_fakes import (
     FirestoreFake as _FirestoreFake,
-    MEMORY_ADAPTER_FIXTURE_NOW as _FIXTURE_NOW,
     VectorCandidateResult as _VectorCandidateResult,
     enabled_rollout_doc,
-    freeze_default_vector_eligibility_clock,
     memory_item,
     stored_item as _stored_item,
     vector_hit as _hit,
@@ -185,16 +183,22 @@ def test_developer_update_route_checks_split_brain_guard_before_reads_and_legacy
 
 
 def test_developer_routes_only_reach_legacy_after_explicit_legacy_safe_decision():
+    # Static tripwire (source order, not behavior): the list route may reach the
+    # legacy read only through the deny branch's narrow un-enrolled guard (#9892);
+    # the vector route still requires an explicit legacy-safe decision.
     developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
     contents = developer_py.read_text(encoding='utf-8')
     denied_check = 'if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:'
-    legacy_safe_check = 'if memory_result.should_use_legacy_fallback:'
+    unenrolled_guard = "if memory_result.fallback_reason != 'missing_rollout_state':"
     legacy_call = 'memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])'
     assert denied_check in contents
-    assert legacy_safe_check in contents
+    assert unenrolled_guard in contents
     assert legacy_call in contents
-    assert contents.index(denied_check) < contents.index(legacy_safe_check) < contents.index(legacy_call)
+    assert contents.index(denied_check) < contents.index(unenrolled_guard) < contents.index(legacy_call)
     vector_route_source = _function_source_for_route('/v1/dev/user/memories/vector/search', 'get')
+    legacy_safe_check = 'if memory_result.should_use_legacy_fallback:'
+    assert denied_check in vector_route_source
+    assert legacy_safe_check in vector_route_source
     assert vector_route_source.index(denied_check) < vector_route_source.index(legacy_safe_check)
 
 
@@ -208,7 +212,7 @@ def test_developer_category_filters_do_not_force_legacy_when_memory_can_decide_s
 
 
 def test_developer_default_memory_adapter_filters_categories_without_legacy_fallback():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     source_unknown = _memory_item('source-unknown', now=now, content='coffee source unknown')
     db_client = _FirestoreFake({f'users/u1/memory_items/{source_unknown.memory_id}': _stored_item(source_unknown)})
     decision = read_default_read_rollout(
@@ -379,7 +383,7 @@ def test_split_brain_guard_allows_disabled_but_blocks_when_convergence_policy_no
 
 
 def test_developer_default_memory_adapter_uses_product_search_and_excludes_stale_short_term_and_archive():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
         'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
@@ -416,7 +420,7 @@ def test_developer_default_memory_adapter_uses_product_search_and_excludes_stale
 
 
 def test_developer_default_memory_adapter_excludes_pending_admission_text():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     pending = _memory_item(
         'pending-explicit',
         now=now,
@@ -438,7 +442,7 @@ def test_developer_default_memory_adapter_excludes_pending_admission_text():
 
 
 def test_developer_default_memory_response_shape_marks_compatibility_defaults_without_silent_fabrication():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     public_item = _memory_item('public-source', now=now, content='coffee public source', visibility='public')
     db_client = _FirestoreFake({f'users/u1/memory_items/{public_item.memory_id}': _stored_item(public_item)})
     decision = read_default_read_rollout(
@@ -462,7 +466,7 @@ def test_developer_default_memory_response_shape_marks_compatibility_defaults_wi
 
 
 def test_developer_default_memory_adapter_returns_denied_decision_when_rollout_or_grant_disabled_without_firestore_read():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     db_client = _FirestoreFake({f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term)})
     disabled_decision = read_default_read_rollout(
@@ -512,11 +516,8 @@ def test_developer_default_memory_adapter_classifies_explicit_legacy_safe_withou
     assert db_client.collection_paths == []
 
 
-def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_without_archive_default(
-    monkeypatch,
-):
-    now = _FIXTURE_NOW
-    freeze_default_vector_eligibility_clock(monkeypatch, now=now)
+def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_without_archive_default():
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
         'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
@@ -549,12 +550,7 @@ def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ran
         )
 
     result = search_memory_default_developer_memories_vector(
-        uid='u1',
-        query='coffee',
-        limit=10,
-        db_client=db_client,
-        rollout_decision=decision,
-        vector_query=vector_query,
+        uid='u1', query='coffee', limit=10, db_client=db_client, rollout_decision=decision, vector_query=vector_query
     )
     assert result.read_decision == MemoryReadDecision.USE_MEMORY
     assert result.fallback_reason is None
@@ -570,7 +566,7 @@ def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ran
 
 
 def test_developer_vector_adapter_returns_denied_decision_before_vector_or_memory_reads_when_rollout_or_grant_disabled():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     db_client = _FirestoreFake({f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term)})
     vector_calls = []

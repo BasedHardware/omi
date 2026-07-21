@@ -256,24 +256,67 @@ final class APIClientRoutingTests: XCTestCase {
     XCTAssertEqual(url, "https://desktop-backend-hhibjajaja-uc.a.run.app/")
   }
 
-  func testBetaProductionBundleRoutesToDevelopmentBackends() {
-    XCTAssertTrue(
+  func testBetaProductionBundleUsesDedicatedRingRatherThanDevelopment() {
+    XCTAssertFalse(
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(
         bundleIdentifier: "com.omi.computer-macos",
         updateChannel: "beta"
       ))
-    // "staging" is normalized to "beta" — same routing.
-    XCTAssertTrue(
+    // "staging" is normalized to "beta" — same ring.
+    XCTAssertFalse(
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(
         bundleIdentifier: "com.omi.computer-macos",
         updateChannel: "staging"
       ))
+    XCTAssertTrue(
+      DesktopBackendEnvironment.shouldUseBetaRingBackends(
+        bundleIdentifier: "com.omi.computer-macos",
+        updateChannel: "beta"
+      ))
+    XCTAssertEqual(
+      DesktopBackendEnvironment.pythonBaseURL(
+        useDevelopmentBackends: false,
+        useBetaRingBackends: true,
+        environmentValue: nil
+      ),
+      "https://api-beta.omi.me/"
+    )
+    XCTAssertEqual(
+      DesktopBackendEnvironment.rustBackendURL(
+        useDevelopmentBackends: false,
+        useBetaRingBackends: true,
+        environmentValue: nil,
+        launchEnvironmentValue: nil
+      ),
+      ""
+    )
   }
 
   func testStableProductionBundleKeepsProductionBackends() {
     XCTAssertFalse(
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(
         bundleIdentifier: "com.omi.computer-macos",
+        updateChannel: "stable"
+      ))
+  }
+
+  func testBetaIdentityBundleRoutesByChannelLikeProduction() {
+    // The Omi Beta app is production-family: it must not take the named-dev-bundle
+    // always-dev branch, and on its pinned beta channel it rides the beta release
+    // ring exactly like a stable-identity beta-channel client.
+    XCTAssertFalse(
+      DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        updateChannel: "beta"
+      ))
+    XCTAssertTrue(
+      DesktopBackendEnvironment.shouldUseBetaRingBackends(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        updateChannel: "beta"
+      ))
+    XCTAssertFalse(
+      DesktopBackendEnvironment.shouldUseBetaRingBackends(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
         updateChannel: "stable"
       ))
   }

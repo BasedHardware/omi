@@ -76,4 +76,39 @@ void main() {
       expect(isAutoPhoneBatchRecording('audio_omibatchphoneauto'), isFalse);
     });
   });
+
+  group('selectPhoneMicSessionMode', () {
+    // (supportsBatch, batchModeEnabled, hasNetwork) -> expected mode, all 8 combos.
+    const cases = <({bool supportsBatch, bool batchModeEnabled, bool hasNetwork, PhoneMicSessionMode expected})>[
+      // No native recorder module → always Live, whatever the toggle/network is.
+      (supportsBatch: false, batchModeEnabled: false, hasNetwork: false, expected: PhoneMicSessionMode.live),
+      (supportsBatch: false, batchModeEnabled: false, hasNetwork: true, expected: PhoneMicSessionMode.live),
+      (supportsBatch: false, batchModeEnabled: true, hasNetwork: false, expected: PhoneMicSessionMode.live),
+      (supportsBatch: false, batchModeEnabled: true, hasNetwork: true, expected: PhoneMicSessionMode.live),
+      // Supported + explicit Transcribe Later → batchExplicit regardless of network.
+      // Explicit suppresses the auto fallback: offline+enabled is batchExplicit, NOT batchAuto.
+      (supportsBatch: true, batchModeEnabled: true, hasNetwork: false, expected: PhoneMicSessionMode.batchExplicit),
+      (supportsBatch: true, batchModeEnabled: true, hasNetwork: true, expected: PhoneMicSessionMode.batchExplicit),
+      // Supported + toggle off → automatic offline fallback only when there is no network.
+      (supportsBatch: true, batchModeEnabled: false, hasNetwork: false, expected: PhoneMicSessionMode.batchAuto),
+      (supportsBatch: true, batchModeEnabled: false, hasNetwork: true, expected: PhoneMicSessionMode.live),
+    ];
+
+    for (final c in cases) {
+      test(
+        'supportsBatch=${c.supportsBatch} batchModeEnabled=${c.batchModeEnabled} '
+        'hasNetwork=${c.hasNetwork} -> ${c.expected}',
+        () {
+          expect(
+            selectPhoneMicSessionMode(
+              supportsBatch: c.supportsBatch,
+              batchModeEnabled: c.batchModeEnabled,
+              hasNetwork: c.hasNetwork,
+            ),
+            c.expected,
+          );
+        },
+      );
+    }
+  });
 }

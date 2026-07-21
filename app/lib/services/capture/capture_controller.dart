@@ -31,6 +31,7 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
+import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
@@ -43,6 +44,7 @@ import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/audio_sources/phone_mic_source.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -197,10 +199,6 @@ class CaptureController extends ChangeNotifier
       ServiceManager.instance().phoneMic.stop();
       // Re-assert interrupted so the recorder's stop callback doesn't overwrite it.
       updateRecordingState(RecordingState.interrupted);
-      if (!Platform.isIOS) {
-        // flutter_sound needs a beat to finish native teardown before restart.
-        await Future.delayed(const Duration(milliseconds: 250));
-      }
       // _activeSource is cleared if the user manually stopped — bail in that case.
       if (_activeSource is! PhoneMicSource) return;
       // Use _resumeMicRecording (not streamRecording) to preserve existing socket/segments.
@@ -265,29 +263,7 @@ class CaptureController extends ChangeNotifier
   BtDevice? _recordingDevice;
 
   String? _getConversationSourceFromDevice() {
-    if (_recordingDevice == null) {
-      return null;
-    }
-    switch (_recordingDevice!.type) {
-      case DeviceType.friendPendant:
-        return 'friend_com';
-      case DeviceType.omi:
-        return 'omi';
-      case DeviceType.openglass:
-        return 'openglass';
-      case DeviceType.fieldy:
-        return 'fieldy';
-      case DeviceType.bee:
-        return 'bee';
-      case DeviceType.plaud:
-        return 'plaud';
-      case DeviceType.appleWatch:
-        return 'apple_watch';
-      case DeviceType.limitless:
-        return 'limitless';
-      case DeviceType.raybanMeta:
-        return 'rayban_meta';
-    }
+    return conversationSourceForDeviceType(_recordingDevice?.type);
   }
 
   ServerConversation? _conversation;
@@ -507,10 +483,9 @@ class CaptureController extends ChangeNotifier
 
   bool get deviceSupportsTranscribeLater => supportsTranscribeLater(_recordingDevice?.type);
 
-  // The phone microphone can capture Transcribe Later (batch) audio only where
-  // the native AVAudioEngine recorder lives: iOS. On Android the phone-mic path
-  // has no batch writer, so an offline/batch session falls back to Live.
-  static bool get phoneMicSupportsTranscribeLater => Platform.isIOS;
+  // The phone microphone can capture Transcribe Later (batch) audio where a
+  // native recorder module exists — iOS (AVAudioEngine) and Android (AudioRecord).
+  static bool get phoneMicSupportsTranscribeLater => Platform.isIOS || Platform.isAndroid;
 
   Future<bool> setBatchMode(bool enabled) async {
     if (SharedPreferencesUtil().batchModeEnabled == enabled) return true;
@@ -1370,14 +1345,17 @@ class CaptureController extends ChangeNotifier
   }
 
   streamRecording() async {
-    // Mode is fixed for the whole session at start. On iOS the phone mic can
-    // capture Transcribe Later (batch) audio: explicitly when the user enabled
-    // it, or automatically as an offline fallback when there is no network. Both
-    // write .bin files natively instead of opening the realtime socket.
-    final bool batchExplicit = Platform.isIOS && SharedPreferencesUtil().batchModeEnabled;
-    final bool batchAuto = !batchExplicit && Platform.isIOS && !ConnectivityService().isConnected;
-    if (batchExplicit || batchAuto) {
-      await _startPhoneMicBatch(auto: batchAuto);
+    // Mode is fixed for the whole session at start. On iOS and Android the phone
+    // mic can capture Transcribe Later (batch) audio: explicitly when the user
+    // enabled it, or automatically as an offline fallback when there is no
+    // network. Both write .bin files natively instead of opening the realtime socket.
+    final mode = selectPhoneMicSessionMode(
+      supportsBatch: phoneMicSupportsTranscribeLater,
+      batchModeEnabled: SharedPreferencesUtil().batchModeEnabled,
+      hasNetwork: ConnectivityService().isConnected,
+    );
+    if (mode != PhoneMicSessionMode.live) {
+      await _startPhoneMicBatch(auto: mode == PhoneMicSessionMode.batchAuto);
       return;
     }
 

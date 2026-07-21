@@ -748,7 +748,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                               style: const TextStyle(color: Colors.white, fontSize: 14),
                               cursorColor: Colors.white,
                               decoration: InputDecoration(
-                                hintText: 'Search settings…',
+                                hintText: context.l10n.searchSettings,
                                 hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
                                 filled: true,
                                 fillColor: const Color(0xFF1C1C1E),
@@ -789,7 +789,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                               });
                               _searchFocusNode.unfocus();
                             },
-                            child: const Text('Cancel', style: TextStyle(color: Colors.white, fontSize: 16)),
+                            child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.white, fontSize: 16)),
                           ),
                         ],
                       ),

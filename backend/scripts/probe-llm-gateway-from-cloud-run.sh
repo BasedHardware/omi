@@ -13,6 +13,7 @@ SUBNET=""
 VPC_EGRESS=""
 TOKEN_SECRET="OMI_LLM_GATEWAY_SERVICE_TOKEN"
 NAME_SUFFIX=""
+LANES=("")
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -25,6 +26,7 @@ while [[ $# -gt 0 ]]; do
     --vpc-egress) VPC_EGRESS="$2"; shift 2 ;;
     --token-secret) TOKEN_SECRET="$2"; shift 2 ;;
     --name-suffix) NAME_SUFFIX="$2"; shift 2 ;;
+    --lane) LANES+=("$2"); shift 2 ;;
     *) echo "ERROR: unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -41,6 +43,12 @@ if [[ ! "$NAME_SUFFIX" =~ ^[a-z0-9-]+$ ]]; then
 fi
 
 JOB_NAME="llm-gateway-vpc-probe-${NAME_SUFFIX}"
+SMOKE_ARGS=(scripts/smoke-llm-gateway.py --url "$GATEWAY_URL")
+for lane in "${LANES[@]}"; do
+  [[ -n "$lane" ]] || continue
+  SMOKE_ARGS+=(--lane "$lane")
+done
+SMOKE_ARGS_CSV="$(IFS=,; echo "${SMOKE_ARGS[*]}")"
 cleanup() {
   gcloud run jobs delete "$JOB_NAME" --project="$PROJECT" --region="$REGION" --quiet >/dev/null 2>&1 || true
 }
@@ -56,7 +64,7 @@ gcloud run jobs deploy "$JOB_NAME" \
   --set-env-vars="SMOKE_URL=$GATEWAY_URL" \
   --set-secrets="OMI_LLM_GATEWAY_SERVICE_TOKEN=${TOKEN_SECRET}:latest" \
   --command=python \
-  --args=scripts/smoke-llm-gateway.py,--url,"$GATEWAY_URL" \
+  --args="$SMOKE_ARGS_CSV" \
   --task-timeout=90s \
   --max-retries=0 \
   --quiet

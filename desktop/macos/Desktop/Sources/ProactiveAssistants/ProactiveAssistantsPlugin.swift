@@ -277,38 +277,34 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
 
     // Request notification permission in parallel, but only for first-time users.
-    // Denied users should not be put through repeated startup repair loops.
-    UNUserNotificationCenter.current().getNotificationSettings { settings in
-      DispatchQueue.main.async {
-        guard settings.authorizationStatus == .notDetermined else {
-          log("Skipping startup notification authorization request (auth=\(settings.authorizationStatus.rawValue))")
-          return
-        }
-
-        // Only attempt the launch-services repair-capable authorization once per
-        // app version on this non-user-initiated path. Otherwise users stuck in the
-        // launch-disabled + notDetermined state re-run lsregister + killall
-        // usernoted/NotificationCenter on every launch/wake (issue #9082). The
-        // user-initiated "Fix" flows and onboarding prompt remain unaffected.
-        guard NotificationRegistrationRepair.shouldAttemptStartupRepair() else {
-          log("Skipping startup notification repair — already attempted for this app version")
-          return
-        }
-        NotificationRegistrationRepair.markStartupRepairAttempted()
-
-        NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
-          reason: "launch_disabled_error_startup",
-          previousStatus: "notDetermined"
-        ) { granted in
-          if !granted {
-            log("Notification permission not granted - screen analysis will work but notifications will be disabled")
-          }
-        }
-      }
-    }
+    // The bridge owns the private-XPC callback registration and explicit main handoff.
+    UserNotificationCallbackBridge.authorizationStatus(handler: Self.handleStartupNotificationAuthorizationStatus)
 
     // Start monitoring immediately — don't wait for notification permission callback
     continueStartMonitoring(completion: completion)
+  }
+
+  @MainActor
+  private static func handleStartupNotificationAuthorizationStatus(_ authorizationStatus: UNAuthorizationStatus) {
+    guard authorizationStatus == .notDetermined else {
+      log("Skipping startup notification authorization request (auth=\(authorizationStatus.rawValue))")
+      return
+    }
+
+    guard NotificationRegistrationRepair.shouldAttemptStartupRepair() else {
+      log("Skipping startup notification repair — already attempted for this app version")
+      return
+    }
+    NotificationRegistrationRepair.markStartupRepairAttempted()
+
+    NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
+      reason: "launch_disabled_error_startup",
+      previousStatus: "notDetermined"
+    ) { granted in
+      if !granted {
+        log("Notification permission not granted - screen analysis will work but notifications will be disabled")
+      }
+    }
   }
 
   /// Repair LaunchServices registration when notification authorization fails with "not allowed".

@@ -61,6 +61,10 @@ class FakeStreamingSTTSocket:
 
     async def drain_and_close(self):
         self.drain_calls += 1
+        # Production drain_and_close finalizes the socket (Parakeet sets
+        # _closed, Deepgram queues EOS); mirror that so teardown observability
+        # (finish_calls) stays consistent between real and fake sockets.
+        self.finish()
 
     def finish(self) -> None:
         self.finish_calls += 1
@@ -74,6 +78,7 @@ def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False):
     """
     from routers.listen import receiver as listen_receiver
     from routers.listen import runtime as listen_runtime
+    from utils.stt.streaming import STTService
 
     sockets = []
 
@@ -94,7 +99,7 @@ def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False):
     monkeypatch.setattr(
         listen_runtime,
         "get_stt_service_for_language",
-        lambda *_args, **_kwargs: (listen_runtime.STTService.parakeet, "en", "parakeet"),
+        lambda *_args, **_kwargs: (STTService.parakeet, "en", "parakeet"),
     )
     monkeypatch.setattr(listen_receiver, "is_gate_enabled", lambda: False)
     monkeypatch.setattr(listen_runtime, "record_usage", lambda *args, **kwargs: None)

@@ -635,6 +635,10 @@ extension SettingsContentView {
             Text("Release builds always auto-check and auto-install updates in the background.")
               .scaledFont(size: OmiType.caption)
               .foregroundColor(OmiColors.textTertiary)
+          } else if AppBuild.isNamedDevelopmentBundle {
+            Text("Named developer bundles do not use shared Sparkle updates. Run omi-dev update instead.")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(OmiColors.textTertiary)
           } else if AnalyticsManager.isDevBuild {
             Text(
               "Development builds keep automatic installation disabled to avoid replacing the local app."
@@ -650,23 +654,31 @@ extension SettingsContentView {
             title: "Update Channel", subtitle: updaterViewModel.updateChannel.description,
             settingId: "about.channel"
           ) {
-            SettingsMenuPicker(
-              selection: Binding(
-                get: { updaterViewModel.updateChannel },
-                set: { newChannel in
-                  // Switching beta → stable with a newer build: confirm first
-                  if updaterViewModel.updateChannel == .beta && newChannel == .stable
-                    && updaterViewModel.isDowngradeToStable
-                  {
-                    showDowngradeAlert = true
-                  } else {
-                    updaterViewModel.updateChannel = newChannel
+            if AppBuild.isBetaProductionBundle {
+              // Omi Beta is permanently a beta-channel client; switching it to stable
+              // would make Sparkle replace it with the stable-identity app in place.
+              Text(UpdateChannel.beta.displayName)
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(OmiColors.textSecondary)
+            } else {
+              SettingsMenuPicker(
+                selection: Binding(
+                  get: { updaterViewModel.updateChannel },
+                  set: { newChannel in
+                    // Switching beta → stable with a newer build: confirm first
+                    if updaterViewModel.updateChannel == .beta && newChannel == .stable
+                      && updaterViewModel.isDowngradeToStable
+                    {
+                      showDowngradeAlert = true
+                    } else {
+                      updaterViewModel.updateChannel = newChannel
+                    }
                   }
+                )
+              ) {
+                ForEach(UpdateChannel.allCases, id: \.self) { channel in
+                  Text(channel.displayName).tag(channel)
                 }
-              )
-            ) {
-              ForEach(UpdateChannel.allCases, id: \.self) { channel in
-                Text(channel.displayName).tag(channel)
               }
             }
           }

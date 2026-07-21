@@ -235,6 +235,57 @@ final class OnboardingFlowTests: XCTestCase {
     XCTAssertEqual(OnboardingFlow.steps[8], "Accessibility")
   }
 
+  func testCanJumpAllowsBackwardAndReachedStepsAlways() {
+    XCTAssertTrue(OnboardingFlow.canJump(to: 0, furthestStep: 10))
+    XCTAssertTrue(OnboardingFlow.canJump(to: 10, furthestStep: 10))
+    XCTAssertTrue(OnboardingFlow.canJump(to: 2, furthestStep: 2))
+  }
+
+  func testCanJumpBlocksForwardOverUnansweredRequiredSteps() {
+    // Steps 0-3 (Name/Language/HowDidYouHear/Trust) have no Skip button.
+    XCTAssertFalse(OnboardingFlow.canJump(to: 3, furthestStep: 2))
+    XCTAssertFalse(OnboardingFlow.canJump(to: 9, furthestStep: 0))
+    XCTAssertFalse(OnboardingFlow.canJump(to: 4, furthestStep: 3))
+  }
+
+  func testCanJumpAllowsForwardOverSkippableSteps() {
+    // Every step from ScreenRecording (4) onward has a Skip button, so once the
+    // required intro is cleared the user may jump anywhere forward.
+    XCTAssertTrue(OnboardingFlow.canJump(to: 9, furthestStep: 4))
+    XCTAssertTrue(
+      OnboardingFlow.canJump(to: OnboardingFlow.lastStepIndex, furthestStep: 4))
+    XCTAssertTrue(OnboardingFlow.canJump(to: 17, furthestStep: 10))
+  }
+
+  func testCanJumpRejectsOutOfRangeTargets() {
+    XCTAssertFalse(OnboardingFlow.canJump(to: -1, furthestStep: 10))
+    XCTAssertFalse(
+      OnboardingFlow.canJump(to: OnboardingFlow.steps.count, furthestStep: 17))
+  }
+
+  func testUnskippableStepsMatchFlowLayout() {
+    // Static tripwire: if steps are reordered/inserted so that the Skip-less
+    // intro block moves, unskippableSteps must be updated with it.
+    XCTAssertEqual(OnboardingFlow.steps[0], "Name")
+    XCTAssertEqual(OnboardingFlow.steps[1], "Language")
+    XCTAssertEqual(OnboardingFlow.steps[2], "HowDidYouHear")
+    XCTAssertEqual(OnboardingFlow.steps[3], "Trust")
+    XCTAssertEqual(OnboardingFlow.unskippableSteps, [0, 1, 2, 3])
+  }
+
+  func testPhasesTileAllStepsContiguously() {
+    // The segmented progress bar renders one segment per phase; a step outside
+    // every phase (or in two) would render a broken bar. Phases must cover
+    // 0..<steps.count exactly, in order, with no gaps or overlaps.
+    var nextStep = 0
+    for phase in OnboardingFlow.phases {
+      XCTAssertFalse(phase.steps.isEmpty, "phase \(phase.title) is empty")
+      XCTAssertEqual(phase.steps.lowerBound, nextStep, "phase \(phase.title) leaves a gap or overlaps")
+      nextStep = phase.steps.upperBound
+    }
+    XCTAssertEqual(nextStep, OnboardingFlow.steps.count)
+  }
+
   func testVoiceShortcutContinueUnlocksOnlyAfterReleaseFollowingObservedPress() {
     XCTAssertFalse(
       OnboardingFlow.shouldUnlockVoiceShortcutContinue(
@@ -254,5 +305,147 @@ final class OnboardingFlowTests: XCTestCase {
         voiceTurnPhase: nil
       )
     )
+  }
+
+  /// Static tripwire (source inspection, not behavioral coverage): a step's
+  /// deferred completion callback must not fire after the user navigates away.
+  /// Each step that schedules "advance later" work stores it in a cancellable
+  /// Task and cancels it in .onDisappear — an uncancellable asyncAfter here
+  /// yanks the user forward after they pressed Back (free-navigation regression).
+  func testDeferredStepAdvanceCallbacksAreCancellableAndCancelledOnDisappear() throws {
+    // OnboardingPermissionStepView is intentionally absent: it no longer defers
+    // advance at all (granting stays on the page until the user presses
+    // Continue) — covered by testPermissionStepNeverAutoAdvancesOnGrant.
+    let sites: [(file: String, task: String)] = [
+      ("OnboardingGoalStepView.swift", "saveTask"),
+      ("OnboardingHowDidYouHearStepView.swift", "advanceTask"),
+    ]
+    for site in sites {
+      let source = try onboardingSourceFile(site.file)
+      XCTAssertTrue(
+        source.contains("@State private var \(site.task): Task<Void, Never>?"),
+        "\(site.file): deferred advance must be a stored cancellable Task")
+      XCTAssertTrue(
+        source.contains(".onDisappear"), "\(site.file): must cancel on disappear")
+      XCTAssertTrue(
+        source.contains("\(site.task)?.cancel()"),
+        "\(site.file): stored task must be cancelled")
+      XCTAssertFalse(
+        source.contains("asyncAfter"),
+        "\(site.file): asyncAfter is uncancellable — use a stored Task")
+    }
+  }
+
+  /// Regression: lazy dev mode makes checkAllPermissions() skip the
+  /// FDA/accessibility/automation probes, so the permission page's status froze
+  /// on named dev bundles. The page must probe its own permission directly.
+  func testPermissionPageProbesItsOwnPermission() throws {
+    // omi-test-quality: source-inspection -- static contract: the probes hit
+    // live TCC/AX/AppleEvents APIs and cannot be exercised hermetically.
+    let source = try onboardingSourceFile("OnboardingPermissionStepView.swift")
+    guard let refresh = source.range(of: "private func refreshPermissionState()") else {
+      return XCTFail("refreshPermissionState must exist")
+    }
+    let body = String(source[refresh.lowerBound...].prefix(1200))
+    for probe in ["checkFullDiskAccess()", "checkAccessibilityPermission()", "checkAutomationPermission()"] {
+      XCTAssertTrue(
+        body.contains(probe),
+        "refreshPermissionState must call \(probe) so lazy dev mode can't freeze the page status")
+    }
+  }
+
+  func testNameFieldNeverPrefillsTherePlaceholder() {
+    XCTAssertEqual(OnboardingFlow.nameFieldPrefill("there"), "")
+    XCTAssertEqual(OnboardingFlow.nameFieldPrefill(""), "")
+    XCTAssertEqual(OnboardingFlow.nameFieldPrefill("Skander"), "Skander")
+  }
+
+  func testPermissionContinueAdvancesWhenGrantAlreadyApplies() {
+    XCTAssertEqual(OnboardingFlow.permissionContinueAction(needsRelaunchToApply: false), .advance)
+  }
+
+  func testPermissionContinueOffersReopenOnlyWhenGrantNeedsRelaunch() {
+    XCTAssertEqual(OnboardingFlow.permissionContinueAction(needsRelaunchToApply: true), .offerReopen)
+  }
+
+  func testPermissionStepNeverAutoAdvancesOnGrant() throws {
+    // omi-test-quality: source-inspection -- static contract: SwiftUI navigation-on-grant
+    // cannot be exercised hermetically; the review-blocked pattern (navigating when
+    // isGranted flips) must stay out — grant stays on the page until Continue.
+    let source = try onboardingSourceFile("OnboardingPermissionStepView.swift")
+    XCTAssertFalse(
+      source.contains("scheduleAutoAdvance"),
+      "granting a permission must not schedule an auto-advance")
+    if let grantChange = source.range(of: "onChange(of: isGranted)") {
+      let handler = source[grantChange.upperBound...].prefix(300)
+      XCTAssertFalse(
+        handler.contains("onContinue()"),
+        "granting must not navigate — only the explicit Continue button advances")
+      XCTAssertFalse(
+        handler.contains("showReopenPrompt = true"),
+        "granting must not pop the reopen prompt — Continue raises it")
+    }
+  }
+
+  // Regression: arrow navigation must be computed from persisted step state and
+  // applied by the mounted view — the NSEvent monitor's captured view copy drops
+  // @AppStorage writes on some macOS versions. These cover the extracted
+  // decision + validation seam the monitor and .onReceive now route through.
+  func testArrowNavigationDecisions() {
+    // Left/up go back one step; blocked at the first step.
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 123, step: 10, furthestStep: 15), .jump(to: 9))
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 126, step: 1, furthestStep: 1), .jump(to: 0))
+    XCTAssertNil(OnboardingFlow.arrowNavigation(keyCode: 123, step: 0, furthestStep: 5))
+    // Right/down jump when the next step is cleared or skippable.
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 124, step: 10, furthestStep: 15), .jump(to: 11))
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 125, step: 5, furthestStep: 5), .jump(to: 6))
+    // At an uncleared required step, defer to the step's own Continue gating.
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 124, step: 1, furthestStep: 1),
+      .forwardDefaultAction)
+    // Non-arrow keys navigate nothing.
+    XCTAssertNil(OnboardingFlow.arrowNavigation(keyCode: 36, step: 5, furthestStep: 10))
+  }
+
+  func testValidatedNavigationTargetPolicy() {
+    // Backward always allowed, forward gated by canJump, range clamped.
+    XCTAssertEqual(
+      OnboardingFlow.validatedNavigationTarget(9, currentStep: 10, furthestStep: 15), 9)
+    XCTAssertEqual(
+      OnboardingFlow.validatedNavigationTarget(11, currentStep: 10, furthestStep: 15), 11)
+    XCTAssertNil(OnboardingFlow.validatedNavigationTarget(2, currentStep: 1, furthestStep: 1))
+    XCTAssertNil(OnboardingFlow.validatedNavigationTarget(-1, currentStep: 0, furthestStep: 0))
+    XCTAssertNil(
+      OnboardingFlow.validatedNavigationTarget(
+        OnboardingFlow.lastStepIndex + 1, currentStep: 5, furthestStep: 17))
+  }
+
+  @MainActor
+  func testHowDidYouHearKeepsOtherLast() {
+    XCTAssertEqual(OnboardingHowDidYouHearStepView.sources.last?.name, "Other")
+    XCTAssertEqual(
+      OnboardingHowDidYouHearStepView.sources.first(where: { $0.name == "YouTube" })?.glyph,
+      .youtube)
+    XCTAssertEqual(
+      OnboardingHowDidYouHearStepView.sources.first(where: { $0.name == "Product Hunt" })?.glyph,
+      .productHunt)
+    XCTAssertEqual(
+      OnboardingHowDidYouHearStepView.sources.count,
+      Set(OnboardingHowDidYouHearStepView.sources.map(\.name)).count,
+      "duplicate chips would break selection")
+  }
+
+  private func onboardingSourceFile(_ name: String) throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Onboarding")
+      .appendingPathComponent(name)
+    // omi-test-quality: source-inspection -- static contract: forbids uncancellable deferred-advance patterns in step views
+    return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }
