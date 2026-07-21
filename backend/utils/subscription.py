@@ -11,13 +11,7 @@ import database.users as users_db
 import database.user_usage as user_usage_db
 from database import redis_db
 from database.announcements import compare_versions
-from models.users import (
-    PlanType,
-    SubscriptionStatus,
-    Subscription,
-    PlanLimits,
-    TrialMetadata,
-)
+from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
 from utils.byok import get_byok_key, get_byok_keys
 from utils.log_sanitizer import sanitize
 from utils.observability.fallback import record_fallback
@@ -30,13 +24,7 @@ def _get_user(uid: str) -> Any:
     return firebase_auth.get_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
 
 
-PAID_PLAN_TYPES = {
-    PlanType.unlimited,
-    PlanType.architect,
-    PlanType.operator,
-    PlanType.plus,
-    PlanType.unlimited_v2,
-}
+PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator, PlanType.plus, PlanType.unlimited_v2}
 
 # Mobile consumer tiers: sold on ios/android + web, hidden from desktop.
 MOBILE_PLAN_TYPES = {PlanType.plus, PlanType.unlimited_v2}
@@ -61,7 +49,7 @@ DESKTOP_ACCESS_TIER_ARCHITECT = "desktop_architect"
 # removed Neo from DESKTOP_ENTITLED_PLAN_TYPES — so users who bought Neo when
 # desktop was de facto included aren't pulled mid-cycle. Env-overridable so
 # the cutoff can shift if the policy date changes.
-NEO_DESKTOP_GRANDFATHER_CUTOFF = int(os.getenv("NEO_DESKTOP_GRANDFATHER_CUTOFF", "1779748479"))
+NEO_DESKTOP_GRANDFATHER_CUTOFF = int(os.getenv('NEO_DESKTOP_GRANDFATHER_CUTOFF', '1779748479'))
 
 
 def plan_grants_desktop(plan: PlanType, subscription: Optional[Subscription] = None) -> bool:
@@ -159,14 +147,14 @@ TRIAL_LENGTH_SECONDS = 3 * 24 * 60 * 60  # 3 days
 # the actual chat-question quota (30/mo) gates them. Set TRIAL_PAYWALL_ENABLED=true to
 # restore the 3-day trial lockout. NOTE: this changes ONLY the trial paywall — plan limits
 # (Neo questions, data-intake caps) are untouched.
-TRIAL_PAYWALL_ENABLED = os.getenv("TRIAL_PAYWALL_ENABLED", "false").lower() == "true"
+TRIAL_PAYWALL_ENABLED = os.getenv('TRIAL_PAYWALL_ENABLED', 'false').lower() == 'true'
 
 # X-App-Platform header values that identify a desktop client. macOS and Windows
 # are the two desktop OSes; both get the desktop plan catalog, the desktop trial
 # paywall, and desktop entitlement treatment. This is the single source of truth
 # for "is this a desktop platform" — every desktop-vs-mobile gate below reads
 # from here so a new desktop OS is wired in one place.
-DESKTOP_PLATFORMS = {"macos", "windows"}
+DESKTOP_PLATFORMS = {'macos', 'windows'}
 
 # Platform identifiers that count as desktop for paywall purposes. The desktop
 # clients send X-App-Platform: macos / windows and the listen WS uses
@@ -248,11 +236,11 @@ def _is_trial_expired_cached(uid: str) -> bool:
                 if not desktop_trial_paywall_eligible(plan, subscription):
                     clear_trial_paywall_cache(uid)
                     record_fallback(
-                        component="other",
-                        from_mode="trial_paywall",
+                        component='other',
+                        from_mode='trial_paywall',
                         to_mode=effective_desktop_access_tier(plan, subscription),
-                        reason="local_heal",
-                        outcome="recovered",
+                        reason='local_heal',
+                        outcome='recovered',
                         log=logger,
                     )
                     return False
@@ -262,11 +250,11 @@ def _is_trial_expired_cached(uid: str) -> bool:
                 # decision for a paid subscriber from stale cache state.
                 logger.warning("trial paywall cache revalidation failed for uid=%s: %s", uid, e)
                 record_fallback(
-                    component="other",
-                    from_mode="trial_paywall",
-                    to_mode="fail_open",
-                    reason="policy",
-                    outcome="degraded",
+                    component='other',
+                    from_mode='trial_paywall',
+                    to_mode='fail_open',
+                    reason='policy',
+                    outcome='degraded',
                     log=logger,
                 )
                 return False
@@ -397,8 +385,8 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
             "subtitle": f"{NEO_CHAT_QUESTIONS_PER_MONTH} questions per month",
             "description": f"{NEO_CHAT_QUESTIONS_PER_MONTH} chat questions per month. Shared with mobile and web.",
             "eyebrow": "Starter",
-            "monthly_price_id": os.getenv("STRIPE_UNLIMITED_MONTHLY_PRICE_ID"),
-            "annual_price_id": os.getenv("STRIPE_UNLIMITED_ANNUAL_PRICE_ID"),
+            "monthly_price_id": os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID'),
+            "annual_price_id": os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID'),
             "annual_description": "Save ~17% with annual billing.",
             "legacy": False,
         },
@@ -409,8 +397,8 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
             "subtitle": f"{OPERATOR_CHAT_QUESTIONS_PER_MONTH} questions per month",
             "description": f"{OPERATOR_CHAT_QUESTIONS_PER_MONTH} chat questions per month. Shared with mobile and web.",
             "eyebrow": "Most popular",
-            "monthly_price_id": os.getenv("STRIPE_OPERATOR_MONTHLY_PRICE_ID"),
-            "annual_price_id": os.getenv("STRIPE_OPERATOR_ANNUAL_PRICE_ID"),
+            "monthly_price_id": os.getenv('STRIPE_OPERATOR_MONTHLY_PRICE_ID'),
+            "annual_price_id": os.getenv('STRIPE_OPERATOR_ANNUAL_PRICE_ID'),
             "annual_description": "Save ~17% with annual billing.",
             "legacy": False,
         },
@@ -421,8 +409,8 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
             "subtitle": "Power-user AI — thousands of chats + agentic automations",
             "description": "Power-user AI for heavy agentic workflows and vibe coding.",
             "eyebrow": "Automation + coding",
-            "monthly_price_id": os.getenv("STRIPE_ARCHITECT_MONTHLY_PRICE_ID"),
-            "annual_price_id": os.getenv("STRIPE_ARCHITECT_ANNUAL_PRICE_ID"),
+            "monthly_price_id": os.getenv('STRIPE_ARCHITECT_MONTHLY_PRICE_ID'),
+            "annual_price_id": os.getenv('STRIPE_ARCHITECT_ANNUAL_PRICE_ID'),
             "annual_description": "Save with annual billing.",
             "legacy": False,
         },
@@ -433,8 +421,8 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
             "subtitle": f"{PLUS_TIER_MINUTES_LIMIT_PER_MONTH:,} minutes of transcription per month",
             "description": f"{PLUS_TIER_MINUTES_LIMIT_PER_MONTH:,} minutes of transcription per month.",
             "eyebrow": "For everyday use",
-            "monthly_price_id": os.getenv("STRIPE_PLUS_MONTHLY_PRICE_ID"),
-            "annual_price_id": os.getenv("STRIPE_PLUS_ANNUAL_PRICE_ID"),
+            "monthly_price_id": os.getenv('STRIPE_PLUS_MONTHLY_PRICE_ID'),
+            "annual_price_id": os.getenv('STRIPE_PLUS_ANNUAL_PRICE_ID'),
             "annual_description": "Save with annual billing.",
             "legacy": False,
         },
@@ -445,8 +433,8 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
             "subtitle": "Unlimited transcription",
             "description": "Unlimited transcription — record all day.",
             "eyebrow": "Most popular",
-            "monthly_price_id": os.getenv("STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID"),
-            "annual_price_id": os.getenv("STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID"),
+            "monthly_price_id": os.getenv('STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID'),
+            "annual_price_id": os.getenv('STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID'),
             "annual_description": "Save with annual billing.",
             "legacy": False,
         },
@@ -457,29 +445,29 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
 # rename. Stripe webhooks still fire with these for renewals/cancellations.
 LEGACY_PRICE_MAP = {
     # Old Unlimited ($19.99/mo, $199.99/yr) → PlanType.unlimited (now Neo)
-    "price_1RtJPm1F8wnoWYvwhVJ38kLb": PlanType.unlimited,
-    "price_1RtJQ71F8wnoWYvwKMPaGlGY": PlanType.unlimited,
+    'price_1RtJPm1F8wnoWYvwhVJ38kLb': PlanType.unlimited,
+    'price_1RtJQ71F8wnoWYvwKMPaGlGY': PlanType.unlimited,
     # Orphaned from the Apr 17–20 Neo-product window: between f30245338 (added
     # a separate Stripe product `prod_UM0IIpZ4iOgfk5` "Neo" wired via
     # STRIPE_NEO_* env vars) and 2e71145ab (reverted to STRIPE_UNLIMITED_*),
     # desktop signups landed on these prices. Stripe keeps billing them, but
     # post-revert code recognizes neither, so renewals raise "unknown price ID"
     # and drop active subscribers to free.
-    "price_1TNIHd1F8wnoWYvwkIrekcQZ": PlanType.unlimited,  # Neo Monthly ($20/mo)
-    "price_1TNIHd1F8wnoWYvwlKywJ8TO": PlanType.unlimited,  # Neo Annual ($200/yr)
+    'price_1TNIHd1F8wnoWYvwkIrekcQZ': PlanType.unlimited,  # Neo Monthly ($20/mo)
+    'price_1TNIHd1F8wnoWYvwlKywJ8TO': PlanType.unlimited,  # Neo Annual ($200/yr)
     # Old Pro ($199/mo, $1999/yr) → PlanType.architect
-    "price_1TAfBB1F8wnoWYvw8XBFM1dX": PlanType.architect,
-    "price_1TLFac1F8wnoWYvwtPxZhtzE": PlanType.architect,
+    'price_1TAfBB1F8wnoWYvw8XBFM1dX': PlanType.architect,
+    'price_1TLFac1F8wnoWYvwtPxZhtzE': PlanType.architect,
 }
 
 
 # Platform identifiers for the two mobile clients (X-App-Platform header).
-_MOBILE_PLATFORM_TOKENS = {"ios", "android"}
+_MOBILE_PLATFORM_TOKENS = {'ios', 'android'}
 
 # The web storefront (X-App-Platform: web). It's an always-latest client that
 # renders the full new catalog (Plus + Unlimited + Operator + Architect) and is
 # the primary Stripe checkout surface; only deprecated Neo is hidden there.
-WEB_PLATFORMS = {"web"}
+WEB_PLATFORMS = {'web'}
 
 
 def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
@@ -490,7 +478,7 @@ def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
     every platform. A subscriber on a hidden plan still sees it via
     `filter_plans_for_user`'s current-plan / ever-purchased escapes.
     """
-    p = (platform or "").lower()
+    p = (platform or '').lower()
     if p in _MOBILE_PLATFORM_TOKENS:
         return {PlanType.unlimited, PlanType.operator, PlanType.architect}
     if p in DESKTOP_PLATFORMS:
@@ -532,11 +520,11 @@ def filter_plans_for_user(
     never-paid users don't see it. Only the *purchase* catalog is filtered.
     """
     hidden = _platform_hidden_plans(platform)
-    is_mobile = (platform or "").lower() in _MOBILE_PLATFORM_TOKENS
+    is_mobile = (platform or '').lower() in _MOBILE_PLATFORM_TOKENS
     out: List[Dict[str, Any]] = []
     for d in definitions:
-        plan_type = d.get("plan_type")
-        if d.get("legacy") and plan_type != current_plan:
+        plan_type = d.get('plan_type')
+        if d.get('legacy') and plan_type != current_plan:
             continue
         if plan_type in hidden and plan_type != current_plan:
             # Mobile-only escape: keep the deprecated Neo plan visible to users
@@ -550,25 +538,25 @@ def filter_plans_for_user(
 
 
 # Minimum macOS desktop build that ships with the new plan catalog + quota UI.
-NEW_PLANS_MIN_DESKTOP_VERSION = os.getenv("NEW_PLANS_MIN_DESKTOP_VERSION", "0.11.324")
+NEW_PLANS_MIN_DESKTOP_VERSION = os.getenv('NEW_PLANS_MIN_DESKTOP_VERSION', '0.11.324')
 
 # Minimum Windows desktop build that ships the new plan catalog. Windows is
 # pre-release and versions independently of macOS, so this defaults permissive
 # ('0.0.0' → every Windows build qualifies); set a floor once Windows ships a
 # build that must be gated out.
-NEW_PLANS_MIN_WINDOWS_VERSION = os.getenv("NEW_PLANS_MIN_WINDOWS_VERSION", "0.0.0")
+NEW_PLANS_MIN_WINDOWS_VERSION = os.getenv('NEW_PLANS_MIN_WINDOWS_VERSION', '0.0.0')
 
 # Minimum mobile build that ships with the `operator` enum value and new plan UI.
 # Mobile builds below this version get the legacy catalog with operator→unlimited mapping.
-NEW_PLANS_MIN_MOBILE_VERSION = os.getenv("NEW_PLANS_MIN_MOBILE_VERSION", "1.0.530")
+NEW_PLANS_MIN_MOBILE_VERSION = os.getenv('NEW_PLANS_MIN_MOBILE_VERSION', '1.0.530')
 
 # Per-desktop-platform minimum client version that understands the Operator +
 # Architect plan shape. Desktop platforms fail *open* (a missing/unparseable
 # version still gets the new catalog); mobile fails *closed* (old builds crash
 # on the operator enum).
 _NEW_PLANS_MIN_DESKTOP_VERSION_BY_PLATFORM = {
-    "macos": NEW_PLANS_MIN_DESKTOP_VERSION,
-    "windows": NEW_PLANS_MIN_WINDOWS_VERSION,
+    'macos': NEW_PLANS_MIN_DESKTOP_VERSION,
+    'windows': NEW_PLANS_MIN_WINDOWS_VERSION,
 }
 
 
@@ -596,13 +584,7 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
         if not app_version:
             return True
         try:
-            return (
-                compare_versions(
-                    app_version,
-                    _NEW_PLANS_MIN_DESKTOP_VERSION_BY_PLATFORM[platform_lower],
-                )
-                >= 0
-            )
+            return compare_versions(app_version, _NEW_PLANS_MIN_DESKTOP_VERSION_BY_PLATFORM[platform_lower]) >= 0
         except Exception:
             return True
 
@@ -620,8 +602,8 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
 # Minimum client build whose plan enum includes `plus`/`max`. Defaulted ahead of
 # any shipped build so every current client is remapped today (see
 # wire_plan_for_client); lower once a plus/unlimited_v2-aware client ships.
-PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION = os.getenv("PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION", "99.0.0")
-PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION = os.getenv("PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION", "99.0.0")
+PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION = os.getenv('PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION', '99.0.0')
+PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION = os.getenv('PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION', '99.0.0')
 
 
 def client_understands_plus_unlimited_v2(platform: Optional[str], app_version: Optional[str]) -> bool:
@@ -651,9 +633,7 @@ def wire_plan_for_client(plan: PlanType, platform: Optional[str], app_version: O
     return plan
 
 
-def adapt_plans_for_legacy_client(
-    definitions: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+def adapt_plans_for_legacy_client(definitions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Transform the new-shape plan catalog back into the pre-v0.11.324 shape
     so older clients (mobile, stable desktop) keep showing the old plan titles
     and don't see desktop-only plans.
@@ -664,14 +644,14 @@ def adapt_plans_for_legacy_client(
     """
     out: List[Dict[str, Any]] = []
     for d in definitions:
-        if d["plan_id"] in ("operator", "pro"):
+        if d['plan_id'] in ('operator', 'pro'):
             continue
         adapted = dict(d)
-        if d["plan_id"] == "architect":
-            adapted["title"] = "Omi Pro"
-        elif d["plan_id"] == "unlimited":
-            adapted["title"] = "Unlimited Plan"
-            adapted["legacy"] = False
+        if d['plan_id'] == 'architect':
+            adapted['title'] = 'Omi Pro'
+        elif d['plan_id'] == 'unlimited':
+            adapted['title'] = 'Unlimited Plan'
+            adapted['legacy'] = False
         out.append(adapted)
     return out
 
@@ -716,8 +696,8 @@ def get_plan_type_from_price_id(price_id: str) -> PlanType:
 def validate_stripe_price_ids():
     """Validate all configured Stripe price IDs on startup. Logs errors for invalid/unreachable prices."""
     for definition in get_paid_plan_definitions():
-        for interval in ("monthly", "annual"):
-            price_id = definition[f"{interval}_price_id"]
+        for interval in ('monthly', 'annual'):
+            price_id = definition[f'{interval}_price_id']
             if not price_id:
                 continue
             try:
@@ -729,39 +709,39 @@ def validate_stripe_price_ids():
                 )
 
 
-BASIC_TIER_MINUTES_LIMIT_PER_MONTH = int(os.getenv("BASIC_TIER_MINUTES_LIMIT_PER_MONTH", "0"))
+BASIC_TIER_MINUTES_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_MINUTES_LIMIT_PER_MONTH', '0'))
 BASIC_TIER_MONTHLY_SECONDS_LIMIT = BASIC_TIER_MINUTES_LIMIT_PER_MONTH * 60
-BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH = int(os.getenv("BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH", "0"))
-BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH = int(os.getenv("BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH", "0"))
+BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH', '0'))
+BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH', '0'))
 
 # Chat caps per plan. Env-overridable for ops.
-FREE_CHAT_QUESTIONS_PER_MONTH = int(os.getenv("FREE_CHAT_QUESTIONS_PER_MONTH", "30"))
-NEO_CHAT_QUESTIONS_PER_MONTH = int(os.getenv("NEO_CHAT_QUESTIONS_PER_MONTH", "200"))
-OPERATOR_CHAT_QUESTIONS_PER_MONTH = int(os.getenv("OPERATOR_CHAT_QUESTIONS_PER_MONTH", "500"))
-ARCHITECT_CHAT_COST_USD_PER_MONTH = float(os.getenv("ARCHITECT_CHAT_COST_USD_PER_MONTH", "400.0"))
+FREE_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('FREE_CHAT_QUESTIONS_PER_MONTH', '30'))
+NEO_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('NEO_CHAT_QUESTIONS_PER_MONTH', '200'))
+OPERATOR_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('OPERATOR_CHAT_QUESTIONS_PER_MONTH', '500'))
+ARCHITECT_CHAT_COST_USD_PER_MONTH = float(os.getenv('ARCHITECT_CHAT_COST_USD_PER_MONTH', '400.0'))
 
-PLUS_TIER_MINUTES_LIMIT_PER_MONTH = int(os.getenv("PLUS_TIER_MINUTES_LIMIT_PER_MONTH", "1500"))
+PLUS_TIER_MINUTES_LIMIT_PER_MONTH = int(os.getenv('PLUS_TIER_MINUTES_LIMIT_PER_MONTH', '1500'))
 PLUS_TIER_MONTHLY_SECONDS_LIMIT = PLUS_TIER_MINUTES_LIMIT_PER_MONTH * 60
-PLUS_CHAT_QUESTIONS_PER_MONTH = int(os.getenv("PLUS_CHAT_QUESTIONS_PER_MONTH", "200"))
-UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH = int(os.getenv("UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH", "1000"))
+PLUS_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('PLUS_CHAT_QUESTIONS_PER_MONTH', '200'))
+UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH', '1000'))
 
 # Features available during the 3-day desktop trial (matches paid-plan behavior).
 TRIAL_FEATURES = [
-    "unlimited_listening",
-    "unlimited_transcription",
-    "unlimited_memories",
-    "unlimited_insights",
-    f"{FREE_CHAT_QUESTIONS_PER_MONTH}_chat_questions_per_month",
+    'unlimited_listening',
+    'unlimited_transcription',
+    'unlimited_memories',
+    'unlimited_insights',
+    f'{FREE_CHAT_QUESTIONS_PER_MONTH}_chat_questions_per_month',
 ]
 
 # Display names shown to users. Internal PlanType stays the same for Stripe compat.
 PLAN_DISPLAY_NAMES = {
-    PlanType.basic: "Free",
-    PlanType.unlimited: "Neo",
-    PlanType.architect: "Architect",
-    PlanType.operator: "Operator",
-    PlanType.plus: "Plus",
-    PlanType.unlimited_v2: "Unlimited",
+    PlanType.basic: 'Free',
+    PlanType.unlimited: 'Neo',
+    PlanType.architect: 'Architect',
+    PlanType.operator: 'Operator',
+    PlanType.plus: 'Plus',
+    PlanType.unlimited_v2: 'Unlimited',
 }
 
 
@@ -783,12 +763,12 @@ def get_chat_quota_snapshot(uid: str, platform: Optional[str] = None) -> Dict[st
     if is_trial_paywalled(uid, platform):
         usage = user_usage_db.get_monthly_chat_usage(uid)
         return {
-            "plan": PlanType.basic,
-            "unit": "questions",
-            "used": float(FREE_CHAT_QUESTIONS_PER_MONTH),
-            "limit": float(FREE_CHAT_QUESTIONS_PER_MONTH),
-            "allowed": False,
-            "reset_at": usage["reset_at"],
+            'plan': PlanType.basic,
+            'unit': 'questions',
+            'used': float(FREE_CHAT_QUESTIONS_PER_MONTH),
+            'limit': float(FREE_CHAT_QUESTIONS_PER_MONTH),
+            'allowed': False,
+            'reset_at': usage['reset_at'],
         }
 
     subscription = users_db.get_user_valid_subscription(uid)
@@ -797,12 +777,12 @@ def get_chat_quota_snapshot(uid: str, platform: Optional[str] = None) -> Dict[st
     usage = user_usage_db.get_monthly_chat_usage(uid)
 
     if limits.chat_cost_usd_per_month is not None:
-        unit = "cost_usd"
-        used = float(usage["cost_usd"])
+        unit = 'cost_usd'
+        used = float(usage['cost_usd'])
         limit_value = float(limits.chat_cost_usd_per_month)
     else:
-        unit = "questions"
-        used = float(usage["questions"])
+        unit = 'questions'
+        used = float(usage['questions'])
         limit_value = float(limits.chat_questions_per_month) if limits.chat_questions_per_month is not None else None
 
     allowed = True
@@ -810,12 +790,12 @@ def get_chat_quota_snapshot(uid: str, platform: Optional[str] = None) -> Dict[st
         allowed = used < limit_value
 
     return {
-        "plan": plan,
-        "unit": unit,
-        "used": used,
-        "limit": limit_value,
-        "allowed": allowed,
-        "reset_at": usage["reset_at"],
+        'plan': plan,
+        'unit': unit,
+        'used': used,
+        'limit': limit_value,
+        'allowed': allowed,
+        'reset_at': usage['reset_at'],
     }
 
 
@@ -843,13 +823,13 @@ def enforce_chat_quota(uid: str, platform: Optional[str] = None) -> None:
         raise HTTPException(
             status_code=402,
             detail={
-                "error": "quota_exceeded",
-                "plan": get_plan_display_name(PlanType.basic),
-                "plan_type": PlanType.basic.value,
-                "unit": snapshot["unit"],
-                "used": round(snapshot["used"], 4),
-                "limit": snapshot["limit"],
-                "reset_at": snapshot["reset_at"],
+                'error': 'quota_exceeded',
+                'plan': get_plan_display_name(PlanType.basic),
+                'plan_type': PlanType.basic.value,
+                'unit': snapshot['unit'],
+                'used': round(snapshot['used'], 4),
+                'limit': snapshot['limit'],
+                'reset_at': snapshot['reset_at'],
             },
         )
 
@@ -857,14 +837,14 @@ def enforce_chat_quota(uid: str, platform: Optional[str] = None) -> None:
     # Require an LLM provider key on this request (not just any BYOK header)
     # so a user can't activate with fake fingerprints or send only x-byok-deepgram
     # to bypass chat quota while chat falls back to Omi's OpenAI/Anthropic keys.
-    if users_db.is_byok_active(uid) and (get_byok_key("openai") or get_byok_key("anthropic")):
+    if users_db.is_byok_active(uid) and (get_byok_key('openai') or get_byok_key('anthropic')):
         return
 
     snapshot = get_chat_quota_snapshot(uid, platform=platform)
-    if snapshot["allowed"]:
+    if snapshot['allowed']:
         return
 
-    plan = snapshot["plan"]
+    plan = snapshot['plan']
 
     # Every paying plan goes into overage mode past its cap, regardless of
     # whether the cap is expressed in questions or dollars. Only Free
@@ -875,13 +855,13 @@ def enforce_chat_quota(uid: str, platform: Optional[str] = None) -> None:
     raise HTTPException(
         status_code=402,
         detail={
-            "error": "quota_exceeded",
-            "plan": get_plan_display_name(plan),
-            "plan_type": plan.value,
-            "unit": snapshot["unit"],
-            "used": round(snapshot["used"], 4),
-            "limit": snapshot["limit"],
-            "reset_at": snapshot["reset_at"],
+            'error': 'quota_exceeded',
+            'plan': get_plan_display_name(plan),
+            'plan_type': plan.value,
+            'unit': snapshot['unit'],
+            'used': round(snapshot['used'], 4),
+            'limit': snapshot['limit'],
+            'reset_at': snapshot['reset_at'],
         },
     )
 
@@ -1050,12 +1030,12 @@ def _has_active_stripe_subscription(uid: str) -> bool:
     if not customer_id:
         return False
     try:
-        subs = stripe.Subscription.list(customer=customer_id, status="active", limit=5)
+        subs = stripe.Subscription.list(customer=customer_id, status='active', limit=5)
         for sub in subs.data:
             sub_dict: Dict[str, Any] = sub.to_dict()  # type: ignore[reportDeprecated]  # stripe public serialization API
-            if sub_dict.get("cancel_at_period_end"):
+            if sub_dict.get('cancel_at_period_end'):
                 continue
-            if sub_dict.get("metadata", {}).get("uid") == uid:
+            if sub_dict.get('metadata', {}).get('uid') == uid:
                 return True
     except Exception as e:
         logger.error(f"Error checking Stripe for active subscriptions: {e}")
@@ -1080,20 +1060,20 @@ def find_active_paid_subscription_for_user(uid: str) -> Optional[Subscription]:
     if not customer_id:
         return None
     try:
-        subs = stripe.Subscription.list(customer=customer_id, status="active", limit=10)
+        subs = stripe.Subscription.list(customer=customer_id, status='active', limit=10)
     except Exception as e:
         logger.error(f"[find_active_paid_subscription_for_user] Stripe lookup failed for uid={uid}: {e}")
         return None
 
     for sub in subs.data:
         d: Dict[str, Any] = sub.to_dict()  # type: ignore[reportDeprecated]  # stripe public serialization API
-        sub_uid = d.get("metadata", {}).get("uid")
+        sub_uid = d.get('metadata', {}).get('uid')
         if sub_uid and sub_uid != uid:
             continue
-        items: List[Dict[str, Any]] = d.get("items", {}).get("data") or []
-        if not items or not items[0].get("price"):
+        items: List[Dict[str, Any]] = d.get('items', {}).get('data') or []
+        if not items or not items[0].get('price'):
             continue
-        price_id: Any = items[0]["price"].get("id")
+        price_id: Any = items[0]['price'].get('id')
         try:
             plan = get_plan_type_from_price_id(price_id)
         except ValueError:
@@ -1103,11 +1083,11 @@ def find_active_paid_subscription_for_user(uid: str) -> Optional[Subscription]:
         return Subscription(
             plan=plan,
             status=SubscriptionStatus.active,
-            stripe_subscription_id=d.get("id"),
+            stripe_subscription_id=d.get('id'),
             current_price_id=price_id,
-            current_period_end=d.get("current_period_end"),
-            current_period_start=d.get("current_period_start"),
-            cancel_at_period_end=d.get("cancel_at_period_end", False),
+            current_period_end=d.get('current_period_end'),
+            current_period_start=d.get('current_period_start'),
+            cancel_at_period_end=d.get('cancel_at_period_end', False),
             limits=get_plan_limits(plan),
         )
     return None
@@ -1140,10 +1120,7 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
     # If subscription is canceled (cancel_at_period_end=True), allow resubscription
     # This handles the case where user canceled but period hasn't ended yet
     if subscription.cancel_at_period_end:
-        return (
-            True,
-            "User can resubscribe (current subscription is scheduled for cancellation)",
-        )
+        return True, "User can resubscribe (current subscription is scheduled for cancellation)"
 
     # If unlimited plan and active, check if this is a plan change
     if is_paid_plan(subscription.plan) and subscription.status == SubscriptionStatus.active:
@@ -1163,8 +1140,8 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
                         stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
                         if stripe_sub:
                             stripe_sub_dict: Dict[str, Any] = stripe_sub.to_dict()  # type: ignore[reportDeprecated]  # stripe public serialization API
-                            if stripe_sub_dict["items"]["data"]:
-                                current_price_id = stripe_sub_dict["items"]["data"][0]["price"]["id"]
+                            if stripe_sub_dict['items']['data']:
+                                current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
                     except Exception as e:
                         logger.error(f"Error retrieving current price ID: {e}")
 
@@ -1186,14 +1163,14 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
     The launch date format is expected to be YYYY-MM-DD.
     If the launch date is not set, not valid, or in the future, usage is considered zero.
     """
-    subscription_launch_date_str = os.getenv("SUBSCRIPTION_LAUNCH_DATE")
+    subscription_launch_date_str = os.getenv('SUBSCRIPTION_LAUNCH_DATE')
     if not subscription_launch_date_str:
         # Subscription not launched, so no usage is counted against limits.
         return {}
 
     try:
         # Use strptime to enforce YYYY-MM-DD format
-        launch_date = datetime.strptime(subscription_launch_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        launch_date = datetime.strptime(subscription_launch_date_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
     except ValueError:
         # Invalid date format, treat as not launched.
         return {}
@@ -1221,7 +1198,7 @@ def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:
     # BYOK users pay Deepgram directly — there's no Omi-side transcription quota to enforce.
     # Require the Deepgram header on this request so a user can't activate BYOK
     # with fake fingerprints then omit x-byok-deepgram to ride Omi's key.
-    if users_db.is_byok_active(uid) and get_byok_key("deepgram"):
+    if users_db.is_byok_active(uid) and get_byok_key('deepgram'):
         return True
 
     subscription = users_db.get_user_valid_subscription(uid)
@@ -1235,7 +1212,7 @@ def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:
         return True
 
     usage = get_monthly_usage_for_subscription(uid)
-    if usage.get("transcription_seconds", 0) >= limits.transcription_seconds:
+    if usage.get('transcription_seconds', 0) >= limits.transcription_seconds:
         return False
 
     return True
@@ -1257,7 +1234,7 @@ def get_remaining_transcription_seconds(uid: str, source: Optional[str] = None) 
 
     # BYOK: user brings their own Deepgram — no Omi quota, no freemium threshold.
     # Require the Deepgram header to prevent fake-fingerprint abuse.
-    if users_db.is_byok_active(uid) and get_byok_key("deepgram"):
+    if users_db.is_byok_active(uid) and get_byok_key('deepgram'):
         return None
 
     subscription = users_db.get_user_valid_subscription(uid)
@@ -1276,7 +1253,7 @@ def get_remaining_transcription_seconds(uid: str, source: Optional[str] = None) 
         return None  # Unlimited (limit is 0 or not set — operator/architect/neo/unlimited_v2)
 
     usage = get_monthly_usage_for_subscription(uid)
-    used_seconds = usage.get("transcription_seconds", 0)
+    used_seconds = usage.get('transcription_seconds', 0)
 
     return max(0, limits.transcription_seconds - used_seconds)
 
@@ -1301,19 +1278,17 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
             return subscription
 
         stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
-        stripe_sub_dict: Optional[Dict[str, Any]] = (
-            stripe_sub.to_dict() if stripe_sub else None
-        )  # type: ignore[reportDeprecated]  # stripe public serialization API
+        stripe_sub_dict: Optional[Dict[str, Any]] = stripe_sub.to_dict() if stripe_sub else None  # type: ignore[reportDeprecated]  # stripe public serialization API
         if not stripe_sub_dict:
             return subscription
 
-        items: List[Dict[str, Any]] = stripe_sub_dict.get("items", {}).get("data") or []
+        items: List[Dict[str, Any]] = stripe_sub_dict.get('items', {}).get('data') or []
         price_id: Optional[str] = None
-        if items and items[0].get("price"):
-            price_id = items[0]["price"].get("id")
+        if items and items[0].get('price'):
+            price_id = items[0]['price'].get('id')
 
-        stripe_status = stripe_sub_dict.get("status")
-        if stripe_status in ("active", "trialing") and price_id:
+        stripe_status = stripe_sub_dict.get('status')
+        if stripe_status in ('active', 'trialing') and price_id:
             try:
                 plan_type = get_plan_type_from_price_id(price_id)
             except ValueError:
@@ -1323,9 +1298,9 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
             if plan_type and is_paid_plan(plan_type):
                 subscription.plan = plan_type
                 subscription.status = SubscriptionStatus.active
-                subscription.current_period_end = stripe_sub_dict.get("current_period_end")
-                subscription.current_period_start = stripe_sub_dict.get("current_period_start")
-                subscription.cancel_at_period_end = stripe_sub_dict.get("cancel_at_period_end", False)
+                subscription.current_period_end = stripe_sub_dict.get('current_period_end')
+                subscription.current_period_start = stripe_sub_dict.get('current_period_start')
+                subscription.cancel_at_period_end = stripe_sub_dict.get('cancel_at_period_end', False)
                 subscription.current_price_id = price_id
                 subscription.limits = get_plan_limits(plan_type)
 

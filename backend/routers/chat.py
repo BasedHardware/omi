@@ -9,14 +9,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
 
-from utils.executors import (
-    critical_executor,
-    db_executor,
-    llm_executor,
-    storage_executor,
-    sync_executor,
-    run_blocking,
-)
+from utils.executors import critical_executor, db_executor, llm_executor, storage_executor, sync_executor, run_blocking
 
 from fastapi import (
     APIRouter,
@@ -61,28 +54,15 @@ from utils.chat import (
     transcribe_pcm_bytes,
 )
 from utils.sync.files import retrieve_file_paths, decode_files_to_wav
-from utils.stt.streaming import (
-    STTService,
-    connect_stt_socket_with_fallback,
-    drain_stt_socket,
-)
-from utils.stt.streaming import (
-    get_stt_service_for_language,
-    process_audio_modulate,
-    process_audio_parakeet,
-)
+from utils.stt.streaming import STTService, connect_stt_socket_with_fallback, drain_stt_socket
+from utils.stt.streaming import get_stt_service_for_language, process_audio_modulate, process_audio_parakeet
 from utils.stt.pre_recorded import get_prerecorded_service
 from config.prerecorded_stt import TranscriptionOutcome
 from config.stt_provider_policy import STTServingSurface
 from utils.stt.outcomes import TranscriptionFailure, failure_from_exception
 from utils.observability.transcription import TranscriptionAttempt
 from utils.llm.goals import extract_and_update_goal_progress
-from database.redis_db import (
-    try_acquire_goal_extraction_lock,
-    check_rate_limit,
-    store_chat_share,
-    get_chat_share,
-)
+from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
@@ -146,7 +126,7 @@ class TranscriptionErrorResponse(BaseModel):
 
 def _transcription_http_error(failure: TranscriptionFailure) -> HTTPException:
     logger.warning(
-        "Transcription request failed: outcome=%s provider=%s retryable=%s",
+        'Transcription request failed: outcome=%s provider=%s retryable=%s',
         failure.outcome.value,
         failure.provider,
         failure.retryable,
@@ -156,7 +136,7 @@ def _transcription_http_error(failure: TranscriptionFailure) -> HTTPException:
 
 def _cleanup_temp_voice_wavs(paths: List[str], uid: str) -> None:
     for path in paths:
-        if path.startswith(f"/tmp/{uid}_"):
+        if path.startswith(f'/tmp/{uid}_'):
             try:
                 Path(path).unlink()
             except OSError:
@@ -195,7 +175,7 @@ def _parse_context_keywords(raw: Optional[str]) -> List[str]:
 
     keywords = []
     seen = set()
-    for item in raw.split(","):
+    for item in raw.split(','):
         keyword = item.strip()
         if len(keyword) < 2 or len(keyword) > 80:
             continue
@@ -210,13 +190,13 @@ def _parse_context_keywords(raw: Optional[str]) -> List[str]:
 
 
 def filter_messages(messages, app_id):
-    logger.info(f"filter_messages {len(messages)} {app_id}")
+    logger.info(f'filter_messages {len(messages)} {app_id}')
     collected = []
     for message in messages:
         if message.sender == MessageSender.ai and message.plugin_id != app_id:
             break
         collected.append(message)
-    logger.info(f"filter_messages output: {len(collected)}")
+    logger.info(f'filter_messages output: {len(collected)}')
     return collected
 
 
@@ -236,27 +216,27 @@ def _build_quota_exceeded_reply(
         id=str(uuid.uuid4()),
         text=data.text,
         created_at=now,
-        sender="human",
-        type="text",
+        sender='human',
+        type='text',
         app_id=compat_app_id,
     )
     chat_db.add_message(uid, user_msg.model_dump())
 
-    plan = detail.get("plan") or "Free"
-    unit = detail.get("unit")
-    limit = detail.get("limit")
-    reset_at = detail.get("reset_at")
-    if unit == "cost_usd" and isinstance(limit, (int, float)):
+    plan = detail.get('plan') or 'Free'
+    unit = detail.get('unit')
+    limit = detail.get('limit')
+    reset_at = detail.get('reset_at')
+    if unit == 'cost_usd' and isinstance(limit, (int, float)):
         limit_phrase = f"your ${int(limit)} monthly AI compute budget"
     elif isinstance(limit, (int, float)):
         limit_phrase = f"your {int(limit)} monthly chat question limit"
     else:
         limit_phrase = "your monthly chat limit"
-    reset_phrase = ""
+    reset_phrase = ''
     if reset_at:
         try:
             reset_dt = datetime.fromtimestamp(int(reset_at), tz=timezone.utc)
-            reset_phrase = f" Your limit resets on {reset_dt.strftime('%B %-d')}."
+            reset_phrase = f' Your limit resets on {reset_dt.strftime("%B %-d")}.'
         except (TypeError, ValueError):
             pass
 
@@ -269,8 +249,8 @@ def _build_quota_exceeded_reply(
         id=str(uuid.uuid4()),
         text=canned,
         created_at=datetime.now(timezone.utc),
-        sender="ai",
-        type="text",
+        sender='ai',
+        type='text',
         app_id=compat_app_id,
     )
     chat_db.add_message(uid, ai_msg.model_dump())
@@ -296,16 +276,16 @@ def _record_chat_quota_question_safe(
             platform=platform,
         )
     except Exception:
-        logger.exception("Failed to record chat quota question source=%s uid=%s", source, uid)
+        logger.exception('Failed to record chat quota question source=%s uid=%s', source, uid)
 
 
-@router.post("/v2/messages", tags=["chat"], response_model=ResponseMessage)
+@router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
 def send_message(
     data: SendMessageRequest,
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:send_message")),
-    x_app_platform: Optional[str] = Header(None, alias="X-App-Platform"),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     # Hard cap: Free by question count, Architect by cost_usd. Operator enters
     # overage mode silently. If exceeded, instead of raising 402 (which mobile
@@ -319,23 +299,23 @@ def send_message(
     except HTTPException as exc:
         if exc.status_code != 402 or not isinstance(exc.detail, dict):
             raise
-        if exc.detail.get("error") != "quota_exceeded":
+        if exc.detail.get('error') != 'quota_exceeded':
             raise
         _compat_id = app_id or plugin_id
-        if _compat_id in ["null", ""]:
+        if _compat_id in ['null', '']:
             _compat_id = None
         response_msg = _build_quota_exceeded_reply(uid, data, _compat_id, exc.detail)
 
         def _quota_exceeded_stream():
-            encoded = base64.b64encode(bytes(response_msg.model_dump_json(), "utf-8")).decode("utf-8")
+            encoded = base64.b64encode(bytes(response_msg.model_dump_json(), 'utf-8')).decode('utf-8')
             yield f"done: {encoded}\n\n"
 
         return StreamingResponse(_quota_exceeded_stream(), media_type="text/event-stream")
 
     compat_app_id = app_id or plugin_id
-    logger.info(f"send_message {sanitize_pii(data.text)} {compat_app_id} {uid}")
+    logger.info(f'send_message {sanitize_pii(data.text)} {compat_app_id} {uid}')
 
-    if compat_app_id in ["null", ""]:
+    if compat_app_id in ['null', '']:
         compat_app_id = None
 
     # get chat session
@@ -346,8 +326,8 @@ def send_message(
         id=str(uuid.uuid4()),
         text=data.text,
         created_at=datetime.now(timezone.utc),
-        sender="human",
-        type="text",
+        sender='human',
+        type='text',
         app_id=compat_app_id,
     )
     # Ensure chat session exists when files are attached
@@ -373,8 +353,8 @@ def send_message(
     chat_db.add_message(uid, message.model_dump())
     _record_chat_quota_question_safe(
         uid,
-        idempotency_key=f"v2_messages:{message.id}",
-        source="v2_messages",
+        idempotency_key=f'v2_messages:{message.id}',
+        source='v2_messages',
         message_id=message.id,
         chat_session_id=message.chat_session_id,
         platform=x_app_platform,
@@ -395,8 +375,8 @@ def send_message(
             Message.deserialize_many_safe(
                 chat_db.get_messages(uid, limit=10, app_id=compat_app_id),
                 on_error=lambda record, exc: logger.warning(
-                    "Skipping malformed chat message %s for uid=%s: %s",
-                    record.get("id") if isinstance(record, dict) else None,
+                    'Skipping malformed chat message %s for uid=%s: %s',
+                    record.get('id') if isinstance(record, dict) else None,
                     uid,
                     type(exc).__name__,
                 ),
@@ -405,17 +385,17 @@ def send_message(
     )
 
     def process_message(response: str, callback_data: dict):
-        memories = callback_data.get("memories_found", [])
-        ask_for_nps = callback_data.get("ask_for_nps", False)
-        langsmith_run_id = callback_data.get("langsmith_run_id")
-        prompt_name = callback_data.get("prompt_name")
-        prompt_commit = callback_data.get("prompt_commit")
-        chart_data = callback_data.get("chart_data")
+        memories = callback_data.get('memories_found', [])
+        ask_for_nps = callback_data.get('ask_for_nps', False)
+        langsmith_run_id = callback_data.get('langsmith_run_id')
+        prompt_name = callback_data.get('prompt_name')
+        prompt_commit = callback_data.get('prompt_commit')
+        chart_data = callback_data.get('chart_data')
 
         # cited extraction
-        cited_conversation_idxs = {int(i) for i in re.findall(r"\[(\d+)\]", response)}
+        cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
         if len(cited_conversation_idxs) > 0:
-            response = re.sub(r"\[\d+\]", "", response)
+            response = re.sub(r'\[\d+\]', '', response)
         memories = [memories[i - 1] for i in cited_conversation_idxs if 0 < i and i <= len(memories)]
 
         memories_id = extract_memory_ids(memories) if memories else []
@@ -424,9 +404,9 @@ def send_message(
             id=str(uuid.uuid4()),
             text=response,
             created_at=datetime.now(timezone.utc),
-            sender="ai",
+            sender='ai',
             app_id=app_id_from_app,
-            type="text",
+            type='text',
             memories_id=memories_id,
             chart_data=chart_data,
             langsmith_run_id=langsmith_run_id,  # Store run_id for feedback tracking
@@ -440,16 +420,11 @@ def send_message(
         chat_db.add_message(uid, ai_message.model_dump())
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         if app_id:
-            record_app_usage(
-                uid,
-                app_id,
-                UsageHistoryType.chat_message_sent,
-                message_id=ai_message.id,
-            )
+            record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
         return ai_message, ask_for_nps
 
-    journey_attempt = JourneyAttempt("chat_response")
+    journey_attempt = JourneyAttempt('chat_response')
 
     async def generate_stream():
         callback_data = {}
@@ -470,20 +445,20 @@ def send_message(
             ):
                 if chunk:
                     msg = chunk.replace("\n", "__CRLF__")
-                    yield f"{msg}\n\n"
+                    yield f'{msg}\n\n'
                 else:
-                    response = callback_data.get("answer")
+                    response = callback_data.get('answer')
                     if response:
                         ai_message, ask_for_nps = process_message(response, callback_data)
                         ai_message_dict = ai_message.model_dump()
                         response_message = ResponseMessage(**ai_message_dict)
                         response_message.ask_for_nps = ask_for_nps
-                        encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), "utf-8")).decode(
-                            "utf-8"
+                        encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode(
+                            'utf-8'
                         )
                         # This is the furthest server-observable client boundary:
                         # a yielded terminal frame is not a client-render acknowledgement.
-                        journey_attempt.finish("success")
+                        journey_attempt.finish('success')
                         yield f"done: {encoded_response}\n\n"
                         answered = True
 
@@ -497,59 +472,55 @@ def send_message(
                 )
             stream_exhausted = True
         except asyncio.CancelledError:
-            journey_attempt.finish("cancelled")
+            journey_attempt.finish('cancelled')
             raise
         except Exception:
-            journey_attempt.finish("failure")
+            journey_attempt.finish('failure')
             raise
         finally:
             reset_usage_context(usage_token)
             if not journey_attempt.finished:
-                journey_attempt.finish("failure" if stream_exhausted else "cancelled")
+                journey_attempt.finish('failure' if stream_exhausted else 'cancelled')
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
-@router.post(
-    "/v2/messages/{message_id}/report",
-    tags=["chat"],
-    response_model=MessageReportResponse,
-)
+@router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=MessageReportResponse)
 def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
     result = chat_db.get_message(uid, message_id)
     if result is None:
-        raise HTTPException(status_code=404, detail="Message not found")
+        raise HTTPException(status_code=404, detail='Message not found')
     message, msg_doc_id = result
-    if message.sender != "ai":
-        raise HTTPException(status_code=400, detail="Only AI messages can be reported")
+    if message.sender != 'ai':
+        raise HTTPException(status_code=400, detail='Only AI messages can be reported')
     if message.reported:
-        raise HTTPException(status_code=400, detail="Message already reported")
+        raise HTTPException(status_code=400, detail='Message already reported')
     chat_db.report_message(uid, msg_doc_id)
-    return {"message": "Message reported"}
+    return {'message': 'Message reported'}
 
 
-@router.delete("/v2/messages", tags=["chat"], response_model=Message)
+@router.delete('/v2/messages', tags=['chat'], response_model=Message)
 def clear_chat_messages(
     app_id: Optional[str] = None,
     plugin_id: Optional[str] = None,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
-    if compat_app_id in ["null", ""]:
+    if compat_app_id in ['null', '']:
         compat_app_id = None
 
     # get current chat session
     chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
-    chat_session_id = chat_session["id"] if chat_session else None
+    chat_session_id = chat_session['id'] if chat_session else None
 
     err = chat_db.clear_chat(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
     if err:
-        raise HTTPException(status_code=500, detail="Failed to clear chat")
+        raise HTTPException(status_code=500, detail='Failed to clear chat')
 
     # clean thread chat file
-    if chat_session and chat_session.get("id"):
+    if chat_session and chat_session.get('id'):
         try:
-            fc_tool = FileChatTool(uid, chat_session["id"])
+            fc_tool = FileChatTool(uid, chat_session['id'])
             fc_tool.cleanup()
         except ValueError:
             # Session not found, continue with cleanup
@@ -562,7 +533,7 @@ def clear_chat_messages(
     return initial_message_util(uid, compat_app_id)
 
 
-@router.post("/v2/initial-message", tags=["chat"], response_model=Message)
+@router.post('/v2/initial-message', tags=['chat'], response_model=Message)
 def create_initial_message(
     app_id: Optional[str] = None,
     plugin_id: Optional[str] = None,
@@ -572,18 +543,18 @@ def create_initial_message(
     return initial_message_util(uid, compat_app_id)
 
 
-@router.get("/v2/messages", response_model=List[Message], tags=["chat"])
+@router.get('/v2/messages', response_model=List[Message], tags=['chat'])
 def get_messages(
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
-    if compat_app_id in ["null", ""]:
+    if compat_app_id in ['null', '']:
         compat_app_id = None
 
     chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
-    chat_session_id = chat_session["id"] if chat_session else None
+    chat_session_id = chat_session['id'] if chat_session else None
 
     messages = chat_db.get_messages(
         uid,
@@ -592,12 +563,12 @@ def get_messages(
         app_id=compat_app_id,
         chat_session_id=chat_session_id,
     )
-    logger.info(f"get_messages {len(messages)} {compat_app_id}")
+    logger.info(f'get_messages {len(messages)} {compat_app_id}')
 
     # Debug: Check for messages with ratings
-    rated_messages = [m for m in messages if m.get("rating") is not None]
+    rated_messages = [m for m in messages if m.get('rating') is not None]
     if rated_messages:
-        logger.info(f"📊 Messages with ratings: {len(rated_messages)}")
+        logger.info(f'📊 Messages with ratings: {len(rated_messages)}')
         for m in rated_messages[:5]:  # Show first 5
             logger.info(f"  - Message {m.get('id')}: rating={m.get('rating')}")
 
@@ -621,7 +592,7 @@ def create_voice_message_stream(
     files: List[UploadFile] = File(...),
     language: Optional[str] = Form(None),
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:message")),
-    x_app_platform: Optional[str] = Header(None, alias="X-App-Platform"),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     enforce_chat_quota(uid, platform=x_app_platform)
 
@@ -632,7 +603,7 @@ def create_voice_message_stream(
 
     def _record_preparation_failure(failure: TranscriptionFailure) -> None:
         preparation_attempt = TranscriptionAttempt(
-            route="voice_chat_sse",
+            route='voice_chat_sse',
             provider=stt_provider,
             platform=x_app_platform,
         )
@@ -662,7 +633,7 @@ def create_voice_message_stream(
         if duration_ms is not None:
             allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
             if not allowed:
-                raise HTTPException(status_code=429, detail="Daily transcription budget exhausted")
+                raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
     except TranscriptionFailure as failure:
         _record_preparation_failure(failure)
         _cleanup_temp_voice_wavs(paths + wav_paths, uid)
@@ -687,7 +658,7 @@ def create_voice_message_stream(
     # process
     async def generate_stream():
         attempt = TranscriptionAttempt(
-            route="voice_chat_sse",
+            route='voice_chat_sse',
             provider=stt_provider,
             platform=x_app_platform,
         )
@@ -698,29 +669,23 @@ def create_voice_message_stream(
             ):
                 if chunk.startswith("message: "):
                     attempt.finish(TranscriptionOutcome.SUCCESS)
-                if not quota_recorded and chunk.startswith("message: "):
-                    payload = chunk.removeprefix("message: ").strip()
+                if not quota_recorded and chunk.startswith('message: '):
+                    payload = chunk.removeprefix('message: ').strip()
                     try:
-                        message_data = json.loads(base64.b64decode(payload).decode("utf-8"))
+                        message_data = json.loads(base64.b64decode(payload).decode('utf-8'))
                         await run_blocking(
                             db_executor,
                             _record_chat_quota_question_safe,
                             uid,
                             idempotency_key=f"v2_voice_messages:{message_data.get('id') or first_wav}",
-                            source="v2_voice_messages",
-                            message_id=message_data.get("id"),
-                            chat_session_id=message_data.get("chat_session_id"),
+                            source='v2_voice_messages',
+                            message_id=message_data.get('id'),
+                            chat_session_id=message_data.get('chat_session_id'),
                             platform=x_app_platform,
                         )
                         quota_recorded = True
-                    except (
-                        binascii.Error,
-                        UnicodeDecodeError,
-                        ValueError,
-                        TypeError,
-                        json.JSONDecodeError,
-                    ) as exc:
-                        logger.warning("Failed to record voice chat quota question: %s", exc)
+                    except (binascii.Error, UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                        logger.warning('Failed to record voice chat quota question: %s', exc)
                 yield chunk
             if not attempt.finished:
                 attempt.finish(TranscriptionOutcome.EXPECTED_SILENCE)
@@ -744,25 +709,16 @@ def create_voice_message_stream(
     "/v2/voice-message/transcribe",
     response_model=VoiceMessageTranscriptionResponse,
     responses={
-        400: {
-            "model": TranscriptionErrorResponse,
-            "description": "Invalid audio input",
-        },
-        502: {
-            "model": TranscriptionErrorResponse,
-            "description": "Upstream or unexpected-empty result",
-        },
-        503: {
-            "model": TranscriptionErrorResponse,
-            "description": "Provider configuration unavailable",
-        },
+        400: {"model": TranscriptionErrorResponse, "description": "Invalid audio input"},
+        502: {"model": TranscriptionErrorResponse, "description": "Upstream or unexpected-empty result"},
+        503: {"model": TranscriptionErrorResponse, "description": "Provider configuration unavailable"},
         504: {"model": TranscriptionErrorResponse, "description": "Provider timeout"},
     },
 )
 async def transcribe_voice_message(
     request: Request,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:transcribe")),
-    x_app_platform: Optional[str] = Header(None, alias="X-App-Platform"),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     """Transcribe audio and return the transcript text.
 
@@ -776,7 +732,7 @@ async def transcribe_voice_message(
     # Narrow to trial-only on purpose — full enforce_chat_quota here would
     # change mobile behavior for users past their existing 30/mo chat cap.
     if await run_blocking(db_executor, is_trial_paywalled, uid, x_app_platform):
-        raise HTTPException(status_code=402, detail={"error": "quota_exceeded", "plan_type": "basic"})
+        raise HTTPException(status_code=402, detail={'error': 'quota_exceeded', 'plan_type': 'basic'})
 
     content_type = request.headers.get("content-type", "")
 
@@ -794,21 +750,15 @@ async def transcribe_voice_message(
                 )
                 raise _transcription_http_error(failure) from error
             if parsed_content_length > _MAX_PCM_BODY_BYTES:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"Body too large (max {_MAX_PCM_BODY_BYTES} bytes)",
-                )
+                raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_PCM_BODY_BYTES} bytes)')
 
         audio_bytes = await request.body()
         if not audio_bytes or len(audio_bytes) == 0:
-            raise HTTPException(status_code=400, detail="No audio data provided")
+            raise HTTPException(status_code=400, detail='No audio data provided')
 
         if len(audio_bytes) > _MAX_PCM_BODY_BYTES:
             del audio_bytes
-            raise HTTPException(
-                status_code=413,
-                detail=f"Body too large (max {_MAX_PCM_BODY_BYTES} bytes)",
-            )
+            raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_PCM_BODY_BYTES} bytes)')
 
         language = request.query_params.get("language")
         resolved_language = await run_blocking(db_executor, resolve_voice_message_language, uid, language)
@@ -852,10 +802,10 @@ async def transcribe_voice_message(
         allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
         if not allowed:
             del audio_bytes
-            raise HTTPException(status_code=429, detail="Daily transcription budget exhausted")
+            raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
 
         attempt = TranscriptionAttempt(
-            route="voice_rest_pcm",
+            route='voice_rest_pcm',
             provider=stt_provider,
             platform=x_app_platform,
         )
@@ -896,11 +846,11 @@ async def transcribe_voice_message(
     form = await parse_multipart_form(request, max_part_size=VOICE_MESSAGE_MAX_PART_SIZE)
     files = form.getlist("files")
     language = form.get("language")
-    upload_files = [f for f in files if hasattr(f, "file")]
+    upload_files = [f for f in files if hasattr(f, 'file')]
     if not upload_files:
-        raise HTTPException(status_code=400, detail="No files provided")
+        raise HTTPException(status_code=400, detail='No files provided')
     if any(not file.filename for file in upload_files):
-        raise HTTPException(status_code=400, detail="Each uploaded file must have a filename")
+        raise HTTPException(status_code=400, detail='Each uploaded file must have a filename')
 
     wav_paths = []
     other_file_paths = []
@@ -913,7 +863,7 @@ async def transcribe_voice_message(
     def _record_multipart_preparation_failure(failure: TranscriptionFailure) -> None:
         """Emit a typed terminal result for rejected multipart audio."""
         preparation_attempt = TranscriptionAttempt(
-            route="voice_rest_multipart",
+            route='voice_rest_multipart',
             provider=stt_provider,
             platform=x_app_platform,
         )
@@ -931,7 +881,7 @@ async def transcribe_voice_message(
         for file in upload_files:
             filename = file.filename
             assert filename is not None
-            if (suffix := Path(filename).suffix.lower()) in (".wav", ".webm", ".mp4"):
+            if (suffix := Path(filename).suffix.lower()) in ('.wav', '.webm', '.mp4'):
                 temp_path = f"/tmp/{uid}_{uuid.uuid4()}{suffix}"
                 await run_blocking(storage_executor, _save_wav, temp_path, file.file)
                 wav_paths.append(temp_path)
@@ -962,11 +912,11 @@ async def transcribe_voice_message(
         if total_duration_ms > 0:
             allowed, used_ms, remaining_ms = try_consume_budget(uid, total_duration_ms)
             if not allowed:
-                raise HTTPException(status_code=429, detail="Daily transcription budget exhausted")
+                raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
 
-        is_multi = resolved_language == "multi"
+        is_multi = resolved_language == 'multi'
         attempt = TranscriptionAttempt(
-            route="voice_rest_multipart",
+            route='voice_rest_multipart',
             provider=stt_provider,
             platform=x_app_platform,
         )
@@ -1037,12 +987,7 @@ async def transcribe_voice_message(
         # retrieve_file_paths and conversion can both allocate uid-scoped
         # inputs. Clean every path even when preprocessing fails before the
         # previous provider-only try/finally boundary.
-        await run_blocking(
-            storage_executor,
-            _cleanup_temp_voice_wavs,
-            wav_paths + other_file_paths,
-            uid,
-        )
+        await run_blocking(storage_executor, _cleanup_temp_voice_wavs, wav_paths + other_file_paths, uid)
         transcripts.clear()
         detected_languages.clear()
         wav_paths.clear()
@@ -1053,12 +998,12 @@ async def transcribe_voice_message(
 async def transcribe_voice_message_stream(
     websocket: WebSocket,
     uid: str = Depends(auth.get_current_user_uid_ws_listen),
-    language: str = "en",
+    language: str = 'en',
     sample_rate: int = 16000,
-    codec: str = "linear16",
+    codec: str = 'linear16',
     channels: int = 1,
     keywords: Optional[str] = None,
-    x_app_platform: Optional[str] = Header(None, alias="X-App-Platform"),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     """WebSocket endpoint for PTT live mode transcription-only streaming.
 
@@ -1086,19 +1031,19 @@ async def transcribe_voice_message_stream(
     # Paywalled desktop users — close before opening a provider connection for
     # a PTT stream that would not be allowed to chat anyway.
     if await run_blocking(db_executor, is_trial_paywalled, uid, x_app_platform):
-        await websocket.close(code=1008, reason="trial_expired")
+        await websocket.close(code=1008, reason='trial_expired')
         return
 
-    if codec != "linear16":
-        await websocket.close(code=1008, reason="Unsupported codec; only linear16 is supported")
+    if codec != 'linear16':
+        await websocket.close(code=1008, reason='Unsupported codec; only linear16 is supported')
         return
 
     if sample_rate < 8000 or sample_rate > 48000:
-        await websocket.close(code=1008, reason="sample_rate must be between 8000 and 48000")
+        await websocket.close(code=1008, reason='sample_rate must be between 8000 and 48000')
         return
 
     if channels < 1 or channels > 2:
-        await websocket.close(code=1008, reason="channels must be 1 or 2")
+        await websocket.close(code=1008, reason='channels must be 1 or 2')
         return
 
     # Deepgram was the only PTT provider that accepted stereo. Parakeet and
@@ -1107,15 +1052,12 @@ async def transcribe_voice_message_stream(
     # transcribed as mono, corrupting timing and quality. Reject channels > 1
     # explicitly instead of silently downmixing or double-billing.
     if channels != 1:
-        await websocket.close(
-            code=1008,
-            reason="Only mono (channels=1) is supported by this transcription provider",
-        )
+        await websocket.close(code=1008, reason='Only mono (channels=1) is supported by this transcription provider')
         return
 
     # Inline rate limiting for WebSocket (can't use Depends(with_rate_limit))
     try:
-        max_requests, window = get_effective_limit("voice:transcribe_stream")
+        max_requests, window = get_effective_limit('voice:transcribe_stream')
         allowed, remaining, retry_after = await run_blocking(
             critical_executor,
             check_rate_limit,
@@ -1126,9 +1068,9 @@ async def transcribe_voice_message_stream(
         )
         if not allowed:
             if not RATE_LIMIT_SHADOW:
-                await websocket.close(code=1008, reason=f"Rate limit exceeded. Retry in {retry_after}s.")
+                await websocket.close(code=1008, reason=f'Rate limit exceeded. Retry in {retry_after}s.')
                 return
-            logger.warning(f"[shadow] rate_limit_exceeded policy=voice:transcribe_stream uid={uid}")
+            logger.warning(f'[shadow] rate_limit_exceeded policy=voice:transcribe_stream uid={uid}')
     except Exception:
         pass  # Fail-open, consistent with Redis rate limiting elsewhere
 
@@ -1137,7 +1079,7 @@ async def transcribe_voice_message_stream(
     try:
         has_budget, used_ms, remaining_ms = check_budget(uid)
         if not has_budget:
-            await websocket.close(code=1008, reason="Daily transcription budget exhausted")
+            await websocket.close(code=1008, reason='Daily transcription budget exhausted')
             return
         budget_remaining_ms = remaining_ms
     except Exception:
@@ -1159,7 +1101,7 @@ async def transcribe_voice_message_stream(
 
     stt_service, stt_language, stt_model = get_stt_service_for_language(language, surface=STTServingSurface.PTT)
     if stt_service is None or stt_language is None or stt_model is None:
-        await websocket.close(code=1011, reason="Transcription service unavailable")
+        await websocket.close(code=1011, reason='Transcription service unavailable')
         return
     context_keywords = _parse_context_keywords(keywords)
 
@@ -1185,7 +1127,7 @@ async def transcribe_voice_message_stream(
             except asyncio.TimeoutError:
                 continue
             except Exception as e:
-                logger.warning(f"transcribe-stream: segment_sender error uid={uid}: {e}")
+                logger.warning(f'transcribe-stream: segment_sender error uid={uid}: {e}')
                 websocket_active = False
                 break
 
@@ -1196,9 +1138,9 @@ async def transcribe_voice_message_stream(
             return
         stt_send_failed = True
         websocket_active = False
-        logger.error("event=ptt_transcription_stream outcome=provider_terminal_failure")
+        logger.error('event=ptt_transcription_stream outcome=provider_terminal_failure')
         try:
-            await websocket.close(code=1011, reason="Transcription service unavailable")
+            await websocket.close(code=1011, reason='Transcription service unavailable')
         except Exception:
             pass
 
@@ -1234,7 +1176,7 @@ async def transcribe_voice_message_stream(
             return True
         try:
             if dg_socket is None:
-                raise RuntimeError("missing STT socket")
+                raise RuntimeError('missing STT socket')
             dg_socket.finalize()
             await drain_stt_socket(dg_socket)
         except Exception:
@@ -1261,7 +1203,7 @@ async def transcribe_voice_message_stream(
         elif stt_service == STTService.modulate:
             dg_socket = await process_audio_modulate(stream_transcript, sample_rate, stt_language)
         else:
-            raise RuntimeError(f"Unsupported serving STT provider {stt_service!r}")
+            raise RuntimeError(f'Unsupported serving STT provider {stt_service!r}')
 
         if dg_socket is None:
             logger.error(
@@ -1269,7 +1211,7 @@ async def transcribe_voice_message_stream(
                 uid,
                 stt_service.value,
             )
-            await websocket.close(code=1011, reason="Transcription service unavailable")
+            await websocket.close(code=1011, reason='Transcription service unavailable')
             return
 
         # Start segment sender task
@@ -1284,21 +1226,15 @@ async def transcribe_voice_message_stream(
             now = asyncio.get_event_loop().time()
             remaining_idle = _WS_IDLE_TIMEOUT_S - (now - last_audio_time)
             if remaining_idle <= 0:
-                logger.info(f"transcribe-stream: audio-idle timeout ({_WS_IDLE_TIMEOUT_S}s) uid={uid}")
-                await websocket.close(
-                    code=1008,
-                    reason=f"Idle timeout: no audio for {_WS_IDLE_TIMEOUT_S}s",
-                )
+                logger.info(f'transcribe-stream: audio-idle timeout ({_WS_IDLE_TIMEOUT_S}s) uid={uid}')
+                await websocket.close(code=1008, reason=f'Idle timeout: no audio for {_WS_IDLE_TIMEOUT_S}s')
                 break
 
             try:
                 message = await asyncio.wait_for(websocket.receive(), timeout=remaining_idle)
             except asyncio.TimeoutError:
-                logger.info(f"transcribe-stream: audio-idle timeout ({_WS_IDLE_TIMEOUT_S}s) uid={uid}")
-                await websocket.close(
-                    code=1008,
-                    reason=f"Idle timeout: no audio for {_WS_IDLE_TIMEOUT_S}s",
-                )
+                logger.info(f'transcribe-stream: audio-idle timeout ({_WS_IDLE_TIMEOUT_S}s) uid={uid}')
+                await websocket.close(code=1008, reason=f'Idle timeout: no audio for {_WS_IDLE_TIMEOUT_S}s')
                 break
             except WebSocketDisconnect:
                 break
@@ -1328,14 +1264,14 @@ async def transcribe_voice_message_stream(
                 continue
 
             if stt_drained:
-                await websocket.close(code=1008, reason="Transcription already finalized")
+                await websocket.close(code=1008, reason='Transcription already finalized')
                 break
 
             last_audio_time = asyncio.get_event_loop().time()
 
             # Guard against oversized frames (5 MB matches REST endpoint limit)
             if len(data) > 5 * 1024 * 1024:
-                logger.warning(f"transcribe-stream: oversized frame uid={uid} size={len(data)}")
+                logger.warning(f'transcribe-stream: oversized frame uid={uid} size={len(data)}')
                 continue
 
             # In-session budget enforcement: check BEFORE incrementing received_audio_bytes
@@ -1344,9 +1280,9 @@ async def transcribe_voice_message_stream(
                 prospective_ms = compute_pcm_duration_ms(received_audio_bytes + len(data), sample_rate, channels)
                 if prospective_ms > budget_remaining_ms:
                     logger.info(
-                        f"transcribe-stream: budget exhausted mid-session uid={uid} elapsed={prospective_ms}ms remaining={budget_remaining_ms}ms"
+                        f'transcribe-stream: budget exhausted mid-session uid={uid} elapsed={prospective_ms}ms remaining={budget_remaining_ms}ms'
                     )
-                    await websocket.close(code=1008, reason="Daily transcription budget exhausted")
+                    await websocket.close(code=1008, reason='Daily transcription budget exhausted')
                     break
 
             received_audio_bytes += len(data)
@@ -1363,7 +1299,7 @@ async def transcribe_voice_message_stream(
     except WebSocketDisconnect:
         pass
     except Exception as e:
-        logger.error(f"transcribe-stream: error uid={uid}: {e}")
+        logger.error(f'transcribe-stream: error uid={uid}: {e}')
         await close_stt_failure()
     finally:
         websocket_active = False
@@ -1403,7 +1339,7 @@ async def transcribe_voice_message_stream(
         del stt_audio_buffer
 
 
-@router.post("/v2/files", response_model=List[FileChat], tags=["chat"])
+@router.post('/v2/files', response_model=List[FileChat], tags=['chat'])
 @max_part_size(CHAT_FILE_MAX_PART_SIZE)
 def upload_file_chat(
     files: List[UploadFile] = File(...),
@@ -1463,7 +1399,7 @@ def upload_file_chat(
 # CLEANUP: Remove after new app goes to prod ----------------------------------------------------------
 
 
-@router.post("/v1/files", response_model=List[FileChat], tags=["chat"])
+@router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
 @max_part_size(CHAT_FILE_MAX_PART_SIZE)
 def upload_file_chat(
     files: List[UploadFile] = File(...),
@@ -1519,42 +1455,42 @@ def upload_file_chat(
     return response
 
 
-@router.post("/v1/messages/{message_id}/report", tags=["chat"], response_model=dict)
+@router.post('/v1/messages/{message_id}/report', tags=['chat'], response_model=dict)
 def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
     result = chat_db.get_message(uid, message_id)
     if result is None:
-        raise HTTPException(status_code=404, detail="Message not found")
+        raise HTTPException(status_code=404, detail='Message not found')
     message, msg_doc_id = result
-    if message.sender != "ai":
-        raise HTTPException(status_code=400, detail="Only AI messages can be reported")
+    if message.sender != 'ai':
+        raise HTTPException(status_code=400, detail='Only AI messages can be reported')
     if message.reported:
-        raise HTTPException(status_code=400, detail="Message already reported")
+        raise HTTPException(status_code=400, detail='Message already reported')
     chat_db.report_message(uid, msg_doc_id)
-    return {"message": "Message reported"}
+    return {'message': 'Message reported'}
 
 
-@router.delete("/v1/messages", tags=["chat"], response_model=Message)
+@router.delete('/v1/messages', tags=['chat'], response_model=Message)
 def clear_chat_messages(
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
-    if compat_app_id in ["null", ""]:
+    if compat_app_id in ['null', '']:
         compat_app_id = None
 
     # get current chat session
     chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
-    chat_session_id = chat_session["id"] if chat_session else None
+    chat_session_id = chat_session['id'] if chat_session else None
 
     err = chat_db.clear_chat(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
     if err:
-        raise HTTPException(status_code=500, detail="Failed to clear chat")
+        raise HTTPException(status_code=500, detail='Failed to clear chat')
 
     # clean thread chat file (v1 endpoint)
-    if chat_session and chat_session.get("id"):
+    if chat_session and chat_session.get('id'):
         try:
-            fc_tool = FileChatTool(uid, chat_session["id"])
+            fc_tool = FileChatTool(uid, chat_session['id'])
             fc_tool.cleanup()
         except ValueError:
             # Session not found, continue with cleanup
@@ -1567,7 +1503,7 @@ def clear_chat_messages(
     return initial_message_util(uid, compat_app_id)
 
 
-@router.post("/v1/initial-message", tags=["chat"], response_model=Message)
+@router.post('/v1/initial-message', tags=['chat'], response_model=Message)
 def create_initial_message(
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
@@ -1580,7 +1516,7 @@ def create_initial_message(
 # MARK: - Message Rating
 
 
-@router.patch("/v2/messages/{message_id}/rating", tags=["chat"], response_model=ChatRatingResponse)
+@router.patch('/v2/messages/{message_id}/rating', tags=['chat'], response_model=ChatRatingResponse)
 def rate_message(
     message_id: str,
     data: RateMessageRequest,
@@ -1594,16 +1530,16 @@ def rate_message(
 
     # Also store in analytics collection
     value = rating if rating is not None else 0
-    set_chat_message_rating_score(uid, message_id, value, platform="mobile")
+    set_chat_message_rating_score(uid, message_id, value, platform='mobile')
 
     # Try to submit feedback to LangSmith
     try:
         message_result = chat_db.get_message(uid, message_id)
         if message_result:
             message, _ = message_result
-            langsmith_run_id = getattr(message, "langsmith_run_id", None)
+            langsmith_run_id = getattr(message, 'langsmith_run_id', None)
             if not langsmith_run_id and isinstance(message, dict):
-                langsmith_run_id = message.get("langsmith_run_id")
+                langsmith_run_id = message.get('langsmith_run_id')
 
             if langsmith_run_id:
                 score = 1.0 if rating == 1 else (0.0 if rating == -1 else 0.5)
@@ -1615,13 +1551,13 @@ def rate_message(
     except Exception as e:
         logger.error(f"LangSmith feedback submission error (non-fatal): {e}")
 
-    return {"status": "ok"}
+    return {'status': 'ok'}
 
 
 # MARK: - Chat Sharing
 
 
-@router.post("/v2/messages/share", tags=["chat"], response_model=ShareChatMessagesResponse)
+@router.post('/v2/messages/share', tags=['chat'], response_model=ShareChatMessagesResponse)
 def share_chat_messages(
     data: ShareChatMessagesRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -1629,36 +1565,32 @@ def share_chat_messages(
     """Create a shareable link for chat messages."""
     message_ids = data.message_ids
     if not message_ids:
-        raise HTTPException(status_code=400, detail="No message IDs provided")
+        raise HTTPException(status_code=400, detail='No message IDs provided')
 
     # Validate messages belong to user
     for mid in message_ids:
         msg = chat_db.get_message(uid, mid)
         if not msg:
-            raise HTTPException(status_code=404, detail=f"Message {mid} not found")
+            raise HTTPException(status_code=404, detail=f'Message {mid} not found')
 
     display_name = get_user_display_name(uid)
     token = uuid.uuid4().hex
     result = store_chat_share(token, uid, display_name, message_ids)
     if result is None:
-        raise HTTPException(status_code=500, detail="Failed to create share link")
+        raise HTTPException(status_code=500, detail='Failed to create share link')
 
     return {"url": f"https://h.omi.me/chat/{token}", "token": token}
 
 
-@router.get(
-    "/v2/messages/shared/{token}",
-    tags=["chat"],
-    response_model=SharedChatMessagesResponse,
-)
+@router.get('/v2/messages/shared/{token}', tags=['chat'], response_model=SharedChatMessagesResponse)
 def get_shared_chat_messages(token: str):
     """Public endpoint — get shared chat messages (no auth required)."""
     share_data = get_chat_share(token)
     if not share_data:
-        raise HTTPException(status_code=404, detail="Share link expired or not found")
+        raise HTTPException(status_code=404, detail='Share link expired or not found')
 
-    sender_uid = share_data["uid"]
-    message_ids = share_data["message_ids"]
+    sender_uid = share_data['uid']
+    message_ids = share_data['message_ids']
 
     messages = []
     for mid in message_ids:
@@ -1675,7 +1607,7 @@ def get_shared_chat_messages(token: str):
             )
 
     return {
-        "sender_name": share_data["display_name"],
+        "sender_name": share_data['display_name'],
         "messages": messages,
         "count": len(messages),
     }
