@@ -896,35 +896,26 @@ def check_mobile_codemagic_release_triggers() -> list[str]:
             errors.append(f"codemagic.yaml is missing {workflow_id}")
             continue
         body = match.group("body")
-        if re.search(
-            r"\n    triggering:\n(?:(?!\n    [A-Za-z_]).)*\n      events:\n(?:(?!\n    [A-Za-z_]).)*\n        - push\b",
-            body,
-            flags=re.DOTALL,
-        ):
-            errors.append(f"{workflow_id} must not directly trigger on push; GitHub paths filtering dispatches it")
+        required = (
+            "    triggering:\n"
+            "      events:\n"
+            "        - push\n"
+            "      branch_patterns:\n"
+            "        - pattern: main\n"
+            "          include: true\n"
+            "      cancel_previous_builds: true\n"
+            "    when:\n"
+            "      changeset:\n"
+            "        includes:\n"
+            "          - 'app/**'"
+        )
+        if required not in body:
+            errors.append(
+                f"{workflow_id} must natively trigger on main app/** pushes and cancel stale builds"
+            )
 
-    workflow = ROOT / ".github/workflows/mobile_internal_auto.yml"
-    if not workflow.exists():
-        errors.append("mobile internal auto deploys must be dispatched by .github/workflows/mobile_internal_auto.yml")
-        return errors
-
-    workflow_text = workflow.read_text(encoding="utf-8")
-    if not re.search(r"(?m)^\s*-\s*['\"]?app/\*\*['\"]?\s*$", workflow_text):
-        errors.append("mobile_internal_auto.yml must gate pushes to app/** paths")
-    if "group: mobile-internal-auto-${{ matrix.workflow_id }}-${{ github.ref }}" not in workflow_text:
-        errors.append("mobile_internal_auto.yml must give each matrix workflow its own concurrency group")
-    token_check_index = workflow_text.find("Validate Codemagic API token")
-    debounce_index = workflow_text.find("Debounce mobile internal deploys")
-    if token_check_index == -1 or debounce_index == -1 or token_check_index > debounce_index:
-        errors.append("mobile_internal_auto.yml must validate CODEMAGIC_API_TOKEN before the push debounce")
-    for required in (
-        "paths:",
-        "https://api.codemagic.io/builds",
-        "ios-internal-auto",
-        "android-internal-auto",
-    ):
-        if required not in workflow_text:
-            errors.append(f"mobile_internal_auto.yml is missing required release guard fragment: {required}")
+    if (ROOT / ".github/workflows/mobile_internal_auto.yml").exists():
+        errors.append("mobile internal releases must not be dispatched through GitHub Actions")
 
     return errors
 

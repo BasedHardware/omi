@@ -31,8 +31,13 @@ workflows:
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
         - $HOME/Library/Caches/CocoaPods
-    # Automatic app deploys are dispatched by .github/workflows/mobile_internal_auto.yml
-    # after GitHub paths filtering, so desktop-only merges never allocate mobile runners.
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+      cancel_previous_builds: true
     when:
       changeset:
         includes:
@@ -248,8 +253,13 @@ workflows:
         - $HOME/opt
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
-    # Automatic app deploys are dispatched by .github/workflows/mobile_internal_auto.yml
-    # after GitHub paths filtering, so desktop-only merges never allocate mobile runners.
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+      cancel_previous_builds: true
     when:
       changeset:
         includes:
