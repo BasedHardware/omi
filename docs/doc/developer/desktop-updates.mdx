@@ -7,7 +7,7 @@ Desktop Beta is a distribution channel, not a backend environment. The Omi and O
 
 ## Release model
 
-One Codemagic build signs and notarizes one exact ZIP/DMG pair. It first creates an immutable, non-live GitHub candidate. The trusted macOS qualifier checks the downloaded assets and records passed T2 evidence. The qualified manifest stores the exact release ID, source SHA, artifact URLs, hashes, Sparkle signature, and evidence.
+One Codemagic build signs and notarizes Stable and side-by-side Beta ZIP/DMG artifacts from one source revision. It first creates an immutable, non-live GitHub candidate. The trusted macOS qualifier downloads and hashes all four artifacts after the candidate gate and hermetic T2 pass, then uploads that evidence as an immutable GitHub Actions run artifact. Promotion verifies the successful trusted `main` qualification run ID and redownloads every asset before registration. The qualified manifest stores exact Stable/Beta URLs, hashes, Sparkle signatures, release ID, and source SHA.
 
 `macos-beta` and `macos-stable` are the only mutable release pointers. A pointer always resolves to an immutable qualified manifest. Registration is exact-idempotent; changing metadata under an existing release ID is rejected.
 
@@ -21,7 +21,7 @@ The normal candidate-to-Beta path uses non-cancelling per-tag GitHub concurrency
 
 ## Stable promotion and repoint
 
-`desktop_promote_prod.yml` is protected, manual-only, and independent of backend deployment. It verifies that the requested release ID is the current qualified Beta pointer, verifies/downloads the exact ZIP and DMG, registers the immutable manifest idempotently, publishes the immutable stable repair artifact, then advances the Stable pointer with the requested expected current release ID and generation. It updates the existing legacy appcast/static bridges and verifies the final pointer, manifest hashes, and feed.
+`desktop_promote_prod.yml` is protected, manual-only, and independent of backend deployment. `promote` verifies that the requested release ID is the current qualified Beta pointer; `repoint` instead accepts a retained passed-T2 manifest under exact Stable CAS. Both verify the trusted qualification run artifact and redownload all four exact artifacts before registering or reusing the manifest, publishing the immutable stable repair artifact, and advancing the Stable pointer. It updates the existing legacy appcast/static bridges and verifies the final pointer, hashes, and exact stable feed item.
 
 `operation=promote` is roll-forward. `operation=repoint` can choose any retained qualified manifest, in either direction, but requires the exact current release ID and generation. Both use the same transactional pointer authority, qualification gate, and GitHub Actions audit trail. A stale compare-and-swap is rejected; a lost response retried against the already-selected release is idempotent.
 

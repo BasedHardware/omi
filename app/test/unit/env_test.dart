@@ -10,7 +10,7 @@ class _TestEnvFields implements EnvFields {
   @override
   String? get posthogApiKey => null;
   @override
-  String? get apiBaseUrl => 'https://api.prod.example.com/';
+  String? get apiBaseUrl => 'https://api.omi.me/';
   @override
   String? get googleMapsApiKey => null;
   @override
@@ -53,12 +53,13 @@ void main() {
     test('returns override when set', () {
       Env.overrideApiBaseUrl('https://override.example.com/');
       expect(Env.apiBaseUrl, 'https://override.example.com/');
+      Env.clearApiBaseUrlOverrideForTesting();
     });
 
     test('TestFlight remains on the production backend', () {
-      Env.overrideApiBaseUrl('https://api.omi.me/');
       Env.isTestFlight = true;
 
+      Env.requireProductionRouting();
       expect(Env.apiBaseUrl, 'https://api.omi.me/');
       expect(Env.agentProxyWsUrl, 'wss://agent.omi.me/v1/agent/ws');
 

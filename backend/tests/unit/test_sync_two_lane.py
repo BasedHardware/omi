@@ -273,14 +273,8 @@ def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_stt_ca
     )
 
 
-def test_transcription_candidate_gate_is_development_only():
-    """The candidate probe must never gate a production deploy.
-
-    The probe reaches the candidate over a Cloud Run tag URL, which is a run.app
-    URL. Production disables run.app URLs and restricts ingress to internal and
-    load-balancer traffic, so a production tag resolves to no HTTPS endpoint and
-    every production deploy fails at the probe (2026-07-17, run 29574215693).
-    """
+def test_production_traffic_is_blocked_until_an_authenticated_candidate_probe_exists():
+    """The public-tag probe is development-only; prod must fail closed first."""
     import yaml
 
     root = Path(__file__).resolve().parents[3]
@@ -305,9 +299,10 @@ def test_transcription_candidate_gate_is_development_only():
     deploy_flags = by_name['Deploy ${{ env.SERVICE }} to Cloud Run']['with']['flags']
     assert "github.event.inputs.environment == 'development' && format('--tag={0}'" in deploy_flags
 
-    # Promotion must not depend on the skipped gate.
-    for name in ('Verify validated revisions are still current', 'Shift Cloud Run traffic to validated revisions'):
-        assert by_name[name].get('if') is None, f'{name} must still run when the gate is skipped'
+    rejection = by_name['Reject production promotion without an authenticated candidate probe']
+    assert "github.event.inputs.environment == 'prod'" in rejection['if']
+    assert rejection['run'].strip().endswith('exit 1')
+    assert steps.index(rejection) < steps.index(by_name['Shift Cloud Run traffic to validated revisions'])
 
 
 def test_static_processed_segment_marker_follows_partial_result_checkpoint():

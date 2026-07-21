@@ -12,6 +12,10 @@ abstract class Env {
     _apiBaseUrlOverride = url;
   }
 
+  static void clearApiBaseUrlOverrideForTesting() {
+    _apiBaseUrlOverride = null;
+  }
+
   static void overrideAgentProxyWsUrl(String url) {
     _agentProxyWsUrlOverride = url;
   }
@@ -22,6 +26,15 @@ abstract class Env {
 
   // static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
   static String? get apiBaseUrl => _apiBaseUrlOverride ?? _instance.apiBaseUrl;
+
+  /// Production-family packages have one pinned backend authority. This runs
+  /// during startup so a misconfigured signing group fails before networking.
+  static void requireProductionRouting() {
+    final normalized = (apiBaseUrl ?? '').trim().replaceFirst(RegExp(r'/+$'), '');
+    if (normalized != 'https://api.omi.me') {
+      throw StateError('Production packages require API_BASE_URL=https://api.omi.me/');
+    }
+  }
 
   /// WebSocket URL for the agent proxy service.
   /// Derives from apiBaseUrl: api.omi.me → agent.omi.me, api.omiapi.com → agent.omiapi.com.

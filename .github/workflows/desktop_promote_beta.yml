@@ -11,9 +11,14 @@ on:
         required: false
         default: false
         type: boolean
+      qualification_run_id:
+        description: 'Successful trusted desktop_qualify_beta.yml run ID containing immutable evidence'
+        required: true
+        type: string
 
 permissions:
   contents: read
+  actions: read
   id-token: write
 
 concurrency:
@@ -59,12 +64,21 @@ jobs:
           fi
           echo "Automatic beta request targets newest candidate $RELEASE_TAG." >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Download immutable qualification evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-qualification-evidence-${{ inputs.release_tag }}
+          run-id: ${{ inputs.qualification_run_id }}
+          github-token: ${{ github.token }}
+          path: /tmp/desktop-qualification-evidence
+
       - name: Download and validate qualified candidate
         id: candidate
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           REPO: ${{ github.repository }}
+          QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
         run: |
           set -euo pipefail
           if ! printf '%s\n' "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+(\.[0-9]+)?\+[0-9]+-macos$'; then
@@ -74,19 +88,27 @@ jobs:
 
           git fetch --force origin "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
           TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
-          mkdir -p /tmp/desktop-beta-assets
+          [[ "$QUALIFICATION_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'qualification_run_id must be numeric' >&2; exit 1; }
+          run=$(gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID")
+          test "$(jq -r .conclusion <<<"$run")" = success
+          test "$(jq -r .head_branch <<<"$run")" = main
+          test "$(jq -r .name <<<"$run")" = 'Qualify Desktop Beta Candidate'
+          test "$(jq -r .head_sha <<<"$run")" = "$TARGET_SHA"
           gh release view "$RELEASE_TAG" --repo "$REPO" \
             --json tagName,body,isDraft,isPrerelease,publishedAt,assets \
             > /tmp/desktop-beta-release.json
+          mkdir -p /tmp/desktop-beta-assets
           gh release download "$RELEASE_TAG" --repo "$REPO" \
-            --pattern 'Omi.zip' --pattern '*.dmg' --dir /tmp/desktop-beta-assets
+            --pattern 'Omi.zip' --pattern 'Omi.dmg' --pattern 'omi.dmg' --pattern 'Omi.Beta.zip' --pattern 'omi-beta.dmg' --dir /tmp/desktop-beta-assets
 
           ZIP_PATH=/tmp/desktop-beta-assets/Omi.zip
-          DMG_PATH=$(find /tmp/desktop-beta-assets -maxdepth 1 -type f -name '*.dmg' -print -quit)
+          DMG_PATH=$(find /tmp/desktop-beta-assets -maxdepth 1 -type f \( -name Omi.dmg -o -name omi.dmg \) -print -quit)
           test -f "$ZIP_PATH"
           test -n "$DMG_PATH"
           ZIP_SHA=$(sha256sum "$ZIP_PATH" | cut -d' ' -f1)
           DMG_SHA=$(sha256sum "$DMG_PATH" | cut -d' ' -f1)
+          BETA_ZIP_SHA=$(sha256sum /tmp/desktop-beta-assets/Omi.Beta.zip | cut -d' ' -f1)
+          BETA_DMG_SHA=$(sha256sum /tmp/desktop-beta-assets/omi-beta.dmg | cut -d' ' -f1)
 
           python3 .github/scripts/prepare-desktop-beta-promotion.py \
             --release-json /tmp/desktop-beta-release.json \
@@ -94,6 +116,9 @@ jobs:
             --target-sha "$TARGET_SHA" \
             --zip-sha256 "$ZIP_SHA" \
             --dmg-sha256 "$DMG_SHA" \
+            --beta-zip-sha256 "$BETA_ZIP_SHA" \
+            --beta-dmg-sha256 "$BETA_DMG_SHA" \
+            --qualification-evidence /tmp/desktop-qualification-evidence/qualification-evidence.json \
             --output /tmp/desktop-release-manifest.json
 
           {

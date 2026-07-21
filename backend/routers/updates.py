@@ -64,13 +64,18 @@ class DesktopReleaseManifestRequest(BaseModel):
     build_number: int = Field(gt=0)
     zip_url: str
     dmg_url: Optional[str] = None
+    beta_zip_url: Optional[str] = None
+    beta_dmg_url: Optional[str] = None
     ed_signature: str
+    beta_ed_signature: Optional[str] = None
     published_at: str
     changelog: List[str] = Field(default_factory=list)
     mandatory: bool = False
     source_sha: str
     zip_sha256: Optional[str] = None
     dmg_sha256: Optional[str] = None
+    beta_zip_sha256: Optional[str] = None
+    beta_dmg_sha256: Optional[str] = None
     qualification: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -269,14 +274,7 @@ async def _find_desktop_release_by_tag(tag_name: str) -> Optional[Dict]:
 async def _resolve_beta_identity_dmg(entry: Dict) -> Optional[str]:
     """Beta-identity DMG URL for this entry's release, or None when it predates
     the dual-identity pipeline."""
-    url = _get_asset_download_url(entry["release"], {BETA_IDENTITY_DMG_ASSET})
-    if url:
-        return url
-    tag = (entry.get("version_info") or {}).get("tag_name") or entry["release"].get("tag_name", "")
-    gh_release = await _find_desktop_release_by_tag(tag)
-    if not gh_release:
-        return None
-    return _get_asset_download_url(gh_release, {BETA_IDENTITY_DMG_ASSET})
+    return _get_asset_download_url(entry["release"], {BETA_IDENTITY_DMG_ASSET})
 
 
 async def _resolve_beta_identity_enclosure(entry: Dict) -> Optional[tuple]:
@@ -290,13 +288,6 @@ async def _resolve_beta_identity_enclosure(entry: Dict) -> Optional[tuple]:
     metadata = entry.get("metadata") or {}
     url = _get_asset_download_url(release, {BETA_IDENTITY_SPARKLE_ASSET})
     signature = (metadata.get("betaEdSignature") or "").strip()
-    if not url:
-        tag = (entry.get("version_info") or {}).get("tag_name") or release.get("tag_name", "")
-        gh_release = await _find_desktop_release_by_tag(tag)
-        if not gh_release:
-            return None
-        url = _get_asset_download_url(gh_release, {BETA_IDENTITY_SPARKLE_ASSET})
-        signature = (extract_key_value_pairs(gh_release.get("body", "")).get("betaEdSignature") or "").strip()
     if not url or not signature:
         return None
     return url, signature
@@ -363,6 +354,10 @@ def _pointer_release_to_entry(release: Dict[str, Any], channel: str, source: str
     assets = [{"name": "Omi.zip", "browser_download_url": manifest["zip_url"]}]
     if manifest.get("dmg_url"):
         assets.append({"name": "Omi.dmg", "browser_download_url": manifest["dmg_url"]})
+    if manifest.get("beta_zip_url"):
+        assets.append({"name": "Omi.Beta.zip", "browser_download_url": manifest["beta_zip_url"]})
+    if manifest.get("beta_dmg_url"):
+        assets.append({"name": "omi-beta.dmg", "browser_download_url": manifest["beta_dmg_url"]})
     return {
         "channel": channel,
         "source": source,
@@ -379,6 +374,9 @@ def _pointer_release_to_entry(release: Dict[str, Any], channel: str, source: str
         },
         "metadata": {
             "edSignature": manifest["ed_signature"],
+            "betaEdSignature": manifest["beta_ed_signature"],
+            "betaZipSha256": manifest.get("beta_zip_sha256"),
+            "betaDmgSha256": manifest.get("beta_dmg_sha256"),
             "changelog": manifest.get("changelog", []),
             "mandatory": "true" if manifest.get("mandatory") else "false",
             "sourceSha": manifest["source_sha"],

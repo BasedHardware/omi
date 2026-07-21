@@ -1,7 +1,10 @@
 import importlib.util
+import json
 from pathlib import Path
+import tempfile
 
 import pytest
+from database.desktop_update_channels import _build_pointer, normalize_release_manifest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = REPO_ROOT / ".github" / "scripts"
@@ -22,6 +25,7 @@ def _load(name: str, filename: str):
 mark_beta = _load("mark_desktop_release_beta", "mark-desktop-release-beta.py")
 prepare_beta = _load("prepare_desktop_beta_promotion", "prepare-desktop-beta-promotion.py")
 repair_installer = _load("desktop_repair_installer", "desktop_repair_installer.py")
+qualification_evidence = _load("desktop_qualification_evidence", "desktop_qualification_evidence.py")
 
 
 def _release(body: str | None = None):
@@ -31,6 +35,7 @@ def _release(body: str | None = None):
 isLive: false
 channel: candidate
 edSignature: signature
+betaEdSignature: beta-signature
 changelog: Fixed updates|Improved recovery
 qualifiedBeta: true
 qualifiedBetaAt: 2026-07-09T12:00:00Z
@@ -47,9 +52,44 @@ KEY_VALUE_END -->"""
         "assets": [
             {"name": "Omi.zip", "url": "https://example.com/Omi.zip"},
             {"name": "omi.dmg", "url": "https://example.com/omi.dmg"},
+            {"name": "Omi.Beta.zip", "url": "https://example.com/Omi.Beta.zip"},
+            {"name": "omi-beta.dmg", "url": "https://example.com/omi-beta.dmg"},
             {"name": evidence, "url": "https://example.com/evidence.json"},
         ],
     }
+
+
+def _evidence():
+    return {
+        "schema_version": 1,
+        "release_id": "v0.12.64+12064-macos",
+        "source_sha": "a" * 40,
+        "qualification": {"passed": True, "tier": "T2"},
+        "artifacts": {
+            "Omi.zip": {"url": "https://example.com/Omi.zip", "sha256": "b" * 64, "signature": "signature"},
+            "omi.dmg": {"url": "https://example.com/omi.dmg", "sha256": "c" * 64},
+            "Omi.Beta.zip": {
+                "url": "https://example.com/Omi.Beta.zip",
+                "sha256": "d" * 64,
+                "signature": "beta-signature",
+            },
+            "omi-beta.dmg": {"url": "https://example.com/omi-beta.dmg", "sha256": "e" * 64},
+        },
+    }
+
+
+def _prepare(release=None, *, allow_stable_channel=False):
+    return prepare_beta.prepare_manifest(
+        _release() if release is None else release,
+        "v0.12.64+12064-macos",
+        "a" * 40,
+        "b" * 64,
+        "c" * 64,
+        beta_zip_sha256="d" * 64,
+        beta_dmg_sha256="e" * 64,
+        qualification_evidence=_evidence(),
+        allow_stable_channel=allow_stable_channel,
+    )
 
 
 def test_mark_beta_changes_only_visibility_fields():
@@ -60,27 +100,129 @@ def test_mark_beta_changes_only_visibility_fields():
 
 
 def test_prepare_manifest_requires_exact_qualification_and_assets():
-    manifest = prepare_beta.prepare_manifest(
-        _release(),
-        "v0.12.64+12064-macos",
-        "a" * 40,
-        "b" * 64,
-        "c" * 64,
-    )
+    manifest = _prepare()
     assert manifest["build_number"] == 12064
     assert manifest["qualification"]["tier"] == "T2"
-    assert manifest["qualification"]["qualified_at"] == "2026-07-09T12:00:00Z"
+    assert manifest["qualification"]["source"] == "trusted_github_actions_artifact"
     assert manifest["changelog"] == ["Fixed updates", "Improved recovery"]
 
 
-def test_stable_repair_bundle_uses_an_immutable_gcs_artifact():
-    manifest = prepare_beta.prepare_manifest(
-        _release(),
-        "v0.12.64+12064-macos",
-        "a" * 40,
-        "b" * 64,
-        "c" * 64,
+def test_prepare_manifest_rejects_caller_hashes_that_do_not_match_trusted_evidence():
+    """Promotion can only bind bytes independently recorded by qualification."""
+    evidence = {
+        "schema_version": 1,
+        "release_id": "v0.12.64+12064-macos",
+        "source_sha": "a" * 40,
+        "artifacts": {
+            "Omi.zip": {"url": "https://example.com/Omi.zip", "sha256": "b" * 64, "signature": "signature"},
+            "omi.dmg": {"url": "https://example.com/omi.dmg", "sha256": "c" * 64},
+            "Omi.Beta.zip": {
+                "url": "https://example.com/Omi.Beta.zip",
+                "sha256": "d" * 64,
+                "signature": "beta-signature",
+            },
+            "omi-beta.dmg": {"url": "https://example.com/omi-beta.dmg", "sha256": "e" * 64},
+        },
+        "qualification": {"passed": True, "tier": "T2"},
+    }
+
+    with pytest.raises(ValueError, match="qualification evidence"):
+        prepare_beta.prepare_manifest(
+            _release(),
+            "v0.12.64+12064-macos",
+            "a" * 40,
+            "1" * 64,
+            "2" * 64,
+            beta_zip_sha256="3" * 64,
+            beta_dmg_sha256="4" * 64,
+            qualification_evidence=evidence,
+        )
+
+
+def test_qualified_artifact_replacement_is_rejected_before_beta_or_stable_pointering():
+    release = _release()
+    release["assets"] = [
+        {"name": name, "url": f"https://example.com/{name}", "digest": ""}
+        for name in ("Omi.zip", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg")
+    ]
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        paths = {}
+        for name, content in (
+            ("Omi.zip", b"stable zip"),
+            ("omi.dmg", b"stable dmg"),
+            ("Omi.Beta.zip", b"beta zip"),
+            ("omi-beta.dmg", b"beta dmg"),
+        ):
+            path = root / name
+            path.write_bytes(content)
+            paths[name] = path
+        gate = root / "gate.json"
+        gate.write_text(json.dumps({"passed": True, "release_tag": release["tagName"]}))
+        evidence = qualification_evidence.build_evidence(
+            release, release["tagName"], "a" * 40, {**paths, "__candidate_gate__": gate}
+        )
+        paths["Omi.Beta.zip"].write_bytes(b"replacement")
+        with pytest.raises(ValueError, match="Omi.Beta.zip hash differs"):
+            qualification_evidence.verify_evidence(
+                evidence,
+                release,
+                release["tagName"],
+                "a" * 40,
+                {name: qualification_evidence.file_sha256(path) for name, path in paths.items()},
+            )
+
+
+def test_local_candidate_evidence_beta_stable_repoint_and_retry_simulation():
+    """No-cloud release-path simulation keeps both pointers bound to exact bytes."""
+    manifest = normalize_release_manifest(_prepare())
+    beta = _build_pointer(
+        {},
+        manifest,
+        transition="promote",
+        platform="macos",
+        channel="beta",
+        release_id=manifest["release_id"],
+        expected_generation=0,
     )
+    stable = _build_pointer(
+        {},
+        manifest,
+        transition="promote",
+        platform="macos",
+        channel="stable",
+        release_id=manifest["release_id"],
+        expected_generation=0,
+    )
+    retry = _build_pointer(
+        stable,
+        manifest,
+        transition="promote",
+        platform="macos",
+        channel="stable",
+        release_id=manifest["release_id"],
+        expected_generation=0,
+    )
+    assert retry is stable
+    retained = dict(manifest, release_id="v0.12.63+12063-macos", version="0.12.63+12063", build_number=12063)
+    repointed = _build_pointer(
+        stable,
+        retained,
+        transition="repoint",
+        platform="macos",
+        channel="stable",
+        release_id=retained["release_id"],
+        expected_generation=stable["generation"],
+        expected_current_release_id=stable["release_id"],
+    )
+    assert beta["release_id"] == manifest["release_id"]
+    assert repointed["release_id"] == retained["release_id"]
+    assert manifest["beta_zip_sha256"] == "d" * 64
+    assert manifest["beta_ed_signature"] == "beta-signature"
+
+
+def test_stable_repair_bundle_uses_an_immutable_gcs_artifact():
+    manifest = _prepare()
 
     bundle = repair_installer.build_repair_bundle(manifest, "gs://omi_macos_updates")
 
@@ -97,13 +239,7 @@ def test_stable_repair_bundle_uses_an_immutable_gcs_artifact():
 
 @pytest.mark.parametrize("field, value", [("platform", "windows"), ("dmg_sha256", "not-a-digest")])
 def test_stable_repair_bundle_rejects_incomplete_or_wrong_platform_manifest(field, value):
-    manifest = prepare_beta.prepare_manifest(
-        _release(),
-        "v0.12.64+12064-macos",
-        "a" * 40,
-        "b" * 64,
-        "c" * 64,
-    )
+    manifest = _prepare()
     manifest[field] = value
 
     with pytest.raises(ValueError):
@@ -111,20 +247,14 @@ def test_stable_repair_bundle_rejects_incomplete_or_wrong_platform_manifest(fiel
 
 
 def test_stable_repair_bundle_requires_the_release_publication_time():
-    manifest = prepare_beta.prepare_manifest(
-        _release(),
-        "v0.12.64+12064-macos",
-        "a" * 40,
-        "b" * 64,
-        "c" * 64,
-    )
+    manifest = _prepare()
     manifest.pop("published_at")
 
     with pytest.raises(ValueError, match="published_at"):
         repair_installer.build_repair_bundle(manifest, "gs://omi_macos_updates")
 
 
-def test_prepare_manifest_accepts_legacy_qualification_metadata():
+def test_prepare_manifest_ignores_mutable_legacy_qualification_metadata():
     release = _release()
     release["body"] = (
         release["body"]
@@ -134,15 +264,8 @@ def test_prepare_manifest_accepts_legacy_qualification_metadata():
         .replace("qualifiedBetaTier:", "blessedTier:")
         .replace("qualifiedBetaEvidence:", "blessedEvidence:")
     )
-    manifest = prepare_beta.prepare_manifest(
-        release,
-        "v0.12.64+12064-macos",
-        "a" * 40,
-        "b" * 64,
-        "c" * 64,
-    )
-    assert manifest["qualification"]["blessed_at"] == "2026-07-09T12:00:00Z"
-    assert "qualified_at" not in manifest["qualification"]
+    manifest = _prepare(release)
+    assert manifest["qualification"]["source"] == "trusted_github_actions_artifact"
 
 
 def test_prepare_manifest_allows_an_already_stable_release_only_for_repair_retries():
@@ -152,35 +275,26 @@ def test_prepare_manifest_allows_an_already_stable_release_only_for_repair_retri
     )
 
     with pytest.raises(SystemExit, match="candidate or beta"):
-        prepare_beta.prepare_manifest(
-            release,
-            "v0.12.64+12064-macos",
-            "a" * 40,
-            "b" * 64,
-            "c" * 64,
-        )
+        _prepare(release)
 
-    manifest = prepare_beta.prepare_manifest(
-        release,
-        "v0.12.64+12064-macos",
-        "a" * 40,
-        "b" * 64,
-        "c" * 64,
-        allow_stable_channel=True,
-    )
+    manifest = _prepare(release, allow_stable_channel=True)
     assert manifest["release_id"] == "v0.12.64+12064-macos"
 
 
 def test_prepare_manifest_rejects_unqualified_candidate():
     release = _release()
-    release["body"] = release["body"].replace("qualifiedBeta: true", "qualifiedBeta: false")
-    with pytest.raises(SystemExit, match="qualifiedBeta"):
+    evidence = _evidence()
+    evidence["qualification"] = {"passed": False, "tier": "T2"}
+    with pytest.raises(ValueError, match="passed T2"):
         prepare_beta.prepare_manifest(
             release,
             "v0.12.64+12064-macos",
             "a" * 40,
             "b" * 64,
             "c" * 64,
+            beta_zip_sha256="d" * 64,
+            beta_dmg_sha256="e" * 64,
+            qualification_evidence=evidence,
         )
 
 
@@ -221,6 +335,21 @@ def test_qualification_is_serialized_by_tag_and_retried_without_release_body_sta
     assert "steps.candidate.outcome == 'success' && steps.qualify.outcome == 'success'" in qualification
 
 
+def test_qualification_and_promotion_bind_all_four_enclosures_to_an_immutable_run_artifact():
+    qualification = QUALIFY_BETA_WORKFLOW.read_text()
+    promotion = PROMOTE_BETA_WORKFLOW.read_text()
+
+    for asset in ("Omi.zip", "Omi.dmg", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg"):
+        assert asset in qualification
+        assert asset in promotion
+    assert "actions/upload-artifact@v4" in qualification
+    assert "qualification_run_id" in promotion
+    assert "actions/download-artifact@v4" in promotion
+    assert "--beta-zip-sha256" in promotion
+    assert "--beta-dmg-sha256" in promotion
+    assert "git tag -l 'v*-macos' --sort=-v:refname | head -1" not in qualification
+
+
 def test_stable_promotion_remains_manual_only():
     workflow = PROMOTE_PROD_WORKFLOW.read_text()
 
@@ -229,6 +358,17 @@ def test_stable_promotion_remains_manual_only():
     assert "\n  push:" not in workflow
     assert "confirm:" in workflow
     assert "promote-stable" in workflow
+
+
+def test_stable_workflow_allows_retained_repoint_but_requires_current_beta_for_promote_and_safe_retries():
+    workflow = PROMOTE_PROD_WORKFLOW.read_text()
+
+    assert (
+        "if os.environ['OPERATION'] == 'promote' and text(beta, 'release_id') != os.environ['RELEASE_TAG']:" in workflow
+    )
+    assert "--allow-stable-channel" in workflow
+    assert "from xml.etree import ElementTree as ET" in workflow
+    assert "sparkle:channel" in workflow
 
 
 def test_stable_repair_is_published_immutably_before_stable_pointer_advances():

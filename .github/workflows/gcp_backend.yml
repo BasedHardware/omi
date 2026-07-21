@@ -673,6 +673,17 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           firebase_auth_project_id: based-hardware
 
+      # Production has internal-only Cloud Run ingress and no VPC-capable
+      # known-audio candidate probe in this workflow yet.  Do not let the
+      # simplified release path weaken the checked-in full-route invariant:
+      # no production traffic can move until that authenticated probe exists.
+      - name: Reject production promotion without an authenticated candidate probe
+        if: ${{ github.event.inputs.environment == 'prod' }}
+        run: |
+          set -euo pipefail
+          echo 'Production traffic promotion is blocked until an authenticated VPC known-audio candidate probe is available.' >&2
+          exit 1
+
       # This is the Cloud Run-only acceptance boundary. GKE config, secrets,
       # and backend-listen stay untouched until every no-traffic revision is
       # proven ready (and development has passed its known-audio candidate gate).

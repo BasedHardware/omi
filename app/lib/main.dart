@@ -158,6 +158,7 @@ Future _init() async {
   // TestFlight remains a distribution/telemetry signal; production-family
   // builds always use the established production backend.
   if (F.env == Environment.prod) {
+    Env.requireProductionRouting();
     Env.isTestFlight = await EnvironmentDetector.isTestFlight();
   }
 

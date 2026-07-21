@@ -373,13 +373,18 @@ def _pointer_release(channel="beta", build=200):
             "build_number": build,
             "zip_url": f"https://example.com/{build}/Omi.zip",
             "dmg_url": f"https://example.com/{build}/Omi.dmg",
+            "beta_zip_url": f"https://example.com/{build}/Omi.Beta.zip",
+            "beta_dmg_url": f"https://example.com/{build}/omi-beta.dmg",
             "ed_signature": "signature",
+            "beta_ed_signature": "beta-signature",
             "published_at": "2026-03-01T00:00:00Z",
             "changelog": ["Qualified release"],
             "mandatory": False,
             "source_sha": "a" * 40,
             "zip_sha256": None,
             "dmg_sha256": None,
+            "beta_zip_sha256": "d" * 64,
+            "beta_dmg_sha256": "e" * 64,
             "qualification": {"tier": "T2", "passed": True},
         },
     }
@@ -1160,6 +1165,15 @@ def _live_entry(channel="beta", assets=None, metadata=None, tag="v1.0.0+100-maco
 
 
 class TestBetaIdentityServing:
+    def test_beta_pointer_projects_only_registered_enclosure_hash_and_signature(self):
+        from routers.updates import _pointer_release_to_entry
+
+        entry = _pointer_release_to_entry(_pointer_release("beta"), "beta", "pointer")
+        beta_zip = next(asset for asset in entry["release"]["assets"] if asset["name"] == "Omi.Beta.zip")
+        assert beta_zip["browser_download_url"] == "https://example.com/200/Omi.Beta.zip"
+        assert entry["metadata"]["betaEdSignature"] == "beta-signature"
+        assert entry["metadata"]["betaZipSha256"] == "d" * 64
+
     @pytest.mark.asyncio
     async def test_appcast_identity_beta_serves_beta_enclosure_and_drops_stable_items(self):
         entries = [
@@ -1221,10 +1235,14 @@ class TestBetaIdentityServing:
         assert resp.text.count("<item>") == 0
 
     @pytest.mark.asyncio
-    async def test_appcast_identity_beta_resolves_pointer_entries_from_release_by_tag(self):
-        # Pointer entries fabricate their asset list from the manifest; the beta
-        # enclosure must come from the underlying GitHub release looked up by tag.
-        entries = [_live_entry(channel="beta", assets=[_zip_asset()], metadata={"edSignature": "sig"})]
+    async def test_appcast_identity_beta_never_resolves_mutable_release_assets_after_promotion(self):
+        entries = [
+            _live_entry(
+                channel="beta",
+                assets=[_zip_asset(), _beta_zip_asset("https://immutable.example/Omi.Beta.zip")],
+                metadata={"edSignature": "sig", "betaEdSignature": "immutable-beta-sig"},
+            )
+        ]
         gh_release = _make_github_release(
             "v1.0.0+100-macos",
             body_kv={"isLive": "false", "betaEdSignature": "beta-sig-from-body"},
@@ -1239,8 +1257,9 @@ class TestBetaIdentityServing:
 
         assert resp.status_code == 200
         xml = resp.text
-        assert "https://example.com/by-tag/Omi.Beta.zip" in xml
-        assert 'edSignature="beta-sig-from-body"' in xml
+        assert "https://immutable.example/Omi.Beta.zip" in xml
+        assert 'edSignature="immutable-beta-sig"' in xml
+        assert "by-tag" not in xml
 
     def test_stable_dmg_picker_never_returns_the_beta_dmg(self):
         release = {

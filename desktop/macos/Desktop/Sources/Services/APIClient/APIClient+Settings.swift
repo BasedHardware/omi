@@ -536,9 +536,8 @@ struct UserSubscriptionResponse: Codable {
   }
 
   // Defensive decode: only `subscription` is required. The usage counters and
-  // plan catalog default when absent so a backend that's behind on schema
-  // (notably the dev backend the beta channel routes to, which can lag prod or
-  // omit newer fields like `memories_created_used`) doesn't blank the entire
+  // plan catalog default when absent so a backend that's behind on schema and
+  // omits newer fields like `memories_created_used` doesn't blank the entire
   // Plan & Usage page with "Failed to load plan information."
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)

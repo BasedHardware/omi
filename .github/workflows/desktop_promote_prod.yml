@@ -29,9 +29,14 @@ on:
         description: 'Current stable pointer generation (0 when Stable is unset)'
         required: true
         type: string
+      qualification_run_id:
+        description: 'Successful trusted qualification run containing immutable artifact evidence'
+        required: true
+        type: string
 
 permissions:
   contents: read
+  actions: read
   id-token: write
 
 concurrency:
@@ -58,6 +63,14 @@ jobs:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
 
+      - name: Download immutable qualification evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-qualification-evidence-${{ inputs.release_tag }}
+          run-id: ${{ inputs.qualification_run_id }}
+          github-token: ${{ github.token }}
+          path: /tmp/desktop-qualification-evidence
+
       - name: Validate and download the exact qualified beta artifact
         id: candidate
         env:
@@ -65,6 +78,7 @@ jobs:
           REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           CONFIRM: ${{ inputs.confirm }}
+          QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
         run: |
           set -euo pipefail
           test "$CONFIRM" = promote-stable || { echo 'confirm must be exactly: promote-stable' >&2; exit 1; }
@@ -73,6 +87,12 @@ jobs:
           }
           git fetch --force origin "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
           TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
+          [[ "$QUALIFICATION_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'qualification_run_id must be numeric' >&2; exit 1; }
+          run=$(gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID")
+          test "$(jq -r .conclusion <<<"$run")" = success
+          test "$(jq -r .head_branch <<<"$run")" = main
+          test "$(jq -r .name <<<"$run")" = 'Qualify Desktop Beta Candidate'
+          test "$(jq -r .head_sha <<<"$run")" = "$TARGET_SHA"
           mkdir -p /tmp/desktop-stable-assets
           gh release view "$RELEASE_TAG" --repo "$REPO" --json tagName,body,isDraft,isPrerelease,publishedAt,assets \
             > /tmp/desktop-stable-release.json
@@ -85,9 +105,17 @@ jobs:
           DMG_PATH=$(find /tmp/desktop-stable-assets -maxdepth 1 -type f \( -name Omi.dmg -o -name omi.dmg \) -print -quit)
           ZIP_SHA=$(sha256sum "$ZIP_PATH" | cut -d' ' -f1)
           DMG_SHA=$(sha256sum "$DMG_PATH" | cut -d' ' -f1)
+          BETA_ZIP_PATH=/tmp/desktop-stable-assets/Omi.Beta.zip
+          BETA_DMG_PATH=/tmp/desktop-stable-assets/omi-beta.dmg
+          gh release download "$RELEASE_TAG" --repo "$REPO" --pattern 'Omi.Beta.zip' --pattern 'omi-beta.dmg' --dir /tmp/desktop-stable-assets
+          BETA_ZIP_SHA=$(sha256sum "$BETA_ZIP_PATH" | cut -d' ' -f1)
+          BETA_DMG_SHA=$(sha256sum "$BETA_DMG_PATH" | cut -d' ' -f1)
           python3 .github/scripts/prepare-desktop-beta-promotion.py \
             --release-json /tmp/desktop-stable-release.json --release-tag "$RELEASE_TAG" --target-sha "$TARGET_SHA" \
-            --zip-sha256 "$ZIP_SHA" --dmg-sha256 "$DMG_SHA" --output /tmp/desktop-release-manifest.json
+            --zip-sha256 "$ZIP_SHA" --dmg-sha256 "$DMG_SHA" \
+            --beta-zip-sha256 "$BETA_ZIP_SHA" --beta-dmg-sha256 "$BETA_DMG_SHA" \
+            --qualification-evidence /tmp/desktop-qualification-evidence/qualification-evidence.json \
+            --allow-stable-channel --output /tmp/desktop-release-manifest.json
           {
             echo "target_sha=$TARGET_SHA"
             echo "dmg_path=$DMG_PATH"
@@ -132,7 +160,7 @@ jobs:
           def generation(fields): return int(fields.get('generation', {}).get('integerValue', '0'))
           beta = fields('/tmp/macos-beta-pointer.json')
           stable = fields('/tmp/macos-stable-pointer.json')
-          if text(beta, 'release_id') != os.environ['RELEASE_TAG']:
+          if os.environ['OPERATION'] == 'promote' and text(beta, 'release_id') != os.environ['RELEASE_TAG']:
               sys.exit('Stable promotion requires the exact current qualified beta release ID.')
           current_id = text(stable, 'release_id')
           current_generation = generation(stable)
@@ -246,6 +274,15 @@ jobs:
           for key in ('zip_sha256', 'dmg_sha256'):
               if manifest.get(key, {}).get('stringValue') != expected[key]: sys.exit(f'manifest {key} mismatch')
           PY
-          curl -fsS https://api.omi.me/v2/desktop/appcast.xml?channel=stable > /tmp/stable-appcast.xml
-          grep -F "$VERSION" /tmp/stable-appcast.xml >/dev/null
+          curl -fsS https://api.omi.me/v2/desktop/appcast.xml > /tmp/stable-appcast.xml
+          python3 - "$VERSION" /tmp/stable-appcast.xml <<'PY'
+          import sys
+          from xml.etree import ElementTree as ET
+          version, path = sys.argv[1:]
+          root = ET.parse(path).getroot()
+          ns = {'sparkle': 'http://www.andymatuschak.org/xml-namespaces/sparkle'}
+          items = [item for item in root.findall('.//item') if item.findtext('sparkle:version', namespaces=ns) == version and item.findtext('sparkle:channel', namespaces=ns) == 'stable']
+          if len(items) != 1:
+              raise SystemExit('stable appcast must contain exactly one requested stable item')
+          PY
           echo "Stable pointer, exact manifest hashes, and appcast verified for $RELEASE_TAG." >> "$GITHUB_STEP_SUMMARY"

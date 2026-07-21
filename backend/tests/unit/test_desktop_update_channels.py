@@ -19,13 +19,18 @@ def _manifest(**overrides):
         "build_number": 12064,
         "zip_url": "https://github.com/BasedHardware/omi/releases/download/test/Omi.zip",
         "dmg_url": "https://github.com/BasedHardware/omi/releases/download/test/Omi.dmg",
+        "beta_zip_url": "https://github.com/BasedHardware/omi/releases/download/test/Omi.Beta.zip",
+        "beta_dmg_url": "https://github.com/BasedHardware/omi/releases/download/test/omi-beta.dmg",
         "ed_signature": "sparkle-signature",
+        "beta_ed_signature": "beta-sparkle-signature",
         "published_at": "2026-07-09T12:00:00Z",
         "changelog": ["Qualified beta"],
         "mandatory": False,
         "source_sha": "a" * 40,
         "zip_sha256": "b" * 64,
         "dmg_sha256": "c" * 64,
+        "beta_zip_sha256": "d" * 64,
+        "beta_dmg_sha256": "e" * 64,
         "qualification": {"tier": "T2", "passed": True},
     }
     data.update(overrides)
@@ -52,6 +57,11 @@ class TestNormalizeReleaseManifest:
     def test_requires_dmg_for_macos(self):
         with pytest.raises(ValueError, match="dmg_url"):
             normalize_release_manifest(_manifest(dmg_url=None))
+
+    def test_requires_all_beta_identity_artifact_fields_for_macos(self):
+        for field in ("beta_zip_url", "beta_dmg_url", "beta_ed_signature", "beta_zip_sha256", "beta_dmg_sha256"):
+            with pytest.raises(ValueError, match=field):
+                normalize_release_manifest(_manifest(**{field: None}))
 
 
 class TestReleaseManifestPersistence:
