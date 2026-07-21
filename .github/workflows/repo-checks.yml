@@ -40,6 +40,12 @@ jobs:
           enable-cache: true
           cache-dependency-glob: backend/openapi-requirements.txt
 
+      - name: Set up Java for manifest-selected Firestore checks
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - name: Run current PR metadata preflight
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -92,6 +98,12 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: backend/openapi-requirements.txt
+
+      - name: Set up Java for manifest-selected Firestore checks
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
 
       - name: Save changed files
         run: |
