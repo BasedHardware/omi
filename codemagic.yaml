@@ -2861,11 +2861,15 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 120
     environment:
-      # Do not reuse desktop_secrets or the normal release groups. This group
-      # contains the preview-only signing/notarization credentials, the
-      # DESKTOP_PREVIEW_PUBLISH_KEY, and a GCS identity restricted to previews/.
+      # TEMPORARY — tracked by #10221. The dedicated Preview group was not
+      # provisioned with the signing/notarization inputs required by the shared
+      # signed-artifact steps. Reuse the existing groups only to unblock an
+      # immutable Preview publication; restore a signing-only group and remove
+      # these broad imports in the follow-up.
       groups:
         - desktop_preview_secrets
+        - appstore_credentials
+        - desktop_secrets
       vars:
         PREVIEW_MODE: "true"
         BINARY_NAME: "Omi Computer"
