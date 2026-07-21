@@ -1,0 +1,3 @@
+{
+  "change": "Fixed onboarding and dashboard integration icons (Notion, ChatGPT, Claude) showing as generic symbols when the app isn't installed — bundled brand logos now always display, and installed apps are found wherever they live"
+}
