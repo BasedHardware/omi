@@ -58,10 +58,18 @@ import type {
   JournalTerminalizeTurnMessage,
   JournalListTurnsMessage,
   JournalClearTurnsMessage,
+  AppendChatFirstBlocksMessage,
+  AppendChatFirstEvidenceMessage,
+  RecordQuestionInteractionReplyMessage,
+  MaterializeChatFirstIntentsMessage,
+  ListChatFirstMaterializationReceiptsMessage,
+  AcknowledgeChatFirstMaterializationReceiptsMessage,
   EnsureAgentSpawnJournalMessage,
   JournalBackendSyncResultMessage,
   JournalBackendDeleteResultMessage,
   JournalBackendReconcileResultMessage,
+  ChatFirstDeferralDeliveryResultMessage,
+  ChatFirstHarnessExecutorBeginMessage,
   RefreshOwnerMessage,
   RevokeOwnerRuntimeMessage,
   RefreshTokenMessage,
@@ -120,12 +128,15 @@ import { LEGACY_MAIN_CHAT_SESSION_COMPATIBILITY } from "./runtime/surface-sessio
 import {
   ackBackendConversationDeleteOutbox,
   ackBackendTurnOutboxWithWakes,
+  appendChatFirstBlocksToProducingTurn,
+  appendChatFirstEvidenceToProducingTurn,
   applyBackendReconcilePage,
   beginBackendReconcilesForOwner,
   clearJournalConversation,
   classifyBackendTurnResultDisposition,
   drainBackendConversationDeleteOutbox,
   drainBackendTurnOutbox,
+  drainChatFirstDeferralOutbox,
   failBackendConversationDeleteOutbox,
   failBackendReconcile,
   failBackendTurnOutbox,
@@ -133,11 +144,16 @@ import {
   journalTurnChangedWakes,
   importRemoteJournalTurn,
   listJournalTurns,
+  listChatFirstMaterializationReceipts,
+  acknowledgeChatFirstMaterializationReceipts,
+  materializeChatFirstIntents,
   recordJournalExchange,
+  recordQuestionInteractionReply,
   recordJournalTurn,
   settleClearedBackendTurnClaim,
   assertPublicJournalUpdatePolicy,
   terminalizeJournalTurn,
+  settleChatFirstDeferralOutbox,
   updateJournalTurn,
 } from "./runtime/conversation-journal.js";
 import { DirectControlExecutionBroker } from "./runtime/direct-control-execution.js";
@@ -286,6 +302,41 @@ const pendingExternalToolCalls = new Map<
   }
 >();
 
+/**
+ * This exists solely for the local/offline desktop E2E fixture. Unlike the
+ * external-surface bridge, it cannot accept a user/model-selected tool or
+ * capability: the kernel derives the one permitted capability from an
+ * already-mounted Main Chat session.
+ */
+const pendingChatFirstHarnessExecutors = new Map<
+  string,
+  {
+    requestId: string;
+    clientId: string;
+    invocation: AuthorizedRunToolInvocation;
+    timeout: ReturnType<typeof setTimeout>;
+  }
+>();
+
+const CHAT_FIRST_HARNESS_TASK_ID = "chat-first-e2e-task-v1";
+
+function isLocalChatFirstExecutorHarnessEnabled(): boolean {
+  return (process.env.OMI_ENV_STAGE === "local" || process.env.OMI_ENV_STAGE === "offline")
+    && process.env.OMI_AGENT_ALLOW_CONTROL_ONLY === "1";
+}
+
+function isBoundedChatFirstHarnessInput(input: unknown): input is Record<string, unknown> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+  const outer = input as Record<string, unknown>;
+  if (Object.keys(outer).length !== 1 || !Array.isArray(outer.blocks) || outer.blocks.length !== 1) return false;
+  const block = outer.blocks[0];
+  if (!block || typeof block !== "object" || Array.isArray(block)) return false;
+  const taskCard = block as Record<string, unknown>;
+  return Object.keys(taskCard).length === 2
+    && taskCard.type === "taskCard"
+    && taskCard.taskId === CHAT_FIRST_HARNESS_TASK_ID;
+}
+
 const TERMINAL_RUN_TOOL_EVENTS = new Set([
   "run.succeeded",
   "run.failed",
@@ -349,6 +400,99 @@ function finalizeRelayResult(
 /** Resolve a pending tool call with a result from Swift */
 function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
   const key = toolCallPendingKey(msg);
+  const chatFirstHarness = pendingChatFirstHarnessExecutors.get(key);
+  if (chatFirstHarness) {
+    pendingChatFirstHarnessExecutors.delete(key);
+    clearTimeout(chatFirstHarness.timeout);
+    const invocation = chatFirstHarness.invocation;
+    const identityMatches = msg.ownerId === invocation.ownerId
+      && msg.sessionId === invocation.sessionId
+      && msg.runId === invocation.runId
+      && msg.attemptId === invocation.attemptId
+      && msg.profileGeneration === invocation.profileGeneration
+      && msg.manifestVersion === invocation.manifestVersion
+      && msg.manifestDigest === invocation.manifestDigest
+      && msg.daemonBootEpoch === invocation.daemonBootEpoch
+      && msg.executionGeneration === invocation.executionGeneration
+      && msg.inputHash === invocation.inputHash;
+    let validated = false;
+    try {
+      if (!runtimeKernel) throw new Error("Agent runtime kernel is not ready");
+      if (!identityMatches) {
+        runtimeKernel.markRunToolInvocationOutcomeUnknown(invocation, "chat_first_e2e_result_mismatch");
+      } else {
+        runtimeKernel.completeRunToolInvocation({
+          invocationId: invocation.invocationId,
+          ownerId: invocation.ownerId,
+          sessionId: invocation.sessionId,
+          runId: invocation.runId,
+          attemptId: invocation.attemptId,
+          profileGeneration: invocation.profileGeneration,
+          manifestVersion: invocation.manifestVersion,
+          manifestDigest: invocation.manifestDigest,
+          daemonBootEpoch: invocation.daemonBootEpoch,
+          executionGeneration: invocation.executionGeneration,
+          inputHash: invocation.inputHash,
+          capabilityRef: invocation.capabilityRef,
+          activeOwnerId: currentOwnerId,
+          outcome: msg.outcome,
+          result: msg.result,
+        });
+        const result = JSON.parse(msg.result) as Record<string, unknown>;
+        validated = msg.outcome === "succeeded" && result.ok === true && result.rendered === 1;
+      }
+      runtimeKernel.completeChatFirstHarnessExecutor({
+        ownerId: invocation.ownerId,
+        sessionId: invocation.sessionId,
+        runId: invocation.runId,
+        attemptId: invocation.attemptId,
+        succeeded: validated,
+      });
+      send({
+        type: "chat_first_harness_executor_result",
+        requestId: chatFirstHarness.requestId,
+        clientId: chatFirstHarness.clientId,
+        ownerId: invocation.ownerId,
+        sessionId: invocation.sessionId,
+        runId: invocation.runId,
+        attemptId: invocation.attemptId,
+        ok: validated,
+        executorInvoked: true,
+        validated,
+        journalBlockRendered: validated,
+        ...(validated ? {} : { error: { code: "chat_first_e2e_executor_failed", message: "The executor did not render the fixture block" } }),
+      });
+    } catch (error) {
+      logErr(`Rejected Chat-first E2E executor result invocation=${msg.invocationId}: ${error}`);
+      try {
+        runtimeKernel?.markRunToolInvocationOutcomeUnknown(invocation, "chat_first_e2e_result_rejected");
+        runtimeKernel?.completeChatFirstHarnessExecutor({
+          ownerId: invocation.ownerId,
+          sessionId: invocation.sessionId,
+          runId: invocation.runId,
+          attemptId: invocation.attemptId,
+          succeeded: false,
+        });
+      } catch (terminalizeError) {
+        logErr(`Failed to terminalize rejected Chat-first E2E executor: ${terminalizeError}`);
+      }
+      send({
+        type: "chat_first_harness_executor_result",
+        requestId: chatFirstHarness.requestId,
+        clientId: chatFirstHarness.clientId,
+        ownerId: invocation.ownerId,
+        sessionId: invocation.sessionId,
+        runId: invocation.runId,
+        attemptId: invocation.attemptId,
+        ok: false,
+        executorInvoked: true,
+        validated: false,
+        journalBlockRendered: false,
+        error: externalAuthorityError(error, "chat_first_e2e_result_rejected"),
+      });
+    }
+    return;
+  }
   const pending = pendingToolCalls.get(key);
   if (pending) {
     try {
@@ -475,6 +619,69 @@ function registerPendingExternalToolCall(
   return pending;
 }
 
+function finishPendingChatFirstHarnessExecutor(
+  pending: {
+    requestId: string;
+    clientId: string;
+    invocation: AuthorizedRunToolInvocation;
+    timeout: ReturnType<typeof setTimeout>;
+  },
+  errorCode: string,
+  message: string,
+): void {
+  try {
+    runtimeKernel?.markRunToolInvocationOutcomeUnknown(pending.invocation, errorCode);
+    runtimeKernel?.completeChatFirstHarnessExecutor({
+      ownerId: pending.invocation.ownerId,
+      sessionId: pending.invocation.sessionId,
+      runId: pending.invocation.runId,
+      attemptId: pending.invocation.attemptId,
+      succeeded: false,
+    });
+  } catch (error) {
+    logErr(`Failed to terminalize Chat-first E2E executor: ${error}`);
+  }
+  send({
+    type: "chat_first_harness_executor_result",
+    requestId: pending.requestId,
+    clientId: pending.clientId,
+    ownerId: pending.invocation.ownerId,
+    sessionId: pending.invocation.sessionId,
+    runId: pending.invocation.runId,
+    attemptId: pending.invocation.attemptId,
+    ok: false,
+    executorInvoked: true,
+    validated: false,
+    journalBlockRendered: false,
+    error: { code: errorCode, message },
+  });
+}
+
+function registerPendingChatFirstHarnessExecutor(input: {
+  requestId: string;
+  clientId: string;
+  invocation: AuthorizedRunToolInvocation;
+}): void {
+  const key = toolCallPendingKey(input.invocation);
+  if (pendingChatFirstHarnessExecutors.has(key) || pendingExternalToolCalls.has(key) || pendingToolCalls.has(key)) {
+    throw Object.assign(new Error("Duplicate tool invocation"), { code: "invocation_replayed" });
+  }
+  const pending = {
+    ...input,
+    timeout: setTimeout(() => {
+      const active = pendingChatFirstHarnessExecutors.get(key);
+      if (!active) return;
+      pendingChatFirstHarnessExecutors.delete(key);
+      finishPendingChatFirstHarnessExecutor(
+        active,
+        "swift_tool_timeout",
+        "Timed out waiting for the authorized Chat-first block executor",
+      );
+    }, 120_000),
+  };
+  pendingChatFirstHarnessExecutors.set(key, pending);
+}
+
 function cancelPendingExternalToolCallsForAttempt(input: {
   ownerId: string;
   runId: string;
@@ -543,6 +750,12 @@ function rejectPendingToolCallsForOwner(
       error: { code: errorCode, message },
     });
   }
+  for (const [key, pending] of pendingChatFirstHarnessExecutors) {
+    if (pending.invocation.ownerId !== ownerId) continue;
+    pendingChatFirstHarnessExecutors.delete(key);
+    clearTimeout(pending.timeout);
+    finishPendingChatFirstHarnessExecutor(pending, errorCode, message);
+  }
 }
 
 /** The broker terminalizes the ledger before subscribers see terminal events. */
@@ -581,6 +794,16 @@ function rejectPendingToolCallsForKernelEvent(event: AgentEvent): void {
       ok: false,
       error: { code: errorCode, message: "Run tool authority ended before Swift returned a result" },
     });
+  }
+  for (const [key, pending] of pendingChatFirstHarnessExecutors) {
+    if (!matches(pending.invocation)) continue;
+    pendingChatFirstHarnessExecutors.delete(key);
+    clearTimeout(pending.timeout);
+    finishPendingChatFirstHarnessExecutor(
+      pending,
+      errorCode,
+      "Run tool authority ended before Swift returned a result",
+    );
   }
 }
 
@@ -789,6 +1012,53 @@ function startOmiToolsRelay(): Promise<string> {
                 continue;
               }
 
+              if (authorized.canonicalToolName === "search_chat_history") {
+                void (async () => {
+                  let result: string;
+                  let outcome: "succeeded" | "failed" = "succeeded";
+                  try {
+                    if (!runtimeKernel) throw new Error("Agent runtime kernel is not ready");
+                    runtimeKernel.markRunToolInvocationDispatched(authorized);
+                    const search = runtimeKernel.searchAuthorizedChatHistory({
+                      invocation: authorized,
+                      toolInput: routedProposal.toolInput,
+                      activeOwnerId: () => currentOwnerId,
+                    });
+                    result = JSON.stringify(search);
+                  } catch {
+                    outcome = "failed";
+                    // Search results and journal details are transcript data.
+                    // Keep relay diagnostics shape-only even on malformed input.
+                    result = relayError("chat_history_search_failed", "Chat history search could not be completed");
+                  }
+                  const finalizedResult = finalizeRelayResult(msg.callId, result, authorized, outcome);
+                  const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);
+                  try {
+                    runtimeKernel?.completeRunToolInvocation({
+                      invocationId: authorized.invocationId,
+                      ownerId: authorized.ownerId,
+                      sessionId: authorized.sessionId,
+                      runId: authorized.runId,
+                      attemptId: authorized.attemptId,
+                      profileGeneration: authorized.profileGeneration,
+                      manifestVersion: authorized.manifestVersion,
+                      manifestDigest: authorized.manifestDigest,
+                      daemonBootEpoch: authorized.daemonBootEpoch,
+                      executionGeneration: authorized.executionGeneration,
+                      inputHash: authorized.inputHash,
+                      capabilityRef: authorized.capabilityRef,
+                      activeOwnerId: currentOwnerId,
+                      outcome: finalizedOutcome,
+                      result: finalizedResult,
+                    });
+                  } catch (error) {
+                    logErr(`Failed to complete chat-history invocation ${authorized.invocationId}: ${error}`);
+                  }
+                  writeFinalizedRelayToolResult(client, msg.callId, finalizedResult);
+                })();
+                continue;
+              }
+
               const callId = msg.callId;
               const pendingKey = toolCallPendingKey({
                 invocationId,
@@ -840,6 +1110,7 @@ function startOmiToolsRelay(): Promise<string> {
                 manifestDigest: authorized.manifestDigest,
                 daemonBootEpoch: authorized.daemonBootEpoch,
                 executionGeneration: authorized.executionGeneration,
+                capabilityRef: authorized.capabilityRef,
                 toolName: authorized.canonicalToolName,
                 input: routedProposal.toolInput,
                 inputHash: authorized.inputHash,
@@ -852,6 +1123,9 @@ function startOmiToolsRelay(): Promise<string> {
                 precedingAssistantText: authorized.precedingAssistantText,
                 runMode: authorized.runMode,
                 chatMode: authorized.chatMode,
+                ...(authorized.chatFirstControlGeneration !== null
+                  ? { chatFirstControlGeneration: authorized.chatFirstControlGeneration }
+                  : {}),
               });
             }
           } catch {
@@ -1080,6 +1354,15 @@ function buildMcpServers(
     }
     if (context?.screenContext === true) {
       omiToolsEnv.push({ name: "OMI_SCREEN_CONTEXT", value: "true" });
+    }
+    // Omit both variables in legacy mode.  This keeps the capability-off child
+    // environment (and therefore its tools/list bytes) exactly unchanged.
+    if (context?.chatFirstUi === true && context.surfaceKind === "main_chat") {
+      omiToolsEnv.push({ name: "OMI_CHAT_FIRST_UI", value: "true" });
+      omiToolsEnv.push({ name: "OMI_SURFACE_KIND", value: "main_chat" });
+      if (context.chatFirstControlGeneration !== undefined && context.chatFirstControlGeneration !== null) {
+        omiToolsEnv.push({ name: "OMI_CHAT_FIRST_CONTROL_GENERATION", value: String(context.chatFirstControlGeneration) });
+      }
     }
     omiToolsEnv.push({
       name: "OMI_EXECUTION_ROLE",
@@ -1496,6 +1779,38 @@ async function main(): Promise<void> {
           payloadHash: delivery.payloadHash,
         });
       }
+      // This deliberately remains distinct from backend_turn_outbox: a
+      // deferral is task-intelligence state, never a second transcript write.
+      // Do not even claim an outbox row until the server-sampled Main Chat
+      // capability is present in this process. A fresh capability-off launch
+      // must leave chat-first background work entirely dormant.
+      if (kernel.hasChatFirstMainCapability(activeOwnerId)) {
+        for (const delivery of drainChatFirstDeferralOutbox(store, { ownerId: activeOwnerId, limit: 20 })) {
+          const deferredQuestionSubject = delivery.question.subject;
+          if (deferredQuestionSubject.kind === "cold_start") {
+            throw new Error("Cold-start sequence questions cannot enter the deferral outbox");
+          }
+          const deferralSubject = deferredQuestionSubject as { kind: "task" | "goal" | "capture"; id: string };
+          send({
+            type: "chat_first_deferral_delivery",
+            requestId: `chat-first-deferral:${delivery.continuityKey}:${delivery.deliveryGeneration}`,
+            clientId: "kernel-chat-first",
+            ownerId: delivery.ownerId,
+            continuityKey: delivery.continuityKey,
+            controlGeneration: delivery.controlGeneration,
+            subject: delivery.subject,
+            question: {
+              questionId: delivery.question.questionId,
+              text: delivery.question.text,
+              subject: deferralSubject,
+              options: delivery.question.options,
+            },
+            attemptCount: delivery.attemptCount,
+            deliveryGeneration: delivery.deliveryGeneration,
+            payloadHash: delivery.payloadHash,
+          });
+        }
+      }
     } catch (error) {
       logErr(`Journal outbox pump failed: ${error}`);
     } finally {
@@ -1637,6 +1952,19 @@ async function main(): Promise<void> {
           }
         }
         const selectedProfile = creationProfile ?? preference;
+        const chatFirstCapability = resolve.chatFirstCapability;
+        if (chatFirstCapability !== undefined) {
+          if (
+            typeof chatFirstCapability.chatFirstUi !== "boolean"
+            || !Number.isSafeInteger(chatFirstCapability.controlGeneration)
+            || chatFirstCapability.controlGeneration < 0
+          ) {
+            throw new Error("Invalid chat-first capability projection");
+          }
+          if (resolve.surfaceKind !== "main_chat" && chatFirstCapability.chatFirstUi) {
+            throw new Error("Chat-first capability may only be projected to main_chat");
+          }
+        }
         const resolved = kernel.resolveSurfaceSession({
           ownerId,
           surfaceRef: {
@@ -1650,6 +1978,7 @@ async function main(): Promise<void> {
           defaultCwd: selectedProfile.workingDirectory,
           executionRole: executionRoleForSurface(resolve),
           title: resolve.title ?? null,
+          chatFirstCapability,
         });
         const profile = kernel.sessionExecutionProfile(resolved.agentSessionId, ownerId);
         send({
@@ -1747,6 +2076,79 @@ async function main(): Promise<void> {
           clientId: msg.clientId,
           snapshot: kernel.contextSnapshot(msg.sessionId, ownerId, msg.surfaceKind),
         });
+        break;
+      }
+
+      case "chat_first_harness_executor_begin": {
+        const request = msg as ChatFirstHarnessExecutorBeginMessage;
+        const requestId = request.requestId?.trim();
+        const clientId = request.clientId?.trim();
+        try {
+          if (!isLocalChatFirstExecutorHarnessEnabled()) {
+            throw new Error("Chat-first executor harness is available only to local/offline debug runtime");
+          }
+          if (!requestId || !clientId) {
+            throw new Error("Chat-first executor harness requires requestId and clientId");
+          }
+          if (!isBoundedChatFirstHarnessInput(request.input)) {
+            throw new Error("Chat-first executor harness accepts only the static fixture task card");
+          }
+          const ownerId = resolveActiveOwner(request.ownerId);
+          const authorized = kernel.beginChatFirstHarnessExecutor({
+            ownerId,
+            sessionId: request.sessionId,
+            producingTurnId: request.producingTurnId,
+            controlGeneration: request.controlGeneration,
+            clientId,
+            requestId,
+            toolInput: request.input,
+          });
+          registerPendingChatFirstHarnessExecutor({ requestId, clientId, invocation: authorized });
+          send({
+            type: "authorized_tool_execution",
+            invocationId: authorized.invocationId,
+            ownerId: authorized.ownerId,
+            sessionId: authorized.sessionId,
+            runId: authorized.runId,
+            attemptId: authorized.attemptId,
+            profileGeneration: authorized.profileGeneration,
+            manifestVersion: authorized.manifestVersion,
+            manifestDigest: authorized.manifestDigest,
+            daemonBootEpoch: authorized.daemonBootEpoch,
+            executionGeneration: authorized.executionGeneration,
+            capabilityRef: authorized.capabilityRef,
+            toolName: authorized.canonicalToolName,
+            input: request.input,
+            inputHash: authorized.inputHash,
+            effectClass: authorized.effectClass,
+            retryPolicy: authorized.retryPolicy,
+            surfaceKind: authorized.surfaceKind,
+            externalRefKind: authorized.externalRefKind,
+            externalRefId: authorized.externalRefId,
+            originatingUserText: authorized.originatingUserText,
+            precedingAssistantText: authorized.precedingAssistantText,
+            runMode: authorized.runMode,
+            chatMode: authorized.chatMode,
+            ...(authorized.chatFirstControlGeneration !== null
+              ? { chatFirstControlGeneration: authorized.chatFirstControlGeneration }
+              : {}),
+          });
+        } catch (error) {
+          send({
+            type: "chat_first_harness_executor_result",
+            requestId: requestId ?? "",
+            clientId: clientId ?? "",
+            ownerId: request.ownerId ?? "",
+            sessionId: request.sessionId ?? "",
+            runId: "",
+            attemptId: "",
+            ok: false,
+            executorInvoked: false,
+            validated: false,
+            journalBlockRendered: false,
+            error: externalAuthorityError(error, "chat_first_e2e_executor_rejected"),
+          });
+        }
         break;
       }
 
@@ -1930,6 +2332,7 @@ async function main(): Promise<void> {
             manifestDigest: authorized.manifestDigest,
             daemonBootEpoch: authorized.daemonBootEpoch,
             executionGeneration: authorized.executionGeneration,
+            capabilityRef: authorized.capabilityRef,
             toolName: authorized.canonicalToolName,
             input: routed.toolInput,
             inputHash: authorized.inputHash,
@@ -1942,6 +2345,9 @@ async function main(): Promise<void> {
             precedingAssistantText: authorized.precedingAssistantText,
             runMode: authorized.runMode,
             chatMode: authorized.chatMode,
+            ...(authorized.chatFirstControlGeneration !== null
+              ? { chatFirstControlGeneration: authorized.chatFirstControlGeneration }
+              : {}),
             ...(routed.recoveredFromDelegation
               ? { policyRecovery: "permission_delegation_to_native" as const }
               : {}),
@@ -2316,6 +2722,425 @@ async function main(): Promise<void> {
             clientId: request.clientId,
             message: envelope.message,
             failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "append_chat_first_blocks": {
+        const request = msg as AppendChatFirstBlocksMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (!Array.isArray(request.blocks) || request.blocks.length < 1 || request.blocks.length > 8) {
+            throw new Error("Chat-first append requires one to eight blocks");
+          }
+          if (!Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0) {
+            throw new Error("Chat-first append requires a valid control generation");
+          }
+          const capability = kernel.assertLiveRunToolCapability({
+            capabilityRef: request.capabilityRef,
+            activeOwnerId: ownerId,
+          });
+          if (
+            capability.ownerId !== ownerId
+            || capability.sessionId !== request.sessionId
+            || capability.runId !== request.runId
+            || capability.attemptId !== request.attemptId
+            || capability.surfaceKind !== "main_chat"
+            || capability.chatFirstUi !== true
+            || capability.chatFirstControlGeneration !== request.controlGeneration
+            || !capability.allowedToolNames.includes("render_chat_blocks")
+          ) {
+            throw new Error("Chat-first append capability does not match the producing run");
+          }
+          const turn = appendChatFirstBlocksToProducingTurn(store, {
+            ownerId,
+            sessionId: request.sessionId,
+            runId: request.runId,
+            attemptId: request.attemptId,
+            blocks: request.blocks as ConversationContentBlock[],
+          });
+          const range = listJournalTurns(store, {
+            ownerId,
+            conversationId: turn.conversationId,
+            afterTurnSeq: Math.max(0, turn.turnSeq - 1),
+            limit: 1,
+          });
+          send({
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "append_chat_first_blocks",
+            conversationId: turn.conversationId,
+            surfaceKind: "main_chat",
+            externalRefKind: capability.externalRefKind ?? "",
+            externalRefId: capability.externalRefId ?? "",
+            turn: journalTurnProjection(turn),
+            turns: [],
+            clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+          });
+          send({
+            type: "journal_turn_changed",
+            ownerId,
+            conversationGeneration: range.generation,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            surfaceKind: "main_chat",
+            externalRefKind: capability.externalRefKind ?? "",
+            externalRefId: capability.externalRefId ?? "",
+            turn: journalTurnProjection(turn),
+          });
+          pumpJournalOutbox();
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "append_chat_first_evidence": {
+        const request = msg as AppendChatFirstEvidenceMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (!request.resource || typeof request.resource !== "object") {
+            throw new Error("Chat-first evidence append requires one resource");
+          }
+          if (!Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0) {
+            throw new Error("Chat-first evidence append requires a valid control generation");
+          }
+          const capability = kernel.assertLiveRunToolCapability({
+            capabilityRef: request.capabilityRef,
+            activeOwnerId: ownerId,
+          });
+          if (
+            capability.ownerId !== ownerId
+            || capability.sessionId !== request.sessionId
+            || capability.runId !== request.runId
+            || capability.attemptId !== request.attemptId
+            || capability.surfaceKind !== "main_chat"
+            || capability.chatFirstUi !== true
+            || capability.chatFirstControlGeneration !== request.controlGeneration
+            || !capability.allowedToolNames.includes("show_rewind_evidence")
+          ) {
+            throw new Error("Chat-first evidence capability does not match the producing run");
+          }
+          const turn = appendChatFirstEvidenceToProducingTurn(store, {
+            ownerId,
+            sessionId: request.sessionId,
+            runId: request.runId,
+            attemptId: request.attemptId,
+            resource: request.resource as ConversationResource,
+          });
+          const range = listJournalTurns(store, {
+            ownerId,
+            conversationId: turn.conversationId,
+            afterTurnSeq: Math.max(0, turn.turnSeq - 1),
+            limit: 1,
+          });
+          send({
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "append_chat_first_evidence",
+            conversationId: turn.conversationId,
+            surfaceKind: "main_chat",
+            externalRefKind: capability.externalRefKind ?? "",
+            externalRefId: capability.externalRefId ?? "",
+            turn: journalTurnProjection(turn),
+            turns: [],
+            clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+          });
+          send({
+            type: "journal_turn_changed",
+            ownerId,
+            conversationGeneration: range.generation,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            surfaceKind: "main_chat",
+            externalRefKind: capability.externalRefKind ?? "",
+            externalRefId: capability.externalRefId ?? "",
+            turn: journalTurnProjection(turn),
+          });
+          pumpJournalOutbox();
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "record_question_interaction_reply": {
+        const request = msg as RecordQuestionInteractionReplyMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (
+            request.surfaceKind !== "main_chat"
+            || typeof request.sessionId !== "string" || !request.sessionId.trim()
+            || typeof request.questionId !== "string" || !request.questionId.trim()
+            || typeof request.optionId !== "string" || !request.optionId.trim()
+            || !Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0
+          ) {
+            throw new Error("Question interaction request is invalid");
+          }
+          kernel.assertChatFirstMainCapability(request.sessionId, ownerId, request.controlGeneration);
+          const receipt = recordQuestionInteractionReply(store, {
+            ownerId,
+            sessionId: request.sessionId,
+            questionId: request.questionId,
+            optionId: request.optionId,
+            controlGeneration: request.controlGeneration,
+          });
+          const conversationId = receipt.parentTurn?.conversationId
+            ?? store.getOptionalRow(
+              `SELECT conversation_id FROM surface_conversations
+               WHERE owner_id = ? AND agent_session_id = ? AND surface_kind = 'main_chat'
+               ORDER BY last_active_at_ms DESC LIMIT 1`,
+              [ownerId, request.sessionId],
+            )?.conversation_id;
+          if (typeof conversationId !== "string" || !conversationId) {
+            throw new Error("Question interaction has no canonical main Chat conversation");
+          }
+          const surface = store.getRow(
+            `SELECT external_ref_kind, external_ref_id FROM surface_conversations
+             WHERE owner_id = ? AND agent_session_id = ? AND surface_kind = 'main_chat'
+             ORDER BY last_active_at_ms DESC LIMIT 1`,
+            [ownerId, request.sessionId],
+          );
+          const range = listJournalTurns(store, {
+            ownerId,
+            conversationId,
+            afterTurnSeq: 0,
+            limit: 1,
+          });
+          send({
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "record_question_interaction_reply",
+            conversationId,
+            surfaceKind: "main_chat",
+            externalRefKind: String(surface.external_ref_kind),
+            externalRefId: String(surface.external_ref_id),
+            turn: receipt.parentTurn ? journalTurnProjection(receipt.parentTurn) : undefined,
+            turns: [receipt.userTurn, receipt.assistantTurn]
+              .filter((turn): turn is ConversationTurn => turn !== null)
+              .map(journalTurnProjection),
+            clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+            accepted: receipt.accepted,
+            duplicate: receipt.duplicate,
+            continuityKey: receipt.continuityKey,
+          });
+          if (receipt.accepted && !receipt.duplicate) {
+            for (const turn of [receipt.parentTurn, receipt.userTurn, receipt.assistantTurn]) {
+              if (!turn) continue;
+              for (const wake of journalTurnChangedWakes(store, ownerId, turn)) {
+                send({ type: "journal_turn_changed", ...wake, turn: journalTurnProjection(wake.turn) });
+              }
+            }
+            pumpJournalOutbox();
+          }
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "materialize_chat_first_intents": {
+        const request = msg as MaterializeChatFirstIntentsMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (
+            request.surfaceKind !== "main_chat"
+            || typeof request.sessionId !== "string" || !request.sessionId.trim()
+            || !Array.isArray(request.intents) || request.intents.length < 1 || request.intents.length > 8
+            || !Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0
+          ) throw new Error("Chat-first materialization request is invalid");
+          kernel.assertChatFirstMainCapability(request.sessionId, ownerId, request.controlGeneration);
+          const resolved = resolveJournalSurface({
+            ownerId, surfaceKind: "main_chat",
+            externalRefKind: request.externalRefKind, externalRefId: request.externalRefId,
+          });
+          if (resolved.agentSessionId !== request.sessionId) throw new Error("Chat-first materialization session is stale");
+          const intents = request.intents.map((intent) => {
+            if (
+              !intent || typeof intent.intentId !== "string" || !intent.intentId.trim()
+              || typeof intent.continuityKey !== "string" || !intent.continuityKey.trim()
+              || !Array.isArray(intent.blocks)
+            ) throw new Error("Chat-first materialization intent is invalid");
+            return {
+              ownerId, conversationId: resolved.conversationId, controlGeneration: request.controlGeneration,
+              intentId: intent.intentId, continuityKey: intent.continuityKey,
+              source: intent.source, blocks: intent.blocks,
+            };
+          });
+          const result = materializeChatFirstIntents(store, intents);
+          const committedTurns = result.results
+            .filter((candidate) => candidate.accepted && !candidate.duplicate && candidate.turn)
+            .map((candidate) => candidate.turn!);
+          const range = listJournalTurns(store, {
+            ownerId, conversationId: resolved.conversationId,
+            afterTurnSeq: 0, limit: 1,
+          });
+          send({
+            type: "journal_operation_result", protocolVersion: request.protocolVersion,
+            requestId: request.requestId, clientId: request.clientId,
+            operation: "materialize_chat_first_intents", conversationId: resolved.conversationId,
+            surfaceKind: "main_chat", externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+            turn: committedTurns.at(-1) ? journalTurnProjection(committedTurns.at(-1)!) : undefined,
+            turns: committedTurns.map(journalTurnProjection), clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq, generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+            accepted: result.results.some((candidate) => candidate.accepted),
+            duplicate: result.results.every((candidate) => candidate.duplicate),
+            suppressedByTailQuestion: result.results.some((candidate) => candidate.suppressedByTailQuestion),
+            suppressedByStreamingTail: result.results.some((candidate) => candidate.suppressedByStreamingTail),
+            materializationStoppedByTail: result.stoppedByTail,
+            materializationReceipts: result.results.flatMap((candidate) => candidate.receipt ? [candidate.receipt] : []),
+          });
+          if (committedTurns.length > 0) {
+            for (const turn of committedTurns) for (const wake of journalTurnChangedWakes(store, ownerId, turn)) {
+              send({ type: "journal_turn_changed", ...wake, turn: journalTurnProjection(wake.turn) });
+            }
+            pumpJournalOutbox();
+          }
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error", protocolVersion: request.protocolVersion, requestId: request.requestId,
+            clientId: request.clientId, message: envelope.message, failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "list_chat_first_materialization_receipts": {
+        const request = msg as ListChatFirstMaterializationReceiptsMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (
+            request.surfaceKind !== "main_chat"
+            || typeof request.sessionId !== "string" || !request.sessionId.trim()
+            || !Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0
+          ) throw new Error("Chat-first receipt listing request is invalid");
+          kernel.assertChatFirstMainCapability(request.sessionId, ownerId, request.controlGeneration);
+          const resolved = resolveJournalSurface({
+            ownerId, surfaceKind: "main_chat",
+            externalRefKind: request.externalRefKind, externalRefId: request.externalRefId,
+          });
+          if (resolved.agentSessionId !== request.sessionId) throw new Error("Chat-first receipt session is stale");
+          const range = listJournalTurns(store, {
+            ownerId, conversationId: resolved.conversationId, afterTurnSeq: 0, limit: 1,
+          });
+          send({
+            type: "journal_operation_result", protocolVersion: request.protocolVersion,
+            requestId: request.requestId, clientId: request.clientId,
+            operation: "list_chat_first_materialization_receipts", conversationId: resolved.conversationId,
+            surfaceKind: "main_chat", externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId, turns: [], clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq, generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+            ...listChatFirstMaterializationReceipts(store, {
+              ownerId, controlGeneration: request.controlGeneration, limit: request.limit,
+            }),
+          });
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error", protocolVersion: request.protocolVersion, requestId: request.requestId,
+            clientId: request.clientId, message: envelope.message, failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "acknowledge_chat_first_materialization_receipts": {
+        const request = msg as AcknowledgeChatFirstMaterializationReceiptsMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (
+            request.surfaceKind !== "main_chat"
+            || typeof request.sessionId !== "string" || !request.sessionId.trim()
+            || !Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0
+            || !Array.isArray(request.receipts) || request.receipts.length > 16
+            || !Array.isArray(request.coldStartSequenceTerminalReceipts)
+            || request.coldStartSequenceTerminalReceipts.length > 16
+          ) throw new Error("Chat-first receipt acknowledgement request is invalid");
+          kernel.assertChatFirstMainCapability(request.sessionId, ownerId, request.controlGeneration);
+          const resolved = resolveJournalSurface({
+            ownerId, surfaceKind: "main_chat",
+            externalRefKind: request.externalRefKind, externalRefId: request.externalRefId,
+          });
+          if (resolved.agentSessionId !== request.sessionId) throw new Error("Chat-first receipt session is stale");
+          const receipts = request.receipts.map((receipt) => ({
+            intentId: typeof receipt?.intentId === "string" ? receipt.intentId : "",
+            receiptId: typeof receipt?.receiptId === "string" ? receipt.receiptId : "",
+          }));
+          const coldStartSequenceTerminalReceipts = request.coldStartSequenceTerminalReceipts.map((receipt) => {
+            if (receipt?.terminalState !== "completed" && receipt?.terminalState !== "abandoned") {
+              throw new Error("Cold-start terminal receipt is invalid");
+            }
+            return {
+              sequenceId: typeof receipt.sequenceId === "string" ? receipt.sequenceId : "",
+              receiptId: typeof receipt.receiptId === "string" ? receipt.receiptId : "",
+              terminalState: receipt.terminalState,
+            };
+          });
+          const acknowledgedReceiptCount = acknowledgeChatFirstMaterializationReceipts(store, {
+            ownerId,
+            controlGeneration: request.controlGeneration,
+            receipts,
+            coldStartSequenceTerminalReceipts,
+          });
+          const range = listJournalTurns(store, {
+            ownerId, conversationId: resolved.conversationId, afterTurnSeq: 0, limit: 1,
+          });
+          send({
+            type: "journal_operation_result", protocolVersion: request.protocolVersion,
+            requestId: request.requestId, clientId: request.clientId,
+            operation: "acknowledge_chat_first_materialization_receipts", conversationId: resolved.conversationId,
+            surfaceKind: "main_chat", externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId, turns: [], clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq, generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation, acknowledgedReceiptCount,
+          });
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error", protocolVersion: request.protocolVersion, requestId: request.requestId,
+            clientId: request.clientId, message: envelope.message, failure: envelope.failure,
           });
         }
         break;
@@ -2895,6 +3720,32 @@ async function main(): Promise<void> {
           triggerBackendReconcile({ ownerId: currentOwnerId });
           pumpJournalOutbox();
         }
+        break;
+      }
+
+      case "chat_first_deferral_delivery_result": {
+        const result = msg as ChatFirstDeferralDeliveryResultMessage;
+        const ownerId = resolveActiveOwner(result.ownerId);
+        if (
+          typeof result.continuityKey !== "string" || !result.continuityKey
+          || !Number.isSafeInteger(result.deliveryGeneration) || result.deliveryGeneration <= 0
+          || typeof result.payloadHash !== "string" || !result.payloadHash
+          || typeof result.ok !== "boolean"
+        ) {
+          throw new Error("Chat-first deferral delivery result is invalid");
+        }
+        const settled = settleChatFirstDeferralOutbox(store, {
+          ownerId,
+          continuityKey: result.continuityKey,
+          deliveryGeneration: result.deliveryGeneration,
+          payloadHash: result.payloadHash,
+          ok: result.ok,
+          errorCode: result.errorCode,
+        });
+        if (!settled) {
+          logErr(`Ignoring stale chat-first deferral delivery result key=${result.continuityKey}`);
+        }
+        pumpJournalOutbox();
         break;
       }
 

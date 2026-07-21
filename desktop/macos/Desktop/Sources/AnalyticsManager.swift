@@ -564,6 +564,17 @@ class AnalyticsManager {
 
   // MARK: - Claude Agent Events
 
+  /// Sends a Chat-first event only after its closed, content-free mapper has
+  /// produced the payload. Views must use this typed entry point instead of a
+  /// generic PostHog event so rich controls cannot leak user text or IDs.
+  func chatFirst(_ event: ChatFirstAnalyticsEvent) {
+    let payload = event.analyticsPayload
+    PostHogManager.shared.track(
+      payload.eventName,
+      properties: payload.properties.mapValues { $0 as Any }
+    )
+  }
+
   func chatQueryTelemetry(_ event: ChatQueryTelemetryEvent) {
     let payload = event.analyticsPayload
     PostHogManager.shared.track(payload.eventName, properties: payload.properties)

@@ -857,6 +857,13 @@ export type CandidateStatus = "pending" | "accepted" | "rejected" | "expired";
 
 export type CandidateSubjectKind = "task" | "workstream";
 
+export interface CaptureLinkSpec {
+  conversation_id: string;
+  moment_timestamp_ms?: number | null;
+  summary: string;
+  type: "captureLink";
+}
+
 export type CategoryEnum = "personal" | "education" | "health" | "finance" | "legal" | "philosophy" | "spiritual" | "science" | "entrepreneurship" | "parenting" | "romantic" | "travel" | "inspiration" | "technology" | "business" | "social" | "work" | "sports" | "politics" | "literature" | "history" | "architecture" | "music" | "weather" | "news" | "entertainment" | "psychology" | "real" | "design" | "family" | "economics" | "environment" | "other";
 
 export interface ChartData {
@@ -876,6 +883,11 @@ export interface ChartDataset {
   color?: string | null;
   data_points: Array<ChartDataPoint>;
   label: string;
+}
+
+export interface ChatFirstSubject {
+  id: string;
+  kind: "task" | "goal" | "capture" | "cold_start";
 }
 
 export interface ChatMessageCountResponse {
@@ -944,6 +956,17 @@ export interface ClickUpSpacesResponse {
 
 export interface ClickUpTeamsResponse {
   teams?: Array<Record<string, unknown>>;
+}
+
+export interface ColdStartSequence {
+  sequence_id: string;
+  step: number;
+}
+
+export interface ColdStartSequenceTerminalReceipt {
+  receipt_id: string;
+  sequence_id: string;
+  terminal_state: "completed" | "abandoned";
 }
 
 export type ContextMatchSignal = "app" | "person" | "document" | "meeting" | "free_time" | "dependency" | "agent";
@@ -1327,6 +1350,21 @@ export interface DefaultTaskIntegrationRequest {
 
 export interface DefaultTaskIntegrationResponse {
   default_app: string | null;
+}
+
+export interface DeferralCreateRequest {
+  continuity_key: string;
+  control_generation: number;
+  owner_fence: string;
+  question: QuestionCardSpec;
+  source_surface: "main_chat";
+  subject: ChatFirstSubject;
+}
+
+export interface DeferralReceipt {
+  deferral_id: string;
+  due_at: string;
+  state: "pending" | "released";
 }
 
 export interface DeleteAccountRequest {
@@ -1821,6 +1859,12 @@ export interface GoalLifecycleRequest {
   status: GoalStatus;
 }
 
+export interface GoalLinkSpec {
+  goal_id: string;
+  summary: string;
+  type: "goalLink";
+}
+
 export interface GoalMetric {
   current: number;
   max?: number | null;
@@ -2020,6 +2064,20 @@ export interface LlmUsageResponse {
   top_features?: Array<LlmUsageFeatureResponse>;
 }
 
+export interface MaterializePromptsRequest {
+  cold_start_sequence_terminal_receipts?: Array<ColdStartSequenceTerminalReceipt>;
+  control_generation: number;
+  initial_page_loaded?: boolean;
+  owner_fence: string;
+  receipts?: Array<ProactiveMaterializationReceipt>;
+  source_surface: "main_chat";
+  window_foreground?: boolean;
+}
+
+export interface MaterializePromptsResponse {
+  intents?: Array<ProactiveIntent>;
+}
+
 export interface McpAddServerResponse {
   app_id: string;
   auth_url?: string | null;
@@ -2208,6 +2266,12 @@ export interface MemoryDB {
 }
 
 export type MemoryLayer = "short_term" | "long_term" | "archive";
+
+export interface MemoryLinkSpec {
+  memory_id: string;
+  summary: string;
+  type: "memoryLink";
+}
 
 export interface MemoryMutationResponse {
   status: string;
@@ -2546,6 +2610,26 @@ export interface PrivateCloudSyncResponse {
   private_cloud_sync_enabled: boolean;
 }
 
+export interface ProactiveIntent {
+  account_generation: number;
+  blocks: Array<QuestionCardSpec | TaskCardSpec | GoalLinkSpec | CaptureLinkSpec | MemoryLinkSpec>;
+  cold_start_sequence_terminal_receipt_id?: string | null;
+  cold_start_sequence_terminal_state?: "completed" | "abandoned" | null;
+  continuity_key: string;
+  created_at: string;
+  delivered_at?: string | null;
+  delivery_state?: "ready" | "pending_kernel_receipt" | "delivered";
+  intent_id: string;
+  materialization_receipt_id?: string | null;
+  source: "daily_opener" | "capture_arrival" | "deferral_reraise" | "agent_judgment" | "cold_start_rich" | "cold_start_sparse";
+  subject?: ChatFirstSubject | null;
+}
+
+export interface ProactiveMaterializationReceipt {
+  intent_id: string;
+  receipt_id: string;
+}
+
 export interface ProactiveNotification {
   scopes: Array<string>;
 }
@@ -2579,6 +2663,22 @@ export interface PublicFairUseCaseStatusResponse {
   stage: string;
   support_email: string;
   updated_at?: string | null;
+}
+
+export interface QuestionCardSpec {
+  cold_start_sequence?: ColdStartSequence | null;
+  options: Array<QuestionOption>;
+  question_id: string;
+  subject: ChatFirstSubject;
+  text: string;
+  type: "questionCard";
+}
+
+export interface QuestionOption {
+  defer?: boolean;
+  label: string;
+  option_id: string;
+  prepared_answer: string;
 }
 
 export interface RateMessageRequest {
@@ -3087,6 +3187,11 @@ export interface TaskCancelCandidate {
 
 export type TaskCandidate = TaskCreateCandidate | TaskUpdateCandidate | TaskCompleteCandidate | TaskCancelCandidate | TaskSupersedeCandidate;
 
+export interface TaskCardSpec {
+  task_id: string;
+  type: "taskCard";
+}
+
 export interface TaskChangePayload {
   description?: string | null;
   due_at?: string | null;
@@ -3227,6 +3332,7 @@ export interface TaskUpdateCandidate {
 
 export interface TaskWorkflowControl {
   account_generation?: number;
+  chat_first_ui?: boolean;
   workflow_mode?: TaskWorkflowMode;
 }
 
@@ -3805,10 +3911,12 @@ export interface OmiApiSchemas {
   "CandidateResolutionRequest": CandidateResolutionRequest;
   "CandidateStatus": CandidateStatus;
   "CandidateSubjectKind": CandidateSubjectKind;
+  "CaptureLinkSpec": CaptureLinkSpec;
   "CategoryEnum": CategoryEnum;
   "ChartData": ChartData;
   "ChartDataPoint": ChartDataPoint;
   "ChartDataset": ChartDataset;
+  "ChatFirstSubject": ChatFirstSubject;
   "ChatMessageCountResponse": ChatMessageCountResponse;
   "ChatQuotaUnit": ChatQuotaUnit;
   "ChatRatingResponse": ChatRatingResponse;
@@ -3820,6 +3928,8 @@ export interface OmiApiSchemas {
   "ClickUpListsResponse": ClickUpListsResponse;
   "ClickUpSpacesResponse": ClickUpSpacesResponse;
   "ClickUpTeamsResponse": ClickUpTeamsResponse;
+  "ColdStartSequence": ColdStartSequence;
+  "ColdStartSequenceTerminalReceipt": ColdStartSequenceTerminalReceipt;
   "ContextMatchSignal": ContextMatchSignal;
   "ContinuationCheckpoint": ContinuationCheckpoint;
   "ContinuationCheckpointUpsert": ContinuationCheckpointUpsert;
@@ -3873,6 +3983,8 @@ export interface OmiApiSchemas {
   "DecisionRecord": DecisionRecord;
   "DefaultTaskIntegrationRequest": DefaultTaskIntegrationRequest;
   "DefaultTaskIntegrationResponse": DefaultTaskIntegrationResponse;
+  "DeferralCreateRequest": DeferralCreateRequest;
+  "DeferralReceipt": DeferralReceipt;
   "DeleteAccountRequest": DeleteAccountRequest;
   "DeleteActionItemRequest": DeleteActionItemRequest;
   "DeleteImportJobResponse": DeleteImportJobResponse;
@@ -3936,6 +4048,7 @@ export interface OmiApiSchemas {
   "GoalFocusRequest": GoalFocusRequest;
   "GoalHistoryEntryResponse": GoalHistoryEntryResponse;
   "GoalLifecycleRequest": GoalLifecycleRequest;
+  "GoalLinkSpec": GoalLinkSpec;
   "GoalMetric": GoalMetric;
   "GoalOriginWorkIntent": GoalOriginWorkIntent;
   "GoalProgressEvent": GoalProgressEvent;
@@ -3966,6 +4079,8 @@ export interface OmiApiSchemas {
   "LlmUsageFeatureResponse": LlmUsageFeatureResponse;
   "LlmUsageRecordResponse": LlmUsageRecordResponse;
   "LlmUsageResponse": LlmUsageResponse;
+  "MaterializePromptsRequest": MaterializePromptsRequest;
+  "MaterializePromptsResponse": MaterializePromptsResponse;
   "McpAddServerResponse": McpAddServerResponse;
   "McpApiKey": McpApiKey;
   "McpApiKeyCreate": McpApiKeyCreate;
@@ -3989,6 +4104,7 @@ export interface OmiApiSchemas {
   "MemoryCategory": MemoryCategory;
   "MemoryDB": MemoryDB;
   "MemoryLayer": MemoryLayer;
+  "MemoryLinkSpec": MemoryLinkSpec;
   "MemoryMutationResponse": MemoryMutationResponse;
   "MemoryReviewItemResponse": MemoryReviewItemResponse;
   "MemorySummaryRatingResponse": MemorySummaryRatingResponse;
@@ -4041,12 +4157,16 @@ export interface OmiApiSchemas {
   "PluginResult": PluginResult;
   "PricingOption": PricingOption;
   "PrivateCloudSyncResponse": PrivateCloudSyncResponse;
+  "ProactiveIntent": ProactiveIntent;
+  "ProactiveMaterializationReceipt": ProactiveMaterializationReceipt;
   "ProactiveNotification": ProactiveNotification;
   "ProcessConversationRequest": ProcessConversationRequest;
   "ProgressExtractRequest": ProgressExtractRequest;
   "ProgressExtractResponse": ProgressExtractResponse;
   "ProgressExtractUpdateResponse": ProgressExtractUpdateResponse;
   "PublicFairUseCaseStatusResponse": PublicFairUseCaseStatusResponse;
+  "QuestionCardSpec": QuestionCardSpec;
+  "QuestionOption": QuestionOption;
   "RateMessageRequest": RateMessageRequest;
   "RebuildResponse": RebuildResponse;
   "Recommendation": Recommendation;
@@ -4114,6 +4234,7 @@ export interface OmiApiSchemas {
   "TaskAssistantSettings": TaskAssistantSettings;
   "TaskCancelCandidate": TaskCancelCandidate;
   "TaskCandidate": TaskCandidate;
+  "TaskCardSpec": TaskCardSpec;
   "TaskChangePayload": TaskChangePayload;
   "TaskCompleteCandidate": TaskCompleteCandidate;
   "TaskCreateCandidate": TaskCreateCandidate;
@@ -5091,6 +5212,26 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/chat/deferrals": {
+    post: {
+      operationId: "record_chat_deferral_v1_chat_deferrals_post";
+      responses: {
+        "200": DeferralReceipt;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/chat/materialize-prompts": {
+    post: {
+      operationId: "materialize_prompts_v1_chat_materialize_prompts_post";
+      responses: {
+        "200": MaterializePromptsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/conversations": {
     get: {
       operationId: "get_conversations_v1_conversations_get";
@@ -5865,6 +6006,16 @@ export interface OmiApiPaths {
       operationId: "create_canonical_goal_v1_goals_canonical_post";
       responses: {
         "200": GoalResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/goals/canonical/list": {
+    get: {
+      operationId: "get_canonical_goals_v1_goals_canonical_list_get";
+      responses: {
+        "200": Array<GoalResponse>;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -9805,7 +9956,49 @@ export async function reject_candidate_v1_candidates__candidate_id__reject_post(
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_conversations_v1_conversations_get(query: { limit?: number, offset?: number, statuses?: string | null, include_discarded?: boolean, start_date?: string | null, end_date?: string | null, folder_id?: string | null, starred?: boolean | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<Conversation>> {
+export async function record_chat_deferral_v1_chat_deferrals_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DeferralCreateRequest, init?: OmiApiClientInit): Promise<DeferralReceipt> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/chat/deferrals`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function materialize_prompts_v1_chat_materialize_prompts_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MaterializePromptsRequest, init?: OmiApiClientInit): Promise<MaterializePromptsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/chat/materialize-prompts`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_conversations_v1_conversations_get(query: { limit?: number, offset?: number, statuses?: string | null, include_discarded?: boolean, sources?: string | null, start_date?: string | null, end_date?: string | null, folder_id?: string | null, starred?: boolean | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<Conversation>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations`;
   const _params = query ? Object.entries(query)
@@ -9933,10 +10126,13 @@ export async function search_conversations_endpoint_v1_conversations_search_post
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_conversation_by_id_v1_conversations__conversation_id__get(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
+export async function get_conversation_by_id_v1_conversations__conversation_id__get(path: { conversation_id: string }, query: { source?: string | null, include_discarded?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}`;
-  const _search = "";
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "GET",
     headers: {
@@ -11288,6 +11484,28 @@ export async function create_canonical_goal_v1_goals_canonical_post(header: { Id
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_canonical_goals_v1_goals_canonical_list_get(query: { include_ended?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<GoalResponse>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/goals/canonical/list`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -15539,4 +15757,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 381 client methods generated.
+// Total: 384 client methods generated.

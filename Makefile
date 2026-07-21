@@ -7,8 +7,11 @@ PYTHON ?= $(shell bash -c 'source "$$(git rev-parse --show-toplevel)/scripts/dev
 export PYTHON
 DESKTOP_USER ?= alice
 DESKTOP_APP_NAME ?=
+CHAT_FIRST_E2E_ACTION ?= prepare
+CHAT_FIRST_E2E_CASE ?= enabled
+CHAT_FIRST_E2E_SECONDS ?= 86400
 
-.PHONY: setup setup-main setup-hooks preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local run-canonical-promotion
+.PHONY: setup setup-main setup-hooks preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local chat-first-e2e-fixture run-canonical-promotion
 
 setup: setup-main setup-hooks
 	@echo "Worktree setup complete."
@@ -78,6 +81,9 @@ desktop-run-local:
 	else \
 		PYTHON="$$PYTHON" bash scripts/dev-harness/desktop-run-local.sh "$(DESKTOP_USER)"; \
 	fi
+
+chat-first-e2e-fixture:
+	PYTHON="$(PYTHON)" bash scripts/dev-harness/chat-first-e2e-fixture.sh "$(CHAT_FIRST_E2E_ACTION)" "$(CHAT_FIRST_E2E_CASE)" "$(CHAT_FIRST_E2E_SECONDS)"
 
 run-canonical-promotion:
 	PYTHON="$$PYTHON" PYTHONPATH="scripts/dev-harness:backend$(if $(PYTHONPATH),:$(PYTHONPATH),)" "$$PYTHON" scripts/dev-harness/run-canonical-promotion.py "$(PROMOTION_USER)"

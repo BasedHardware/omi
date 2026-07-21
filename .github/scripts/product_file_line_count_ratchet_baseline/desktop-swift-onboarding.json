@@ -1,10 +1,10 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": 2197,
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": 2199,
     "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": 1714
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": "Chat-first capability wiring remains with onboarding's shared chat surface so rollout state cannot diverge across entry points.",
     "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": "Onboarding adopts the async-arriving auth name, cancels the local file import task in deinit, and carries the sharpened goal/task prompts on top of the terminal-scan-state helper."
   },
   "threshold": 1500

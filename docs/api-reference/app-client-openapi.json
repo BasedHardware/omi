@@ -5543,6 +5543,48 @@
         "title": "CandidateSubjectKind",
         "type": "string"
       },
+      "CaptureLinkSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "moment_timestamp_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moment Timestamp Ms"
+          },
+          "summary": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "const": "captureLink",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "conversation_id",
+          "summary"
+        ],
+        "title": "CaptureLinkSpec",
+        "type": "object"
+      },
       "CategoryEnum": {
         "enum": [
           "personal",
@@ -5682,6 +5724,34 @@
           "data_points"
         ],
         "title": "ChartDataset",
+        "type": "object"
+      },
+      "ChatFirstSubject": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "task",
+              "goal",
+              "capture",
+              "cold_start"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "ChatFirstSubject",
         "type": "object"
       },
       "ChatMessageCountResponse": {
@@ -6033,6 +6103,66 @@
           }
         },
         "title": "ClickUpTeamsResponse",
+        "type": "object"
+      },
+      "ColdStartSequence": {
+        "additionalProperties": false,
+        "description": "Explicit local-only identity for the fixed sparse cold-start script.",
+        "properties": {
+          "sequence_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Sequence Id",
+            "type": "string"
+          },
+          "step": {
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Step",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sequence_id",
+          "step"
+        ],
+        "title": "ColdStartSequence",
+        "type": "object"
+      },
+      "ColdStartSequenceTerminalReceipt": {
+        "additionalProperties": false,
+        "description": "A durable local-journal acknowledgement that sparse sequencing ended.",
+        "properties": {
+          "receipt_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Receipt Id",
+            "type": "string"
+          },
+          "sequence_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Sequence Id",
+            "type": "string"
+          },
+          "terminal_state": {
+            "enum": [
+              "completed",
+              "abandoned"
+            ],
+            "title": "Terminal State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence_id",
+          "receipt_id",
+          "terminal_state"
+        ],
+        "title": "ColdStartSequenceTerminalReceipt",
         "type": "object"
       },
       "ContextMatchSignal": {
@@ -8464,6 +8594,84 @@
           "default_app"
         ],
         "title": "DefaultTaskIntegrationResponse",
+        "type": "object"
+      },
+      "DeferralCreateRequest": {
+        "additionalProperties": false,
+        "description": "The idempotent server receiver for the kernel-owned deferral outbox.",
+        "properties": {
+          "continuity_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Continuity Key",
+            "type": "string"
+          },
+          "control_generation": {
+            "minimum": 0.0,
+            "title": "Control Generation",
+            "type": "integer"
+          },
+          "owner_fence": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Owner Fence",
+            "type": "string"
+          },
+          "question": {
+            "$ref": "#/components/schemas/QuestionCardSpec"
+          },
+          "source_surface": {
+            "const": "main_chat",
+            "title": "Source Surface",
+            "type": "string"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/ChatFirstSubject"
+          }
+        },
+        "required": [
+          "source_surface",
+          "control_generation",
+          "owner_fence",
+          "continuity_key",
+          "subject",
+          "question"
+        ],
+        "title": "DeferralCreateRequest",
+        "type": "object"
+      },
+      "DeferralReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "deferral_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Deferral Id",
+            "type": "string"
+          },
+          "due_at": {
+            "format": "date-time",
+            "title": "Due At",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "released"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deferral_id",
+          "due_at",
+          "state"
+        ],
+        "title": "DeferralReceipt",
         "type": "object"
       },
       "DeleteAccountRequest": {
@@ -11309,6 +11517,36 @@
         "title": "GoalLifecycleRequest",
         "type": "object"
       },
+      "GoalLinkSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "goal_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "const": "goalLink",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "goal_id",
+          "summary"
+        ],
+        "title": "GoalLinkSpec",
+        "type": "object"
+      },
       "GoalMetric": {
         "additionalProperties": false,
         "properties": {
@@ -12421,6 +12659,75 @@
           "period_days"
         ],
         "title": "LlmUsageResponse",
+        "type": "object"
+      },
+      "MaterializePromptsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cold_start_sequence_terminal_receipts": {
+            "items": {
+              "$ref": "#/components/schemas/ColdStartSequenceTerminalReceipt"
+            },
+            "maxItems": 16,
+            "title": "Cold Start Sequence Terminal Receipts",
+            "type": "array"
+          },
+          "control_generation": {
+            "minimum": 0.0,
+            "title": "Control Generation",
+            "type": "integer"
+          },
+          "initial_page_loaded": {
+            "default": false,
+            "title": "Initial Page Loaded",
+            "type": "boolean"
+          },
+          "owner_fence": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Owner Fence",
+            "type": "string"
+          },
+          "receipts": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationReceipt"
+            },
+            "maxItems": 16,
+            "title": "Receipts",
+            "type": "array"
+          },
+          "source_surface": {
+            "const": "main_chat",
+            "title": "Source Surface",
+            "type": "string"
+          },
+          "window_foreground": {
+            "default": false,
+            "title": "Window Foreground",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "source_surface",
+          "control_generation",
+          "owner_fence"
+        ],
+        "title": "MaterializePromptsRequest",
+        "type": "object"
+      },
+      "MaterializePromptsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "intents": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveIntent"
+            },
+            "title": "Intents",
+            "type": "array"
+          }
+        },
+        "title": "MaterializePromptsResponse",
         "type": "object"
       },
       "McpAddServerResponse": {
@@ -13650,6 +13957,36 @@
         ],
         "title": "MemoryLayer",
         "type": "string"
+      },
+      "MemoryLinkSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "memory_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Memory Id",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "const": "memoryLink",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "memory_id",
+          "summary"
+        ],
+        "title": "MemoryLinkSpec",
+        "type": "object"
       },
       "MemoryMutationResponse": {
         "properties": {
@@ -15467,6 +15804,194 @@
         "title": "PrivateCloudSyncResponse",
         "type": "object"
       },
+      "ProactiveIntent": {
+        "additionalProperties": false,
+        "description": "A server-side instruction, not a Chat transcript row.\n\nThe local desktop kernel is the sole writer of the visible assistant turn.\nThis record remains deliverable until that kernel has committed and\nacknowledged its stable ``intent_id``; cold-start intents make that\nexplicit as ``pending_kernel_receipt``.",
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "blocks": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "captureLink": "#/components/schemas/CaptureLinkSpec",
+                  "goalLink": "#/components/schemas/GoalLinkSpec",
+                  "memoryLink": "#/components/schemas/MemoryLinkSpec",
+                  "questionCard": "#/components/schemas/QuestionCardSpec",
+                  "taskCard": "#/components/schemas/TaskCardSpec"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/QuestionCardSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/TaskCardSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/GoalLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/CaptureLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/MemoryLinkSpec"
+                }
+              ]
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Blocks",
+            "type": "array"
+          },
+          "cold_start_sequence_terminal_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cold Start Sequence Terminal Receipt Id"
+          },
+          "cold_start_sequence_terminal_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "completed",
+                  "abandoned"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cold Start Sequence Terminal State"
+          },
+          "continuity_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Continuity Key",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered At"
+          },
+          "delivery_state": {
+            "default": "ready",
+            "enum": [
+              "ready",
+              "pending_kernel_receipt",
+              "delivered"
+            ],
+            "title": "Delivery State",
+            "type": "string"
+          },
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "materialization_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Materialization Receipt Id"
+          },
+          "source": {
+            "enum": [
+              "daily_opener",
+              "capture_arrival",
+              "deferral_reraise",
+              "agent_judgment",
+              "cold_start_rich",
+              "cold_start_sparse"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatFirstSubject"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "intent_id",
+          "continuity_key",
+          "account_generation",
+          "source",
+          "blocks",
+          "created_at"
+        ],
+        "title": "ProactiveIntent",
+        "type": "object"
+      },
+      "ProactiveMaterializationReceipt": {
+        "additionalProperties": false,
+        "description": "Content-free receipt emitted only after the local journal commits.",
+        "properties": {
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "receipt_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Receipt Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id",
+          "receipt_id"
+        ],
+        "title": "ProactiveMaterializationReceipt",
+        "type": "object"
+      },
       "ProactiveNotification": {
         "properties": {
           "scopes": {
@@ -15662,6 +16187,96 @@
           "support_email"
         ],
         "title": "PublicFairUseCaseStatusResponse",
+        "type": "object"
+      },
+      "QuestionCardSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "cold_start_sequence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ColdStartSequence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionOption"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Options",
+            "type": "array"
+          },
+          "question_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/ChatFirstSubject"
+          },
+          "text": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "const": "questionCard",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "question_id",
+          "text",
+          "subject",
+          "options"
+        ],
+        "title": "QuestionCardSpec",
+        "type": "object"
+      },
+      "QuestionOption": {
+        "additionalProperties": false,
+        "properties": {
+          "defer": {
+            "default": false,
+            "title": "Defer",
+            "type": "boolean"
+          },
+          "label": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "option_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Option Id",
+            "type": "string"
+          },
+          "prepared_answer": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Prepared Answer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "option_id",
+          "label",
+          "prepared_answer"
+        ],
+        "title": "QuestionOption",
         "type": "object"
       },
       "RateMessageRequest": {
@@ -18699,6 +19314,29 @@
           }
         ]
       },
+      "TaskCardSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "task_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "taskCard",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "task_id"
+        ],
+        "title": "TaskCardSpec",
+        "type": "object"
+      },
       "TaskChangePayload": {
         "additionalProperties": false,
         "properties": {
@@ -19674,13 +20312,18 @@
       },
       "TaskWorkflowControl": {
         "additionalProperties": false,
-        "description": "Per-user universal-contract migration control; defaults preserve legacy behavior.",
+        "description": "Persisted workflow metadata plus the derived Chat-first capability.\n\n``workflow_mode`` remains readable for legacy records and operational\nhistory. It is not an entitlement. ``chat_first_ui`` is derived only from\nthe canonical-memory selector; persistence excludes it so clients cannot\nturn a sampled response into later authority.",
         "properties": {
           "account_generation": {
             "default": 0,
             "minimum": 0.0,
             "title": "Account Generation",
             "type": "integer"
+          },
+          "chat_first_ui": {
+            "default": false,
+            "title": "Chat First Ui",
+            "type": "boolean"
           },
           "workflow_mode": {
             "$ref": "#/components/schemas/TaskWorkflowMode",
@@ -30240,6 +30883,182 @@
         ]
       }
     },
+    "/v1/chat/deferrals": {
+      "post": {
+        "description": "Receive one idempotent kernel-outbox deferral without touching Chat state.",
+        "operationId": "record_chat_deferral_v1_chat_deferrals_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeferralCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeferralReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Record Chat Deferral",
+        "tags": [
+          "chat-first"
+        ]
+      }
+    },
+    "/v1/chat/materialize-prompts": {
+      "post": {
+        "description": "Fetch ready intents and accept kernel receipts; never writes a Chat row.",
+        "operationId": "materialize_prompts_v1_chat_materialize_prompts_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterializePromptsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterializePromptsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Materialize Prompts",
+        "tags": [
+          "chat-first"
+        ]
+      }
+    },
     "/v1/conversations": {
       "get": {
         "description": "List responses may omit detail-only fields such as transcript_segments. Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript.",
@@ -30293,6 +31112,24 @@
               "default": true,
               "title": "Include Discarded",
               "type": "boolean"
+            }
+          },
+          {
+            "description": "Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
+            "in": "query",
+            "name": "sources",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
+              "title": "Sources"
             }
           },
           {
@@ -30637,7 +31474,7 @@
             }
           },
           {
-            "description": "Comma-separated source filter (e.g. friend,omi)",
+            "description": "Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
             "in": "query",
             "name": "sources",
             "required": false,
@@ -30650,7 +31487,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Comma-separated source filter (e.g. friend,omi)",
+              "description": "Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
               "title": "Sources"
             }
           },
@@ -31099,6 +31936,34 @@
             "schema": {
               "title": "Conversation Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Optional provenance constraint for a detail read",
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional provenance constraint for a detail read",
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_discarded",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Discarded",
+              "type": "boolean"
             }
           },
           {
@@ -36846,6 +37711,98 @@
           }
         ],
         "summary": "Create Canonical Goal",
+        "tags": [
+          "goals"
+        ]
+      }
+    },
+    "/v1/goals/canonical/list": {
+      "get": {
+        "description": "List goals for enrolled canonical-memory task-system clients only.",
+        "operationId": "get_canonical_goals_v1_goals_canonical_list_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_ended",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Ended",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GoalResponse"
+                  },
+                  "title": "Response Get Canonical Goals V1 Goals Canonical List Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Canonical Goals",
         "tags": [
           "goals"
         ]

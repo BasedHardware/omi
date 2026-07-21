@@ -2245,6 +2245,9 @@ private struct AgentMainChatView: View {
           case .discoveryCard(_, let title, let summary, let fullText):
             DiscoveryCard(title: title, summary: summary, fullText: fullText)
               .frame(maxWidth: .infinity, alignment: .leading)
+          // Rich controls are main-chat-only; floating/notch stays passive.
+          case .questionCard, .taskCard, .goalLink, .captureLink, .memoryLink:
+            EmptyView()
           case .agentSpawn(
             _, let pillId, let sessionId, let runId, let title, let objective, let provider
           ):

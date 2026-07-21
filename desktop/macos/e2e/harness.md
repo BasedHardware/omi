@@ -70,8 +70,37 @@ Supported step types:
 - `state.expect`
 - `trace.expect`
 - `log.expect`
+- `ax.activate`
 - `ax.expect`
 - `power.sample`
+
+`ax.activate` is UI-lane-only and activates a SwiftUI/AppKit control by its stable
+accessibility identifier — never a coordinate. AX steps require a named
+non-production bundle id (`com.omi.omi-*`); the harness refuses production and
+unnamed bundle ids. `ax.expect` supports `identifiers_visible`, ordered
+`focus_order` assertions over the interactive AX tree, and exact
+`voiceover_labels` keyed by stable identifier. Use these only for static,
+user-facing controls; expected labels must never contain user content.
+
+```yaml
+- name: Verify chat-first sidebar accessibility contract
+  ax.expect:
+    identifiers_visible:
+      - chat-first-sidebar-chat
+      - chat-first-sidebar-goals
+    focus_order:
+      - chat-first-sidebar-chat
+      - chat-first-sidebar-goals
+    voiceover_labels:
+      chat-first-sidebar-chat: Chat
+      chat-first-sidebar-goals: Goals
+
+- name: Open Goals by stable accessibility identifier
+  ax.activate:
+    identifier: chat-first-sidebar-goals
+  wait:
+    state.chatFirstRoute: goals
+```
 
 Use `wait:` after bridge steps when a state or trace must settle before the next
 step. Keep automated checks to facts the harness can measure directly: state,
@@ -84,10 +113,11 @@ include `surfaces`, `safety`, `sideEffects`, and `examples`; use a matching sema
 `bridge.action` first when `preferSemantic` is true, especially for read-only probes,
 local captures, and deterministic visual fixtures.
 
-Bridge routes return as soon as the app has accepted the command. Prefer `wait:`
-for readiness checks so benchmark timing separates command latency from UI settle
-latency. If a flow genuinely needs a fixed pause, pass `settleMs:` on
-`bridge.navigate` payloads, `/conversation/open` payloads, or as an action param.
+Bridge navigation returns only after its requested destination is mounted; the
+Chat-first shell additionally requires the exact route-visible acknowledgement.
+Use `wait:` for data, traces, or other readiness checks that follow navigation.
+If a flow genuinely needs a fixed pause, pass `settleMs:` on `bridge.navigate`
+payloads, `/conversation/open` payloads, or as an action param.
 
 Use `visual.action_sequence` for fast animations. It posts the bridge action and
 captures frames concurrently, which avoids missing transitions that finish before
@@ -117,3 +147,38 @@ cheap enough for agents to run repeatedly while optimizing idle UI power.
     interval_ms: 250
     max_avg_cpu_percent: 5
 ```
+
+## Chat-first local fixture flows
+
+`chat-first-cohesive.yaml`, `chat-first-question-deferral.yaml`,
+`chat-first-cold-start.yaml`, and `chat-first-capability-isolation.yaml` are
+manual flows. They require the server-owned local fixture; the desktop bridge
+never manufactures eligibility, goals, tasks, captures, prompts, question
+options, or rollout state.
+
+```bash
+PROVIDER_MODE=offline make dev-up
+make seed-memory-scenario SCENARIO=happy_path
+make chat-first-e2e-fixture CHAT_FIRST_E2E_ACTION=prepare CHAT_FIRST_E2E_CASE=enabled
+make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e DESKTOP_USER=omi-local-emulator-chat-first-enabled-v1
+```
+
+Use `CHAT_FIRST_E2E_CASE=question` for the question-deferral flow. It begins
+after a fixture-owned completed rich cold-start receipt, so the real
+server-materialized question remains the actionable Chat tail.
+
+The fixture helper authenticates through Firebase Auth emulator credentials and
+checks the emulator-assigned UID against the harness manifest. Its read-back and
+clock advance responses contain bounded state and counts only; never add a
+desktop capability override or print fixture content from these flows.
+
+`chat-first-capability-isolation.yaml` is a two-launch matrix: run the same
+single-case flow once after preparing and launching each `out_of_cohort` and
+`unreachable_control` case in its own `omi-*` bundle and
+automation port. The exact three command pairs live in the flow header. A
+harness run cannot switch named bundles midway through a flow, so do not treat
+one serial run as proof of all three accounts. Each run asserts the real
+`legacy` shell can still open Chat. The separate behavioral tests named in that
+flow own the byte-equivalent legacy tool manifest and the no-rich-block,
+no-materialization, and no-proactive-work guarantees; do not add a bridge
+fixture or client capability override merely to duplicate those assertions.

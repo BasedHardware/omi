@@ -3,7 +3,8 @@ import json
 import logging
 import os
 
-from utils.env_loader import load_backend_env
+from utils.env_loader import firebase_admin_options, load_backend_env
+from config.chat_first_e2e_fixture import is_chat_first_e2e_harness_runtime
 
 load_backend_env()  # No-op if no env files exist (production); stage + local overrides otherwise
 
@@ -41,6 +42,8 @@ from routers import (
     auth,
     action_items,
     candidates,
+    chat_first,
+    chat_first_e2e,
     task_integrations,
     integrations,
     x_connector,
@@ -97,6 +100,7 @@ log_langsmith_status()
 validate_stripe_price_ids()
 
 _auth_emulator_host = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip()
+_firebase_admin_options = firebase_admin_options()
 if _auth_emulator_host:
     for _adc_key in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON"):
         os.environ.pop(_adc_key, None)
@@ -107,9 +111,9 @@ if _auth_emulator_host:
 elif os.environ.get("SERVICE_ACCOUNT_JSON"):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
     credentials = firebase_admin.credentials.Certificate(service_account_info)
-    firebase_admin.initialize_app(credentials)  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
+    firebase_admin.initialize_app(credentials, options=_firebase_admin_options)  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 else:
-    firebase_admin.initialize_app()  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
+    firebase_admin.initialize_app(options=_firebase_admin_options)  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
 app = FastAPI()
 
@@ -120,6 +124,11 @@ app.include_router(conversations.router)
 app.include_router(public_shared_conversation_chat.router)
 app.include_router(action_items.router)
 app.include_router(candidates.router)
+app.include_router(chat_first.router)
+if is_chat_first_e2e_harness_runtime():
+    # The fixture router has its own runtime check as defense in depth.  It is
+    # intentionally absent from dev/prod route tables, not merely disabled.
+    app.include_router(chat_first_e2e.router)
 app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(x_connector.router)

@@ -33,6 +33,7 @@
       "owner_paths": [
         "desktop/macos/Desktop/Sources/Stores/TasksStore.swift",
         "desktop/macos/Desktop/Sources/APIClient.swift",
+        "desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstTasksPage.swift",
         "desktop/macos/Desktop/Sources/MainWindow/Dashboard/WhatMattersNowSection.swift",
         "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift",
         "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift",
@@ -41,7 +42,10 @@
         "desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift"
       ],
       "test_adapter": "direct_command_contract",
-      "writer_anchors": []
+      "writer_anchors": [
+        {"path": "desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstTasksPage.swift", "symbol": "client.createTask", "discover": true},
+        {"path": "desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstTasksPage.swift", "symbol": "client.updateTask", "discover": true}
+      ]
     },
     {
       "id": "chat_voice_tools",

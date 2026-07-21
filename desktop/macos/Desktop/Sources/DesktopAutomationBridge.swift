@@ -124,6 +124,22 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var usesLegacyHomeDesign: Bool
   /// Redesigned Home stage mode: `hub`, `chat`, or `connect`. Nil when legacy home or not on Dashboard.
   var homeMode: String?
+  /// `loading`, `legacy`, or `chat_first`; never a local rollout preference.
+  var shellVariant: String?
+  /// Stable typed route for the cohort shell. Nil for the legacy shell.
+  var chatFirstRoute: String?
+  /// Set only by the mounted cohort destination after it has appeared. This
+  /// keeps a successful navigation response equivalent to the target being
+  /// visible, rather than merely accepted by the root reducer.
+  var visibleChatFirstRoute: String?
+  /// Shape-only focus telemetry for route acknowledgement; entity IDs stay local.
+  var pendingFocusKind: String?
+  var acknowledgedFocusKind: String?
+  /// The focused entity is available only through the local non-production
+  /// bridge so named-bundle probes can prove the acknowledgement target. It is
+  /// never an analytics dimension or a persisted navigation value.
+  var focusedEntityID: String?
+  var isFocusedEntityAcknowledged: Bool
   var showsPrimarySidebar: Bool
   var isSidebarCollapsed: Bool
   var hasCompletedOnboarding: Bool
@@ -431,6 +447,13 @@ final class DesktopAutomationStateStore {
     highlightedSettingId: nil,
     usesLegacyHomeDesign: false,
     homeMode: nil,
+    shellVariant: nil,
+    chatFirstRoute: nil,
+    visibleChatFirstRoute: nil,
+    pendingFocusKind: nil,
+    acknowledgedFocusKind: nil,
+    focusedEntityID: nil,
+    isFocusedEntityAcknowledged: false,
     showsPrimarySidebar: false,
     isSidebarCollapsed: true,
     hasCompletedOnboarding: false,
@@ -517,7 +540,7 @@ func awaitWithTimeout<T: Sendable>(
   }
 }
 
-private func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
+func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
   // Bound the MainActor hop: if the main thread is wedged (blocking Keychain read
   // during sign-in), fall back to the last cached snapshot so `/state` still
   // answers instead of hanging the whole bridge. See awaitWithTimeout.
@@ -772,7 +795,6 @@ final class DesktopAutomationActionRegistry {
         "window": window.map { $0.title.isEmpty ? "untitled" : $0.title } ?? "none",
       ]
     }
-
     // CHAT-05: read the free-tier monthly chat usage-limiter state so a harness can
     // prove the counter is deterministic without spending LLM calls. Read-only.
     register(
@@ -3745,8 +3767,8 @@ final class DesktopAutomationBridge: @unchecked Sendable {
         let payload = try JSONDecoder().decode(
           DesktopAutomationNavigationRequest.self, from: request.body)
         try await dispatchNavigation(payload)
+        let snapshot = try await waitForNavigationTarget(payload)
         try await sleepForAutomationSettle(payload.settleMs)
-        let snapshot = await cachedAutomationSnapshot()
         return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
       } catch {
         return jsonResponse(

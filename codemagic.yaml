@@ -2429,10 +2429,6 @@ workflows:
               exit 1
             fi
             cp -Rf .harness/agent-runtime/agent-node_modules "$APP_BUNDLE/Contents/Resources/agent/node_modules"
-            mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
-            cp -f agent/src/runtime/control-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
-            cp -f agent/src/runtime/node-tools.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
-            cp -f agent/src/runtime/omi-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
           else
             echo "ERROR: agent/dist not found"
             exit 1

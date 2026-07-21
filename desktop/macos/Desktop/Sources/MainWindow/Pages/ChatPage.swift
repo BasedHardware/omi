@@ -6,21 +6,27 @@ struct ChatPage: View {
   @ObservedObject var appProvider: AppProvider
   @ObservedObject var chatProvider: ChatProvider
   let onHome: () -> Void
+  /// Present only for the cohort-gated main-window Chat. Every other caller
+  /// intentionally keeps journaled chat-first blocks inert.
+  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
   @State private var showAppPicker = false
   @State private var showHistoryPopover = false
   @State private var selectedCitation: Citation?
   @State private var citedConversation: ServerConversation?
   @State private var isLoadingCitation = false
   @State private var copied = false
+  @State private var didReportChatFirstTranscriptPage = false
 
   init(
     appProvider: AppProvider,
     chatProvider: ChatProvider,
-    onHome: @escaping () -> Void = {}
+    onHome: @escaping () -> Void = {},
+    chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
   ) {
     self.appProvider = appProvider
     self.chatProvider = chatProvider
     self.onHome = onHome
+    self.chatFirstRichBlockContext = chatFirstRichBlockContext
   }
 
   var selectedApp: OmiApp? {
@@ -93,6 +99,12 @@ struct ChatPage: View {
         .padding(.bottom, OmiSpacing.xxl)
     }
     .background(OmiColors.backgroundPrimary)
+    .onAppear { reportChatFirstTranscriptPageIfReady() }
+    .onDisappear {
+      didReportChatFirstTranscriptPage = false
+      chatFirstRichBlockContext?.promptMaterializationCoordinator.chatTranscriptDidDisappear()
+    }
+    .onChange(of: chatProvider.isMainChatJournalFirstPageReady) { _, _ in reportChatFirstTranscriptPageIfReady() }
     .sheet(item: $citedConversation) { conversation in
       ConversationDetailView(
         conversation: conversation,
@@ -165,6 +177,15 @@ struct ChatPage: View {
         }
       }
     }
+  }
+
+  private func reportChatFirstTranscriptPageIfReady() {
+    guard !didReportChatFirstTranscriptPage,
+      chatFirstRichBlockContext != nil,
+      chatProvider.isMainChatJournalFirstPageReady
+    else { return }
+    didReportChatFirstTranscriptPage = true
+    chatFirstRichBlockContext?.promptMaterializationCoordinator.chatTranscriptFirstPageDidLoad()
   }
 
   // MARK: - Header
@@ -413,6 +434,7 @@ struct ChatPage: View {
       onOpenAgentRef: { ref, completion in
         FloatingControlBarManager.shared.openAgentChatFromTimeline(ref: ref, completion: completion)
       },
+      chatFirstRichBlockContext: chatFirstRichBlockContext,
       welcomeContent: { welcomeMessage }
     )
     .overlay(alignment: .bottom) {

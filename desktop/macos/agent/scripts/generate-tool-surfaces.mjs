@@ -10,7 +10,9 @@ import { fileURLToPath } from "node:url";
 
 import {
   OMI_TOOL_MANIFEST_DIGEST,
+  OMI_CHAT_FIRST_TOOL_MANIFEST_DIGEST,
   OMI_TOOL_MANIFEST_VERSION,
+  allOmiToolManifest,
   omiToolManifest,
 } from "../dist/runtime/omi-tool-manifest.js";
 
@@ -99,7 +101,7 @@ function validateManifest() {
   const names = new Set();
   const aliases = new Map();
 
-  for (const tool of omiToolManifest) {
+  for (const tool of allOmiToolManifest) {
     if (tool.intendedForAgents !== false && !tool.surfaces?.length) {
       throw new Error(`Tool ${tool.name} is missing surfaces`);
     }
@@ -485,7 +487,7 @@ function swiftToolCaseName(name) {
 }
 
 function generateExecutorsSwift() {
-  const swiftTools = omiToolManifest.filter((tool) => tool.executor.kind === "swiftTool");
+  const swiftTools = allOmiToolManifest.filter((tool) => tool.executor.kind === "swiftTool");
   const enumCases = swiftTools
     .map((tool) => `  case ${swiftToolCaseName(tool.name)} = "${tool.name}"`)
     .join("\n");
@@ -527,6 +529,7 @@ enum GeneratedSwiftToolExecutor: String {
 enum GeneratedToolExecutors {
   static let manifestVersion = ${OMI_TOOL_MANIFEST_VERSION}
   static let manifestDigest = ${JSON.stringify(OMI_TOOL_MANIFEST_DIGEST)}
+  static let chatFirstManifestDigest = ${JSON.stringify(OMI_CHAT_FIRST_TOOL_MANIFEST_DIGEST)}
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
 ${aliasMapEntries.join(",\n")}

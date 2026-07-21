@@ -30,11 +30,13 @@ import routers.staged_tasks as r
 from datetime import datetime, timezone
 
 from models.candidate import CandidateCreate, CandidateRecord, CandidateStatus
-from models.task_intelligence import TaskWorkflowControl
+from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
 
 
 @pytest.fixture(autouse=True)
 def legacy_workflow_mode(monkeypatch):
+    clear_canonical_cohort(monkeypatch)
     monkeypatch.setattr(r.task_control_db, 'get_task_workflow_control', lambda uid: TaskWorkflowControl())
 
 
@@ -185,11 +187,8 @@ class TestRouterHandlers:
 class TestModeAwareSidecarReconciliation:
     @staticmethod
     def _write_control(monkeypatch):
-        monkeypatch.setattr(
-            r.task_control_db,
-            'get_task_workflow_control',
-            lambda uid: TaskWorkflowControl(workflow_mode='write', account_generation=7),
-        )
+        control = TaskWorkflowControl(workflow_mode=TaskWorkflowMode.write, account_generation=7)
+        monkeypatch.setattr(r, '_effective_control', lambda uid: control)
 
     def test_normal_and_duplicate_promotion_resolve_the_exact_sidecar(self, monkeypatch):
         self._write_control(monkeypatch)
@@ -428,11 +427,8 @@ class TestModeAwareSidecarReconciliation:
         )
 
     def test_read_mode_legacy_migrations_are_noops(self, monkeypatch):
-        monkeypatch.setattr(
-            r.task_control_db,
-            'get_task_workflow_control',
-            lambda uid: TaskWorkflowControl(workflow_mode='read', account_generation=7),
-        )
+        control = TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=7)
+        monkeypatch.setattr(r, '_effective_control', lambda uid: control)
         monkeypatch.setattr(
             r.staged_tasks_db,
             'migrate_ai_tasks',
@@ -448,11 +444,8 @@ class TestModeAwareSidecarReconciliation:
         assert r.migrate_conversation_items(uid='u1') == {'status': 'ok', 'migrated': 0, 'deleted': 0}
 
     def test_read_mode_by_id_routes_ignore_non_staged_candidates(self, monkeypatch):
-        monkeypatch.setattr(
-            r.task_control_db,
-            'get_task_workflow_control',
-            lambda uid: TaskWorkflowControl(workflow_mode='read', account_generation=7),
-        )
+        control = TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=7)
+        monkeypatch.setattr(r, '_effective_control', lambda uid: control)
         proposal = CandidateCreate.model_validate(
             {
                 'subject_kind': 'task',

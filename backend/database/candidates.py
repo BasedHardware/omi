@@ -9,6 +9,8 @@ from uuid import uuid4
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+
+from config.canonical_memory_cohort import is_canonical_memory_user
 import database.action_items as action_items_db
 from database._client import db
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
@@ -21,7 +23,7 @@ from models.candidate import (
     CandidateStatus,
     CandidateSubjectKind,
 )
-from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+from models.task_intelligence import TaskWorkflowControl
 
 CANDIDATES_COLLECTION = 'candidates'
 ACTION_ITEMS_COLLECTION = 'action_items'
@@ -133,14 +135,14 @@ def _task_control_ref(uid: str):
     )
 
 
-def _validate_write_control(snapshot: Any, *, account_generation: int) -> None:
+def _validate_write_control(snapshot: Any, *, uid: str, account_generation: int) -> None:
+    if not is_canonical_memory_user(uid):
+        raise CandidateConflictError('canonical task intelligence is not enabled')
     control = TaskWorkflowControl()
     if snapshot.exists:
         control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
     if control.account_generation != account_generation:
         raise CandidateGenerationMismatchError('account generation mismatch')
-    if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-        raise CandidateConflictError('Candidate writes are not enabled')
 
 
 def _snapshot_dict(snapshot: Any) -> dict[str, Any]:
@@ -398,7 +400,7 @@ def create_candidate(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
 
         alias_snapshot = alias_ref.get(transaction=write_transaction)
         if alias_snapshot.exists:
@@ -635,7 +637,7 @@ def resolve_task_candidate(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         snapshot = candidate_ref.get(transaction=write_transaction)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
@@ -782,15 +784,7 @@ def claim_candidate_integration_dispatch(
                 },
             )
             return None
-        if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-            write_transaction.update(
-                outbox_ref,
-                {
-                    'status': 'suppressed',
-                    'resolution_reason': 'candidate_writes_disabled',
-                    'updated_at': claim_time,
-                },
-            )
+        if not is_canonical_memory_user(uid):
             return None
         if payload.get('status') in {'completed', 'suppressed'}:
             return None
@@ -847,15 +841,7 @@ def complete_candidate_integration_dispatch(
                 },
             )
             return False
-        if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-            write_transaction.update(
-                outbox_ref,
-                {
-                    'status': 'suppressed',
-                    'resolution_reason': 'candidate_writes_disabled',
-                    'updated_at': completion_time,
-                },
-            )
+        if not is_canonical_memory_user(uid):
             return False
         if payload.get('status') != 'processing' or payload.get('lease_token') != lease_token:
             return False
@@ -908,7 +894,7 @@ def resolve_candidate_without_mutation(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         snapshot = candidate_ref.get(transaction=write_transaction)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
@@ -967,7 +953,7 @@ def reconcile_migrated_candidate(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         snapshot = candidate_ref.get(transaction=write_transaction)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
@@ -1035,7 +1021,7 @@ def claim_candidate_for_legacy_promotion(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         candidate_snapshot = candidate_ref.get(transaction=write_transaction)
         if not candidate_snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
@@ -1109,7 +1095,7 @@ def begin_candidate_legacy_promotion(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         candidate_snapshot = candidate_ref.get(transaction=write_transaction)
         if not candidate_snapshot.exists:
             raise CandidateNotFoundError(candidate_id)

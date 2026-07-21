@@ -142,6 +142,7 @@ def _call_list(conv, **overrides):
         offset=0,
         statuses="processing,completed",
         include_discarded=True,
+        sources=None,
         start_date=None,
         end_date=None,
         folder_id=None,
@@ -199,3 +200,38 @@ def test_valid_range_passes_through(conv):
             conv, start_date=datetime(2024, 1, 1), end_date=datetime(2024, 12, 31, tzinfo=timezone.utc)
         )
     assert result == {"count": 0}
+
+
+def test_list_forwards_sources_and_statuses_together(conv):
+    with patch.object(conv.conversations_db, "get_conversations_without_photos", return_value=[]) as query:
+        assert _call_list(conv, statuses="processing,completed", sources="omi") == []
+
+    assert query.call_args.kwargs["statuses"] == ["processing", "completed"]
+    assert query.call_args.kwargs["sources"] == ["omi"]
+
+
+def test_count_forwards_sources_and_statuses_together_without_400(conv):
+    with patch.object(conv.conversations_db, "get_conversations_count", return_value=3) as query:
+        result = _call_count(conv, statuses="processing,completed", sources="omi")
+
+    assert result == {"count": 3, "sources": ["omi"]}
+    assert query.call_args.kwargs["statuses"] == ["processing", "completed"]
+    assert query.call_args.kwargs["sources"] == ["omi"]
+
+
+def test_multi_source_with_multi_status_returns_a_clear_400_instead_of_a_firestore_error(conv):
+    with pytest.raises(HTTPException, match="multiple sources") as exc:
+        _call_list(conv, sources="omi,friend")
+    assert exc.value.status_code == 400
+
+    with pytest.raises(HTTPException, match="multiple sources") as exc:
+        _call_count(conv, statuses="processing,completed", sources="omi,friend")
+    assert exc.value.status_code == 400
+
+
+def test_multi_source_with_one_status_forwards_without_a_disjunction_conflict(conv):
+    with patch.object(conv.conversations_db, "get_conversations_without_photos", return_value=[]) as query:
+        assert _call_list(conv, statuses="completed", sources="omi,friend") == []
+
+    assert query.call_args.kwargs["statuses"] == ["completed"]
+    assert query.call_args.kwargs["sources"] == ["omi", "friend"]

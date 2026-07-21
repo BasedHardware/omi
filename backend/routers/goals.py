@@ -33,6 +33,7 @@ from models.goal import (
 )
 from models.workstream import GoalDetailProjection
 import database.workstreams as workstreams_db
+from routers.canonical_task_access import require_canonical_task_user
 
 router = APIRouter()
 IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1, max_length=256)]
@@ -57,6 +58,16 @@ def get_all_goals(
     return [normalize_goal_response(goal) for goal in goals]
 
 
+@router.get('/v1/goals/canonical/list', tags=['goals'], response_model=List[GoalResponse])
+def get_canonical_goals(
+    include_ended: bool = Query(False),
+    uid: str = Depends(require_canonical_task_user),
+) -> List[dict]:
+    """List goals for enrolled canonical-memory task-system clients only."""
+    goals = goals_db.get_all_goals(uid, include_inactive=include_ended)
+    return [normalize_goal_response(goal) for goal in goals]
+
+
 @router.post('/v1/goals', tags=['goals'], response_model=GoalResponse)
 def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Create a durable goal without changing any other goal's focus or lifecycle."""
@@ -76,7 +87,7 @@ def create_canonical_goal(
     goal: GoalCreate,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> dict:
     """Create a generation-scoped canonical goal with safe retry semantics."""
 
@@ -107,7 +118,7 @@ def focus_goal(
     request: GoalFocusRequest,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> dict:
     try:
         goal = goals_db.focus_goal(
@@ -129,7 +140,7 @@ def unfocus_goal(
     goal_id: str,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> dict:
     try:
         return normalize_goal_response(
@@ -151,7 +162,7 @@ def transition_goal_lifecycle(
     request: GoalLifecycleRequest,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> dict:
     try:
         goal = goals_db.transition_goal_lifecycle(
@@ -169,7 +180,7 @@ def transition_goal_lifecycle(
 
 
 @router.get('/v1/goals/{goal_id}/detail', tags=['goals'], response_model=GoalDetailProjection)
-def get_goal_detail(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> GoalDetailProjection:
+def get_goal_detail(goal_id: str, uid: str = Depends(require_canonical_task_user)) -> GoalDetailProjection:
     try:
         return workstreams_db.get_goal_detail(uid, goal_id)
     except workstreams_db.WorkstreamNotFoundError as exc:
@@ -182,7 +193,7 @@ def append_goal_progress_event(
     request: GoalProgressEventCreate,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> GoalProgressEvent:
     try:
         return goals_db.append_goal_progress_event(
@@ -201,7 +212,7 @@ def append_goal_progress_event(
 def list_goal_progress_events(
     goal_id: str,
     limit: int = Query(100, ge=1, le=500),
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> list[GoalProgressEvent]:
     return goals_db.list_goal_progress_events(uid, goal_id, limit=limit)
 

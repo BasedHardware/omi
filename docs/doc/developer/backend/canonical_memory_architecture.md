@@ -59,11 +59,12 @@ Every read/write/maintenance path resolves the user's cohort first.
 
 | Concern | Behavior | Evidence |
 |---------|----------|----------|
-| Whitelist | Only UIDs in `CANONICAL_MEMORY_USERS` get canonical routing | `backend/utils/memory/memory_system.py:14-17`, `resolve_memory_system` at `:36-57` |
-| Default | Absent from whitelist → `MemorySystem.LEGACY` (explicit, not implicit) | `memory_system.py:54-57` |
-| Kill-switch | Removing a UID from the code whitelist overrides any stale Firestore `memory_system=canonical` | Docstring at `memory_system.py:43-44` |
+| Whitelist | Only UIDs in `CANONICAL_MEMORY_USERS` get canonical memory, task intelligence, and Chat-first | `backend/config/canonical_memory_cohort.py`, `resolve_memory_system` |
+| Default | Absent from whitelist → `MemorySystem.LEGACY`, task intelligence off, Chat-first off | `canonical_memory_cohort.py` and `utils/task_intelligence/rollout.py` |
+| Kill-switch | Removing a UID from the code whitelist overrides stale Firestore controls and hides canonical task routes | `canonical_memory_cohort.py` and `routers/canonical_task_access.py` |
+| Operational controls | `MEMORY_MODE`, `MEMORY_ENABLED_USERS`, and `MEMORY_V3_GET_ENABLED` may govern maintenance readiness only; they never select or suppress a user's request path | `backend/.env.template` |
 | Request pin | HTTP/MCP handlers pin cohort once per request to avoid mid-request flips | `backend/utils/memory/memory_system_pin.py:17-40` |
-| Routing seam | `MemoryService._resolve_backend` picks `CanonicalMemoryBackend` vs `LegacyMemoryBackend` | `backend/utils/memory/memory_service.py:390-394` |
+| Routing seam | `MemoryService._resolve_backend` picks `CanonicalMemoryBackend` vs `LegacyMemoryBackend`; an enrolled-but-unready account fails closed rather than falling back | `backend/utils/memory/memory_service.py` |
 | Maintenance refusal | Consolidation/promotion return `skipped_reason="not_canonical_cohort"` for legacy users | `canonical_consolidation.py:784-785`, `short_term_promotion.py:361-362` |
 
 ---

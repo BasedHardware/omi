@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from google.cloud import firestore
+
+from config.canonical_memory_cohort import is_canonical_memory_user
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from database._client import db as default_db
@@ -15,7 +17,7 @@ from models.workstream_association import (
     RecurrenceInboxStatus,
     RecurrenceOutcomeKind,
 )
-from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+from models.task_intelligence import TaskWorkflowControl
 
 RECURRENCE_INBOX_COLLECTION = 'task_recurrence_inbox'
 TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
@@ -55,7 +57,9 @@ def _control_ref(uid: str, *, firestore_client: Any = None):
     )
 
 
-def _validate_generation(snapshot: Any, account_generation: int) -> None:
+def _validate_generation(snapshot: Any, *, uid: str, account_generation: int) -> None:
+    if not is_canonical_memory_user(uid):
+        raise RecurrenceGenerationMismatchError('canonical task intelligence is not enabled')
     if not snapshot.exists:
         control = TaskWorkflowControl()
     else:
@@ -65,8 +69,6 @@ def _validate_generation(snapshot: Any, account_generation: int) -> None:
             raise RecurrenceGenerationMismatchError('task workflow control is malformed') from error
     if control.account_generation != account_generation:
         raise RecurrenceGenerationMismatchError('account generation mismatch')
-    if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-        raise RecurrenceGenerationMismatchError('task workflow mode changed')
 
 
 def _from_snapshot(snapshot: Any) -> RecurrenceInboxReceipt:
@@ -97,7 +99,9 @@ def enqueue_recurrence_signal(
     @firestore.transactional
     def apply(write_transaction):
         _validate_generation(
-            _control_ref(uid, firestore_client=client).get(transaction=write_transaction), account_generation
+            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
+            uid=uid,
+            account_generation=account_generation,
         )
         snapshot = ref.get(transaction=write_transaction)
         if snapshot.exists:
@@ -155,7 +159,9 @@ def complete_recurrence_receipt(
     @firestore.transactional
     def apply(write_transaction):
         _validate_generation(
-            _control_ref(uid, firestore_client=client).get(transaction=write_transaction), account_generation
+            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
+            uid=uid,
+            account_generation=account_generation,
         )
         snapshot = ref.get(transaction=write_transaction)
         if not snapshot.exists or _from_snapshot(snapshot).account_generation != account_generation:
@@ -189,7 +195,9 @@ def retry_recurrence_receipt(
     @firestore.transactional
     def apply(write_transaction):
         _validate_generation(
-            _control_ref(uid, firestore_client=client).get(transaction=write_transaction), account_generation
+            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
+            uid=uid,
+            account_generation=account_generation,
         )
         snapshot = ref.get(transaction=write_transaction)
         if not snapshot.exists or _from_snapshot(snapshot).account_generation != account_generation:

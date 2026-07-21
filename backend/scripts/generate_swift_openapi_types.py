@@ -348,7 +348,10 @@ def _render_struct(name: str, schema: dict[str, Any]) -> str:
     lines.append('')
 
     # Memberwise init for adapter construction.
-    param_list = ', '.join(f'{sn}: {te}' + ('?' if opt else '') for sn, _, te, opt in fields)
+    # Optional fields need defaults to preserve source compatibility when the
+    # OpenAPI schema adds a new response member. Existing desktop fixtures and
+    # adapters can keep constructing the DTO with their known subset.
+    param_list = ', '.join(f'{sn}: {te}' + ('? = nil' if opt else '') for sn, _, te, opt in fields)
     lines.append(f'  public init({param_list}) {{')
     for swift_name, _, _, _ in fields:
         lines.append(f'    self.{swift_name} = {swift_name}')

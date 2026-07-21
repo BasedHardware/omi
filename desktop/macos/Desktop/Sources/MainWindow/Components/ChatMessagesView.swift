@@ -91,6 +91,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Horizontal inset of the message column. Home passes 0 so bubbles align
   /// exactly with the ask bar's edges; other surfaces keep the default gutter.
   var horizontalContentPadding: CGFloat = OmiSpacing.xxl
+  /// Explicitly enables chat-first controls only in the cohort shell's main
+  /// Chat route. Nil keeps shared transcript projections safe elsewhere.
+  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
   @ViewBuilder var welcomeContent: () -> WelcomeContent
 
   /// IDs of messages that are near-duplicates of an earlier message in the same session.
@@ -474,7 +477,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           isDuplicate: dupeIds.contains(message.id),
           onCancelTurn: onCancelTurn,
           onOpenAgent: onOpenAgent,
-          onOpenAgentRef: onOpenAgentRef
+          onOpenAgentRef: onOpenAgentRef,
+          chatFirstRichBlockContext: chatFirstRichBlockContext
         )
         .id(message.id)
       }

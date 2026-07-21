@@ -481,6 +481,22 @@ final class APIClientRoutingTests: XCTestCase {
       label: "getConversation")
   }
 
+  func testGetOmiCaptureUsesStrictArchiveDetailContract() async {
+    let client = await makeTestClient()
+    _ = try? await client.getOmiCapture(id: "capture-123") as ServerConversation
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "python-test", port: 9001,
+      pathContains: "v1/conversations/capture-123", method: "GET",
+      label: "getOmiCapture")
+    guard let firstRequest = requests.first else {
+      return XCTFail("Expected getOmiCapture to issue a request")
+    }
+    let queryItems = URLComponents(url: firstRequest.url, resolvingAgainstBaseURL: false)?.queryItems
+    XCTAssertEqual(queryItems?.first(where: { $0.name == "source" })?.value, "omi")
+    XCTAssertEqual(queryItems?.first(where: { $0.name == "include_discarded" })?.value, "false")
+  }
+
   func testDeleteConversationRoutesToPython() async {
     let client = await makeTestClient()
     try? await client.deleteConversation(id: "conv-456")

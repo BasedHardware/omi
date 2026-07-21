@@ -80,6 +80,8 @@ export interface RunToolCapability {
   manifestVersion: number;
   manifestDigest: string;
   allowedToolNames: readonly string[];
+  chatFirstUi: boolean;
+  chatFirstControlGeneration: number | null;
   daemonBootEpoch: string;
   executionGeneration: number;
   registeredAtMs: number;
@@ -130,6 +132,8 @@ export interface AuthorizedRunToolInvocation {
   precedingAssistantText: string | null;
   runMode: RunMode;
   chatMode: string | null;
+  chatFirstUi: boolean;
+  chatFirstControlGeneration: number | null;
   canonicalToolName: string;
   tool: OmiToolManifestEntry;
 }
@@ -270,6 +274,9 @@ export class RunToolCapabilityBroker {
     const projectionContext = {
       executionRole: persisted.profile.executionRole,
       screenContext: persisted.screenContext,
+      surfaceKind: persisted.surfaceKind,
+      chatFirstUi: persisted.chatFirstUi,
+      controlGeneration: persisted.chatFirstControlGeneration,
     };
     const snapshot = buildToolAvailabilitySnapshot(adapterProjection, projectionContext);
     const allowedToolNames = toolsForAdapter(adapterProjection, projectionContext)
@@ -295,6 +302,8 @@ export class RunToolCapabilityBroker {
       manifestVersion: snapshot.manifestVersion,
       manifestDigest: snapshot.manifestDigest,
       allowedToolNames: Object.freeze(allowedToolNames),
+      chatFirstUi: persisted.chatFirstUi,
+      chatFirstControlGeneration: persisted.chatFirstControlGeneration,
       daemonBootEpoch: this.daemonBootEpoch,
       executionGeneration: ++this.executionGeneration,
       registeredAtMs: this.nowMs(),
@@ -431,6 +440,8 @@ export class RunToolCapabilityBroker {
       precedingAssistantText: capability.precedingAssistantText,
       runMode: capability.runMode,
       chatMode: capability.chatMode,
+      chatFirstUi: capability.chatFirstUi,
+      chatFirstControlGeneration: capability.chatFirstControlGeneration,
       canonicalToolName: tool.name,
       tool,
     };
@@ -580,6 +591,18 @@ export class RunToolCapabilityBroker {
     return state && !state.revoked ? state.capability : undefined;
   }
 
+  /** Verify a live capability without consuming its one-use tool invocation. */
+  assertLiveCapability(capabilityRef: string, activeOwnerId: string): RunToolCapability {
+    const state = this.states.get(capabilityRef);
+    if (!state) this.reject("capability_missing", "Unknown run tool capability");
+    if (state.revoked) {
+      const code = rejectCodeForRevocation(state.revocationReason ?? "explicit");
+      this.reject(code, "Run tool capability has been revoked");
+    }
+    this.assertLiveCapabilityAuthority(state, activeOwnerId);
+    return state.capability;
+  }
+
   private revokeRunCapabilities(
     runId: string,
     reason: RunToolCapabilityRevocationReason,
@@ -673,6 +696,8 @@ export class RunToolCapabilityBroker {
     runMode: RunMode;
     chatMode: string | null;
     screenContext: boolean;
+    chatFirstUi: boolean;
+    chatFirstControlGeneration: number | null;
   } {
     const row = this.store.getRow(
       `SELECT s.*, r.session_id AS authoritative_session_id, r.status AS authoritative_run_status,
@@ -705,6 +730,18 @@ export class RunToolCapabilityBroker {
       && !Array.isArray(metadata.externalSurface)
       ? metadata.externalSurface as Record<string, unknown>
       : null;
+    const admitted = runInput.admittedContextSnapshot
+      && typeof runInput.admittedContextSnapshot === "object"
+      && !Array.isArray(runInput.admittedContextSnapshot)
+      ? runInput.admittedContextSnapshot as Record<string, unknown>
+      : {};
+    const admittedCapabilities = admitted.capabilities
+      && typeof admitted.capabilities === "object"
+      && !Array.isArray(admitted.capabilities)
+      ? admitted.capabilities as Record<string, unknown>
+      : {};
+    const chatFirstUi = admittedCapabilities.chatFirstUi === true && text(row.surface_kind) === "main_chat";
+    const controlGeneration = Number(admittedCapabilities.chatFirstControlGeneration);
     return {
       ownerId: text(row.owner_id),
       sessionId,
@@ -720,6 +757,10 @@ export class RunToolCapabilityBroker {
       runMode: text(row.mode) === "act" ? "act" : "ask",
       chatMode: typeof metadata.chatMode === "string" ? metadata.chatMode : null,
       screenContext: admittedScreenContext(runInput),
+      chatFirstUi,
+      chatFirstControlGeneration: chatFirstUi && Number.isSafeInteger(controlGeneration) && controlGeneration >= 0
+        ? controlGeneration
+        : null,
     };
   }
 

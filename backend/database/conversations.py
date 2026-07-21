@@ -609,9 +609,19 @@ def get_conversations_count(
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if sources:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('source', 'in', sources))
+        # The archive's `sources=omi` must compose with the multi-status `in`
+        # filter below. Firestore allows only one disjunctive `in` filter per
+        # query, so a singleton source is an equality predicate, not a
+        # degenerate `in` predicate.
+        if len(sources) == 1:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('source', '==', sources[0]))
+        else:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('source', 'in', sources))
     if statuses:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+        if len(statuses) == 1:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', '==', statuses[0]))
+        else:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
     if categories:
         conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
     if folder_id:
@@ -633,6 +643,7 @@ def get_conversations_without_photos(
     offset: int = 0,
     include_discarded: bool = False,
     statuses: List[str] = [],
+    sources: Optional[List[str]] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     categories: Optional[List[str]] = None,
@@ -646,8 +657,18 @@ def get_conversations_without_photos(
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    if sources:
+        # Keep the paginated list semantically identical to the count query;
+        # see `get_conversations_count` for why a singleton is equality.
+        if len(sources) == 1:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('source', '==', sources[0]))
+        else:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('source', 'in', sources))
     if len(statuses) > 0:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+        if len(statuses) == 1:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', '==', statuses[0]))
+        else:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
 
     if categories:
         conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))

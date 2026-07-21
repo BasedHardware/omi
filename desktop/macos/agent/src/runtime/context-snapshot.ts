@@ -13,6 +13,10 @@ import {
 } from "./omi-tool-manifest.js";
 import { readSessionExecutionProfile } from "./session-execution-profile.js";
 import { stableJsonStringify } from "./kernel-support.js";
+import {
+  effectiveChatFirstCapability,
+  type ChatFirstCapabilityProjection,
+} from "./chat-first-capability.js";
 import type { AgentExecutionRole, AgentStore } from "./types.js";
 
 const ACTIVE_RUN_STATUSES = [
@@ -62,6 +66,7 @@ export interface ContextSourceUpdateInput {
   capturedAtMs: number;
   expiresAtMs?: number | null;
   payload: Record<string, unknown>;
+  chatFirstCapability?: ChatFirstCapabilityProjection;
 }
 
 export interface ContextSourceUpdateResult {
@@ -143,7 +148,14 @@ export function updateContextSource(
       }
       return {
         changed: metadataChanged,
-        snapshot: buildContextSnapshot(store, input.sessionId, input.ownerId, nowMs, projectionSurface),
+        snapshot: buildContextSnapshot(
+          store,
+          input.sessionId,
+          input.ownerId,
+          nowMs,
+          projectionSurface,
+          input.chatFirstCapability,
+        ),
       };
     }
 
@@ -175,7 +187,14 @@ export function updateContextSource(
     );
     return {
       changed: true,
-      snapshot: buildContextSnapshot(store, input.sessionId, input.ownerId, nowMs, projectionSurface),
+      snapshot: buildContextSnapshot(
+        store,
+        input.sessionId,
+        input.ownerId,
+        nowMs,
+        projectionSurface,
+        input.chatFirstCapability,
+      ),
     };
   });
 }
@@ -186,6 +205,7 @@ export function buildContextSnapshot(
   ownerId: string,
   nowMs = Date.now(),
   requestedSurfaceKind?: string,
+  chatFirstCapability?: ChatFirstCapabilityProjection,
 ): ContextSnapshotProjection {
   const session = assertOwnedSession(store, sessionId, ownerId);
   const surfaceKind = projectionSurfaceKind(store, sessionId, ownerId, String(session.surface_kind), requestedSurfaceKind);
@@ -349,6 +369,7 @@ export function buildContextSnapshot(
     baseMaterial,
     nowMs,
     surfaceKind,
+    chatFirstCapability,
   });
 }
 
@@ -383,7 +404,31 @@ export function inheritContextSnapshotForSession(
     },
     nowMs,
     surfaceKind: String(session.surface_kind),
+    // The admitted snapshot is the immutable, generation-fenced authority for
+    // this logical run. Re-project its effective main-Chat capability instead
+    // of silently rebuilding the child snapshot with the extension disabled.
+    // projectContextSnapshot still applies the destination surface gate, so a
+    // delegated, PTT, or other non-main session cannot inherit the tools.
+    chatFirstCapability: chatFirstCapabilityFromAdmittedSnapshot(admitted),
   });
+}
+
+function chatFirstCapabilityFromAdmittedSnapshot(
+  admitted: ContextSnapshotProjection,
+): ChatFirstCapabilityProjection | undefined {
+  const { chatFirstUi, chatFirstControlGeneration } = admitted.capabilities;
+  if (
+    chatFirstUi !== true
+    || chatFirstControlGeneration === null
+    || !Number.isSafeInteger(chatFirstControlGeneration)
+    || chatFirstControlGeneration < 0
+  ) {
+    return undefined;
+  }
+  return {
+    chatFirstUi: true,
+    controlGeneration: chatFirstControlGeneration,
+  };
 }
 
 function projectContextSnapshot(
@@ -398,6 +443,7 @@ function projectContextSnapshot(
     baseMaterial: Pick<ContextSnapshotProjection, "recentTurns" | "sourceOutcomes" | "activeRuns" | "recentCompletedRuns">;
     nowMs: number;
     surfaceKind: string;
+    chatFirstCapability?: ChatFirstCapabilityProjection;
   },
 ): ContextSnapshotProjection {
   const profile = readSessionExecutionProfile(store, input.sessionId);
@@ -405,18 +451,26 @@ function projectContextSnapshot(
   const screenContext = input.baseMaterial.sourceOutcomes.some(
     (source) => source.source === "screen" && source.outcome === "available",
   );
-  const availability = buildToolAvailabilitySnapshot(adapterId, {
+  const chatFirst = effectiveChatFirstCapability({
+    surfaceKind: input.surfaceKind,
+    chatFirstUi: input.chatFirstCapability?.chatFirstUi,
+    controlGeneration: input.chatFirstCapability?.controlGeneration,
+  });
+  const projectionContext = {
     executionRole: profile.executionRole,
     screenContext,
-  });
+    surfaceKind: input.surfaceKind,
+    chatFirstUi: chatFirst.chatFirstUi,
+    controlGeneration: chatFirst.controlGeneration,
+  } as const;
+  const availability = buildToolAvailabilitySnapshot(adapterId, projectionContext);
   const capabilities = {
     executionRole: profile.executionRole,
     manifestVersion: availability.manifestVersion,
     manifestDigest: availability.manifestDigest,
-    allowedToolNames: toolsForAdapter(adapterId, {
-      executionRole: profile.executionRole,
-      screenContext,
-    }).map((tool) => tool.name).sort(),
+    allowedToolNames: toolsForAdapter(adapterId, projectionContext).map((tool) => tool.name).sort(),
+    chatFirstUi: chatFirst.chatFirstUi,
+    chatFirstControlGeneration: chatFirst.controlGeneration,
   };
   const capabilityVersion = hash(stableJsonStringify(capabilities));
   const contextPlan = buildConversationContextPlan({

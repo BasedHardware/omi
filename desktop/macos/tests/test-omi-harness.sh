@@ -89,7 +89,6 @@ except RuntimeError:
 else:
     raise AssertionError("relative health log path must fail loudly")
 
-
 class FakeResponse:
     def __init__(self, payload):
         self.payload = payload
@@ -153,6 +152,130 @@ assert [(request["method"], request["route"]) for request in requests] == [
 assert requests[0]["authorization"] is None
 assert requests[1]["authorization"] == "Bearer test-automation-token"
 assert requests[2]["authorization"] == "Bearer test-automation-token"
+
+from pathlib import Path
+import tempfile
+
+snapshot = {
+    "elements": [
+        {"identifier": "chat-first-sidebar-chat", "label": "Chat"},
+        {"identifier": "chat-first-sidebar-goals", "title": "Goals"},
+        {"identifier": "chat-first-sidebar-tasks", "attrs": {"AXLabel": "Tasks"}},
+    ]
+}
+snapshot_json = module.json.dumps(snapshot)
+commands = []
+def fake_agent_swift(_ctx, args):
+    commands.append(args)
+    stdout = snapshot_json if args[:2] == ["snapshot", "-i"] else "activated"
+    return module.subprocess.CompletedProcess(args, 0, stdout)
+
+real_agent_swift = module.run_agent_swift
+module.run_agent_swift = fake_agent_swift
+with tempfile.TemporaryDirectory() as directory:
+    artifacts = Path(directory)
+    ctx = module.HarnessContext(
+        base_url="http://127.0.0.1:9",
+        flow_path=Path("flow.yaml"),
+        run_dir=artifacts,
+        steps_dir=artifacts,
+        lane="ui",
+        log_path=artifacts / "missing.log",
+        log_start=0,
+        bundle_id="com.omi.omi-chat-first-e2e",
+        process_match=None,
+    )
+    ok, error = module.assert_ax(
+        ctx,
+        {
+            "identifiers_visible": ["chat-first-sidebar-chat", "chat-first-sidebar-goals"],
+            "focus_order": [
+                "chat-first-sidebar-chat",
+                "chat-first-sidebar-goals",
+                "chat-first-sidebar-tasks",
+            ],
+            "voiceover_labels": {
+                "chat-first-sidebar-chat": "Chat",
+                "chat-first-sidebar-goals": "Goals",
+                "chat-first-sidebar-tasks": "Tasks",
+            },
+        },
+        artifacts / "ax.json",
+    )
+    assert ok, error
+    ok, error = module.activate_ax(ctx, {"identifier": "chat-first-sidebar-goals"}, artifacts / "activate.json")
+    assert ok, error
+    assert commands[-1] == ["find", "identifier", "chat-first-sidebar-goals", "click"]
+    ok, error = module.activate_ax(ctx, {"identifier": "not a stable id"}, artifacts / "activate-invalid.json")
+    assert not ok and "stable identifier" in error
+    ok, error = module.assert_ax(
+        ctx,
+        {"focus_order": ["chat-first-sidebar-goals", "chat-first-sidebar-chat"]},
+        artifacts / "ax-reordered.json",
+    )
+    assert not ok and "keyboard focus order" in error
+    ok, error = module.assert_ax(
+        ctx,
+        {"voiceover_labels": {"chat-first-sidebar-goals": "unexpected label"}},
+        artifacts / "ax-label-mismatch.json",
+    )
+    assert not ok and "chat-first-sidebar-goals" in error
+    assert "unexpected label" not in error and "Goals" not in error
+
+    production_ctx = module.HarnessContext(
+        base_url=ctx.base_url,
+        flow_path=ctx.flow_path,
+        run_dir=ctx.run_dir,
+        steps_dir=ctx.steps_dir,
+        lane=ctx.lane,
+        log_path=ctx.log_path,
+        log_start=ctx.log_start,
+        bundle_id="com.omi.computer-macos",
+        process_match=None,
+    )
+    module.run_agent_swift = real_agent_swift
+    try:
+        module.run_agent_swift(production_ctx, ["snapshot", "-i", "--json"])
+    except RuntimeError as exc:
+        assert "named non-production" in str(exc)
+    else:
+        raise AssertionError("production bundle was not rejected")
+
+assert module.NAMED_NON_PRODUCTION_BUNDLE_PREFIX == "com.omi.omi-"
+PY
+
+python3 - "$MACOS_DIR/scripts/desktop-flow-lint.py" <<'PY'
+import importlib.machinery
+import importlib.util
+import sys
+from pathlib import Path
+
+path = sys.argv[1]
+loader = importlib.machinery.SourceFileLoader("desktop_flow_lint", path)
+spec = importlib.util.spec_from_loader(loader.name, loader)
+module = importlib.util.module_from_spec(spec)
+sys.modules[loader.name] = module
+loader.exec_module(module)
+
+assert "ax.activate" in module.TYPED_STEP_KEYS
+assert "chat_first_runtime_snapshot" in module.registered_actions()
+assert module.lint_ax_step(
+    Path("chat-first.yaml"),
+    {
+        "ax.activate": {"identifier": "chat-first-sidebar-goals"},
+        "ax.expect": {
+            "focus_order": ["chat-first-sidebar-chat", "chat-first-sidebar-goals"],
+            "voiceover_labels": {"chat-first-sidebar-chat": "Chat"},
+        },
+    },
+) == []
+errors = module.lint_ax_step(Path("chat-first.yaml"), {"ax.activate": {"identifier": "not a stable id"}})
+assert errors and "stable identifier" in errors[0]
+errors = module.lint_ax_step(
+    Path("chat-first.yaml"),
+    {"ax.expect": {"focus_order": ["chat-first-sidebar-chat", "chat-first-sidebar-chat"]}},
+)
+assert errors and "must not repeat" in errors[0]
 PY
 
 write_flow() {

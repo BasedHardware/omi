@@ -69,6 +69,9 @@ const CLEARED_BACKEND_TURN_CLAIMS_MIGRATION_VERSION = 24;
 const CONTEXT_SOURCE_SURFACE_SCOPE_MIGRATION_VERSION = 25;
 const BACKEND_RECONCILE_CURSOR_MIGRATION_VERSION = 26;
 const JOURNAL_PRODUCING_ATTEMPT_MIGRATION_VERSION = 27;
+const CHAT_FIRST_DEFERRAL_OUTBOX_MIGRATION_VERSION = 28;
+const CHAT_FIRST_MATERIALIZATION_RECEIPTS_MIGRATION_VERSION = 29;
+const CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_MIGRATION_VERSION = 30;
 
 const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
@@ -375,6 +378,9 @@ export function probeNodeSqliteRuntime(options: NodeSqliteProbeOptions = {}): vo
     runJournalGenerationBaseMigration(db, Date.now());
     runContextSourceSurfaceScopeMigration(db, Date.now());
     runJournalProducingAttemptMigration(db, Date.now());
+    runChatFirstDeferralOutboxMigration(db, Date.now());
+    runChatFirstMaterializationReceiptsMigration(db, Date.now());
+    runChatFirstColdStartSequenceReceiptsMigration(db, Date.now());
     runTransaction(db, () => {
       db?.prepare("INSERT INTO sessions (session_id, owner_id, status, surface_kind, default_adapter_id, created_at_ms, updated_at_ms, last_activity_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
         "ses_probe",
@@ -506,6 +512,15 @@ export class SqliteAgentStore implements AgentStore {
     }
     if (!this.hasMigration(JOURNAL_PRODUCING_ATTEMPT_MIGRATION_VERSION)) {
       runJournalProducingAttemptMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(CHAT_FIRST_DEFERRAL_OUTBOX_MIGRATION_VERSION)) {
+      runChatFirstDeferralOutboxMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(CHAT_FIRST_MATERIALIZATION_RECEIPTS_MIGRATION_VERSION)) {
+      runChatFirstMaterializationReceiptsMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_MIGRATION_VERSION)) {
+      runChatFirstColdStartSequenceReceiptsMigration(this.db, this.nowMs());
     }
   }
 
@@ -734,6 +749,17 @@ export class SqliteAgentStore implements AgentStore {
                last_error_code = 'daemon_restart', updated_at_ms = ?
            WHERE status = 'delivering'`,
         ).run(now, now);
+      }
+      const requeuedChatFirstDeferralIds = this.allRows(
+        "SELECT continuity_key FROM chat_first_deferral_outbox WHERE status = 'delivering'",
+      ).map((row) => text(row.continuity_key));
+      if (requeuedChatFirstDeferralIds.length > 0) {
+        this.db.prepare(
+          `UPDATE chat_first_deferral_outbox
+           SET status = 'retrying', available_at_ms = 0, lease_expires_at_ms = NULL,
+               last_error_code = 'daemon_restart', updated_at_ms = ?
+           WHERE status = 'delivering'`,
+        ).run(now);
       }
       this.db.prepare(
         `UPDATE backend_reconcile_state
@@ -3135,6 +3161,110 @@ function runJournalProducingAttemptMigration(
     `);
     db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
       JOURNAL_PRODUCING_ATTEMPT_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+/**
+ * T08 deferrals are a second, intentionally narrow durable transport. They
+ * are not conversation rows and must never be folded into backend_turn_outbox:
+ * delivery creates task-intelligence state, not transcript state.
+ */
+function runChatFirstDeferralOutboxMigration(
+  db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">,
+  appliedAtMs: number,
+): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE chat_first_deferral_outbox(
+        continuity_key TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        control_generation INTEGER NOT NULL CHECK (control_generation >= 0),
+        subject_kind TEXT NOT NULL CHECK (subject_kind IN ('task', 'goal', 'capture')),
+        subject_id TEXT NOT NULL,
+        question_json TEXT NOT NULL CHECK (json_valid(question_json)),
+        payload_hash TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'delivering', 'retrying', 'delivered', 'failed')),
+        attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+        delivery_generation INTEGER NOT NULL DEFAULT 0 CHECK (delivery_generation >= 0),
+        available_at_ms INTEGER NOT NULL,
+        lease_expires_at_ms INTEGER,
+        last_error_code TEXT CHECK (last_error_code IS NULL OR length(last_error_code) <= 128),
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        delivered_at_ms INTEGER
+      ) STRICT;
+      CREATE INDEX chat_first_deferral_outbox_drain_idx
+        ON chat_first_deferral_outbox(owner_id, status, available_at_ms ASC, created_at_ms ASC);
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      CHAT_FIRST_DEFERRAL_OUTBOX_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+/**
+ * Kernel materialization receipts are deliberately separate from both the
+ * transcript reconciliation outbox and question deferrals. The server only
+ * marks an intent delivered after this receipt is observed, while the local
+ * receipt survives a process crash after its assistant row committed.
+ */
+function runChatFirstMaterializationReceiptsMigration(
+  db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">,
+  appliedAtMs: number,
+): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE chat_first_materialization_receipts(
+        intent_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        control_generation INTEGER NOT NULL CHECK (control_generation >= 0),
+        receipt_id TEXT NOT NULL,
+        turn_id TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL
+      ) STRICT;
+      CREATE INDEX chat_first_materialization_receipts_owner_idx
+        ON chat_first_materialization_receipts(owner_id, conversation_id, control_generation, created_at_ms ASC);
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      CHAT_FIRST_MATERIALIZATION_RECEIPTS_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+/**
+ * Terminal sparse-sequence receipts are a local-journal outbox, not a second
+ * transcript state or client-side rollout flag. The server attaches the
+ * accepted receipt to the originating cold-start intent before it permits
+ * agent-tier judgment again.
+ */
+function runChatFirstColdStartSequenceReceiptsMigration(
+  db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">,
+  appliedAtMs: number,
+): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE chat_first_cold_start_sequence_receipts(
+        sequence_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        control_generation INTEGER NOT NULL CHECK (control_generation >= 0),
+        receipt_id TEXT NOT NULL,
+        terminal_state TEXT NOT NULL CHECK (terminal_state IN ('completed', 'abandoned')),
+        created_at_ms INTEGER NOT NULL
+      ) STRICT;
+      CREATE INDEX chat_first_cold_start_sequence_receipts_owner_idx
+        ON chat_first_cold_start_sequence_receipts(
+          owner_id, conversation_id, control_generation, created_at_ms ASC
+        );
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_MIGRATION_VERSION,
       appliedAtMs,
     );
   });

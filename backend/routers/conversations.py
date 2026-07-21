@@ -362,6 +362,10 @@ def get_conversations(
     offset: NonNegativeOffset = 0,
     statuses: Optional[str] = "processing,completed",
     include_discarded: bool = True,
+    sources: Optional[str] = Query(
+        None,
+        description="Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
+    ),
     start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
     end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
     folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
@@ -370,13 +374,23 @@ def get_conversations(
 ):
     if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
         raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
-    logger.info(f'get_conversations {uid} {limit} {offset} {statuses} {folder_id} {starred}')
+    logger.info(f'get_conversations {uid} {limit} {offset} {statuses} {sources} {folder_id} {starred}')
     # force convos statuses to processing, completed on the empty filter
     if len(statuses) == 0:
         statuses = "processing,completed"
+    source_list = [source.strip() for source in sources.split(',') if source.strip()] if sources else []
+    if len(source_list) > 1 and len([status.strip() for status in statuses.split(',') if status.strip()]) > 1:
+        # Firestore permits one disjunctive `in` predicate. The archive's
+        # supported `sources=omi&statuses=processing,completed` path uses an
+        # equality source filter; reject only the unsupported two-`in` shape.
+        raise HTTPException(
+            status_code=400,
+            detail='multiple sources cannot be combined with multiple statuses',
+        )
 
     status_filter = statuses.split(",") if len(statuses) > 0 else []
     _reject_oversized_filter(status_filter, "statuses")
+    _reject_oversized_filter(source_list, "sources")
 
     conversations = conversations_db.get_conversations_without_photos(
         uid,
@@ -384,6 +398,7 @@ def get_conversations(
         offset,
         include_discarded=include_discarded,
         statuses=status_filter,
+        sources=source_list,
         start_date=start_date,
         end_date=end_date,
         folder_id=folder_id,
@@ -402,7 +417,10 @@ def get_conversations_count(
     end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
     folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
-    sources: Optional[str] = Query(None, description="Comma-separated source filter (e.g. friend,omi)"),
+    sources: Optional[str] = Query(
+        None,
+        description="Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
+    ),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
@@ -411,9 +429,8 @@ def get_conversations_count(
     source_list = [s.strip() for s in sources.split(',') if s.strip()] if sources else []
     _reject_oversized_filter(status_list, "statuses")
     _reject_oversized_filter(source_list, "sources")
-    if status_list and source_list:
-        # Combining status+source `in` filters would need a composite index; keep them exclusive.
-        raise HTTPException(status_code=400, detail="statuses and sources filters cannot be combined")
+    if len(source_list) > 1 and len(status_list) > 1:
+        raise HTTPException(status_code=400, detail='multiple sources cannot be combined with multiple statuses')
     count = conversations_db.get_conversations_count(
         uid,
         include_discarded=include_discarded,
@@ -440,9 +457,21 @@ def get_conversations_count(
         "may include an empty transcript_segments array even though transcript data exists."
     ),
 )
-def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_conversation_by_id(
+    conversation_id: str,
+    source: Optional[str] = Query(None, description="Optional provenance constraint for a detail read"),
+    include_discarded: bool = Query(True),
+    uid: str = Depends(auth.get_current_user_uid),
+):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    if source is not None:
+        if source != 'omi':
+            raise HTTPException(
+                status_code=400, detail="Only source=omi is supported for provenance-constrained detail reads"
+            )
+        if conversation.get('source') != 'omi' or (not include_discarded and conversation.get('discarded', False)):
+            raise HTTPException(status_code=404, detail="Conversation not found")
     # Lazy processing: a desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
     if conversation.get('deferred'):

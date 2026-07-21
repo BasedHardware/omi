@@ -1,5 +1,6 @@
 import Combine
 import CoreGraphics
+import CryptoKit
 @preconcurrency import GRDB
 import OmiSupport
 import SwiftUI
@@ -324,6 +325,19 @@ enum ChatContentBlock: Identifiable {
   case thinking(id: String, text: String)
   /// Collapsible card showing a summary with expandable full text (used for AI profile/discovery)
   case discoveryCard(id: String, title: String, summary: String, fullText: String)
+  case questionCard(
+    id: String,
+    questionId: String,
+    text: String,
+    subjectKind: String,
+    subjectId: String,
+    options: [[String: Any]],
+    selectedOptionId: String? = nil
+  )
+  case taskCard(id: String, taskId: String)
+  case goalLink(id: String, goalId: String, summary: String)
+  case captureLink(id: String, conversationId: String, momentTimestampMs: Int?, summary: String)
+  case memoryLink(id: String, memoryId: String, summary: String)
   case agentSpawn(
     id: String,
     pillId: UUID?,
@@ -350,6 +364,11 @@ enum ChatContentBlock: Identifiable {
     case .toolCall(let id, _, _, _, _, _): return id
     case .thinking(let id, _): return id
     case .discoveryCard(let id, _, _, _): return id
+    case .questionCard(let id, _, _, _, _, _, _): return id
+    case .taskCard(let id, _): return id
+    case .goalLink(let id, _, _): return id
+    case .captureLink(let id, _, _, _): return id
+    case .memoryLink(let id, _, _): return id
     case .agentSpawn(let id, _, _, _, _, _, _): return id
     case .agentCompletion(let id, _, _, _, _, _, _, _): return id
     }
@@ -830,13 +849,17 @@ struct ChatMessage: Identifiable {
   /// Kernel journal lifecycle when this message was projected from a journal
   /// row. Failed turns get a light visual treatment so they don't look completed.
   var journalStatus: KernelJournalTurnStatus?
+  /// A journal-first continuation can reserve its assistant row before the
+  /// query begins. It stays out of the transcript until real output arrives.
+  var hidesEmptyStreamingPlaceholder: Bool
 
   init(
     id: String = UUID().uuidString, clientTurnId: String? = nil, text: String, createdAt: Date = Date(),
     sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false,
     citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil,
     notificationContext: String? = nil, notificationScreenshot: Data? = nil, attachments: [ChatAttachment] = [],
-    resources: [ChatResource] = [], turnOwner: ChatTurnOwner? = nil, journalStatus: KernelJournalTurnStatus? = nil
+    resources: [ChatResource] = [], turnOwner: ChatTurnOwner? = nil, journalStatus: KernelJournalTurnStatus? = nil,
+    hidesEmptyStreamingPlaceholder: Bool = false
   ) {
     self.id = id
     self.turnOwner = turnOwner
@@ -855,6 +878,62 @@ struct ChatMessage: Identifiable {
     self.attachments = attachments
     self.resources = resources
     self.journalStatus = journalStatus
+    self.hidesEmptyStreamingPlaceholder = hidesEmptyStreamingPlaceholder
+  }
+}
+
+/// IDs are the only caller-provided inputs for a suggestion selection. The
+/// kernel derives all visible reply content transactionally.
+struct ChatQuestionCardSelection: Sendable {
+  let questionID: String
+  let optionID: String
+}
+
+/// Receipt for resuming an already-admitted question reply after an app crash.
+struct ChatQuestionCardContinuation: Sendable {
+  let continuityKey: String
+  let preparedAnswer: String
+  let userTurnID: String
+  let assistantTurnID: String
+
+  init?(continuityKey: String, preparedAnswer: String, userTurnID: String, assistantTurnID: String) {
+    guard !continuityKey.isEmpty, !preparedAnswer.isEmpty, !userTurnID.isEmpty, !assistantTurnID.isEmpty else {
+      return nil
+    }
+    self.continuityKey = continuityKey
+    self.preparedAnswer = preparedAnswer
+    self.userTurnID = userTurnID
+    self.assistantTurnID = assistantTurnID
+  }
+
+  init?(receipt: AgentRuntimeProcess.QuestionInteractionReply) {
+    self.init(
+      continuityKey: receipt.continuityKey,
+      preparedAnswer: receipt.userTurn.content,
+      userTurnID: receipt.userTurn.turnId,
+      assistantTurnID: receipt.assistantTurn.turnId
+    )
+  }
+
+  static func tailResumeCandidate(from messages: [ChatMessage]) -> ChatQuestionCardContinuation? {
+    guard let assistant = messages.last,
+      assistant.sender == .ai,
+      assistant.isStreaming,
+      assistant.hidesEmptyStreamingPlaceholder,
+      assistant.text.isEmpty,
+      assistant.contentBlocks.isEmpty,
+      let continuityKey = assistant.clientTurnId,
+      continuityKey.hasPrefix("qri_"),
+      messages.count >= 2
+    else { return nil }
+    let user = messages[messages.count - 2]
+    guard user.sender == .user, user.clientTurnId == continuityKey else { return nil }
+    return ChatQuestionCardContinuation(
+      continuityKey: continuityKey,
+      preparedAnswer: user.text,
+      userTurnID: user.id,
+      assistantTurnID: assistant.id
+    )
   }
 }
 
@@ -891,6 +970,14 @@ extension ChatContentBlock {
     case .discoveryCard(_, let title, _, let fullText):
       let trimmed = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
       return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
+    case .questionCard(_, _, let text, _, _, _, _):
+      let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+      return trimmed.isEmpty ? nil : trimmed
+    case .taskCard:
+      return nil
+    case .goalLink(_, _, let summary), .captureLink(_, _, _, let summary), .memoryLink(_, _, let summary):
+      let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+      return trimmed.isEmpty ? nil : trimmed
     case .agentSpawn(_, _, _, _, let title, let objective, _):
       let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
       return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
@@ -1072,6 +1159,9 @@ class ChatProvider: ObservableObject {
   }
   @Published var isLoading = false
   @Published var isLoadingSessions = true  // Start true since we load sessions on init
+  /// Root-only prompt materialization waits for the current main-chat journal
+  /// replay, never for an unrelated legacy session load.
+  @Published private(set) var isMainChatJournalFirstPageReady = false
   @Published var isSending = false
   @Published var isStopping = false
   @Published private(set) var activeTurnOwner: ChatTurnOwner?
@@ -1216,6 +1306,10 @@ class ChatProvider: ObservableObject {
   private var journalOwnerByMessageID: [String: String] = [:]
   private var journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
   private var agentBridgeStarted = false
+  /// The root shell supplies one server-authoritative sample before this
+  /// provider resolves Main Chat. This is process-local only: a different
+  /// owner, a failed sample, and every non-main surface receive no extension.
+  private var chatFirstMainChatProjectionGate = ChatFirstMainChatProjectionGate()
   private let bridgeReadinessSingleFlight =
     AgentRuntimeStartupSingleFlight<RuntimeOwnerAuthorizationSnapshot, Bool>()
   /// Tracks the harness mode the bridge is actually running (NOT the @AppStorage preference).
@@ -1570,6 +1664,16 @@ class ChatProvider: ObservableObject {
     _ = await ensureBridgeStarted()
   }
 
+  /// Configures the immutable main-Chat capability handoff at root-shell
+  /// construction. A nil sample is explicit capability-off and is never
+  /// persisted or inferred from local state.
+  @discardableResult
+  func configureChatFirstMainChatCapability(
+    _ sample: ChatFirstCapabilityProjection?
+  ) -> Bool {
+    chatFirstMainChatProjectionGate.configure(sample: sample, ownerID: runtimeOwnerId)
+  }
+
   /// Drop a cached agent surface so the next query recreates it with fresh prompt context.
   func invalidateAgentSurface(surface: AgentSurfaceReference) async {
     guard agentBridgeStarted else { return }
@@ -1661,9 +1765,16 @@ class ChatProvider: ObservableObject {
       modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
       workingDirectory: effectiveAgentWorkingDirectory()
     )
-    let warmSurfaces: [AgentSurfaceReference] = [.mainChat(chatId: nil), .floatingChat()]
+    // Onboarding can start the shared runtime before the root shell has
+    // sampled workflow control. Do not resolve Main Chat in that interval:
+    // its first kernel resolution must carry the root's true or explicit
+    // capability-off sample. Floating remains capability-off.
+    var warmSurfaces: [AgentSurfaceReference] = [.floatingChat()]
+    if chatFirstMainChatProjectionGate.isConfigured(for: runtimeOwnerId) {
+      warmSurfaces.insert(.mainChat(chatId: nil), at: 0)
+    }
     for surface in warmSurfaces {
-      let session = try await resolvedAgentClient().resolveSurfaceSession(surface)
+      let session = try await resolveAgentSurfaceSession(surface)
       await resolvedAgentClient().warmupSession(session)
     }
     agentBridgeStarted = true
@@ -1768,7 +1879,7 @@ class ChatProvider: ObservableObject {
       throw BridgeError.agentError("Unknown AI runtime mode: \(requestedHarness)")
     }
     let usesNativeModelChoice = requestedHarness == "hermes" || requestedHarness == "openclaw"
-    return try await resolvedAgentClient().resolveSurfaceSession(
+    return try await resolveAgentSurfaceSession(
       surface,
       creationProfile: AgentSessionCreationProfile(
         adapterId: requestedAdapter,
@@ -1777,6 +1888,28 @@ class ChatProvider: ObservableObject {
         workingDirectory: effectiveAgentWorkingDirectory()
       )
     )
+  }
+
+  /// The only ChatProvider path that resolves a runtime surface. It carries
+  /// the root's immutable projection to the local kernel for Main Chat and
+  /// deliberately omits it for floating, onboarding, task, and all other
+  /// surfaces. A failed/off/owner-mismatched sample maps to the base tools.
+  private func resolveAgentSurfaceSession(
+    _ surface: AgentSurfaceReference,
+    creationProfile: AgentSessionCreationProfile? = nil
+  ) async throws -> AgentSurfaceSession {
+    let ownerID = runtimeOwnerId
+    let projection = chatFirstMainChatProjectionGate.capability(
+      for: surface,
+      ownerID: ownerID
+    )
+    let session = try await resolvedAgentClient().resolveSurfaceSession(
+      surface,
+      creationProfile: creationProfile,
+      chatFirstCapability: projection
+    )
+    chatFirstMainChatProjectionGate.markResolved(surface: surface, ownerID: ownerID)
+    return session
   }
 
   private func prepareKernelQueryContext(
@@ -1806,7 +1939,10 @@ class ChatProvider: ObservableObject {
     )
     let workspacePath = session.profile.workingDirectory
     let memoryText = formatMemoriesSection()
-    let goalText = formatGoalSection()
+    // Canonical goals are retrieved through the capability-scoped tool. An
+    // enabled Chat-first session must not quietly inject legacy GoalStorage
+    // rows into the model context.
+    let goalText = isChatFirstEnabled(for: surface) ? "" : formatGoalSection()
     let taskText = formatTasksSection()
     let identityText = formatAIProfileSection()
     var surfacePayload: [String: Any] = [
@@ -2276,6 +2412,7 @@ class ChatProvider: ObservableObject {
     currentSession = session
     isInDefaultChat = false
     isLoading = true
+    isMainChatJournalFirstPageReady = false
     errorMessage = nil
     hasMoreMessages = false
 
@@ -2292,6 +2429,7 @@ class ChatProvider: ObservableObject {
     messagesPaginationOffset = messages.count
     hasMoreMessages = false
     log("ChatProvider loaded \(messages.count) kernel journal messages for session \(session.id)")
+    isMainChatJournalFirstPageReady = true
 
     isLoading = false
   }
@@ -2429,6 +2567,16 @@ class ChatProvider: ObservableObject {
     } catch {
       logError("Failed to load goals for chat context", error: error)
     }
+  }
+
+  private var isChatFirstMainChatEnabled: Bool {
+    guard let ownerID = runtimeOwnerId else { return false }
+    return chatFirstMainChatProjectionGate.capability(for: mainChatSurfaceReference(), ownerID: ownerID) != nil
+  }
+
+  private func isChatFirstEnabled(for surface: AgentSurfaceReference) -> Bool {
+    guard let ownerID = runtimeOwnerId else { return false }
+    return chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) != nil
   }
 
   /// Formats goals into a prompt section
@@ -2753,7 +2901,9 @@ class ChatProvider: ObservableObject {
   /// Warm local prompt context used by first send / bridge startup.
   func warmupPromptContext() async {
     await refreshMemoriesForPrompt()
-    await loadGoalsIfNeeded()
+    if !isChatFirstMainChatEnabled {
+      await loadGoalsIfNeeded()
+    }
     await loadTasksIfNeeded()
     await loadAIProfileIfNeeded()
     await loadSchemaIfNeeded()
@@ -2986,6 +3136,7 @@ class ChatProvider: ObservableObject {
   /// by the bounded, checkpointed legacy importer on first migration.
   func loadDefaultChatMessages() async {
     isLoading = true
+    isMainChatJournalFirstPageReady = false
     errorMessage = nil
     hasMoreMessages = false
 
@@ -3004,6 +3155,7 @@ class ChatProvider: ObservableObject {
     hasMoreMessages = false
     sessionsLoadError = nil
     log("ChatProvider loaded \(messages.count) default kernel journal messages")
+    isMainChatJournalFirstPageReady = true
     isLoading = false
   }
 
@@ -3357,6 +3509,32 @@ class ChatProvider: ObservableObject {
       if $0.createdAt == $1.createdAt { return $0.id < $1.id }
       return $0.createdAt < $1.createdAt
     }
+    resumeTailQuestionContinuationIfNeeded()
+  }
+
+  /// Resumes a kernel-admitted suggestion reply only when it remains the
+  /// current final chat event and the account is still in the gated cohort.
+  private func resumeTailQuestionContinuationIfNeeded() {
+    guard !isSending,
+      let ownerID = runtimeOwnerId,
+      let continuation = ChatQuestionCardContinuation.tailResumeCandidate(from: messages)
+    else { return }
+    let surface = mainChatSurfaceReference()
+    guard chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) != nil else { return }
+    Task { @MainActor [weak self] in
+      guard let self,
+        !self.isSending,
+        self.messages.last?.id == continuation.assistantTurnID,
+        self.chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) != nil
+      else { return }
+      _ = await self.sendMessage(
+        "",
+        surfaceRef: surface,
+        turnOwner: .mainChat,
+        clientTurnId: continuation.continuityKey,
+        questionContinuation: continuation
+      )
+    }
   }
 
   func resetJournalProjection(surface: AgentSurfaceReference) {
@@ -3641,6 +3819,245 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Send Message
 
+  /// Question-card controls are only live on a completed assistant turn at
+  /// the conversation tail. A later user response retires its choices.
+  func isQuestionCardActionable(
+    messageID: String,
+    questionID: String,
+    selectedOptionID: String?
+  ) -> Bool {
+    guard selectedOptionID == nil, !isSending, let ownerID = runtimeOwnerId else { return false }
+    let surface = mainChatSurfaceReference()
+    guard chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) != nil,
+      let tail = messages.last,
+      tail.id == messageID,
+      tail.sender == .ai,
+      tail.journalStatus == .completed,
+      !tail.isStreaming
+    else { return false }
+    return tail.contentBlocks.contains { block in
+      guard case .questionCard(_, let candidateID, _, _, _, _, let candidateSelection) = block else {
+        return false
+      }
+      return candidateID == questionID && candidateSelection == nil
+    }
+  }
+
+  /// The click is immediately sent through the normal single-send lock; the
+  /// kernel owns validation and derives the persisted user reply.
+  func selectQuestionCardOption(questionID: String, optionID: String) async {
+    let normalizedQuestionID = questionID.trimmingCharacters(in: .whitespacesAndNewlines)
+    let normalizedOptionID = optionID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalizedQuestionID.isEmpty, !normalizedOptionID.isEmpty, let ownerID = runtimeOwnerId else { return }
+    let surface = mainChatSurfaceReference()
+    guard chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) != nil else { return }
+    _ = await sendMessage(
+      "",
+      surfaceRef: surface,
+      turnOwner: .mainChat,
+      clientTurnId: Self.questionInteractionContinuityKey(
+        questionID: normalizedQuestionID,
+        optionID: normalizedOptionID
+      ),
+      questionInteraction: ChatQuestionCardSelection(
+        questionID: normalizedQuestionID,
+        optionID: normalizedOptionID
+      )
+    )
+  }
+
+  /// Root-only prompt materialization is inert until this main-chat surface
+  /// has a current cohort capability projection.
+  func chatFirstMaterializationContext() -> ChatFirstMaterializationContext? {
+    guard let ownerID = runtimeOwnerId else { return nil }
+    let surface = mainChatSurfaceReference()
+    guard let capability = chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) else {
+      return nil
+    }
+    return ChatFirstMaterializationContext(
+      ownerID: ownerID,
+      controlGeneration: capability.controlGeneration
+    )
+  }
+
+  func pendingChatFirstMaterializationReceipts() async throws -> ChatFirstPromptReceiptBatch {
+    guard let session = try await chatFirstMaterializationSession() else { return .empty }
+    return try await resolvedAgentClient().listChatFirstMaterializationReceipts(
+      surface: session.surface,
+      ownerID: session.ownerID,
+      sessionID: session.agentSession.sessionId,
+      controlGeneration: session.capability.controlGeneration
+    )
+  }
+
+  @discardableResult
+  func acknowledgeChatFirstMaterializationReceipts(
+    _ receipts: ChatFirstPromptReceiptBatch
+  ) async throws -> Int {
+    guard !receipts.isEmpty, let session = try await chatFirstMaterializationSession() else { return 0 }
+    return try await resolvedAgentClient().acknowledgeChatFirstMaterializationReceipts(
+      surface: session.surface,
+      ownerID: session.ownerID,
+      sessionID: session.agentSession.sessionId,
+      controlGeneration: session.capability.controlGeneration,
+      receipts: receipts
+    )
+  }
+
+  /// The local kernel owns every replay-visible effect; this is only its
+  /// capability-fenced bridge adapter.
+  @discardableResult
+  func materializeChatFirstIntents(
+    _ intents: [ChatFirstPromptIntent]
+  ) async throws -> AgentRuntimeProcess.ChatFirstIntentsMaterialization? {
+    guard let session = try await chatFirstMaterializationSession(),
+      !intents.isEmpty,
+      intents.count <= 8,
+      intents.allSatisfy({ $0.accountGeneration == session.capability.controlGeneration })
+    else { return nil }
+    let encodedIntents = try JSONEncoder().encode(intents)
+    guard let intentsJSON = String(data: encodedIntents, encoding: .utf8) else {
+      throw APIError.invalidResponse
+    }
+    let result = try await resolvedAgentClient().materializeChatFirstIntents(
+      surface: session.surface,
+      ownerID: session.ownerID,
+      sessionID: session.agentSession.sessionId,
+      controlGeneration: session.capability.controlGeneration,
+      intentsJSON: intentsJSON
+    )
+    if result.accepted {
+      await kernelTurnProjection.refresh(surface: session.surface)
+    }
+    return result
+  }
+
+  /// Local/offline E2E probe for the ordinary authorized block-rendering path.
+  /// It reserves canonical journal rows before invoking the fixture, so a
+  /// successful probe proves the real executor and projection paths.
+  func runChatFirstFixtureTaskCardProbe() async -> [String: String] {
+    let stage = ProcessInfo.processInfo.environment["OMI_ENV_STAGE"]
+    let isLocalOrOfflineStage = stage == "local" || stage == "offline"
+    guard AppBuild.allowsLocalAutomation,
+      isLocalOrOfflineStage,
+      !isSending,
+      let session = try? await chatFirstMaterializationSession()
+    else {
+      return [
+        "executor_invoked": "false",
+        "validated": "false",
+        "journal_block_rendered": "false",
+      ]
+    }
+
+    await kernelTurnProjection.refresh(surface: session.surface)
+    let fixtureTaskID = "chat-first-e2e-task-v1"
+    let beforeCount = messages.reduce(into: 0) { count, message in
+      count += message.contentBlocks.reduce(into: 0) { blockCount, block in
+        if case .taskCard(_, let taskID) = block, taskID == fixtureTaskID {
+          blockCount += 1
+        }
+      }
+    }
+    let continuityKey = "chat-first-e2e-executor-\(UUID().uuidString.lowercased())"
+    let ids = Self.messageIds(forAttemptId: continuityKey)
+    let userMessage = ChatMessage(
+      id: ids.user,
+      clientTurnId: continuityKey,
+      text: "Render the Chat-first fixture task card.",
+      sender: .user,
+      turnOwner: .mainChat
+    )
+    let assistantMessage = ChatMessage(
+      id: ids.assistant,
+      clientTurnId: continuityKey,
+      text: "",
+      sender: .ai,
+      isStreaming: true,
+      turnOwner: .mainChat,
+      hidesEmptyStreamingPlaceholder: true
+    )
+    guard
+      await recordStreamingJournalExchange(
+        surface: session.surface,
+        ownerID: session.ownerID,
+        continuityKey: continuityKey,
+        userMessage: userMessage,
+        assistantMessage: assistantMessage,
+        origin: journalOrigin(for: session.surface),
+        appId: overrideAppId ?? selectedAppId,
+        sessionId: isInDefaultChat ? nil : currentSessionId,
+        messageSource: journalOrigin(for: session.surface)
+      )
+    else {
+      return [
+        "executor_invoked": "false",
+        "validated": "false",
+        "journal_block_rendered": "false",
+      ]
+    }
+
+    do {
+      let receipt = try await resolvedAgentClient().invokeChatFirstFixtureTaskCard(
+        ownerID: session.ownerID,
+        sessionID: session.agentSession.sessionId,
+        producingTurnID: ids.assistant,
+        controlGeneration: session.capability.controlGeneration
+      )
+      await kernelTurnProjection.refresh(surface: session.surface)
+      let afterCount = messages.reduce(into: 0) { count, message in
+        count += message.contentBlocks.reduce(into: 0) { blockCount, block in
+          if case .taskCard(_, let taskID) = block, taskID == fixtureTaskID {
+            blockCount += 1
+          }
+        }
+      }
+      let rendered = receipt.journalBlockRendered && afterCount == beforeCount + 1
+      return [
+        "executor_invoked": receipt.executorInvoked ? "true" : "false",
+        "validated": receipt.validated ? "true" : "false",
+        "journal_block_rendered": rendered ? "true" : "false",
+      ]
+    } catch {
+      _ = await finishJournalUpdate(
+        messageId: ids.assistant,
+        status: .failed,
+        surface: session.surface,
+        ownerID: session.ownerID
+      )
+      return [
+        "executor_invoked": "false",
+        "validated": "false",
+        "journal_block_rendered": "false",
+      ]
+    }
+  }
+
+  private struct ChatFirstMaterializationSession {
+    let ownerID: String
+    let capability: ChatFirstCapabilityProjection
+    let surface: AgentSurfaceReference
+    let agentSession: AgentSurfaceSession
+  }
+
+  private func chatFirstMaterializationSession() async throws -> ChatFirstMaterializationSession? {
+    guard let ownerID = runtimeOwnerId else { return nil }
+    let surface = mainChatSurfaceReference()
+    guard let capability = chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) else {
+      return nil
+    }
+    let agentSession = try await resolveAgentSurfaceSession(surface)
+    guard runtimeOwnerId == ownerID,
+      chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) == capability
+    else { return nil }
+    return ChatFirstMaterializationSession(
+      ownerID: ownerID,
+      capability: capability,
+      surface: surface,
+      agentSession: agentSession
+    )
+  }
+
   /// Send a message and get AI response via Claude Agent SDK bridge
   /// Persists both user and AI messages to backend
   /// - Parameters:
@@ -3657,11 +4074,14 @@ class ChatProvider: ObservableObject {
     imageData: Data? = nil,
     turnOwner: ChatTurnOwner = .mainChat,
     clientTurnId: String = UUID().uuidString,
+    questionInteraction: ChatQuestionCardSelection? = nil,
+    questionContinuation: ChatQuestionCardContinuation? = nil,
     onAccepted: (@MainActor () -> Void)? = nil,
     onJournalFinalized: (@MainActor (_ accepted: Bool) -> Void)? = nil
   ) async -> String? {
     let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedText.isEmpty else { return nil }
+    guard !trimmedText.isEmpty || questionInteraction != nil || questionContinuation != nil else { return nil }
+    var effectivePrompt = trimmedText
     guard let capturedRuntimeOwnerID = runtimeOwnerId else {
       errorMessage = "Sign in again to continue."
       return nil
@@ -3753,6 +4173,7 @@ class ChatProvider: ObservableObject {
         telemetryAttempt.finish(stopReason: turnLifecycle.stopReason ?? stopReason(for: sendGen))
         clearChatTelemetryState(for: sendGen)
         releaseSendLock(sendGeneration: sendGen)
+
         return nil
       }
       guard let sid = currentSessionId else {
@@ -3997,6 +4418,61 @@ class ChatProvider: ObservableObject {
       usageLimiter.recordQuery()
     }
 
+    var preAdmittedQuestionReply = questionContinuation
+    if let questionContinuation {
+      guard questionContinuation.continuityKey == turnAttemptId,
+        questionContinuation.userTurnID == Self.messageIds(forAttemptId: turnAttemptId).user,
+        questionContinuation.assistantTurnID == Self.messageIds(forAttemptId: turnAttemptId).assistant
+      else {
+        errorMessage = "That suggestion is no longer available."
+        telemetryAttempt.fail(errorClass: .sessionSetup)
+        clearChatTelemetryState(for: sendGen)
+        releaseSendLock(sendGeneration: sendGen)
+        return nil
+      }
+      effectivePrompt = questionContinuation.preparedAnswer
+    }
+    if let questionInteraction {
+      guard resolvedSurface.surfaceKind == "main_chat",
+        let capability = chatFirstMainChatProjectionGate.capability(
+          for: resolvedSurface,
+          ownerID: capturedRuntimeOwnerID
+        )
+      else {
+        errorMessage = "That suggestion is no longer available."
+        telemetryAttempt.fail(errorClass: .sessionSetup)
+        clearChatTelemetryState(for: sendGen)
+        releaseSendLock(sendGeneration: sendGen)
+        return nil
+      }
+      do {
+        let receipt = try await resolvedAgentClient().recordQuestionInteractionReply(
+          surface: resolvedSurface,
+          ownerID: capturedRuntimeOwnerID,
+          sessionID: pinnedSession.sessionId,
+          questionID: questionInteraction.questionID,
+          optionID: questionInteraction.optionID,
+          controlGeneration: capability.controlGeneration
+        )
+        guard receipt.continuityKey == turnAttemptId,
+          receipt.userTurn.turnId == Self.messageIds(forAttemptId: turnAttemptId).user,
+          receipt.assistantTurn.turnId == Self.messageIds(forAttemptId: turnAttemptId).assistant,
+          let continuation = ChatQuestionCardContinuation(receipt: receipt)
+        else {
+          throw BridgeError.agentError("Question interaction continuity mismatch")
+        }
+        effectivePrompt = continuation.preparedAnswer
+        preAdmittedQuestionReply = continuation
+        await kernelTurnProjection.refresh(surface: resolvedSurface)
+      } catch {
+        errorMessage = "That suggestion is no longer available."
+        telemetryAttempt.fail(errorClass: .sessionSetup)
+        clearChatTelemetryState(for: sendGen)
+        releaseSendLock(sendGeneration: sendGen)
+        return nil
+      }
+    }
+
     // Attempt-derived IDs are the canonical journal identities. Backend
     // delivery preserves them through the outbox instead of minting a
     // second writer identity.
@@ -4009,7 +4485,7 @@ class ChatProvider: ObservableObject {
     let userMessage = ChatMessage(
       id: userMessageId,
       clientTurnId: turnAttemptId,
-      text: trimmedText,
+      text: effectivePrompt,
       sender: .user,
       attachments: attachmentsForMessage,
       turnOwner: turnOwner
@@ -4025,17 +4501,23 @@ class ChatProvider: ObservableObject {
     )
     // Both visible halves enter the journal under one SQLite transaction.
     // If either identity/payload is rejected, neither row can project.
-    let recordedExchange = await recordStreamingJournalExchange(
-      surface: resolvedSurface,
-      ownerID: capturedRuntimeOwnerID,
-      continuityKey: turnAttemptId,
-      userMessage: userMessage,
-      assistantMessage: aiMessage,
-      origin: journalOrigin,
-      appId: capturedAppId,
-      sessionId: capturedSessionId,
-      messageSource: journalOrigin
-    )
+    let recordedExchange: Bool
+    if preAdmittedQuestionReply != nil {
+      // The runtime already wrote the exact pair transactionally.
+      recordedExchange = true
+    } else {
+      recordedExchange = await recordStreamingJournalExchange(
+        surface: resolvedSurface,
+        ownerID: capturedRuntimeOwnerID,
+        continuityKey: turnAttemptId,
+        userMessage: userMessage,
+        assistantMessage: aiMessage,
+        origin: journalOrigin,
+        appId: capturedAppId,
+        sessionId: capturedSessionId,
+        messageSource: journalOrigin
+      )
+    }
     if recordedExchange {
       journalOwnerByMessageID[aiMessageId] = capturedRuntimeOwnerID
       journalTerminalTargets.register(
@@ -4078,7 +4560,7 @@ class ChatProvider: ObservableObject {
     // Track onboarding user-message shape without content.
     if isOnboarding {
       AnalyticsManager.shared.onboardingChatMessageDetailed(
-        role: "user", text: trimmedText, step: "chat"
+        role: "user", text: effectivePrompt, step: "chat"
       )
     }
 
@@ -4113,7 +4595,7 @@ class ChatProvider: ObservableObject {
       var screenPayload: [String: Any]?
       if effectiveImageData == nil,
         let screenContextReason = ScreenContextAutoIncludePolicy.reason(
-          userText: trimmedText,
+          userText: effectivePrompt,
           systemPromptStyle: systemPromptStyle,
           turnOwner: turnOwner,
           onboardingActive: !UserDefaults.standard.bool(forKey: DefaultsKey.hasCompletedOnboarding)
@@ -4434,7 +4916,7 @@ class ChatProvider: ObservableObject {
       let queryResult: AgentClient.QueryResult
       do {
         queryResult = try await resolvedAgentClient().query(
-          prompt: trimmedText,
+          prompt: effectivePrompt,
           session: kernelContext.session,
           surface: resolvedSurface,
           mode: chatMode.rawValue,
@@ -4727,7 +5209,7 @@ class ChatProvider: ObservableObject {
       }
 
       // Fire-and-forget: check if user's message mentions goal progress
-      let chatText = trimmedText
+      let chatText = effectivePrompt
       Task.detached(priority: .background) {
         await GoalsAIService.shared.extractProgressFromAllGoals(text: chatText)
       }
@@ -4922,7 +5404,7 @@ class ChatProvider: ObservableObject {
         }
         AnalyticsManager.shared.onboardingChatMessageDetailed(
           role: onboardingRole,
-          text: trimmedText,
+          text: effectivePrompt,
           step: "chat",
           error: onboardingRole == "error" ? String(describing: error) : nil
         )
@@ -4971,7 +5453,7 @@ class ChatProvider: ObservableObject {
         let card = ChatErrorState.from(bridgeError)
       {
         currentError = card
-        lastFailedPrompt = trimmedText
+        lastFailedPrompt = effectivePrompt
         errorMessage = nil
       } else {
         errorMessage = error.localizedDescription
@@ -5028,7 +5510,28 @@ class ChatProvider: ObservableObject {
     user: String,
     assistant: String
   ) {
-    (user: attemptId, assistant: "\(attemptId)-assistant")
+    if attemptId.hasPrefix("qri_") {
+      return (
+        user: questionInteractionTurnID(continuityKey: attemptId, role: "user"),
+        assistant: questionInteractionTurnID(continuityKey: attemptId, role: "assistant")
+      )
+    }
+    return (user: attemptId, assistant: "\(attemptId)-assistant")
+  }
+
+  nonisolated static func questionInteractionContinuityKey(questionID: String, optionID: String) -> String {
+    "qri_\(sha256Prefix("\(questionID)\u{0}\(optionID)", byteCount: 16))"
+  }
+
+  nonisolated private static func questionInteractionTurnID(continuityKey: String, role: String) -> String {
+    "turn_\(sha256Prefix("\(continuityKey)\u{0}\(role)", byteCount: 8))"
+  }
+
+  nonisolated private static func sha256Prefix(_ value: String, byteCount: Int) -> String {
+    SHA256.hash(data: Data(value.utf8))
+      .prefix(byteCount)
+      .map { String(format: "%02x", $0) }
+      .joined()
   }
 
   @discardableResult
@@ -5499,8 +6002,14 @@ class ChatProvider: ObservableObject {
 
   private func localFileResources(fromToolName name: String, texts: [String]) -> [ChatResource] {
     let normalizedName = Self.normalizedToolNameHead(name)
-    guard ["write", "edit", "multiedit"].contains(normalizedName) else { return [] }
-    return localFileURLs(from: texts.joined(separator: "\n")).map { url in
+    // Rewind evidence is appended through its capability-bound journal
+    // operation; treating the returned cache path as a generic artifact would
+    // create a second, unbound resource on the assistant turn.
+    let supportedFileTools = ["write", "edit", "multiedit", "capture_screen"]
+    guard supportedFileTools.contains(normalizedName) else { return [] }
+    let urls = localFileURLs(from: texts.joined(separator: "\n"))
+    let displayURLs = normalizedName == "capture_screen" ? Array(urls.prefix(1)) : urls
+    return displayURLs.map { url in
       let mimeType = mimeType(forLocalFile: url)
       return ChatResource.localGeneratedFile(
         id: "generated-file:\(url.path)",

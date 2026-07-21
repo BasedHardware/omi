@@ -1,7 +1,7 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": 1742,
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1641
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1614
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": "Task candidate context now carries only backend action-item IDs, while local SQLite/staged evidence remains id-less so the model cannot target it for a backend mutation.",

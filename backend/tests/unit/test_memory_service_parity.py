@@ -190,7 +190,7 @@ class TestResolveMemorySystem:
 
 
 class TestMemoryServiceParity:
-    def test_canonical_write_decision_malformed_rollout_fails_closed_for_code_cohort(self, monkeypatch):
+    def test_canonical_write_decision_ignores_malformed_legacy_rollout_env_for_code_cohort(self, monkeypatch):
         from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
         from utils.memory.canonical_activation import canonical_write_decision
 
@@ -202,7 +202,7 @@ class TestMemoryServiceParity:
         assert decision.enabled is False
         assert decision.memory_system == MemorySystem.CANONICAL
         assert decision.fail_closed is True
-        assert decision.reason == "invalid_rollout_config"
+        assert decision.reason == "missing_control_doc"
 
     def test_canonical_write_decision_missing_db_fails_closed_for_code_cohort(self, monkeypatch):
         from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort

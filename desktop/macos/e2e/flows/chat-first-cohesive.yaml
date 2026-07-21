@@ -1,0 +1,206 @@
+version: 2
+name: chat-first-cohesive
+tier: manual
+description: "Manual local/offline fixture flow for the mounted Chat-first goal-link, focus, task, capture, and ordinary Chat response path."
+app: non-prod
+# Setup is server-owned and must precede this flow:
+# PROVIDER_MODE=offline make dev-up
+# make seed-memory-scenario SCENARIO=happy_path
+# make chat-first-e2e-fixture CHAT_FIRST_E2E_ACTION=prepare CHAT_FIRST_E2E_CASE=enabled
+# make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e DESKTOP_USER=omi-local-emulator-chat-first-enabled-v1
+# Run with --lane ui --bundle-id com.omi.omi-chat-first-e2e for AX steps.
+covers:
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  # S1a exercises the real Node -> authorized Swift tool dispatch, backend
+  # validation, and journal append; it is not a local card-insertion mapping.
+  - desktop/macos/agent/src/protocol.ts
+  - desktop/macos/agent/src/runtime/kernel-core.ts
+  - desktop/macos/agent/src/index.ts
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentBridge+ChatFirst.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentClient.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatFirstBlockToolExecutor.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatFirstBlockValidation.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  # S8 drives the Tasks-page closure, including its bounded attempt/terminal telemetry.
+  - desktop/macos/Desktop/Sources/Chat/ChatFirstAnalytics.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstAutomationRuntime.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/Blocks/ChatFirstContentBlockViews.swift
+  # S2/S3 prove the enabled main Chat rendered and operated the rich-block context.
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/Blocks/ChatFirstRichBlockContext.swift
+  # S2 and S12 activate the real task card's Omi-capture badge. The local
+  # fixture uses only transcription:omi provenance, so the policy's
+  # fail-closed branch is part of the mounted path rather than a paper cover.
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstCaptureLinkPolicy.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstGoalsPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstTasksPage.swift
+  # S3-S6 load canonical goals, acknowledge focus, and mutate focused-goal state.
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CanonicalGoalsStore.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CaptureArchivePage.swift
+  # S12/S13 load the Omi-only archive, select detail, and prepare its playback through typed audio APIs.
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CaptureArchiveRepository.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CapturePlayback.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CapturePlaybackAPI.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstShell.swift
+preconditions:
+  - automation_bridge_ready
+  - named_non_production_bundle_ui_lane
+  - provider_mode_offline
+  - chat_first_e2e_fixture_case_enabled_prepared_by_make_helper
+  - desktop_user_omi_chat_first_e2e_enabled
+  - chat_first_daily_opener_materialized_in_mounted_main_chat
+
+steps:
+  - id: S1
+    name: Navigate to the mounted Chat surface that owns the real rich goal link
+    bridge.navigate:
+      target: chat
+      activateApp: true
+      settleMs: 750
+
+  - id: S1a
+    name: Dispatch the fixture task card through the real authorized Chat-first block executor
+    bridge.action:
+      name: chat_first_render_fixture_task_card
+    expect:
+      result.detail.executor_invoked: "true"
+      result.detail.validated: "true"
+      result.detail.journal_block_rendered: "true"
+
+  - id: S1b
+    name: Verify the executor-rendered fixture task card is visible through Accessibility
+    ax.expect:
+      identifiers_visible:
+        - chat-first-task-chat-first-e2e-task-v1-toggle
+
+  - id: S2
+    name: Verify the materialized rich Goal link and Omi-capture task badge are exposed through Accessibility
+    ax.expect:
+      identifiers_visible:
+        - chat-first-goal-chat-first-e2e-goal-v1-open
+        - chat-first-task-chat-first-e2e-task-v1-capture-chat-first-e2e-capture-v1
+
+  - id: S3
+    name: Open the Goal through its real mounted rich-link control
+    ax.activate:
+      identifier: chat-first-goal-chat-first-e2e-goal-v1-open
+    timeout_seconds: 10
+    wait:
+      state.shellVariant: chat_first
+      state.visibleChatFirstRoute: goals
+      state.isFocusedEntityAcknowledged: true
+
+  - id: S4
+    name: Confirm the Goal destination acknowledged the focused entity
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.route: goals
+      result.detail.route_visible: "true"
+      result.detail.focus_acknowledged: "true"
+      result.detail.focused_goal_available: "true"
+
+  - id: S5
+    name: Set the server-seeded alternate active Goal as focus through the mounted Goals page
+    bridge.action:
+      name: chat_first_set_focus
+    expect:
+      result.detail.focus_updated: "true"
+
+  - id: S6
+    name: Open the selected Goal's related Tasks through the mounted Goals page
+    bridge.action:
+      name: chat_first_open_related_tasks
+    expect:
+      result.detail.related_tasks_opened: "true"
+
+  - id: S7
+    name: Confirm the mounted Tasks page acknowledged the related Goal focus
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.route: tasks
+      result.detail.route_visible: "true"
+      result.detail.focus_acknowledged: "true"
+
+  - id: S8
+    name: Toggle and reconcile the seeded task through the shared Tasks store
+    bridge.action:
+      name: chat_first_toggle_task
+    expect:
+      result.detail.task_reconciled: "true"
+
+  - id: S9
+    name: Confirm the actual Tasks owner retained the reconciled completion count
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.completed_visible_task_count: "1"
+
+  - id: S10
+    name: Return to mounted Chat and preserve the shared-store reconciliation
+    bridge.navigate:
+      target: chat
+      activateApp: false
+      settleMs: 750
+
+  - id: S11
+    name: Confirm Chat sees the same reconciled Tasks-store shape
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.route: chat
+      result.detail.route_visible: "true"
+      result.detail.completed_visible_task_count: "1"
+
+  - id: S12
+    name: Open the fixture's Omi capture through the real mounted task-card badge
+    ax.activate:
+      identifier: chat-first-task-chat-first-e2e-task-v1-capture-chat-first-e2e-capture-v1
+    timeout_seconds: 10
+    wait:
+      state.shellVariant: chat_first
+      state.visibleChatFirstRoute: conversations
+      state.isFocusedEntityAcknowledged: true
+
+  - id: S13
+    name: Confirm the task-originated capture detail is mounted without returning capture content
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.route: conversations
+      result.detail.route_visible: "true"
+      result.detail.capture_detail_visible: "true"
+
+  - id: S14
+    name: Discuss the selected capture through the normal main-Chat owner
+    bridge.action:
+      name: chat_first_discuss_capture
+    expect:
+      result.detail.capture_discussion_started: "true"
+
+  - id: S15
+    name: Wait for the resulting ordinary main-Chat response to terminalize
+    bridge.action:
+      name: wait_main_chat_idle
+      params:
+        timeoutMs: "120000"
+    expect:
+      result.detail.idle: "true"
+
+  - id: S16
+    name: Confirm the response returned to visibly mounted Chat without exposing transcript content
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.route: chat
+      result.detail.route_visible: "true"
+      result.detail.completed_visible_task_count: "1"
+
+  - id: S17
+    name: Confirm the bridge recorded no route failure
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
+        - "navigation_target_not_visible"

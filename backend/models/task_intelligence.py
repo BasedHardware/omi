@@ -92,12 +92,37 @@ class TaskIntelligenceRolloutDecision(BaseModel):
 
 
 class TaskWorkflowControl(BaseModel):
-    """Per-user universal-contract migration control; defaults preserve legacy behavior."""
+    """Persisted workflow metadata plus the derived Chat-first capability.
+
+    ``workflow_mode`` remains readable for legacy records and operational
+    history. It is not an entitlement. ``chat_first_ui`` is derived only from
+    the canonical-memory selector; persistence excludes it so clients cannot
+    turn a sampled response into later authority.
+    """
 
     model_config = ConfigDict(extra='forbid', frozen=True)
 
     workflow_mode: TaskWorkflowMode = TaskWorkflowMode.off
     account_generation: int = Field(default=0, ge=0)
+    chat_first_ui: bool = False
+
+    @model_validator(mode='before')
+    @classmethod
+    def strip_retired_chat_first_flag(cls, value):
+        """Accept historic control documents without retaining a dormant gate."""
+
+        if isinstance(value, dict):
+            value = dict(value)
+            value.pop('chat_first_ui_enabled', None)
+        return value
+
+    def persisted_payload(self) -> dict[str, object]:
+        """Return the exact Firestore control-record shape, excluding derived API state."""
+
+        return {
+            'workflow_mode': self.workflow_mode.value,
+            'account_generation': self.account_generation,
+        }
 
 
 class TaskIntelligenceAttributionEvent(BaseModel):

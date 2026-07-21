@@ -222,6 +222,25 @@ enum ChatScrollMode: Equatable {
   case freeScrolling
 }
 
+/// Deterministic arrival policy shared by the main transcript's live edge.
+/// A prompt materialized while opening Chat should be visible; the same prompt
+/// arriving while the user reads history must leave their position untouched
+/// and surface the existing jump-to-latest affordance instead.
+enum ChatArrivalScrollPolicy {
+  enum Action: Equatable {
+    case restoreTail
+    case followTail
+    case preserveReadingPosition
+    case none
+  }
+
+  static func action(oldCount: Int, newCount: Int, mode: ChatScrollMode) -> Action {
+    guard newCount > oldCount else { return .none }
+    if oldCount == 0 { return .restoreTail }
+    return mode == .followingBottom ? .followTail : .preserveReadingPosition
+  }
+}
+
 /// First-class chat scroll container used by floating/notch transcripts.
 /// It follows streaming content only while the reader is at the live edge.
 struct ChatScrollContainer<Content: View>: View {

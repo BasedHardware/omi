@@ -6,6 +6,9 @@ import SwiftUI
 class ViewModelContainer: ObservableObject {
   // Shared stores (single source of truth)
   let tasksStore = TasksStore.shared
+  /// Cohort-only canonical goal projection. It is injected only by the
+  /// capability-gated chat-first shell.
+  let canonicalGoalsStore = CanonicalGoalsStore()
 
   // ViewModels for each page
   let dashboardViewModel = DashboardViewModel()
@@ -144,6 +147,7 @@ class ViewModelContainer: ObservableObject {
     memoriesViewModel.resetSessionState()
     appProvider.resetSessionState()
     memoryGraphViewModel.resetSessionState()
+    canonicalGoalsStore.resetSessionState()
     isInitialLoadComplete = false
     isLoading = false
     databaseInitFailed = false

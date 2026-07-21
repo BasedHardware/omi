@@ -17,6 +17,40 @@ export function conversationIdForSession(store: AgentStore, sessionId: string): 
   return row ? String(row.conversation_id) : null;
 }
 
+/**
+ * Resolve one caller-owned surface mapping exactly.  Capability-scoped reads
+ * must not pick whichever alias happened to be active most recently for a
+ * session that participates in more than one surface mapping.
+ */
+export function conversationIdForOwnedSurfaceSession(
+  store: AgentStore,
+  input: {
+    ownerId: string;
+    sessionId: string;
+    surfaceKind: string;
+    externalRefKind: string;
+    externalRefId: string;
+  },
+): string | null {
+  const row = store.getOptionalRow(
+    `SELECT conversation_id FROM surface_conversations
+     WHERE owner_id = ?
+       AND agent_session_id = ?
+       AND surface_kind = ?
+       AND external_ref_kind = ?
+       AND external_ref_id = ?
+     LIMIT 1`,
+    [
+      input.ownerId,
+      input.sessionId,
+      input.surfaceKind,
+      input.externalRefKind,
+      input.externalRefId,
+    ],
+  );
+  return row ? String(row.conversation_id) : null;
+}
+
 /** Shared row codec for the canonical journal reader. This function never writes. */
 export function conversationTurnFromRow(row: Record<string, unknown>): ConversationTurn {
   return {

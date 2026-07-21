@@ -477,6 +477,24 @@ class SingleFlightTests(unittest.TestCase):
                 first.stdout.close()
             self.assertEqual(first.wait(), 0)
 
+    def test_failure_reports_exit_status_and_last_phase(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            temp = Path(tmp)
+            command = [sys.executable, "-c", "print('==> deliberate-failure', flush=True); raise SystemExit(17)"]
+            process = self.run_runner(temp, command)
+            assert process.stdin is not None
+            process.stdin.close()
+            output = process.stdout.read() if process.stdout else ""
+            self.assertEqual(process.wait(), 17, output)
+            if process.stdout:
+                process.stdout.close()
+            self.assertIn("child exited with status 17", output)
+            self.assertIn("phase=deliberate-failure", output)
+            result = json.loads((temp / "test" / "result.json").read_text())
+            self.assertEqual(result["exit_code"], 17)
+            self.assertEqual(result["last_phase"], "deliberate-failure")
+            self.assertIsNone(result["received_signal"])
+
 
 if __name__ == "__main__":
     unittest.main()

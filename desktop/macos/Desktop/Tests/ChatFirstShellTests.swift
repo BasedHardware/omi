@@ -1,0 +1,243 @@
+import XCTest
+
+@testable import Omi_Computer
+
+@MainActor
+final class ChatFirstShellTests: XCTestCase {
+  private func enabledControl(generation: Int = 7) -> OmiAPI.TaskWorkflowControl {
+    OmiAPI.TaskWorkflowControl(
+      accountGeneration: generation,
+      chatFirstUi: true,
+      workflowMode: .read
+    )
+  }
+
+  func testSuccessfulSampleSelectsChatFirstAndCannotLiveSwap() throws {
+    var sample = ChatFirstShellCapabilitySample()
+    sample.resolve(
+      control: enabledControl(),
+      requestedOwnerID: "owner-a",
+      ownerIsStillCurrent: true
+    )
+
+    XCTAssertEqual(sample.variant.projection?.controlGeneration, 7)
+    XCTAssertEqual(sample.variant.stableName, "chat_first")
+
+    sample.resolve(
+      control: OmiAPI.TaskWorkflowControl(accountGeneration: 8, chatFirstUi: false, workflowMode: .off),
+      requestedOwnerID: "owner-a",
+      ownerIsStillCurrent: true
+    )
+    XCTAssertEqual(sample.variant.projection?.controlGeneration, 7)
+  }
+
+  func testLegacyWorkflowMetadataCannotSuppressDerivedChatFirstCapability() throws {
+    let control = OmiAPI.TaskWorkflowControl(
+      accountGeneration: 9,
+      chatFirstUi: true,
+      workflowMode: .off
+    )
+
+    let projection = try XCTUnwrap(ChatFirstCapabilityProjection(control: control))
+
+    XCTAssertTrue(projection.chatFirstUi)
+    XCTAssertEqual(projection.controlGeneration, 9)
+  }
+
+  func testMissingStaleAndOwnerChangedSamplesFailClosed() {
+    var missing = ChatFirstShellCapabilitySample()
+    missing.resolve(control: nil, requestedOwnerID: "owner-a", ownerIsStillCurrent: true)
+    XCTAssertEqual(missing.variant.stableName, "legacy")
+
+    var stale = ChatFirstShellCapabilitySample()
+    stale.resolve(control: enabledControl(), requestedOwnerID: "owner-a", ownerIsStillCurrent: false)
+    XCTAssertEqual(stale.variant.stableName, "legacy")
+
+    var ownerChanged = ChatFirstShellCapabilitySample()
+    ownerChanged.resolve(control: enabledControl(), requestedOwnerID: "owner-a", ownerIsStillCurrent: true)
+    ownerChanged.ownerDidChange(to: "owner-b")
+    XCTAssertEqual(ownerChanged.variant.stableName, "legacy")
+  }
+
+  func testNavigationPersistsOnlyRouteAndCollapseAndRetainsFocusUntilAcknowledged() throws {
+    let suiteName = "ChatFirstShellTests.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    XCTAssertEqual(navigation.route, .chat)
+    XCTAssertNil(navigation.pendingFocus)
+
+    let focus = ChatFirstPendingFocus.capture(id: "capture-1", momentTs: 42)
+    navigation.open(focus: focus)
+    navigation.toggleSidebar()
+    XCTAssertEqual(navigation.route, .conversations)
+    XCTAssertEqual(navigation.pendingFocus, focus)
+    XCTAssertEqual(navigation.focusedEntityID, "capture-1")
+    XCTAssertFalse(navigation.isFocusedEntityAcknowledged)
+    XCTAssertFalse(navigation.acknowledgeFocus(.task(id: "task-1")))
+    XCTAssertEqual(navigation.pendingFocus, focus)
+    XCTAssertTrue(navigation.acknowledgeFocus(focus))
+    XCTAssertNil(navigation.pendingFocus)
+    XCTAssertEqual(navigation.lastAcknowledgedFocusKind, "capture")
+    XCTAssertEqual(navigation.focusedEntityID, "capture-1")
+    XCTAssertTrue(navigation.isFocusedEntityAcknowledged)
+
+    let restored = ChatFirstShellNavigation(defaults: defaults)
+    XCTAssertEqual(restored.route, .conversations)
+    XCTAssertTrue(restored.isSidebarCollapsed)
+    XCTAssertNil(restored.pendingFocus)
+    XCTAssertNil(restored.focusedEntityID)
+    XCTAssertFalse(restored.isFocusedEntityAcknowledged)
+  }
+
+  func testRouteIsNotVisibleUntilTheMountedDestinationAcknowledgesIt() throws {
+    let suiteName = "ChatFirstShellTests.visible-route.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    XCTAssertNil(navigation.visibleRoute)
+
+    navigation.selectPrimary(.goals)
+    XCTAssertEqual(navigation.route, .goals)
+    XCTAssertNil(navigation.visibleRoute)
+
+    navigation.markRouteVisible(.tasks)
+    XCTAssertNil(navigation.visibleRoute)
+    navigation.markRouteVisible(.goals)
+    XCTAssertEqual(navigation.visibleRoute, .goals)
+
+    navigation.open(focus: .task(id: "task-1"))
+    XCTAssertEqual(navigation.route, .tasks)
+    XCTAssertNil(navigation.visibleRoute)
+  }
+
+  func testDirectAndLegacyNavigationClearFocusAndMapToTypedRoutes() throws {
+    let suiteName = "ChatFirstShellTests.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    navigation.open(focus: .goal(id: "goal-1"))
+    navigation.selectPrimary(.tasks)
+    XCTAssertEqual(navigation.route, .tasks)
+    XCTAssertNil(navigation.pendingFocus)
+    XCTAssertNil(navigation.focusedEntityID)
+    XCTAssertFalse(navigation.isFocusedEntityAcknowledged)
+
+    navigation.open(focus: .memory(id: "memory-1"))
+    navigation.selectLegacyDestination(.settings)
+    XCTAssertEqual(navigation.route, .more(.settings))
+    XCTAssertNil(navigation.pendingFocus)
+
+    navigation.selectLegacyDestination(.chat)
+    XCTAssertEqual(navigation.route, .chat)
+  }
+
+  func testNavigationUsesTypedOriginsWithoutEntityIdentifiersInAnalytics() throws {
+    let suiteName = "ChatFirstShellTests.analytics.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    var events: [ChatFirstAnalyticsEvent] = []
+    let navigation = ChatFirstShellNavigation(defaults: defaults) { event in
+      events.append(event)
+    }
+
+    navigation.selectPrimary(.tasks)
+    navigation.open(focus: .goal(id: "private-goal-id"))
+    navigation.selectMore(.settings)
+
+    XCTAssertEqual(
+      events,
+      [
+        .routeEntered(route: .tasks, origin: .sidebar),
+        .routeEntered(route: .goals, origin: .chatDeeplink),
+        .routeEntered(route: .more, origin: .more),
+      ]
+    )
+    XCTAssertFalse(
+      events.map(\.analyticsPayload).flatMap { $0.properties.values }.contains("private-goal-id")
+    )
+  }
+
+  func testRelatedGoalFocusCanLandInTasksAndAcknowledgesAfterTasksVisibility() throws {
+    let suiteName = "ChatFirstShellTests.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    let focus = ChatFirstPendingFocus.goal(id: "goal-1")
+    navigation.open(focus: focus, destination: .tasks)
+
+    XCTAssertEqual(navigation.route, .tasks)
+    XCTAssertEqual(navigation.pendingFocus, focus)
+    XCTAssertEqual(navigation.pendingFocusDestination, .tasks)
+    XCTAssertTrue(navigation.acknowledgeFocus(focus))
+    XCTAssertNil(navigation.pendingFocus)
+  }
+
+  func testPrimaryAutomationRouteIncludesGoalsWithoutRepurposingLegacyPages() {
+    XCTAssertEqual(ChatFirstRoute.primaryAutomationDestination(named: "goals"), .goals)
+    XCTAssertEqual(ChatFirstRoute.primaryAutomationDestination(named: "GOALS"), .goals)
+    XCTAssertNil(ChatFirstRoute.primaryAutomationDestination(named: "dashboard"))
+    XCTAssertNil(ChatFirstRoute.primaryAutomationDestination(named: "settings"))
+  }
+
+  func testAutomationNavigationVisibilityAcceptsTheMountedShellForSharedNames() {
+    XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "settings"), .more(.settings))
+    XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "help"), .more(.help))
+    XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "home"), .more(.dashboard))
+
+    XCTAssertTrue(
+      DesktopAutomationNavigationVisibilityPolicy.isTargetVisible(
+        shellVariant: "chat_first",
+        selectedTab: nil,
+        visibleChatFirstRoute: "tasks",
+        expectedChatFirstRoute: "tasks",
+        expectedLegacyTitle: "Tasks"
+      )
+    )
+    XCTAssertTrue(
+      DesktopAutomationNavigationVisibilityPolicy.isTargetVisible(
+        shellVariant: "legacy",
+        selectedTab: "Tasks",
+        visibleChatFirstRoute: nil,
+        expectedChatFirstRoute: "tasks",
+        expectedLegacyTitle: "Tasks"
+      )
+    )
+    XCTAssertFalse(
+      DesktopAutomationNavigationVisibilityPolicy.isTargetVisible(
+        shellVariant: "loading",
+        selectedTab: "Tasks",
+        visibleChatFirstRoute: nil,
+        expectedChatFirstRoute: "tasks",
+        expectedLegacyTitle: "Tasks"
+      )
+    )
+  }
+
+  func testProjectionGatePassesOnlyEnabledMainChatForSampledOwner() throws {
+    var gate = ChatFirstMainChatProjectionGate()
+    XCTAssertFalse(gate.isConfigured(for: "owner-a"))
+    let enabled = try XCTUnwrap(ChatFirstCapabilityProjection(control: enabledControl(generation: 11)))
+    XCTAssertTrue(gate.configure(sample: enabled, ownerID: "owner-a"))
+    XCTAssertTrue(gate.isConfigured(for: "owner-a"))
+
+    let main = AgentSurfaceReference.mainChat(chatId: nil)
+    XCTAssertEqual(gate.capability(for: main, ownerID: "owner-a"), enabled)
+    XCTAssertNil(gate.capability(for: .floatingChat(), ownerID: "owner-a"))
+    XCTAssertNil(gate.capability(for: main, ownerID: "owner-b"))
+
+    gate.markResolved(surface: main, ownerID: "owner-a")
+    XCTAssertFalse(gate.configure(sample: nil, ownerID: "owner-a"))
+    XCTAssertEqual(gate.capability(for: main, ownerID: "owner-a"), enabled)
+  }
+
+  func testProjectionGateKeepsCapabilityOffForFalseSample() {
+    var gate = ChatFirstMainChatProjectionGate()
+    XCTAssertTrue(gate.configure(sample: nil, ownerID: "owner-a"))
+    XCTAssertNil(gate.capability(for: .mainChat(chatId: nil), ownerID: "owner-a"))
+  }
+}

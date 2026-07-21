@@ -1,5 +1,6 @@
 @preconcurrency import AVFoundation
 import AppKit
+import CryptoKit
 import Foundation
 @preconcurrency import GRDB
 @preconcurrency import UserNotifications
@@ -132,7 +133,11 @@ class ChatToolExecutor {
     originatingChatMode: ChatMode? = nil,
     originatingClientScope: String? = nil,
     originatingSurfaceRef: AgentSurfaceReference? = nil,
+    originatingSessionID: String? = nil,
     originatingRunId: String? = nil,
+    originatingAttemptId: String? = nil,
+    toolCapabilityRef: String? = nil,
+    chatFirstControlGeneration: Int? = nil,
     originatingUserText: String? = nil,
     isOnboardingSurface: Bool = false,
     expectedOwnerID: String? = nil,
@@ -169,7 +174,11 @@ class ChatToolExecutor {
         originatingChatMode: originatingChatMode,
         originatingClientScope: originatingClientScope,
         originatingSurfaceRef: originatingSurfaceRef,
+        originatingSessionID: originatingSessionID,
         originatingRunId: originatingRunId,
+        originatingAttemptId: originatingAttemptId,
+        toolCapabilityRef: toolCapabilityRef,
+        chatFirstControlGeneration: chatFirstControlGeneration,
         isOnboardingSurface: isOnboardingSurface,
         expectedOwnerID: pinnedOwnerID,
         backendAPIClient: backendAPIClient)
@@ -185,7 +194,11 @@ class ChatToolExecutor {
     originatingChatMode: ChatMode?,
     originatingClientScope: String?,
     originatingSurfaceRef: AgentSurfaceReference?,
+    originatingSessionID: String?,
     originatingRunId: String?,
+    originatingAttemptId: String?,
+    toolCapabilityRef: String?,
+    chatFirstControlGeneration: Int?,
     isOnboardingSurface: Bool,
     expectedOwnerID: String?,
     backendAPIClient: APIClient
@@ -232,6 +245,39 @@ class ChatToolExecutor {
       return await executeDeleteTask(
         toolCall.arguments,
         expectedOwnerID: expectedOwnerID)
+
+    case .renderChatBlocks:
+      return await ChatFirstBlockToolExecutor.execute(
+        toolCall.arguments,
+        surface: originatingSurfaceRef,
+        sessionID: originatingSessionID,
+        runID: originatingRunId,
+        attemptID: originatingAttemptId,
+        capabilityRef: toolCapabilityRef,
+        controlGeneration: chatFirstControlGeneration,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot,
+        api: backendAPIClient)
+
+    case .getCanonicalGoals:
+      return await executeGetCanonicalGoals(
+        toolCall.arguments,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot,
+        api: backendAPIClient)
+
+    case .showRewindEvidence:
+      return await executeShowRewindEvidence(
+        toolCall.arguments,
+        context: telemetryContext,
+        surface: originatingSurfaceRef,
+        sessionID: originatingSessionID,
+        runID: originatingRunId,
+        attemptID: originatingAttemptId,
+        capabilityRef: toolCapabilityRef,
+        controlGeneration: chatFirstControlGeneration,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot)
 
     // Onboarding tools
     case .requestPermission:
@@ -397,6 +443,40 @@ class ChatToolExecutor {
     }
   }
 
+  private static func executeGetCanonicalGoals(
+    _ arguments: [String: Any],
+    expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
+    api: APIClient
+  ) async -> String {
+    guard let expectedOwnerID, let authorizationSnapshot else { return authorizedOwnerChangedResult() }
+    let includeEnded = (arguments["include_ended"] as? Bool) ?? false
+    do {
+      let goals = try await api.getCanonicalGoals(
+        includeEnded: includeEnded,
+        expectedOwnerId: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot
+      )
+      guard isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else {
+        return authorizedOwnerChangedResult()
+      }
+      let result = goals.prefix(20).map { goal -> [String: Any] in
+        var value: [String: Any] = [
+          "goal_id": goal.id,
+          "title": goal.title,
+          "status": goal.status.rawValue,
+        ]
+        if !goal.desiredOutcome.isEmpty { value["description"] = goal.desiredOutcome }
+        if let focusRank = goal.focusRank { value["focus_rank"] = focusRank }
+        return value
+      }
+      let data = try JSONSerialization.data(withJSONObject: ["goals": result])
+      return String(data: data, encoding: .utf8) ?? #"{"goals":[]}"#
+    } catch {
+      return #"{"ok":false,"error":"canonical_goals_unavailable"}"#
+    }
+  }
+
   nonisolated static func isExpectedOwnerCurrent(
     _ expectedOwnerID: String?,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
@@ -495,7 +575,7 @@ class ChatToolExecutor {
     toolName: String
   ) -> PhysicalExecutionPrecondition {
     switch toolName {
-    case "capture_screen", "get_screenshot":
+    case "capture_screen", "get_screenshot", "show_rewind_evidence":
       if isChatScreenshotSharingEnabled {
         return .satisfied
       }
@@ -625,6 +705,145 @@ class ChatToolExecutor {
       fullPath: capture.fullImageURL.path,
       tiles: capture.tiles.map { (label: $0.label, rect: $0.rect, path: $0.url.path) }
     )
+  }
+
+  private static func executeShowRewindEvidence(
+    _ arguments: [String: Any],
+    context: ScreenContextTelemetryContext,
+    surface: AgentSurfaceReference?,
+    sessionID: String?,
+    runID: String?,
+    attemptID: String?,
+    capabilityRef: String?,
+    controlGeneration: Int?,
+    expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async -> String {
+    guard
+      let expectedOwnerID,
+      let authorizationSnapshot,
+      let surface,
+      surface.surfaceKind == "main_chat",
+      let sessionID,
+      let runID,
+      let attemptID,
+      let capabilityRef,
+      let controlGeneration,
+      controlGeneration >= 0,
+      isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot)
+    else { return authorizedOwnerChangedResult() }
+    let rawID = arguments["screenshot_id"]
+    let screenshotID: Int64?
+    if let value = rawID as? Int64 {
+      screenshotID = value
+    } else if let value = rawID as? Int {
+      screenshotID = Int64(value)
+    } else if let value = rawID as? Double, value.rounded() == value {
+      screenshotID = Int64(value)
+    } else if let value = rawID as? String {
+      screenshotID = Int64(value.trimmingCharacters(in: .whitespacesAndNewlines))
+    } else {
+      screenshotID = nil
+    }
+    guard let screenshotID, screenshotID >= 0 else {
+      return "Error: screenshot_id is required"
+    }
+
+    do {
+      guard let screenshot = try await RewindDatabase.shared.getScreenshot(id: screenshotID) else {
+        ScreenContextToolTelemetry.trackToolResult(
+          toolName: "show_rewind_evidence",
+          context: context,
+          ok: false,
+          failureCode: .imageUnavailable,
+          permissionTCCGranted: CGPreflightScreenCaptureAccess())
+        return "Error: Screenshot not found"
+      }
+      let data: Data
+      do {
+        data = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
+      } catch {
+        try await RewindStorage.shared.initialize()
+        data = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
+      }
+      guard isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else {
+        return authorizedOwnerChangedResult()
+      }
+      // Journal resources must survive cache eviction, and their paths must
+      // never alias across signed-in owners. Hashing the owner and attempt
+      // keeps raw account IDs out of the filesystem while preserving a stable
+      // snapshot for this exact producing turn.
+      let ownerDigest = SHA256.hash(data: Data(expectedOwnerID.utf8))
+        .prefix(12)
+        .map { String(format: "%02x", $0) }
+        .joined()
+      let evidenceDigest = SHA256.hash(
+        data: Data("\(attemptID)\u{0}\(screenshotID)".utf8)
+      )
+      .prefix(12)
+      .map { String(format: "%02x", $0) }
+      .joined()
+      let applicationSupport = try FileManager.default.url(
+        for: .applicationSupportDirectory,
+        in: .userDomainMask,
+        appropriateFor: nil,
+        create: true
+      )
+      let evidenceRoot =
+        applicationSupport
+        .appendingPathComponent("Omi", isDirectory: true)
+        .appendingPathComponent("ChatEvidence", isDirectory: true)
+        .appendingPathComponent(ownerDigest, isDirectory: true)
+      try FileManager.default.createDirectory(
+        at: evidenceRoot,
+        withIntermediateDirectories: true,
+        attributes: [.posixPermissions: NSNumber(value: Int16(0o700))]
+      )
+      try FileManager.default.setAttributes(
+        [.posixPermissions: NSNumber(value: Int16(0o700))],
+        ofItemAtPath: evidenceRoot.path
+      )
+      let outputURL = evidenceRoot.appendingPathComponent("rewind-\(evidenceDigest).jpg")
+      try data.write(to: outputURL, options: .atomic)
+      try FileManager.default.setAttributes(
+        [.posixPermissions: NSNumber(value: Int16(0o600))],
+        ofItemAtPath: outputURL.path
+      )
+      let resource = ChatResource.localGeneratedFile(
+        id: "rewind-evidence:\(evidenceDigest)",
+        title: "Rewind evidence",
+        subtitle: "Screenshot evidence",
+        mimeType: "image/jpeg",
+        uri: outputURL.absoluteString
+      )
+      _ = try await AgentRuntimeProcess.shared.appendChatFirstEvidence(
+        clientId: "chat-first-rewind-evidence",
+        surface: surface,
+        ownerID: expectedOwnerID,
+        sessionID: sessionID,
+        runID: runID,
+        attemptID: attemptID,
+        capabilityRef: capabilityRef,
+        controlGeneration: controlGeneration,
+        resource: resource,
+        authorizationSnapshot: authorizationSnapshot
+      )
+      ScreenContextToolTelemetry.trackToolResult(
+        toolName: "show_rewind_evidence",
+        context: context,
+        ok: true,
+        imageBytes: data.count,
+        permissionTCCGranted: CGPreflightScreenCaptureAccess())
+      return #"{"ok":true,"evidence_attached":true}"#
+    } catch {
+      ScreenContextToolTelemetry.trackToolResult(
+        toolName: "show_rewind_evidence",
+        context: context,
+        ok: false,
+        failureCode: .imageUnavailable,
+        permissionTCCGranted: CGPreflightScreenCaptureAccess())
+      return "Error: Failed to load screenshot evidence"
+    }
   }
 
   /// Format the capture_screen tool result: the full-screen path first (the
