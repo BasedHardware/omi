@@ -56,6 +56,30 @@ class MobileProductionRoutingContractTests(unittest.TestCase):
                     (root / "codemagic.yaml").write_text(original.replace(block, changed, 1), encoding="utf-8")
                     self.assertTrue(CHECKER.validate(root))
 
+    def test_desktop_release_rejects_staging_or_duplicate_late_python_api_assignment(self) -> None:
+        original = (ROOT / "codemagic.yaml").read_text(encoding="utf-8")
+        block = CHECKER._workflow_block(original, CHECKER.DESKTOP_WORKFLOW)
+        self.assertIsNotNone(block)
+        assert block is not None
+        for mutation in ("staging", "duplicate_late"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                if mutation == "staging":
+                    changed = block.replace(
+                        'OMI_PYTHON_API_URL: "https://api.omi.me"',
+                        'OMI_PYTHON_API_URL: "https://staging.example.test"',
+                        1,
+                    )
+                else:
+                    changed = block.replace(
+                        'OMI_PYTHON_API_URL: "https://api.omi.me"',
+                        'OMI_PYTHON_API_URL: "https://api.omi.me"\n'
+                        '        OMI_PYTHON_API_URL: "https://staging.example.test"',
+                        1,
+                    )
+                (root / "codemagic.yaml").write_text(original.replace(block, changed, 1), encoding="utf-8")
+                self.assertTrue(CHECKER.validate(root))
+
 
 if __name__ == "__main__":
     unittest.main()

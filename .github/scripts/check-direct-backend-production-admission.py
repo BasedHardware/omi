@@ -18,6 +18,7 @@ ANCESTRY_GUARD = 'git merge-base --is-ancestor "$CHECKED_OUT_SHA" origin/main'
 HEAD_IDENTITY = "CHECKED_OUT_SHA=$(git rev-parse HEAD)"
 IMAGE_IDENTITY = 'IMAGE_TAG=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")'
 DIAGNOSTIC = "ERROR: checked-out HEAD $CHECKED_OUT_SHA is not an ancestor of fresh origin/main"
+PERSISTED_IMAGE_IDENTITY = 'echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"'
 
 
 def validate(root: Path) -> list[str]:
@@ -39,11 +40,20 @@ def validate(root: Path) -> list[str]:
             errors.append(f"{relative} must not check out a second source after production admission")
         if text.count(HEAD_IDENTITY) != 1:
             errors.append(f"{relative} must establish checked-out source identity exactly once")
-        unsafe_image_assignment = re.search(
-            r"(?m)^\s*(?:.*\brun:\s*)?IMAGE_TAG=(?:latest|\$?\{?GITHUB_SHA\}?|[0-9a-f]{7,})",
-            text,
-        )
-        if text.count(IMAGE_IDENTITY) != 1 or unsafe_image_assignment:
+        persistent_image_writes = [
+            line.strip()
+            for line in re.findall(r"(?m)^[^\n]*\bIMAGE_TAG=[^\n]*>>\s*[\"']?\$GITHUB_ENV[\"']?[^\n]*$", text)
+        ]
+        image_authorities = []
+        for line in text.splitlines():
+            assignment = re.match(r"^\s*(?:run:\s+)?IMAGE_TAG=(.*)$", line)
+            if assignment and not re.match(r"[\"']?\$\{?IMAGE_TAG\}?\b", assignment.group(1)):
+                image_authorities.append(line.strip())
+        if (
+            text.count(IMAGE_IDENTITY) != 1
+            or image_authorities != [IMAGE_IDENTITY]
+            or persistent_image_writes != [PERSISTED_IMAGE_IDENTITY]
+        ):
             errors.append(f"{relative} must establish its immutable image tag exactly once from checked-out HEAD")
     return errors
 
