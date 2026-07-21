@@ -2,6 +2,29 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.94",
+      "date": "2026-07-21",
+      "changes": [
+        "Improved macOS update reliability across both Apple silicon and Intel Macs."
+      ]
+    },
+    {
+      "version": "0.12.93",
+      "date": "2026-07-21",
+      "changes": [
+        "Remediated dependabot vulnerability in agent-cloud ws dependency",
+        "Remediated dependabot vulnerabilities in demo dependencies (ws, js-yaml)",
+        "Fixed an issue that could prevent macOS Beta releases from completing",
+        "Claude Code setup now detects running CLI sessions and offers a one-click restart to load Omi Memory, and the manual setup cards copy just the paste-able value instead of the labeled text",
+        "Fixed Open Omi shortcut changes occasionally reporting a false conflict",
+        "Notion is now a live connection: approve Omi once in your browser and it keeps an Omi Memories page fresh in your workspace, replacing the copy-paste export",
+        "Obsidian setup now walks you through the steps like the Claude connector does, including what to do when Obsidian asks whether you trust the vault",
+        "Onboarding now connects ChatGPT, Claude, Claude Code, Codex, OpenClaw, and Hermes over live MCP with the same connect flow as the main app",
+        "Beta updates now use the same verified Omi app package as Stable",
+        "Omi Beta now stays connected to the same production account, conversations, and memory as the stable macOS app"
+      ]
+    },
+    {
       "version": "0.12.92",
       "date": "2026-07-21",
       "changes": [

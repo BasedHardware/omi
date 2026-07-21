@@ -131,7 +131,7 @@ Click at coordinates: `cliclick c:X,Y`. Mac screenshots: `screencapture -x /tmp/
 
 | Blocked on | Hatch |
 |---|---|
-| Desktop candidate won't cut (`Desktop Swift Build & Tests` red/flaky) | `desktop_auto_release.yml` with `release_mode=break_glass` |
+| A signed, qualified desktop candidate did not reach Beta | `desktop_recover_beta.yml` with its exact tag, `confirm=recover-beta`, and a reason |
 | Backend deploy has no Release Eligibility proof | `gcp_backend.yml` with `skip_eligibility_proof=true`, `break_glass_confirm=deploy-without-proof`, `break_glass_reason` |
 
 Hatches relax *evidence* requirements only. They never relax that code is merged to `main` first, and never reach stable/prod pointers without their own explicit confirm.

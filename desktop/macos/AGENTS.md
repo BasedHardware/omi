@@ -54,9 +54,9 @@ Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.
 
 ## Release Pipeline
 
-Merging `desktop/macos/**` changes queues them for the next daily or manually dispatched candidate. A candidate advances to beta automatically only after every qualification gate passes:
+Merging `desktop/macos/**` changes queues them for the next daily candidate. A candidate advances to beta automatically only after every qualification gate passes:
 
-1. **GitHub Actions** (`desktop_auto_release.yml`) — batches mainline changes, auto-increments the version, and pushes a `v*-macos` build-candidate tag. It fail-closes before changelog or tag mutation unless `Desktop Swift Build & Tests` completed successfully for the newest queued releasable desktop source SHA; unrelated later commits do not block the queue, and the tag includes the newly consolidated release notes. `force_release` does not bypass this source gate — use `release_mode=break_glass` when the source check itself is broken; it records `source_gate_bypassed`
+1. **GitHub Actions** (`desktop_auto_release.yml`) — batches mainline changes, auto-increments the version, and pushes a `v*-macos` build-candidate tag. It is schedule-only and fails closed before changelog or tag mutation unless `Desktop Swift Build & Tests` completed successfully for the newest queued releasable desktop source SHA; unrelated later commits do not block the queue, and the tag includes the newly consolidated release notes.
 2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — triggered by the tag, runs on Mac mini M2:
    - Builds universal binary (arm64 + x86_64)
    - Signs with Developer ID, notarizes with Apple
@@ -64,7 +64,7 @@ Merging `desktop/macos/**` changes queues them for the next daily or manually di
    - Runs `scripts/smoke-signed-desktop-artifact.sh` on the signed app, Sparkle ZIP, and DMG before publishing, including a mandatory in-app synthetic Keychain write/read/delete canary
    - Publishes an immutable non-live GitHub candidate with smoke evidence
 3. **Trusted macOS qualification runner** (`desktop_qualify_beta.yml`) — dispatched by Codemagic after candidate publication and restricted to the `self-hosted`, `macos`, `omi-desktop-qualification` runner. It verifies published asset digests against signed-smoke evidence, runs the static release checks, rebuilds the exact tag, runs hermetic T2 plus the fault-injection suite, and writes canonical `qualifiedBeta*` evidence metadata. The runner must be an administrator-managed Mac with Docker Desktop; it must never execute pull-request or arbitrary-ref workflows.
-4. **Automatic beta promotion** (`desktop_promote_beta.yml`) — captures the server-owned Beta admission generation before validating digest-matched evidence, then atomically verifies that the reservation and pause state are unchanged while registering the immutable manifest and advancing the explicit beta pointer
+4. **Automatic beta promotion** (`desktop_promote_beta.yml`) — the qualification workflow invokes this internal-only authority after qualification. It captures the server-owned Beta admission generation before validating digest-matched evidence, then atomically verifies that the reservation and pause state are unchanged while registering the immutable manifest and advancing the explicit beta pointer. If that handoff fails after qualification, use only `desktop_recover_beta.yml` with the exact tag, `confirm=recover-beta`, and a reason.
 
 The shared Python backend must contain the manifest/pointer endpoints before the first beta promotion. Deploy it separately with `gcp_backend.yml`; merging desktop code does not deploy the prod backend. Static GCS/CDN feed ownership remains follow-up work and is not the channel source of truth.
 
@@ -77,8 +77,7 @@ Signed artifact smoke scope:
 
 Stable is manual:
 - Automatic qualification never promotes Stable. `desktop_promote_prod.yml` remains `workflow_dispatch` only and protected by the `prod` environment.
-- Run it with the current qualified Beta `release_tag`, `confirm=promote-stable`, and the observed Stable pointer release ID/generation. It verifies the exact Beta artifact, advances only the Stable pointer, updates the existing legacy/static bridges, and verifies hashes and feed output.
-- `operation=repoint` selects a retained qualified manifest with exact current pointer CAS. It cannot downgrade clients Sparkle has already upgraded; issue a higher-version hotfix for those clients.
+- Run it with the current qualified Beta `release_tag` and `confirm=promote-stable`. It reads and compare-and-swaps the current Stable pointer itself, advances only that pointer, updates the existing legacy/static bridges, and verifies hashes and feed output.
 - Backend deployments remain independent in their established workflows. Do not manually edit release visibility or pointers outside the promotion workflow.
 
 **Codemagic CLI & API:**
