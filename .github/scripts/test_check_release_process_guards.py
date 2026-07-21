@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import os
+import subprocess
 from pathlib import Path
 
 SCRIPT = Path(__file__).with_name("check-release-process-guards.py")
@@ -35,6 +37,50 @@ def test_beta_backend_guard_ignores_fixtures_but_rejects_shipped_source(tmp_path
 
 def _write_codemagic(tmp_path, workflows: str) -> None:
     (tmp_path / "codemagic.yaml").write_text(f"workflows:\n{workflows}", encoding="utf-8")
+
+
+def _canonical_release_workflow(extra_release_script: str = "", extra_workflows: str = "") -> str:
+    extra = (
+        f"\n          {extra_release_script.replace(chr(10), chr(10) + '          ')}" if extra_release_script else ""
+    )
+    return f'''  omi-desktop-swift-release:
+    scripts:
+      - name: Smoke signed desktop artifact
+        script: echo smoke
+      - name: Create GitHub release
+        script: |
+          curl --request POST /v2/desktop/beta/candidates/reserve
+          gh release create "$CM_TAG"{extra}
+{extra_workflows}'''
+
+
+def test_codemagic_publisher_guard_rejects_attached_hash_command_substitution_that_bash_executes(tmp_path, monkeypatch):
+    """The fixture proves `#` is attached to a word, not a Bash comment boundary."""
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    counter = tmp_path / "gh-invocations"
+    stub = stub_dir / "gh"
+    stub.write_text("#!/bin/sh\nprintf '1\\n' >> \"$GH_STUB_COUNTER\"\n", encoding="utf-8")
+    stub.chmod(0o755)
+
+    script = 'echo harmless#$(gh release create "$TAG_NAME")'
+    completed = subprocess.run(
+        ["bash", "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PATH": f"{stub_dir}{os.pathsep}{os.environ['PATH']}", "GH_STUB_COUNTER": str(counter)},
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert counter.read_text(encoding="utf-8").splitlines() == ["1"]
+
+    _write_codemagic(tmp_path, _canonical_release_workflow(script))
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    errors = GUARDS.check_codemagic_release_publishers()
+
+    assert any("exactly one release-create authority occurrence" in error for error in errors)
 
 
 def test_codemagic_publisher_guard_rejects_legacy_tag_and_live_release(tmp_path, monkeypatch):
@@ -169,22 +215,48 @@ def test_codemagic_publisher_guard_rejects_extra_create_and_reservation_decoys(t
     assert any("canonical candidate reservation" in error for error in errors)
 
 
-def test_codemagic_publisher_guard_ignores_comments_and_echo_decoys(tmp_path, monkeypatch):
-    _write_codemagic(
-        tmp_path,
-        '''  omi-desktop-swift-release:
-    scripts:
-      - name: Smoke signed desktop artifact
-        script: echo smoke
-      - name: Create GitHub release
-        script: |
-          # gh release create "$TAG_NAME"
-          echo 'gh release create "$TAG_NAME"'
-          printf '%s\\n' 'gh release create "$TAG_NAME"'
-          curl --request POST /v2/desktop/beta/candidates/reserve
-          gh release create "$CM_TAG"
-''',
-    )
+def test_codemagic_publisher_guard_rejects_comments_and_quoted_decoys(tmp_path, monkeypatch):
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    for decoy in (
+        '# gh release create "$TAG_NAME"',
+        "echo 'gh release create \"$TAG_NAME\"'",
+        "printf '%s\\n' 'gh release create \"$TAG_NAME\"'",
+    ):
+        _write_codemagic(tmp_path, _canonical_release_workflow(decoy))
+
+        errors = GUARDS.check_codemagic_release_publishers()
+
+        assert any("exactly one release-create authority occurrence" in error for error in errors), decoy
+
+
+def test_codemagic_publisher_guard_rejects_indirect_and_path_authority(tmp_path, monkeypatch):
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    for alternate_publisher in (
+        'PUBLISH=\'gh release create "$TAG_NAME"\'\neval "$PUBLISH"',
+        'GH=gh\n$GH release create "$TAG_NAME"',
+        '/usr/local/bin/gh release create "$TAG_NAME"',
+        'echo harmless\\ #$(gh release create "$TAG_NAME")',
+    ):
+        _write_codemagic(tmp_path, _canonical_release_workflow(alternate_publisher))
+
+        errors = GUARDS.check_codemagic_release_publishers()
+
+        assert any("release-create authority" in error for error in errors), alternate_publisher
+
+
+def test_codemagic_publisher_guard_fails_closed_on_malformed_shell_near_authority(tmp_path, monkeypatch):
+    _write_codemagic(tmp_path, _canonical_release_workflow("echo 'unterminated\ngh release create \"$TAG_NAME\""))
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    errors = GUARDS.check_codemagic_release_publishers()
+
+    assert any("malformed shell syntax around release-create authority" in error for error in errors)
+
+
+def test_codemagic_publisher_guard_accepts_only_the_canonical_authority(tmp_path, monkeypatch):
+    _write_codemagic(tmp_path, _canonical_release_workflow())
     monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
 
     assert GUARDS.check_codemagic_release_publishers() == []
