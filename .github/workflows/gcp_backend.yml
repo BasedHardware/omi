@@ -70,7 +70,6 @@ env:
 jobs:
   validate-production-boundary:
     if: >-
-      github.ref == 'refs/heads/main' &&
       github.event.inputs.mode == 'deploy'
     runs-on: ubuntu-latest
     steps:
