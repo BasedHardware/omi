@@ -120,7 +120,13 @@ from tests.unit.test_ws_i_write_convergence import (
     _trusted_account_generation,
 )
 
-NOW = datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc)
+# Anchored to the real clock rather than a fixed calendar date. Several cases persist an
+# item through write_canonical_extraction_memory, which has no clock parameter and stamps
+# captured_at from the real clock, and then drive processing with now=NOW. A fixed NOW
+# meant expires_at (NOW + DEFAULT_SHORT_TERM_TTL_DAYS) eventually fell behind real
+# captured_at, and the short_term "expires_at must be after captured_at" invariant started
+# failing on its own — with no code change — once the wall clock passed that date.
+NOW = datetime.now(timezone.utc).replace(hour=12, minute=0, second=0, microsecond=0)
 
 _WS_B_RUNTIME_MODULE_NAMES = (
     "database.memory_apply_store",
