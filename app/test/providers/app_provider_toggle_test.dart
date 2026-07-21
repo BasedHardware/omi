@@ -39,21 +39,20 @@ void main() {
       // Set up local app so the success path can find and update it.
       provider.apps = [
         App(
-          id: 'app_123',
-          name: 'Test',
-          author: 'tester',
-          description: 'test',
-          image: '',
-          capabilities: {'memories'},
-          status: 'approved',
-          category: 'test',
-          approved: true,
-          ratingCount: 0,
-          enabled: true,
-          deleted: false,
-          isPaid: false,
-          isUserPaid: false,
-        ),
+            id: 'app_123',
+            name: 'Test',
+            author: 'tester',
+            description: 'test',
+            image: '',
+            capabilities: {'memories'},
+            status: 'approved',
+            category: 'test',
+            approved: true,
+            ratingCount: 0,
+            enabled: true,
+            deleted: false,
+            isPaid: false,
+            isUserPaid: false),
       ];
       var enableCalled = false;
       provider.enableAppOverride = (String id) async {

@@ -87,7 +87,11 @@ class ConnectionGuideSheet extends StatelessWidget {
         localImagePath: Assets.images.neoOne.path,
       ),
       if (Platform.isIOS)
-        DeviceGuideProduct(id: 'rayban_meta', name: 'Ray-Ban Meta', localImagePath: Assets.images.raybanMeta.path),
+        DeviceGuideProduct(
+          id: 'rayban_meta',
+          name: 'Ray-Ban Meta',
+          localImagePath: Assets.images.raybanMeta.path,
+        ),
     ];
   }
 

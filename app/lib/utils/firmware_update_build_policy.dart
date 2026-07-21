@@ -9,7 +9,9 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 class FirmwareUpdateBuildPolicy {
   const FirmwareUpdateBuildPolicy({required this.rayBanDat});
 
-  static const current = FirmwareUpdateBuildPolicy(rayBanDat: bool.fromEnvironment('OMI_RAYBAN_DAT'));
+  static const current = FirmwareUpdateBuildPolicy(
+    rayBanDat: bool.fromEnvironment('OMI_RAYBAN_DAT'),
+  );
 
   final bool rayBanDat;
 

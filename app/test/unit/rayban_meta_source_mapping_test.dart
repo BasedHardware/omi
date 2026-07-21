@@ -36,11 +36,8 @@ void main() {
 
       // Fails if a DeviceType is added without a mapping entry here, forcing the
       // author to decide its backend source instead of silently streaming null.
-      expect(
-        expected.keys.toSet(),
-        DeviceType.values.toSet(),
-        reason: 'a DeviceType is missing from the source-mapping contract',
-      );
+      expect(expected.keys.toSet(), DeviceType.values.toSet(),
+          reason: 'a DeviceType is missing from the source-mapping contract');
 
       expected.forEach((type, source) {
         expect(conversationSourceForDeviceType(type), source, reason: 'wrong source for $type');

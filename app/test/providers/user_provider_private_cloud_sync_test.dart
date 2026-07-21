@@ -74,7 +74,9 @@ void main() {
     });
 
     test('rethrows when the write throws', () async {
-      final provider = UserProvider(privateCloudSyncSetter: (_) async => throw Exception('network down'));
+      final provider = UserProvider(
+        privateCloudSyncSetter: (_) async => throw Exception('network down'),
+      );
       addTearDown(provider.dispose);
 
       await expectLater(provider.setPrivateCloudSync(true), throwsException);
