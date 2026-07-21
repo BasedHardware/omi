@@ -817,10 +817,11 @@ struct DashboardPage: View {
         .foregroundStyle(HomePalette.ink)
         .multilineTextAlignment(.center)
 
-      Text("I'm listening — follow-ups appear as conversations end.")
+      Text(homeDailyBrief)
         .scaledFont(size: OmiType.subheading)
         .foregroundStyle(HomePalette.muted)
         .multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
     }
     .frame(maxWidth: .infinity, alignment: .center)
   }
@@ -838,27 +839,40 @@ struct DashboardPage: View {
       insights: intelligenceStore.recommendations.map {
         HomeKnowsInsightCandidate(id: $0.id, text: $0.headline)
       },
-      focus: homeKnowsFocusText,
       questions: homeSuggestedQuestions,
       dismissedTaskIDs: dismissedKnowsTaskIDs
     )
   }
 
-  /// The live focus signal for the hub list — what Omi sees you doing right
-  /// now. Nil until the focus assistant has a reading.
-  private var homeKnowsFocusText: String? {
-    guard let status = focusStorage.currentStatus else { return nil }
-    let rawApp = focusStorage.currentApp ?? focusStorage.detectedAppName
-    let app = rawApp?.trimmingCharacters(in: .whitespacesAndNewlines)
-    let appName = (app?.isEmpty == false) ? app : nil
-    switch status {
-    case .focused:
-      return appName.map { "In focus on \($0) — I'll keep it clear." }
-        ?? "You're in focus — I'll keep it clear."
-    case .distracted:
-      return appName.map { "Pulled away by \($0) — want me to mute it?" }
-        ?? "You've drifted — want me to help you refocus?"
+  /// A short, conversational read on the day — what you've been doing and how
+  /// much is waiting — shown under the greeting. It absorbs the focus status so
+  /// the action rows below stay purely actionable.
+  private var homeDailyBrief: String {
+    let openCount = homeKnowsTaskCandidates
+      .filter { !dismissedKnowsTaskIDs.contains($0.id) }
+      .count
+    let tail: String
+    switch openCount {
+    case 0: tail = "nothing's waiting on you."
+    case 1: tail = "one thing needs you."
+    default: tail = "\(openCount) things need you."
     }
+
+    var lead: String?
+    if let status = focusStorage.currentStatus {
+      let rawApp = focusStorage.currentApp ?? focusStorage.detectedAppName
+      let appName = rawApp?.trimmingCharacters(in: .whitespacesAndNewlines)
+      if status == .focused, let appName, !appName.isEmpty {
+        lead = "Deep in \(appName) today"
+      } else if status == .distracted {
+        lead = "A scattered stretch just now"
+      }
+    }
+
+    if let lead {
+      return "\(lead) — \(tail)"
+    }
+    return tail.prefix(1).uppercased() + tail.dropFirst()
   }
 
   private var homeKnowsTaskCandidates: [HomeKnowsTaskCandidate] {
@@ -902,7 +916,10 @@ struct DashboardPage: View {
     case .focus:
       navigate(to: .focus)
     case .question:
-      askHomeSuggestion(row.text)
+      // Prefill the ask bar so you can glance it over and edit before sending,
+      // rather than firing the suggestion blindly.
+      chatProvider.draftText = row.text
+      homeAskFieldFocused = true
     }
   }
 
@@ -1207,7 +1224,9 @@ struct DashboardPage: View {
   /// repeated taps don't spawn empty sessions.
   private func beginNewHomeChatFromAskBar() {
     homeAskFieldFocused = true
-    guard !chatProvider.messages.isEmpty else { return }
+    // Only start a fresh chat from the resting hero — never mid-conversation.
+    // Once you're in an open chat, tapping the bar just continues it.
+    guard homeMode == .hub, !chatProvider.messages.isEmpty else { return }
     Task { _ = await chatProvider.createNewSession(skipGreeting: true) }
   }
 

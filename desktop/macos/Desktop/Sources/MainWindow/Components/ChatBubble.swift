@@ -269,8 +269,11 @@ struct ChatBubble: View {
           onOpenAgentRef: onOpenAgentRef
         )
       )
-    case .thinking(_, let text):
-      return AnyView(ThinkingBlock(text: text))
+    case .thinking:
+      // Omi replies like a person texting — no exposed "Thinking" reasoning
+      // disclosure. The streaming typing indicator (spinning mark) carries the
+      // wait on its own.
+      return AnyView(EmptyView())
     case .discoveryCard(_, let title, let summary, let fullText):
       return AnyView(DiscoveryCard(title: title, summary: summary, fullText: fullText))
     case .agentSpawn(

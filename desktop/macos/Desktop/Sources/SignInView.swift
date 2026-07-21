@@ -6,6 +6,9 @@ struct SignInView: View {
   @ObservedObject var authState: AuthState
   @Environment(\.sbTheme) private var sb
   @State private var breathe = false
+  /// Sign-in opens on just the Omi mark + wordmark; after a beat the mark spins,
+  /// the "Omi" wordmark fades, and the rest of the screen reveals.
+  @State private var introRevealed = false
 
   private static let logoImage: NSImage? = {
     guard let url = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
@@ -45,82 +48,89 @@ struct SignInView: View {
       // generous whitespace, no floating box.
       VStack(spacing: 0) {
         HStack(spacing: 12) {
+          SBLogo(size: introRevealed ? 44 : 60, spinning: !introRevealed)
+            .scaleEffect(breathe ? 1.04 : 1.0)
+            .animation(SBMotion.breathe, value: breathe)
+
+          if !introRevealed {
+            Text("Omi")
+              .geist(size: 40, weight: .semibold, tracking: 40 * -0.02)
+              .foregroundStyle(sb.ink)
+              .transition(.opacity)
+          }
+        }
+
+        if introRevealed {
           Group {
-            if let logo = Self.logoImage {
-              Image(nsImage: logo).resizable().renderingMode(.template).scaledToFit()
-            } else {
-              Circle().strokeBorder(lineWidth: 5)
+            Text("A second brain you trust\nmore than your first")
+              .geist(size: 32, weight: .semibold, tracking: 32 * -0.03)
+              .foregroundStyle(sb.ink)
+              .multilineTextAlignment(.center)
+              .lineSpacing(3)
+              .fixedSize(horizontal: false, vertical: true)
+              .padding(.top, 28)
+
+            Text("It remembers every conversation — and does the follow-ups.")
+              .geist(size: 15)
+              .foregroundStyle(sb.ink(.w55))
+              .multilineTextAlignment(.center)
+              .fixedSize(horizontal: false, vertical: true)
+              .padding(.top, 10)
+
+            VStack(spacing: 11) {
+              signInButton(
+                title: "Continue with Apple",
+                filled: true,
+                leading: {
+                  Image(systemName: "applelogo").font(.system(size: 13)).foregroundStyle(sb.inkInverted)
+                },
+                action: { signIn(apple: true) })
+              signInButton(
+                title: "Continue with Google",
+                filled: false,
+                leading: { GoogleLogo().frame(width: 15, height: 15) },
+                action: { signIn(apple: false) })
             }
-          }
-          .frame(width: 42, height: 42)
-
-          Text("Omi")
-            .geist(size: 34, weight: .semibold, tracking: 34 * -0.02)
-        }
-        .foregroundStyle(sb.ink)
-        .scaleEffect(breathe ? 1.08 : 1.0)
-        .opacity(breathe ? 1.0 : 0.85)
-        .animation(SBMotion.breathe, value: breathe)
-
-        Text("A second brain you trust\nmore than your first")
-          .geist(size: 32, weight: .semibold, tracking: 32 * -0.03)
-          .foregroundStyle(sb.ink)
-          .multilineTextAlignment(.center)
-          .lineSpacing(3)
-          .fixedSize(horizontal: false, vertical: true)
-          .padding(.top, 28)
-
-        Text("It remembers every conversation — and does the follow-ups.")
-          .geist(size: 15)
-          .foregroundStyle(sb.ink(.w55))
-          .multilineTextAlignment(.center)
-          .fixedSize(horizontal: false, vertical: true)
-          .padding(.top, 10)
-
-        VStack(spacing: 11) {
-          signInButton(
-            title: "Continue with Apple",
-            filled: true,
-            leading: {
-              Image(systemName: "applelogo").font(.system(size: 13)).foregroundStyle(sb.inkInverted)
-            },
-            action: { signIn(apple: true) })
-          signInButton(
-            title: "Continue with Google",
-            filled: false,
-            leading: { GoogleLogo().frame(width: 15, height: 15) },
-            action: { signIn(apple: false) })
-        }
-        .frame(width: 320)
-        .padding(.top, 34)
-
-        if authState.isLoading {
-          HStack(spacing: 10) {
-            ProgressView().scaleEffect(0.7).tint(sb.ink(.w6))
-            Button { AuthService.shared.cancelSignIn() } label: {
-              Text("Cancel").geist(size: 12.5).foregroundStyle(sb.ink(.w45))
-            }
-            .buttonStyle(.plain)
-          }
-          .padding(.top, 14)
-        }
-        if let error = authState.error {
-          Text(UserFacingErrorPresentation.message(from: error, while: .signIn))
-            .geist(size: 12.5).foregroundStyle(sb.ink(.w6))
-            .multilineTextAlignment(.center)
             .frame(width: 320)
-            .padding(.top, 12)
-        }
+            .padding(.top, 34)
 
-        Text("open source · runs on your mac · pause anytime")
-          .geistMono(size: 12)
-          .foregroundStyle(sb.ink(.w35))
-          .padding(.top, 28)
+            if authState.isLoading {
+              HStack(spacing: 10) {
+                ProgressView().scaleEffect(0.7).tint(sb.ink(.w6))
+                Button { AuthService.shared.cancelSignIn() } label: {
+                  Text("Cancel").geist(size: 12.5).foregroundStyle(sb.ink(.w45))
+                }
+                .buttonStyle(.plain)
+              }
+              .padding(.top, 14)
+            }
+            if let error = authState.error {
+              Text(UserFacingErrorPresentation.message(from: error, while: .signIn))
+                .geist(size: 12.5).foregroundStyle(sb.ink(.w6))
+                .multilineTextAlignment(.center)
+                .frame(width: 320)
+                .padding(.top, 12)
+            }
+
+            Text("open source · runs on your mac · pause anytime")
+              .geistMono(size: 12)
+              .foregroundStyle(sb.ink(.w35))
+              .padding(.top, 28)
+          }
+          .transition(.opacity)
+        }
       }
       .frame(maxWidth: 460)
+      .animation(.easeOut(duration: 0.5), value: introRevealed)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .onAppear { breathe = true }
+    .onAppear {
+      breathe = true
+      guard !introRevealed else { return }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+        withAnimation(.easeOut(duration: 0.5)) { introRevealed = true }
+      }
+    }
   }
 
   @ViewBuilder private func signInButton<Leading: View>(
