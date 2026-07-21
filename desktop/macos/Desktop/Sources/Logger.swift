@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import Sentry
 
 enum OmiLogPathResolver {
@@ -38,11 +39,75 @@ func omiLogFilePath() -> String { logFile }
 func omiLogLaunchID() -> String { logLaunchID }
 
 private let logQueue = DispatchQueue(label: "me.omi.logger", qos: .utility)
+private let logFailureDiagnostics = Logger(subsystem: "me.omi.desktop", category: "file-logger")
 private let dateFormatter: DateFormatter = {
   let formatter = DateFormatter()
   formatter.dateFormat = "HH:mm:ss.SSS"  // Added milliseconds for perf tracking
   return formatter
 }()
+
+/// Appends to a file using Foundation's throwing APIs. Legacy `FileHandle.write(_:)`
+/// raises an Objective-C exception for I/O failures, which aborts a Swift process.
+enum OmiLogFileAppender {
+  static func append(
+    _ data: Data,
+    to file: URL,
+    openFile: (URL) throws -> FileHandle = { try FileHandle(forWritingTo: $0) },
+    seekToEnd: (FileHandle) throws -> Void = { try $0.seekToEnd() },
+    write: (FileHandle, Data) throws -> Void = { try $0.write(contentsOf: $1) },
+    close: (FileHandle) throws -> Void = { try $0.close() }
+  ) -> Result<Void, Error> {
+    var handle: FileHandle?
+    do {
+      let openedHandle = try openFile(file)
+      handle = openedHandle
+      try seekToEnd(openedHandle)
+      try write(openedHandle, data)
+      try close(openedHandle)
+      return .success(())
+    } catch {
+      // A failed seek or write can leave the handle open; closing is best-effort
+      // here because the original I/O failure is the useful diagnostic.
+      if let handle {
+        try? close(handle)
+      }
+      return .failure(error)
+    }
+  }
+}
+
+/// Bounds diagnostics when every file write fails (for example, on a full disk).
+/// Instances are confined to the serial log queue.
+final class OmiLogFileFailureReporter: @unchecked Sendable {
+  private var didReport = false
+  private let emit: (Error) -> Void
+
+  init(emit: @escaping (Error) -> Void) {
+    self.emit = emit
+  }
+
+  func report(_ error: Error) {
+    guard !didReport else { return }
+    didReport = true
+    emit(error)
+  }
+}
+
+/// Records a local-log failure without recursing into the unavailable file logger.
+private func reportLogFileWriteFailure(_ error: Error) {
+  let nsError = error as NSError
+  let diagnostic = "Local log write failed; dropped entry (domain=\(nsError.domain), code=\(nsError.code))"
+  logFailureDiagnostics.error("\(diagnostic, privacy: .public)")
+
+  // A breadcrumb accompanies any later crash report without turning expected disk
+  // exhaustion into a high-volume Sentry error event.
+  guard !AppBuild.isNonProduction else { return }
+  let breadcrumb = Breadcrumb(level: .error, category: "file-logger")
+  breadcrumb.message = diagnostic
+  SentrySDK.addBreadcrumb(breadcrumb)
+}
+
+private let logFileFailureReporter = OmiLogFileFailureReporter(emit: reportLogFileWriteFailure)
 
 /// Append data to the log file on a background queue (non-blocking)
 private func appendToLogFile(_ line: String) {
@@ -132,6 +197,17 @@ private func logLine(timestamp: String, category: String, message: String) -> St
   "[\(timestamp)] [\(category)] [bundle_id=\(logBundleIdentifier) pid=\(logProcessID)] \(message)"
 }
 
+func writeToLogFile(
+  _ data: Data,
+  to file: URL,
+  appendFile: (Data, URL) -> Result<Void, Error>,
+  reportFailure: (Error) -> Void
+) {
+  if case .failure(let error) = appendFile(data, file) {
+    reportFailure(error)
+  }
+}
+
 /// Shared file-write implementation (must be called on logQueue)
 private func writeToLogFile(_ data: Data) {
   if !didEnsureLogFilePermissions {
@@ -143,15 +219,18 @@ private func writeToLogFile(_ data: Data) {
       && ensureLogFileOwnerOnly(atPath: logFile)
   }
   if FileManager.default.fileExists(atPath: logFile) {
-    if let handle = FileHandle(forWritingAtPath: logFile) {
-      handle.seekToEndOfFile()
-      handle.write(data)
-      handle.closeFile()
-    }
+    writeToLogFile(
+      data,
+      to: URL(fileURLWithPath: logFile),
+      appendFile: { data, file in OmiLogFileAppender.append(data, to: file) },
+      reportFailure: { logFileFailureReporter.report($0) })
   } else {
     // Recreate owner-only if the file was removed mid-session.
-    FileManager.default.createFile(
+    let created = FileManager.default.createFile(
       atPath: logFile, contents: data, attributes: [.posixPermissions: 0o600])
+    if !created {
+      logFileFailureReporter.report(CocoaError(.fileWriteUnknown))
+    }
   }
 }
 
