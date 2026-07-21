@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.94",
+      "date": "2026-07-21",
+      "changes": [
+        "Improved macOS update reliability across both Apple silicon and Intel Macs."
+      ]
+    },
+    {
       "version": "0.12.93",
       "date": "2026-07-21",
       "changes": [
