@@ -898,6 +898,20 @@ class TestBYOKFingerprintValidation:
 
     @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
     @patch('database.users.get_byok_state')
+    def test_valid_request_exposes_exactly_the_enrolled_keys(self, mock_get_state):
+        """A passing BYOK request makes the enrolled provider keys available downstream."""
+        from utils.byok import _byok_ctx, validate_byok_request, get_byok_keys
+
+        mock_get_state.return_value = self._mock_byok_state()
+        token = _byok_ctx.set(dict(self._valid_request_keys))
+        try:
+            validate_byok_request('byok-uid')
+            assert set(get_byok_keys()) == set(self._enrolled_fingerprints)
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
     def test_partial_headers_when_byok_active_raises_403(self, mock_get_state):
         """BYOK-active user sending SOME but not all headers → 403 (incomplete BYOK attempt)."""
         from fastapi import HTTPException
