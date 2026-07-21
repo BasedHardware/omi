@@ -1,5 +1,10 @@
 //! Omi device BLE protocol helpers + optional STT.
 //! See `sdks/device/PROTOCOL.md` and `sdks/device/STT.md`.
+//!
+//! Enable feature `ble` for `btleplug`-backed [`ble`] scan/listen.
+
+#[cfg(feature = "ble")]
+pub mod ble;
 
 pub const SERVICE_UUID: &str = "19b10000-e8f2-537e-4f6c-d104768a1214";
 pub const AUDIO_DATA_UUID: &str = "19b10001-e8f2-537e-4f6c-d104768a1214";
