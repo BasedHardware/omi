@@ -152,7 +152,17 @@ jobs:
           sudo apt-get install --yes redis-server
 
       - name: Run listen to pusher stack gauntlet
-        run: npm run test:listen-pusher-stack:emulator
+        run: npm run test:listen-pusher-stack:emulator -- --state-dir "$RUNNER_TEMP/listen-pusher-stack"
+
+      - name: Show listen gauntlet backend logs on failure
+        if: failure()
+        run: |
+          state_dir="$RUNNER_TEMP/listen-pusher-stack"
+          if [[ -d "$state_dir" ]]; then
+            find "$state_dir" -type f -name backend.log -print -exec tail -n 160 {} \;
+          else
+            echo "Listen gauntlet state directory was not retained."
+          fi
 
   sync-cloud-tasks-stack-gauntlet:
     name: Sync Cloud Tasks Stack Gauntlet

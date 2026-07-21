@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import asyncio
 import time
 from html import escape
 from datetime import datetime, timezone
@@ -16,7 +15,7 @@ from fastapi.responses import HTMLResponse
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.apps import fetch_app_chat_tools_from_manifest
-from utils.executors import db_executor, llm_executor, storage_executor, run_blocking
+from utils.executors import db_executor, llm_executor, storage_executor, run_blocking, start_background_task
 from utils.http_client import get_webhook_client
 from utils.multipart import APP_IMAGE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 from utils.mcp_client import (
@@ -1684,9 +1683,10 @@ def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_curre
 async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid)):
     await run_blocking(db_executor, migrate_app_owner_id_db, uid, old_id)
 
-    # Start async tasks to migrate memories and update persona connected accounts
-    asyncio.create_task(run_blocking(db_executor, migrate_memories, old_id, uid))
-    asyncio.create_task(update_omi_persona_connected_accounts(uid))
+    # Tracked background tasks (not bare asyncio.create_task): keeps a live reference
+    # and logs a failed migration instead of silently dropping it.
+    start_background_task(run_blocking(db_executor, migrate_memories, old_id, uid), name=f"migrate_memories:{uid}")
+    start_background_task(update_omi_persona_connected_accounts(uid), name=f"migrate_persona_accounts:{uid}")
 
     return {"status": "ok", "message": "Migration started"}
 

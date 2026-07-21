@@ -223,7 +223,7 @@ final class CloudConnectorGuidanceOverlay {
     settingsWatchTask?.cancel()
     window?.close()
 
-    let cardSize = CGSize(width: 180, height: 164)
+    let cardSize = Self.dragCardSize(appName: appName)
     dragCardSize = cardSize
     let dragTargetState = ScreenRecordingDragTargetState(frame: anchor)
     self.dragTargetState = dragTargetState
@@ -322,6 +322,14 @@ final class CloudConnectorGuidanceOverlay {
     let y = visibleFrame.minY + (visibleFrame.height / 4 - cardSize.height) / 2
     let proposed = CGRect(x: x, y: y, width: cardSize.width, height: cardSize.height)
     return SpatialOverlayGeometry.clamped(proposed, to: visibleFrame, padding: 12)
+  }
+
+  /// A named development bundle can have a much longer display name than the
+  /// production app. Widen the helper rather than allowing its instruction to
+  /// render outside the transparent panel and get clipped by AppKit.
+  static func dragCardSize(appName: String) -> CGSize {
+    let hasLongDisplayName = appName.count > 16
+    return CGSize(width: hasLongDisplayName ? 240 : 180, height: hasLongDisplayName ? 180 : 164)
   }
 
   static func dragCardInitialAlpha(reduceMotion: Bool) -> CGFloat {
@@ -822,7 +830,8 @@ private struct ScreenRecordingDragCardView: View {
           .foregroundColor(OmiColors.textPrimary)
           .multilineTextAlignment(.center)
           .lineSpacing(-1)
-          .fixedSize(horizontal: true, vertical: true)
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(maxWidth: size.width - 20)
           .shadow(color: Color.black.opacity(0.65), radius: 3, y: 1)
       }
     }

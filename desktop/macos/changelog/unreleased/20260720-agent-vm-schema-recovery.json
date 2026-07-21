@@ -1,0 +1,3 @@
+{
+  "change": "Improved recovery when an agent VM starts with an incomplete local database"
+}

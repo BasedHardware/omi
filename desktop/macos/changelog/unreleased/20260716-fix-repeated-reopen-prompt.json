@@ -1,0 +1,3 @@
+{
+  "change": "Fixed onboarding repeatedly asking to quit and reopen Omi after granting permissions — the reopen prompt now appears once, only when a Screen Recording grant actually needs it"
+}

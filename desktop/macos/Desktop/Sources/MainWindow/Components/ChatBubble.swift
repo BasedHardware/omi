@@ -267,6 +267,7 @@ struct ChatBubble: View {
       return AnyView(
         ToolCallsGroup(
           calls: calls,
+          compact: true,
           onCancel: onCancelTurn,
           onOpenAgent: onOpenAgent,
           onOpenAgentRef: onOpenAgentRef
@@ -958,14 +959,8 @@ enum ContentBlockGroup: Identifiable {
     return groups
   }
 
-  /// Main chat renders the agent's final answer and sub-agent entrypoints, not
-  /// the implementation log of every completed tool. An in-flight tool remains
-  /// visible as progress feedback even if its surrounding text segment already
-  /// reached a terminal streaming state; the tool's own lifecycle is the
-  /// authority. Once that tool completes or fails, only spawned-agent links
-  /// survive. When a structured `.agentSpawn` exists
-  /// for the same pill/run, hide the spawn tool call so the card is the single
-  /// entrypoint (INV-6 structured identity).
+  /// Main chat keeps a durable tool trace, so streamed answers do not appear to lose completed work.
+  /// A structured `.agentSpawn` replaces only its duplicate raw spawn call (INV-6 structured identity).
   static func visibleChatGroups(_ blocks: [ChatContentBlock], isStreaming: Bool) -> [ContentBlockGroup] {
     // The display projection turns a persisted spawn into its terminal card.
     // Both structured forms are therefore authoritative evidence that the
@@ -1009,16 +1004,21 @@ enum ContentBlockGroup: Identifiable {
           }
           return true
         }
-        // Keep unresolved agent links and live work together. A raw spawn can
-        // briefly precede its structured receipt while another tool (for
-        // example a web lookup) is still executing; returning early for the
-        // spawn would hide that truthful active-tool indication.
+        // Keep the complete tool trace together. A raw spawn can briefly
+        // precede its structured receipt; once that receipt arrives, hide only
+        // the duplicate raw spawn and retain every other completed, failed, or
+        // in-flight tool row as visible progress evidence.
         let unresolvedSpawnIDs = Set(spawnedAgentCalls.map(\.id))
         let visibleCalls = calls.filter { block in
           if unresolvedSpawnIDs.contains(block.id) { return true }
-          if case .toolCall(_, _, let status, _, _, _) = block {
-            return status.isInFlight
+          if let ref = block.agentOpenRef {
+            let hasStructuredSpawn =
+              ref.pillId.map { structuredSpawnKeys.contains("pill:\($0.uuidString)") }
+              ?? ref.runId.map { structuredSpawnKeys.contains("run:\($0)") }
+              ?? false
+            if hasStructuredSpawn { return false }
           }
+          if case .toolCall = block { return true }
           return false
         }
         return visibleCalls.isEmpty ? nil : .toolCalls(id: id, calls: visibleCalls)
@@ -1029,12 +1029,18 @@ enum ContentBlockGroup: Identifiable {
 
 // MARK: - Tool Calls Group
 
+/// Keeps streamed tool groups compact until the reader explicitly asks for the details.
+enum ToolCallsGroupExpansionPolicy {
+  static func initiallyExpanded() -> Bool {
+    false
+  }
+}
+
 /// Renders a group of consecutive tool calls as a single summary line with
 /// optional expanded per-step details.
 struct ToolCallsGroup: View {
   let calls: [ChatContentBlock]
   var compact: Bool = false
-  var expandRunning: Bool = true
   /// `ChatProvider` wires this to `agentBridge.interrupt()` via the
   /// parent message view. If no action is available, the banner is hidden
   /// so the UI never presents a no-op Cancel button.
@@ -1048,23 +1054,16 @@ struct ToolCallsGroup: View {
   init(
     calls: [ChatContentBlock],
     compact: Bool = false,
-    expandRunning: Bool = true,
     onCancel: (() -> Void)? = nil,
     onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil,
     onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
   ) {
     self.calls = calls
     self.compact = compact
-    self.expandRunning = expandRunning
     self.onCancel = onCancel
     self.onOpenAgent = onOpenAgent
     self.onOpenAgentRef = onOpenAgentRef
-    self._isExpanded = State(initialValue: expandRunning && Self.hasRunningTool(in: calls))
-  }
-
-  /// Whether any tool in the group is still running.
-  private var hasRunningTool: Bool {
-    Self.hasRunningTool(in: calls)
+    self._isExpanded = State(initialValue: ToolCallsGroupExpansionPolicy.initiallyExpanded())
   }
 
   /// True iff at least one tool in the group is `.stalled` and is not a
@@ -1186,13 +1185,8 @@ struct ToolCallsGroup: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+    .fixedSize(horizontal: false, vertical: true)
     .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.82), radius: compact ? 14 : 16)
-    .onChange(of: hasRunningTool) { _, isRunning in
-      guard expandRunning, isRunning else { return }
-      OmiMotion.withGated(.easeInOut(duration: 0.18)) {
-        isExpanded = true
-      }
-    }
   }
 
   private var header: some View {
@@ -1291,13 +1285,6 @@ struct ToolCallsGroup: View {
       }
       .padding(.horizontal, OmiSpacing.xs)
       .padding(.vertical, OmiSpacing.xs)
-    }
-  }
-
-  private static func hasRunningTool(in calls: [ChatContentBlock]) -> Bool {
-    calls.contains { block in
-      if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
-      return false
     }
   }
 

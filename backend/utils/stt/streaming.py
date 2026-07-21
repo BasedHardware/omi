@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import io
 import json
 import os
@@ -6,7 +7,7 @@ import threading
 import urllib.parse
 import wave as _wave
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, cast
 
 import numpy as np
 import websockets
@@ -19,13 +20,18 @@ from config.stt_provider_policy import (
     PARAKEET_PROVIDER,
     STTServingSurface,
     default_models_for_surface,
+    modulate_supports_language,
+    normalized_stt_language,
+    parakeet_supports_language,
     provider_is_enabled,
+    supports_live_multilingual_mode,
 )
 from utils.async_tasks import create_named_task
 from utils.executors import sync_executor, run_blocking
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from utils.stt.socket import STTSocket
+from utils.stt.provider_resilience import EXPECTED_REJECTIONS, ProviderCircuitBreaker
 from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
     async_extract_embedding_from_bytes,
@@ -51,6 +57,92 @@ class STTService(str, Enum):
             return 'modulate_streaming'
         if value == STTService.parakeet:
             return 'parakeet_streaming'
+
+
+class ParakeetConnectionError(RuntimeError):
+    def __init__(self, reason: str, detail: str = '') -> None:
+        self.reason = reason
+        super().__init__(detail or reason)
+
+
+_parakeet_circuit = ProviderCircuitBreaker(
+    failure_threshold=int(os.getenv('PARAKEET_CIRCUIT_FAILURE_THRESHOLD', '3')),
+    cooldown_seconds=float(os.getenv('PARAKEET_CIRCUIT_COOLDOWN_SECONDS', '30')),
+)
+
+
+async def connect_stt_socket_with_fallback(
+    *,
+    primary_service: STTService,
+    connect_primary: Callable[[], Awaitable[Optional[STTSocket]]],
+    connect_modulate: Callable[[], Awaitable[Optional[STTSocket]]],
+) -> Tuple[STTSocket, STTService]:
+    """Connect Parakeet before audio starts, falling back once to Modulate.
+
+    The circuit is deliberately process-local and never owns capacity. The
+    Parakeet service rejects excess streams at its GPU boundary; this helper
+    only avoids repeated connection latency while that provider is unhealthy.
+    """
+    if primary_service != STTService.parakeet:
+        raise ValueError('connection fallback is defined only for a Parakeet primary')
+
+    reason = 'circuit_open'
+    if _parakeet_circuit.allow_request():
+        try:
+            socket = await connect_primary()
+            if socket is None:
+                raise ParakeetConnectionError('config_incomplete', 'Parakeet returned no socket')
+            _parakeet_circuit.record_success()
+            return socket, STTService.parakeet
+        except ParakeetConnectionError as error:
+            reason = error.reason
+            if reason in EXPECTED_REJECTIONS:
+                _parakeet_circuit.record_rejection(reason)
+            else:
+                _parakeet_circuit.record_failure()
+        except (asyncio.TimeoutError, TimeoutError):
+            reason = 'timeout'
+            _parakeet_circuit.record_failure()
+        except Exception:
+            reason = 'provider_5xx'
+            _parakeet_circuit.record_failure()
+
+    try:
+        fallback_socket = await connect_modulate()
+        if fallback_socket is None:
+            raise RuntimeError('Modulate returned no socket')
+    except Exception:
+        record_fallback(
+            component='stt_selection',
+            from_mode=STTService.parakeet.value,
+            to_mode=STTService.modulate.value,
+            reason=reason,
+            outcome='exhausted',
+        )
+        raise
+
+    record_fallback(
+        component='stt_selection',
+        from_mode=STTService.parakeet.value,
+        to_mode=STTService.modulate.value,
+        reason=reason,
+        outcome='recovered',
+    )
+    return fallback_socket, STTService.modulate
+
+
+async def drain_stt_socket(socket: STTSocket) -> None:
+    """Await a serving socket's tail drain, with a synchronous close fallback."""
+    drain_and_close = getattr(socket, 'drain_and_close', None)
+    if not callable(drain_and_close):
+        socket.finish()
+        return
+    drain_result = drain_and_close()
+    if inspect.isawaitable(drain_result):
+        await drain_result
+        return
+    logger.warning('STT provider lacks async tail drain')
+    socket.finish()
 
 
 deepgram_nova3_multi_languages = {
@@ -164,108 +256,9 @@ deepgram_nova3_languages = {
 }
 
 
-modulate_languages = {
-    'multi',
-    'en',
-    'af',
-    'sq',
-    'ar',
-    'az',
-    'eu',
-    'be',
-    'bn',
-    'bs',
-    'bg',
-    'ca',
-    'zh',
-    'hr',
-    'cs',
-    'da',
-    'nl',
-    'et',
-    'fi',
-    'fr',
-    'gl',
-    'de',
-    'el',
-    'gu',
-    'he',
-    'hi',
-    'hu',
-    'id',
-    'it',
-    'ja',
-    'kn',
-    'kk',
-    'ko',
-    'lv',
-    'lt',
-    'mk',
-    'ms',
-    'ml',
-    'mr',
-    'no',
-    'fa',
-    'pl',
-    'pt',
-    'pa',
-    'ro',
-    'ru',
-    'sr',
-    'sk',
-    'sl',
-    'es',
-    'sw',
-    'sv',
-    'tl',
-    'ta',
-    'te',
-    'th',
-    'tr',
-    'uk',
-    'ur',
-    'vi',
-    'cy',
-}
-
-parakeet_languages = {
-    'multi',
-    'bg',
-    'hr',
-    'cs',
-    'da',
-    'nl',
-    'en',
-    'et',
-    'fi',
-    'fr',
-    'de',
-    'el',
-    'hu',
-    'it',
-    'lt',
-    'lv',
-    'mt',
-    'pl',
-    'pt',
-    'ro',
-    'ru',
-    'sk',
-    'sl',
-    'es',
-    'sv',
-    'uk',
-}
-
 # Compatibility export for callers. Its value is owned by stt_provider_policy.
 DEFAULT_STT_SERVICE_MODELS = default_models_for_surface(STTServingSurface.STREAMING)
 stt_service_models = os.getenv('STT_SERVICE_MODELS', ','.join(DEFAULT_STT_SERVICE_MODELS)).split(',')
-
-
-def _normalize_language(language: str | None) -> str:
-    if not language:
-        return ''
-    return language.split('-')[0].split('_')[0].lower()
 
 
 def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
@@ -276,11 +269,43 @@ def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
     return 'none'
 
 
+def _requested_stt_language(
+    language: Optional[str], base_lang: str, *, multi_lang_enabled: bool, surface: STTServingSurface
+) -> str:
+    """Resolve the provider language while retaining PTT's explicit input language.
+
+    Live sessions with multi-language enabled must select a provider's auto-detect
+    mode. PTT does not load the user's transcription preference, so it keeps its
+    explicit language unless the client itself sends the ``multi`` sentinel.
+    """
+    if base_lang == 'multi' or (
+        surface == STTServingSurface.STREAMING
+        and multi_lang_enabled
+        and language
+        and supports_live_multilingual_mode(language)
+    ):
+        return 'multi'
+    return base_lang
+
+
+def _models_with_preferred_service(
+    models: List[str] | Tuple[str, ...], *, preferred_service: Optional[str]
+) -> Tuple[str, ...]:
+    """Honor a recognized client engine preference within the serving policy."""
+    normalized_preference = (preferred_service or '').strip().lower()
+    if normalized_preference != STTService.parakeet.value:
+        return tuple(models)
+    return tuple(model for model in models if model.strip() == STTService.parakeet.value) + tuple(
+        model for model in models if model.strip() != STTService.parakeet.value
+    )
+
+
 def get_stt_service_for_language(
     language: Optional[str],
     multi_lang_enabled: bool = True,
     *,
     surface: STTServingSurface = STTServingSurface.STREAMING,
+    preferred_service: Optional[str] = None,
 ) -> Tuple[Optional[STTService], Optional[str], Optional[str]]:
     """Select a serving STT provider allowed for the requested product surface.
 
@@ -290,10 +315,19 @@ def get_stt_service_for_language(
     """
     # Missing language metadata historically meant English. Preserve that
     # behavior without opening a retired-provider fallback for unknown values.
-    base_lang = _normalize_language(language) or 'en'
+    base_lang = normalized_stt_language(language) or 'en'
+    requested_language = _requested_stt_language(
+        language,
+        base_lang,
+        multi_lang_enabled=multi_lang_enabled,
+        surface=surface,
+    )
 
-    def select(models: List[str] | Tuple[str, ...]) -> Optional[Tuple[STTService, str, str]]:
-        for model in models:
+    def select(
+        models: List[str] | Tuple[str, ...],
+    ) -> Tuple[Optional[Tuple[STTService, str, str]], Optional[str]]:
+        parakeet_fallback_reason: Optional[str] = None
+        for model in _models_with_preferred_service(models, preferred_service=preferred_service):
             model = model.strip()
             if (
                 model.startswith('dg-')
@@ -302,38 +336,61 @@ def get_stt_service_for_language(
             ):
                 dg_model = model.replace('dg-', '', 1)
                 if multi_lang_enabled and language in deepgram_nova3_multi_languages:
-                    return STTService.deepgram, 'multi', dg_model
+                    return (STTService.deepgram, 'multi', dg_model), parakeet_fallback_reason
                 if language in deepgram_nova3_languages:
-                    return STTService.deepgram, language, dg_model
+                    return (STTService.deepgram, language, dg_model), parakeet_fallback_reason
                 continue
-            if (
-                model == 'parakeet'
-                and provider_is_enabled(PARAKEET_PROVIDER, surface)
-                and os.getenv('HOSTED_PARAKEET_API_URL')
-            ):
-                if base_lang in parakeet_languages:
-                    return STTService.parakeet, base_lang or 'en', 'parakeet'
+            if model == 'parakeet':
+                if provider_is_enabled(PARAKEET_PROVIDER, surface) and os.getenv('HOSTED_PARAKEET_API_URL'):
+                    if parakeet_supports_language(surface, requested_language):
+                        return (STTService.parakeet, requested_language, 'parakeet'), parakeet_fallback_reason
+                    else:
+                        parakeet_fallback_reason = 'capability_mismatch'
+                else:
+                    parakeet_fallback_reason = 'config_incomplete'
             if (
                 model == 'modulate-velma-2'
                 and provider_is_enabled(MODULATE_PROVIDER, surface)
-                and base_lang in modulate_languages
+                and modulate_supports_language(requested_language)
             ):
-                return STTService.modulate, base_lang or 'en', 'velma-2'
-        return None
+                return (STTService.modulate, requested_language, 'velma-2'), parakeet_fallback_reason
+        return None, parakeet_fallback_reason
 
-    selected = select(stt_service_models)
+    prefers_parakeet = (preferred_service or '').strip().lower() == STTService.parakeet.value
+
+    def record_selected_fallback(
+        selected: Tuple[STTService, str, str], *, used_default: bool, parakeet_fallback_reason: Optional[str]
+    ) -> None:
+        if selected[0] != STTService.parakeet and (prefers_parakeet or parakeet_fallback_reason):
+            record_fallback(
+                component='stt_selection',
+                from_mode=STTService.parakeet.value,
+                to_mode=selected[0].value,
+                reason=parakeet_fallback_reason
+                or (
+                    'capability_mismatch'
+                    if not parakeet_supports_language(surface, requested_language)
+                    else 'config_incomplete'
+                ),
+                outcome='degraded',
+            )
+        elif used_default:
+            record_fallback(
+                component='stt_selection',
+                from_mode=_stt_selection_from_mode(language or '', base_lang),
+                to_mode=selected[0].value,
+                reason='config_incomplete',
+                outcome='degraded',
+            )
+
+    selected, parakeet_fallback_reason = select(stt_service_models)
     if selected is not None:
+        record_selected_fallback(selected, used_default=False, parakeet_fallback_reason=parakeet_fallback_reason)
         return selected
 
-    selected = select(default_models_for_surface(surface))
+    selected, parakeet_fallback_reason = select(default_models_for_surface(surface))
     if selected is not None:
-        record_fallback(
-            component='stt_selection',
-            from_mode=_stt_selection_from_mode(language or '', base_lang),
-            to_mode=selected[0].value,
-            reason='config_incomplete',
-            outcome='degraded',
-        )
+        record_selected_fallback(selected, used_default=True, parakeet_fallback_reason=parakeet_fallback_reason)
         return selected
 
     record_fallback(
@@ -1164,6 +1221,7 @@ class ParakeetWebSocketSocket(STTSocket):
         self._receiver_task: Optional[asyncio.Task[None]] = None
         self._connected_event = asyncio.Event()
         self._startup_event = asyncio.Event()
+        self._startup_failure_reason = 'provider_5xx'
 
     async def start(self) -> None:
         self._sender_task = create_named_task(self._run(), name="parakeet_ws_stream")
@@ -1172,12 +1230,16 @@ class ParakeetWebSocketSocket(STTSocket):
         except asyncio.TimeoutError:
             logger.error(f'Parakeet WS connect timeout after {PARAKEET_WS_CONNECT_TIMEOUT}s')
             self._mark_dead(f'parakeet ws connect timeout after {PARAKEET_WS_CONNECT_TIMEOUT}s')
+            self._startup_failure_reason = 'timeout'
             self._closed = True
             self._cancel_task(self._sender_task)
-            raise
+            raise ParakeetConnectionError('timeout', self._dead_reason or 'Parakeet connect timeout')
         if not self._connected_event.is_set():
             logger.error(f'Parakeet WS failed before connection: {self._dead_reason}')
-            raise RuntimeError(self._dead_reason or 'parakeet ws failed before connection')
+            raise ParakeetConnectionError(
+                self._startup_failure_reason,
+                self._dead_reason or 'parakeet ws failed before connection',
+            )
         logger.info('Parakeet WS connected successfully')
 
     def send(self, data: bytes) -> bool:
@@ -1245,6 +1307,13 @@ class ParakeetWebSocketSocket(STTSocket):
         try:
             async with websockets.connect(url, max_size=10 * 1024 * 1024) as ws:
                 self._ws = ws
+                ready_raw = await asyncio.wait_for(ws.recv(), timeout=PARAKEET_WS_CONNECT_TIMEOUT)
+                try:
+                    ready = json.loads(ready_raw) if isinstance(ready_raw, str) else None
+                except json.JSONDecodeError as error:
+                    raise RuntimeError('Parakeet returned an invalid readiness frame') from error
+                if not isinstance(ready, dict) or ready.get('type') != 'ready':
+                    raise RuntimeError('Parakeet did not confirm stream admission')
                 self._receiver_task = create_named_task(self._receive_loop(ws), name="parakeet_ws_recv")
                 self._connected_event.set()
                 self._startup_event.set()
@@ -1273,6 +1342,11 @@ class ParakeetWebSocketSocket(STTSocket):
 
         except Exception as e:
             logger.error(f"Parakeet WS connection error: {e}")
+            close_reason = str(getattr(e, 'reason', '') or '')
+            if close_reason in EXPECTED_REJECTIONS:
+                self._startup_failure_reason = close_reason
+            elif isinstance(e, (asyncio.TimeoutError, TimeoutError)):
+                self._startup_failure_reason = 'timeout'
             self._mark_dead(f"parakeet ws failed: {e}")
         finally:
             self._startup_event.set()

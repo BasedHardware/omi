@@ -524,14 +524,18 @@ def test_finalize_conversation_returns_queued_outbox_after_uncertain_task_acknow
 def test_finalize_conversation_returns_503_without_mutating_when_durable_dispatch_is_unavailable():
     target = _conversation(status=ConversationStatus.in_progress)
 
+    class DispatchUnavailable(RuntimeError):
+        pass
+
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
         patch.object(conv, 'deserialize_conversation', return_value=target),
         patch.object(conv.byok, 'has_byok_keys', return_value=False),
+        patch.object(conv.lifecycle_service, 'FinalizationDispatchUnavailable', DispatchUnavailable),
         patch.object(
             conv.lifecycle_service,
             'request_finalization',
-            side_effect=conv.lifecycle_service.FinalizationDispatchUnavailable('missing durable worker'),
+            side_effect=DispatchUnavailable('missing durable worker'),
         ),
         patch.object(conv.redis_db, 'get_in_progress_conversation_id') as get_pointer,
         patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,

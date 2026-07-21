@@ -28,7 +28,10 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     assert 'uses: actions/setup-java@v5' in job
     assert "java-version: '21'" in job
     assert 'sudo apt-get install --yes redis-server' in job
-    assert 'npm run test:listen-pusher-stack:emulator' in job
+    assert 'npm run test:listen-pusher-stack:emulator -- --state-dir "$RUNNER_TEMP/listen-pusher-stack"' in job
+    assert 'name: Show listen gauntlet backend logs on failure' in job
+    assert 'if: failure()' in job
+    assert 'find "$state_dir" -type f -name backend.log -print -exec tail -n 160 {} \\;' in job
 
     assert package['scripts']['test:listen-pusher-stack:emulator'] == 'backend/testing/listen_pusher_stack/run.sh'
     listen_contract = next(
@@ -36,6 +39,20 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     )
     assert 'backend/testing/listen_pusher_stack/**' in listen_contract['sources']
     assert 'tests/unit/test_listen_pusher_stack_ci_wiring.py' in listen_contract['tests']
+
+    # Static wiring tripwire only: the emulator stack proves behavior. This
+    # keeps #10000's REST admission/restart scenario in the blocking command.
+    runner = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'run.py').read_text(encoding='utf-8')
+    task_seam = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'cloud_tasks.py').read_text(
+        encoding='utf-8'
+    )
+    listener_entrypoint = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'listener_app.py').read_text(
+        encoding='utf-8'
+    )
+    assert '_rest_finalization_survives_listener_restart' in runner
+    assert "state_dir / 'cloud-rest-restart'" in runner
+    assert "'task_already_exists'" in task_seam
+    assert 'OMI_STACK_FINALIZATION_RACE_PARTIES' in listener_entrypoint
 
 
 def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:

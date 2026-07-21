@@ -6,6 +6,8 @@ import SwiftUI
 struct OnboardingVoiceDemoView: View {
   @ObservedObject var appState: AppState
   @ObservedObject var chatProvider: ChatProvider
+  var stepIndex: Int
+  var totalSteps: Int
   var onComplete: () -> Void
   var onSkip: () -> Void
   var onForceComplete: (() -> Void)?
@@ -16,7 +18,6 @@ struct OnboardingVoiceDemoView: View {
   @State private var observedShortcutPress = false
   @State private var waitingForResponse = false
   @State private var showContinue = false
-  @State private var previousTranscriptionMode: ShortcutSettings.PTTTranscriptionMode?
   @State private var outputReadiness: SystemAudioMuteController.OutputReadiness = .unavailable
 
   var body: some View {
@@ -39,6 +40,10 @@ struct OnboardingVoiceDemoView: View {
 
       Divider()
         .background(OmiColors.backgroundTertiary)
+
+      OnboardingProgressBar(stepIndex: stepIndex, totalSteps: totalSteps)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, OmiSpacing.xl)
 
       Spacer()
 
@@ -86,21 +91,25 @@ struct OnboardingVoiceDemoView: View {
 
       Spacer()
 
-      if showContinue {
-        Button(action: onComplete) {
-          Text("Continue")
-            .font(.system(size: 15, weight: .semibold))
-            .foregroundColor(.black)
-            .frame(maxWidth: 280)
-            .padding(.vertical, OmiSpacing.md)
-            .background(Color.white)
-            .cornerRadius(OmiChrome.smallControlRadius)
+      HStack(spacing: OmiSpacing.md) {
+        OnboardingBackButton()
+
+        if showContinue {
+          Button(action: onComplete) {
+            Text("Continue")
+              .font(.system(size: 15, weight: .semibold))
+              .foregroundColor(.black)
+              .frame(maxWidth: 280)
+              .padding(.vertical, OmiSpacing.md)
+              .background(Color.white)
+              .cornerRadius(OmiChrome.smallControlRadius)
+          }
+          .buttonStyle(.plain)
+          .keyboardShortcut(.defaultAction)
+          .transition(.move(edge: .bottom).combined(with: .opacity))
         }
-        .buttonStyle(.plain)
-        .keyboardShortcut(.defaultAction)
-        .padding(.bottom, OmiSpacing.section)
-        .transition(.move(edge: .bottom).combined(with: .opacity))
       }
+      .padding(.bottom, OmiSpacing.section)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(OmiColors.backgroundPrimary)
@@ -112,14 +121,15 @@ struct OnboardingVoiceDemoView: View {
       if let barState = FloatingControlBarManager.shared.barState {
         PushToTalkManager.shared.setup(barState: barState)
       }
-      previousTranscriptionMode = shortcutSettings.pttTranscriptionMode
-      shortcutSettings.pttTranscriptionMode = .live
+      // Force live transcription for the demo via a transient, never-persisted
+      // override so a quit/crash mid-step can't corrupt the saved PTT mode.
+      shortcutSettings.pttTranscriptionModeDemoOverride = .live
       Task {
         await chatProvider.warmupBridge()
       }
     }
     .onDisappear {
-      shortcutSettings.pttTranscriptionMode = previousTranscriptionMode ?? .batch
+      shortcutSettings.pttTranscriptionModeDemoOverride = nil
       resetFloatingBarConversation()
       PushToTalkManager.shared.cleanup()
     }

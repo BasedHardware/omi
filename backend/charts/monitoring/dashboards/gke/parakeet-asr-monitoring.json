@@ -212,7 +212,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Number of active WebSocket streaming connections to the ASR service.",
+      "description": "Average active WebSocket streams per ready Parakeet replica. Warning at 15; critical at 20. Check that HPA replicas are ready before changing capacity.",
       "fieldConfig": {
         "defaults": {
           "decimals": 0,
@@ -226,11 +226,11 @@
               },
               {
                 "color": "yellow",
-                "value": 50
+                "value": 15
               },
               {
                 "color": "red",
-                "value": 100
+                "value": 20
               }
             ]
           },
@@ -269,13 +269,13 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\"})",
+          "expr": "sum(parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\"}) / clamp_min(sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-parakeet\", namespace=\"prod-omi-backend\"}), 1)",
           "instant": true,
-          "legendFormat": "Active Streams",
+          "legendFormat": "Active streams / ready replica",
           "refId": "A"
         }
       ],
-      "title": "Active Streams",
+      "title": "Streaming capacity per ready replica",
       "type": "stat"
     },
     {

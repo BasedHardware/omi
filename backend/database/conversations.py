@@ -3,8 +3,9 @@ import json
 import logging
 import uuid
 import zlib
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Callable
 
 from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
 from google.cloud import firestore
@@ -27,6 +28,10 @@ conversations_collection = 'conversations'
 
 
 _LIFECYCLE_FIELDS = frozenset({'status', 'discarded'})
+_PUBLIC_TRANSCRIPT_MAX_STORED_BYTES = 256 * 1024
+_PUBLIC_TRANSCRIPT_MAX_DECODED_BYTES = 512 * 1024
+_PUBLIC_TRANSCRIPT_MAX_SEGMENTS = 4096
+_PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS = 24_000
 
 
 def get_conversation_ids(uid: str) -> List[str]:
@@ -160,6 +165,89 @@ def _decode_transcript_segments_strict(uid: str, raw_segments: Any, compressed: 
     if isinstance(raw_segments, bytes) and compressed:
         return json.loads(zlib.decompress(raw_segments).decode('utf-8'))
     raise ValueError(f'undecodable transcript_segments: {type(raw_segments).__name__} compressed={compressed}')
+
+
+def _decode_public_transcript_segments_bounded(
+    uid: str,
+    raw_segments: Any,
+    *,
+    compressed: bool,
+    max_stored_bytes: int = _PUBLIC_TRANSCRIPT_MAX_STORED_BYTES,
+    max_decoded_bytes: int = _PUBLIC_TRANSCRIPT_MAX_DECODED_BYTES,
+    max_segments: int = _PUBLIC_TRANSCRIPT_MAX_SEGMENTS,
+    max_segment_text_chars: int = _PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS,
+    decompressor_factory: Callable[[], Any] = zlib.decompressobj,
+) -> List[Dict[str, Any]]:
+    """Decode only the bounded compressed transcript shape used by public chat."""
+
+    def invalid() -> ValueError:
+        return ValueError('invalid bounded public transcript')
+
+    if (
+        compressed is not True
+        or max_stored_bytes <= 0
+        or max_decoded_bytes <= 0
+        or max_segments < 0
+        or max_segment_text_chars < 0
+    ):
+        raise invalid()
+
+    try:
+        if isinstance(raw_segments, str):
+            # Enhanced storage encrypts the hex-encoded compressed bytes. Check
+            # the encoded representation before invoking the decryptor so a
+            # malformed Firestore value cannot allocate without a fixed bound.
+            max_encrypted_chars = (((max_stored_bytes * 2) + 28 + 2) // 3) * 4
+            if not raw_segments.isascii() or len(raw_segments) > max_encrypted_chars:
+                raise invalid()
+            decrypted_hex = encryption.decrypt(raw_segments, uid)
+            if len(decrypted_hex) > max_stored_bytes * 2 or len(decrypted_hex) % 2 != 0:
+                raise invalid()
+            compressed_bytes = bytes.fromhex(decrypted_hex)
+        elif isinstance(raw_segments, (bytes, bytearray, memoryview)):
+            if len(raw_segments) > max_stored_bytes:
+                raise invalid()
+            compressed_bytes = bytes(raw_segments)
+        else:
+            raise invalid()
+
+        if len(compressed_bytes) > max_stored_bytes:
+            raise invalid()
+
+        decompressor = decompressor_factory()
+        decoded = decompressor.decompress(compressed_bytes, max_decoded_bytes + 1)
+        if (
+            len(decoded) > max_decoded_bytes
+            or decompressor.unconsumed_tail
+            or not decompressor.eof
+            or decompressor.unused_data
+        ):
+            raise invalid()
+
+        parsed = json.loads(decoded.decode('utf-8'))
+        if not isinstance(parsed, list) or len(parsed) > max_segments:
+            raise invalid()
+
+        safe_segments: List[Dict[str, Any]] = []
+        for segment in parsed:
+            if not isinstance(segment, Mapping):
+                raise invalid()
+            text = segment.get('text')
+            if not isinstance(text, str) or len(text) > max_segment_text_chars:
+                raise invalid()
+            safe_segment: Dict[str, Any] = {'text': text}
+            is_user = segment.get('is_user')
+            if isinstance(is_user, bool):
+                safe_segment['is_user'] = is_user
+            speaker_id = segment.get('speaker_id')
+            if isinstance(speaker_id, int) and not isinstance(speaker_id, bool):
+                safe_segment['speaker_id'] = speaker_id
+            safe_segments.append(safe_segment)
+        return safe_segments
+    except (json.JSONDecodeError, RecursionError, TypeError, UnicodeDecodeError, ValueError, zlib.error) as exc:
+        if isinstance(exc, ValueError) and str(exc) == 'invalid bounded public transcript':
+            raise
+        raise invalid() from exc
 
 
 def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool:
@@ -401,6 +489,51 @@ def get_conversation(uid, conversation_id):
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_data = _document_data_with_revision(conversation_ref.get())
     return conversation_data
+
+
+def get_public_shared_conversation_bounded(
+    uid: str,
+    conversation_id: str,
+    *,
+    firestore_client: Any = None,
+) -> Optional[Dict[str, Any]]:
+    """Read only public-chat fields and decode the transcript within fixed bounds."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    conversation_ref = (
+        client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    )
+    snapshot = conversation_ref.get(
+        field_paths=[
+            'visibility',
+            'is_locked',
+            'transcript_segments_compressed',
+            'transcript_segments',
+        ]
+    )
+    if not snapshot.exists:
+        return None
+    raw = snapshot.to_dict()
+    if not isinstance(raw, dict):
+        return None
+
+    visibility = raw.get('visibility')
+    is_locked = raw.get('is_locked', False)
+    public_conversation: Dict[str, Any] = {
+        'visibility': visibility,
+        'is_locked': is_locked,
+    }
+    if not isinstance(visibility, str) or visibility not in {'shared', 'public'} or is_locked:
+        return public_conversation
+
+    try:
+        public_conversation['transcript_segments'] = _decode_public_transcript_segments_bounded(
+            uid,
+            raw.get('transcript_segments'),
+            compressed=raw.get('transcript_segments_compressed') is True,
+        )
+    except ValueError:
+        return None
+    return public_conversation
 
 
 def get_conversation_audio_stamp(uid: str, conversation_id: str) -> Optional[dict]:

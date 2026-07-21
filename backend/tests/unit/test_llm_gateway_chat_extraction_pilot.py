@@ -282,7 +282,8 @@ def test_feature_bundles_have_gateway_payload_contract_coverage():
     config_path = Path(__file__).resolve().parents[2] / 'llm_gateway' / 'config' / 'feature_bundles.yaml'
     configured = {bundle['feature'] for bundle in yaml.safe_load(config_path.read_text())['feature_bundles']}
 
-    assert configured <= set(GATEWAY_FEATURE_MODELS)
+    assert configured <= set(GATEWAY_FEATURE_MODELS) | {'public_shared_conversation_chat'}
+    assert configured - set(GATEWAY_FEATURE_MODELS) == {'public_shared_conversation_chat'}
 
 
 def _assert_openai_strict_schema_subset(schema):

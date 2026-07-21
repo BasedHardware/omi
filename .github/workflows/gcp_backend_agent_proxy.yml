@@ -36,6 +36,10 @@ jobs:
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
             exit 1
           fi
+          if [[ "${{ github.event.inputs.environment }}" == "prod" ]]; then
+            echo "Production artifact deploys are release-record-only; use deploy-release-ring.yml with ring=prod." >&2
+            exit 1
+          fi
 
       - name: Delete huge unnecessary tools folder
         run: rm -rf /opt/hostedtoolcache

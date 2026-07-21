@@ -52,6 +52,7 @@ describe("omi tool manifest", () => {
       "complete_task",
       "delete_task",
       "load_skill",
+      "search_skills",
       "save_knowledge_graph",
       "get_conversations",
       "search_conversations",

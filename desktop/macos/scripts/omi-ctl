@@ -81,10 +81,37 @@ print(path)
     tries="${1:-30}"
     for _ in $(seq 1 "$tries"); do
       s=$(curl_bridge "$BASE/state" 2>/dev/null || true)
-      if echo "$s" | grep -q '"appState" : "main"'; then echo "$s"; exit 0; fi
+      # `appState: main` is a UI projection, not an authentication guarantee.
+      # The authenticated state snapshot is the only readiness contract exposed
+      # by DesktopAutomationBridge: require a live, signed-in, fully-onboarded
+      # owner snapshot after restoration has completed.
+      if printf '%s' "$s" | python3 -c '
+import json
+import sys
+
+try:
+    envelope = json.load(sys.stdin)
+    snapshot = envelope["result"]
+except (json.JSONDecodeError, KeyError, TypeError):
+    raise SystemExit(1)
+
+ready = (
+    envelope.get("ok") is True
+    and isinstance(snapshot, dict)
+    and snapshot.get("appState") == "main"
+    and snapshot.get("isSignedIn") is True
+    and snapshot.get("hasCompletedOnboarding") is True
+    and snapshot.get("isRestoringAuth") is False
+    and snapshot.get("snapshotStale") is False
+)
+raise SystemExit(0 if ready else 1)
+'; then
+        echo "$s"
+        exit 0
+      fi
       sleep 0.5
     done
-    echo "omi-ctl: timed out waiting for app to reach \"main\" state" >&2; exit 1 ;;
+    echo "omi-ctl: timed out waiting for a live signed-in owner-ready main state" >&2; exit 1 ;;
   screens)
     echo "dashboard|home  conversations  chat  memories  tasks  focus  insight  rewind  apps|integrations  settings  permissions  help" ;;
   *)
@@ -97,7 +124,7 @@ Usage:
   omi-ctl log-path                       Print the exact current bundle-and-launch app log path
   omi-ctl navigate <screen> [section]    Jump to a screen; optional settings sub-section
   omi-ctl open-conversation <id> [--transcript]
-  omi-ctl wait-ready [tries]             Block until app reaches "main" state (0.5s/try)
+  omi-ctl wait-ready [tries]             Block until a live signed-in owner-ready main state (0.5s/try)
   omi-ctl screens                        List valid screen targets
   omi-ctl actions                        List semantic actions the app exposes
   omi-ctl action <name> [key=value ...]  Run a semantic action (cursor-free, in-process)

@@ -566,14 +566,48 @@ extension RealtimeHubController {
       ensureWarm()
       return
     }
-    guard
-      RealtimeVoiceContextRefreshPolicy.requiresRefresh(
-        currentSnapshotIdentity: requirement.snapshotFreshnessIdentity,
-        sessionSnapshotIdentity: sessionVoiceContextFreshnessIdentity)
-    else { return }
-    requestSessionHandoff(
-      reason: .voiceContextFreshness,
-      preservingReconnectAudio: reconnectAudioBuffer != nil)
+    switch RealtimeVoiceContextRefreshPolicy.handoffDecision(
+      currentSnapshotIdentity: requirement.snapshotFreshnessIdentity,
+      sessionSnapshotIdentity: sessionVoiceContextFreshnessIdentity,
+      hasBufferedTurn: reconnectAudioBuffer != nil
+    ) {
+    case .keepCurrentSession:
+      return
+    case .replacePreservingBufferedTurn:
+      idleVoiceContextRefreshTask?.cancel()
+      idleVoiceContextRefreshTask = nil
+      requestSessionHandoff(reason: .voiceContextFreshness, preservingReconnectAudio: true)
+    case .debounceIdleHandoff:
+      scheduleIdleVoiceContextRefresh()
+    }
+  }
+
+  /// Refresh a warm socket only after context updates settle. This is a
+  /// trailing debounce: the task re-reads the latest snapshot before a single
+  /// replacement, so a streamed chat response cannot rotate the voice socket
+  /// once per chunk. A PTT-owned buffer takes the immediate path above.
+  func scheduleIdleVoiceContextRefresh() {
+    idleVoiceContextRefreshTask?.cancel()
+    let ownerScope = currentOwnerScope
+    idleVoiceContextRefreshTask = Task { @MainActor [weak self] in
+      do {
+        try await Task.sleep(
+          nanoseconds: RealtimeVoiceContextRefreshPolicy.idleHandoffDebounceNanoseconds)
+      } catch {
+        return
+      }
+      guard let self, self.isOwnerScopeCurrent(ownerScope) else { return }
+      self.idleVoiceContextRefreshTask = nil
+      let requirement = self.voiceSessionContext(for: ownerScope)
+      guard requirement.isResolved,
+        RealtimeVoiceContextRefreshPolicy.requiresRefresh(
+          currentSnapshotIdentity: requirement.snapshotFreshnessIdentity,
+          sessionSnapshotIdentity: self.sessionVoiceContextFreshnessIdentity)
+      else { return }
+      self.requestSessionHandoff(
+        reason: .voiceContextFreshness,
+        preservingReconnectAudio: self.reconnectAudioBuffer != nil)
+    }
   }
 
   /// Converts an input already streaming to a live socket into the same

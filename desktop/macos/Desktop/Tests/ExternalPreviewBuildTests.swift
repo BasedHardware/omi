@@ -64,7 +64,7 @@ final class ExternalPreviewBuildTests: XCTestCase {
     )
   }
 
-  func testNamedDevelopmentBundlesKeepTheirExistingAutomationAndUpdateBehavior() {
+  func testNamedDevelopmentBundlesKeepAutomationButDisableSharedSparkle() {
     let configuration = AppBuild.configuration(
       bundleIdentifier: "com.omi.omi-local-preview",
       infoDictionary: [
@@ -76,7 +76,8 @@ final class ExternalPreviewBuildTests: XCTestCase {
     XCTAssertTrue(configuration.isNonProduction)
     XCTAssertFalse(configuration.isExternalPreview)
     XCTAssertTrue(configuration.allowsLocalAutomation)
-    XCTAssertTrue(configuration.allowsSparkleUpdates)
+    XCTAssertTrue(configuration.isNamedDevelopmentBundle)
+    XCTAssertFalse(configuration.allowsSparkleUpdates)
   }
 
   func testAutomationBridgeCannotBeForcedOnForAnExternalPreview() {

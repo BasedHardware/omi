@@ -43,7 +43,7 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     )
   }
 
-  func testScreenRecordingDenialContinuesThroughTheNormalVoiceProvider() {
+  func testUnavailableScreenEvidenceContinuesThroughTheNormalVoiceProvider() {
     let denied = evidence(
       bytes: 0,
       target: .unavailable,
@@ -59,7 +59,7 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     )
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.failureDisposition(for: unavailable),
-      .authoritativeLocalResult
+      .providerContinuation
     )
   }
 

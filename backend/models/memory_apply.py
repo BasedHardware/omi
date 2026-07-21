@@ -465,7 +465,7 @@ def apply_long_term_patch_transaction(
             source_version="unknown",
             artifact_preservation=ArtifactPreservationState.preserved,
         )
-        for evidence_id in raw.get("evidence_ids", [])
+        for evidence_id in (raw.get("evidence_ids") or [])
     ]
     try:
         patch = DurableMemoryPatch(**raw)

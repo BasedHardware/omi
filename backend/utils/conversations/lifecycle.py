@@ -16,6 +16,7 @@ from typing import Any, Mapping
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.conversation_enums import ConversationStatus
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
@@ -56,7 +57,7 @@ class LifecycleTransitionError(ValueError):
 
 
 class FinalizationDispatchUnavailable(RuntimeError):
-    """A caller requiring the durable worker cannot be admitted safely."""
+    """A caller cannot be admitted to the durable finalization path safely."""
 
 
 RECORDING_SESSION_MODES = frozenset({'shadow', 'dual_write', 'enforce'})
@@ -586,15 +587,20 @@ def request_finalization(
         # that this deployment cannot recover or dispatch.
         raise FinalizationDispatchUnavailable('durable conversation finalization worker is not configured')
 
-    intent = jobs_db.create_or_get_finalization_intent(
-        uid,
-        conversation_id,
-        requires_byok=has_byok_keys,
-        finalization_admission=lambda conversation: _finalization_admission(conversation, conversation_id),
-        force_process=force_process,
-        extra_updates=extra_updates,
-        firestore_client=firestore_client,
-    )
+    try:
+        intent = jobs_db.create_or_get_finalization_intent(
+            uid,
+            conversation_id,
+            requires_byok=has_byok_keys,
+            finalization_admission=lambda conversation: _finalization_admission(conversation, conversation_id),
+            force_process=force_process,
+            extra_updates=extra_updates,
+            firestore_client=firestore_client,
+        )
+    except FirestoreContentionExhausted as error:
+        # An exhausted contention budget is a clean retry boundary: no outbox
+        # mutation committed, so callers must not fall back to inline work.
+        raise FinalizationDispatchUnavailable('durable finalization admission is temporarily contended') from error
     # The outbox transaction is the authoritative acceptance boundary. Count
     # only newly-created jobs so an idempotent re-dispatch cannot inflate traffic.
     if intent.get('created'):

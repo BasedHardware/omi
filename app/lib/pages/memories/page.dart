@@ -211,8 +211,6 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                     SizedBox(width: 44, height: 44, child: _buildShimmerButton()),
                                     const SizedBox(width: 8),
                                     SizedBox(width: 44, height: 44, child: _buildShimmerButton()),
-                                    const SizedBox(width: 8),
-                                    SizedBox(width: 44, height: 44, child: _buildShimmerButton()),
                                   ],
                                 ),
                               ),
@@ -291,14 +289,6 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                           ),
                                         );
                                       },
-                                    ),
-                                    const SizedBox(width: 8),
-                                    FilterChip(
-                                      label: Text(context.l10n.memoryThisDevice, style: const TextStyle(fontSize: 12)),
-                                      selected: provider.filterThisDeviceOnly,
-                                      onSelected: provider.setFilterThisDeviceOnly,
-                                      visualDensity: VisualDensity.compact,
-                                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                     ),
                                     const SizedBox(width: 8),
                                     SizedBox(

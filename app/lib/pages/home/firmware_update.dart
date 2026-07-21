@@ -375,7 +375,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         const SizedBox(height: 24),
 
         // Action buttons
-        if (shouldUpdate) ...[
+        if (shouldUpdate && firmwareUpdatePolicy.allowsOmiFirmwareUpdate) ...[
           // Update button
           GestureDetector(
             onTap: () async {

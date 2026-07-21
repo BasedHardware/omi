@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch, AsyncMock
 import pytest
 
 from deepgram import LiveTranscriptionEvents
+from config.stt_provider_policy import STTServingSurface
 from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg
 from utils.stt.streaming import get_stt_service_for_language, STTService, should_preserve_filler_words
 
@@ -1021,7 +1022,7 @@ class TestGetSttServiceForLanguage:
         with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(
             'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
         ):
-            service, lang, model = get_stt_service_for_language('en')
+            service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
 
         assert (service, lang, model) == (STTService.parakeet, 'en', 'parakeet')
 
@@ -1029,7 +1030,7 @@ class TestGetSttServiceForLanguage:
         with patch('utils.stt.streaming.stt_service_models', ['parakeet', 'modulate-velma-2']), patch.dict(
             'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
         ):
-            service, lang, model = get_stt_service_for_language('zh-TW')
+            service, lang, model = get_stt_service_for_language('zh-TW', multi_lang_enabled=False)
 
         assert (service, lang, model) == (STTService.modulate, 'zh', 'velma-2')
 
@@ -1037,9 +1038,10 @@ class TestGetSttServiceForLanguage:
         with patch('utils.stt.streaming.stt_service_models', ['dg-nova-3']), patch.dict(
             'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
         ):
-            service, lang, model = get_stt_service_for_language('en')
+            service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
 
-        assert (service, lang, model) == (STTService.parakeet, 'en', 'parakeet')
+        # After #10048 fix: Deepgram retirement is subtractive; Modulate is the safe primary
+        assert (service, lang, model) == (STTService.modulate, 'en', 'velma-2')
 
     def test_unsupported_language_fails_closed(self):
         with patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2']):
@@ -1052,6 +1054,46 @@ class TestGetSttServiceForLanguage:
             service, lang, model = get_stt_service_for_language(None)
 
         assert (service, lang, model) == (STTService.parakeet, 'en', 'parakeet')
+
+
+@pytest.mark.parametrize(
+    ('language', 'multi_lang_enabled', 'surface', 'preferred_service', 'expected'),
+    [
+        ('multi', False, STTServingSurface.STREAMING, None, (STTService.modulate, 'multi', 'velma-2')),
+        ('en', True, STTServingSurface.STREAMING, None, (STTService.modulate, 'multi', 'velma-2')),
+        ('en', True, STTServingSurface.STREAMING, 'parakeet', (STTService.modulate, 'multi', 'velma-2')),
+        ('es', True, STTServingSurface.STREAMING, 'parakeet', (STTService.modulate, 'multi', 'velma-2')),
+        ('zh-TW', True, STTServingSurface.STREAMING, None, (STTService.modulate, 'multi', 'velma-2')),
+        ('ar', True, STTServingSurface.STREAMING, None, (STTService.modulate, 'multi', 'velma-2')),
+        ('es', False, STTServingSurface.STREAMING, None, (STTService.modulate, 'es', 'velma-2')),
+        ('es', False, STTServingSurface.STREAMING, 'parakeet', (STTService.modulate, 'es', 'velma-2')),
+        ('en', False, STTServingSurface.STREAMING, 'parakeet', (STTService.parakeet, 'en', 'parakeet')),
+        ('es', True, STTServingSurface.PTT, None, (STTService.modulate, 'es', 'velma-2')),
+    ],
+)
+def test_selection_respects_model_capability_and_live_multilingual_mode(
+    language, multi_lang_enabled, surface, preferred_service, expected
+):
+    with patch('utils.stt.streaming.stt_service_models', ['parakeet', 'modulate-velma-2']), patch.dict(
+        'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
+    ):
+        result = get_stt_service_for_language(
+            language,
+            multi_lang_enabled=multi_lang_enabled,
+            surface=surface,
+            preferred_service=preferred_service,
+        )
+
+    assert result == expected
+
+
+def test_explicit_parakeet_preference_reorders_only_a_capable_live_selection():
+    with patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2', 'parakeet']), patch.dict(
+        'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
+    ):
+        result = get_stt_service_for_language('en', multi_lang_enabled=False, preferred_service='parakeet')
+
+    assert result == (STTService.parakeet, 'en', 'parakeet')
 
 
 class TestFillerWordsLanguageBehavior:

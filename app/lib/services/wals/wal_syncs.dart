@@ -205,6 +205,10 @@ class WalSyncs implements IWalSync {
     await _ringSync.deleteAllPendingWals();
   }
 
+  /// Terminal corruption is produced by the phone-local WAL owner. Device
+  /// stores keep their existing pending-deletion semantics.
+  Future<void> deleteAllCorruptedWals() => _phoneSync.deleteAllCorruptedWals();
+
   @override
   void start() {
     _phoneSync.start();

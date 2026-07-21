@@ -13,6 +13,14 @@ inputs:
   gcp_credentials:
     description: Google Cloud credentials used only by the deploy actions.
     required: true
+  service_account:
+    description: Optional Cloud Run service identity supplied by the owning workflow.
+    required: false
+    default: ""
+  runtime_env_vars:
+    description: Optional newline-delimited runtime environment entries supplied by the owning workflow.
+    required: false
+    default: ""
 outputs:
   service:
     description: Cloud Run service deployed from the checked-in target contract.
@@ -124,9 +132,12 @@ runs:
         flags: >-
           --revision-suffix=${{ steps.candidate.outputs.revision_suffix }}
           --tag=${{ steps.candidate.outputs.tag }}
+          ${{ inputs.service_account != '' && format('--service-account={0}', inputs.service_account) || '' }}
           ${{ steps.contract.outputs.remove_runtime_secrets }}
           ${{ steps.contract.outputs.flags }}
-        env_vars: ${{ steps.contract.outputs.runtime_env_vars }}
+        env_vars: |-
+          ${{ steps.contract.outputs.runtime_env_vars }}
+          ${{ inputs.runtime_env_vars }}
         env_vars_update_strategy: merge
         secrets: ${{ steps.contract.outputs.runtime_secrets }}
         secrets_update_strategy: merge

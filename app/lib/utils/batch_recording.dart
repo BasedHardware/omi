@@ -63,6 +63,26 @@ String? selectNextAutoPhoneUpload(
   return null;
 }
 
+/// Which capture mode a phone-mic session starts in. Fixed for the whole
+/// session at streamRecording(); there is no mid-session switching.
+enum PhoneMicSessionMode { live, batchExplicit, batchAuto }
+
+/// Pure decision table for CaptureController.streamRecording. [hasNetwork] is
+/// network connectivity (ConnectivityService.isConnected) — never device
+/// connectivity. Explicit Transcribe Later suppresses the automatic offline
+/// fallback, so an offline start with the toggle on is batchExplicit (the file
+/// keeps the manual marker and is not auto-uploaded on reconnect).
+PhoneMicSessionMode selectPhoneMicSessionMode({
+  required bool supportsBatch,
+  required bool batchModeEnabled,
+  required bool hasNetwork,
+}) {
+  if (!supportsBatch) return PhoneMicSessionMode.live;
+  if (batchModeEnabled) return PhoneMicSessionMode.batchExplicit;
+  if (!hasNetwork) return PhoneMicSessionMode.batchAuto;
+  return PhoneMicSessionMode.live;
+}
+
 /// Metadata parsed from a batch recording filename written by the native layer:
 ///
 ///   audio_{device}_{codec}_{sampleRate}_{channel}_fs{frameSize}_{timestamp}.bin

@@ -105,18 +105,18 @@ class TestFactoryRouting:
             provider = pr.get_prerecorded_provider()
             assert isinstance(provider, pr.ParakeetPrerecordedProvider)
 
-    def test_unknown_model_falls_back_to_parakeet(self):
+    def test_unknown_model_falls_back_to_modulate(self):
         with patch.object(pr, 'get_prerecorded_models', return_value=('unknown-model',)):
             provider = pr.get_prerecorded_provider()
-            assert isinstance(provider, pr.ParakeetPrerecordedProvider)
-            assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.PARAKEET
+            assert isinstance(provider, pr.ModulatePrerecordedProvider)
+            assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.MODULATE
 
     def test_model_selection_reads_environment_at_call_time(self, monkeypatch):
         monkeypatch.setenv('STT_PRERECORDED_MODEL', 'parakeet')
         assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.PARAKEET
 
         monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
-        assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.PARAKEET
+        assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.MODULATE
 
     def test_deepgram_client_is_constructed_lazily_once(self, monkeypatch):
         client = MagicMock()
@@ -511,7 +511,7 @@ class TestStreamingFactoryRouting:
         with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(
             os.environ, {'HOSTED_PARAKEET_API_URL': 'http://fake-parakeet:8080'}
         ):
-            service, lang, model = get_stt_service_for_language('en')
+            service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
             assert service == STTService.parakeet
             assert model == 'parakeet'
 

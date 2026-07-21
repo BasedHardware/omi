@@ -13,11 +13,11 @@ from utils.metrics import (
     OMI_JOURNEY_TERMINAL_TOTAL,
 )
 
-JourneyName = Literal['chat_response', 'pusher_session', 'capture_finalization']
+JourneyName = Literal['chat_response', 'pusher_session', 'live_transcription', 'capture_finalization']
 JourneyOutcome = Literal['success', 'failure', 'cancelled', 'stale']
 ReconciliationOutcome = Literal['requeued', 'enqueue_failed']
 
-_JOURNEYS = frozenset({'chat_response', 'pusher_session', 'capture_finalization'})
+_JOURNEYS = frozenset({'chat_response', 'pusher_session', 'live_transcription', 'capture_finalization'})
 _OUTCOMES = frozenset({'success', 'failure', 'cancelled', 'stale'})
 _RECONCILIATION_OUTCOMES = frozenset({'requeued', 'enqueue_failed'})
 

@@ -1008,6 +1008,21 @@ final class WALService: ObservableObject {
     return wal
   }
 
+  /// Remove a just-created SD-card WAL that never received any data (a failed
+  /// or aborted sync). `createSdCardWal` reserves a `.miss` entry before the
+  /// download starts; leaving it after a failure permanently inflates the
+  /// persisted "pending" count. A WAL that downloaded frames has a `filePath`
+  /// (set by `writeFramesToDiskAndWait`) and is kept.
+  func removeSdCardWalIfEmpty(walId: String) {
+    guard let index = wals.firstIndex(where: { $0.id == walId }) else { return }
+    let wal = wals[index]
+    guard wal.storage == .sdcard, wal.status == .miss, wal.filePath == nil else { return }
+    wals.remove(at: index)
+    updatePendingWals()
+    saveWals()
+    logger.info("Removed empty SD card WAL after failed/aborted sync: \(walId)")
+  }
+
   /// Update WAL with downloaded data
   func updateWalWithDownloadedData(walId: String, downloadedBytes: Int, frames: [Data]) {
     guard let index = wals.firstIndex(where: { $0.id == walId }) else {
@@ -1069,6 +1084,11 @@ final class WALService: ObservableObject {
       updatePendingWals()
       saveWals()
     }
+
+    // Reclaim already-synced audio past the retention window. Runs every sync
+    // pass (not just launch) so the wals directory + metadata don't grow without
+    // bound — cleanupOldWals was previously never invoked.
+    cleanupOldWals()
 
     // If jobs are still in-flight (.uploaded) after the immediate reconcile,
     // schedule a follow-up poll so queued/processing jobs eventually resolve.
@@ -1156,12 +1176,14 @@ final class WALService: ObservableObject {
 
   // MARK: - Cleanup
 
-  /// Remove synced WALs older than specified days
+  /// Remove synced WALs older than `olderThanDays` and delete their on-disk audio.
+  /// Runs at the end of each `syncToCloud` pass; uses the injected clock so the
+  /// retention window is deterministic in tests.
   func cleanupOldWals(olderThanDays: Int = 7) {
-    let cutoff = Date().addingTimeInterval(-Double(olderThanDays * 24 * 60 * 60))
-    let cutoffTimestamp = Int(cutoff.timeIntervalSince1970)
+    let cutoffTimestamp = timestampProvider() - olderThanDays * 24 * 60 * 60
 
-    let toRemove = wals.filter { $0.status == .synced && $0.timerStart < cutoffTimestamp }
+    let toRemove = WALCloudSyncLogic.cleanupCandidates(wals: wals, cutoffTimestamp: cutoffTimestamp)
+    guard !toRemove.isEmpty else { return }
 
     for wal in toRemove {
       // Delete file

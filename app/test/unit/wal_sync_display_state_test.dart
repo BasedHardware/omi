@@ -24,11 +24,15 @@ void main() {
   }
 
   group('Wal.syncDisplayState', () {
-    test('isSyncing wins over every status', () {
-      for (final s in WalStatus.values) {
+    test('isSyncing wins over every non-terminal status', () {
+      for (final s in WalStatus.values.where((status) => status != WalStatus.corrupted)) {
         final w = makeWal(status: s, isSyncing: true);
         expect(w.syncDisplayState, WalSyncDisplayState.syncing, reason: 'status=$s');
       }
+    });
+
+    test('corrupted wins over a stale syncing flag', () {
+      expect(makeWal(status: WalStatus.corrupted, isSyncing: true).syncDisplayState, WalSyncDisplayState.corrupted);
     });
 
     test('uploaded -> uploaded (processing on server)', () {

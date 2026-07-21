@@ -714,6 +714,65 @@ final class DesktopAutomationActionRegistry {
       return nil
     }
 
+    // Posts a real keyDown+keyUp pair through the app's own event queue, so local
+    // NSEvent monitors and SwiftUI key equivalents see it exactly like a physical
+    // keypress — lets a headless harness drive keyboard navigation without
+    // Accessibility permission or a frontmost window. Non-prod only.
+    register(
+      name: "post_key",
+      summary:
+        "Post a keyDown+keyUp NSEvent through the app event queue (e.g. key_code=124 for right arrow). Non-prod only.",
+      params: ["key_code", "modifiers"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "post_key is disabled on production bundles"]
+      }
+      guard let codeText = params["key_code"], let keyCode = UInt16(codeText) else {
+        throw DesktopAutomationActionError.invalidParams("key_code must be a numeric macOS key code")
+      }
+      var modifiers: NSEvent.ModifierFlags = []
+      for token in (params["modifiers"] ?? "").split(separator: ",") {
+        switch token.trimmingCharacters(in: .whitespaces).lowercased() {
+        case "command", "cmd": modifiers.insert(.command)
+        case "shift": modifiers.insert(.shift)
+        case "option", "alt": modifiers.insert(.option)
+        case "control", "ctrl": modifiers.insert(.control)
+        case "function", "fn": modifiers.insert(.function)
+        case "": break
+        default:
+          throw DesktopAutomationActionError.invalidParams("unknown modifier '\(token)'")
+        }
+      }
+      // Arrow keys carry their function-key character and the flags a physical
+      // press would have, so consumers that look at characters/flags match too.
+      let arrowCharacters: [UInt16: String] = [
+        123: "\u{F702}", 124: "\u{F703}", 125: "\u{F701}", 126: "\u{F700}",
+      ]
+      let characters = arrowCharacters[keyCode] ?? ""
+      if arrowCharacters[keyCode] != nil {
+        modifiers.formUnion([.function, .numericPad])
+      }
+      let window = NSApp.keyWindow ?? NSApp.mainWindow
+      var posted = 0
+      for phase in [NSEvent.EventType.keyDown, .keyUp] {
+        if let event = NSEvent.keyEvent(
+          with: phase, location: .zero, modifierFlags: modifiers,
+          timestamp: ProcessInfo.processInfo.systemUptime,
+          windowNumber: window?.windowNumber ?? 0, context: nil,
+          characters: characters, charactersIgnoringModifiers: characters,
+          isARepeat: false, keyCode: keyCode)
+        {
+          NSApp.postEvent(event, atStart: false)
+          posted += 1
+        }
+      }
+      return [
+        "posted_events": "\(posted)",
+        "key_code": "\(keyCode)",
+        "window": window.map { $0.title.isEmpty ? "untitled" : $0.title } ?? "none",
+      ]
+    }
+
     // CHAT-05: read the free-tier monthly chat usage-limiter state so a harness can
     // prove the counter is deterministic without spending LLM calls. Read-only.
     register(
@@ -1555,6 +1614,20 @@ final class DesktopAutomationActionRegistry {
         return ["error": "a non-debug voice turn is active"]
       }
       return ["state": s, "usesNotchIsland": bar.usesNotchIsland ? "true" : "false"]
+    }
+
+    register(
+      name: "debug_reach_error",
+      summary: "Show the actionable 'Couldn't reach Omi' card on the bar (Retry/Skip) for visual verification",
+      params: []
+    ) { _ in
+      let mgr = FloatingControlBarManager.shared
+      guard mgr.barState != nil else { return ["error": "no bar state"] }
+      if !mgr.isVisible { mgr.show() }
+      mgr.showReachError(message: "Error 502") {
+        log("debug_reach_error: Retry tapped")
+      }
+      return ["shown": "true"]
     }
 
     register(
@@ -3058,7 +3131,7 @@ final class DesktopAutomationActionRegistry {
         "storage_bytes": "\(stats?.storageSize ?? 0)",
       ]
     }
-
+    registerRewindArtifactRecoveryGauntlet()
     register(
       name: "navigate_via_shortcut",
       summary: "Post the same sidebar navigation notification as Cmd+1..6 / Cmd+, shortcuts",
@@ -3649,8 +3722,8 @@ final class DesktopAutomationBridge: @unchecked Sendable {
           logLaunchID: omiLogLaunchID(),
           bridgePort: DesktopAutomationLaunchOptions.port,
           requiresAuth: true,
-          backendEnvironment: DesktopBackendEnvironment.shouldUseDevelopmentBackends
-            ? "development" : "production",
+          backendEnvironment: DesktopBackendEnvironment.shouldUseBetaRingBackends
+            ? "beta" : (DesktopBackendEnvironment.shouldUseDevelopmentBackends ? "development" : "production"),
           pythonBackendURL: DesktopBackendEnvironment.pythonBaseURL(),
           rustBackendURL: DesktopBackendEnvironment.rustBackendURL(),
           agentRuntimeRunning: runtime.running,

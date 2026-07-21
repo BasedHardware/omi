@@ -362,6 +362,19 @@ class ShortcutSettings: ObservableObject {
     didSet { UserDefaults.standard.set(pttTranscriptionMode.rawValue, forKey: "shortcut_pttTranscriptionMode") }
   }
 
+  /// Transient, never-persisted override for the onboarding voice demo, which
+  /// forces `.live` only while its step is on screen. Persisting the forced
+  /// mode (as the demo used to, via `pttTranscriptionMode`'s didSet) meant a
+  /// quit/crash mid-step permanently corrupted the user's saved PTT mode.
+  /// Consumers read `effectivePTTTranscriptionMode`, not the stored property.
+  @Published var pttTranscriptionModeDemoOverride: PTTTranscriptionMode?
+
+  /// The PTT transcription mode in effect: the demo override when present,
+  /// otherwise the user's persisted preference.
+  var effectivePTTTranscriptionMode: PTTTranscriptionMode {
+    pttTranscriptionModeDemoOverride ?? pttTranscriptionMode
+  }
+
   /// When true, the floating bar can be repositioned by dragging. Off by default.
   @Published var draggableBarEnabled: Bool {
     didSet { UserDefaults.standard.set(draggableBarEnabled, forKey: "shortcut_draggableBarEnabled") }
