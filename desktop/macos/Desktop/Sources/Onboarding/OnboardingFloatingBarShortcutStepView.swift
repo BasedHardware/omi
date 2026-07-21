@@ -342,7 +342,7 @@ struct OnboardingFloatingBarShortcutStepView: View {
 
   private func captureCustomShortcut(from event: NSEvent) -> Bool {
     if event.type == .flagsChanged {
-      captureError = "Ask omi needs a non-modifier key."
+      captureError = "Open Omi needs a non-modifier key."
       return true
     }
 
