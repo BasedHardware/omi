@@ -8,8 +8,11 @@ import { callAgentLLM } from '../lib/agentLLM'
 import type { AutomationPlan } from '../../../shared/types'
 import { getPreferences } from '../lib/preferences'
 import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
+import { createWebSpeechReplyPlayer, findReplySpeechBoundary } from '../lib/replySpeech'
 
 export type ChatMsg = { id?: string; role: 'user' | 'assistant'; content: string }
+// Replies are spoken by default; callers can opt out for silent sends.
+export type SendOptions = { speakReply?: boolean }
 
 const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
 
@@ -25,7 +28,7 @@ export type UseChat = {
   // voice transcript. When it classifies a message as an action and builds a valid
   // plan, approval + execution happen via a NATIVE Windows dialog (main process),
   // so it works identically from the main window and the floating overlay.
-  send: (text: string) => Promise<void>
+  send: (text: string, options?: SendOptions) => Promise<void>
   /** Clear the thread to a fresh conversation (used by the overlay's Esc). */
   reset: () => void
 }
@@ -70,6 +73,13 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
   // message firing right as a previous reply finishes), which would wrongly drop
   // the new send; the ref is always current.
   const sendingRef = useRef(false)
+  const speechRef = useRef(createWebSpeechReplyPlayer())
+
+  useEffect(() => {
+    return () => {
+      speechRef.current.cancel()
+    }
+  }, [])
 
   // In infinite mode the MAIN window shows the ongoing thread, so load it once on
   // mount (and backfill ids on any legacy id-less messages so the merge can match
@@ -184,9 +194,10 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     }
   }
 
-  const send = async (text: string): Promise<void> => {
+  const send = async (text: string, options?: SendOptions): Promise<void> => {
     // Re-entrancy latch (sendingRef is the always-current mirror of `sending`).
     if (!text.trim() || sendingRef.current) return
+    const speech = options?.speakReply === false ? null : speechRef.current
     sendingRef.current = true
     const userMsg: ChatMsg = { id: crypto.randomUUID(), role: 'user', content: text }
     const baseHistory = history
@@ -194,6 +205,28 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     // planner snapshot+LLM round-trip, so the chat never appears to hang. The
     // planner then decides: park a plan, surface an error, or fall through to chat.
     setHistory((h) => [...h, userMsg])
+    speech?.startFiller()
+
+    let speechBuffer = ''
+    let firstSpeechChunk = true
+    const queueSpeech = (chunk: string, final = false): void => {
+      if (!speech) return
+      speechBuffer += chunk
+      while (true) {
+        const boundary = findReplySpeechBoundary(speechBuffer, {
+          final,
+          first: firstSpeechChunk
+        })
+        if (boundary === null) break
+        const next = speechBuffer.slice(0, boundary)
+        speechBuffer = speechBuffer.slice(boundary).replace(/^\s+/, '')
+        if (speech.speak(next)) firstSpeechChunk = false
+        if (!speechBuffer.trim()) {
+          speechBuffer = ''
+          break
+        }
+      }
+    }
 
     const verdict = await tryPlan(text)
     if (verdict.kind === 'planned') {
@@ -211,6 +244,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
             : `I couldn't finish that: ${r.message ?? 'a step failed'}`
       }
       setHistory((h) => [...h, outMsg])
+      speech?.speak(outMsg.content)
       void persistChat([...baseHistory, userMsg, outMsg])
       sendingRef.current = false
       return
@@ -223,6 +257,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
           "I couldn't turn that into an action I could run safely, so I didn't do anything. Try rephrasing it, or try again in a moment."
       }
       setHistory((h) => [...h, errMsg])
+      speech?.speak(errMsg.content)
       void persistChat([...baseHistory, userMsg, errMsg])
       sendingRef.current = false
       return
@@ -295,6 +330,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
           const chunk = parseChunk(line)
           if (chunk === null) continue
           assistantText += chunk
+          queueSpeech(chunk)
           setHistory((h) => {
             const next = [...h]
             next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
@@ -309,6 +345,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       const tail = parseChunk(buffer)
       if (tail !== null) {
         assistantText += tail
+        queueSpeech(tail)
         setHistory((h) => {
           const next = [...h]
           next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
@@ -319,16 +356,24 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       // with raw plan JSON (when it reached chat WITHOUT our planner — e.g. a
       // keyword-less follow-up like "again"). Don't render that raw in the thread.
       if (looksLikeRawPlan(assistantText)) {
+        speechBuffer = ''
+        speech?.cancel()
         assistantText =
           "It looks like you want me to do something in an app. Phrase it as a direct command (e.g. \"type report in the search box\") with that app focused, and I'll show you a plan to approve."
+        speech?.speak(assistantText)
         setHistory((h) => {
           const next = [...h]
           next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
           return next
         })
+      } else {
+        queueSpeech('', true)
       }
     } catch (e) {
       assistantText = `Error: ${(e as Error).message}`
+      speechBuffer = ''
+      speech?.cancel()
+      speech?.speak(assistantText)
       setHistory((h) => {
         const next = [...h]
         next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
@@ -349,6 +394,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     setHistory([])
     setSending(false)
     sendingRef.current = false
+    speechRef.current.cancel()
     // Per-launch: forget the id so the next send creates a NEW conversation.
     // Infinite: keep the shared id — reset is only a fresh on-screen view of the
     // same ongoing thread, not a new conversation.
