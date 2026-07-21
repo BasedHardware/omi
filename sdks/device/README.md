@@ -31,3 +31,9 @@ Full connect/listen loops remain in Python/Swift/RN (and the Flutter app). Wire 
 ### Opus decode
 
 Python uses `opuslib`. Other languages should use the platform Opus decoder (libopus / `audiopus` / Flutter plugins). Header strip is identical everywhere.
+
+## STT engines
+
+See [`STT.md`](STT.md) and [`PARITY.md`](PARITY.md).
+
+All languages expose the same engine names: `deepgram`, `whisper`, `parakeet`.

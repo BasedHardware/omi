@@ -1,6 +1,7 @@
 // The Swift Programming Language
 // https://docs.swift.org/swift-book
 import AVFoundation
+import Foundation
 
 
 public struct Device {
@@ -46,6 +47,7 @@ public class OmiManager {
         self.friend_singleton.connectionStatus(completion: completion)
     }
 
+    /// Default live transcription uses on-device Whisper (existing path).
     public static func getLiveTranscription(device: Device, completion: @escaping (String?) -> Void) {
         if let device = self.singleton.seen_devices.first(where: {$0.id.uuidString == device.id}) {
             self.friend_singleton.getLiveTranscription(device: device, completion: completion)
@@ -57,6 +59,20 @@ public class OmiManager {
             self.friend_singleton.getRawAudio(device: device, completion: completion)
         }
     }
-    
-}
 
+    /// Streaming STT factory for Deepgram / Parakeet.
+    /// Whisper device path remains `getLiveTranscription`.
+    public static func makeTranscriber(
+        engine: OmiSttEngine,
+        deepgramAPIKey: String? = nil,
+        parakeetAPIURL: String? = ProcessInfo.processInfo.environment["HOSTED_PARAKEET_API_URL"],
+        onTranscript: @escaping OmiTranscriptHandler
+    ) throws -> OmiStreamingTranscriber {
+        try OmiSttFactory.makeStreaming(
+            engine: engine,
+            deepgramAPIKey: deepgramAPIKey,
+            parakeetAPIURL: parakeetAPIURL,
+            onTranscript: onTranscript
+        )
+    }
+}

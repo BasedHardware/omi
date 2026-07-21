@@ -2,7 +2,22 @@
 name = "omi-device"
 version = "0.1.0"
 edition = "2021"
-description = "Omi device BLE protocol helpers"
+description = "Omi device BLE protocol helpers + optional STT engines"
 license = "MIT"
 
+[features]
+default = []
+# Optional BLE transport glue (no OS BLE stack vendored; enable when wiring btleplug/etc).
+ble = []
+stt-deepgram = ["dep:tokio-tungstenite", "dep:tokio", "dep:futures-util", "dep:http"]
+stt-parakeet = ["dep:tokio-tungstenite", "dep:tokio", "dep:futures-util"]
+stt-whisper = []
+stt-all = ["stt-deepgram", "stt-parakeet", "stt-whisper"]
+
 [dependencies]
+tokio = { version = "1", features = ["rt", "macros", "sync", "time", "net"], optional = true }
+tokio-tungstenite = { version = "0.24", optional = true, features = ["native-tls"] }
+futures-util = { version = "0.3", optional = true }
+http = { version = "1", optional = true }
+serde_json = "1"
+thiserror = "1"
