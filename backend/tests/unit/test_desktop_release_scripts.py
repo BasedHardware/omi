@@ -495,10 +495,10 @@ def test_stable_promotion_remains_manual_only():
     assert "promote-stable" in workflow
 
 
-def test_stable_workflow_allows_retained_repoint_but_requires_current_beta_for_promote_and_safe_retries():
+def test_stable_workflow_reads_current_beta_and_owns_its_cas_inputs():
     workflow = PROMOTE_PROD_WORKFLOW.read_text()
 
-    assert "check_stable_pointer_precondition.py" in workflow
+    assert "Read current pointers and capture workflow-owned CAS inputs" in workflow
     assert "Fetch exact retained qualified manifest" in workflow
     assert "actions/download-artifact@v7" not in workflow
     assert "prepare-desktop-beta-promotion.py" not in workflow
@@ -508,12 +508,18 @@ def test_stable_workflow_allows_retained_repoint_but_requires_current_beta_for_p
     assert 'Authorization: Bearer $ACCESS_TOKEN' in workflow
     assert 'Authorization: Bearer ***' not in workflow
     assert 'ref: ${{ inputs.release_tag }}' in workflow
+    assert "operation:" not in workflow
+    assert "repoint" not in workflow
 
 
-def test_stable_workflow_retains_its_own_human_qualification_admission_path():
+def test_stable_workflow_selects_its_own_trusted_qualification():
     workflow = PROMOTE_PROD_WORKFLOW.read_text()
-    assert 'gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID"' in workflow
+    assert (
+        'actions/workflows/desktop_qualify_beta.yml/runs?event=workflow_dispatch&status=completed&per_page=100'
+        in workflow
+    )
     assert "desktop_qualification_admission.py" in workflow
+    assert "qualification_run_id:" not in workflow
 
 
 def test_beta_pointer_lost_response_retry_remains_exact_and_generation_stable():
@@ -555,6 +561,6 @@ def test_stable_repair_is_published_immutably_before_stable_pointer_advances():
     assert "--if-generation-match=0" in workflow
     assert "manifest_sha256" in workflow
     assert '"$BASE/macos-beta"' in workflow
-    assert "expected_current_release_id:" in workflow
-    assert "expected_generation:" in workflow
+    assert "EXPECTED_RELEASE_ID" in workflow
+    assert "EXPECTED_GENERATION" in workflow
     assert "gcloud run deploy" not in workflow

@@ -14,26 +14,6 @@ on:
         description: 'Type promote-stable to advance the stable pointer'
         required: true
         type: string
-      operation:
-        description: 'promote advances Stable; repoint selects a retained qualified manifest'
-        required: true
-        default: promote
-        type: choice
-        options: [promote, repoint]
-      expected_current_release_id:
-        description: 'Current stable release ID (empty only for the first promotion)'
-        required: false
-        default: ''
-        type: string
-      expected_generation:
-        description: 'Current stable pointer generation (0 when Stable is unset)'
-        required: true
-        type: string
-      qualification_run_id:
-        description: 'Successful trusted qualification run required only for an initial promote'
-        required: false
-        default: ''
-        type: string
 
 permissions:
   contents: read
@@ -65,15 +45,13 @@ jobs:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
 
-      - name: Validate trusted qualification run for initial promotion
-        if: ${{ inputs.operation == 'promote' }}
+      - name: Select and validate the exact trusted qualification
         id: candidate
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           CONFIRM: ${{ inputs.confirm }}
-          QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
         run: |
           set -euo pipefail
           test "$CONFIRM" = promote-stable || { echo 'confirm must be exactly: promote-stable' >&2; exit 1; }
@@ -82,12 +60,20 @@ jobs:
           }
           git fetch --force origin "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
           TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
-          [[ "$QUALIFICATION_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'qualification_run_id must be numeric' >&2; exit 1; }
-          run=$(gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID")
-          printf '%s\n' "$run" > /tmp/desktop-qualification-run.json
-          python3 .github/scripts/desktop_qualification_admission.py \
-            --run-json /tmp/desktop-qualification-run.json \
-            --repository "$REPO" --release-tag "$RELEASE_TAG" --candidate-sha "$TARGET_SHA"
+          gh api "repos/$REPO/actions/workflows/desktop_qualify_beta.yml/runs?event=workflow_dispatch&status=completed&per_page=100" \
+            --jq '.workflow_runs | sort_by(.updated_at) | reverse | .[] | @base64' > /tmp/desktop-qualification-runs.txt
+          selected=""
+          while IFS= read -r encoded; do
+            printf '%s' "$encoded" | base64 --decode > /tmp/desktop-qualification-run.json
+            if python3 .github/scripts/desktop_qualification_admission.py \
+              --run-json /tmp/desktop-qualification-run.json \
+              --repository "$REPO" --release-tag "$RELEASE_TAG" --candidate-sha "$TARGET_SHA"; then
+              selected="$(jq -r .id /tmp/desktop-qualification-run.json)"
+              break
+            fi
+          done < /tmp/desktop-qualification-runs.txt
+          [[ "$selected" =~ ^[1-9][0-9]*$ ]] || { echo 'no successful trusted qualification exists for this exact candidate' >&2; exit 1; }
+          echo "Selected trusted qualification run $selected for $RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
       - name: Google Auth
         uses: google-github-actions/auth@v3
         with:
@@ -113,23 +99,35 @@ jobs:
               raise SystemExit('retained manifest canonical identity mismatch')
           PY
 
-      - name: Verify current beta and stable pointer compare-and-swap inputs
+      - name: Read current pointers and capture workflow-owned CAS inputs
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           RELEASE_TAG: ${{ inputs.release_tag }}
-          EXPECTED_RELEASE_ID: ${{ inputs.expected_current_release_id }}
-          EXPECTED_GENERATION: ${{ inputs.expected_generation }}
-          OPERATION: ${{ inputs.operation }}
         run: |
           set -euo pipefail
           ACCESS_TOKEN=$(gcloud auth print-access-token)
           BASE="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/desktop_update_channels"
           curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "$BASE/macos-beta" > /tmp/macos-beta-pointer.json
           curl -sS -H "Authorization: Bearer $ACCESS_TOKEN" "$BASE/macos-stable" > /tmp/macos-stable-pointer.json
-          python3 .github/scripts/check_stable_pointer_precondition.py \
-            --beta /tmp/macos-beta-pointer.json --stable /tmp/macos-stable-pointer.json \
-            --release-id "$RELEASE_TAG" --expected-release-id "$EXPECTED_RELEASE_ID" \
-            --expected-generation "$EXPECTED_GENERATION" --operation "$OPERATION"
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json
+          import os
+
+          def fields(path):
+              return json.load(open(path)).get("fields", {})
+
+          def text(values, key):
+              return values.get(key, {}).get("stringValue", "")
+
+          beta, stable = fields("/tmp/macos-beta-pointer.json"), fields("/tmp/macos-stable-pointer.json")
+          if text(beta, "release_id") != os.environ["RELEASE_TAG"]:
+              raise SystemExit("Stable promotion requires the exact current qualified Beta release ID")
+          generation = stable.get("generation", {}).get("integerValue", "0")
+          if not generation.isdigit():
+              raise SystemExit("Stable pointer generation is invalid")
+          print(f"EXPECTED_RELEASE_ID={text(stable, 'release_id')}")
+          print(f"EXPECTED_GENERATION={generation}")
+          PY
 
       - name: Publish immutable stable repair installer
         env:
@@ -151,16 +149,13 @@ jobs:
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           RELEASE_TAG: ${{ inputs.release_tag }}
-          EXPECTED_RELEASE_ID: ${{ inputs.expected_current_release_id }}
-          EXPECTED_GENERATION: ${{ inputs.expected_generation }}
-          OPERATION: ${{ inputs.operation }}
         run: |
           set -euo pipefail
           ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
           python3 - <<'PY' > /tmp/desktop-stable-pointer.json
           import json, os
           payload = {"platform": "macos", "channel": "stable", "release_id": os.environ["RELEASE_TAG"],
-                     "expected_generation": int(os.environ["EXPECTED_GENERATION"]), "operation": os.environ["OPERATION"]}
+                     "expected_generation": int(os.environ["EXPECTED_GENERATION"])}
           if os.environ["EXPECTED_RELEASE_ID"]:
               payload["expected_current_release_id"] = os.environ["EXPECTED_RELEASE_ID"]
           print(json.dumps(payload))
@@ -199,7 +194,6 @@ jobs:
           done
 
       - name: Mark GitHub release live stable
-        if: ${{ inputs.operation == 'promote' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}

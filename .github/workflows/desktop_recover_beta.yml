@@ -1,0 +1,54 @@
+name: Recover Qualified Desktop Beta
+
+# The sole break-glass path. It can only retry the server-owned promotion of an
+# already signed and qualified immutable candidate; it cannot create a build,
+# waive evidence, or mutate Stable.
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Exact qualified v*-macos candidate tag to retry on Beta'
+        required: true
+        type: string
+      confirm:
+        description: 'Type recover-beta to retry this exact candidate'
+        required: true
+        type: string
+      reason:
+        description: 'Why automatic Beta promotion needs recovery'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate-recovery:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record the bounded recovery request
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          CONFIRM: ${{ inputs.confirm }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRM" = recover-beta || { echo 'confirm must be exactly: recover-beta' >&2; exit 1; }
+          printf '%s\n' "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+\+[1-9][0-9]*-macos$' || {
+            echo 'release_tag must be an exact immutable macOS candidate tag' >&2; exit 1;
+          }
+          test -n "${REASON//[[:space:]]/}" || { echo 'reason is required' >&2; exit 1; }
+          {
+            echo '### Beta recovery request'
+            echo
+            echo "- Candidate: \`$RELEASE_TAG\`"
+            echo "- Requested by: \`${{ github.actor }}\`"
+            echo "- Reason: $REASON"
+            echo '- Admission, qualification evidence, pointer generation, and pause state remain server-verified.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  recover-qualified-beta:
+    needs: validate-recovery
+    uses: ./.github/workflows/desktop_promote_beta.yml
+    with:
+      release_tag: ${{ inputs.release_tag }}
