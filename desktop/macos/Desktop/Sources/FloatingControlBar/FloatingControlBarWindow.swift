@@ -2540,6 +2540,12 @@ class FloatingControlBarManager {
   }
 
   private var window: FloatingControlBarWindow?
+  /// The new per-display notch stack. While it runs, the legacy window above
+  /// stays nil and its call sites no-op.
+  private(set) var notchScreenManager: NotchScreenManager?
+  /// Bar state owned by the manager for the notch stack (the legacy window
+  /// owned its own copy; PTT/notification writers reach it via `barState`).
+  let notchState = FloatingControlBarState()
   /// Tracks whether the deferred notch reveal has happened this session for
   /// explicit opt-in contexts such as onboarding/demo/minimal mode.
   private var hasRevealedNotchThisSession = false
@@ -2556,7 +2562,7 @@ class FloatingControlBarManager {
   /// Public read-only access to the currently-active agent chat pill in the
   /// floating bar, so viewed-pill expiration can skip the one the user is
   /// actively reading.
-  var activeAgentChatPillID: UUID? { window?.state.activeAgentChatPillID }
+  var activeAgentChatPillID: UUID? { notchState.activeAgentChatPillID }
 
   func openAgentChatFromTimeline(agentID: UUID, completion: ((Bool) -> Void)? = nil) {
     openAgentChatFromTimeline(
@@ -2566,7 +2572,7 @@ class FloatingControlBarManager {
   }
 
   func openAgentChatFromTimeline(ref: AgentTimelineRef, completion: ((Bool) -> Void)? = nil) {
-    guard let window else {
+    guard let notchScreenManager else {
       completion?(false)
       return
     }
@@ -2602,13 +2608,7 @@ class FloatingControlBarManager {
         return
       }
       AgentPillsManager.shared.markViewed(pillID: pillID)
-      window.state.setNotchHoverMenuOpen(false)
-      window.makeKeyAndOrderFront(nil)
-      OmiMotion.withGated(.easeOut(duration: 0.10)) {
-        window.state.present(.agent(pillID))
-        window.state.isAILoading = false
-      }
-      window.resizeForActiveAgentChatPublic(pillID: pillID, animated: true)
+      notchScreenManager.openAgent(pillID: pillID)
       completion?(true)
     }
   }
@@ -2618,8 +2618,10 @@ class FloatingControlBarManager {
   /// of dangling as .agent(id) for a removed pill. (Codex P2 — clear active
   /// chat when dismissing a pill.)
   func leaveActiveAgentSurfaceFromPillDismiss() {
-    guard let window else { return }
-    window.leaveAgentConversation()
+    if let pillID = notchState.activeAgentChatPillID {
+      notchScreenManager?.clearAgentDrillIn(pillID: pillID)
+    }
+    notchState.activeAgentChatPillID = nil
   }
   private var pendingNotifications: [FloatingBarNotification] = []
   private var notificationDismissWorkItem: DispatchWorkItem?
@@ -2680,10 +2682,8 @@ class FloatingControlBarManager {
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
     pendingNotifications.removeAll()
-    if let window, window.state.currentNotification != nil {
-      window.dismissNotification(animated: false)
-    }
-    window?.orderOut(nil)
+    notchState.currentNotification = nil
+    notchScreenManager?.hideAll()
     scheduleSnoozeTimer()
     AnalyticsManager.shared.floatingBarToggled(visible: false, source: "snooze")
   }
@@ -2694,7 +2694,7 @@ class FloatingControlBarManager {
     snoozeTimer?.invalidate()
     snoozeTimer = nil
     if isEnabled {
-      window?.makeKeyAndOrderFront(nil)
+      notchScreenManager?.showAll()
     }
   }
 
@@ -2731,10 +2731,8 @@ class FloatingControlBarManager {
     storedNotificationMessages.removeAll()
     mostRecentNotificationKey = nil
     pendingNotificationContext = nil
-    if window?.state.currentNotification != nil {
-      window?.dismissNotification(animated: false)
-    }
-    window?.state.clearVisibleConversation()
+    notchState.currentNotification = nil
+    notchState.clearVisibleConversation()
   }
 
   var notificationProjectionSnapshot: NotificationProjectionSnapshot {
@@ -2758,99 +2756,31 @@ class FloatingControlBarManager {
     return value
   }
 
-  /// Create the floating bar window and wire up AppState bindings.
+  /// Start the notch: one panel per display, chat-first. The notch renders the
+  /// same timeline as the main chat window over the shared provider.
   func setup(appState: AppState, chatProvider: ChatProvider) {
-    guard window == nil else {
-      log("FloatingControlBarManager: setup() called but window already exists")
+    guard notchScreenManager == nil else {
+      log("FloatingControlBarManager: setup() called but notch is already running")
       return
     }
-    log("FloatingControlBarManager: setup() creating floating bar window")
-
-    let barWindow = FloatingControlBarWindow(
-      contentRect: .zero,
-      styleMask: [.borderless],
-      backing: .buffered,
-      defer: false
-    )
-
-    // Play/pause toggles transcription
-    barWindow.onPlayPause = { [weak appState] in
-      guard let appState = appState else { return }
-      appState.toggleTranscription()
-    }
-
-    // Typing lives in the main app — the bar's "chat" affordances jump there.
-    barWindow.onAskAI = {
-      (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
-    }
-
-    // Hide persists the preference so bar stays hidden across restarts
-    barWindow.onHide = { [weak self] in
-      self?.isEnabled = false
-    }
+    log("FloatingControlBarManager: setup() starting notch screen manager")
 
     // Default floating/notch chat is a second view over the main chat provider.
     // That keeps streamed deltas, unsynced local IDs, and prompt history in one
     // canonical transcript instead of waiting for backend polling to reconcile.
     historyChatProvider = chatProvider
 
-    barWindow.onSendQuery = { [weak self, weak barWindow, weak chatProvider] message in
-      guard let self = self, let barWindow = barWindow, let provider = chatProvider else { return }
-      Task { @MainActor in
-        await self.withQueryTracer(query: message, fromVoice: false) {
-          await self.routeQuery(message, barWindow: barWindow, provider: provider, fromVoice: false)
-        }
-      }
-    }
-
-    barWindow.onRate = { [weak chatProvider] messageId, rating in
-      guard let provider = chatProvider else { return }
-      Task { @MainActor in
-        await provider.rateMessage(messageId, rating: rating)
-      }
-    }
-
-    barWindow.onShareLink = { [weak self, weak barWindow] in
-      guard let self, let barWindow = barWindow else { return nil }
-      // Share synced message ids from the viewport cursor over the shared provider.
-      let orderedUniqueMessageIds = barWindow.state.syncedShareMessageIds(
-        from: self.historyChatProvider
-      )
-      guard !orderedUniqueMessageIds.isEmpty else { return nil }
-      do {
-        let response = try await APIClient.shared.shareChatMessages(messageIds: orderedUniqueMessageIds)
-        return response.url
-      } catch {
-        log("Failed to get chat share link: \(error)")
-        return nil
-      }
-    }
-
-    // Observe recording state
+    // The closed chrome shows a recording dot while transcription runs (the
+    // legacy bar's recording indicator, retained on the notch).
     recordingCancellable = appState.$isTranscribing
-      .combineLatest(appState.$isSavingConversation)
       .receive(on: DispatchQueue.main)
-      .sink { [weak barWindow] isTranscribing, isSaving in
-        barWindow?.updateRecordingState(
-          isRecording: isTranscribing,
-          duration: Int(RecordingTimer.shared.duration),
-          isInitialising: isSaving
-        )
+      .sink { [weak self] isTranscribing in
+        self?.notchState.isRecording = isTranscribing
       }
 
-    // Observe duration from RecordingTimer
-    durationCancellable = RecordingTimer.shared.$duration
-      .receive(on: DispatchQueue.main)
-      .sink { [weak barWindow, weak appState] duration in
-        guard let appState = appState else { return }
-        barWindow?.updateRecordingState(
-          isRecording: appState.isTranscribing,
-          duration: Int(duration),
-          isInitialising: appState.isSavingConversation
-        )
-      }
-
-    self.window = barWindow
+    let screenManager = NotchScreenManager()
+    screenManager.start(barState: notchState, chatProvider: chatProvider)
+    notchScreenManager = screenManager
 
     // Re-apply any in-flight snooze that survived app relaunch.
     if isSnoozed {
@@ -2858,12 +2788,11 @@ class FloatingControlBarManager {
     } else if snoozedUntil != nil {
       snoozedUntil = nil
     }
-
   }
 
-  /// Whether the floating bar window is currently visible.
+  /// Whether the notch is running (panels exist on every display).
   var isVisible: Bool {
-    window?.isVisible ?? false
+    notchScreenManager != nil
   }
 
   struct AutomationState {
@@ -2877,7 +2806,7 @@ class FloatingControlBarManager {
   }
 
   var automationState: AutomationState {
-    guard let window else {
+    guard let notchScreenManager else {
       return AutomationState(
         isVisible: false,
         isAskOmiOpen: false,
@@ -2888,20 +2817,19 @@ class FloatingControlBarManager {
         usesNotchIsland: false
       )
     }
-    let focused = window.firstResponder is NSTextView
     return AutomationState(
-      isVisible: window.isVisible,
-      isAskOmiOpen: window.state.showingAIConversation,
-      isAskOmiFocused: focused,
-      frame: NSStringFromRect(window.frame),
-      isVoiceListening: window.state.isVoiceListening,
-      isVoiceResponseActive: window.state.isVoiceResponseGlowActive,
-      usesNotchIsland: window.state.usesNotchIsland
+      isVisible: true,
+      isAskOmiOpen: notchScreenManager.hasOpenPanel,
+      isAskOmiFocused: notchScreenManager.anyPanelKeyboardFocused,
+      frame: notchScreenManager.primaryPanelFrame.map(NSStringFromRect),
+      isVoiceListening: notchState.isVoiceListening,
+      isVoiceResponseActive: notchState.isVoiceResponseGlowActive,
+      usesNotchIsland: true
     )
   }
 
   func openAskOmiForAutomation(reset: Bool, wait: Bool = true) async -> [String: String] {
-    guard let window else {
+    guard let notchScreenManager else {
       return ["error": "floating_bar_window_unavailable"]
     }
     if reset {
@@ -2910,37 +2838,35 @@ class FloatingControlBarManager {
           return ["error": error]
         }
       }
-      if window.state.showingAIConversation {
-        window.closeAIConversation()
-        _ = await waitForAskOmiClosed(in: window)
+      if notchScreenManager.hasOpenPanel {
+        notchScreenManager.closeAll()
+        _ = await waitForAutomationCondition { !notchScreenManager.hasOpenPanel }
       }
     }
 
     let start = ContinuousClock.now
     openAIInput()
+    let frameString = { notchScreenManager.primaryPanelFrame.map(NSStringFromRect) ?? "" }
     guard wait else {
       return [
         "triggered": "true",
-        "frame": NSStringFromRect(window.frame),
-        "focused": (window.firstResponder is NSTextView) ? "true" : "false",
+        "frame": frameString(),
+        "focused": notchScreenManager.anyPanelKeyboardFocused ? "true" : "false",
       ]
     }
     let openMs = await waitForAutomationCondition {
-      window.isVisible && window.state.showingAIConversation && !window.state.showingAIResponse
-    }
-    if !(window.firstResponder is NSTextView) {
-      _ = window.focusInputField()
+      notchScreenManager.hasOpenPanel
     }
     let focusMs = await waitForAutomationCondition {
-      window.firstResponder is NSTextView
+      notchScreenManager.anyPanelKeyboardFocused
     }
     let elapsedMs = start.duration(to: .now).millisecondsString
     return [
       "openMs": openMs ?? "timeout",
       "focusMs": focusMs ?? "timeout",
       "elapsedMs": elapsedMs,
-      "frame": NSStringFromRect(window.frame),
-      "focused": (window.firstResponder is NSTextView) ? "true" : "false",
+      "frame": frameString(),
+      "focused": notchScreenManager.anyPanelKeyboardFocused ? "true" : "false",
     ]
   }
 
@@ -2960,15 +2886,13 @@ class FloatingControlBarManager {
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
     if !isVisible { show() }
-    // Use the window's presenter directly (not the owner-gated manager
-    // overload): a reach error is UI state, not a runtime-owner notification.
-    window?.showNotification(
-      FloatingBarNotification(
-        ownerID: RuntimeOwnerIdentity.currentOwnerId() ?? "",
-        title: "Couldn't reach Omi",
-        message: message,
-        assistantId: "reach_error"
-      )
+    // Present directly (not the owner-gated manager overload): a reach error
+    // is UI state, not a runtime-owner notification.
+    notchState.currentNotification = FloatingBarNotification(
+      ownerID: RuntimeOwnerIdentity.currentOwnerId() ?? "",
+      title: "Couldn't reach Omi",
+      message: message,
+      assistantId: "reach_error"
     )
   }
 
@@ -3019,26 +2943,20 @@ class FloatingControlBarManager {
   }
 
   func seedSubagentsForAutomation(count: Int) async -> [String: String] {
-    guard let window else {
+    guard let notchScreenManager else {
       return ["error": "floating_bar_window_unavailable"]
     }
     let pills = AgentPillsManager.shared.replaceWithAutomationPills(count: count)
-    if !window.state.showingAIConversation {
-      window.showAIConversation()
-    }
-    window.state.present(.mainInput)
-    window.state.isAILoading = false
-    window.resizeToResponseHeightPublic(animated: false)
-    window.state.present(.mainInput)
+    notchScreenManager.openPrimary(tab: .agents)
     return [
       "count": "\(pills.count)",
       "first": pills.first?.id.uuidString ?? "",
-      "frame": NSStringFromRect(window.frame),
+      "frame": notchScreenManager.primaryPanelFrame.map(NSStringFromRect) ?? "",
     ]
   }
 
   func openSeededSubagentForAutomation(index: Int, wait: Bool = true) async -> [String: String] {
-    guard let window else {
+    guard let notchScreenManager else {
       return ["error": "floating_bar_window_unavailable"]
     }
     let pills = AgentPillsManager.shared.pills
@@ -3048,52 +2966,49 @@ class FloatingControlBarManager {
     let pill = pills[index]
     let start = ContinuousClock.now
     AgentPillsManager.shared.markViewed(pillID: pill.id)
-    OmiMotion.withGated(.easeOut(duration: 0.10)) {
-      window.state.present(.agent(pill.id))
-      window.state.isAILoading = false
-    }
-    window.resizeForActiveAgentChatPublic(pillID: pill.id, animated: false)
+    notchState.activeAgentChatPillID = pill.id
+    notchScreenManager.openAgent(pillID: pill.id)
     guard wait else {
       return ["triggered": "true", "active": pill.id.uuidString]
     }
     let selectMs = await waitForAutomationCondition {
-      window.state.activeAgentChatPillID == pill.id && window.state.showingAIResponse
+      notchScreenManager.hasOpenPanel
     }
     return [
       "selectMs": selectMs ?? "timeout",
       "elapsedMs": start.duration(to: .now).millisecondsString,
       "active": pill.id.uuidString,
-      "frame": NSStringFromRect(window.frame),
+      "frame": notchScreenManager.primaryPanelFrame.map(NSStringFromRect) ?? "",
     ]
   }
 
   func backFromSubagentForAutomation(wait: Bool = true) async -> [String: String] {
-    guard let window else {
+    guard let notchScreenManager else {
       return ["error": "floating_bar_window_unavailable"]
     }
     let start = ContinuousClock.now
     let expectsRows = !AgentPillsManager.shared.pills.isEmpty
-    window.leaveAgentConversation()
+    if let pillID = notchState.activeAgentChatPillID {
+      notchScreenManager.clearAgentDrillIn(pillID: pillID)
+    }
+    notchState.activeAgentChatPillID = nil
     guard wait else {
       return [
         "triggered": "true",
-        "active": window.state.activeAgentChatPillID?.uuidString ?? "",
+        "active": notchState.activeAgentChatPillID?.uuidString ?? "",
         "mode": expectsRows ? "rows" : "main",
-        "rowsOpen": window.state.isNotchHoverMenuVisible ? "true" : "false",
+        "rowsOpen": "false",
       ]
     }
-    let backMs = await waitForAutomationCondition {
-      window.state.activeAgentChatPillID == nil
-        && (expectsRows
-          ? (!window.state.showingAIConversation && window.state.isNotchHoverMenuVisible)
-          : window.state.showingAIConversation)
+    let backMs = await waitForAutomationCondition { [notchState] in
+      notchState.activeAgentChatPillID == nil
     }
     return [
       "backMs": backMs ?? "timeout",
       "elapsedMs": start.duration(to: .now).millisecondsString,
       "mode": expectsRows ? "rows" : "main",
-      "rowsOpen": window.state.isNotchHoverMenuVisible ? "true" : "false",
-      "frame": NSStringFromRect(window.frame),
+      "rowsOpen": "false",
+      "frame": notchScreenManager.primaryPanelFrame.map(NSStringFromRect) ?? "",
     ]
   }
 
@@ -3123,7 +3038,7 @@ class FloatingControlBarManager {
     let presentation = FloatingBarLaunchPolicy.presentation(
       isEnabled: isEnabled,
       context: context,
-      displayHasNotch: window?.usesNotchIslandForCurrentScreen == true
+      displayHasNotch: NotchMetrics.screenHasCameraHousing(NSScreen.main)
     )
 
     switch presentation {
@@ -3139,7 +3054,7 @@ class FloatingControlBarManager {
   /// Opt-in presentation for contexts where the notch should stay hidden until
   /// the user's first Push-to-Talk press (which calls `show()`).
   func showDeferredUntilFirstPushToTalk() {
-    if window?.usesNotchIslandForCurrentScreen == true, !hasRevealedNotchThisSession {
+    if NotchMetrics.screenHasCameraHousing(NSScreen.main), !hasRevealedNotchThisSession {
       isEnabled = true
       log("FloatingControlBarManager: showDeferredUntilFirstPushToTalk() — notch hidden until first Push-to-Talk")
       return
@@ -3149,48 +3064,26 @@ class FloatingControlBarManager {
 
   /// Show the floating bar and persist the preference.
   func show() {
-    log("FloatingControlBarManager: show() called, window=\(window != nil), isVisible=\(window?.isVisible ?? false)")
+    log("FloatingControlBarManager: show() called")
     isEnabled = true
     if isSnoozed {
       log(
         "FloatingControlBarManager: show() suppressed because bar is snoozed until \(snoozedUntil?.description ?? "?")")
       return
     }
-    // Reveal on every hidden→present transition (not just once per session):
-    // the island should always grow out of the notch instead of popping in.
-    let shouldPlayNotchReveal =
-      window?.usesNotchIslandForCurrentScreen == true
-      && (window?.isVisible != true || !hasRevealedNotchThisSession)
-    hasRevealedNotchThisSession = true
-    window?.normalizeForTemporaryShow()
-    window?.makeKeyAndOrderFront(nil)
-    if shouldPlayNotchReveal {
-      window?.playNotchRevealAnimation()
-    }
-    log("FloatingControlBarManager: show() done, frame=\(window?.frame ?? .zero)")
-
-    // Auto-focus input if AI conversation is open
-    if let window = window, window.state.showingAIConversation && !window.state.showingAIResponse {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-        window.focusInputField()
-      }
-    }
+    notchScreenManager?.showAll()
   }
 
   /// Hide the floating bar and persist the preference.
   func hide() {
     isEnabled = false
-    if let window {
-      window.retractIntoNotch { [weak window] in
-        window?.orderOut(nil)
-      }
-    }
+    notchScreenManager?.hideAll()
   }
 
   /// Show the floating bar temporarily without changing the user's persisted preference.
   /// Used when browser tools activate so the bar stays visible above Chrome.
   func showTemporarily() {
-    guard window != nil else { return }
+    guard notchScreenManager != nil else { return }
     if !isEnabled {
       // The user has explicitly disabled the floating bar. Honor that even when
       // a background browser tool would otherwise surface it — unlike the
@@ -3204,8 +3097,7 @@ class FloatingControlBarManager {
       return
     }
     log("FloatingControlBarManager: showTemporarily() — showing bar above Chrome")
-    window?.normalizeForTemporaryShow()
-    window?.makeKeyAndOrderFront(nil)
+    notchScreenManager?.showAll()
   }
 
   @discardableResult
@@ -3232,8 +3124,8 @@ class FloatingControlBarManager {
       action: action,
       screenshotData: screenshotData
     )
-    guard let window else {
-      log("FloatingControlBarManager: dropping notification because window is not set up")
+    guard notchScreenManager != nil else {
+      log("FloatingControlBarManager: dropping notification because notch is not set up")
       return .windowUnavailable
     }
 
@@ -3251,16 +3143,16 @@ class FloatingControlBarManager {
       break
     }
 
-    if !window.state.showingAIConversation {
+    if !notchState.showingAIConversation {
       persistNotificationMessageIfNeeded(notification)
     }
 
-    if window.state.currentNotification != nil || window.state.showingAIConversation {
+    if notchState.currentNotification != nil || notchScreenManager?.hasOpenPanel == true {
       pendingNotifications.append(notification)
       return .queued
     }
 
-    presentNotification(notification, in: window)
+    presentNotification(notification)
     return .presented
   }
 
@@ -3271,7 +3163,7 @@ class FloatingControlBarManager {
   }
 
   func flushQueuedNotificationsIfPossible() {
-    guard let window, window.state.currentNotification == nil, !window.state.showingAIConversation
+    guard notchState.currentNotification == nil, notchScreenManager?.hasOpenPanel != true
     else { return }
     while !pendingNotifications.isEmpty {
       let nextNotification = pendingNotifications.removeFirst()
@@ -3279,7 +3171,7 @@ class FloatingControlBarManager {
         log("FloatingControlBarManager: dropping queued notification from stale runtime owner")
         continue
       }
-      presentNotification(nextNotification, in: window)
+      presentNotification(nextNotification)
       return
     }
   }
@@ -3377,8 +3269,7 @@ class FloatingControlBarManager {
 
   /// Toggle visibility.
   func toggle() {
-    guard let window = window else { return }
-    if window.isVisible {
+    if isEnabled {
       AnalyticsManager.shared.floatingBarToggled(visible: false, source: "shortcut")
       hide()
     } else {
@@ -3387,53 +3278,23 @@ class FloatingControlBarManager {
     }
   }
 
-  /// Toggle for the retired typed-input panel: collapsing an open
-  /// conversation still works, but opening now routes to the main app —
-  /// the floating bar no longer offers typing.
+  /// Toggle the notch chat panel (chat-first: opening always lands on chat).
   func toggleAIInput() {
-    guard let window = window else {
+    guard let notchScreenManager else {
       (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
       return
     }
-    if window.isVisible && window.state.showingAIConversation {
-      window.closeAIConversation()
+    if notchScreenManager.hasOpenPanel {
+      notchScreenManager.closeAll()
     } else {
-      (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
+      notchScreenManager.openPrimary(tab: .chat)
     }
   }
 
-  /// Open the floating conversation surface. Harness/automation-only entry:
-  /// every user-facing typed-input path now opens the main app instead.
+  /// Open the notch chat surface (harness/automation + shortcut entry).
   func openAIInput() {
-    guard let window = window else { return }
-
-    // The bar is a non-activating panel, so it can become key for text input
-    // without surfacing the main Omi window.
-
-    // If a conversation is already showing, just focus the follow-up input
-    if window.state.showingAIConversation && window.state.showingAIResponse {
-      if !window.isVisible {
-        // Show without persisting enabled state — bar hides again when conversation closes
-        window.makeKeyAndOrderFront(nil)
-      }
-      window.makeKeyAndOrderFront(nil)
-      window.focusInputField()
-      return
-    }
-
     AnalyticsManager.shared.floatingBarAskOmiOpened(source: "shortcut")
-    if !window.isVisible {
-      // Show window without persisting enabled state — if the user has the bar
-      // disabled, it will hide again when the AI conversation closes.
-      window.makeKeyAndOrderFront(nil)
-    }
-
-    if openRecentNotificationConversationIfAvailable(in: window) {
-      return
-    }
-
-    window.showAIConversation()
-    window.orderFrontRegardless()
+    notchScreenManager?.openPrimary(tab: .chat)
   }
 
   /// Open AI input with a pre-filled query and auto-send (used by PTT).
@@ -3442,7 +3303,6 @@ class FloatingControlBarManager {
     fromVoice: Bool = false,
     voiceTurnID: VoiceTurnID? = nil
   ) {
-    guard let window = window else { return }
     guard let provider = activeFloatingProvider() else { return }
 
     if fromVoice {
@@ -3451,13 +3311,7 @@ class FloatingControlBarManager {
       else { return }
       chatCancellable?.cancel()
       chatCancellable = nil
-      window.cancelInputHeightObserver()
-      window.state.currentQueryFromVoice = true
-      if window.state.showingAIConversation {
-        window.closeAIConversation(intent: .voiceHandoff)
-      } else if !window.isVisible {
-        window.makeKeyAndOrderFront(nil)
-      }
+      notchState.currentQueryFromVoice = true
       Task { @MainActor in
         guard VoiceTurnCoordinator.shared.requireCurrentOwner(for: voiceTurnID) != nil else {
           return
@@ -3465,7 +3319,6 @@ class FloatingControlBarManager {
         await self.withQueryTracer(query: query, fromVoice: true) {
           await self.routeQuery(
             query,
-            barWindow: window,
             provider: provider,
             presentation: .voiceOnly,
             voiceTurnID: voiceTurnID
@@ -3478,49 +3331,21 @@ class FloatingControlBarManager {
     // Cancel stale subscriptions immediately to prevent old data from flashing
     chatCancellable?.cancel()
     chatCancellable = nil
-    window.cancelInputHeightObserver()
 
     // Reset visible state without animation; keep provider session (cancelInFlightWork: false).
-    window.state.showingAIConversation = false
-    window.state.clearVisibleConversation(cancelInFlightWork: false)
-    window.state.currentQueryFromVoice = fromVoice
+    notchState.showingAIConversation = false
+    notchState.clearVisibleConversation(cancelInFlightWork: false)
+    notchState.currentQueryFromVoice = fromVoice
     pendingNotificationContext = nil
 
-    // Re-wire onSendQuery for typed follow-ups (force fromVoice:false after voice turns).
-    window.onSendQuery = { [weak self, weak window, weak provider] message in
-      guard let self = self, let window = window, let provider = provider else { return }
-      Task { @MainActor in
-        await self.withQueryTracer(query: message, fromVoice: false) {
-          await self.routeQuery(message, barWindow: window, provider: provider, fromVoice: false)
-        }
-      }
-    }
+    // Chat-first: the visible surface is the notch chat over the shared timeline.
+    notchScreenManager?.openPrimary(tab: .chat)
 
-    if !window.isVisible {
-      // Show window without persisting enabled state — if the user has the bar
-      // disabled, it will hide again when the AI conversation closes.
-      window.makeKeyAndOrderFront(nil)
-    }
-
-    // Cancel any in-flight windowDidResignKey dismiss animation before saving the
-    // pre-chat center. Without this, the stale completion block fires after the new
-    // query opens and immediately closes it.
-    window.cancelPendingDismiss()
-
-    // Save pre-chat center so closeAIConversation can restore the original position.
-    // Without this, Escape after a PTT query places the bar at the response window's
-    // center instead of where it was before the chat opened.
-    window.savePreChatCenterIfNeeded()
-
-    // Mark the query source before sending so playback behavior is correct.
-    window.state.currentQueryFromVoice = fromVoice
-    window.orderFrontRegardless()
-
-    // Auto-send the query. PTT bypasses the typed onSendQuery closure, so
-    // we need to apply the same router rule here ourselves.
+    // Auto-send the query. PTT bypasses the typed composer, so we apply the
+    // same router rule here ourselves.
     Task { @MainActor in
       await self.withQueryTracer(query: query, fromVoice: fromVoice) {
-        await self.routeQuery(query, barWindow: window, provider: provider, fromVoice: fromVoice)
+        await self.routeQuery(query, provider: provider, fromVoice: fromVoice)
       }
     }
   }
@@ -3543,14 +3368,12 @@ class FloatingControlBarManager {
   /// whether to call `spawn_agent`; Swift never interprets provider wording.
   private func routeQuery(
     _ message: String,
-    barWindow: FloatingControlBarWindow,
     provider: ChatProvider,
     fromVoice: Bool,
     voiceTurnID: VoiceTurnID? = nil
   ) async {
     await routeQuery(
       message,
-      barWindow: barWindow,
       provider: provider,
       presentation: .visible(fromVoice: fromVoice),
       voiceTurnID: voiceTurnID
@@ -3559,7 +3382,6 @@ class FloatingControlBarManager {
 
   private func routeQuery(
     _ message: String,
-    barWindow: FloatingControlBarWindow,
     provider: ChatProvider,
     presentation: QueryPresentation,
     voiceTurnID: VoiceTurnID? = nil
@@ -3571,7 +3393,7 @@ class FloatingControlBarManager {
     let turnOwner = chatTurnOwner(for: presentation)
     if provider.isSending {
       guard provider.canInterruptActiveTurn(owner: turnOwner) else {
-        showSharedProviderBusy(in: barWindow, presentation: presentation)
+        showSharedProviderBusy(presentation: presentation)
         return
       }
       pendingFollowUpQuery = PendingFollowUpQuery(
@@ -3580,7 +3402,7 @@ class FloatingControlBarManager {
         voiceTurnID: voiceTurnID
       )
       if case .visible(let fromVoice) = presentation {
-        prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
+        prepareVisibleQueryState(message, fromVoice: fromVoice)
       }
       provider.stopAgent(owner: turnOwner, reason: .superseded)
       return
@@ -3588,14 +3410,13 @@ class FloatingControlBarManager {
 
     // Show the thinking state immediately while the kernel accepts the turn.
     if case .visible(let fromVoice) = presentation {
-      prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
+      prepareVisibleQueryState(message, fromVoice: fromVoice)
     }
 
     let routerTracer = QueryTracerContext.current
     routerTracer?.mark("kernel_route", metadata: ["authority": "agent_kernel"])
     await dispatchChatQuery(
       message,
-      barWindow: barWindow,
       provider: provider,
       presentation: presentation,
       voiceTurnID: voiceTurnID
@@ -3604,7 +3425,6 @@ class FloatingControlBarManager {
 
   private func dispatchChatQuery(
     _ message: String,
-    barWindow: FloatingControlBarWindow,
     provider: ChatProvider,
     presentation: QueryPresentation,
     voiceTurnID: VoiceTurnID?
@@ -3617,7 +3437,6 @@ class FloatingControlBarManager {
     case .visible:
       await sendAIQuery(
         message,
-        barWindow: barWindow,
         provider: provider,
         voiceTurnID: voiceTurnID
       )
@@ -3625,7 +3444,6 @@ class FloatingControlBarManager {
       guard let voiceTurnID else { return }
       await sendVoiceOnlyQuery(
         message,
-        barWindow: barWindow,
         provider: provider,
         voiceTurnID: voiceTurnID
       )
@@ -3641,19 +3459,18 @@ class FloatingControlBarManager {
     }
   }
 
-  private func showSharedProviderBusy(in barWindow: FloatingControlBarWindow, presentation: QueryPresentation) {
+  private func showSharedProviderBusy(presentation: QueryPresentation) {
     let message = ChatMessage(text: "Omi is already responding in the app.", sender: .ai)
     switch presentation {
     case .visible:
       chatCancellable?.cancel()
       chatCancellable = nil
-      barWindow.state.displayedQuery = ""
-      barWindow.state.bindQuestionMessageId(nil)
-      barWindow.state.setLocalAnswerOverride(message)
-      barWindow.state.isAILoading = false
-      barWindow.state.present(.mainResponse)
-      barWindow.state.markConversationActivity()
-      barWindow.resizeToResponseHeightPublic(animated: true)
+      notchState.displayedQuery = ""
+      notchState.bindQuestionMessageId(nil)
+      notchState.setLocalAnswerOverride(message)
+      notchState.isAILoading = false
+      notchState.present(.mainResponse)
+      notchState.markConversationActivity()
     case .voiceOnly:
       FloatingBarVoicePlaybackService.shared.speakOneShot(message.text)
     }
@@ -3702,19 +3519,16 @@ class FloatingControlBarManager {
     log("FloatingControlBarManager: refusing unjournaled visible response")
     chatCancellable?.cancel()
     chatCancellable = nil
-    appendJournalSaveWarning(in: barWindow, provider: activeFloatingProvider())
+    appendJournalSaveWarning(provider: activeFloatingProvider())
     barWindow.state.isAILoading = false
     barWindow.state.present(.mainResponse)
     barWindow.resizeToResponseHeightPublic(animated: true)
   }
 
   /// Keep any visible partial/override and append a save warning (do not replace content).
-  private func appendJournalSaveWarning(
-    in barWindow: FloatingControlBarWindow,
-    provider: ChatProvider?
-  ) {
+  private func appendJournalSaveWarning(provider: ChatProvider?) {
     let warning = "⚠️ I couldn't save that response. Please try again."
-    if let existing = barWindow.state.currentAIMessage(from: provider),
+    if let existing = notchState.currentAIMessage(from: provider),
       FloatingControlBarState.messageHasAnswerContent(existing)
     {
       if let provider,
@@ -3731,7 +3545,7 @@ class FloatingControlBarManager {
         if provider.messages[index].journalStatus != .failed {
           provider.messages[index].journalStatus = .failed
         }
-        barWindow.state.bindAnswerMessage(provider.messages[index])
+        notchState.bindAnswerMessage(provider.messages[index])
         return
       }
       let existingText = existing.text
@@ -3743,24 +3557,20 @@ class FloatingControlBarManager {
       override.text = combined
       override.isStreaming = false
       override.journalStatus = .failed
-      barWindow.state.setLocalAnswerOverride(override)
+      notchState.setLocalAnswerOverride(override)
       return
     }
-    barWindow.state.setLocalAnswerOverride(
+    notchState.setLocalAnswerOverride(
       ChatMessage(text: warning, sender: .ai, journalStatus: .failed)
     )
   }
 
-  private func dispatchPendingQueryIfNeeded(
-    barWindow: FloatingControlBarWindow,
-    provider: ChatProvider
-  ) async -> Bool {
+  private func dispatchPendingQueryIfNeeded(provider: ChatProvider) async -> Bool {
     guard let pending = pendingFollowUpQuery else { return false }
     pendingFollowUpQuery = nil
-    barWindow.state.currentQueryFromVoice = pending.presentation.fromVoice
+    notchState.currentQueryFromVoice = pending.presentation.fromVoice
     await routeQuery(
       pending.text,
-      barWindow: barWindow,
       provider: provider,
       presentation: pending.presentation,
       voiceTurnID: pending.voiceTurnID
@@ -3779,7 +3589,7 @@ class FloatingControlBarManager {
         VoiceTurnCoordinator.shared.requireCurrentOwner(for: voiceTurnID) != nil
       else { return }
     }
-    guard let window = window, window.state.showingAIResponse else {
+    guard notchState.showingAIResponse else {
       // No active conversation — fall back to new conversation
       openAIInputWithQuery(query, fromVoice: fromVoice, voiceTurnID: voiceTurnID)
       return
@@ -3787,12 +3597,12 @@ class FloatingControlBarManager {
     guard let provider = activeFloatingProvider() else { return }
 
     // Archive current exchange as viewport id anchors (content stays on provider).
-    window.state.archiveCurrentExchange(using: provider)
+    notchState.archiveCurrentExchange(using: provider)
 
     if provider.isSending {
       let turnOwner = chatTurnOwner(for: .visible(fromVoice: fromVoice))
       guard provider.canInterruptActiveTurn(owner: turnOwner) else {
-        showSharedProviderBusy(in: window, presentation: .visible(fromVoice: fromVoice))
+        showSharedProviderBusy(presentation: .visible(fromVoice: fromVoice))
         return
       }
       pendingFollowUpQuery = PendingFollowUpQuery(
@@ -3800,12 +3610,12 @@ class FloatingControlBarManager {
         presentation: .visible(fromVoice: fromVoice),
         voiceTurnID: voiceTurnID
       )
-      prepareVisibleQueryState(query, in: window, fromVoice: fromVoice)
+      prepareVisibleQueryState(query, fromVoice: fromVoice)
       provider.stopAgent(owner: turnOwner, reason: .superseded)
       return
     }
 
-    window.state.currentQueryFromVoice = fromVoice
+    notchState.currentQueryFromVoice = fromVoice
     Task { @MainActor in
       guard
         voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
@@ -3814,7 +3624,6 @@ class FloatingControlBarManager {
       await self.withQueryTracer(query: query, fromVoice: fromVoice) {
         await self.sendAIQuery(
           query,
-          barWindow: window,
           provider: provider,
           voiceTurnID: voiceTurnID
         )
@@ -3823,9 +3632,7 @@ class FloatingControlBarManager {
   }
 
   func openNotificationAsChat(_ notification: FloatingBarNotification) {
-    guard notification.ownerID == RuntimeOwnerIdentity.currentOwnerId(),
-      let window
-    else { return }
+    guard notification.ownerID == RuntimeOwnerIdentity.currentOwnerId() else { return }
 
     AnalyticsManager.shared.notificationClicked(
       notificationId: notification.id.uuidString,
@@ -3841,32 +3648,29 @@ class FloatingControlBarManager {
       ContextualTaskNavigationRouter.shared.request(recommendationID: recommendationID)
       return
     }
-    _ = openNotificationConversation(notificationID: notification.id, in: window)
+    // Chat-first: the journaled notification message already lives in the one
+    // shared timeline, so opening the notch chat lands on it.
+    notchScreenManager?.openPrimary(tab: .chat)
   }
 
-  private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) {
+  private func presentNotification(_ notification: FloatingBarNotification) {
     guard notification.ownerID == RuntimeOwnerIdentity.currentOwnerId() else {
       log("FloatingControlBarManager: refusing to present stale-owner notification")
       return
     }
     persistNotificationMessageIfNeeded(notification)
 
-    // The flag must survive the whole notification chain: when a queued
-    // notification is presented the window is already visible from the
-    // temp-show, so resetting it here would skip the re-hide in
-    // dismissNotificationAndAdvanceQueue and leave the bar on screen
-    // forever with "Show floating bar" off (#6972). The bar can also be
-    // visible while disabled (e.g. a notification flushed right as an AI
-    // conversation closes), so any presentation with the bar disabled
-    // must arm the re-hide; dismissNotificationAndAdvanceQueue owns the reset.
-    if !window.isVisible || !isEnabled {
+    // The flag must survive the whole notification chain: a notification can
+    // present while the bar is disabled/hidden, so any presentation with the
+    // bar disabled must arm the re-hide; dismissNotificationAndAdvanceQueue
+    // owns the reset (#6972).
+    if !isEnabled {
       notificationWasTemporarilyShown = true
-      if !window.isVisible {
-        window.orderFrontRegardless()
-      }
+      notchScreenManager?.showAll()
     }
 
-    window.showNotification(notification)
+    guard !notchState.showingAIConversation else { return }
+    notchState.currentNotification = notification
     AnalyticsManager.shared.notificationSent(
       notificationId: notification.id.uuidString,
       title: notification.title,
@@ -3882,10 +3686,8 @@ class FloatingControlBarManager {
   }
 
   private func dismissNotificationAndAdvanceQueue(trackDismissal: Bool) {
-    guard let window else { return }
-
-    let dismissedNotification = window.state.currentNotification
-    window.dismissNotification()
+    let dismissedNotification = notchState.currentNotification
+    notchState.currentNotification = nil
 
     if trackDismissal, let dismissedNotification {
       AnalyticsManager.shared.notificationDismissed(
@@ -3896,20 +3698,20 @@ class FloatingControlBarManager {
       )
     }
 
-    if !window.state.showingAIConversation {
+    if notchScreenManager?.hasOpenPanel != true {
       while !pendingNotifications.isEmpty {
         let nextNotification = pendingNotifications.removeFirst()
         guard nextNotification.ownerID == RuntimeOwnerIdentity.currentOwnerId() else {
           log("FloatingControlBarManager: dropping queued notification from stale runtime owner")
           continue
         }
-        presentNotification(nextNotification, in: window)
+        presentNotification(nextNotification)
         return
       }
     }
 
-    if notificationWasTemporarilyShown && !isEnabled && !window.state.showingAIConversation {
-      window.orderOut(nil)
+    if notificationWasTemporarilyShown && !isEnabled && notchScreenManager?.hasOpenPanel != true {
+      notchScreenManager?.hideAll()
     }
     notificationWasTemporarilyShown = false
   }
@@ -4238,7 +4040,7 @@ class FloatingControlBarManager {
 
   /// Access the bar state for PTT updates.
   var barState: FloatingControlBarState? {
-    return window?.state
+    return window?.state ?? notchState
   }
 
   /// Resize the floating bar for PTT state changes.
@@ -4248,12 +4050,20 @@ class FloatingControlBarManager {
 
   // MARK: - AI Query
 
-  private func prepareVisibleQueryState(_ message: String, in barWindow: FloatingControlBarWindow, fromVoice: Bool) {
+  private func prepareVisibleQueryState(_ message: String, fromVoice: Bool) {
     activeQueryGeneration += 1
     chatCancellable?.cancel()
     chatCancellable = nil
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
-    barWindow.beginVisibleMainQuery(message, fromVoice: fromVoice, animated: true)
+    // State effects of the old window's beginVisibleMainQuery; sizing is now
+    // owned by the notch's presentation ladder.
+    notchState.currentQueryFromVoice = fromVoice
+    notchState.markAIDraftSubmitted(message)
+    notchState.displayedQuery = message
+    notchState.clearCurrentAnswerAnchors()
+    notchState.isAILoading = true
+    notchState.markConversationActivity()
+    notchScreenManager?.openPrimary(tab: .chat)
   }
 
   private func isActiveQueryGeneration(_ generation: Int) -> Bool {
@@ -4287,7 +4097,6 @@ class FloatingControlBarManager {
 
   private func sendAIQuery(
     _ message: String,
-    barWindow: FloatingControlBarWindow,
     provider: ChatProvider,
     voiceTurnID: VoiceTurnID? = nil
   ) async {
@@ -4309,7 +4118,7 @@ class FloatingControlBarManager {
     // the ChatProvider call (screenshot capture, usage checks, filler audio).
     let currentTracer = QueryTracerContext.current
     currentTracer?.begin("pre_llm")
-    let queryFromVoice = barWindow.state.currentQueryFromVoice
+    let queryFromVoice = notchState.currentQueryFromVoice
     let voiceCompletionToken =
       queryFromVoice
       ? VoiceTurnCoordinator.shared.nonHubCompletionToken()
@@ -4323,7 +4132,7 @@ class FloatingControlBarManager {
         )
       }
     }
-    prepareVisibleQueryState(message, in: barWindow, fromVoice: queryFromVoice)
+    prepareVisibleQueryState(message, fromVoice: queryFromVoice)
     let generation = activeQueryGeneration
 
     // Re-check after the await-free setup work above.
@@ -4354,12 +4163,11 @@ class FloatingControlBarManager {
       screenshotData = nil
       currentTracer?.mark("screenshot_capture")
     }
-    barWindow.orderFrontRegardless()
 
     AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
 
     let shouldPlayVoice = ShortcutSettings.shared.shouldSpeakFloatingBarResponse(
-      forVoiceQuery: barWindow.state.currentQueryFromVoice
+      forVoiceQuery: notchState.currentQueryFromVoice
     )
     if shouldPlayVoice {
       // QueryTracer: hand the tracer to the playback service so it can close
@@ -4374,12 +4182,12 @@ class FloatingControlBarManager {
 
     // Observe messages for streaming response — bind viewport ids only.
     chatCancellable?.cancel()
-    barWindow.state.beginTurn(clientTurnId: clientTurnId)
-    barWindow.state.isAILoading = true
-    var hasSetUpResponseHeight = false
+    notchState.beginTurn(clientTurnId: clientTurnId)
+    notchState.isAILoading = true
+    var hasPresentedResponse = false
     chatCancellable = provider.$messages
       .receive(on: DispatchQueue.main)
-      .sink { [weak self, weak barWindow] messages in
+      .sink { [weak self] messages in
         guard let self, self.isActiveQueryGeneration(generation) else { return }
         guard
           let aiMessage = messages.last(where: {
@@ -4388,11 +4196,11 @@ class FloatingControlBarManager {
         else { return }
 
         // Viewport cursor over provider messages (preserves contentBlocks via id lookup)
-        barWindow?.state.bindAnswerMessage(aiMessage)
+        self.notchState.bindAnswerMessage(aiMessage)
         if let userMessage = messages.last(where: {
           $0.clientTurnId == clientTurnId && $0.sender == .user
         }) {
-          barWindow?.state.bindQuestionMessageId(userMessage.id)
+          self.notchState.bindQuestionMessageId(userMessage.id)
         }
         if shouldPlayVoice {
           FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
@@ -4401,19 +4209,14 @@ class FloatingControlBarManager {
           )
         }
 
-        if aiMessage.isStreaming {
-          barWindow?.state.isAILoading = false
-          if let barWindow = barWindow, !hasSetUpResponseHeight {
-            hasSetUpResponseHeight = true
-            if !barWindow.state.showingAIResponse {
-              OmiMotion.withGated(.spring(response: 0.24, dampingFraction: 0.9)) {
-                barWindow.state.present(.mainResponse)
-              }
+        self.notchState.isAILoading = false
+        if aiMessage.isStreaming, !hasPresentedResponse {
+          hasPresentedResponse = true
+          if !self.notchState.showingAIResponse {
+            OmiMotion.withGated(.spring(response: 0.24, dampingFraction: 0.9)) {
+              self.notchState.present(.mainResponse)
             }
-            barWindow.resizeToResponseHeightPublic(animated: true)
           }
-        } else {
-          barWindow?.state.isAILoading = false
         }
       }
 
@@ -4438,8 +4241,8 @@ class FloatingControlBarManager {
             imageData: screenshotData,
             turnOwner: chatTurnOwner(for: .visible(fromVoice: queryFromVoice)),
             clientTurnId: clientTurnId,
-            onAccepted: { [weak barWindow] in
-              barWindow?.state.clearSubmittedAIDraftIfUnchanged(message)
+            onAccepted: { [weak self] in
+              self?.notchState.clearSubmittedAIDraftIfUnchanged(message)
             },
             onJournalFinalized: { accepted in
               journalAccepted = accepted
@@ -4458,8 +4261,8 @@ class FloatingControlBarManager {
         imageData: screenshotData,
         turnOwner: chatTurnOwner(for: .visible(fromVoice: queryFromVoice)),
         clientTurnId: clientTurnId,
-        onAccepted: { [weak barWindow] in
-          barWindow?.state.clearSubmittedAIDraftIfUnchanged(message)
+        onAccepted: { [weak self] in
+          self?.notchState.clearSubmittedAIDraftIfUnchanged(message)
         },
         onJournalFinalized: { accepted in
           journalAccepted = accepted
@@ -4474,7 +4277,7 @@ class FloatingControlBarManager {
       voiceCompletionOutcome = journalAccepted == true ? .journalAccepted : .journalFailed
     }
 
-    if await dispatchPendingQueryIfNeeded(barWindow: barWindow, provider: provider) {
+    if await dispatchPendingQueryIfNeeded(provider: provider) {
       return
     }
 
@@ -4482,12 +4285,12 @@ class FloatingControlBarManager {
     if let syncedUserMessage = provider.messages.last(where: {
       $0.clientTurnId == clientTurnId && $0.sender == .user && $0.isSynced
     }) {
-      barWindow.state.bindQuestionMessageId(syncedUserMessage.id)
+      notchState.bindQuestionMessageId(syncedUserMessage.id)
     }
     if let finalAIMessage = provider.messages.last(where: {
       $0.clientTurnId == clientTurnId && $0.sender == .ai
     }) {
-      barWindow.state.bindAnswerMessage(finalAIMessage)
+      notchState.bindAnswerMessage(finalAIMessage)
     }
     // Cancel the messages subscription now that streaming is done.
     // Leaving it alive lets later sidebar mutations overwrite the floating bar display.
@@ -4495,15 +4298,15 @@ class FloatingControlBarManager {
     chatCancellable = nil
 
     // Handle errors after sendMessage completes
-    barWindow.state.isAILoading = false
+    notchState.isAILoading = false
 
     if journalAccepted == false, providerResponse != nil {
-      appendJournalSaveWarning(in: barWindow, provider: provider)
+      appendJournalSaveWarning(provider: provider)
     } else if let errorText = provider.displayErrorMessage {
       // Provider reported an error (timeout, bridge crash, etc.).
       // Prefer mutating the provider-backed answer in place; only use
       // localAnswerOverride when there is no provider message to update.
-      if let existing = barWindow.state.currentAIMessage(from: provider),
+      if let existing = notchState.currentAIMessage(from: provider),
         let index = provider.messages.firstIndex(where: { $0.id == existing.id })
       {
         let existingText = provider.messages[index].text
@@ -4512,31 +4315,30 @@ class FloatingControlBarManager {
           ? "⚠️ \(errorText)"
           : existingText + "\n\n⚠️ \(errorText)"
         provider.messages[index].isStreaming = false
-        barWindow.state.bindAnswerMessage(provider.messages[index])
+        notchState.bindAnswerMessage(provider.messages[index])
       } else {
-        barWindow.state.setLocalAnswerOverride(ChatMessage(text: "⚠️ \(errorText)", sender: .ai))
+        notchState.setLocalAnswerOverride(ChatMessage(text: "⚠️ \(errorText)", sender: .ai))
       }
-    } else if barWindow.state.shouldPresentEmptyResponseFailure(from: provider) {
+    } else if notchState.shouldPresentEmptyResponseFailure(from: provider) {
       // No error and no provider-backed answer content (text/blocks/resources).
       // Never call setLocalAnswerOverride when an answerMessageId is already
       // bound — that would clear the provider answer (including block-only).
-      barWindow.state.setLocalAnswerOverride(
+      notchState.setLocalAnswerOverride(
         ChatMessage(text: "Failed to get a response. Please try again.", sender: .ai)
       )
     }
 
-    // Ensure the response view is visible and resized (handles the case where
-    // the sink never fired because no streaming data arrived before the error)
-    if !barWindow.state.showingAIResponse {
+    // Ensure the response state is visible (handles the case where the sink
+    // never fired because no streaming data arrived before the error).
+    if !notchState.showingAIResponse {
       OmiMotion.withGated(.spring(response: 0.24, dampingFraction: 0.9)) {
-        barWindow.state.present(.mainResponse)
+        notchState.present(.mainResponse)
       }
-      barWindow.resizeToResponseHeightPublic(animated: true)
     }
 
     if shouldPlayVoice {
       FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
-        barWindow.state.currentAIMessage(from: provider),
+        notchState.currentAIMessage(from: provider),
         isFinal: true
       )
     }
@@ -4544,7 +4346,6 @@ class FloatingControlBarManager {
 
   private func sendVoiceOnlyQuery(
     _ message: String,
-    barWindow: FloatingControlBarWindow,
     provider: ChatProvider,
     voiceTurnID: VoiceTurnID
   ) async {
@@ -4566,7 +4367,7 @@ class FloatingControlBarManager {
       }
     }
 
-    barWindow.state.currentQueryFromVoice = true
+    notchState.currentQueryFromVoice = true
     if let turnID = VoiceTurnCoordinator.shared.activeTurnID {
       VoiceTurnCoordinator.shared.publish(.clearPresentation(turnID: turnID))
     }
@@ -4642,7 +4443,7 @@ class FloatingControlBarManager {
       voiceCompletionOutcome = journalAccepted == true ? .journalAccepted : .journalFailed
     }
 
-    if await dispatchPendingQueryIfNeeded(barWindow: barWindow, provider: provider) {
+    if await dispatchPendingQueryIfNeeded(provider: provider) {
       return
     }
 
@@ -4652,7 +4453,7 @@ class FloatingControlBarManager {
     }) {
       FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(finalAIMessage, isFinal: true)
       if journalAccepted == false {
-        appendJournalSaveWarning(in: barWindow, provider: provider)
+        appendJournalSaveWarning(provider: provider)
       }
     } else if let errorText = provider.displayErrorMessage, !errorText.isEmpty {
       FloatingBarVoicePlaybackService.shared.speakOneShot(errorText)
