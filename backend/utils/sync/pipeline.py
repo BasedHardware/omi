@@ -404,6 +404,12 @@ def _require_current_conversation_persistence(persisted: bool) -> None:
         raise SyncConversationPersistenceFenced('sync conversation persistence fenced')
 
 
+def _raise_sync_terminal_result(result: object) -> None:
+    """Preserve lifecycle fences across ``asyncio.gather`` exception fan-in."""
+    if isinstance(result, SyncConversationPersistenceFenced):
+        raise result
+
+
 def _require_run_owner(mutation, *, job_id: str) -> Dict | None:
     """Turn a non-applied Redis CAS result into the worker's stop signal."""
     if getattr(mutation, 'applied', False):
@@ -2101,8 +2107,7 @@ async def _run_full_pipeline_background_async(
                         raise r
                     # A lifecycle fence has a semantic terminal outcome at the
                     # task boundary; never reduce it to a retryable segment error.
-                    if isinstance(r, SyncConversationPersistenceFenced):
-                        raise r
+                    _raise_sync_terminal_result(r)
                     if isinstance(r, Exception):
                         failure = failure_from_exception(r, provider=sync_provider)
                         await _record_sync_segment_failure_async(
