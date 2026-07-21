@@ -54,6 +54,60 @@ _SHELL_SEPARATORS = {";", "&&", "||", "|", "&", "\n"}
 _SHELL_CONTROL_WORDS = {"then", "do", "else", "elif", "fi", "done", "esac", "{", "}"}
 _ENV_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _RELEASE_CREATE_GRAMMAR = re.compile(r"\bgh\s+release\s+create\b")
+_RELEASE_CREATE_AUTHORITY = re.compile(
+    r"(?<![A-Za-z0-9_./-])"
+    r"(?P<executable>gh|/(?:[^ \t\r\n;&|()]+/)*gh|\$GH|\$\{GH\})"
+    r"(?![A-Za-z0-9_./-])"
+    r"(?:[ \t\r\n])+release(?:[ \t\r\n])+create\b"
+)
+
+
+def _normalize_shell_text(script: str) -> str:
+    """Apply the one continuation rule needed before conservative authority scanning."""
+    return script.replace("\\\n", "")
+
+
+def _raw_codemagic_script_scalars(path: Path) -> tuple[list[str], list[str]]:
+    """Return physical YAML script scalars, preserving their unparsed shell text.
+
+    YAML aliases intentionally reuse the desktop release scripts for previews.
+    Track scalar-node identity so that an alias is one physical scalar rather
+    than a second release authority occurrence.
+    """
+    try:
+        root = yaml.compose(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        return [], [f"codemagic.yaml is not valid YAML: {exc}"]
+
+    scripts: list[str] = []
+    seen_scripts: set[int] = set()
+
+    def visit(node: yaml.Node | None) -> None:
+        if isinstance(node, yaml.MappingNode):
+            for key_node, value_node in node.value:
+                if (
+                    isinstance(key_node, yaml.ScalarNode)
+                    and key_node.value == "script"
+                    and isinstance(value_node, yaml.ScalarNode)
+                    and id(value_node) not in seen_scripts
+                ):
+                    seen_scripts.add(id(value_node))
+                    scripts.append(value_node.value)
+                visit(value_node)
+        elif isinstance(node, yaml.SequenceNode):
+            for child in node.value:
+                visit(child)
+
+    visit(root)
+    return scripts, []
+
+
+def _raw_release_create_occurrences(path: Path) -> tuple[list[re.Match[str]], list[str]]:
+    """Find all release-create grammar in physical script text, before shell lexing."""
+    scripts, errors = _raw_codemagic_script_scalars(path)
+    return [
+        match for script in scripts for match in _RELEASE_CREATE_AUTHORITY.finditer(_normalize_shell_text(script))
+    ], errors
 
 
 def _script_commands(script: str) -> list[_ShellCommand]:
@@ -63,10 +117,10 @@ def _script_commands(script: str) -> list[_ShellCommand]:
     find direct executable commands after control separators and continuations;
     dynamic shell evaluation is rejected below instead of being interpreted.
     """
-    lexer = shlex.shlex(script.replace("\\\n", ""), posix=True, punctuation_chars=";&|()\n")
+    lexer = shlex.shlex(_normalize_shell_text(script), posix=True, punctuation_chars=";&|()\n")
     lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
-    lexer.commenters = "#"
+    lexer.commenters = ""
     commands: list[_ShellCommand] = []
     words: list[str] = []
     for word in lexer:
@@ -149,6 +203,27 @@ def _has_embedded_release_create(command: _ShellCommand) -> bool:
     return any(words[index : index + 3] == ("gh", "release", "create") for index in range(len(words) - 2))
 
 
+def _has_unclassifiable_release_authority(script: str, matches: list[re.Match[str]]) -> bool:
+    """Reject syntax that carries release authority outside the tiny direct-command grammar."""
+    if not matches:
+        return False
+    normalized = _normalize_shell_text(script)
+    for match in matches:
+        line_start = normalized.rfind("\n", 0, match.start()) + 1
+        line_end = normalized.find("\n", match.end())
+        line = normalized[line_start:] if line_end == -1 else normalized[line_start:line_end]
+        before = normalized[line_start : match.start()]
+        if match.group("executable") != "gh":
+            return True
+        if re.search(r"(?:^|[;|&]\s*)[A-Za-z_][A-Za-z0-9_]*=", before):
+            return True
+        if re.search(r"\b(?:eval|(?:bash|sh|zsh|dash)\s+(?:-[A-Za-z]*c\b|-c\b))", before):
+            return True
+        if "$(" in before or "`" in line:
+            return True
+    return False
+
+
 def _is_candidate_reservation(command: _ShellCommand) -> bool:
     """Recognize only a real curl reservation request, never echoed text."""
     words = _executable_words(command)
@@ -175,8 +250,11 @@ def _is_isolated_preview_workflow(workflow: dict[str, object]) -> bool:
 
 def check_codemagic_release_publishers() -> list[str]:
     """Keep exactly one executable canonical GitHub-release publisher in Codemagic."""
-    document, duplicates, errors = _load_codemagic_with_duplicates(ROOT / "codemagic.yaml")
+    codemagic_path = ROOT / "codemagic.yaml"
+    document, duplicates, errors = _load_codemagic_with_duplicates(codemagic_path)
     errors.extend(f"codemagic.yaml has duplicate key: {key}" for key in duplicates)
+    raw_occurrences, raw_errors = _raw_release_create_occurrences(codemagic_path)
+    errors.extend(raw_errors)
     workflows = document.get("workflows")
     if not isinstance(workflows, dict):
         return [*errors, "codemagic.yaml is missing its workflows mapping"]
@@ -200,7 +278,21 @@ def check_codemagic_release_publishers() -> list[str]:
             if not isinstance(step, dict) or not isinstance(step.get("script"), str):
                 continue
             step_name = step.get("name") if isinstance(step.get("name"), str) else "unnamed script"
-            for command in _script_commands(step["script"]):
+            script = step["script"]
+            script_matches = list(_RELEASE_CREATE_AUTHORITY.finditer(_normalize_shell_text(script)))
+            if _has_unclassifiable_release_authority(script, script_matches):
+                errors.append(
+                    f"Codemagic workflow {workflow_name} has release-create authority in shell syntax the guard cannot classify"
+                )
+            try:
+                commands = _script_commands(script)
+            except ValueError:
+                if script_matches:
+                    errors.append(
+                        f"Codemagic workflow {workflow_name} has malformed shell syntax around release-create authority"
+                    )
+                continue
+            for command in commands:
                 if _is_dynamic_release_create(command) or _has_embedded_release_create(command):
                     errors.append(
                         f"Codemagic workflow {workflow_name} has a dynamic shell command that cannot safely interpret "
@@ -213,10 +305,11 @@ def check_codemagic_release_publishers() -> list[str]:
                     if not isolated_preview:
                         publisher_commands.append((str(workflow_name), step_name, tag))
 
-    canonical_commands = [tag for workflow, _, tag in publisher_commands if workflow == canonical_name]
+    if len(raw_occurrences) != 1:
+        errors.append("Codemagic must contain exactly one release-create authority occurrence in raw script text")
     if len(publisher_commands) != 1:
         errors.append("Codemagic must contain exactly one executable gh release create publisher")
-    if canonical_commands != ["$CM_TAG"]:
+    if publisher_commands != [(canonical_name, "Create GitHub release", "$CM_TAG")]:
         errors.append(
             "canonical workflow must contain the exact canonical gh release create \"$CM_TAG\" and no alternate release-create path"
         )
@@ -254,7 +347,11 @@ def check_codemagic_release_publishers() -> list[str]:
         return errors
     release_step = scripts[release_position]
     release_script = release_step.get("script") if isinstance(release_step, dict) else None
-    commands = _script_commands(release_script) if isinstance(release_script, str) else []
+    try:
+        commands = _script_commands(release_script) if isinstance(release_script, str) else []
+    except ValueError:
+        commands = []
+        errors.append("canonical workflow has malformed shell syntax around release-create authority")
     create_index = next(
         (index for index, command in enumerate(commands) if _release_create_tag(command) == "$CM_TAG"), None
     )
