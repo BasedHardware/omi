@@ -739,33 +739,12 @@ struct FloatingControlBarView: View {
       }
       .buttonStyle(.plain)
 
-      if !state.isVoicePresentationActive && notchSettingsHovering {
-        notchSettingsButton
-          .zIndex(1)
-          .transition(.scale.combined(with: .opacity))
-      }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     .padding(.leading, OmiSpacing.xs)
     // Breathing room between the settings gear and the island's right edge.
     .padding(.trailing, OmiSpacing.md)
     .accessibilityElement(children: .contain)
-  }
-
-  private var notchSettingsButton: some View {
-    Button(action: openFloatingBarSettings) {
-      Image(systemName: "gearshape.fill")
-        .scaledFont(size: 12, weight: .semibold)
-        .foregroundColor(.white.opacity(0.86))
-        .frame(width: 26, height: 24)
-        .frame(width: 44, height: 44)
-        .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .help("Floating Bar Settings")
-    .accessibilityIdentifier("notch_floating_bar_settings")
-    .accessibilityLabel("Floating Bar Settings")
-    .accessibilityHint("Open settings")
   }
 
   private var notchOmiChatRow: some View {

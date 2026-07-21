@@ -44,15 +44,20 @@ struct SignInView: View {
       // brand on the backdrop, one primary + one frosted-glass secondary button,
       // generous whitespace, no floating box.
       VStack(spacing: 0) {
-        Group {
-          if let logo = Self.logoImage {
-            Image(nsImage: logo).resizable().renderingMode(.template).scaledToFit()
-          } else {
-            Circle().strokeBorder(lineWidth: 5)
+        HStack(spacing: 12) {
+          Group {
+            if let logo = Self.logoImage {
+              Image(nsImage: logo).resizable().renderingMode(.template).scaledToFit()
+            } else {
+              Circle().strokeBorder(lineWidth: 5)
+            }
           }
+          .frame(width: 42, height: 42)
+
+          Text("Omi")
+            .geist(size: 34, weight: .semibold, tracking: 34 * -0.02)
         }
         .foregroundStyle(sb.ink)
-        .frame(width: 42, height: 42)
         .scaleEffect(breathe ? 1.08 : 1.0)
         .opacity(breathe ? 1.0 : 0.85)
         .animation(SBMotion.breathe, value: breathe)

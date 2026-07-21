@@ -809,6 +809,9 @@ struct DashboardPage: View {
 
   private var homeHubHeadline: some View {
     VStack(spacing: OmiSpacing.sm) {
+      SBLogo(size: 40, spinning: chatProvider.isSending)
+        .padding(.bottom, OmiSpacing.lg)
+
       Text(homeHubGreeting)
         .scaledFont(size: OmiType.hero, weight: .bold)
         .foregroundStyle(HomePalette.ink)
