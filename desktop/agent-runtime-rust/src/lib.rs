@@ -11,6 +11,7 @@ use tokio::task::JoinHandle;
 
 pub mod safety;
 
+pub mod journal;
 pub mod provider_policy;
 pub mod tool_relay;
 

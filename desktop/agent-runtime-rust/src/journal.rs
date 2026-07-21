@@ -35,6 +35,23 @@ pub struct RunIdentity {
     pub attempt_id: String,
 }
 
+#[derive(Clone)]
+pub struct ToolClaim {
+    pub invocation_id: String,
+    pub owner_id: String,
+    pub session_id: String,
+    pub run_id: String,
+    pub attempt_id: String,
+    pub profile_generation: u64,
+    pub daemon_boot_epoch: String,
+    pub execution_generation: u64,
+    pub tool_name: String,
+    pub input_hash: String,
+    pub status: String,
+    pub outcome: Option<String>,
+    pub result: Option<String>,
+}
+
 impl JournalStore {
     pub fn open_default() -> Result<Self, String> {
         let state_dir = env::var_os("OMI_AGENT_STATE_DIR")
@@ -53,12 +70,11 @@ impl JournalStore {
         Self::open(state_dir.join("omi-agentd.sqlite3"))
     }
 
-    #[cfg(test)]
     pub fn in_memory() -> Result<Self, String> {
         Self::from_connection(Connection::open_in_memory().map_err(|error| error.to_string())?)
     }
 
-    fn open(path: PathBuf) -> Result<Self, String> {
+    pub fn open(path: PathBuf) -> Result<Self, String> {
         Self::from_connection(Connection::open(path).map_err(|error| error.to_string())?)
     }
 
@@ -120,7 +136,26 @@ impl JournalStore {
                  session_id TEXT NOT NULL,
                  profile_generation INTEGER NOT NULL,
                  created_at_ms INTEGER NOT NULL
-             );",
+             );
+             CREATE TABLE IF NOT EXISTS rx4_tool_claims (
+                 invocation_id TEXT PRIMARY KEY,
+                 owner_id TEXT NOT NULL,
+                 session_id TEXT NOT NULL,
+                 run_id TEXT NOT NULL,
+                 attempt_id TEXT NOT NULL,
+                 profile_generation INTEGER NOT NULL,
+                 daemon_boot_epoch TEXT NOT NULL,
+                 execution_generation INTEGER NOT NULL,
+                 tool_name TEXT NOT NULL,
+                 input_hash TEXT NOT NULL,
+                 status TEXT NOT NULL,
+                 outcome TEXT,
+                 result TEXT,
+                 created_at_ms INTEGER NOT NULL,
+                 updated_at_ms INTEGER NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS rx4_tool_claims_owner_run_idx
+                 ON rx4_tool_claims(owner_id, run_id, status);",
             )
             .map_err(|error| error.to_string())?;
         self.migrate_node_journal()?;
@@ -139,6 +174,182 @@ impl JournalStore {
         };
         self.connection.execute("INSERT INTO rx4_runtime_runs(run_id, attempt_id, owner_id, session_id, profile_generation, created_at_ms) VALUES (?, ?, ?, ?, ?, ?)", params![identity.run_id, identity.attempt_id, owner_id, session_id, profile_generation, now_ms()]).map_err(|error| error.to_string())?;
         Ok(identity)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn authorize_tool_claim(
+        &mut self,
+        invocation_id: &str,
+        owner_id: &str,
+        session_id: &str,
+        run_id: &str,
+        attempt_id: &str,
+        profile_generation: u64,
+        daemon_boot_epoch: &str,
+        execution_generation: u64,
+        tool_name: &str,
+        input_hash: &str,
+    ) -> Result<(), String> {
+        let existing: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT status FROM rx4_tool_claims WHERE invocation_id = ?",
+                params![invocation_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        if existing.is_some() {
+            return Err("authorized tool invocation is already known".into());
+        }
+        let created = now_ms();
+        self.connection
+            .execute(
+                "INSERT INTO rx4_tool_claims(
+                    invocation_id, owner_id, session_id, run_id, attempt_id,
+                    profile_generation, daemon_boot_epoch, execution_generation,
+                    tool_name, input_hash, status, created_at_ms, updated_at_ms
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
+                params![
+                    invocation_id,
+                    owner_id,
+                    session_id,
+                    run_id,
+                    attempt_id,
+                    profile_generation,
+                    daemon_boot_epoch,
+                    execution_generation,
+                    tool_name,
+                    input_hash,
+                    created,
+                    created
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    pub fn pending_tool_claim(&self, invocation_id: &str) -> Result<Option<ToolClaim>, String> {
+        self.tool_claim_with_status(invocation_id, "pending")
+    }
+
+    pub fn completed_tool_claim(&self, invocation_id: &str) -> Result<Option<Value>, String> {
+        let claim = self.tool_claim_with_status(invocation_id, "completed")?;
+        Ok(claim.map(|claim| {
+            json!({
+                "invocationId": claim.invocation_id,
+                "outcome": claim.outcome.unwrap_or_default(),
+                "result": claim.result.unwrap_or_default()
+            })
+        }))
+    }
+
+    pub fn complete_tool_claim(
+        &mut self,
+        invocation_id: &str,
+        outcome: &str,
+        result: &str,
+    ) -> Result<(), String> {
+        let updated = self
+            .connection
+            .execute(
+                "UPDATE rx4_tool_claims
+                 SET status = 'completed', outcome = ?, result = ?, updated_at_ms = ?
+                 WHERE invocation_id = ? AND status = 'pending'",
+                params![outcome, result, now_ms(), invocation_id],
+            )
+            .map_err(|error| error.to_string())?;
+        if updated == 0 {
+            return Err("authorized tool result is unknown".into());
+        }
+        Ok(())
+    }
+
+    pub fn revoke_tool_claims(
+        &mut self,
+        owner_id: &str,
+        run_id: Option<&str>,
+    ) -> Result<u64, String> {
+        let updated = match run_id {
+            Some(run_id) => self
+                .connection
+                .execute(
+                    "UPDATE rx4_tool_claims
+                     SET status = 'revoked', updated_at_ms = ?
+                     WHERE owner_id = ? AND run_id = ? AND status = 'pending'",
+                    params![now_ms(), owner_id, run_id],
+                )
+                .map_err(|error| error.to_string())?,
+            None => self
+                .connection
+                .execute(
+                    "UPDATE rx4_tool_claims
+                     SET status = 'revoked', updated_at_ms = ?
+                     WHERE owner_id = ? AND status = 'pending'",
+                    params![now_ms(), owner_id],
+                )
+                .map_err(|error| error.to_string())?,
+        };
+        Ok(updated as u64)
+    }
+
+    pub fn reconcile_pending_tool_claims(&mut self, owner_id: Option<&str>) -> Result<u64, String> {
+        let updated = match owner_id {
+            Some(owner_id) => self
+                .connection
+                .execute(
+                    "UPDATE rx4_tool_claims
+                     SET status = 'revoked', updated_at_ms = ?
+                     WHERE owner_id = ? AND status = 'pending'",
+                    params![now_ms(), owner_id],
+                )
+                .map_err(|error| error.to_string())?,
+            None => self
+                .connection
+                .execute(
+                    "UPDATE rx4_tool_claims
+                     SET status = 'revoked', updated_at_ms = ?
+                     WHERE status = 'pending'",
+                    params![now_ms()],
+                )
+                .map_err(|error| error.to_string())?,
+        };
+        Ok(updated as u64)
+    }
+
+    fn tool_claim_with_status(
+        &self,
+        invocation_id: &str,
+        status: &str,
+    ) -> Result<Option<ToolClaim>, String> {
+        self.connection
+            .query_row(
+                "SELECT invocation_id, owner_id, session_id, run_id, attempt_id,
+                        profile_generation, daemon_boot_epoch, execution_generation,
+                        tool_name, input_hash, status, outcome, result
+                 FROM rx4_tool_claims
+                 WHERE invocation_id = ? AND status = ?",
+                params![invocation_id, status],
+                |row| {
+                    Ok(ToolClaim {
+                        invocation_id: row.get(0)?,
+                        owner_id: row.get(1)?,
+                        session_id: row.get(2)?,
+                        run_id: row.get(3)?,
+                        attempt_id: row.get(4)?,
+                        profile_generation: row.get(5)?,
+                        daemon_boot_epoch: row.get(6)?,
+                        execution_generation: row.get(7)?,
+                        tool_name: row.get(8)?,
+                        input_hash: row.get(9)?,
+                        status: row.get(10)?,
+                        outcome: row.get(11)?,
+                        result: row.get(12)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|error| error.to_string())
     }
 
     fn migrate_node_journal(&self) -> Result<(), String> {

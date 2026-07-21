@@ -1,9 +1,12 @@
+use omi_agent_runtime::journal::{
+    JournalStore, ResultPage as JournalResultPage, Surface as JournalSurface,
+};
 use omi_agent_runtime::provider_policy::ManagedTransport;
-use omi_agent_runtime::tool_relay::ToolRelay;
+use omi_agent_runtime::tool_relay::{Identity, ToolRelay};
 use omi_agent_runtime::{
     emit_line, parse_line, select_execution_mode, ExecutionMode, Message, PROTOCOL_VERSION,
 };
-use rx4::{Agent, Event};
+use rx4::{Agent, Event, ToolCall};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -11,8 +14,12 @@ use std::env;
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::{mpsc, watch};
+use uuid::Uuid;
 
 const RUNTIME_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+mod tool_authority;
+use tool_authority::{RunningQuery, ToolRequest};
 
 macro_rules! required_fields {
     ($fields:expr, $($name:literal),+ $(,)?) => {
@@ -61,7 +68,7 @@ struct OwnerRevocationReceipt {
 struct Runtime {
     managed_base_url: Option<String>,
     credentials: Option<ManagedCredentials>,
-    running: HashMap<String, watch::Sender<bool>>,
+    running: HashMap<String, RunningQuery>,
     preferences: HashMap<String, ExecutionProfile>,
     sessions: HashMap<String, SurfaceSession>,
     surfaces: HashMap<(String, String, String, String), String>,
@@ -71,8 +78,10 @@ struct Runtime {
     last_revocation: Option<OwnerRevocationReceipt>,
     journal: JournalStore,
     tool_relay: ToolRelay,
+    daemon_boot_epoch: String,
     output: mpsc::UnboundedSender<Message>,
     completed: mpsc::UnboundedSender<String>,
+    tool_requests: mpsc::UnboundedSender<ToolRequest>,
 }
 
 impl Runtime {
@@ -81,6 +90,8 @@ impl Runtime {
         journal: JournalStore,
         output: mpsc::UnboundedSender<Message>,
         completed: mpsc::UnboundedSender<String>,
+        tool_requests: mpsc::UnboundedSender<ToolRequest>,
+        daemon_boot_epoch: String,
     ) -> Self {
         Self {
             managed_base_url,
@@ -95,8 +106,10 @@ impl Runtime {
             last_revocation: None,
             journal,
             tool_relay: ToolRelay::new(),
+            daemon_boot_epoch,
             output,
             completed,
+            tool_requests,
         }
     }
 
@@ -697,7 +710,7 @@ impl Runtime {
     }
 
     fn authorized_tool_execution_result(&mut self, fields: Map<String, Value>) {
-        match self.tool_relay.complete(&fields) {
+        match self.tool_relay.complete(&mut self.journal, &fields) {
             Ok((completion, duplicate)) => self.emit(
                 "authorized_tool_result",
                 envelope(
@@ -707,6 +720,54 @@ impl Runtime {
                 ),
             ),
             Err(error) => self.emit_error(None, None, "invalid_request", &error),
+        }
+    }
+
+    fn authorize_tool_request(&mut self, request: ToolRequest) {
+        let Some(running) = self.running.get(&request.request_id).cloned() else {
+            self.emit_error(
+                Some(request.request_id),
+                Some(request.client_id),
+                "invalid_request",
+                "authorized tool execution has no active run",
+            );
+            return;
+        };
+        let input =
+            serde_json::from_str::<Map<String, Value>>(&request.call.arguments).unwrap_or_default();
+        let identity = Identity {
+            invocation_id: request.call.id.clone(),
+            owner_id: running.owner_id,
+            session_id: running.session_id,
+            run_id: running.run_id,
+            attempt_id: running.attempt_id,
+            profile_generation: running.profile_generation,
+            daemon_boot_epoch: self.daemon_boot_epoch.clone(),
+            execution_generation: 1,
+        };
+        match self.tool_relay.dispatch(
+            &mut self.journal,
+            identity,
+            request.call.name,
+            input,
+            running.surface_kind,
+            None,
+            None,
+            "act".into(),
+        ) {
+            Ok(authorized) => {
+                let mut fields = authorized.as_object().cloned().unwrap_or_default();
+                fields.insert("requestId".into(), json!(request.request_id));
+                fields.insert("clientId".into(), json!(request.client_id));
+                fields.insert("protocolVersion".into(), json!(PROTOCOL_VERSION));
+                self.emit("authorized_tool_execution", fields);
+            }
+            Err(error) => self.emit_error(
+                Some(request.request_id),
+                Some(request.client_id),
+                "invalid_request",
+                &error,
+            ),
         }
     }
 
@@ -906,8 +967,8 @@ impl Runtime {
         }
         let mut revoked_run_ids = self.running.keys().cloned().collect::<Vec<_>>();
         revoked_run_ids.sort();
-        for cancel in self.running.values() {
-            let _ = cancel.send(true);
+        for running in self.running.values() {
+            let _ = running.cancel.send(true);
         }
         self.clear_owner_state(&owner_id);
         self.owner_id = None;
@@ -927,6 +988,9 @@ impl Runtime {
     }
 
     fn clear_owner_state(&mut self, owner_id: &str) {
+        let _ = self
+            .tool_relay
+            .revoke_owner_run(&mut self.journal, owner_id, None);
         self.preferences.remove(owner_id);
         self.surfaces
             .retain(|(stored_owner_id, _, _, _), _| stored_owner_id != owner_id);
@@ -941,6 +1005,8 @@ impl Runtime {
             .retain(|_, session| session.owner_id != owner_id);
         self.context_sources
             .retain(|(session_id, _, _), _| !session_ids.contains(session_id));
+        self.running
+            .retain(|_, running| running.owner_id != owner_id);
     }
 
     fn emit_owner_revocation(
@@ -1025,18 +1091,25 @@ impl Runtime {
             );
             return;
         }
-        let profile_generation = self
+        let session = self
             .sessions
             .get(&session_id)
-            .filter(|session| session.owner_id == credentials.owner_id)
-            .map_or(1, |session| session.profile.generation);
-        if let Err(error) =
-            self.journal
+            .filter(|session| session.owner_id == credentials.owner_id);
+        let profile_generation = session.map_or(1, |session| session.profile.generation);
+        let surface_kind = session
+            .map(|session| session.surface_kind.clone())
+            .unwrap_or_else(|| "main_chat".into());
+        let run_identity =
+            match self
+                .journal
                 .admit_run(&credentials.owner_id, &session_id, profile_generation)
-        {
-            self.emit_error(Some(request_id), Some(client_id), "runtime_state", &error);
-            return;
-        }
+            {
+                Ok(identity) => identity,
+                Err(error) => {
+                    self.emit_error(Some(request_id), Some(client_id), "runtime_state", &error);
+                    return;
+                }
+            };
 
         let requested_mode = fields
             .get("agentMode")
@@ -1053,9 +1126,21 @@ impl Runtime {
             ExecutionMode::Deep => "omi-deep".into(),
         });
         let (cancel, mut cancelled) = watch::channel(false);
-        self.running.insert(request_id.clone(), cancel);
+        self.running.insert(
+            request_id.clone(),
+            RunningQuery {
+                cancel,
+                owner_id: credentials.owner_id.clone(),
+                session_id: session_id.clone(),
+                run_id: run_identity.run_id,
+                attempt_id: run_identity.attempt_id,
+                profile_generation,
+                surface_kind,
+            },
+        );
         let output = self.output.clone();
         let completed = self.completed.clone();
+        let tool_requests = self.tool_requests.clone();
         tokio::spawn(async move {
             let transport = ManagedTransport::new(base_url, credentials.bearer_token);
             let Ok(transport) = transport else {
@@ -1075,7 +1160,16 @@ impl Runtime {
             let events = output.clone();
             let event_request_id = request_id.clone();
             let event_client_id = client_id.clone();
+            let tool_sink = tool_requests.clone();
             agent.subscribe(move |event| {
+                if let Event::ToolCall(call) = event {
+                    let _ = tool_sink.send(ToolRequest {
+                        request_id: event_request_id.clone(),
+                        client_id: event_client_id.clone(),
+                        call: call.clone(),
+                    });
+                    return;
+                }
                 if let Some(message) = map_agent_event(event, &event_request_id, &event_client_id) {
                     let _ = events.send(message);
                 }
@@ -1116,7 +1210,7 @@ impl Runtime {
         let accepted = request_id
             .as_deref()
             .and_then(|request_id| self.running.get(request_id))
-            .is_some_and(|cancel| cancel.send(true).is_ok());
+            .is_some_and(|running| running.cancel.send(true).is_ok());
         self.emit(
             "cancel_ack",
             envelope(
@@ -1128,8 +1222,8 @@ impl Runtime {
     }
 
     fn stop(&mut self) {
-        for cancel in self.running.values() {
-            let _ = cancel.send(true);
+        for running in self.running.values() {
+            let _ = running.cancel.send(true);
         }
         self.emit(
             "cancel_ack",
@@ -1164,18 +1258,6 @@ fn map_agent_event(event: &Event, request_id: &str, client_id: &str) -> Option<M
             kind: "text_delta".into(),
             fields: envelope(Some(request_id), Some(client_id), json!({"text": delta})),
         }),
-        Event::ToolCall(call) => {
-            let input =
-                serde_json::from_str::<Map<String, Value>>(&call.arguments).unwrap_or_default();
-            Some(Message {
-                kind: "tool_use".into(),
-                fields: envelope(
-                    Some(request_id),
-                    Some(client_id),
-                    json!({"callId": call.id, "name": call.name, "input": input}),
-                ),
-            })
-        }
         Event::Error(message) => Some(Message {
             kind: "error".into(),
             fields: envelope(
@@ -1184,6 +1266,7 @@ fn map_agent_event(event: &Event, request_id: &str, client_id: &str) -> Option<M
                 json!({"message": message, "failure": {"code": "transport_interruption", "failureCode": "transport_interruption", "userMessage": message}}),
             ),
         }),
+        Event::ToolCall(_) => None,
         _ => None,
     }
 }
@@ -1356,18 +1439,26 @@ fn hash_json(value: &Value) -> String {
 async fn main() {
     let (output, mut output_receiver) = mpsc::unbounded_channel();
     let (completed, mut completed_receiver) = mpsc::unbounded_channel();
-    let journal = match JournalStore::open_default() {
+    let (tool_requests, mut tool_request_receiver) = mpsc::unbounded_channel();
+    let mut journal = match JournalStore::open_default() {
         Ok(journal) => journal,
         Err(error) => {
             eprintln!("unable to open Omi journal: {error}");
             return;
         }
     };
+    if let Err(error) = journal.reconcile_pending_tool_claims(None) {
+        eprintln!("unable to reconcile Omi tool claims: {error}");
+        return;
+    }
+    let daemon_boot_epoch = Uuid::new_v4().to_string();
     let mut runtime = Runtime::new(
         env::var("OMI_API_BASE_URL").ok(),
         journal,
         output,
         completed,
+        tool_requests,
+        daemon_boot_epoch,
     );
     runtime.emit(
         "init",
@@ -1394,6 +1485,9 @@ async fn main() {
             Some(request_id) = completed_receiver.recv() => {
                 runtime.running.remove(&request_id);
             },
+            Some(request) = tool_request_receiver.recv() => {
+                runtime.authorize_tool_request(request);
+            },
             Some(message) = output_receiver.recv() => {
                 if let Ok(line) = emit_line(&message) {
                     if stdout.write_all(line.as_bytes()).await.is_err() || stdout.flush().await.is_err() {
@@ -1418,7 +1512,15 @@ mod tests {
             Ok(journal) => journal,
             Err(error) => panic!("journal test setup failed: {error}"),
         };
-        Runtime::new(managed_base_url, journal, output, completed)
+        let (tool_requests, _) = mpsc::unbounded_channel();
+        Runtime::new(
+            managed_base_url,
+            journal,
+            output,
+            completed,
+            tool_requests,
+            "boot-test".into(),
+        )
     }
 
     #[test]
@@ -1433,7 +1535,7 @@ mod tests {
         .expect("text delta must map");
         assert_eq!(text.kind, "text_delta");
         assert_eq!(text.fields["text"], "hello");
-        let tool = map_agent_event(
+        assert!(map_agent_event(
             &Event::ToolCall(rx4::ToolCall {
                 id: "tool".into(),
                 name: "search".into(),
@@ -1442,9 +1544,123 @@ mod tests {
             "request",
             "client",
         )
-        .expect("tool call must map");
-        assert_eq!(tool.kind, "tool_use");
-        assert_eq!(tool.fields["input"]["q"], "omi");
+        .is_none());
+    }
+
+    #[tokio::test]
+    async fn authorized_tool_dispatch_accepts_persisted_result() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(None, output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
+                .expect("owner fixture must parse"),
+        );
+        let (cancel, _) = watch::channel(false);
+        runtime.running.insert(
+            "request".into(),
+            RunningQuery {
+                cancel,
+                owner_id: "owner".into(),
+                session_id: "session".into(),
+                run_id: "run".into(),
+                attempt_id: "attempt".into(),
+                profile_generation: 1,
+                surface_kind: "main_chat".into(),
+            },
+        );
+        runtime.authorize_tool_request(ToolRequest {
+            request_id: "request".into(),
+            client_id: "client".into(),
+            call: ToolCall {
+                id: "invoke-1".into(),
+                name: "search".into(),
+                arguments: r#"{"q":"omi"}"#.into(),
+            },
+        });
+        let authorized = receiver
+            .recv()
+            .await
+            .expect("authorized tool execution must emit");
+        assert_eq!(authorized.kind, "authorized_tool_execution");
+        assert_eq!(authorized.fields["invocationId"], "invoke-1");
+        assert_eq!(authorized.fields["runId"], "run");
+        let mut result = authorized.fields.clone();
+        result.insert("type".into(), json!("authorized_tool_execution_result"));
+        result.insert("outcome".into(), json!("succeeded"));
+        result.insert("result".into(), json!("found"));
+        for key in [
+            "toolName",
+            "input",
+            "effectClass",
+            "retryPolicy",
+            "surfaceKind",
+            "externalRefKind",
+            "externalRefId",
+            "originatingUserText",
+            "precedingAssistantText",
+            "runMode",
+            "chatMode",
+            "requestId",
+            "clientId",
+        ] {
+            result.remove(key);
+        }
+        runtime.authorized_tool_execution_result(result);
+        let accepted = receiver
+            .recv()
+            .await
+            .expect("authorized tool result must emit");
+        assert_eq!(accepted.kind, "authorized_tool_result");
+        assert_eq!(accepted.fields["outcome"], "succeeded");
+        assert_eq!(accepted.fields["duplicate"], false);
+    }
+
+    #[tokio::test]
+    async fn restart_reconcile_revokes_pending_tool_claims() {
+        let path = std::env::temp_dir().join(format!(
+            "omi-runtime-claim-{}.sqlite3",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|duration| duration.as_millis())
+                .unwrap_or(0)
+        ));
+        let mut journal = JournalStore::open(path.clone()).expect("journal must open");
+        let relay = ToolRelay::new();
+        relay
+            .dispatch(
+                &mut journal,
+                Identity {
+                    invocation_id: "invoke-restart".into(),
+                    owner_id: "owner".into(),
+                    session_id: "session".into(),
+                    run_id: "run".into(),
+                    attempt_id: "attempt".into(),
+                    profile_generation: 1,
+                    daemon_boot_epoch: "boot".into(),
+                    execution_generation: 1,
+                },
+                "search".into(),
+                serde_json::from_value(json!({"q":"omi"})).unwrap_or_default(),
+                "main_chat".into(),
+                None,
+                None,
+                "act".into(),
+            )
+            .expect("dispatch must persist");
+        drop(journal);
+        let mut reopened = JournalStore::open(path.clone()).expect("journal must reopen");
+        assert_eq!(
+            reopened
+                .reconcile_pending_tool_claims(Some("owner"))
+                .expect("reconcile"),
+            1
+        );
+        assert!(reopened
+            .pending_tool_claim("invoke-restart")
+            .expect("lookup")
+            .is_none());
+        let _ = std::fs::remove_file(path);
     }
 
     #[tokio::test]
@@ -1566,7 +1782,18 @@ mod tests {
                 .expect("owner fixture must parse"),
         );
         let (cancel, cancelled) = watch::channel(false);
-        runtime.running.insert("run-a".into(), cancel);
+        runtime.running.insert(
+            "run-a".into(),
+            RunningQuery {
+                cancel,
+                owner_id: "owner-a".into(),
+                session_id: "session".into(),
+                run_id: "run-a".into(),
+                attempt_id: "attempt-a".into(),
+                profile_generation: 1,
+                surface_kind: "main_chat".into(),
+            },
+        );
 
         runtime.handle(parse_line(r#"{"type":"revoke_owner_runtime","requestId":"revoke-1","clientId":"client","ownerId":"owner-a"}"#).expect("revoke fixture must parse"));
         let revoked = receiver.recv().await.expect("revoke receipt must emit");
@@ -1684,6 +1911,3 @@ mod tests {
         );
     }
 }
-mod journal;
-
-use journal::{JournalStore, ResultPage as JournalResultPage, Surface as JournalSurface};
