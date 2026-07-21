@@ -18,6 +18,7 @@ enum DesktopHealthEventName: String {
   case realtimeProviderPolicyClose = "realtime_provider_policy_close"
   case realtimeProviderSessionError = "realtime_provider_session_error"
   case userVisibleIssue = "user_visible_issue"
+  case betaDiagnosticTrail = "beta_diagnostic_trail"
   case fallbackTriggered = "fallback_triggered"
 }
 
@@ -59,7 +60,9 @@ final class DesktopDiagnosticsManager {
 
   private let lock = NSLock()
   private var snapshots: [DesktopHealthSnapshot] = []
+  private var betaTrailSnapshots: [DesktopHealthSnapshot] = []
   private let snapshotLimit = 150
+  private let betaTrailSnapshotLimit = 50
   private var consecutiveNearZeroPTTTurns = 0
   private var lastPTTWatchdogIncidentAt: Date?
   private var lastUserVisibleSentryIncidentAt: [String: Date] = [:]
@@ -355,6 +358,38 @@ final class DesktopDiagnosticsManager {
       captureSentry: false)
   }
 
+  /// Records a beta-only typed error trail entry. The caller passes free-form local
+  /// log text only for local classification; no message or error description is
+  /// retained in the trail or cloud attachment.
+  func recordBetaLogError(
+    message: String,
+    error: Error?,
+    enabled: Bool = BetaEnhancedDiagnosticsConfiguration.isEnabled
+  ) {
+    guard enabled else { return }
+    let nsError = error as NSError?
+    let snapshot = DesktopHealthSnapshot(
+      timestamp: Date(),
+      event: .betaDiagnosticTrail,
+      properties: commonProperties().merging(
+        sanitized([
+          "component": betaComponent(for: message),
+          "operation": "error",
+          "phase": "handling",
+          "outcome": "failed",
+          "failure_class": betaFailureClass(for: nsError),
+          "error_domain": betaErrorDomain(nsError?.domain),
+          "error_code": betaErrorCode(nsError?.code),
+        ])
+      ) { _, new in new })
+    lock.lock()
+    betaTrailSnapshots.append(snapshot)
+    if betaTrailSnapshots.count > betaTrailSnapshotLimit {
+      betaTrailSnapshots.removeFirst(betaTrailSnapshots.count - betaTrailSnapshotLimit)
+    }
+    lock.unlock()
+  }
+
   func recordVoiceTurnTerminal(
     reason: String,
     route: String,
@@ -509,9 +544,17 @@ final class DesktopDiagnosticsManager {
     return current
   }
 
-  private func currentCloudSnapshotsForSentry() -> [[String: Any]] {
+  private func currentCloudSnapshotsForSentry(
+    includeBetaDiagnostics: Bool = BetaEnhancedDiagnosticsConfiguration.isEnabled
+  ) -> [[String: Any]] {
     lock.lock()
-    let current = snapshots.map { cloudSafeSnapshot($0) }
+    var current = snapshots.map { cloudSafeSnapshot($0, includeBetaDiagnostics: includeBetaDiagnostics) }
+    if includeBetaDiagnostics {
+      current.append(
+        contentsOf: betaTrailSnapshots.map {
+          cloudSafeSnapshot($0, includeBetaDiagnostics: true)
+        })
+    }
     lock.unlock()
     return current
   }
@@ -520,13 +563,20 @@ final class DesktopDiagnosticsManager {
     currentSnapshotsForSentry()
   }
 
-  private func cloudSafeSnapshot(_ snapshot: DesktopHealthSnapshot) -> [String: Any] {
+  private func cloudSafeSnapshot(
+    _ snapshot: DesktopHealthSnapshot,
+    includeBetaDiagnostics: Bool
+  ) -> [String: Any] {
     var result: [String: Any] = [
       "timestamp": ISO8601DateFormatter.desktopDiagnostics.string(from: snapshot.timestamp),
       "event": snapshot.event.rawValue,
     ]
 
-    guard snapshot.event == .userVisibleIssue || snapshot.event == .pttAudioCaptureWatchdogTriggered else {
+    let includesTypedIncidentContext =
+      snapshot.event == .userVisibleIssue
+      || snapshot.event == .pttAudioCaptureWatchdogTriggered
+      || (includeBetaDiagnostics && snapshot.event == .betaDiagnosticTrail)
+    guard includesTypedIncidentContext else {
       return result
     }
 
@@ -543,6 +593,7 @@ final class DesktopDiagnosticsManager {
     "source", "mode", "hub_active", "turn_audio_seconds", "voiced_audio_seconds", "peak", "rms",
     "is_near_zero", "watchdog_eligible", "consecutive_silent_turns", "tcc_microphone_granted",
     "input_device_class", "recovery_action", "recovery_result", "threshold",
+    "component", "operation", "outcome", "error_domain", "error_code",
   ]
 
   func writeDiagnosticsAttachment() -> URL? {
@@ -563,23 +614,28 @@ final class DesktopDiagnosticsManager {
     failureClass: String,
     phase: String,
     logPath: String = omiLogFilePath(),
-    maxLogLines: Int = 200
+    maxLogLines: Int = 200,
+    includeBetaDiagnostics: Bool = BetaEnhancedDiagnosticsConfiguration.isEnabled
   ) -> URL? {
     let incident = incidentProperties(
       id: incidentID,
       area: area,
       failureClass: failureClass,
       phase: phase)
-    let payload: [String: Any] = [
+    var payload: [String: Any] = [
       "generated_at": ISO8601DateFormatter.desktopDiagnostics.string(from: Date()),
       "privacy": "redacted_incident_context",
       "incident": incident,
-      "snapshots": currentCloudSnapshotsForSentry(),
-      "redacted_log_tail": redactedLogTail(
+      "snapshots": currentCloudSnapshotsForSentry(includeBetaDiagnostics: includeBetaDiagnostics),
+    ]
+    // Beta uploads the independently assembled typed trail only. The free-form
+    // local-log tail remains available exclusively to the existing non-beta path.
+    if !includeBetaDiagnostics {
+      payload["redacted_log_tail"] = redactedLogTail(
         logPath: logPath,
         maxLines: maxLogLines,
-        strictCloudRedaction: true),
-    ]
+        strictCloudRedaction: true)
+    }
     return writeDiagnosticsPayload(payload, prefix: "omi-desktop-incident")
   }
 
@@ -742,6 +798,7 @@ final class DesktopDiagnosticsManager {
     func resetForTests() {
       lock.lock()
       snapshots.removeAll()
+      betaTrailSnapshots.removeAll()
       consecutiveNearZeroPTTTurns = 0
       lastPTTWatchdogIncidentAt = nil
       lastUserVisibleSentryIncidentAt.removeAll()
@@ -915,6 +972,48 @@ final class DesktopDiagnosticsManager {
 
   private func rounded(_ value: Double) -> Double {
     (value * 100).rounded() / 100
+  }
+
+  private func betaComponent(for message: String) -> String {
+    let value = message.lowercased()
+    if value.contains("chat") || value.contains("bridge") { return "chat" }
+    if value.contains("realtime") || value.contains("omni") { return "realtime" }
+    if value.contains("ptt") || value.contains("audio") || value.contains("transcription") { return "audio" }
+    if value.contains("bluetooth") || value.contains("wifi") || value.contains("device") { return "device" }
+    if value.contains("auth") || value.contains("sign") { return "auth" }
+    if value.contains("sync") || value.contains("wal") { return "sync" }
+    if value.contains("update") || value.contains("sparkle") { return "update" }
+    if value.contains("rewind") || value.contains("screen") { return "capture" }
+    return "app"
+  }
+
+  private func betaFailureClass(for error: NSError?) -> String {
+    guard let error else { return "unknown" }
+    if error.domain == NSURLErrorDomain {
+      switch error.code {
+      case NSURLErrorTimedOut: return "timeout"
+      case NSURLErrorNotConnectedToInternet, NSURLErrorCannotConnectToHost: return "network_unavailable"
+      default: return "network_error"
+      }
+    }
+    if error.domain == NSPOSIXErrorDomain { return "posix_error" }
+    if error.domain == NSCocoaErrorDomain { return "cocoa_error" }
+    return "other"
+  }
+
+  private func betaErrorDomain(_ domain: String?) -> String {
+    switch domain {
+    case NSURLErrorDomain: return "url"
+    case NSPOSIXErrorDomain: return "posix"
+    case NSCocoaErrorDomain: return "cocoa"
+    case nil: return "none"
+    default: return "other"
+    }
+  }
+
+  private func betaErrorCode(_ code: Int?) -> Int {
+    guard let code else { return 0 }
+    return max(-9_999, min(9_999, code))
   }
 
   private func classifyInputDevice(_ description: String?) -> String {

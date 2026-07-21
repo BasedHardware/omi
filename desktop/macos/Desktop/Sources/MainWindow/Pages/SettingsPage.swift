@@ -315,6 +315,7 @@ struct SettingsContentView: View {
 
   // Dev Mode setting
   @AppStorage("devModeEnabled") var devModeEnabled = false
+  @AppStorage(BetaEnhancedDiagnosticsConfiguration.defaultsKey) var betaEnhancedDiagnosticsEnabled = true
 
   // Browser Extension settings
   @AppStorage("playwrightUseExtension") var playwrightUseExtension = true
