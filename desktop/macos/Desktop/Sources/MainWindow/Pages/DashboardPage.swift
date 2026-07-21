@@ -294,7 +294,6 @@ struct DashboardPage: View {
   private static let homeAskBarMaxWidth: CGFloat = 980
   private static let homeStagePanelMaxWidth: CGFloat = 1280
   private static let homeChatColumnMaxWidth: CGFloat = 900
-  private static let homeNavRailWidth: CGFloat = 60
   private static let homeStageTopPadding: CGFloat = 74
   private static let homeStageBottomPadding: CGFloat = 26
   private static let homeStageAnimation = Animation.spring(response: 0.46, dampingFraction: 0.86)
@@ -678,26 +677,13 @@ struct DashboardPage: View {
           // Full Keyboard Access.
           .accessibilityHidden(isHomeModalPresented)
 
-        // Thin navigation rail pinned to the left edge, above the stage so it
-        // stays clickable even while a panel is open.
-        homeNavRail
-          .padding(.leading, OmiSpacing.sm)
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-          .accessibilityHidden(isHomeModalPresented)
-
         // Header hugs the same column as the chat/ask bar: its edges align
-        // with the 900px measure whenever the window is wide enough. The
-        // leading edge also clears the nav rail.
+        // with the 900px measure whenever the window is wide enough.
         homeHeader
           .padding(
-            .leading,
-            max(
-              sideInset,
-              (proxy.size.width - Self.homeChatColumnMaxWidth) / 2,
-              Self.homeNavRailWidth + OmiSpacing.lg
-            )
+            .horizontal,
+            max(sideInset, (proxy.size.width - Self.homeChatColumnMaxWidth) / 2)
           )
-          .padding(.trailing, max(sideInset, (proxy.size.width - Self.homeChatColumnMaxWidth) / 2))
           .padding(.top, OmiSpacing.xxl)
           .accessibilityHidden(isHomeModalPresented)
 
@@ -1404,41 +1390,6 @@ struct DashboardPage: View {
         max(Self.appsPopupMinHeight, panelHeight - (Self.appsPopupVerticalMargin * 2))
       )
     )
-  }
-
-  /// Destinations reachable from the chat-first Home via the thin left rail.
-  /// The redesign hides the legacy SidebarView, so this rail is the primary
-  /// navigation surface (Settings sits at the foot, added separately).
-  private var homeNavRailItems: [SidebarNavItem] {
-    [.dashboard, .conversations, .memories, .tasks, .focus, .insight, .rewind, .apps]
-  }
-
-  /// Minimal always-present icon rail on the left edge of Home — mirrors the
-  /// design mockup and gives Focus / Insights / Conversations / etc. a home now
-  /// that the stat strip is gone.
-  private var homeNavRail: some View {
-    VStack(spacing: OmiSpacing.xxs) {
-      ForEach(homeNavRailItems, id: \.rawValue) { item in
-        HomeNavRailButton(
-          icon: item.icon,
-          title: item.title,
-          isSelected: selectedIndex == item.rawValue && !isHomeModalPresented,
-          action: { navigate(to: item) }
-        )
-      }
-
-      Spacer(minLength: OmiSpacing.md)
-
-      HomeNavRailButton(
-        icon: SidebarNavItem.settings.icon,
-        title: SidebarNavItem.settings.title,
-        isSelected: false,
-        action: { navigate(to: .settings) }
-      )
-    }
-    .padding(.vertical, OmiSpacing.lg)
-    .frame(width: Self.homeNavRailWidth)
-    .frame(maxHeight: .infinity)
   }
 
   /// Leading-edge entry point to previous chats: opens the existing session
@@ -4159,39 +4110,6 @@ private struct HomeListeningStatusButton: View {
       return status.indicator.opacity(isHovering ? 0.54 : 0.38)
     }
     return HomePalette.hairline.opacity(isHovering ? 0.6 : 0.0)
-  }
-}
-
-/// A single quiet icon button in the Home nav rail: transparent at rest, a
-/// subtle ink tile when hovered or when its page is the current one.
-private struct HomeNavRailButton: View {
-  let icon: String
-  let title: String
-  let isSelected: Bool
-  let action: () -> Void
-
-  @State private var isHovering = false
-
-  var body: some View {
-    Button(action: action) {
-      Image(systemName: icon)
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundStyle(isSelected || isHovering ? HomePalette.ink : HomePalette.muted)
-        .frame(width: 40, height: 40)
-        .background(
-          RoundedRectangle(cornerRadius: 11, style: .continuous)
-            .fill(
-              isSelected
-                ? HomePalette.tile.opacity(0.9)
-                : (isHovering ? HomePalette.tile.opacity(0.5) : Color.clear)
-            )
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-    }
-    .buttonStyle(.plain)
-    .onHover { isHovering = $0 }
-    .help(title)
-    .accessibilityLabel(title)
   }
 }
 

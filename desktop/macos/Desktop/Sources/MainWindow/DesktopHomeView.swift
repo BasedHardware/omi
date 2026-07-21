@@ -942,6 +942,10 @@ struct DesktopHomeView: View {
         }
         .fixedSize(horizontal: true, vertical: false)
         .clipped()
+      } else if !useLegacyHomeDesign {
+        // Redesign: a persistent thin nav rail beside every page so navigation
+        // never has to route back through Home.
+        AppNavRail(selectedIndex: $selectedIndex)
       }
 
       // Main content area with rounded container
@@ -968,21 +972,8 @@ struct DesktopHomeView: View {
         // Extracted into a separate struct so that pages like TasksPage
         // are not re-rendered when AppState publishes unrelated changes.
         VStack(spacing: 0) {
-          // Settings has its own Back affordance in SettingsSidebar, so skip the
-          // redundant Home chrome there.
-          if !useLegacyHomeDesign && selectedIndex != SidebarNavItem.dashboard.rawValue
-            && selectedIndex != SidebarNavItem.chat.rawValue && !isInSettings
-          {
-            PageChromeBar(
-              onHome: {
-                selectedIndex = SidebarNavItem.dashboard.rawValue
-              }
-            )
-            .padding(.horizontal, OmiSpacing.lg)
-            .padding(.top, OmiSpacing.md)
-            .padding(.bottom, OmiSpacing.xxs)
-          }
-
+          // The persistent AppNavRail provides Home + cross-page navigation, so
+          // no per-page Home chrome bar is needed in the redesign.
           PageContentView(
             selectedIndex: selectedIndex,
             appState: appState,
@@ -1108,52 +1099,6 @@ struct DesktopHomeView: View {
     OmiMotion.withGated(Self.pageNavigationAnimation) {
       selectedIndex = SidebarNavItem.dashboard.rawValue
     }
-  }
-}
-
-private struct PageChromeBar: View {
-  let onHome: () -> Void
-
-  var body: some View {
-    HStack(spacing: OmiSpacing.sm) {
-      PageChromeButton(title: "Home", systemImage: "house.fill", action: onHome)
-      Spacer()
-    }
-    .frame(height: 34)
-  }
-}
-
-private struct PageChromeButton: View {
-  let title: String
-  let systemImage: String
-  let action: () -> Void
-  @State private var isHovering = false
-
-  var body: some View {
-    Button(action: action) {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: systemImage)
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-        Text(title)
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-      }
-      .foregroundStyle(isHovering ? OmiColors.textPrimary : OmiColors.textSecondary)
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.xs)
-      .background(
-        Capsule(style: .continuous)
-          .fill(.ultraThinMaterial)
-      )
-      .overlay(
-        Capsule(style: .continuous)
-          .stroke(isHovering ? OmiColors.success.opacity(0.34) : OmiColors.border.opacity(0.4), lineWidth: 1)
-      )
-      .contentShape(Capsule())
-    }
-    .buttonStyle(.plain)
-    .onHover { isHovering = $0 }
-    .help(title)
-    .accessibilityLabel(title)
   }
 }
 

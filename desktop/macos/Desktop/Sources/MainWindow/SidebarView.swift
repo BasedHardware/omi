@@ -1568,3 +1568,78 @@ enum OmiDeviceImage {
     return NSImage(contentsOf: url)
   }()
 }
+
+// MARK: - App Nav Rail (Second Brain)
+
+/// The thin, always-present left navigation rail for the redesigned app shell.
+/// Lives beside every page (not just Home) so you can move between Home, the
+/// memory/task surfaces, Focus, Insights, Rewind, and Apps without bouncing
+/// back through Home. Settings sits at the foot. Styled with the SB ink system
+/// so it matches the sign-in / onboarding aesthetic.
+struct AppNavRail: View {
+  @Binding var selectedIndex: Int
+  @Environment(\.sbTheme) private var sb
+
+  private var items: [SidebarNavItem] {
+    [.dashboard, .conversations, .memories, .tasks, .focus, .insight, .rewind, .apps]
+  }
+
+  var body: some View {
+    VStack(spacing: 4) {
+      ForEach(items, id: \.rawValue) { item in
+        AppNavRailButton(
+          icon: item.icon,
+          title: item.title,
+          isSelected: selectedIndex == item.rawValue,
+          action: { select(item) }
+        )
+      }
+
+      Spacer(minLength: 12)
+
+      AppNavRailButton(
+        icon: SidebarNavItem.settings.icon,
+        title: SidebarNavItem.settings.title,
+        isSelected: selectedIndex == SidebarNavItem.settings.rawValue,
+        action: { select(.settings) }
+      )
+    }
+    .padding(.vertical, 16)
+    .frame(width: 60)
+    .frame(maxHeight: .infinity)
+  }
+
+  private func select(_ item: SidebarNavItem) {
+    guard selectedIndex != item.rawValue else { return }
+    selectedIndex = item.rawValue
+    AnalyticsManager.shared.tabChanged(tabName: item.title)
+  }
+}
+
+private struct AppNavRailButton: View {
+  let icon: String
+  let title: String
+  let isSelected: Bool
+  let action: () -> Void
+
+  @Environment(\.sbTheme) private var sb
+  @State private var isHovering = false
+
+  var body: some View {
+    Button(action: action) {
+      Image(systemName: icon)
+        .font(.system(size: 15, weight: .medium))
+        .foregroundStyle(isSelected || isHovering ? sb.ink : sb.ink(.w38))
+        .frame(width: 40, height: 40)
+        .background(
+          RoundedRectangle(cornerRadius: 11, style: .continuous)
+            .fill(isSelected ? sb.ink(.w09) : (isHovering ? sb.ink(.w05) : Color.clear))
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+    }
+    .buttonStyle(.plain)
+    .onHover { isHovering = $0 }
+    .help(title)
+    .accessibilityLabel(title)
+  }
+}
