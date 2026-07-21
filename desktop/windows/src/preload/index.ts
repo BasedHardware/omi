@@ -16,7 +16,12 @@ import type {
   RewindSettings,
   InsightPayload,
   AutomationPlan,
-  StepResult
+  StepResult,
+  ByokProvider,
+  ByokSaveRequest,
+  ByokTestRequest,
+  ByokUseRequest,
+  ByokChatRequest
 } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -68,6 +73,13 @@ const omi: OmiBridgeApi = {
   kgQueryNodes: (q, limit?) => ipcRenderer.invoke('kg:queryNodes', q, limit),
   kgSearchFiles: (q, fileType?, limit?) => ipcRenderer.invoke('kg:searchFiles', q, fileType, limit),
   kgExecuteSql: (sql) => ipcRenderer.invoke('kg:executeSql', sql),
+  byokStatus: () => ipcRenderer.invoke('byok:status'),
+  byokSave: (request: ByokSaveRequest) => ipcRenderer.invoke('byok:save', request),
+  byokDelete: (provider: ByokProvider) => ipcRenderer.invoke('byok:delete', provider),
+  byokTest: (request: ByokTestRequest) => ipcRenderer.invoke('byok:test', request),
+  byokUse: (request: ByokUseRequest) => ipcRenderer.invoke('byok:use', request),
+  byokChatSend: (request: ByokChatRequest) => ipcRenderer.invoke('byok:chatSend', request),
+  byokListModels: () => ipcRenderer.invoke('byok:models'),
   readStickyNotes: () => ipcRenderer.invoke('integrations:stickyNotes:read'),
   googleConnect: () => ipcRenderer.invoke('integrations:google:connect'),
   googleDisconnect: () => ipcRenderer.invoke('integrations:google:disconnect'),

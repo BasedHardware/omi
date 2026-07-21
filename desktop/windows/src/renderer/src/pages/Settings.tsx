@@ -6,6 +6,7 @@ import { SettingsTabRail } from '../components/settings/SettingsTabRail'
 import { SettingsTabPanel } from '../components/settings/SettingsTabPanel'
 import { SETTINGS_TABS, type SettingsTabId } from '../components/settings/tabs'
 import { GeneralTab } from '../components/settings/tabs/GeneralTab'
+import { ByokTab } from '../components/settings/tabs/ByokTab'
 import { RewindTab } from '../components/settings/tabs/RewindTab'
 import { PrivacyTab } from '../components/settings/tabs/PrivacyTab'
 import { AccountTab } from '../components/settings/tabs/AccountTab'
@@ -15,12 +16,15 @@ import { Memories } from './Memories'
 // The Memories tab renders the full Memories page (its own layout, brain map and
 // management UI), so it isn't a simple searchable settings panel — it's handled
 // separately below and is intentionally absent from this map.
-const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = {
-  general: GeneralTab,
-  rewind: RewindTab,
-  privacy: PrivacyTab,
-  account: AccountTab,
-  advanced: AdvancedTab
+const TAB_COMPONENTS: Partial<
+  Record<SettingsTabId, (props: { active: boolean }) => React.JSX.Element>
+> = {
+  general: () => <GeneralTab />,
+  byok: ByokTab,
+  rewind: () => <RewindTab />,
+  privacy: () => <PrivacyTab />,
+  account: () => <AccountTab />,
+  advanced: () => <AdvancedTab />
 }
 
 function SettingsInner(): React.JSX.Element {
@@ -57,7 +61,7 @@ function SettingsInner(): React.JSX.Element {
               if (!Comp) return null // memories has no panel — rendered full-page above
               return (
                 <SettingsTabPanel key={id} id={id} label={label} active={active === id}>
-                  <Comp />
+                  <Comp active={active === id} />
                 </SettingsTabPanel>
               )
             })}

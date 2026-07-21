@@ -33,6 +33,7 @@ import {
   stopAutomationTargetTracker
 } from './automation/foregroundTarget'
 import { registerScreenSynthHandlers } from './ipc/screenSynth'
+import { registerByokHandlers } from './ipc/byok'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
@@ -347,6 +348,7 @@ app.whenReady().then(async () => {
   registerMemoryExportHandlers()
   registerKgHandlers()
   registerIntegrationsHandlers()
+  registerByokHandlers()
   registerUsageHandlers()
   registerMemoryCleanupHandlers()
   registerRewindHandlers()

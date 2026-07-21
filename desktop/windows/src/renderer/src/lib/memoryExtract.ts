@@ -8,6 +8,7 @@
 // the Node agent subprocess (which only exists for tool-using chat).
 import { desktopApi } from './apiClient'
 import { extractJSONObject } from './extractJson'
+import { hostedModelForPurpose, tryByokCompletion } from './modelSelection'
 
 // ModelQoS.Claude.synthesis on desktop — the cheap extraction tier used for
 // calendar/gmail/notes/memory-import synthesis tasks.
@@ -98,22 +99,30 @@ export async function extractMemories(
   if (!trimmed) return { memories: [], profile: '' }
 
   // Synthesis over up to 40k chars can exceed the default 12s client timeout.
-  const res = await desktopApi.post(
-    '/v2/chat/completions',
-    {
-      model: SYNTHESIS_MODEL,
-      stream: false,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildImportPrompt(trimmed, source, existing) }
-      ]
-    },
-    { timeout: 60_000 }
-  )
+  const prompt = buildImportPrompt(trimmed, source, existing)
+  const byok = await tryByokCompletion('memory', {
+    systemPrompt: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: prompt }]
+  })
+  let content = byok ?? ''
+  if (byok === null) {
+    const res = await desktopApi.post(
+      '/v2/chat/completions',
+      {
+        model: hostedModelForPurpose('memory', SYNTHESIS_MODEL),
+        stream: false,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: prompt }
+        ]
+      },
+      { timeout: 60_000 }
+    )
 
-  const content: string =
-    (res.data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message
-      ?.content ?? ''
+    content =
+      (res.data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message
+        ?.content ?? ''
+  }
   const parsed = JSON.parse(extractJSONObject(content)) as {
     memories?: unknown
     profile?: unknown

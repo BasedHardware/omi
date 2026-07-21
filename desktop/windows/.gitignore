@@ -50,3 +50,4 @@ resources/win-ocr-helper/*.pdb
 src/main/automation/helper/bin/
 src/main/automation/helper/obj/
 resources/win-automation-helper/*.pdb
+resources/koffi/

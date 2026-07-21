@@ -52,6 +52,91 @@ export type ConversationPayload = {
 
 export type ChatMessage = { id?: string; role: 'user' | 'assistant'; content: string }
 
+export type PiChatUsage = {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
+export type ByokProvider =
+  | 'openai'
+  | 'anthropic'
+  | 'gemini'
+  | 'deepgram'
+  | 'openrouter'
+  | 'elevenlabs'
+
+export type ByokChatProvider = Exclude<ByokProvider, 'deepgram' | 'elevenlabs'>
+
+export type ModelPurpose = 'chat' | 'agent' | 'memory'
+
+export type ModelProvider = 'omi' | ByokChatProvider
+
+export type AvailableModel = {
+  id: string
+  provider: ModelProvider
+  providerLabel: string
+  model: string
+  label: string
+  configured: boolean
+  source: 'hosted' | 'byok'
+  reason?: string
+}
+
+export type ModelListResult = {
+  models: AvailableModel[]
+  fetchedAt: number
+}
+
+export type ByokProviderStatus = {
+  provider: ByokProvider
+  configured: boolean
+  maskedKey?: string
+  updatedAt?: number
+  lastValidatedAt?: number
+  lastValidationOk?: boolean
+  lastValidationError?: string
+}
+
+export type ByokStatus = {
+  activeChatProvider: ByokChatProvider | null
+  providers: Record<ByokProvider, ByokProviderStatus>
+}
+
+export type ByokSaveRequest = {
+  provider: ByokProvider
+  key: string
+}
+
+export type ByokTestRequest = {
+  provider: ByokProvider
+  /** Optional unsaved key to validate. When omitted, main validates the stored key. */
+  key?: string
+}
+
+export type ByokUseRequest = {
+  provider: ByokChatProvider | null
+}
+
+export type ByokValidationResult = {
+  ok: boolean
+  status?: number
+  error?: string
+}
+
+export type ByokChatRequest = {
+  messages: ChatMessage[]
+  modelId?: string
+  systemPrompt?: string
+  timeoutMs?: number
+}
+
+export type ByokChatResponse = {
+  provider: ByokChatProvider
+  text: string
+  usage: PiChatUsage
+}
+
 // Capture modes a recording session can start in. 'mic' = audio only;
 // 'screen' = mic + screen capture + system audio (both audio streams
 // transcribed independently).
@@ -218,6 +303,13 @@ export type OmiBridgeApi = {
   kgSearchFiles: (q: string, fileType?: string, limit?: number) => Promise<IndexedFileRecord[]>
   /** Run a single read-only SELECT against the local DB (sqlGuard-validated). */
   kgExecuteSql: (sql: string) => Promise<KgSqlResult>
+  byokStatus: () => Promise<ByokStatus>
+  byokSave: (request: ByokSaveRequest) => Promise<ByokStatus>
+  byokDelete: (provider: ByokProvider) => Promise<ByokStatus>
+  byokTest: (request: ByokTestRequest) => Promise<ByokValidationResult>
+  byokUse: (request: ByokUseRequest) => Promise<ByokStatus>
+  byokChatSend: (request: ByokChatRequest) => Promise<ByokChatResponse>
+  byokListModels: () => Promise<ModelListResult>
   // Integrations (3e): read local Windows Sticky Notes for import. The renderer
   // synthesizes the returned note text and writes /v3/memories itself (it holds
   // the auth token).

@@ -2,6 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { auth } from '../lib/firebase'
 import { invalidateConversationsCache } from '../lib/pageCache'
 import { gatherLocalContext } from '../lib/localAgent'
+import {
+  byokProviderFromModelId,
+  byokProviderLabel,
+  resolveByokChatSelection
+} from '../lib/modelSelection'
 import { readCurrentScreen } from '../lib/screenContext'
 import { looksLikeAction, looksLikeRawPlan, planActions } from '../lib/actionPlanner'
 import { callAgentLLM } from '../lib/agentLLM'
@@ -258,6 +263,29 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       const textToSend = contextParts.length
         ? `${contextParts.join('\n\n')}\n\n${userMsg.content}`
         : userMsg.content
+      const prefs = getPreferences()
+      const byokStatus = await window.omi.byokStatus().catch(() => null)
+      const chatModelId = prefs.defaultModelByPurpose?.chat
+      const byokSelection = resolveByokChatSelection(chatModelId, byokStatus)
+      const selectedByokProvider = byokProviderFromModelId(chatModelId)
+      if (selectedByokProvider && !byokSelection.useByok) {
+        throw new Error(
+          `${byokProviderLabel(selectedByokProvider)} BYOK is selected for chat, but that provider is not configured.`
+        )
+      }
+      if (byokSelection.useByok) {
+        const result = await window.omi.byokChatSend({
+          messages: [...baseHistory, { ...userMsg, content: textToSend }],
+          modelId: byokSelection.modelId
+        })
+        assistantText = result.text
+        setHistory((h) => {
+          const next = [...h]
+          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
+          return next
+        })
+        return
+      }
       const res = await fetch(`${OMI_BASE}/v2/messages`, {
         method: 'POST',
         headers: {
@@ -320,7 +348,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       // keyword-less follow-up like "again"). Don't render that raw in the thread.
       if (looksLikeRawPlan(assistantText)) {
         assistantText =
-          "It looks like you want me to do something in an app. Phrase it as a direct command (e.g. \"type report in the search box\") with that app focused, and I'll show you a plan to approve."
+          'It looks like you want me to do something in an app. Phrase it as a direct command (e.g. "type report in the search box") with that app focused, and I\'ll show you a plan to approve.'
         setHistory((h) => {
           const next = [...h]
           next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }

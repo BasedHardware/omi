@@ -8,3 +8,14 @@ allowBuilds:
   onnxruntime-node: true
   protobufjs: true
   sharp: true
+supportedArchitectures:
+  os:
+    - current
+    # Keep Windows optional native packages in the lockfile from non-Windows hosts;
+    # install-time scripts still gate Windows-only staging by process.platform.
+    - win32
+  cpu:
+    - current
+    - x64
+  libc:
+    - current
