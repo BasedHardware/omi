@@ -1,5 +1,8 @@
 // Package omidevice holds Omi wearable BLE protocol helpers.
-// BLE scanning/connecting is platform-specific; use smallgo/ble or similar with these UUIDs.
+//
+// BLE scan/connect/listen is feature-gated: build with -tags ble to enable
+// Scan/Listen/ListenPayload/ReadCodec via tinygo.org/x/bluetooth (desktop
+// darwin/linux). Default builds return ErrBLEDisabled so tests need no adapter.
 package omidevice
 
 const (
