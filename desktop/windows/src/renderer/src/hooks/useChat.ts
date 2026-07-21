@@ -89,6 +89,18 @@ export const CHAT_STREAM_TIMEOUT_COPY = 'Response took too long. Try again.'
 export const CHAT_NOT_READY_INTERIM = 'One moment, finishing sign-in…'
 export const CHAT_NOT_READY_FINAL = 'Still finishing sign-in. Try again in a moment.'
 
+// First-reply slow-connect feedback. On a cold managed-cloud backend (fresh
+// install, or the service scaled to zero) the first turn can sit with an EMPTY
+// bubble for tens of seconds before the first delta arrives — indistinguishable
+// from a hang, and the top first-run complaint ("sent hi, got dots forever").
+// After this long with nothing visible, say we're still connecting instead of
+// bare dots. DISPLAY-ONLY: the copy is written to the live bubble but never
+// into `assistantText`, so it is never persisted, never saved to the shared
+// thread, and never spoken; the first text_delta/tool_activity recomposes the
+// bubble and replaces it. Exported so tests key off the same values.
+export const CHAT_SLOW_CONNECT_MS = 8_000
+export const CHAT_SLOW_CONNECT_COPY = 'Connecting to Omi… the first reply can take a little longer.'
+
 // pi_mono not-ready markers (`result.error`). These strings are produced ONLY when
 // the kernel isn't wired for a turn yet — the cold-start owner gate hasn't seen the
 // verified uid (mainChat.ts), the adapter was never registered (adapterRegistry.ts),
@@ -823,6 +835,17 @@ export function useChat(): UseChat {
       )
     }, CHAT_STREAM_TIMEOUT_MS)
 
+    // Slow-connect feedback (see CHAT_SLOW_CONNECT_MS): if nothing has landed in
+    // the bubble by the deadline, surface the connecting copy so a cold backend
+    // reads as "connecting", not broken. Emptiness is checked at FIRE time, so a
+    // turn that has streamed text or shows a tool line is never overwritten. The
+    // not-ready/busy-retry interims clear this timer before writing their own
+    // copy (they are more specific), and the finally clears it on completion.
+    const slowConnect = setTimeout(() => {
+      if (!isCurrent()) return
+      if (assistantText === '' && toolActivity === null) writeAssistant(CHAT_SLOW_CONNECT_COPY)
+    }, CHAT_SLOW_CONNECT_MS)
+
     let errored = false
     let errorLine = ''
     try {
@@ -859,6 +882,8 @@ export function useChat(): UseChat {
       // unlatched busy and cleared history, so the lingering ~600ms promise is
       // harmless: when it resolves we bail here before sending attempt 2.
       if (!result.ok && result.error && PI_MONO_NOT_READY_RE.test(result.error) && isCurrent()) {
+        // The specific not-ready copy supersedes the generic slow-connect line.
+        clearTimeout(slowConnect)
         writeAssistant(CHAT_NOT_READY_INTERIM)
         await new Promise<void>((resolve) => setTimeout(resolve, NOT_READY_RETRY_DELAY_MS))
         if (!isCurrent()) return
@@ -882,6 +907,8 @@ export function useChat(): UseChat {
         isCurrent();
         rl++
       ) {
+        // The specific busy-retry copy supersedes the generic slow-connect line.
+        clearTimeout(slowConnect)
         writeAssistant(CHAT_BUSY_RETRY_INTERIM)
         await new Promise<void>((resolve) => setTimeout(resolve, chatRateLimitBackoffMs(rl)))
         if (!isCurrent()) return
@@ -931,6 +958,7 @@ export function useChat(): UseChat {
       // below is skipped — the recovered timeout state stands and there is no double
       // terminal. clearTimeout on an already-fired timer is a harmless no-op.
       clearTimeout(watchdog)
+      clearTimeout(slowConnect)
       // Terminal handling runs exactly once, after the FINAL attempt (each attempt
       // already released its own run handle + listener in its own finally). State
       // writes only for the still-current generation (a dismissed turn was already

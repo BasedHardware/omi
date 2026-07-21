@@ -70,7 +70,9 @@ import {
   CHAT_NOT_READY_INTERIM,
   CHAT_NOT_READY_FINAL,
   CHAT_STREAM_TIMEOUT_MS,
-  CHAT_STREAM_TIMEOUT_COPY
+  CHAT_STREAM_TIMEOUT_COPY,
+  CHAT_SLOW_CONNECT_MS,
+  CHAT_SLOW_CONNECT_COPY
 } from './useChat'
 import { CHAT_BUSY_RETRY_INTERIM } from '../lib/chat/chatRetry'
 import { clearAttachments } from '../lib/chatAttachments'
@@ -1065,6 +1067,95 @@ describe('useChat — pi_mono per-turn watchdog', () => {
       expect(persistedTimeout).toBe(true)
     } finally {
       prefsState.chatHistoryMode = 'per-launch'
+      vi.useRealTimers()
+    }
+  })
+})
+
+// First-reply slow-connect feedback. On a cold managed-cloud backend the first
+// turn can wait tens of seconds before its first delta with the bubble EMPTY —
+// which rendered as a bare spinner and read as a hang (the shipped first-run
+// complaint: "sent hi, got dots"). At CHAT_SLOW_CONNECT_MS with nothing visible
+// the bubble shows the connecting copy; real content replaces it, and a turn
+// that already streamed is never overwritten.
+describe('useChat — pi_mono slow-connect feedback', () => {
+  async function mountFake(): Promise<
+    ReturnType<typeof renderHook<ReturnType<typeof useChat>, unknown>>['result']
+  > {
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+    return result
+  }
+
+  async function pumpToSend(): Promise<void> {
+    for (let k = 0; k < 50 && !sendArgs; k++) await vi.advanceTimersByTimeAsync(1)
+    if (!sendArgs) throw new Error('mainChatSend was never called')
+  }
+
+  it('COLD START: an empty bubble shows the connecting copy at the deadline; the first delta replaces it', async () => {
+    vi.useFakeTimers()
+    try {
+      // The default mainChatSend never settles — the run was accepted but the
+      // first delta is a long way off (cold backend).
+      const result = await mountFake()
+      await act(async () => {
+        void result.current.send('hi')
+        await pumpToSend()
+        emit({ type: 'accepted', requestId: sendArgs!.requestId, runId: 'run-cold' })
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      // Pre-deadline: bubble empty (the spinner state), no interim copy yet.
+      expect(lastAssistant(result.current.history)?.content).toBe('')
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(CHAT_SLOW_CONNECT_MS + 10)
+      })
+      // Feedback, not a terminal: the copy shows and the turn stays in flight.
+      expect(lastAssistant(result.current.history)?.content).toBe(CHAT_SLOW_CONNECT_COPY)
+      expect(result.current.sending).toBe(true)
+      // Display-only: nothing was saved to the shared thread beyond human@start,
+      // and nothing was spoken.
+      expect(saveSpy).toHaveBeenCalledTimes(1)
+      expect(speakSpy).not.toHaveBeenCalled()
+
+      // The first real delta supersedes the interim copy.
+      await act(async () => {
+        emit({
+          type: 'text_delta',
+          requestId: sendArgs!.requestId,
+          runId: 'run-cold',
+          text: 'Hi there'
+        })
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      expect(lastAssistant(result.current.history)?.content).toBe('Hi there')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('NO-OVERWRITE REGRESSION: a turn that streamed before the deadline never shows the connecting copy', async () => {
+    vi.useFakeTimers()
+    try {
+      const result = await mountFake()
+      await act(async () => {
+        void result.current.send('hi')
+        await pumpToSend()
+        const rid = sendArgs!.requestId
+        emit({ type: 'accepted', requestId: rid, runId: 'run-warm' })
+        emit({ type: 'text_delta', requestId: rid, runId: 'run-warm', text: 'Hello' })
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      expect(lastAssistant(result.current.history)?.content).toBe('Hello')
+
+      // Crossing the slow-connect deadline is a no-op once content streamed.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(CHAT_SLOW_CONNECT_MS + 10)
+      })
+      expect(lastAssistant(result.current.history)?.content).toBe('Hello')
+    } finally {
       vi.useRealTimers()
     }
   })
