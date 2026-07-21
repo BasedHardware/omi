@@ -1,11 +1,11 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2209,
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4314
+    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2184,
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4421
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": "per-turn reasoningEffort threaded through both query variants",
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "reasoningEffort added to the query wire message"
+    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": "Named non-production fault bundle supplies an inert hermetic model token so fault injection reaches the configured remote 5xx backend without Firebase auth.",
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "Chat-first evidence attachment stays with the owner-bound runtime bridge so run, attempt, and capability fences remain atomic."
   },
   "threshold": 1500
 }
