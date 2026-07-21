@@ -656,7 +656,7 @@ pub(super) fn translate_response(
     let usage = anthropic_usage_to_openai(&resp.usage);
 
     ChatCompletionResponse {
-        id: format!("chatcmpl-{}", &resp.id),
+        id: format!("chatcmpl-{}", resp.id),
         object: "chat.completion",
         created: chrono::Utc::now().timestamp(),
         model: public_model.to_string(),
