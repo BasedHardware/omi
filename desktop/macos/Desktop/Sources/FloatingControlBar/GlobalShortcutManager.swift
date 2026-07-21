@@ -74,11 +74,37 @@ class GlobalShortcutManager: @unchecked Sendable {
       NSLog("GlobalShortcutManager: Ask Omi shortcut is not a registerable hotkey")
       return
     }
-    registerHotKey(keyCode: Int(keyCode), modifiers: askOmiShortcut.carbonModifiers, id: .askOmi)
-    NSLog("GlobalShortcutManager: Registered Ask Omi shortcut: \(askOmiShortcut.displayLabel)")
+    let outcome = registerHotKey(keyCode: Int(keyCode), modifiers: askOmiShortcut.carbonModifiers, id: .askOmi)
+    // Gate the success log on the registration outcome. Previously this logged
+    // "Registered" unconditionally — even when Carbon had rejected the combo
+    // (e.g. another app owns it) — which made the silent failure actively misleading.
+    if outcome == .registered {
+      NSLog("GlobalShortcutManager: Registered Ask Omi shortcut: \(askOmiShortcut.displayLabel)")
+    }
   }
 
-  private func registerHotKey(keyCode: Int, modifiers: Int, id: HotKeyID) {
+  /// Outcome of a Carbon `RegisterEventHotKey` attempt, classified for telemetry.
+  enum HotKeyRegistrationOutcome: Equatable {
+    case registered
+    case alreadyInUse
+    case otherFailure
+  }
+
+  /// Pure classifier over the `OSStatus` returned by `RegisterEventHotKey`.
+  ///
+  /// Extracted from `registerHotKey` so the registration-failure decision is
+  /// unit-testable without driving the real Carbon call, which cannot be made to
+  /// return a conflict status hermetically. `eventHotKeyExistsErr` (-9878,
+  /// CarbonEvents.h) means another app — or a macOS System Settings > Keyboard >
+  /// Shortcuts entry, even a disabled one — already owns this (keyCode, modifiers)
+  /// pair in the global Carbon hotkey namespace; the shortcut is dead on that machine.
+  static func classifyRegistration(_ status: OSStatus) -> HotKeyRegistrationOutcome {
+    if status == noErr { return .registered }
+    if Int(status) == eventHotKeyExistsErr { return .alreadyInUse }
+    return .otherFailure
+  }
+
+  private func registerHotKey(keyCode: Int, modifiers: Int, id: HotKeyID) -> HotKeyRegistrationOutcome {
     var hotKeyRef: EventHotKeyRef?
     let hotKeyID = EventHotKeyID(signature: FourCharCode(0x4F4D_4921), id: id.rawValue)  // "OMI!"
 
@@ -87,11 +113,22 @@ class GlobalShortcutManager: @unchecked Sendable {
       GetApplicationEventTarget(), 0, &hotKeyRef
     )
 
-    if status == noErr, let ref = hotKeyRef {
+    let outcome = Self.classifyRegistration(status)
+    if outcome == .registered, let ref = hotKeyRef {
       hotKeyRefs[id] = ref
     } else {
+      // The shortcut will not fire on this machine. Keep the local NSLog for
+      // debugging and surface the failure to ops/Sentry via the incident path
+      // (NOT recordFallback — this is a hard-terminal failure with no mode switch).
+      // User-visible conflict surfacing in shortcut settings is tracked separately.
       NSLog("GlobalShortcutManager: Failed to register hotkey (keycode \(keyCode)), error: \(status)")
+      DesktopDiagnosticsManager.shared.recordHotkeyRegistrationFailed(
+        osStatus: Int(status),
+        keycode: keyCode,
+        modifiers: modifiers,
+        isConflict: outcome == .alreadyInUse)
     }
+    return outcome
   }
 
   private func handleHotKeyEvent(_ event: EventRef) -> OSStatus {
