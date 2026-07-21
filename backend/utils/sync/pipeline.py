@@ -2099,6 +2099,10 @@ async def _run_full_pipeline_background_async(
                 for path, r in zip(chunk, seg_results):
                     if isinstance(r, SyncJobRunLeaseLost):
                         raise r
+                    # A lifecycle fence has a semantic terminal outcome at the
+                    # task boundary; never reduce it to a retryable segment error.
+                    if isinstance(r, SyncConversationPersistenceFenced):
+                        raise r
                     if isinstance(r, Exception):
                         failure = failure_from_exception(r, provider=sync_provider)
                         await _record_sync_segment_failure_async(
