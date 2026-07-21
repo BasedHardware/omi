@@ -14,6 +14,16 @@ checks:
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "manifest validity and workflow drift guard"
+  - id: backend-production-release-vector-guards
+    command: ["python3", ".github/scripts/check_release_rings.py"]
+    triggers: [".github/workflows/release-record.yml", ".github/workflows/deploy-release-ring.yml", ".github/scripts/check_release_rings.py", "backend/scripts/release_rings.py", "backend/scripts/render_release_ring_config.py", "backend/deploy/release_rings.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#10049 ensures the immutable backend release vector cannot regain a separate beta ring"
+  - id: backend-production-release-vector-guard-tests
+    command: ["python3", ".github/scripts/test_check_release_rings.py"]
+    triggers: [".github/scripts/check_release_rings.py", ".github/scripts/test_check_release_rings.py", ".github/workflows/release-record.yml", ".github/workflows/deploy-release-ring.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the production-only backend release-vector tripwire must reject beta dispatches"
   - id: product-file-line-count-ratchet
     command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{base}"]
     triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", ".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/product_file_line_count_ratchet_baseline/**/*.json"]
