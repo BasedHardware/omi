@@ -158,7 +158,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 
 ### API & SDKs
 - [API Reference](https://docs.omi.me/api-reference/introduction) — REST endpoints for memories, conversations, action items
-- [Integration API SDKs](sdks/integration/) — OpenAPI-generated TypeScript, Go, Python, Rust, C++
+- [Integration API SDKs](sdks/integration/) — OpenAPI-generated TypeScript, Go, Python, Rust, C++, Dart (RN uses TypeScript)
 - [Python device SDK](sdks/python/)
 - [Swift SDK](sdks/swift/)
 - [React Native SDK](sdks/react-native/)

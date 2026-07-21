@@ -16,6 +16,8 @@ OpenAPI-generated clients for the **Omi Integration API**.
 | Python | [`python/`](python/) | `omi-integration` |
 | Rust | [`rust/`](rust/) | `omi-integration` |
 | C++ | [`cpp/`](cpp/) | CMake target `omi_integration` |
+| Dart / Flutter | [`dart/`](dart/) | `omi_integration` |
+| React Native | use [`typescript/`](typescript/) | same package — `fetch` works in RN |
 
 ## Regenerate
 
@@ -93,3 +95,15 @@ let memories = client.list_memories(uid, None, None)?;
 omi::integration::Client client(api_key, app_id);
 auto memories = client.list_memories(uid);
 ```
+
+### Dart / Flutter
+
+```dart
+final client = OmiIntegrationClient(apiKey: apiKey, appId: appId);
+final memories = await client.listMemories(uid: uid);
+```
+
+### React Native
+
+Use the TypeScript client (`@basedhardware/omi-integration`). No separate RN package —
+global `fetch` is enough.

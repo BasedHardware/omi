@@ -1270,6 +1270,254 @@ install(DIRECTORY include/ DESTINATION include)
 
 
 # ---------------------------------------------------------------------------
+# Dart
+# ---------------------------------------------------------------------------
+
+
+def _dart_type(param: dict[str, Any], optional: bool) -> str:
+    t = param.get("type")
+    if str(t).startswith("array"):
+        base = "List<String>"
+    elif t == "integer":
+        base = "int"
+    elif t == "number":
+        base = "double"
+    elif t == "boolean":
+        base = "bool"
+    else:
+        base = "String"
+    if optional:
+        return f"{base}?"
+    return base
+
+
+def gen_dart(ops: list[dict[str, Any]], spec_path: Path) -> dict[str, str]:
+    lines: list[str] = [header_comment("cpp", spec_path)]
+    lines.append("""import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
+class OmiIntegrationException implements Exception {
+  OmiIntegrationException(this.statusCode, this.body);
+  final int statusCode;
+  final Object? body;
+
+  @override
+  String toString() => 'OmiIntegrationException: HTTP $statusCode: $body';
+}
+
+/// Thin Integration API client. Auth: `Authorization: Bearer <key>`.
+class OmiIntegrationClient {
+  OmiIntegrationClient({
+    required this.apiKey,
+    required this.appId,
+    this.baseUrl = 'https://api.omi.me',
+    http.Client? httpClient,
+  })  : _http = httpClient ?? http.Client(),
+        _ownsClient = httpClient == null {
+    if (apiKey.isEmpty) {
+      throw ArgumentError.value(apiKey, 'apiKey', 'required');
+    }
+    if (appId.isEmpty) {
+      throw ArgumentError.value(appId, 'appId', 'required');
+    }
+  }
+
+  final String apiKey;
+  final String appId;
+  final String baseUrl;
+  final http.Client _http;
+  final bool _ownsClient;
+
+  void close() {
+    if (_ownsClient) {
+      _http.close();
+    }
+  }
+
+  Future<Object?> _request(
+    String method,
+    String path, {
+    Map<String, dynamic>? query,
+    Object? body,
+  }) async {
+    final cleanedBase = baseUrl.replaceAll(RegExp(r'/+$'), '');
+    final filteredQuery = <String, String>{};
+    if (query != null) {
+      for (final entry in query.entries) {
+        if (entry.value == null) continue;
+        filteredQuery[entry.key] = '${entry.value}';
+      }
+    }
+    final uri = Uri.parse('$cleanedBase$path').replace(
+      queryParameters: filteredQuery.isEmpty ? null : filteredQuery,
+    );
+    final headers = <String, String>{
+      'Authorization': 'Bearer $apiKey',
+      'Accept': 'application/json',
+    };
+    final encoded = body == null ? null : jsonEncode(body);
+    if (encoded != null) {
+      headers['Content-Type'] = 'application/json';
+    }
+    late final http.Response response;
+    switch (method) {
+      case 'GET':
+        response = await _http.get(uri, headers: headers);
+      case 'POST':
+        response = await _http.post(uri, headers: headers, body: encoded);
+      case 'PUT':
+        response = await _http.put(uri, headers: headers, body: encoded);
+      case 'PATCH':
+        response = await _http.patch(uri, headers: headers, body: encoded);
+      case 'DELETE':
+        response = await _http.delete(uri, headers: headers, body: encoded);
+      default:
+        throw UnsupportedError('HTTP $method');
+    }
+    Object? parsed;
+    if (response.body.isNotEmpty) {
+      try {
+        parsed = jsonDecode(response.body);
+      } catch (_) {
+        parsed = response.body;
+      }
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw OmiIntegrationException(response.statusCode, parsed);
+    }
+    return parsed;
+  }
+""")
+
+    for op in ops:
+        method_name = op["name"]  # snake_case is idiomatic Dart for private; public APIs often camelCase.
+        dart_name = to_camel(op["name"])
+        query_params = [p for p in op["params"] if p["in"] == "query"]
+        required_q = [p for p in query_params if p["required"]]
+        optional_q = [p for p in query_params if not p["required"]]
+
+        args: list[str] = []
+        for p in required_q:
+            args.append(f"required {_dart_type(p, False)} {to_camel(p['name'])}")
+        if op["body_type"]:
+            args.append("required Map<String, dynamic> body")
+        for p in optional_q:
+            args.append(f"{_dart_type(p, True)} {to_camel(p['name'])}")
+
+        lines.append(f"  /// {op['summary']}")
+        if args:
+            lines.append(f"  Future<Object?> {dart_name}({{")
+            for a in args:
+                lines.append(f"    {a},")
+            lines.append("  }) async {")
+        else:
+            lines.append(f"  Future<Object?> {dart_name}() async {{")
+
+        if "{app_id}" in op["path"]:
+            path_expr = "'" + op["path"].replace("{app_id}", "$appId") + "'"
+            # Use string interpolation carefully: path has no other $
+            path_expr = '"' + op["path"].replace("{app_id}", "$appId") + '"'
+        else:
+            path_expr = json.dumps(op["path"])
+
+        if query_params:
+            lines.append("    final query = <String, dynamic>{")
+            for p in required_q:
+                lines.append(f"      {json.dumps(p['name'])}: {to_camel(p['name'])},")
+            lines.append("    };")
+            for p in optional_q:
+                lines.append(
+                    f"    if ({to_camel(p['name'])} != null) query[{json.dumps(p['name'])}] = {to_camel(p['name'])};"
+                )
+            query_arg = "query: query"
+        else:
+            query_arg = "query: null"
+        body_arg = "body: body" if op["body_type"] else "body: null"
+        lines.append(f"    return _request({json.dumps(op['method'])}, {path_expr}, {query_arg}, {body_arg});")
+        lines.append("  }")
+        lines.append("")
+
+    lines.append("}")
+    lines.append("")
+
+    pubspec = """name: omi_integration
+description: Omi Integration API client (OpenAPI-generated)
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+dependencies:
+  http: ^1.2.0
+dev_dependencies:
+  test: ^1.25.0
+"""
+    test = """import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:omi_integration/omi_integration.dart';
+import 'package:test/test.dart';
+
+void main() {
+  test('sends bearer auth and app_id path', () async {
+    late http.Request seen;
+    final mock = MockClient((request) async {
+      seen = request;
+      return http.Response(jsonEncode({'memories': []}), 200);
+    });
+    final client = OmiIntegrationClient(
+      apiKey: 'test-key',
+      appId: 'app-123',
+      httpClient: mock,
+    );
+    final body = await client.listMemories(uid: 'user-1', limit: 10);
+    expect(body, isA<Map>());
+    expect(seen.headers['Authorization'], 'Bearer test-key');
+    expect(seen.url.path, '/v2/integrations/app-123/memories');
+    expect(seen.url.queryParameters['uid'], 'user-1');
+    client.close();
+  });
+
+  test('throws on non-2xx', () async {
+    final mock = MockClient((request) async {
+      return http.Response(jsonEncode({'detail': 'nope'}), 401);
+    });
+    final client = OmiIntegrationClient(
+      apiKey: 'test-key',
+      appId: 'app-123',
+      httpClient: mock,
+    );
+    expect(
+      () => client.listMemories(uid: 'user-1'),
+      throwsA(isA<OmiIntegrationException>()),
+    );
+    client.close();
+  });
+}
+"""
+    return {
+        "lib/omi_integration.dart": "\n".join(lines) + "\n",
+        "pubspec.yaml": pubspec,
+        "test/client_test.dart": test,
+        "README.md": """# omi_integration (Dart)
+
+OpenAPI-generated client for the Omi Integration API.
+
+```dart
+final client = OmiIntegrationClient(apiKey: apiKey, appId: appId);
+final memories = await client.listMemories(uid: uid);
+```
+
+React Native / JS: use the TypeScript package under `../typescript` (same `fetch` API).
+
+See the parent [README](../README.md).
+""",
+        ".gitignore": ".dart_tool/\n.packages\npubspec.lock\nbuild/\n",
+    }
+
+
+# ---------------------------------------------------------------------------
 # Shared docs / scripts
 # ---------------------------------------------------------------------------
 
@@ -1294,6 +1542,8 @@ OpenAPI-generated clients for the **Omi Integration API**.
 | Python | [`python/`](python/) | `omi-integration` |
 | Rust | [`rust/`](rust/) | `omi-integration` |
 | C++ | [`cpp/`](cpp/) | CMake target `omi_integration` |
+| Dart / Flutter | [`dart/`](dart/) | `omi_integration` |
+| React Native | use [`typescript/`](typescript/) | same package — `fetch` works in RN |
 
 ## Regenerate
 
@@ -1364,6 +1614,18 @@ let memories = client.list_memories(uid, None, None)?;
 omi::integration::Client client(api_key, app_id);
 auto memories = client.list_memories(uid);
 ```
+
+### Dart / Flutter
+
+```dart
+final client = OmiIntegrationClient(apiKey: apiKey, appId: appId);
+final memories = await client.listMemories(uid: uid);
+```
+
+### React Native
+
+Use the TypeScript client (`@basedhardware/omi-integration`). No separate RN package —
+global `fetch` is enough.
 '''
 
 
@@ -1391,6 +1653,8 @@ def generate_all(spec_path: Path) -> dict[str, str]:
         files[f'rust/{rel}'] = content
     for rel, content in gen_cpp(ops, spec_path).items():
         files[f'cpp/{rel}'] = content
+    for rel, content in gen_dart(ops, spec_path).items():
+        files[f'dart/{rel}'] = content
 
     files['README.md'] = gen_readme(ops)
     files['python/README.md'] = """# omi-integration (Python)
