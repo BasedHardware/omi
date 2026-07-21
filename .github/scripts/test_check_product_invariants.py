@@ -3,11 +3,14 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 from check_product_invariants import (
+    format_suggest_block,
     matched_invariants,
     parse_invariant,
     path_matches,
@@ -152,6 +155,78 @@ class CitationTokenTests(unittest.TestCase):
             "INV-CHAT-1"
         )
         self.assertTrue(pr_body_cites_id("INV-CHAT-1", template_body))
+
+
+class SuggestTests(unittest.TestCase):
+    def test_suggest_block_lists_ids(self) -> None:
+        block = format_suggest_block(
+            [
+                {"id": "INV-AUTH-1"},
+                {"id": "INV-CHAT-1"},
+            ]
+        )
+        self.assertEqual(
+            block,
+            "## Product invariants affected\n\n- INV-AUTH-1\n- INV-CHAT-1\n",
+        )
+
+    def test_suggest_block_none_when_empty(self) -> None:
+        self.assertEqual(format_suggest_block([]), "## Product invariants affected\n\nnone\n")
+
+    def test_suggest_cli_prints_paste_ready_block(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            changed = Path(tmp) / "changed.txt"
+            changed.write_text(
+                "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift\n",
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    ".github/scripts/check_product_invariants.py",
+                    "--changed-files",
+                    str(changed),
+                    "--suggest",
+                ],
+                cwd=Path(__file__).resolve().parents[1].parent,
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn("## Product invariants affected", result.stdout)
+            self.assertIn("- INV-AUTH-1", result.stdout)
+            self.assertIn("- INV-CHAT-1", result.stdout)
+
+    def test_failure_includes_suggest_block(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            changed = Path(tmp) / "changed.txt"
+            body = Path(tmp) / "body.md"
+            changed.write_text(
+                "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift\n",
+                encoding="utf-8",
+            )
+            body.write_text("## Product invariants affected\n\nnone\n", encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    ".github/scripts/check_product_invariants.py",
+                    "--changed-files",
+                    str(changed),
+                    "--pr-body-file",
+                    str(body),
+                ],
+                cwd=Path(__file__).resolve().parents[1].parent,
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 1, result.stdout)
+            self.assertIn("Paste this into the PR body", result.stdout)
+            self.assertIn("- INV-AUTH-1", result.stdout)
+            self.assertIn("- INV-CHAT-1", result.stdout)
 
 
 class FailClosedTests(unittest.TestCase):

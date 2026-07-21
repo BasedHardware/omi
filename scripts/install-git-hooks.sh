@@ -20,12 +20,25 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 HOOK_NAME="$(basename "$0")"
+if [ "$HOOK_NAME" = "pre-push" ]; then
+  if [ -x "$ROOT/scripts/pre-push-singleflight" ]; then
+    exec "$ROOT/scripts/pre-push-singleflight" "$@"
+  fi
+  # Older worktree branches may predate the single-flight wrapper even though
+  # linked worktrees share this dispatcher. Keep their checked-in hook usable.
+  exec "$ROOT/scripts/pre-push" "$@"
+fi
 exec "$ROOT/scripts/$HOOK_NAME" "$@"
 HOOK
   chmod +x "$hook_path"
 }
 
-chmod +x "$ROOT/scripts/pre-commit" "$ROOT/scripts/pre-push"
+chmod +x \
+  "$ROOT/scripts/changed-files" \
+  "$ROOT/scripts/pre-commit" \
+  "$ROOT/scripts/pre-push" \
+  "$ROOT/scripts/pre-push-singleflight" \
+  "$ROOT/scripts/pr-preflight"
 install_dispatch_hook pre-commit
 install_dispatch_hook pre-push
 

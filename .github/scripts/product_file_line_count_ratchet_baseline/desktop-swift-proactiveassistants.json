@@ -1,0 +1,11 @@
+{
+  "files": {
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": 1742,
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1641
+  },
+  "raise_justifications": {
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": "Task candidate context now carries only backend action-item IDs, while local SQLite/staged evidence remains id-less so the model cannot target it for a backend mutation.",
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": "A nonisolated UserNotifications callback bridge now performs an explicit MainActor hop so macOS callback queues cannot trap the public app at launch."
+  },
+  "threshold": 1500
+}

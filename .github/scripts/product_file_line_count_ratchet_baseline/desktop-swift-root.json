@@ -1,0 +1,16 @@
+{
+  "files": {
+    "desktop/macos/Desktop/Sources/AuthService.swift": 3294,
+    "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": 1678,
+    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4239,
+    "desktop/macos/Desktop/Sources/MemoryExportService.swift": 1578,
+    "desktop/macos/Desktop/Sources/OmiApp.swift": 1638
+  },
+  "raise_justifications": {
+    "desktop/macos/Desktop/Sources/AuthService.swift": "Apple first-auth name capture signals observers (authNameDidUpdate) and persists the name to Firebase so it survives reinstalls.",
+    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": "Reach-error card gains a debug bridge action so the actionable failure surface is verifiable in-process.",
+    "desktop/macos/Desktop/Sources/MemoryExportService.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
+    "desktop/macos/Desktop/Sources/OmiApp.swift": "shared openMainAppWindow helper for menu bar + Open Omi shortcut"
+  },
+  "threshold": 1500
+}

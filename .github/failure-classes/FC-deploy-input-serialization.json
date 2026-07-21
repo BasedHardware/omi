@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-deploy-input-serialization",
+  "violated_contract": "A Cloud Run deployment input must preserve every runtime environment key and value as one intended key-value pair.",
+  "canonical_prevention": "Encode action-input separators at each raw Cloud Run environment serializer and exercise the manifest renderer plus live-contract clone path in deterministic deploy preflight.",
+  "evidence_prs": [9986],
+  "scope_hints": [
+    "backend/scripts/render_backend_runtime_env.py",
+    "backend/scripts/render_cloud_run_clone_env.py",
+    "backend/scripts/pre-deploy-check.sh",
+    "backend/tests/unit/test_render_backend_runtime_env.py",
+    "backend/tests/unit/test_sync_two_lane.py"
+  ],
+  "status": "open"
+}

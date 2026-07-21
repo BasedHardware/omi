@@ -1,0 +1,678 @@
+#!/usr/bin/env python3
+"""Inspect and validate Omi's agent-friendly failure-class protocol.
+
+Definitions live in .github/failure-classes/ as one JSON file per semantic
+failure-class ID. This CLI never classifies a change from its diff or paths;
+it provides structured context and validates the declaration an author chose.
+All required validation is local and deterministic. `report` accepts an
+explicit event fixture so advisory recurrence reports do not require network
+access or mutate definition state.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
+
+
+OUTPUT_SCHEMA_VERSION = 1
+DEFINITION_SCHEMA_VERSION = 1
+DEFINITIONS_RELATIVE_PATH = Path(".github/failure-classes")
+FAILURE_CLASS_ID_RE = re.compile(r"^FC-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+FIX_SUBJECT_RE = re.compile(r"^fix(?:\([^)]+\))?!?:")
+DECLARATION_LINE_RE = re.compile(r"^[ \t]*Failure-Class:[ \t]*([^\r\n]*)[ \t]*$", re.MULTILINE)
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+DURATION_RE = re.compile(r"^(\d+)([dh])$")
+
+
+@dataclass(frozen=True)
+class Definition:
+    """A parsed failure-class definition and its repository-relative path."""
+
+    data: dict[str, Any]
+    path: Path
+
+    @property
+    def id(self) -> str:
+        return self.data["id"]
+
+
+class CliError(Exception):
+    """A deterministic input or repository error intended for CLI output."""
+
+
+def error(code: str, message: str, **details: Any) -> dict[str, Any]:
+    return {"code": code, "message": message, **details}
+
+
+def emit(payload: dict[str, Any], output_format: str) -> None:
+    if output_format == "json":
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    if not payload.get("ok", True):
+        print("FAIL:")
+        for item in payload.get("errors", []):
+            print(f"- {item['code']}: {item['message']}")
+        return
+
+    command = payload.get("command", "failure-class")
+    print(f"OK: {command}")
+    if command == "validate":
+        validation = payload["validation"]
+        print(
+            "  "
+            f"fix commits={validation['has_fix_commit']}; "
+            f"declaration={validation['declaration'] or 'absent'}"
+        )
+    elif command == "explain":
+        definition = payload["failure_class"]
+        print(f"  {definition['id']}: {definition['violated_contract']}")
+    elif command == "prepare":
+        patch = payload["pr_body_patch"]
+        print(f"  patch operation={patch['operation']}")
+        if patch["text"]:
+            print(patch["text"], end="" if patch["text"].endswith("\n") else "\n")
+    elif command == "report":
+        for item in payload["classes"]:
+            print(f"  {item['id']}: closure_eligible={item['closure_eligible']}")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    def add_common_arguments(command: argparse.ArgumentParser) -> None:
+        command.add_argument("--root", type=Path, default=Path.cwd(), help="Repository root (default: cwd).")
+        command.add_argument("--format", choices=("json", "text"), default="json")
+
+    prepare = subparsers.add_parser("prepare", help="Return a non-destructive PR-body declaration patch.")
+    add_common_arguments(prepare)
+    prepare.add_argument("--base", default="origin/main")
+    prepare.add_argument("--head", default="HEAD")
+    prepare.add_argument("--pr-body-file", type=Path, required=True)
+
+    explain = subparsers.add_parser("explain", help="Return one failure-class definition.")
+    add_common_arguments(explain)
+    explain.add_argument("failure_class_id")
+
+    validate = subparsers.add_parser("validate", help="Validate definitions and a PR-body declaration offline.")
+    add_common_arguments(validate)
+    validate.add_argument("--base", default="origin/main")
+    validate.add_argument("--head", default="HEAD")
+    validate.add_argument("--pr-body-file", type=Path, required=True)
+
+    report = subparsers.add_parser("report", help="Produce an advisory, non-mutating recurrence report.")
+    add_common_arguments(report)
+    report.add_argument("--since", default="14d", help="Quiet period, such as 14d or 24h (default: 14d).")
+    report.add_argument("--events-file", type=Path, help="Local merged-PR event fixture; no network is used.")
+    report.add_argument("--now", help="UTC ISO-8601 timestamp for deterministic advisory reports.")
+
+    return parser.parse_args()
+
+
+def repository_root(root: Path) -> Path:
+    root = root.resolve()
+    if not root.is_dir():
+        raise CliError(f"repository root does not exist: {root}")
+    return root
+
+
+def definitions_directory(root: Path) -> Path:
+    return root / DEFINITIONS_RELATIVE_PATH
+
+
+def validate_definition(data: Any, path: Path) -> list[dict[str, Any]]:
+    """Return schema errors without allowing malformed files to fail open."""
+    if not isinstance(data, dict):
+        return [error("invalid_definition", "definition must be a JSON object", path=str(path))]
+
+    required = {
+        "schema_version",
+        "id",
+        "violated_contract",
+        "canonical_prevention",
+        "evidence_prs",
+        "status",
+    }
+    allowed = required | {"scope_hints", "dormant_since"}
+    errors: list[dict[str, Any]] = []
+    for key in sorted(required - data.keys()):
+        errors.append(error("missing_definition_field", f"missing required field '{key}'", path=str(path)))
+    for key in sorted(data.keys() - allowed):
+        errors.append(error("unknown_definition_field", f"unknown field '{key}'", path=str(path)))
+
+    if data.get("schema_version") != DEFINITION_SCHEMA_VERSION:
+        errors.append(
+            error(
+                "unsupported_definition_schema",
+                f"schema_version must be {DEFINITION_SCHEMA_VERSION}",
+                path=str(path),
+            )
+        )
+    failure_class_id = data.get("id")
+    if not isinstance(failure_class_id, str) or not FAILURE_CLASS_ID_RE.fullmatch(failure_class_id):
+        errors.append(
+            error(
+                "invalid_failure_class_id",
+                "id must use the semantic form FC-<lower-kebab-slug>",
+                path=str(path),
+            )
+        )
+    for key in ("violated_contract", "canonical_prevention"):
+        if not isinstance(data.get(key), str) or not data[key].strip():
+            errors.append(error("invalid_definition_field", f"'{key}' must be a non-empty string", path=str(path)))
+
+    evidence_prs = data.get("evidence_prs")
+    if (
+        not isinstance(evidence_prs, list)
+        or not evidence_prs
+        or any(not isinstance(pr, int) or isinstance(pr, bool) or pr <= 0 for pr in evidence_prs)
+    ):
+        errors.append(
+            error(
+                "invalid_evidence_prs",
+                "'evidence_prs' must be a non-empty array of positive PR numbers",
+                path=str(path),
+            )
+        )
+    elif len(set(evidence_prs)) != len(evidence_prs):
+        errors.append(error("invalid_evidence_prs", "'evidence_prs' must not contain duplicates", path=str(path)))
+
+    scope_hints = data.get("scope_hints", [])
+    if not isinstance(scope_hints, list) or any(not isinstance(hint, str) or not hint.strip() for hint in scope_hints):
+        errors.append(
+            error(
+                "invalid_scope_hints",
+                "'scope_hints', when present, must be an array of non-empty strings",
+                path=str(path),
+            )
+        )
+    status = data.get("status")
+    if status not in {"open", "dormant"}:
+        errors.append(error("invalid_status", "'status' must be 'open' or 'dormant'", path=str(path)))
+    dormant_since = data.get("dormant_since")
+    if status == "dormant":
+        if not isinstance(dormant_since, str):
+            errors.append(
+                error(
+                    "missing_dormant_since",
+                    "a dormant class must record an ISO-8601 'dormant_since' timestamp",
+                    path=str(path),
+                )
+            )
+        else:
+            try:
+                parse_timestamp(dormant_since)
+            except CliError as exc:
+                errors.append(error("invalid_dormant_since", str(exc), path=str(path)))
+    elif dormant_since is not None:
+        errors.append(
+            error(
+                "unexpected_dormant_since",
+                "'dormant_since' is only valid while status is 'dormant'",
+                path=str(path),
+            )
+        )
+
+    if isinstance(failure_class_id, str) and path.name != f"{failure_class_id}.json":
+        errors.append(
+            error(
+                "definition_filename_mismatch",
+                f"definition filename must be {failure_class_id}.json",
+                path=str(path),
+            )
+        )
+    return errors
+
+
+def load_definitions(root: Path) -> tuple[list[Definition], list[dict[str, Any]]]:
+    directory = definitions_directory(root)
+    if not directory.is_dir():
+        return [], [error("missing_definition_directory", f"missing {DEFINITIONS_RELATIVE_PATH}")]
+
+    definitions: list[Definition] = []
+    errors: list[dict[str, Any]] = []
+    ids: dict[str, Path] = {}
+    paths = sorted(directory.glob("*.json"))
+    if not paths:
+        errors.append(error("missing_definitions", "at least one failure-class definition is required"))
+    for path in paths:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append(error("invalid_definition_json", str(exc), path=str(path)))
+            continue
+        errors.extend(validate_definition(data, path))
+        if isinstance(data, dict) and isinstance(data.get("id"), str):
+            if data["id"] in ids:
+                errors.append(
+                    error(
+                        "duplicate_failure_class_id",
+                        f"duplicate id '{data['id']}' in {path.name} and {ids[data['id']].name}",
+                    )
+                )
+            else:
+                ids[data["id"]] = path
+                definitions.append(Definition(data=data, path=path))
+    return sorted(definitions, key=lambda item: item.id), errors
+
+
+def clean_pr_body(body: str) -> str:
+    return HTML_COMMENT_RE.sub("", body)
+
+
+def declarations_in_body(body: str) -> list[str]:
+    return [match.group(1).strip() for match in DECLARATION_LINE_RE.finditer(clean_pr_body(body))]
+
+
+def read_pr_body(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise CliError(f"could not read PR body file {path}: {exc}") from exc
+
+
+def run_git(root: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=root,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise CliError(f"git {' '.join(args)} failed: {detail}")
+    return result.stdout.strip()
+
+
+def merge_base(root: Path, base: str, head: str) -> str:
+    return run_git(root, "merge-base", base, head)
+
+
+def commit_subjects(root: Path, base: str, head: str) -> tuple[str, list[str]]:
+    common = merge_base(root, base, head)
+    subjects = run_git(root, "log", "--format=%s", f"{common}..{head}")
+    return common, [subject for subject in subjects.splitlines() if subject]
+
+
+def added_definition_paths(root: Path, common: str, head: str) -> list[Path]:
+    output = run_git(
+        root,
+        "diff",
+        "--name-only",
+        "--diff-filter=A",
+        common,
+        head,
+        "--",
+        str(DEFINITIONS_RELATIVE_PATH),
+    )
+    return [Path(line) for line in output.splitlines() if line]
+
+
+def changed_definition_paths(root: Path, common: str, head: str) -> list[Path]:
+    output = run_git(
+        root,
+        "diff",
+        "--name-only",
+        "--diff-filter=ACMRD",
+        common,
+        head,
+        "--",
+        str(DEFINITIONS_RELATIVE_PATH),
+    )
+    return [Path(line) for line in output.splitlines() if line]
+
+
+def public_definition(definition: Definition, root: Path) -> dict[str, Any]:
+    return {**definition.data, "path": str(definition.path.relative_to(root))}
+
+
+def validate_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, Any], int]:
+    definitions, errors = load_definitions(root)
+    body = read_pr_body(args.pr_body_file)
+    try:
+        common, subjects = commit_subjects(root, args.base, args.head)
+    except CliError as exc:
+        errors.append(error("invalid_git_range", str(exc), base=args.base, head=args.head))
+        common, subjects = "", []
+
+    declarations = declarations_in_body(body)
+    declaration: str | None = None
+    if len(declarations) > 1:
+        errors.append(
+            error(
+                "multiple_declarations",
+                "PR body may contain at most one Failure-Class declaration outside HTML comments",
+            )
+        )
+    elif declarations:
+        declaration = declarations[0]
+
+    has_fix_commit = any(FIX_SUBJECT_RE.match(subject) for subject in subjects)
+    by_id = {definition.id: definition for definition in definitions}
+    changed_definition_paths_in_range: list[Path] = []
+    if common:
+        try:
+            changed_definition_paths_in_range = changed_definition_paths(root, common, args.head)
+        except CliError as exc:
+            errors.append(error("definition_change_check_failed", str(exc)))
+    if declaration is None:
+        if has_fix_commit:
+            errors.append(
+                error(
+                    "missing_declaration",
+                    "a commit subject beginning with fix: requires 'Failure-Class: FC-<slug> | new | none'",
+                )
+            )
+    elif declaration == "new":
+        if common:
+            try:
+                added_paths = added_definition_paths(root, common, args.head)
+            except CliError as exc:
+                errors.append(error("new_definition_check_failed", str(exc)))
+            else:
+                added_definitions = [
+                    definition
+                    for definition in definitions
+                    if definition.path.relative_to(root) in added_paths
+                ]
+                if len(added_definitions) != 1:
+                    errors.append(
+                        error(
+                            "new_definition_required",
+                            "'Failure-Class: new' requires exactly one added, valid class definition in this commit range",
+                            added_paths=[str(path) for path in added_paths],
+                        )
+                    )
+                elif set(changed_definition_paths_in_range) != set(added_paths):
+                    errors.append(
+                        error(
+                            "new_definition_must_be_only_registry_change",
+                            "'Failure-Class: new' may add one definition but must not modify or remove other definitions",
+                            changed_paths=[str(path) for path in changed_definition_paths_in_range],
+                        )
+                    )
+    elif declaration == "none":
+        pass
+    elif not FAILURE_CLASS_ID_RE.fullmatch(declaration):
+        errors.append(
+            error(
+                "invalid_declaration",
+                "Failure-Class must be an existing FC-<lower-kebab-slug>, 'new', or 'none'",
+                declaration=declaration,
+            )
+        )
+    elif declaration not in by_id:
+        errors.append(
+            error(
+                "unknown_failure_class",
+                f"no definition exists for '{declaration}'",
+                declaration=declaration,
+            )
+        )
+    elif by_id[declaration].data["status"] == "dormant":
+        errors.append(
+            error(
+                "dormant_failure_class_requires_reopen",
+                f"'{declaration}' is dormant; explicitly reopen its definition before classifying a new instance",
+                declaration=declaration,
+            )
+        )
+
+    if has_fix_commit and declaration != "new" and changed_definition_paths_in_range:
+        errors.append(
+            error(
+                "instance_fix_mutates_registry",
+                "an instance-fix PR must not edit failure-class definitions; use a separate registry-only lifecycle PR",
+                changed_paths=[str(path) for path in changed_definition_paths_in_range],
+            )
+        )
+
+    payload = {
+        "schema_version": OUTPUT_SCHEMA_VERSION,
+        "command": "validate",
+        "ok": not errors,
+        "errors": errors,
+        "validation": {
+            "base": args.base,
+            "head": args.head,
+            "merge_base": common or None,
+            "commit_subjects": subjects,
+            "has_fix_commit": has_fix_commit,
+            "declaration": declaration,
+            "definition_count": len(definitions),
+        },
+    }
+    return payload, 0 if not errors else 1
+
+
+def pr_body_patch(body: str, declarations: list[str]) -> dict[str, str]:
+    if declarations:
+        return {"operation": "none", "text": "", "resulting_pr_body": body}
+    prefix = "" if not body or body.endswith("\n") else "\n"
+    text = f"{prefix}Failure-Class: none\n"
+    return {"operation": "append", "text": text, "resulting_pr_body": body + text}
+
+
+def prepare_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, Any], int]:
+    definitions, errors = load_definitions(root)
+    body = read_pr_body(args.pr_body_file)
+    try:
+        common, subjects = commit_subjects(root, args.base, args.head)
+    except CliError as exc:
+        errors.append(error("invalid_git_range", str(exc), base=args.base, head=args.head))
+        common, subjects = "", []
+    has_fix_commit = any(FIX_SUBJECT_RE.match(subject) for subject in subjects)
+    declarations = declarations_in_body(body)
+
+    payload = {
+        "schema_version": OUTPUT_SCHEMA_VERSION,
+        "command": "prepare",
+        "ok": not errors,
+        "errors": errors,
+        "requires_declaration": has_fix_commit,
+        "commit_subjects": subjects,
+        "merge_base": common or None,
+        "declaration_template": "Failure-Class: FC-<lower-kebab-slug> | new | none",
+        "pr_body_patch": pr_body_patch(body, declarations),
+        "advisory_candidates": [
+            {
+                "id": definition.id,
+                "status": definition.data["status"],
+                "violated_contract": definition.data["violated_contract"],
+                "canonical_prevention": definition.data["canonical_prevention"],
+            }
+            for definition in definitions
+        ],
+        "candidate_source": "registry-only; no class was inferred from paths, diffs, or commit text",
+        "next_action": "Choose the declaration manually; replace 'none' in an appended patch if a class applies.",
+    }
+    return payload, 0 if not errors else 1
+
+
+def explain_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, Any], int]:
+    definitions, errors = load_definitions(root)
+    matches = [definition for definition in definitions if definition.id == args.failure_class_id]
+    if not errors and not matches:
+        errors.append(error("unknown_failure_class", f"no definition exists for '{args.failure_class_id}'"))
+    payload = {
+        "schema_version": OUTPUT_SCHEMA_VERSION,
+        "command": "explain",
+        "ok": not errors,
+        "errors": errors,
+    }
+    if matches:
+        payload["failure_class"] = public_definition(matches[0], root)
+    return payload, 0 if not errors else 1
+
+
+def parse_duration(value: str) -> timedelta:
+    match = DURATION_RE.fullmatch(value)
+    if not match:
+        raise CliError("--since must be a positive duration such as 14d or 24h")
+    count = int(match.group(1))
+    if count <= 0:
+        raise CliError("--since must be greater than zero")
+    return timedelta(days=count) if match.group(2) == "d" else timedelta(hours=count)
+
+
+def parse_timestamp(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise CliError(f"invalid ISO-8601 timestamp: {value}") from exc
+    if parsed.tzinfo is None:
+        raise CliError(f"timestamp must include a timezone: {value}")
+    return parsed.astimezone(timezone.utc)
+
+
+def timestamp_string(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def load_report_events(path: Path | None) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
+    if path is None:
+        return [], {"type": "none"}, [
+            error(
+                "no_event_source",
+                "no event source was supplied; report cannot establish a last reported instance",
+            )
+        ]
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise CliError(f"could not load events fixture {path}: {exc}") from exc
+    if not isinstance(raw, dict) or raw.get("schema_version") != OUTPUT_SCHEMA_VERSION:
+        raise CliError(f"events fixture must be a schema_version {OUTPUT_SCHEMA_VERSION} JSON object")
+    events = raw.get("events")
+    if not isinstance(events, list):
+        raise CliError("events fixture must be an array or an object with an 'events' array")
+    parsed: list[dict[str, Any]] = []
+    for index, event in enumerate(events):
+        if not isinstance(event, dict):
+            raise CliError(f"events[{index}] must be an object")
+        body = event.get("body")
+        merged_at = event.get("merged_at")
+        if not isinstance(body, str) or not isinstance(merged_at, str):
+            raise CliError(f"events[{index}] requires string fields 'body' and 'merged_at'")
+        parsed.append(
+            {
+                "number": event.get("number"),
+                "body": body,
+                "merged_at": parse_timestamp(merged_at),
+            }
+        )
+    return parsed, {"type": "events_fixture", "path": str(path)}, []
+
+
+def report_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, Any], int]:
+    definitions, errors = load_definitions(root)
+    try:
+        quiet_period = parse_duration(args.since)
+        as_of = parse_timestamp(args.now) if args.now else datetime.now(timezone.utc)
+        events, source, warnings = load_report_events(args.events_file)
+    except CliError as exc:
+        errors.append(error("invalid_report_input", str(exc)))
+        quiet_period = timedelta(days=14)
+        as_of = datetime.now(timezone.utc)
+        events, source, warnings = [], {"type": "none"}, []
+
+    by_id = {definition.id: definition for definition in definitions}
+    latest: dict[str, dict[str, Any]] = {}
+    for event in events:
+        declarations = declarations_in_body(event["body"])
+        if len(declarations) != 1 or declarations[0] not in by_id:
+            continue
+        class_id = declarations[0]
+        if class_id not in latest or event["merged_at"] > latest[class_id]["merged_at"]:
+            latest[class_id] = event
+
+    cutoff = as_of - quiet_period
+    classes: list[dict[str, Any]] = []
+    for definition in definitions:
+        instance = latest.get(definition.id)
+        reopen_required = False
+        if definition.data["status"] == "dormant" and instance is not None:
+            dormant_since = parse_timestamp(definition.data["dormant_since"])
+            reopen_required = instance["merged_at"] > dormant_since
+        closure_eligible = bool(
+            definition.data["status"] == "open" and instance is not None and instance["merged_at"] <= cutoff
+        )
+        if reopen_required:
+            reason = "a classified recurrence was reported after this class became dormant; explicit reopen required"
+        elif definition.data["status"] == "dormant":
+            reason = "already dormant; report never changes state automatically"
+        elif instance is None:
+            reason = "no classified instance in the supplied event source"
+        elif closure_eligible:
+            reason = "no classified recurrence was reported during the quiet period; maintainer confirmation required"
+        else:
+            reason = "a classified instance falls inside the quiet period"
+        classes.append(
+            {
+                "id": definition.id,
+                "status": definition.data["status"],
+                "last_reported_instance": (
+                    {"number": instance["number"], "merged_at": timestamp_string(instance["merged_at"])} if instance else None
+                ),
+                "closure_eligible": closure_eligible,
+                "reopen_required": reopen_required,
+                "reason": reason,
+            }
+        )
+
+    payload = {
+        "schema_version": OUTPUT_SCHEMA_VERSION,
+        "command": "report",
+        "ok": not errors,
+        "errors": errors,
+        "advisory": True,
+        "automatic_state_changes": False,
+        "as_of": timestamp_string(as_of),
+        "since": args.since,
+        "source": source,
+        "warnings": warnings,
+        "events_considered": len(events),
+        "classes": classes,
+    }
+    return payload, 0 if not errors else 1
+
+
+def main() -> int:
+    args = parse_args()
+    try:
+        root = repository_root(args.root)
+        if args.command == "validate":
+            payload, exit_code = validate_command(args, root)
+        elif args.command == "prepare":
+            payload, exit_code = prepare_command(args, root)
+        elif args.command == "explain":
+            payload, exit_code = explain_command(args, root)
+        elif args.command == "report":
+            payload, exit_code = report_command(args, root)
+        else:  # argparse makes this unreachable; preserve fail-closed behavior.
+            raise CliError(f"unsupported command: {args.command}")
+    except CliError as exc:
+        payload = {
+            "schema_version": OUTPUT_SCHEMA_VERSION,
+            "command": args.command,
+            "ok": False,
+            "errors": [error("invalid_input", str(exc))],
+        }
+        exit_code = 2
+    emit(payload, args.format)
+    return exit_code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

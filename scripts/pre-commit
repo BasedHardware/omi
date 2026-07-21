@@ -133,4 +133,19 @@ EOF
   fi
 fi
 
+# Swift formatting for desktop/macos/Desktop/
+STAGED_SWIFT_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^desktop/macos/Desktop/.*\.swift$' | grep -v '/Generated/' || true)
+
+if [ -n "$STAGED_SWIFT_FILES" ]; then
+  echo "Formatting staged Swift files in desktop/macos/Desktop/..."
+  if ! command -v xcrun >/dev/null 2>&1; then
+    echo "xcrun not found — Swift formatting requires macOS with Xcode" >&2
+    echo "Bootstrap: desktop/macos/scripts/swift-format-wrapper.sh bootstrap" >&2
+    exit 1
+  fi
+  ROOT="$(git rev-parse --show-toplevel)"
+  WRAPPER="$ROOT/desktop/macos/scripts/swift-format-wrapper.sh"
+  echo "$STAGED_SWIFT_FILES" | xargs "$WRAPPER" format -i
+  echo "$STAGED_SWIFT_FILES" | xargs git add
+fi
 exit 0
