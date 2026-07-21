@@ -30,7 +30,7 @@ struct SignInView: View {
           .scaledToFill()
           .overlay(
             LinearGradient(
-              colors: [.black.opacity(0.5), .black.opacity(0.62), .black.opacity(0.82)],
+              colors: [.black.opacity(0.32), .black.opacity(0.42), .black.opacity(0.66)],
               startPoint: .top, endPoint: .bottom)
           )
           .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -40,6 +40,7 @@ struct SignInView: View {
         SBWallpaper()
       }
 
+      // Glassmorphic sign-in card — content-sized + centered so nothing clips.
       VStack(spacing: 0) {
         // Breathing logo.
         Group {
@@ -50,22 +51,23 @@ struct SignInView: View {
           }
         }
         .foregroundStyle(sb.ink)
-        .frame(width: 44, height: 44)
+        .frame(width: 40, height: 40)
         .scaleEffect(breathe ? 1.08 : 1.0)
         .opacity(breathe ? 1.0 : 0.85)
         .animation(SBMotion.breathe, value: breathe)
 
         Text("A second brain you trust\nmore than your first")
-          .geist(size: 36, weight: .semibold, tracking: 36 * -0.03)
+          .geist(size: 29, weight: .semibold, tracking: 29 * -0.03)
           .foregroundStyle(sb.ink)
           .multilineTextAlignment(.center)
           .fixedSize(horizontal: false, vertical: true)
-          .padding(.top, 26)
+          .padding(.top, 22)
 
         Text("It remembers every conversation — and does the follow-ups.")
-          .geist(size: 15.5)
-          .foregroundStyle(sb.ink(.w45))
+          .geist(size: 14.5)
+          .foregroundStyle(sb.ink(.w6))
           .multilineTextAlignment(.center)
+          .fixedSize(horizontal: false, vertical: true)
           .padding(.top, 8)
 
         VStack(spacing: 10) {
@@ -91,18 +93,31 @@ struct SignInView: View {
           }
           if let error = authState.error {
             Text(UserFacingErrorPresentation.message(from: error, while: .signIn))
-              .geist(size: 12).foregroundStyle(sb.ink(.w5))
+              .geist(size: 12).foregroundStyle(sb.ink(.w6))
               .multilineTextAlignment(.center).padding(.top, 4)
           }
         }
-        .frame(width: 300)
-        .padding(.top, 34)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 26)
 
         Text("open source · runs on your mac · pause anytime")
-          .geistMono(size: 12)
-          .foregroundStyle(sb.ink(.w28))
-          .padding(.top, 30)
+          .geistMono(size: 11.5)
+          .foregroundStyle(sb.ink(.w38))
+          .padding(.top, 24)
       }
+      .padding(.horizontal, 40)
+      .padding(.vertical, 40)
+      .frame(width: 440)
+      .background(
+        RoundedRectangle(cornerRadius: 26, style: .continuous)
+          .fill(Color.white.opacity(0.05))
+          .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: 26, style: .continuous)
+          .stroke(Color.white.opacity(0.14), lineWidth: 1)
+      )
+      .shadow(color: .black.opacity(0.5), radius: 50, y: 24)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onAppear { breathe = true }
