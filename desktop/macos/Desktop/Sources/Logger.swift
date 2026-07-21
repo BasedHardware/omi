@@ -234,11 +234,8 @@ func logSync(_ message: String) {
   print(line)
   fflush(stdout)
 
-  if !isDevBuild {
-    let breadcrumb = Breadcrumb(level: .info, category: "app")
-    breadcrumb.message = message
-    SentrySDK.addBreadcrumb(breadcrumb)
-  }
+  // Free-form messages stay in the local log. Cloud incidents carry a bounded,
+  // redacted diagnostic attachment when an error is captured instead.
 
   appendToLogFileSync(line)
 }
@@ -250,11 +247,8 @@ func log(_ message: String) {
   print(line)
   fflush(stdout)
 
-  if !isDevBuild {
-    let breadcrumb = Breadcrumb(level: .info, category: "app")
-    breadcrumb.message = message
-    SentrySDK.addBreadcrumb(breadcrumb)
-  }
+  // Free-form messages stay in the local log. Cloud incidents carry a bounded,
+  // redacted diagnostic attachment when an error is captured instead.
 
   appendToLogFile(line)
 }
@@ -374,11 +368,8 @@ func logError(_ message: String, error: Error? = nil) {
   print(line)
   fflush(stdout)
 
-  if !isDevBuild {
-    let breadcrumb = Breadcrumb(level: .error, category: "error")
-    breadcrumb.message = fullMessage
-    SentrySDK.addBreadcrumb(breadcrumb)
-  }
+  // Keep raw error messages local. Sentry receives a stable incident event below
+  // with a redacted local diagnostic attachment.
 
   // Always persist locally; only the Sentry capture is filtered/rate-limited below.
   appendToLogFile(line)
@@ -392,25 +383,46 @@ func logError(_ message: String, error: Error? = nil) {
   // Collapse repeated identical errors so a single root cause doesn't flood Sentry.
   guard shouldCaptureToSentry(fullMessage) else { return }
 
-  // Capture error context in Sentry without passing the raw Swift Error object.
-  // Some Swift-native error payloads can crash inside Sentry's reflection path.
+  // Free-form error text stays local. Cloud capture is a stable title plus typed
+  // error metadata and a redacted diagnostic attachment.
+  let attachmentURL = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
+    area: "other",
+    failureClass: "other",
+    phase: "other")
+  defer {
+    if let attachmentURL {
+      try? FileManager.default.removeItem(at: attachmentURL)
+    }
+  }
   if let error = error {
     let nsError = error as NSError
     let errorType = String(reflecting: type(of: error))
-    SentrySDK.capture(message: fullMessage) { scope in
+    SentrySDK.capture(message: "Desktop error") { scope in
       scope.setLevel(.error)
       scope.setContext(
         value: [
-          "message": message,
           "error_type": errorType,
           "error_domain": nsError.domain,
           "error_code": nsError.code,
-          "localized_description": errorDesc,
         ], key: "app_context")
+      if let attachmentURL {
+        scope.addAttachment(
+          Attachment(
+            path: attachmentURL.path,
+            filename: "desktop-incident-diagnostics.json",
+            contentType: "application/json"))
+      }
     }
   } else {
-    SentrySDK.capture(message: fullMessage) { scope in
+    SentrySDK.capture(message: "Desktop error") { scope in
       scope.setLevel(.error)
+      if let attachmentURL {
+        scope.addAttachment(
+          Attachment(
+            path: attachmentURL.path,
+            filename: "desktop-incident-diagnostics.json",
+            contentType: "application/json"))
+      }
     }
   }
 }
