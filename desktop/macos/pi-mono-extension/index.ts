@@ -59,15 +59,30 @@ export function omiRequestIdFromRelayContext(raw: string): string | undefined {
   }
 }
 
-async function omiRequestIdFromRelayFile(): Promise<string | undefined> {
-  const contextFile = process.env.OMI_CONTEXT_FILE;
-  if (!contextFile) return undefined;
+/** Per-turn effort lane. Strict allowlist — the header must never carry
+ *  anything but one of these two opaque tokens. */
+export function omiReasoningEffortFromRelayContext(raw: string): string | undefined {
   try {
-    return omiRequestIdFromRelayContext(await readFile(contextFile, "utf8"));
+    const parsed = JSON.parse(raw) as { reasoningEffort?: unknown };
+    return parsed.reasoningEffort === "adaptive" || parsed.reasoningEffort === "fast"
+      ? parsed.reasoningEffort
+      : undefined;
   } catch {
     return undefined;
   }
 }
+
+async function omiRelayContextRaw(): Promise<string | undefined> {
+  const contextFile = process.env.OMI_CONTEXT_FILE;
+  if (!contextFile) return undefined;
+  try {
+    return await readFile(contextFile, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+
 
 // ---------------------------------------------------------------------------
 // Denylist patterns
@@ -825,8 +840,15 @@ export default function omiProvider(pi: ExtensionAPI): void {
   // Pi asks for headers once per provider request and keeps them for retries,
   // which preserves one safe correlation id across an upstream retry chain.
   pi.on("before_provider_headers", async (event) => {
-    const requestId = await omiRequestIdFromRelayFile();
+    const raw = await omiRelayContextRaw();
+    if (raw === undefined) return;
+    const requestId = omiRequestIdFromRelayContext(raw);
     if (requestId) event.headers["x-omi-request-id"] = requestId;
+    // Per-turn effort lane: typed chat runs "adaptive" (the model decides its
+    // own thinking depth), PTT runs "fast" (thinking off, low effort). The
+    // gateway translates this into Anthropic thinking/effort parameters.
+    const reasoningEffort = omiReasoningEffortFromRelayContext(raw);
+    if (reasoningEffort) event.headers["x-omi-reasoning-effort"] = reasoningEffort;
   });
 
   pi.on("tool_call", async (event): Promise<ToolCallEventResult | void> => {

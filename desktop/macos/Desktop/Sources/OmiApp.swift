@@ -1034,6 +1034,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
   @MainActor @objc private func openOmiFromMenu() {
     AnalyticsManager.shared.menuBarActionClicked(action: "open_omi")
+    openMainAppWindow()
+  }
+
+  /// Bring the main Omi window to the front, creating it if needed. Shared by
+  /// the menu-bar "Open Omi" item, the global Open Omi (formerly Ask Omi)
+  /// shortcut, and the floating bar's "Continue in Omi" affordance.
+  @MainActor func openMainAppWindow() {
     NSApp.activate()
     var foundWindow = revealMainWindowIfAvailable()
     if !foundWindow {
@@ -1043,7 +1050,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Dock icon is always visible; just activate the app
     NSApp.activate()
     if !foundWindow {
-      log("AppDelegate: [MENUBAR] WARNING - No Omi window found when opening from menu bar")
+      log("AppDelegate: [MENUBAR] WARNING - No Omi window found when opening main window")
     }
   }
 

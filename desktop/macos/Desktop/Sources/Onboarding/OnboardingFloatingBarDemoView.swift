@@ -21,6 +21,7 @@ struct OnboardingFloatingBarDemoView: View {
   @State private var pressedTokens: Set<String> = []
   @State private var mainKeyDown = false
   @State private var keyLightMonitor: Any?
+  @State private var demoQuerySent = false
 
   var body: some View {
     VStack(spacing: 0) {
@@ -59,12 +60,12 @@ struct OnboardingFloatingBarDemoView: View {
               .multilineTextAlignment(.center)
               .frame(maxWidth: 560)
 
-            Text("Press this shortcut to open Ask Omi.")
+            Text("Press this shortcut to try it.")
               .font(.system(size: 18, weight: .medium))
               .foregroundColor(OmiColors.textSecondary)
               .multilineTextAlignment(.center)
           } else {
-            Text("Type in the Floating Bar 'Which computer should I buy?'")
+            Text("Omi is answering 'Which computer should I buy?' in the floating bar")
               .font(.system(size: 24, weight: .bold))
               .foregroundColor(OmiColors.textPrimary)
               .lineLimit(1)
@@ -86,7 +87,7 @@ struct OnboardingFloatingBarDemoView: View {
               }
             }
 
-            Text("Ask Omi opens at the top of your screen.")
+            Text("Omi answers in the floating bar at the top of your screen.")
               .font(.system(size: 13))
               .foregroundColor(OmiColors.textTertiary)
           }
@@ -231,6 +232,14 @@ struct OnboardingFloatingBarDemoView: View {
 
     // Only light caps that belong to this shortcut.
     pressedTokens = tokens.intersection(Set(shortcut.displayTokens))
+
+    // The shortcut now opens the main app (typing moved out of the floating
+    // bar), so the demo sends the sample question itself the moment the full
+    // shortcut is pressed — the floating bar then shows the live answer.
+    if !demoQuerySent, pressedTokens == Set(shortcut.displayTokens), !shortcut.displayTokens.isEmpty {
+      demoQuerySent = true
+      FloatingControlBarManager.shared.openAIInputWithQuery("Which computer should I buy?")
+    }
   }
 
   // MARK: - Key Cap

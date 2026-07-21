@@ -1381,7 +1381,7 @@ struct FloatingControlBarView: View {
           .transition(.opacity)
       } else if allowsHoverExpansion {
         VStack(spacing: 1) {
-          compactButton(title: "Ask omi / Collapse", keys: shortcutSettings.askOmiShortcut.displayTokens) {
+          compactButton(title: "Open Omi", keys: shortcutSettings.askOmiShortcut.displayTokens) {
             onAskAI()
           }
 
@@ -1683,28 +1683,15 @@ struct FloatingControlBarView: View {
         set: { state.isAILoading = $0 }
       ),
       currentMessage: state.currentAIMessage(from: provider),
-      followUpText: Binding(
-        get: { state.aiInputText },
-        set: { state.aiInputText = $0 }
-      ),
       userInput: state.displayedQuery,
       chatHistory: state.derivedChatHistory(from: provider),
       canClearVisibleConversation: false,
       showsHeader: false,
       onClearVisibleConversation: onClearVisibleConversation,
       onEscape: onEscape,
-      onSendFollowUp: { message in
-        state.archiveCurrentExchange(using: floatingChatProvider)
-
-        (window as? FloatingControlBarWindow)?
-          .beginVisibleMainQuery(message, fromVoice: false, animated: true)
-        state.displayedQuery = message
-        state.bindQuestionMessageId(nil)
-        state.markConversationActivity()
-        OmiMotion.withGated(.spring(response: 0.24, dampingFraction: 0.9)) {
-          state.isAILoading = true
-        }
-        onSendQuery(message)
+      onOpenMainApp: {
+        (window as? FloatingControlBarWindow)?.closeAIConversation()
+        (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
       },
       onRate: onRate,
       onShareLink: onShareLink,
@@ -1929,11 +1916,6 @@ private struct AgentMainChatView: View {
   let onBackToAgentRows: () -> Void
   let onEscape: () -> Void
 
-  @State private var followUpText: String
-  @State private var attachments: [ChatAttachment] = []
-  @State private var isDropTargeted = false
-  @FocusState private var isFollowUpFocused: Bool
-
   init(
     pill: AgentPill,
     manager: AgentPillsManager,
@@ -1944,7 +1926,6 @@ private struct AgentMainChatView: View {
     self.manager = manager
     self.onBackToAgentRows = onBackToAgentRows
     self.onEscape = onEscape
-    _followUpText = State(initialValue: ChatDraftStore.shared.text(for: .floatingAgent(pill.id)))
   }
 
   private var isRunning: Bool {
@@ -2028,11 +2009,6 @@ private struct AgentMainChatView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onAppear {
       manager.markViewed(pillID: pill.id)
-    }
-    .task {
-      // Focus the follow-up field once the view is on screen (view-lifecycle
-      // signal) instead of guessing a fixed delay for it to mount (BL-005).
-      isFollowUpFocused = true
     }
     .onExitCommand {
       onEscape()
@@ -2316,80 +2292,29 @@ private struct AgentMainChatView: View {
   }
 
   private var followUpInput: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-      if !attachments.isEmpty {
-        AttachmentPreviewRow(
-          attachments: attachments,
-          onRemove: removeAttachment
-        )
-        .environment(\.colorScheme, .dark)
-      }
-
-      HStack(spacing: OmiSpacing.xs) {
-        TextField("Ask this agent...", text: $followUpText)
-          .textFieldStyle(.plain)
-          .scaledFont(size: OmiType.body)
-          .padding(.horizontal, 10)
-          .padding(.vertical, 7)
-          .background(Color.white.opacity(isDropTargeted ? 0.18 : 0.10))
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous))
-          .focused($isFollowUpFocused)
-          .onSubmit {
-            sendFollowUp()
-          }
-
-        Button(action: sendFollowUp) {
-          Image(systemName: "arrow.up.circle.fill")
-            .scaledFont(size: OmiType.heading)
-            .foregroundColor(canSend ? .white : .secondary)
+    HStack(spacing: OmiSpacing.xs) {
+      Button {
+        onEscape()
+        (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
+      } label: {
+        HStack(spacing: OmiSpacing.xs) {
+          Text("Continue in Omi")
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundColor(.white.opacity(0.85))
+          Spacer(minLength: 0)
+          Image(systemName: "arrow.up.forward.app")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(.secondary)
         }
-        .disabled(!canSend)
-        .buttonStyle(.plain)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color.white.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous))
+        .contentShape(Rectangle())
       }
+      .buttonStyle(.plain)
+      .help("Open the Omi app to steer this agent")
     }
-    .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleAttachmentDrop)
-    .onChange(of: followUpText) { _, text in
-      ChatDraftStore.shared.setText(text, for: .floatingAgent(pill.id))
-    }
-  }
-
-  private var canSend: Bool {
-    !followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
-  }
-
-  private func sendFollowUp() {
-    let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let staged = attachments
-    guard !trimmed.isEmpty || !staged.isEmpty else { return }
-    followUpText = ""
-    attachments = []
-    manager.continueAgent(from: pill, text: trimmed, attachments: staged)
-  }
-
-  // MARK: - Attachments
-
-  private func handleAttachmentDrop(providers: [NSItemProvider]) -> Bool {
-    ChatAttachmentDropHandler.collectURLs(from: providers) { urls in
-      addAttachmentURLs(urls)
-    }
-  }
-
-  private func addAttachmentURLs(_ urls: [URL]) {
-    let remaining = max(0, kMaxChatAttachments - attachments.count)
-    guard remaining > 0 else { return }
-    let staged = urls.prefix(remaining).compactMap { url -> ChatAttachment? in
-      guard var attachment = ChatAttachment.from(url: url) else { return nil }
-      // Files are read from disk by the local agent, so mark them ready
-      // immediately — there is no upload step in the floating-pill path.
-      attachment.state = .localOnly
-      return attachment
-    }
-    guard !staged.isEmpty else { return }
-    attachments.append(contentsOf: staged)
-  }
-
-  private func removeAttachment(_ id: String) {
-    attachments.removeAll { $0.id == id }
   }
 }
 

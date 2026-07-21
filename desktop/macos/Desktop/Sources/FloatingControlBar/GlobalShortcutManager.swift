@@ -112,9 +112,11 @@ class GlobalShortcutManager: @unchecked Sendable {
 
     switch id {
     case .askOmi:
-      NSLog("GlobalShortcutManager: Ask Omi shortcut detected")
+      NSLog("GlobalShortcutManager: Open Omi shortcut detected")
       DispatchQueue.main.async {
-        FloatingControlBarManager.shared.toggleAIInput()
+        // Typing moved to the main app: the shortcut opens Omi itself
+        // instead of the floating bar's typed input panel.
+        (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
       }
     }
 
