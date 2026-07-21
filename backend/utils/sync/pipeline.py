@@ -133,6 +133,7 @@ _SYNC_FAILURE_REASON_CODES = {
     'stt_upstream_error',
     'sync_backfill_dispatch_unavailable',
     'sync_backfill_paced',
+    'sync_conversation_persistence_fenced',
     'sync_dispatch_staging_failed',
     'sync_decode_failed',
     'sync_invalid_audio',
@@ -393,6 +394,16 @@ class SyncJobRunLeaseLost(RuntimeError):
     """A worker tried to write after its run token stopped owning the job."""
 
 
+class SyncConversationPersistenceFenced(RuntimeError):
+    """Conversation lifecycle rejected this worker's stale processing result."""
+
+
+def _require_current_conversation_persistence(persisted: bool) -> None:
+    """Turn a lifecycle fence into the worker's terminal supersession signal."""
+    if not persisted:
+        raise SyncConversationPersistenceFenced('sync conversation persistence fenced')
+
+
 def _require_run_owner(mutation, *, job_id: str) -> Dict | None:
     """Turn a non-applied Redis CAS result into the worker's stop signal."""
     if getattr(mutation, 'applied', False):
@@ -508,6 +519,41 @@ def bind_or_converge_sync_ledger_completion(
     )
     delete_sync_job_run_lock_epoch(job_id)
     return finalized
+
+
+async def finalize_sync_job_superseded(
+    *,
+    job_id: str,
+    run_lock_token: str | None,
+    lane: str,
+    provider: str,
+    model: str,
+) -> None:
+    """Acknowledge a stale conversation processor without inviting a WAL retry.
+
+    A lifecycle fence means another generation owns the conversation, not that
+    audio decoding or the Cloud Task failed.  The released clients only
+    acknowledge ``completed`` sync jobs, so publish a zero-segment completed
+    result with an explicit bounded ``superseded`` outcome rather than a
+    retryable failure status.
+    """
+    finalized = await run_blocking(
+        db_executor,
+        _finalize_sync_job_for_run,
+        job_id,
+        run_lock_token,
+        {
+            'failed_segments': 0,
+            'total_segments': 0,
+            'errors': [],
+            'outcome': 'superseded',
+            'provider': provider,
+            'model': model,
+            'lane': lane,
+        },
+    )
+    if finalized is None:
+        raise SyncJobRunLeaseLost(f'sync job state is no longer mutable: job={job_id} outcome=superseded')
 
 
 async def _finalize_sync_job_failure(
@@ -694,6 +740,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         conversation=conversation,
         force_process=True,
         is_reprocess=True,
+        persistence_observer=_require_current_conversation_persistence,
     )
 
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
@@ -1080,7 +1127,12 @@ def process_segment(
                 client_device_id=client_device_id,
                 client_platform=client_platform,
             )
-            created = process_conversation(uid, language, create_memory)
+            created = process_conversation(
+                uid,
+                language,
+                create_memory,
+                persistence_observer=_require_current_conversation_persistence,
+            )
             with lock:
                 response['new_memories'].add(created.id)
             if private_cloud_sync_enabled:
@@ -1194,6 +1246,8 @@ def process_segment(
                 retryable=False,
             )
         return True
+    except SyncConversationPersistenceFenced:
+        raise
     except Exception as e:
         failure = failure_from_exception(e, provider=provider)
         _set_deferred_segment_outcome(
@@ -1227,6 +1281,8 @@ def _reprocess_merged_conversations(uid: str, response: dict):
     for conversation_id, language in merged.items():
         try:
             _reprocess_conversation_after_update(uid, conversation_id, language)
+        except SyncConversationPersistenceFenced:
+            raise
         except Exception as e:
             logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
 

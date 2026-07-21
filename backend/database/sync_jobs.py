@@ -47,6 +47,7 @@ _SYNC_JOB_OUTCOMES = (
     'upstream_error',
     'config_error',
     'invalid_input',
+    'superseded',
 )
 _SYNC_LANES = ('fresh', 'backfill')
 _SYNC_PROVIDERS = ('deepgram', 'modulate', 'parakeet')

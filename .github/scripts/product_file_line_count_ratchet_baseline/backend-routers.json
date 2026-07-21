@@ -4,13 +4,13 @@
     "backend/routers/chat.py": 1577,
     "backend/routers/developer.py": 2195,
     "backend/routers/mcp_sse.py": 1858,
-    "backend/routers/sync.py": 2035,
+    "backend/routers/sync.py": 2056,
     "backend/routers/users.py": 2046
   },
   "raise_justifications": {
     "backend/routers/developer.py": "GET /v1/dev/user/memories serves the authoritative legacy memories collection for legacy-cohort accounts with no rollout state (#9892), keeping the narrow deny/fallback decision in the route that owns the read contract.",
     "backend/routers/chat.py": "PTT stereo rejection keeps the serving STT provider boundary explicit in the established chat admission owner.",
-    "backend/routers/sync.py": "Fresh Sync's daily ceiling remains beside the existing fresh-admission gates, before staged audio or durable worker work is created.",
+    "backend/routers/sync.py": "Fresh Sync's daily ceiling remains beside the existing fresh-admission gates, before staged audio or durable worker work is created. Lifecycle-fenced workers are terminalized at this Cloud Tasks boundary so released WAL clients do not retry an owner they no longer own.",
     "backend/routers/users.py": "GET /v1/users/subscription serializes the new mobile plus/max plans as `unlimited` for clients whose plan enum predates them, so day-one buyers read as paid instead of Free (mirrors the existing operator remap); real limits/grandfather are computed from the true plan first.",
     "backend/routers/mcp_sse.py": "MCP SSE memory reads route their legacy-fallback decision through the shared mcp_legacy_read_authorized helper (#9892); one import line."
   },

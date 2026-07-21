@@ -233,6 +233,7 @@ else:
     _pre_ledger_failures_remaining = _nonnegative_int('OMI_SYNC_STACK_PRE_LEDGER_FAILURES')
     _post_ledger_failures_remaining = _nonnegative_int('OMI_SYNC_STACK_POST_LEDGER_FAILURES')
     _cleanup_failures_remaining = _nonnegative_int('OMI_SYNC_STACK_CLEANUP_FAILURES')
+    _process_persistence_fenced = os.getenv('OMI_SYNC_STACK_PROCESS_PERSISTENCE_FENCED', 'false').lower() == 'true'
     _gate_dir_raw = os.getenv('OMI_SYNC_STACK_PROCESS_GATE_DIR', '').strip()
     _gate_dir = Path(_gate_dir_raw) if _gate_dir_raw else None
 
@@ -283,6 +284,7 @@ else:
         conversation: Any = None,
         *,
         language_code: str | None = None,
+        persistence_observer: Any = None,
         **_kwargs: Any,
     ) -> Conversation:
         """Deterministic process leaf with real lifecycle-backed persistence."""
@@ -315,9 +317,16 @@ else:
             client_device_id=getattr(conversation, 'client_device_id', None),
             client_platform=getattr(conversation, 'client_platform', None),
         )
-        persisted = lifecycle_service.persist_processed_conversation(uid, completed.model_dump())
+        persisted = (
+            False
+            if _process_persistence_fenced
+            else lifecycle_service.persist_processed_conversation(uid, completed.model_dump())
+        )
+        if persistence_observer is not None:
+            persistence_observer(persisted)
         if not persisted:
-            raise RuntimeError('Sync stack deterministic processor lost conversation lifecycle ownership')
+            write_event('providers', {'event': 'conversation_persistence_fenced', 'conversation_id': completed.id})
+            return completed
         write_event('providers', {'event': 'conversation_persisted', 'conversation_id': completed.id})
         return completed
 
