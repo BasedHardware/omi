@@ -244,8 +244,9 @@ def validate_serving_release_vector(name: str, text: str) -> list[str]:
         errors.append(f"{name}: release-vector verification must use the canonical verifier")
     if "--environment" not in verifier_text:
         errors.append(f"{name}: release-vector verification must bind an environment")
-    if name == "gcp_backend.yml" and "github.event.inputs.deploy_targets == 'all'" not in verifier_text:
-        errors.append(f"{name}: all-tier release-vector verification must not run for cloud-run-only deploys")
+    if name == "gcp_backend.yml":
+        if "github.event.inputs.deploy_targets" not in verifier_text or "--cloud-run-only" not in verifier_text:
+            errors.append(f"{name}: cloud-run-only promotion must use the Cloud Run-only release-vector contract")
     return errors
 
 
