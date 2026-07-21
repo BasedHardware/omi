@@ -2,6 +2,19 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.92",
+      "date": "2026-07-21",
+      "changes": [
+        "Omi Beta now uses the same reliable production backend as Omi while keeping its separate Beta app and update channel",
+        "Chat now decides for itself how much to think: typed questions get adaptive reasoning (ask it to think longer and it will), while push-to-talk stays speed-optimized",
+        "Improved the privacy and noise controls for Beta Enhanced Diagnostics.",
+        "Beta builds now collect additional bounded technical diagnostics by default to help resolve reliability issues faster. You can disable Enhanced Diagnostics in Settings → Advanced.",
+        "Fixed a release-pipeline check that blocked the first side-by-side Omi Beta build from publishing",
+        "Redesigned Home: chat with your history is now the home surface, with a '2nd brain' greeting plus suggested task, insight, and question rows for new accounts, glanceable stats in the header, and a quieter chat timeline",
+        "The floating bar no longer has a typed input — the Open Omi shortcut (formerly Ask Omi) now brings up the Omi app, and voice answers offer a one-click Continue in Omi"
+      ]
+    },
+    {
       "version": "0.12.91",
       "date": "2026-07-21",
       "changes": [
