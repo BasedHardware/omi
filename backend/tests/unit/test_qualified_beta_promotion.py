@@ -130,6 +130,29 @@ def _artifact_archive(evidence):
     return output.getvalue()
 
 
+def _replace_trusted_evidence(reader, evidence):
+    """Keep the immutable release copy and trusted artifact copy in sync for a probe."""
+    evidence_bytes = json.dumps(evidence).encode()
+    evidence_asset = reader.release_payload["assets"][2]
+    reader.downloaded[evidence_asset["browser_download_url"]] = evidence_bytes
+    evidence_asset["digest"] = _digest(evidence_bytes)
+    artifact = _artifact_archive(evidence_bytes)
+    reader.artifacts_payload[0]["size_in_bytes"] = len(artifact)
+    reader.artifact_downloads[reader.artifacts_payload[0]["id"]] = artifact
+
+
+def _malformed_reader(collection, value):
+    release, evidence, run = _candidate()
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+    if collection == "assets":
+        reader.release_payload["assets"] = [value]
+    elif collection == "runs":
+        reader.runs_payload = [value]
+    else:
+        reader.artifacts_payload = [value]
+    return reader
+
+
 def _corrupt_deflated_artifact(evidence):
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -156,6 +179,100 @@ async def test_server_builds_the_canonical_manifest_from_qualified_immutable_ass
     assert manifest["zip_url"].endswith("/Omi.zip")
     assert manifest["dmg_url"].endswith("/omi.dmg")
     assert manifest["qualification_evidence_sha256"] == _digest(evidence)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "expected_error"),
+    [
+        ("qualification_run_id", "does not bind its run"),
+        ("run_id", "no fresh trusted qualification run"),
+        ("artifact_id", "qualification artifact is invalid"),
+        ("artifact_size", "qualification artifact is invalid"),
+        ("evidence_schema_version", "trusted qualification evidence is invalid"),
+    ],
+)
+async def test_boolean_security_integer_metadata_is_rejected(field, expected_error):
+    release, evidence_bytes, run = _candidate()
+    reader = FakeQualifiedBetaReader(release, evidence_bytes, run)
+
+    if field == "qualification_run_id":
+        run["id"] = 1
+        evidence = json.loads(evidence_bytes)
+        evidence["qualification_run_id"] = True
+        _replace_trusted_evidence(reader, evidence)
+    elif field == "run_id":
+        run["id"] = True
+    elif field == "artifact_id":
+        reader.artifacts_payload[0]["id"] = True
+        reader.artifact_downloads[True] = reader.artifact_downloads.pop(456)
+    elif field == "artifact_size":
+        reader.artifacts_payload[0]["size_in_bytes"] = True
+    else:
+        evidence = json.loads(evidence_bytes)
+        evidence["schema_version"] = True
+        _replace_trusted_evidence(reader, evidence)
+
+    with pytest.raises(QualifiedBetaAdmissionError, match=expected_error):
+        await build_qualified_beta_manifest(
+            TAG,
+            reader=reader,
+            now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("collection", ["assets", "runs", "artifacts"])
+@pytest.mark.parametrize("value", [None, "not-an-object", [], {}])
+async def test_malformed_nested_github_entries_are_typed_admission_rejections(collection, value):
+    reader = _malformed_reader(collection, value)
+
+    with pytest.raises(QualifiedBetaAdmissionError):
+        await build_qualified_beta_manifest(
+            TAG,
+            reader=reader,
+            now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("collection", "value"),
+    [
+        ("assets", None),
+        ("assets", "not-an-object"),
+        ("assets", []),
+        ("assets", {}),
+        ("runs", None),
+        ("runs", "not-an-object"),
+        ("runs", []),
+        ("runs", {}),
+        ("artifacts", None),
+        ("artifacts", "not-an-object"),
+        ("artifacts", []),
+        ("artifacts", {}),
+    ],
+)
+async def test_malformed_nested_metadata_returns_generic_422_without_mutation(collection, value):
+    reader = _malformed_reader(collection, value)
+
+    with (
+        patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "promotion-token"}),
+        patch("utils.qualified_beta_promotion.GitHubQualifiedBetaReader", return_value=reader),
+        patch("routers.updates.admit_qualified_beta_manifest") as admit,
+        patch("routers.updates.delete_generic_cache") as invalidate,
+    ):
+        async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+            response = await client.post(
+                "/v2/desktop/beta/promote-qualified",
+                headers={"Authorization": "Bearer promotion-token"},
+                json={"tag": TAG},
+            )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Qualified Beta candidate rejected"}
+    admit.assert_not_called()
+    invalidate.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -9,7 +9,7 @@ import json
 import os
 import re
 from collections.abc import Awaitable
-from typing import Any, NoReturn
+from typing import Any, NoReturn, TypeGuard
 import zipfile
 import zlib
 
@@ -58,8 +58,8 @@ def _max_age_seconds() -> int:
     return value
 
 
-def _asset(release: dict[str, Any], name: str) -> dict[str, Any]:
-    matches = [asset for asset in release.get("assets", []) if asset.get("name") == name]
+def _asset(assets: list[dict[str, Any]], name: str) -> dict[str, Any]:
+    matches = [asset for asset in assets if asset.get("name") == name]
     if len(matches) != 1:
         _fail("candidate is missing a canonical asset")
     return matches[0]
@@ -73,6 +73,17 @@ def _github_object(value: object, message: str) -> dict[str, Any]:
     for key, item in value.items():
         result[key] = item
     return result
+
+
+def _github_objects(value: object, message: str) -> list[dict[str, Any]]:
+    """Validate an untrusted GitHub JSON array of objects before consuming it."""
+    if not isinstance(value, list):
+        _fail(message)
+    return [_github_object(item, message) for item in value]
+
+
+def _is_exact_integer(value: object) -> TypeGuard[int]:
+    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def _asset_url(asset: dict[str, Any], tag: str, name: str) -> str:
@@ -92,19 +103,15 @@ def _asset_digest(asset: dict[str, Any]) -> str:
 
 def _trusted_run_id(run: dict[str, Any]) -> int:
     run_id = run.get("id")
-    if not isinstance(run_id, int) or run_id <= 0:
+    if not _is_exact_integer(run_id) or run_id <= 0:
         _fail("candidate qualification run has no trusted identity")
     return run_id
 
 
 def _select_qualification_run(runs: object, tag: str, source_sha: str, now: datetime) -> tuple[dict[str, Any], int]:
     """Choose the newest fully trusted retry without caller-selected run state."""
-    if not isinstance(runs, list):
-        _fail("candidate qualification runs are unavailable")
     acceptable: list[tuple[datetime, int, dict[str, Any]]] = []
-    for run in runs:
-        if not isinstance(run, dict):
-            continue
+    for run in _github_objects(runs, "candidate qualification runs are invalid"):
         try:
             validate_qualification_run(run, REPOSITORY, tag, source_sha)
             run_id = _trusted_run_id(run)
@@ -121,11 +128,11 @@ def _select_qualification_run(runs: object, tag: str, source_sha: str, now: date
 
 
 def _qualification_artifact_id(artifacts: object, tag: str) -> int:
-    if not isinstance(artifacts, list):
-        _fail("candidate qualification artifact list is invalid")
     expected_name = f"{QUALIFICATION_ARTIFACT_PREFIX}{tag}"
     matches = [
-        artifact for artifact in artifacts if isinstance(artifact, dict) and artifact.get("name") == expected_name
+        artifact
+        for artifact in _github_objects(artifacts, "candidate qualification artifacts are invalid")
+        if artifact.get("name") == expected_name
     ]
     if len(matches) != 1:
         _fail("candidate qualification artifact is missing or ambiguous")
@@ -135,9 +142,9 @@ def _qualification_artifact_id(artifacts: object, tag: str) -> int:
     artifact_id = artifact.get("id")
     size = artifact.get("size_in_bytes")
     if (
-        not isinstance(artifact_id, int)
+        not _is_exact_integer(artifact_id)
         or artifact_id <= 0
-        or not isinstance(size, int)
+        or not _is_exact_integer(size)
         or not 0 < size <= MAX_QUALIFICATION_ARTIFACT_BYTES
     ):
         _fail("candidate qualification artifact is invalid")
@@ -185,7 +192,7 @@ async def _read_github(source: Any, method: str, *args: Any) -> Any:
         raise QualifiedBetaAdmissionError("candidate GitHub read dependency is unavailable") from exc
 
 
-def _release_for_contract(release: dict[str, Any]) -> dict[str, Any]:
+def _release_for_contract(release: dict[str, Any], assets: list[dict[str, Any]]) -> dict[str, Any]:
     """Adapt GitHub REST names to the existing canonical evidence owner."""
     return {
         "tagName": release.get("tag_name"),
@@ -199,7 +206,7 @@ def _release_for_contract(release: dict[str, Any]) -> dict[str, Any]:
                 "url": asset.get("browser_download_url") or asset.get("url"),
                 "digest": asset.get("digest"),
             }
-            for asset in release.get("assets", [])
+            for asset in assets
         ],
     }
 
@@ -256,16 +263,12 @@ class GitHubQualifiedBetaReader:
             f"actions/workflows/{QUALIFICATION_WORKFLOW}/runs?event=workflow_dispatch&status=completed&per_page=100"
         )
         runs = response.get("workflow_runs")
-        if not isinstance(runs, list):
-            _fail("candidate qualification runs are invalid")
-        return [_github_object(run, "candidate qualification runs are invalid") for run in runs]
+        return _github_objects(runs, "candidate qualification runs are invalid")
 
     async def artifacts(self, run_id: int) -> list[dict[str, Any]]:
         response = await self._api(f"actions/runs/{run_id}/artifacts?per_page=100")
         artifacts = response.get("artifacts")
-        if not isinstance(artifacts, list):
-            _fail("candidate qualification artifacts are invalid")
-        return [_github_object(artifact, "candidate qualification artifacts are invalid") for artifact in artifacts]
+        return _github_objects(artifacts, "candidate qualification artifacts are invalid")
 
     async def download(self, url: str) -> bytes:
         response = await get_web_fetch_client().get(url, headers=self._headers())
@@ -298,12 +301,13 @@ async def build_qualified_beta_manifest(
     if (now or datetime.now(timezone.utc)) - published > timedelta(seconds=_max_age_seconds()):
         _fail("candidate release is stale")
 
-    names = {asset.get("name") for asset in release.get("assets", [])}
+    assets = _github_objects(release.get("assets"), "candidate GitHub release assets are invalid")
+    names = {asset.get("name") for asset in assets}
     if names & RETIRED_ASSET_NAMES or any(isinstance(name, str) and "omi beta" in name.lower() for name in names):
         _fail("candidate contains a retired desktop identity")
-    zip_asset, dmg_asset = _asset(release, "Omi.zip"), _asset(release, "omi.dmg")
+    zip_asset, dmg_asset = _asset(assets, "Omi.zip"), _asset(assets, "omi.dmg")
     evidence_name = f"qualification-evidence-{tag}.json"
-    evidence_asset = _asset(release, evidence_name)
+    evidence_asset = _asset(assets, evidence_name)
     zip_url, dmg_url, evidence_url = (
         _asset_url(zip_asset, tag, "Omi.zip"),
         _asset_url(dmg_asset, tag, "omi.dmg"),
@@ -328,8 +332,11 @@ async def build_qualified_beta_manifest(
     except (TypeError, json.JSONDecodeError):
         _fail("candidate trusted qualification evidence is invalid")
     evidence = _github_object(evidence, "candidate trusted qualification evidence does not bind its run")
-    if evidence.get("qualification_run_id") != run_id:
+    qualification_run_id = evidence.get("qualification_run_id")
+    if not _is_exact_integer(qualification_run_id) or qualification_run_id != run_id:
         _fail("candidate trusted qualification evidence does not bind its run")
+    if not _is_exact_integer(evidence.get("schema_version")) or evidence.get("schema_version") != 1:
+        _fail("candidate trusted qualification evidence is invalid")
     downloaded: dict[str, bytes] = {}
     for name, url in (("Omi.zip", zip_url), ("omi.dmg", dmg_url), (evidence_name, evidence_url)):
         content = await _read_github(source, "download", url)
@@ -341,7 +348,7 @@ async def build_qualified_beta_manifest(
         _fail("candidate asset digest does not match GitHub release metadata")
     if downloaded[evidence_name] != trusted_evidence_bytes:
         _fail("candidate release qualification evidence differs from its trusted run artifact")
-    contract_release = _release_for_contract(release)
+    contract_release = _release_for_contract(release, assets)
     try:
         verify_evidence(
             evidence,
