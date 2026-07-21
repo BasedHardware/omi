@@ -91,6 +91,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Horizontal inset of the message column. Home passes 0 so bubbles align
   /// exactly with the ask bar's edges; other surfaces keep the default gutter.
   var horizontalContentPadding: CGFloat = OmiSpacing.xxl
+  /// Reports the transcript content's measured height (the LazyVStack inside
+  /// the scroll view). The notch uses this to grow its panel to fit the
+  /// conversation; nil everywhere else.
+  var onContentHeightChange: ((CGFloat) -> Void)? = nil
   @ViewBuilder var welcomeContent: () -> WelcomeContent
 
   /// IDs of messages that are near-duplicates of an earlier message in the same session.
@@ -176,6 +180,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       // chrome Text (agent card headers, tool summaries, timestamps) can peg the
       // main thread in GraphHost layout. Message bodies opt in via SelectableMarkdown.
       .background(scrollDetectors)
+      .onGeometryChange(for: CGFloat.self) { proxy in
+        proxy.size.height
+      } action: { height in
+        onContentHeightChange?(height)
+      }
 
       // Invisible anchor lives OUTSIDE the LazyVStack so it is always
       // eagerly rendered. Inside LazyVStack it may not exist in the view
