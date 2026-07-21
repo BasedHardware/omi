@@ -292,6 +292,7 @@ struct DashboardPage: View {
   private static let homeAskBarMinWidth: CGFloat = 560
   private static let homeAskBarMaxWidth: CGFloat = 980
   private static let homeStagePanelMaxWidth: CGFloat = 1280
+  private static let homeChatColumnMaxWidth: CGFloat = 900
   private static let homeStageTopPadding: CGFloat = 74
   private static let homeStageBottomPadding: CGFloat = 26
   private static let homeStageAnimation = Animation.spring(response: 0.46, dampingFraction: 0.86)
@@ -1113,7 +1114,9 @@ struct DashboardPage: View {
   private func homeAskBarWidth(for stageWidth: CGFloat) -> CGFloat {
     let contentWidth = homeStageContentWidth(for: stageWidth)
     if homeMode != .hub {
-      return min(Self.homeStagePanelMaxWidth, contentWidth)
+      // Chat mode: bar and message column share one readable width, edges
+      // aligned (bubbles start/end on the bar's verticals).
+      return min(Self.homeChatColumnMaxWidth, contentWidth)
     }
 
     let availableWidth = min(Self.homeAskBarMaxWidth, contentWidth)

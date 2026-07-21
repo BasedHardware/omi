@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeSuggestionsStore.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeKnowsComposer.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
 preconditions:
   - automation_bridge_ready
