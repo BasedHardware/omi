@@ -6,7 +6,8 @@ import {
   MAX_REWIND_FRAME_BYTES,
   isRewindFramePath,
   isRewindFrameSizeAllowed,
-  readRewindFrame
+  readRewindFrame,
+  removeRewindFrame
 } from './frameFile'
 
 describe('Rewind frame file boundary', () => {
@@ -57,5 +58,23 @@ describe('Rewind frame file boundary', () => {
     await mkdir(frameRoot)
     await writeFile(frame, Buffer.from('jpeg'))
     expect(await readRewindFrame(frameRoot, frame)).toEqual(Buffer.from('jpeg'))
+  })
+
+  it('removes a canonical JPEG without following an escaped link', async () => {
+    const temp = await mkdtemp(join(tmpdir(), 'omi-rewind-remove-'))
+    tempPaths.push(temp)
+    const frameRoot = join(temp, 'rewind')
+    const outside = join(temp, 'outside')
+    const valid = join(frameRoot, 'valid.jpg')
+    const linked = join(frameRoot, 'linked')
+    await Promise.all([mkdir(frameRoot), mkdir(outside)])
+    await writeFile(valid, Buffer.from('jpeg'))
+    await writeFile(join(outside, '1.jpg'), Buffer.from('jpeg'))
+    await symlink(outside, linked, process.platform === 'win32' ? 'junction' : 'dir')
+
+    await removeRewindFrame(frameRoot, valid)
+    await expect(readRewindFrame(frameRoot, valid)).rejects.toThrow()
+    await expect(removeRewindFrame(frameRoot, join(linked, '1.jpg'))).rejects.toThrow('invalid frame path')
+    expect(await readRewindFrame(outside, join(outside, '1.jpg'))).toEqual(Buffer.from('jpeg'))
   })
 })
