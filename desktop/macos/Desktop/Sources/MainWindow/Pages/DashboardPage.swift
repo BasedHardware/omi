@@ -241,6 +241,7 @@ struct DashboardPage: View {
   @State private var isTogglingListening = false
   @State private var showingAllGoals = false
   @State private var showingGoalDetail = false
+  @State private var showingHomeHistory = false
   @AppStorage("dashboardWidgetsCollapsed") private var widgetsCollapsed = false
   @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
   @AppStorage("transcriptionEnabled") private var transcriptionEnabled = true
@@ -808,20 +809,21 @@ struct DashboardPage: View {
   private var homeHubHeadline: some View {
     VStack(spacing: OmiSpacing.sm) {
       Text(homeHubGreeting)
-        .scaledFont(size: OmiType.title, weight: .semibold)
+        .scaledFont(size: OmiType.hero, weight: .bold)
         .foregroundStyle(HomePalette.ink)
         .multilineTextAlignment(.center)
 
-      Text("Here's what it already knows to do:")
+      Text("I'm listening — follow-ups appear as conversations end.")
         .scaledFont(size: OmiType.subheading)
         .foregroundStyle(HomePalette.muted)
+        .multilineTextAlignment(.center)
     }
     .frame(maxWidth: .infinity, alignment: .center)
   }
 
   private var homeHubGreeting: String {
     let name = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
-    return name.isEmpty ? "Your 2nd brain is ready." : "Your 2nd brain is ready, \(name)."
+    return name.isEmpty ? "I'm ready." : "Hey \(name). I'm ready."
   }
 
   // MARK: Knows list
@@ -1419,11 +1421,48 @@ struct DashboardPage: View {
     )
   }
 
+  /// Leading-edge entry point to previous chats: opens the existing session
+  /// history (new chat, search, Recents grouped by date) as a popover, so the
+  /// thin rail stays uncluttered while chats remain one click away.
+  private var homeHistoryButton: some View {
+    Button {
+      showingHomeHistory.toggle()
+    } label: {
+      HStack(spacing: OmiSpacing.xs) {
+        Image(systemName: "clock.arrow.circlepath")
+          .scaledFont(size: OmiType.body, weight: .semibold)
+        Text("History")
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .lineLimit(1)
+      }
+      .foregroundStyle(showingHomeHistory ? HomePalette.ink : HomePalette.muted)
+      .padding(.horizontal, OmiSpacing.md)
+      .frame(height: 34)
+      .background(
+        Capsule(style: .continuous)
+          .fill(showingHomeHistory ? HomePalette.tile.opacity(0.6) : Color.clear)
+      )
+      .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .help("Chat history")
+    .accessibilityLabel("Chat history")
+    .popover(isPresented: $showingHomeHistory, arrowEdge: .bottom) {
+      ChatHistoryPopover(
+        chatProvider: chatProvider,
+        onSelect: {
+          showingHomeHistory = false
+          openHomeChat()
+        }
+      )
+    }
+  }
+
   private var homeHeader: some View {
     let transcriptionUnavailable = appState.transcriptionServiceError != nil
 
     return HStack {
-      homeStatTextStrip
+      homeHistoryButton
 
       Spacer()
       HStack(spacing: OmiSpacing.sm) {
@@ -2101,10 +2140,10 @@ private enum HomePalette {
   static let panel = Color(red: 0.045, green: 0.046, blue: 0.052)
   static let tile = Color(red: 0.078, green: 0.078, blue: 0.088)
   static let tileHover = Color(red: 0.108, green: 0.110, blue: 0.122)
-  static let ink = Color(red: 0.94, green: 0.925, blue: 0.89)
-  static let secondary = Color(red: 0.78, green: 0.765, blue: 0.725)
-  static let muted = Color(red: 0.49, green: 0.47, blue: 0.43)
-  static let faint = Color(red: 0.36, green: 0.35, blue: 0.33)
+  static let ink = Color(red: 0.97, green: 0.97, blue: 0.975)
+  static let secondary = Color(red: 0.72, green: 0.73, blue: 0.75)
+  static let muted = Color(red: 0.46, green: 0.47, blue: 0.50)
+  static let faint = Color(red: 0.34, green: 0.35, blue: 0.37)
   static let hairline = Color(red: 0.155, green: 0.155, blue: 0.172)
   static let green = Color(red: 0.17, green: 0.78, blue: 0.38)
   // Neutral cool-grey key light (INV-UI-1 brand accent rules).
@@ -4009,7 +4048,7 @@ private struct HomeStatusButton: View {
     if status.isBlocked {
       return status.indicator.opacity(isHovering ? 0.16 : 0.10)
     }
-    return isHovering ? HomePalette.tileHover : HomePalette.panel
+    return isHovering ? HomePalette.tile.opacity(0.6) : Color.clear
   }
 
   private var statusStroke: Color {
@@ -4019,7 +4058,7 @@ private struct HomeStatusButton: View {
     if status.isBlocked {
       return status.indicator.opacity(isHovering ? 0.54 : 0.38)
     }
-    return HomePalette.hairline.opacity(isHovering ? 0.8 : 0.58)
+    return HomePalette.hairline.opacity(isHovering ? 0.6 : 0.0)
   }
 }
 
@@ -4126,7 +4165,7 @@ private struct HomeListeningStatusButton: View {
     if status.isBlocked {
       return status.indicator.opacity(isHovering ? 0.16 : 0.10)
     }
-    return isHovering ? HomePalette.tileHover : HomePalette.panel
+    return isHovering ? HomePalette.tile.opacity(0.6) : Color.clear
   }
 
   private var statusStroke: Color {
@@ -4136,7 +4175,7 @@ private struct HomeListeningStatusButton: View {
     if status.isBlocked {
       return status.indicator.opacity(isHovering ? 0.54 : 0.38)
     }
-    return HomePalette.hairline.opacity(isHovering ? 0.8 : 0.58)
+    return HomePalette.hairline.opacity(isHovering ? 0.6 : 0.0)
   }
 }
 

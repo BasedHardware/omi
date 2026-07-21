@@ -1186,7 +1186,7 @@ struct ToolCallsGroup: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .fixedSize(horizontal: false, vertical: true)
-    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.82), radius: compact ? 14 : 16)
+    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.42), radius: compact ? 14 : 16)
   }
 
   private var header: some View {
