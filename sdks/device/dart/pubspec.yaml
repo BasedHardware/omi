@@ -1,10 +1,15 @@
 name: omi_device
-description: Omi device BLE protocol helpers (constants + packet framing)
+description: Omi device BLE protocol helpers + optional flutter_blue_plus client
 version: 0.1.0
 publish_to: none
 environment:
   sdk: '>=3.0.0 <4.0.0'
 dependencies:
+  flutter:
+    sdk: flutter
+  flutter_blue_plus: ^1.35.0
   web_socket_channel: ^3.0.0
 dev_dependencies:
+  flutter_test:
+    sdk: flutter
   test: ^1.25.0
