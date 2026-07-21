@@ -351,6 +351,16 @@ class SelectionTests(unittest.TestCase):
         self.assertIn("github.event_name != 'pull_request'", changes_job)
         self.assertIn("github.event_name != 'pull_request'", hygiene_job)
 
+        # The manifest can select the Firestore admission proof for either PR
+        # preflight path. Java must be present before the selected check runs.
+        for job, gate in (
+            (metadata_job, "Run current PR metadata preflight"),
+            (hygiene_job, "Run shared PR contract preflight"),
+        ):
+            self.assertIn("actions/setup-java@v5", job)
+            self.assertIn("java-version: '21'", job)
+            self.assertLess(job.index("Set up Java for manifest-selected Firestore checks"), job.index(gate))
+
     def test_issue_sync_action_is_pinned(self) -> None:
         workflow = (REPO_ROOT / ".github/workflows/main.yml").read_text(encoding="utf-8")
 
