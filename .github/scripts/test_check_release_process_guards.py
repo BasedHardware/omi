@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -23,7 +24,7 @@ RAW_SCANNER_PARENT = "11ac6d9e9d27677d06d513364f2e658f5ed99870"
 def _copy_contract_tree(tmp_path: Path, monkeypatch) -> Path:
     shutil.copy2(REPO_ROOT / "codemagic.yaml", tmp_path / "codemagic.yaml")
     fixture = tmp_path / ".github/scripts/fixtures/codemagic_workflow_contract/v1.json"
-    fixture.parent.mkdir(parents=True)
+    fixture.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(REPO_ROOT / ".github/scripts/fixtures/codemagic_workflow_contract/v1.json", fixture)
     monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
     return tmp_path / "codemagic.yaml"
@@ -375,7 +376,7 @@ def test_global_document_semantic_lock_is_checked_even_when_raw_bytes_are_unchan
     loaded = yaml.safe_load(codemagic.read_text(encoding="utf-8"))
     assert isinstance(loaded, dict)
     loaded["semantic_lock_test_seam"] = "changed only through the safe-load seam"
-    monkeypatch.setattr(GUARDS, "_load_codemagic_with_duplicates", lambda _path: (loaded, [], []))
+    monkeypatch.setattr(GUARDS, "_load_codemagic_with_duplicates", lambda _raw_bytes: (loaded, [], []))
 
     errors = GUARDS.check_codemagic_release_publishers()
     assert not any("raw byte digest" in error for error in errors), errors
@@ -420,3 +421,190 @@ def test_fixture_independently_hashes_only_current_codemagic_source():
     assert contract["codemagic_raw_sha256"] == hashlib.sha256(raw_bytes).hexdigest()
     assert contract["codemagic_semantic_sha256"] == hashlib.sha256(semantic_json.encode("utf-8")).hexdigest()
     assert contract["codemagic_raw_sha256"] != hashlib.sha256(fixture.read_bytes()).hexdigest()
+
+
+def test_global_document_lock_rejects_codemagic_symlink_even_when_target_is_approved(tmp_path, monkeypatch):
+    codemagic = _copy_contract_tree(tmp_path, monkeypatch)
+    approved = tmp_path / "approved-codemagic.yaml"
+    approved.write_bytes(codemagic.read_bytes())
+    codemagic.unlink()
+    codemagic.symlink_to(approved)
+
+    errors = GUARDS.check_codemagic_release_publishers()
+
+    assert any("ordinary regular file" in error and "codemagic.yaml" in error for error in errors), errors
+
+
+def test_global_document_lock_rejects_fixture_symlink_even_when_target_is_approved(tmp_path, monkeypatch):
+    _copy_contract_tree(tmp_path, monkeypatch)
+    fixture = _fixture_path(tmp_path)
+    approved = tmp_path / "approved-contract.json"
+    approved.write_bytes(fixture.read_bytes())
+    fixture.unlink()
+    fixture.symlink_to(approved)
+
+    errors = GUARDS.check_codemagic_release_publishers()
+
+    assert any("ordinary regular file" in error and "v1.json" in error for error in errors), errors
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="platform does not support FIFOs")
+def test_global_document_lock_rejects_nonregular_codemagic_file(tmp_path, monkeypatch):
+    codemagic = _copy_contract_tree(tmp_path, monkeypatch)
+    codemagic.unlink()
+    os.mkfifo(codemagic)
+
+    errors = GUARDS.check_codemagic_release_publishers()
+
+    assert any("ordinary regular file" in error and "codemagic.yaml" in error for error in errors), errors
+
+
+@pytest.mark.parametrize(
+    ("target", "expected"),
+    (
+        ("codemagic", "codemagic.yaml must be valid UTF-8"),
+        ("fixture", "Codemagic workflow contract fixture must be valid UTF-8"),
+    ),
+)
+def test_global_document_lock_rejects_invalid_utf8_security_bound_inputs(tmp_path, monkeypatch, target, expected):
+    codemagic = _copy_contract_tree(tmp_path, monkeypatch)
+    path = codemagic if target == "codemagic" else _fixture_path(tmp_path)
+    path.write_bytes(b"\xff")
+
+    errors = GUARDS.check_codemagic_release_publishers()
+
+    assert any(expected in error for error in errors), errors
+
+
+def test_global_document_lock_uses_the_same_open_codemagic_bytes_after_path_replacement(tmp_path, monkeypatch):
+    codemagic = _copy_contract_tree(tmp_path, monkeypatch)
+    original_open = GUARDS.os.open
+    opens: list[Path] = []
+
+    def replace_path_after_open(path, flags, *args):
+        fd = original_open(path, flags, *args)
+        if Path(path) == codemagic:
+            opens.append(codemagic)
+            replacement = tmp_path / "replacement-codemagic.yaml"
+            replacement.write_text("workflows: {}\n", encoding="utf-8")
+            os.replace(replacement, codemagic)
+        return fd
+
+    monkeypatch.setattr(GUARDS.os, "open", replace_path_after_open)
+
+    assert GUARDS.check_codemagic_release_publishers() == []
+    assert opens == [codemagic]
+
+
+def _write_contract(tmp_path: Path, contract: object) -> None:
+    _fixture_path(tmp_path).write_text(json.dumps(contract, separators=(",", ":")), encoding="utf-8")
+
+
+def _fixture_contract(tmp_path: Path) -> dict[str, object]:
+    contract = json.loads(_fixture_path(tmp_path).read_text(encoding="utf-8"))
+    assert isinstance(contract, dict)
+    return contract
+
+
+def test_global_document_lock_rejects_duplicate_fixture_keys_at_every_object_level(tmp_path, monkeypatch):
+    _copy_contract_tree(tmp_path, monkeypatch)
+    contract = _fixture_contract(tmp_path)
+    raw_digest = contract["codemagic_raw_sha256"]
+    duplicate_top_level = json.dumps(contract, separators=(",", ":")).replace(
+        f'"codemagic_raw_sha256":"{raw_digest}"',
+        f'"codemagic_raw_sha256":"{raw_digest}","codemagic_raw_sha256":"{raw_digest}"',
+        1,
+    )
+    _fixture_path(tmp_path).write_text(duplicate_top_level, encoding="utf-8")
+    errors = GUARDS.check_codemagic_release_publishers()
+    assert any("duplicate key" in error for error in errors), errors
+
+    _copy_contract_tree(tmp_path, monkeypatch)
+    contract = _fixture_contract(tmp_path)
+    preview = contract["omi-desktop-swift-preview"]
+    assert isinstance(preview, dict)
+    preview_digest = preview["semantic_sha256"]
+    duplicate_nested = json.dumps(contract, separators=(",", ":")).replace(
+        f'"semantic_sha256":"{preview_digest}"',
+        f'"semantic_sha256":"{preview_digest}","semantic_sha256":"{preview_digest}"',
+        1,
+    )
+    _fixture_path(tmp_path).write_text(duplicate_nested, encoding="utf-8")
+    errors = GUARDS.check_codemagic_release_publishers()
+    assert any("duplicate key" in error for error in errors), errors
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected"),
+    (
+        (lambda contract: contract.update({"unexpected": "value"}), "top-level keys"),
+        (
+            lambda contract: contract["omi-desktop-swift-preview"].update({"unexpected": "value"}),
+            "omi-desktop-swift-preview keys",
+        ),
+        (lambda contract: contract.pop("codemagic_raw_sha256"), "top-level keys"),
+        (
+            lambda contract: contract["omi-desktop-swift-release"].pop("publication_script"),
+            "omi-desktop-swift-release keys",
+        ),
+        (
+            lambda contract: contract["omi-desktop-swift-preview"].update({"semantic_sha256": []}),
+            "semantic_sha256 must be a lowercase SHA-256 digest",
+        ),
+        (
+            lambda contract: contract["omi-desktop-swift-preview"].update({"semantic_sha256": True}),
+            "semantic_sha256 must be a lowercase SHA-256 digest",
+        ),
+        (
+            lambda contract: contract.update({"codemagic_raw_sha256": "A" * 64}),
+            "codemagic_raw_sha256 must be a lowercase SHA-256 digest",
+        ),
+        (
+            lambda contract: contract.update({"codemagic_raw_sha256": "a" * 63}),
+            "codemagic_raw_sha256 must be a lowercase SHA-256 digest",
+        ),
+        (
+            lambda contract: contract.update({"codemagic_raw_sha256": "g" * 64}),
+            "codemagic_raw_sha256 must be a lowercase SHA-256 digest",
+        ),
+        (
+            lambda contract: contract["omi-desktop-swift-release"].update({"publication_script": True}),
+            "publication_script must be an exact string",
+        ),
+        (
+            lambda contract: contract["omi-desktop-swift-release"].update({"publication_script_sha256": "0" * 64}),
+            "publication script digest does not match",
+        ),
+    ),
+    ids=(
+        "unknown-top-level",
+        "unknown-nested",
+        "missing-top-level",
+        "missing-nested",
+        "wrong-type",
+        "bool",
+        "uppercase-digest",
+        "short-digest",
+        "nonhex-digest",
+        "publication-script-bool",
+        "publication-script-digest-mismatch",
+    ),
+)
+def test_global_document_lock_rejects_untrusted_fixture_shape(tmp_path, monkeypatch, mutate, expected):
+    _copy_contract_tree(tmp_path, monkeypatch)
+    contract = _fixture_contract(tmp_path)
+    mutate(contract)
+    _write_contract(tmp_path, contract)
+
+    errors = GUARDS.check_codemagic_release_publishers()
+
+    assert any(expected in error for error in errors), errors
+
+
+def test_global_document_lock_rejects_malformed_fixture_json(tmp_path, monkeypatch):
+    _copy_contract_tree(tmp_path, monkeypatch)
+    _fixture_path(tmp_path).write_text('{"codemagic_raw_sha256":', encoding="utf-8")
+
+    errors = GUARDS.check_codemagic_release_publishers()
+
+    assert any("invalid JSON" in error for error in errors), errors
