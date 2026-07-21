@@ -3,10 +3,7 @@ from omi.stt import SttEngine, create_transcriber
 
 
 def test_parakeet_ws_url():
-    assert (
-        parakeet_ws_url("https://parakeet.example/")
-        == "wss://parakeet.example/v3/stream?sample_rate=16000"
-    )
+    assert parakeet_ws_url("https://parakeet.example/") == "wss://parakeet.example/v3/stream?sample_rate=16000"
 
 
 def test_whisper_requires_dep_or_runner():
