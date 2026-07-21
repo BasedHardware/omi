@@ -913,8 +913,9 @@ async def promote_qualified_beta(
     except ValueError:
         logger.info("qualified_beta_promotion tag=%s result=conflict", request.tag)
         raise HTTPException(status_code=409, detail="Qualified Beta promotion conflict") from None
-    if not receipt["idempotent"]:
-        await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
+    # A prior successful commit can lose its cache deletion. Every committed
+    # receipt, including an idempotent retry, repairs only this Beta projection.
+    await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
     logger.info(
         "qualified_beta_promotion tag=%s result=%s", request.tag, "idempotent" if receipt["idempotent"] else "promoted"
     )

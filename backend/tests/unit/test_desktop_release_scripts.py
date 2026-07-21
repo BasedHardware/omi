@@ -174,8 +174,10 @@ def _canonical_candidate_reservation_contract(workflow: str) -> bool:
     publish = workflow[start:end]
     reserve = publish.find("/v2/desktop/beta/candidates/reserve")
     create = publish.find('gh release create "$CM_TAG"')
+    guard = publish.rfind("set -euo pipefail", 0, reserve)
     return (
-        "set -euo pipefail" in publish
+        guard >= 0
+        and "set +e" not in publish[guard:reserve]
         and 'Authorization: Bearer ${BETA_PROMOTION_TOKEN}' in publish
         and '--data "{\\"tag\\":\\"${CM_TAG}\\"}"' in publish
         and reserve >= 0
@@ -198,8 +200,8 @@ def test_codemagic_reserves_the_exact_candidate_before_every_canonical_publish_a
     )
     assert not _canonical_candidate_reservation_contract(
         workflow.replace(
-            '          set -euo pipefail\n          test -n "${BETA_PROMOTION_TOKEN:-}"',
-            '          set +e\n          test -n "${BETA_PROMOTION_TOKEN:-}"',
+            '            set -euo pipefail\n            test -n "${BETA_PROMOTION_TOKEN:-}"',
+            '            set +e\n            test -n "${BETA_PROMOTION_TOKEN:-}"',
         )
     )
     assert not _canonical_candidate_reservation_contract(

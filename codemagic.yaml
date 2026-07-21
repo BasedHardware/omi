@@ -1123,6 +1123,9 @@ workflows:
         notify:
           success: true
           failure: false
+
+  # Retained only for local artifact diagnostics; it has no trigger or publisher.
+  macos-prod-legacy-no-publish:
     instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
@@ -1638,79 +1641,6 @@ workflows:
           fi
 
           echo "$SIGNATURE" > "$DIST_DIR/signature.txt"
-
-      - name: Create GitHub Release
-        script: |
-          # Get the recent commits for changelog
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${TAG_NAME}^ 2>/dev/null || echo "")
-
-          if [ -n "$PREVIOUS_TAG" ]; then
-            CHANGELOG=$(git log --pretty=format:"* %s" $PREVIOUS_TAG..$TAG_NAME | grep -v "Merge" | head -20)
-          else
-            CHANGELOG=$(git log --pretty=format:"* %s" -10 | grep -v "Merge")
-          fi
-
-          # Read the EdDSA signature for Sparkle
-          SIGNATURE=$(cat "dist/${VERSION}-${PLATFORM}/signature.txt" 2>/dev/null || echo "")
-
-          # Create release notes
-          cat > /tmp/release_notes.md <<EOF
-          ## What's Changed
-
-          $CHANGELOG
-
-          **Full Changelog**: https://github.com/BasedHardware/omi/compare/${PREVIOUS_TAG}...${TAG_NAME}
-
-          <!-- KEY_VALUE_START
-          changelog: macOS desktop app update | Bug fixes and improvements | Performance enhancements
-          mandatory: false
-          minimum_app_version: 1.0.70
-          isLive: true
-          edSignature: $SIGNATURE
-          KEY_VALUE_END -->
-          EOF
-
-          # Find the DMG file
-          DMG_FILE=$(find build/macos/dmg -name "omi.dmg" | head -1)
-
-          # Find the Sparkle ZIP and signature files
-          SPARKLE_ZIP="dist/${VERSION}-${PLATFORM}/Omi.zip"
-          SIGNATURE_FILE="dist/${VERSION}-${PLATFORM}/signature.txt"
-
-          # Create GitHub release with DMG, Sparkle ZIP, and signature attachments
-          if [ -f "$DMG_FILE" ]; then
-            # Create the release with the DMG first
-            gh release create "$TAG_NAME" \
-              --title "Omi Desktop v${BUILD_NAME} (${BUILD_NUMBER})" \
-              --notes-file /tmp/release_notes.md \
-              --repo BasedHardware/omi \
-              "$DMG_FILE"
-
-            # Upload Sparkle ZIP if it exists
-            if [ -f "$SPARKLE_ZIP" ]; then
-              echo "Uploading Sparkle ZIP: $SPARKLE_ZIP"
-              gh release upload "$TAG_NAME" \
-                "$SPARKLE_ZIP" \
-                --repo BasedHardware/omi \
-                --clobber
-            else
-              echo "WARNING: Sparkle ZIP not found at $SPARKLE_ZIP"
-            fi
-
-            # Upload signature file if it exists
-            if [ -f "$SIGNATURE_FILE" ]; then
-              echo "Uploading signature file: $SIGNATURE_FILE"
-              gh release upload "$TAG_NAME" \
-                "$SIGNATURE_FILE" \
-                --repo BasedHardware/omi \
-                --clobber
-            else
-              echo "WARNING: Signature file not found at $SIGNATURE_FILE"
-            fi
-          else
-            echo "ERROR: DMG file not found"
-            exit 1
-          fi
 
     artifacts:
       - dist/**/*
@@ -2828,18 +2758,6 @@ workflows:
             exit 0
           fi
           set -euo pipefail
-          test -n "${BETA_PROMOTION_TOKEN:-}" || {
-            echo "ERROR: BETA_PROMOTION_TOKEN is required to reserve a canonical candidate" >&2
-            exit 1
-          }
-          # The backend reservation is the authoritative Beta fence. It runs
-          # only after package, signature, notarization, and signed smoke pass,
-          # immediately before this workflow can create the immutable candidate.
-          curl --fail-with-body --silent --show-error \
-            --request POST "${OMI_PYTHON_API_URL%/}/v2/desktop/beta/candidates/reserve" \
-            --header "Authorization: Bearer ${BETA_PROMOTION_TOKEN}" \
-            --header 'Content-Type: application/json' \
-            --data "{\"tag\":\"${CM_TAG}\"}"
           CHANGELOG_MD=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format markdown || echo "- Bug fixes and improvements")
 
           # Build changelog as pipe-separated string for KEY_VALUE_START
@@ -2867,6 +2785,19 @@ workflows:
           if gh release view "$CM_TAG" --repo "$GITHUB_REPO" >/dev/null 2>&1; then
             echo "GitHub release candidate already exists; preserving immutable evidence for $CM_TAG"
           else
+            # The backend reservation is the authoritative Beta fence. It runs
+            # only after package, signature, notarization, and signed smoke pass,
+            # immediately before this workflow creates the immutable candidate.
+            set -euo pipefail
+            test -n "${BETA_PROMOTION_TOKEN:-}" || {
+              echo "ERROR: BETA_PROMOTION_TOKEN is required to reserve a canonical candidate" >&2
+              exit 1
+            }
+            curl --fail-with-body --silent --show-error \
+              --request POST "${OMI_PYTHON_API_URL%/}/v2/desktop/beta/candidates/reserve" \
+              --header "Authorization: Bearer ${BETA_PROMOTION_TOKEN}" \
+              --header 'Content-Type: application/json' \
+              --data "{\"tag\":\"${CM_TAG}\"}"
             gh release create "$CM_TAG" \
               --repo "$GITHUB_REPO" \
               --title "Omi Desktop v${VERSION} (candidate)" \

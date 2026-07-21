@@ -979,7 +979,7 @@ class TestDesktopUpdateAdminEndpoints:
         invalidate.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_qualified_beta_idempotent_receipt_does_not_invalidate_cache_without_a_commit(self):
+    async def test_qualified_beta_idempotent_receipt_repairs_only_the_beta_cache_after_the_transaction(self):
         manifest = {"release_id": "v0.12.93+12093-macos"}
         receipt = {"manifest": manifest, "pointer": {"generation": 7}, "idempotent": True}
         with (
@@ -997,7 +997,7 @@ class TestDesktopUpdateAdminEndpoints:
                 )
 
         assert response.status_code == 200
-        invalidate.assert_not_called()
+        invalidate.assert_called_once_with("desktop_update_pointer:macos:beta")
 
     @pytest.mark.asyncio
     async def test_registers_immutable_manifest(self):
