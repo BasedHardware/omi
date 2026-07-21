@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -15,11 +16,81 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+MAX_SECURITY_BOUND_FILE_BYTES = 10 * 1024 * 1024
 
 
-def _load_codemagic_with_duplicates(path: Path) -> tuple[dict[str, object], list[str], list[str]]:
+class SecurityBoundFileError(Exception):
+    """A release lock input was not read from one verified ordinary file."""
+
+
+def _read_security_bound_file(path: Path, description: str) -> bytes:
+    """Read one bounded ordinary file without following a replacement path.
+
+    The descriptor, not a later pathname lookup, is the source for every
+    consumer of this security-bound input. O_NOFOLLOW closes the symlink race
+    where available; the fallback compares lstat and fstat identity.
+    """
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    flags = os.O_RDONLY | nofollow | getattr(os, "O_NONBLOCK", 0)
+    before: os.stat_result | None = None
+    try:
+        if nofollow == 0:
+            before = os.lstat(path)
+            if stat.S_ISLNK(before.st_mode):
+                raise SecurityBoundFileError(
+                    f"{description} must be an ordinary regular file read without following links: {path}"
+                )
+        fd = os.open(path, flags)
+    except SecurityBoundFileError:
+        raise
+    except OSError as exc:
+        raise SecurityBoundFileError(
+            f"{description} must be an ordinary regular file read without following links: {path} ({exc})"
+        ) from exc
+
+    try:
+        opened = os.fstat(fd)
+        if not stat.S_ISREG(opened.st_mode):
+            raise SecurityBoundFileError(
+                f"{description} must be an ordinary regular file read without following links: {path}"
+            )
+        if before is not None and (before.st_dev, before.st_ino) != (opened.st_dev, opened.st_ino):
+            raise SecurityBoundFileError(f"{description} changed while opening its security-bound file: {path}")
+        if opened.st_size > MAX_SECURITY_BOUND_FILE_BYTES:
+            raise SecurityBoundFileError(f"{description} exceeds the security-bound read limit: {path}")
+
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = os.read(fd, min(64 * 1024, MAX_SECURITY_BOUND_FILE_BYTES + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > MAX_SECURITY_BOUND_FILE_BYTES:
+                raise SecurityBoundFileError(f"{description} exceeds the security-bound read limit: {path}")
+
+        completed = os.fstat(fd)
+        if (
+            (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns)
+            != (completed.st_dev, completed.st_ino, completed.st_size, completed.st_mtime_ns, completed.st_ctime_ns)
+        ):
+            raise SecurityBoundFileError(f"{description} changed while being read: {path}")
+        return b"".join(chunks)
+    except SecurityBoundFileError:
+        raise
+    except OSError as exc:
+        raise SecurityBoundFileError(f"{description} could not be read safely: {path} ({exc})") from exc
+    finally:
+        os.close(fd)
+
+
+def _load_codemagic_with_duplicates(raw_bytes: bytes) -> tuple[dict[str, object], list[str], list[str]]:
     """Load the executable YAML shape; comments never provide release authority."""
-    text = path.read_text(encoding="utf-8")
+    try:
+        text = raw_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return {}, [], [f"codemagic.yaml must be valid UTF-8: {exc}"]
     try:
         root = yaml.compose(text)
     except yaml.YAMLError as exc:
@@ -58,6 +129,18 @@ NORMAL_RELEASE_CREDENTIAL_GROUPS = {"desktop_secrets"}
 CODEMAGIC_RAW_SHA256_FIELD = "codemagic_raw_sha256"
 CODEMAGIC_SEMANTIC_SHA256_FIELD = "codemagic_semantic_sha256"
 _SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+WORKFLOW_CONTRACT_TOP_LEVEL_KEYS = frozenset(
+    {
+        CODEMAGIC_RAW_SHA256_FIELD,
+        CODEMAGIC_SEMANTIC_SHA256_FIELD,
+        CANONICAL_WORKFLOW,
+        PREVIEW_WORKFLOW,
+    }
+)
+WORKFLOW_CONTRACT_NESTED_KEYS = {
+    CANONICAL_WORKFLOW: frozenset({"semantic_sha256", "publication_script", "publication_script_sha256"}),
+    PREVIEW_WORKFLOW: frozenset({"semantic_sha256"}),
+}
 
 # This is deliberately supplemental.  The fixture below is the authority
 # boundary; these literals only make obvious new direct authority easy to spot.
@@ -79,13 +162,86 @@ def _sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
+class _DuplicateFixtureKeyError(ValueError):
+    pass
+
+
+def _reject_duplicate_fixture_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise _DuplicateFixtureKeyError(key)
+        result[key] = value
+    return result
+
+
+def _fixture_sha256_error(field: str) -> str:
+    return f"Codemagic workflow contract fixture {field} must be a lowercase SHA-256 digest"
+
+
+def _load_workflow_contract(raw_bytes: bytes) -> tuple[dict[str, object] | None, list[str]]:
+    """Parse the fixture as a closed, typed schema from its verified bytes."""
+    try:
+        text = raw_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return None, [f"Codemagic workflow contract fixture must be valid UTF-8: {exc}"]
+    try:
+        contract = json.loads(text, object_pairs_hook=_reject_duplicate_fixture_keys)
+    except _DuplicateFixtureKeyError as exc:
+        return None, [f"Codemagic workflow contract fixture has duplicate key: {exc}"]
+    except json.JSONDecodeError as exc:
+        return None, [f"Codemagic workflow contract fixture is invalid JSON: {exc}"]
+    if type(contract) is not dict:
+        return None, ["Codemagic workflow contract fixture must be a mapping"]
+    if set(contract) != WORKFLOW_CONTRACT_TOP_LEVEL_KEYS:
+        missing = sorted(WORKFLOW_CONTRACT_TOP_LEVEL_KEYS.difference(contract))
+        unknown = sorted(set(contract).difference(WORKFLOW_CONTRACT_TOP_LEVEL_KEYS))
+        return None, [
+            "Codemagic workflow contract fixture top-level keys must exactly match the approved schema "
+            f"(missing: {missing}; unknown: {unknown})"
+        ]
+
+    errors: list[str] = []
+    for field in (CODEMAGIC_RAW_SHA256_FIELD, CODEMAGIC_SEMANTIC_SHA256_FIELD):
+        value = contract[field]
+        if type(value) is not str or _SHA256_HEX.fullmatch(value) is None:
+            errors.append(_fixture_sha256_error(field))
+
+    for workflow_name, expected_keys in WORKFLOW_CONTRACT_NESTED_KEYS.items():
+        workflow = contract[workflow_name]
+        if type(workflow) is not dict:
+            errors.append(f"Codemagic workflow contract fixture {workflow_name} must be a mapping")
+            continue
+        if set(workflow) != expected_keys:
+            missing = sorted(expected_keys.difference(workflow))
+            unknown = sorted(set(workflow).difference(expected_keys))
+            errors.append(
+                f"Codemagic workflow contract fixture {workflow_name} keys must exactly match the approved schema "
+                f"(missing: {missing}; unknown: {unknown})"
+            )
+            continue
+        semantic_digest = workflow["semantic_sha256"]
+        if type(semantic_digest) is not str or _SHA256_HEX.fullmatch(semantic_digest) is None:
+            errors.append(_fixture_sha256_error(f"{workflow_name}.semantic_sha256"))
+        if workflow_name == CANONICAL_WORKFLOW:
+            publication_script = workflow["publication_script"]
+            publication_digest = workflow["publication_script_sha256"]
+            if type(publication_script) is not str:
+                errors.append("Codemagic workflow contract fixture publication_script must be an exact string")
+            if type(publication_digest) is not str or _SHA256_HEX.fullmatch(publication_digest) is None:
+                errors.append(_fixture_sha256_error("publication_script_sha256"))
+            elif type(publication_script) is str and _sha256_text(publication_script) != publication_digest:
+                errors.append("Codemagic workflow contract fixture publication script digest does not match publication_script")
+    return (contract if not errors else None), errors
+
+
 def _check_codemagic_document_digest(
     contract: dict[str, object], field: str, actual_digest: str, description: str
 ) -> list[str]:
     """Require a valid approved digest before narrower Codemagic checks run."""
     expected_digest = contract.get(field)
-    if not isinstance(expected_digest, str) or _SHA256_HEX.fullmatch(expected_digest) is None:
-        return [f"Codemagic workflow contract fixture {field} must be a lowercase SHA-256 digest"]
+    if type(expected_digest) is not str or _SHA256_HEX.fullmatch(expected_digest) is None:
+        return [_fixture_sha256_error(field)]
     if actual_digest != expected_digest:
         return [f"Codemagic entire document {description} does not match approved fixture {field}"]
     return []
@@ -139,18 +295,21 @@ def check_codemagic_release_publishers() -> list[str]:
     preview, and supplemental checks remain defense in depth.
     """
     codemagic_path = ROOT / "codemagic.yaml"
-    raw_digest = _sha256_bytes(codemagic_path.read_bytes())
-    document, duplicates, errors = _load_codemagic_with_duplicates(codemagic_path)
+    try:
+        codemagic_bytes = _read_security_bound_file(codemagic_path, "codemagic.yaml")
+    except SecurityBoundFileError as exc:
+        return [str(exc)]
+    raw_digest = _sha256_bytes(codemagic_bytes)
+    document, duplicates, errors = _load_codemagic_with_duplicates(codemagic_bytes)
     errors.extend(f"codemagic.yaml has duplicate key: {key}" for key in duplicates)
     workflow_contract = ROOT / WORKFLOW_CONTRACT_RELATIVE_PATH
-    if not workflow_contract.exists():
-        return [*errors, "Codemagic workflow contract fixture is missing"]
     try:
-        contract = json.loads(workflow_contract.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        return [*errors, f"Codemagic workflow contract fixture is invalid JSON: {exc}"]
-    if not isinstance(contract, dict):
-        return [*errors, "Codemagic workflow contract fixture must be a mapping"]
+        contract_bytes = _read_security_bound_file(workflow_contract, "Codemagic workflow contract fixture")
+    except SecurityBoundFileError as exc:
+        return [*errors, str(exc)]
+    contract, contract_errors = _load_workflow_contract(contract_bytes)
+    if contract is None:
+        return [*errors, *contract_errors]
 
     # These comparisons deliberately precede every workflow-specific check.
     # The raw digest includes comments, anchors, aliases, and source topology;
