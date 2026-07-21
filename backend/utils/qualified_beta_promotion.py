@@ -8,7 +8,8 @@ import io
 import json
 import os
 import re
-from typing import Any
+from collections.abc import Awaitable
+from typing import Any, NoReturn
 import zipfile
 import zlib
 
@@ -33,7 +34,7 @@ class QualifiedBetaAdmissionError(ValueError):
     """A candidate failed server-side Beta admission without mutable effects."""
 
 
-def _fail(message: str) -> None:
+def _fail(message: str) -> NoReturn:
     raise QualifiedBetaAdmissionError(message)
 
 
@@ -64,10 +65,20 @@ def _asset(release: dict[str, Any], name: str) -> dict[str, Any]:
     return matches[0]
 
 
+def _github_object(value: object, message: str) -> dict[str, Any]:
+    """Validate an untrusted GitHub JSON object before reading its fields."""
+    if not isinstance(value, dict) or any(not isinstance(key, str) for key in value):
+        _fail(message)
+    result: dict[str, Any] = {}
+    for key, item in value.items():
+        result[key] = item
+    return result
+
+
 def _asset_url(asset: dict[str, Any], tag: str, name: str) -> str:
     url = asset.get("browser_download_url") or asset.get("url")
     expected = f"https://github.com/{REPOSITORY}/releases/download/{tag}/{name}"
-    if url != expected:
+    if not isinstance(url, str) or url != expected:
         _fail("candidate asset identity does not match its immutable release")
     return url
 
@@ -163,7 +174,11 @@ def _evidence_from_artifact(payload: object) -> bytes:
 async def _read_github(source: Any, method: str, *args: Any) -> Any:
     """Keep every read dependency fail-closed before the admission transaction."""
     try:
-        return await getattr(source, method)(*args)
+        dependency = getattr(source, method)
+        result = dependency(*args)
+        if not isinstance(result, Awaitable):
+            _fail("candidate GitHub read dependency is unavailable")
+        return await result
     except QualifiedBetaAdmissionError:
         raise
     except Exception as exc:
@@ -210,25 +225,27 @@ class GitHubQualifiedBetaReader:
         if response.status_code != 200:
             _fail("candidate GitHub evidence is unavailable")
         value: object = response.json()
-        if not isinstance(value, dict):
-            _fail("candidate GitHub evidence is invalid")
-        return value
+        return _github_object(value, "candidate GitHub evidence is invalid")
 
     async def release(self, tag: str) -> dict[str, Any]:
         return await self._api(f"releases/tags/{tag}")
 
     async def tag_sha(self, tag: str) -> str:
         ref = await self._api(f"git/ref/tags/{tag}")
-        obj = ref.get("object")
-        if not isinstance(obj, dict) or obj.get("type") not in {"commit", "tag"} or not isinstance(obj.get("sha"), str):
+        obj = _github_object(ref.get("object"), "candidate tag is invalid")
+        object_type = obj.get("type")
+        object_sha = obj.get("sha")
+        if object_type not in {"commit", "tag"} or not isinstance(object_sha, str):
             _fail("candidate tag is invalid")
-        if obj["type"] == "commit":
-            return obj["sha"]
-        tag_object = await self._api(f"git/tags/{obj['sha']}")
-        nested = tag_object.get("object")
-        if not isinstance(nested, dict) or nested.get("type") != "commit" or not isinstance(nested.get("sha"), str):
+        if object_type == "commit":
+            return object_sha
+        tag_object = await self._api(f"git/tags/{object_sha}")
+        nested = _github_object(tag_object.get("object"), "candidate tag is invalid")
+        nested_type = nested.get("type")
+        nested_sha = nested.get("sha")
+        if nested_type != "commit" or not isinstance(nested_sha, str):
             _fail("candidate tag is invalid")
-        return nested["sha"]
+        return nested_sha
 
     async def is_merged_source(self, source_sha: str) -> bool:
         comparison = await self._api(f"compare/{source_sha}...main")
@@ -239,16 +256,16 @@ class GitHubQualifiedBetaReader:
             f"actions/workflows/{QUALIFICATION_WORKFLOW}/runs?event=workflow_dispatch&status=completed&per_page=100"
         )
         runs = response.get("workflow_runs")
-        if not isinstance(runs, list) or any(not isinstance(run, dict) for run in runs):
+        if not isinstance(runs, list):
             _fail("candidate qualification runs are invalid")
-        return runs
+        return [_github_object(run, "candidate qualification runs are invalid") for run in runs]
 
     async def artifacts(self, run_id: int) -> list[dict[str, Any]]:
         response = await self._api(f"actions/runs/{run_id}/artifacts?per_page=100")
         artifacts = response.get("artifacts")
-        if not isinstance(artifacts, list) or any(not isinstance(artifact, dict) for artifact in artifacts):
+        if not isinstance(artifacts, list):
             _fail("candidate qualification artifacts are invalid")
-        return artifacts
+        return [_github_object(artifact, "candidate qualification artifacts are invalid") for artifact in artifacts]
 
     async def download(self, url: str) -> bytes:
         response = await get_web_fetch_client().get(url, headers=self._headers())
@@ -273,7 +290,7 @@ async def build_qualified_beta_manifest(
     if not match:
         _fail("candidate tag is invalid")
     source = reader or GitHubQualifiedBetaReader()
-    release = await _read_github(source, "release", tag)
+    release = _github_object(await _read_github(source, "release", tag), "candidate GitHub evidence is invalid")
     if release.get("tag_name") != tag or release.get("draft") or release.get("prerelease"):
         _fail("candidate release is not an immutable published release")
     published_at = release.get("published_at")
@@ -298,6 +315,8 @@ async def build_qualified_beta_manifest(
         evidence_name: _asset_digest(evidence_asset),
     }
     source_sha = await _read_github(source, "tag_sha", tag)
+    if not isinstance(source_sha, str):
+        _fail("candidate source is not a trusted merged source")
     if not re.fullmatch(r"[0-9a-f]{40}", source_sha) or not await _read_github(source, "is_merged_source", source_sha):
         _fail("candidate source is not a trusted merged source")
     current_time = now or datetime.now(timezone.utc)
@@ -305,16 +324,18 @@ async def build_qualified_beta_manifest(
     artifact_id = _qualification_artifact_id(await _read_github(source, "artifacts", run_id), tag)
     trusted_evidence_bytes = _evidence_from_artifact(await _read_github(source, "download_artifact", artifact_id))
     try:
-        evidence = json.loads(trusted_evidence_bytes)
+        evidence: object = json.loads(trusted_evidence_bytes)
     except (TypeError, json.JSONDecodeError):
         _fail("candidate trusted qualification evidence is invalid")
-    if not isinstance(evidence, dict) or evidence.get("qualification_run_id") != run_id:
+    evidence = _github_object(evidence, "candidate trusted qualification evidence does not bind its run")
+    if evidence.get("qualification_run_id") != run_id:
         _fail("candidate trusted qualification evidence does not bind its run")
-    downloaded = {
-        "Omi.zip": await _read_github(source, "download", zip_url),
-        "omi.dmg": await _read_github(source, "download", dmg_url),
-        evidence_name: await _read_github(source, "download", evidence_url),
-    }
+    downloaded: dict[str, bytes] = {}
+    for name, url in (("Omi.zip", zip_url), ("omi.dmg", dmg_url), (evidence_name, evidence_url)):
+        content = await _read_github(source, "download", url)
+        if not isinstance(content, bytes):
+            _fail("candidate GitHub asset is unavailable")
+        downloaded[name] = content
     actual_digests = {name: "sha256:" + hashlib.sha256(content).hexdigest() for name, content in downloaded.items()}
     if actual_digests != expected_digests:
         _fail("candidate asset digest does not match GitHub release metadata")
