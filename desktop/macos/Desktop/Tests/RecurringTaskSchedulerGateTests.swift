@@ -11,24 +11,24 @@ import XCTest
 /// `agentStartedAt` (stamped by `investigateInBackground` before sending).
 @MainActor
 final class RecurringTaskSchedulerGateTests: XCTestCase {
-    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+  private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
-    func testNeverInvestigatedTaskIsInvestigated() {
-        XCTAssertTrue(RecurringTaskScheduler.shouldInvestigate(lastInvestigatedAt: nil, now: now))
-    }
+  func testNeverInvestigatedTaskIsInvestigated() {
+    XCTAssertTrue(RecurringTaskScheduler.shouldInvestigate(lastInvestigatedAt: nil, now: now))
+  }
 
-    func testRecentInvestigationIsSkipped() {
-        let oneMinuteAgo = now.addingTimeInterval(-60)
-        XCTAssertFalse(RecurringTaskScheduler.shouldInvestigate(lastInvestigatedAt: oneMinuteAgo, now: now))
-    }
+  func testRecentInvestigationIsSkipped() {
+    let oneMinuteAgo = now.addingTimeInterval(-60)
+    XCTAssertFalse(RecurringTaskScheduler.shouldInvestigate(lastInvestigatedAt: oneMinuteAgo, now: now))
+  }
 
-    func testJustUnderFourHoursIsStillSkipped() {
-        let underFourHours = now.addingTimeInterval(-4 * 3600 + 1)
-        XCTAssertFalse(RecurringTaskScheduler.shouldInvestigate(lastInvestigatedAt: underFourHours, now: now))
-    }
+  func testJustUnderFourHoursIsStillSkipped() {
+    let underFourHours = now.addingTimeInterval(-4 * 3600 + 1)
+    XCTAssertFalse(RecurringTaskScheduler.shouldInvestigate(lastInvestigatedAt: underFourHours, now: now))
+  }
 
-    func testOverFourHoursIsReinvestigated() {
-        let overFourHours = now.addingTimeInterval(-4 * 3600 - 1)
-        XCTAssertTrue(RecurringTaskScheduler.shouldInvestigate(lastInvestigatedAt: overFourHours, now: now))
-    }
+  func testOverFourHoursIsReinvestigated() {
+    let overFourHours = now.addingTimeInterval(-4 * 3600 - 1)
+    XCTAssertTrue(RecurringTaskScheduler.shouldInvestigate(lastInvestigatedAt: overFourHours, now: now))
+  }
 }
