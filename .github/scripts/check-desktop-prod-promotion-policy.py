@@ -9,6 +9,9 @@ REQUIRED = (
     "on:\n  workflow_dispatch:",
     "confirm:",
     "promote-stable",
+    "Require explicit Stable confirmation",
+    "require_stable_promotion_confirmation.py",
+    '--operation "$OPERATION" --confirm "$CONFIRM"',
     "operation:",
     "expected_current_release_id:",
     "expected_generation:",
@@ -57,6 +60,10 @@ def validate(text: str) -> list[str]:
             errors.append(f"stable pointer promotion must not contain backend deployment or bypass path: {forbidden}")
     if "\n  push:" in text or "\n  schedule:" in text or "\n  release:" in text:
         errors.append("stable pointer promotion must remain manual-only")
+    confirmation = text.find("Require explicit Stable confirmation")
+    for later_step in ("Checkout promotion controls", "Generate Omi Bot token", "Google Auth"):
+        if confirmation == -1 or confirmation > text.find(later_step):
+            errors.append(f"Stable confirmation must fail closed before {later_step}")
     order = [text.find(fragment) for fragment in ORDERED_STEPS]
     if -1 in order or order != sorted(order):
         errors.append("stable promotion must fetch and verify retained identity before pointer mutation, then bridge and verify")

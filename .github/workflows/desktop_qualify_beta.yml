@@ -21,7 +21,7 @@ concurrency:
 
 # This workflow deliberately runs only on the dedicated, trusted macOS runner.
 # Do not add pull_request or push triggers: the runner has Docker and a GitHub
-# App token that can request beta promotion after exact qualification passes.
+# App token for reading immutable candidate evidence.
 jobs:
   qualify:
     runs-on: [self-hosted, macos, omi-desktop-qualification]
@@ -143,16 +143,3 @@ jobs:
           name: desktop-qualification-evidence-${{ inputs.release_tag }}
           path: /tmp/desktop-beta-qualification/qualification-evidence.json
           if-no-files-found: error
-
-      - name: Request protected beta promotion
-        if: steps.candidate.outcome == 'success' && steps.qualify.outcome == 'success'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          gh workflow run desktop_promote_beta.yml --repo "$REPO" \
-            -f release_tag="$RELEASE_TAG" \
-            -f automatic=true \
-            -f qualification_run_id="$GITHUB_RUN_ID"

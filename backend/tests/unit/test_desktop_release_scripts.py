@@ -385,8 +385,9 @@ def test_stable_workflow_allows_retained_repoint_but_requires_current_beta_for_p
     assert 'ref: main' in workflow
 
 
-def test_qualification_run_is_bound_to_the_exact_main_dispatch_and_workflow():
-    for workflow in (PROMOTE_BETA_WORKFLOW.read_text(), PROMOTE_PROD_WORKFLOW.read_text()):
+def test_qualification_run_is_bound_to_the_exact_candidate_tag_and_workflow():
+    beta_workflow = PROMOTE_BETA_WORKFLOW.read_text()
+    for workflow in (beta_workflow, PROMOTE_PROD_WORKFLOW.read_text()):
         assert 'gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID"' in workflow
         assert 'jq -r .repository.full_name' in workflow
         assert 'jq -r .head_repository.full_name' in workflow
@@ -394,9 +395,13 @@ def test_qualification_run_is_bound_to_the_exact_main_dispatch_and_workflow():
         assert '= workflow_dispatch' in workflow
         assert 'jq -r .path' in workflow
         assert '= .github/workflows/desktop_qualify_beta.yml' in workflow
-        assert 'jq -r .head_branch' in workflow
-        assert '= main' in workflow
-        assert 'jq -r .head_sha' in workflow
+        assert 'test "$(jq -r .head_branch <<<"$run")" = "$RELEASE_TAG"' in workflow
+        assert 'test "$(jq -r .head_sha <<<"$run")" = "$TARGET_SHA"' in workflow
+
+    assert "workflow_run:" in beta_workflow
+    assert "github.event.workflow_run.conclusion == 'success'" in beta_workflow
+    assert 'test "$QUALIFICATION_RUN_ID" = "$QUALIFIER_EVENT_RUN_ID"' in beta_workflow
+    assert 'test "$QUALIFIER_EVENT_HEAD_SHA" = "$TARGET_SHA"' in beta_workflow
 
 
 def test_beta_promotion_controls_are_pinned_to_main_and_only_accept_lost_response_generation_plus_one():

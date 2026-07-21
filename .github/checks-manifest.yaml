@@ -36,7 +36,7 @@ checks:
     reason: "advisory desktop release evidence and drift report"
   - id: desktop-qualification-immutable-dispatch
     command: ["python3", ".github/scripts/test_desktop_qualification_dispatch.py"]
-    triggers: ["codemagic.yaml", ".github/workflows/desktop_qualify_beta.yml", ".github/scripts/test_desktop_qualification_dispatch.py", ".github/checks-manifest.yaml"]
+    triggers: ["codemagic.yaml", ".github/workflows/desktop_qualify_beta.yml", ".github/workflows/desktop_promote_beta.yml", ".github/scripts/test_desktop_qualification_dispatch.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "candidate qualification must dispatch and rebuild at one immutable candidate tag SHA"
   - id: desktop-changelog-io-tests
@@ -372,12 +372,12 @@ checks:
     reason: "#10163 mutation-tests production-family mobile API routing"
   - id: stable-pointer-precondition-cli
     command: ["python3", ".github/scripts/check_stable_pointer_precondition.py", "--help"]
-    triggers: [".github/workflows/desktop_promote_prod.yml", ".github/scripts/check_stable_pointer_precondition.py", ".github/scripts/verify_stable_appcast.py", ".github/scripts/test_stable_promotion_verifiers.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/desktop_promote_prod.yml", ".github/scripts/check_stable_pointer_precondition.py", ".github/scripts/require_stable_promotion_confirmation.py", ".github/scripts/verify_stable_appcast.py", ".github/scripts/test_stable_promotion_verifiers.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#10163 keeps Stable retry acknowledgement and appcast verification executable"
   - id: stable-pointer-precondition-fixtures
     command: ["python3", ".github/scripts/test_stable_promotion_verifiers.py"]
-    triggers: [".github/workflows/desktop_promote_prod.yml", ".github/scripts/check_stable_pointer_precondition.py", ".github/scripts/verify_stable_appcast.py", ".github/scripts/test_stable_promotion_verifiers.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/desktop_promote_prod.yml", ".github/scripts/check_stable_pointer_precondition.py", ".github/scripts/require_stable_promotion_confirmation.py", ".github/scripts/verify_stable_appcast.py", ".github/scripts/test_stable_promotion_verifiers.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#10163 mutation-sensitive Stable retry and default-channel feed fixtures"
   - id: stable-static-publication-fixtures

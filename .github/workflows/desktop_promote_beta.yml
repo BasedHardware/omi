@@ -1,6 +1,9 @@
 name: Promote Qualified Desktop Beta
 
 on:
+  workflow_run:
+    workflows: ["Qualify Desktop Beta Candidate"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       release_tag:
@@ -25,8 +28,23 @@ concurrency:
   group: desktop-beta-promotion
   cancel-in-progress: false
 
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || inputs.release_tag }}
+  QUALIFICATION_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.qualification_run_id }}
+  AUTOMATIC_REQUEST: ${{ github.event_name == 'workflow_run' || inputs.automatic }}
+  QUALIFIER_EVENT_RUN_ID: ${{ github.event.workflow_run.id }}
+  QUALIFIER_EVENT_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+
 jobs:
   promote:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'workflow_dispatch' &&
+      github.event.workflow_run.repository.full_name == github.repository &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.path == '.github/workflows/desktop_qualify_beta.yml' &&
+      github.event.workflow_run.name == 'Qualify Desktop Beta Candidate')
     environment: prod
     runs-on: ubuntu-latest
     steps:
@@ -44,10 +62,9 @@ jobs:
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
 
       - name: Validate automatic beta request
-        if: ${{ inputs.automatic }}
+        if: ${{ env.AUTOMATIC_REQUEST == 'true' }}
         env:
           AUTO_BETA_ENABLED: ${{ vars.DESKTOP_AUTO_BETA_ENABLED }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
           if [[ "${AUTO_BETA_ENABLED,,}" == "false" ]]; then
@@ -68,8 +85,8 @@ jobs:
       - name: Download immutable qualification evidence
         uses: actions/download-artifact@v7
         with:
-          name: desktop-qualification-evidence-${{ inputs.release_tag }}
-          run-id: ${{ inputs.qualification_run_id }}
+          name: desktop-qualification-evidence-${{ env.RELEASE_TAG }}
+          run-id: ${{ env.QUALIFICATION_RUN_ID }}
           github-token: ${{ github.token }}
           path: /tmp/desktop-qualification-evidence
 
@@ -77,9 +94,7 @@ jobs:
         id: candidate
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
           REPO: ${{ github.repository }}
-          QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
         run: |
           set -euo pipefail
           if ! printf '%s\n' "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+(\.[0-9]+)?\+[0-9]+-macos$'; then
@@ -96,9 +111,13 @@ jobs:
           test "$(jq -r .head_repository.full_name <<<"$run")" = "$REPO"
           test "$(jq -r .event <<<"$run")" = workflow_dispatch
           test "$(jq -r .path <<<"$run")" = .github/workflows/desktop_qualify_beta.yml
-          test "$(jq -r .head_branch <<<"$run")" = main
+          test "$(jq -r .head_branch <<<"$run")" = "$RELEASE_TAG"
           test "$(jq -r .name <<<"$run")" = 'Qualify Desktop Beta Candidate'
           test "$(jq -r .head_sha <<<"$run")" = "$TARGET_SHA"
+          if [[ "$GITHUB_EVENT_NAME" == workflow_run ]]; then
+            test "$QUALIFICATION_RUN_ID" = "$QUALIFIER_EVENT_RUN_ID"
+            test "$QUALIFIER_EVENT_HEAD_SHA" = "$TARGET_SHA"
+          fi
           gh release view "$RELEASE_TAG" --repo "$REPO" \
             --json tagName,body,isDraft,isPrerelease,publishedAt,assets \
             > /tmp/desktop-beta-release.json
@@ -154,7 +173,6 @@ jobs:
       - name: Advance explicit beta pointer
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
           ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
@@ -175,7 +193,6 @@ jobs:
       - name: Mark GitHub release live beta
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -264,4 +281,4 @@ jobs:
           ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
           curl -fsS -X POST -H "secret-key: $ADMIN_KEY" \
             https://api.omi.me/v2/desktop/clear-cache >/dev/null
-          echo "Promoted ${{ inputs.release_tag }} to qualified beta." >> "$GITHUB_STEP_SUMMARY"
+          echo "Promoted $RELEASE_TAG to qualified beta." >> "$GITHUB_STEP_SUMMARY"

@@ -20,6 +20,8 @@ def _load(name: str):
 
 APPCAST = _load("verify_stable_appcast.py")
 POINTER = _load("check_stable_pointer_precondition.py")
+CONFIRMATION = _load("require_stable_promotion_confirmation.py")
+POLICY = _load("check-desktop-prod-promotion-policy.py")
 
 
 def _fields(release_id: str, generation: int) -> dict:
@@ -27,6 +29,28 @@ def _fields(release_id: str, generation: int) -> dict:
 
 
 class StablePromotionVerifierTests(unittest.TestCase):
+    def test_confirmation_rejects_wrong_or_missing_token_for_every_stable_mutation(self):
+        for operation in ("promote", "repoint"):
+            for confirm in ("", "promote-beta"):
+                with self.subTest(operation=operation, confirm=confirm or "missing"):
+                    with self.assertRaisesRegex(ValueError, "confirm must be exactly"):
+                        CONFIRMATION.validate(operation=operation, confirm=confirm)
+            CONFIRMATION.validate(operation=operation, confirm="promote-stable")
+
+    def test_policy_requires_confirmation_before_authentication_or_mutation(self):
+        original = (ROOT / POLICY.WORKFLOW).read_text(encoding="utf-8")
+        mutations = (
+            original.replace("      - name: Require explicit Stable confirmation\n", "      - name: Confirmation moved too late\n", 1),
+            original.replace("--operation \"$OPERATION\" --confirm \"$CONFIRM\"", "--operation \"$OPERATION\" --confirm promote-beta", 1),
+        )
+        for changed in mutations:
+            with self.subTest(mutation=changed != original), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                workflow = root / POLICY.WORKFLOW
+                workflow.parent.mkdir(parents=True)
+                workflow.write_text(changed, encoding="utf-8")
+                self.assertTrue(POLICY.validate(workflow.read_text(encoding="utf-8")))
+
     def test_lost_response_retry_accepts_only_the_expected_next_generation(self):
         POINTER.verify(
             beta=_fields("target", 4),
