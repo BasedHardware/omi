@@ -9,6 +9,9 @@ import { desktopCapturer, screen } from 'electron'
 
 let cached: string | null = null
 let inflight: Promise<string | null> | null = null
+// Bumped whenever the display layout changes, so an in-flight fetch that resolves
+// after a change does not write its now-stale id into the cache.
+let generation = 0
 
 async function fetchPrimarySourceId(): Promise<string | null> {
   const sources = await desktopCapturer.getSources({
@@ -28,10 +31,13 @@ async function fetchPrimarySourceId(): Promise<string | null> {
 export async function getPrimarySourceId(): Promise<string | null> {
   if (cached) return cached
   if (!inflight) {
+    const gen = generation
     inflight = fetchPrimarySourceId()
       .then((id) => {
-        cached = id
-        return id
+        // Drop the result if the display layout changed mid-fetch; the id was
+        // enumerated against the old layout and may now be stale.
+        if (generation === gen) cached = id
+        return generation === gen ? id : null
       })
       .finally(() => {
         inflight = null
@@ -50,6 +56,7 @@ let invalidatorBound = false
 export function prewarmPrimarySourceId(): void {
   if (!invalidatorBound) {
     const invalidate = (): void => {
+      generation++
       cached = null
     }
     screen.on('display-added', invalidate)

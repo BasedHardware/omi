@@ -21,18 +21,25 @@ export function registerRewindHandlers(): void {
   ipcMain.handle('rewind:frames', async (_e, from: number, to: number) => listRewindFrames(from, to))
   ipcMain.handle('rewind:dayBounds', async () => rewindDayBounds())
   ipcMain.handle('rewind:search', async (_e, query: string) => {
-    const q = query.trim()
+    const q = typeof query === 'string' ? query.trim() : ''
     if (!q) return []
     return groupFrames(searchRewindFrames(q), q)
   })
   ipcMain.handle('rewind:frameImage', async (_e, imagePath: string) => {
+    if (typeof imagePath !== 'string' || !imagePath) return ''
     const root = resolve(rewindRoot())
     const full = resolve(imagePath)
     if (full !== root && !full.startsWith(root + sep)) {
       throw new Error('invalid frame path')
     }
-    const buf = await readFile(full)
-    return `data:image/jpeg;base64,${buf.toString('base64')}`
+    try {
+      const buf = await readFile(full)
+      return `data:image/jpeg;base64,${buf.toString('base64')}`
+    } catch {
+      // The frame JPEG may have been pruned by retention since the timeline
+      // loaded; return empty rather than rejecting the renderer's invoke.
+      return ''
+    }
   })
   ipcMain.handle('rewind:getSettings', async () => getRewindSettings())
   ipcMain.handle('rewind:setSettings', async (_e, next: RewindSettings) => {
@@ -41,7 +48,11 @@ export function registerRewindHandlers(): void {
     // Notify the renderer capture host so it can start/stop the stream and
     // re-pace immediately, without waiting for a re-mount or a poll.
     for (const w of BrowserWindow.getAllWindows()) {
-      w.webContents.send('rewind:settings', current)
+      // A just-closed overlay/toast window can still be listed transiently; its
+      // destroyed webContents would throw and abort the rest of the broadcast.
+      if (!w.isDestroyed() && !w.webContents.isDestroyed()) {
+        w.webContents.send('rewind:settings', current)
+      }
     }
     return current
   })

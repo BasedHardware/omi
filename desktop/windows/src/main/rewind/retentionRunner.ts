@@ -4,14 +4,20 @@ import { deleteRewindFramesOlderThan } from '../ipc/db'
 import { getRewindSettings } from './captureService'
 
 const PRUNE_INTERVAL_MS = 60 * 60 * 1000 // hourly
+const UNLINK_CONCURRENCY = 64
 
 export async function pruneRewindOnce(): Promise<number> {
   const { retentionDays } = getRewindSettings()
   const cutoff = retentionCutoff(Date.now(), retentionDays)
   const removed = deleteRewindFramesOlderThan(cutoff)
-  await Promise.all(
-    removed.map((f) => unlink(f.imagePath).catch(() => undefined)) // file may already be gone
-  )
+  // Delete the JPEGs in bounded-concurrency batches. The first prune after a long
+  // gap can return a very large set, and firing every unlink at once would spike
+  // main-process memory with that many pending promises.
+  for (let i = 0; i < removed.length; i += UNLINK_CONCURRENCY) {
+    await Promise.all(
+      removed.slice(i, i + UNLINK_CONCURRENCY).map((f) => unlink(f.imagePath).catch(() => undefined))
+    )
+  }
   return removed.length
 }
 

@@ -1,3 +1,4 @@
+import { app } from 'electron'
 import { getForegroundExePath, subscribeForegroundChange } from './nativeForeground'
 import { UsageAccumulator } from './usageAccumulator'
 import { addAppUsage, pruneAppUsage } from '../ipc/db'
@@ -18,6 +19,7 @@ let pollTimer: NodeJS.Timeout | null = null
 let flushTimer: NodeJS.Timeout | null = null
 let unsubscribeForeground: (() => void) | null = null
 let accumulator: UsageAccumulator | null = null
+let quitHookBound = false
 
 function flush(): void {
   if (!accumulator) return
@@ -49,6 +51,13 @@ export function startForegroundMonitor(): void {
   if (process.platform !== 'win32') return
   // Bound the table: drop apps not foregrounded within the retention window.
   pruneUsageNow()
+  // A normal app quit does not call stopForegroundMonitor (only disabling tracking
+  // in Settings does), so persist banked time and unhook the WinEvent hook on quit
+  // — otherwise up to FLUSH_MS of foreground time is lost and the hook leaks.
+  if (!quitHookBound) {
+    app.on('will-quit', () => stopForegroundMonitor())
+    quitHookBound = true
+  }
   accumulator = new UsageAccumulator(MAX_GAP_MS)
   const sample = (): void => {
     try {

@@ -1,5 +1,5 @@
 import { promises as fs, existsSync, type Dirent } from 'fs'
-import { basename, extname, join } from 'path'
+import { extname, join } from 'path'
 import { shell } from 'electron'
 import { resolveScanRoots } from './scanRoots'
 import { shouldVisitDir, shouldIndexFile, MAX_DEPTH } from './scanRules'
@@ -75,7 +75,7 @@ async function walkApps(root: string, out: IndexedFileRecord[]): Promise<void> {
           const st = await fs.stat(full)
           out.push({
             path: full,
-            filename: basename(ent.name, '.lnk'),
+            filename: ent.name.replace(/\.lnk$/i, ''),
             extension: 'lnk',
             fileType: 'application',
             sizeBytes: st.size,
