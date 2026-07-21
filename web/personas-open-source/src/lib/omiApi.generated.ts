@@ -1735,6 +1735,7 @@ export interface FolderMutationResponse {
 }
 
 export interface FullConversation {
+  apps_results?: Array<AppResult>;
   finished_at: string | null;
   id: string;
   language?: string | null;
@@ -2866,6 +2867,7 @@ export interface SimpleChatMessage {
 }
 
 export interface SimpleConversation {
+  apps_results?: Array<AppResult>;
   finished_at: string | null;
   id: string;
   language?: string | null;

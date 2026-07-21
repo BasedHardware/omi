@@ -301,15 +301,28 @@ class ShortcutSettings: ObservableObject {
   @Published var askOmiShortcut: KeyboardShortcut {
     didSet {
       persistShortcut(askOmiShortcut, forKey: Self.askOmiShortcutDefaultsKey)
-      NotificationCenter.default.post(name: Self.askOmiShortcutChanged, object: nil)
+      postAskOmiShortcutChangedIfNeeded()
     }
   }
 
   @Published var askOmiEnabled: Bool {
     didSet {
       UserDefaults.standard.set(askOmiEnabled, forKey: "shortcut_askOmiEnabled")
+      postAskOmiShortcutChangedIfNeeded()
+    }
+  }
+
+  /// Keeps the registration owner from observing a half-applied Ask Omi selection.
+  /// The individual published values still update for SwiftUI, but the hotkey owner
+  /// receives one notification only after both persisted values are final.
+  func updateAskOmiRegistration(enabled: Bool, shortcut: KeyboardShortcut) {
+    isUpdatingAskOmiRegistration = true
+    defer {
+      isUpdatingAskOmiRegistration = false
       NotificationCenter.default.post(name: Self.askOmiShortcutChanged, object: nil)
     }
+    askOmiShortcut = shortcut
+    askOmiEnabled = enabled
   }
 
   @Published var pttEnabled: Bool {
@@ -533,6 +546,13 @@ class ShortcutSettings: ObservableObject {
 
   var pttUsesCustomShortcut: Bool {
     !Self.pttPresets.contains(pttShortcut)
+  }
+
+  private var isUpdatingAskOmiRegistration = false
+
+  private func postAskOmiShortcutChangedIfNeeded() {
+    guard !isUpdatingAskOmiRegistration else { return }
+    NotificationCenter.default.post(name: Self.askOmiShortcutChanged, object: nil)
   }
 
   private static let askOmiShortcutDefaultsKey = "shortcut_askOmiKey"
