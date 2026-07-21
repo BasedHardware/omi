@@ -70,15 +70,13 @@ struct SecondBrainShell<Content: View>: View {
   // MARK: Top bar — window dots + working logo
 
   private var topBar: some View {
+    // No fake window dots — the real macOS title bar already has traffic lights.
     HStack(spacing: 6) {
-      ForEach(0..<3, id: \.self) { _ in
-        Circle().fill(sb.ink(.w14)).frame(width: 11, height: 11)
-      }
       Spacer()
       SBLogo(size: 15, spinning: isWorking, opacity: isWorking ? 1 : 0.85)
     }
     .padding(.horizontal, 22)
-    .padding(.top, 16)
+    .padding(.top, 14)
   }
 
   // MARK: Nav — tabs + ⌘K + settings + overflow

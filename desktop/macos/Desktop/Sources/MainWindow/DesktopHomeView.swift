@@ -49,6 +49,8 @@ struct DesktopHomeView: View {
   @State private var showSBPalette = false
   /// Second Brain settings landing (redesigned entry point) visibility.
   @State private var sbSettingsLanding = false
+  /// Native Second Brain Account & Billing page visibility.
+  @State private var sbAccountPage = false
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
   @State private var lastActivationRefresh = Date.distantPast
@@ -1095,8 +1097,9 @@ struct DesktopHomeView: View {
       }
       // Only auto-refresh stores when their pages are visible
       updateStoreActivity(for: newValue)
-      // Any navigation dismisses the Second Brain settings landing.
+      // Any navigation dismisses the Second Brain settings landing / account page.
       sbSettingsLanding = false
+      sbAccountPage = false
       // Shell tabs/overflow expose every page; enforce tier gating on navigation
       // (the legacy sidebar filtered these; redirect keeps locked pages unreachable).
       redirectIfPageHidden()
@@ -1161,7 +1164,17 @@ struct DesktopHomeView: View {
   /// Today is Second-Brain-native; other content pages render inside the shell frame
   /// (rebuilt in later phases). Settings never reaches here — it keeps its two-pane.
   @ViewBuilder private var secondBrainPageBody: some View {
-    if sbSettingsLanding {
+    if sbAccountPage {
+      SBAccountPage(
+        appState: appState,
+        onBack: {
+          sbAccountPage = false
+          sbSettingsLanding = true
+        },
+        onManagePlan: { openLegacyAccount() },
+        onDelete: { openLegacyAccount() }
+      )
+    } else if sbSettingsLanding {
       SBSettingsLanding(
         appState: appState,
         onOpenSection: { section in
@@ -1172,6 +1185,10 @@ struct DesktopHomeView: View {
         onNavigate: { idx in
           sbSettingsLanding = false
           selectedIndex = idx
+        },
+        onOpenAccount: {
+          sbSettingsLanding = false
+          sbAccountPage = true
         },
         onReplayOnboarding: {
           sbSettingsLanding = false
@@ -1222,6 +1239,13 @@ struct DesktopHomeView: View {
   private func askFromSecondBrain(_ query: String) {
     selectedIndex = SidebarNavItem.chat.rawValue
     Task { _ = await viewModelContainer.chatProvider.sendMainDraft(query) }
+  }
+
+  /// Billing management + account deletion use the tested legacy account flow.
+  private func openLegacyAccount() {
+    sbAccountPage = false
+    selectedSettingsSection = .account
+    selectedIndex = SidebarNavItem.settings.rawValue
   }
 }
 

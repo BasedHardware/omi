@@ -188,15 +188,18 @@ struct SBConversationDetail: View {
             .geist(size: 13.5).foregroundStyle(sb.ink(.w35)).padding(.vertical, 8)
         } else {
           ForEach(convo.transcriptSegments) { seg in
-            HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
               Text(speakerLabel(seg))
-                .geistMono(size: 12.5, weight: .medium)
-                .foregroundStyle(sb.ink(.w35))
-                .frame(width: 48, alignment: .leading)
-              Text(seg.text).geist(size: 14).foregroundStyle(sb.ink(.w7)).lineSpacing(2)
-              Spacer(minLength: 0)
+                .geistMono(size: 11, weight: .medium, tracking: 11 * 0.06)
+                .foregroundStyle(seg.isUser ? sb.ink(.w6) : sb.ink(.w4))
+              Text(seg.text)
+                .geist(size: 14.5)
+                .foregroundStyle(sb.ink(.w75))
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 7)
           }
         }
       }
@@ -220,9 +223,14 @@ struct SBConversationDetail: View {
   }
 
   private func speakerLabel(_ seg: TranscriptSegment) -> String {
-    if seg.isUser { return "YOU" }
-    if let s = seg.speaker, !s.isEmpty { return s.uppercased() }
-    return "SPK \(seg.speakerId)"
+    if seg.isUser { return "You" }
+    if let s = seg.speaker, !s.isEmpty {
+      // "SPEAKER_0" / "SPEAKER 0" → "Speaker 1"; a real name stays as-is.
+      let digits = s.filter(\.isNumber)
+      if !digits.isEmpty, let n = Int(digits) { return "Speaker \(n + 1)" }
+      return s.capitalized
+    }
+    return "Speaker \(seg.speakerId + 1)"
   }
 }
 

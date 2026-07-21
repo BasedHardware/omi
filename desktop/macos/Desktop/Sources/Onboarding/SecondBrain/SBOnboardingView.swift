@@ -72,7 +72,8 @@ struct SBOnboardingView: View {
         .onChange(of: model.showWidget) { _, _ in scrollDown(proxy) }
         .onChange(of: model.streamingText) { _, _ in scrollDown(proxy) }
       }
-      progressDots
+      // No progress dots — the user shouldn't count steps or feel a finish line.
+      Color.clear.frame(height: 14)
     }
     .background(
       RoundedRectangle(cornerRadius: 18, style: .continuous)

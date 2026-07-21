@@ -14,6 +14,7 @@ struct SBTodayContainer: View {
   var onAsk: (String) -> Void
 
   @State private var screenOn = AssistantSettings.shared.screenAnalysisEnabled
+  @State private var showLive = false
 
   private static let timeFormatter: DateFormatter = {
     let f = DateFormatter()
@@ -21,21 +22,35 @@ struct SBTodayContainer: View {
     return f
   }()
 
+  private var liveTitle: String {
+    appState.conversations.first { $0.status == .inProgress }?.title ?? "Recording"
+  }
+
   var body: some View {
-    SBTodayPage(
-      data: buildData(),
-      onToggleListening: { appState.toggleTranscription() },
-      onToggleScreen: {
-        let next = !AssistantSettings.shared.screenAnalysisEnabled
-        AssistantSettings.shared.screenAnalysisEnabled = next
-        screenOn = next
-      },
-      onAsk: onAsk,
-      onViewAllFollowUps: { onNavigate(SidebarNavItem.tasks.rawValue) },
-      onStartRecording: { if !appState.isTranscribing { appState.toggleTranscription() } }
-    )
+    Group {
+      if showLive {
+        SBLiveTranscript(title: liveTitle, onBack: { showLive = false })
+      } else {
+        SBTodayPage(
+          data: buildData(),
+          onToggleListening: { appState.toggleTranscription() },
+          onToggleScreen: {
+            let next = !AssistantSettings.shared.screenAnalysisEnabled
+            AssistantSettings.shared.screenAnalysisEnabled = next
+            screenOn = next
+          },
+          onAsk: onAsk,
+          onViewAllFollowUps: { onNavigate(SidebarNavItem.tasks.rawValue) },
+          onStartRecording: { if !appState.isTranscribing { appState.toggleTranscription() } },
+          onOpenLive: { showLive = true }
+        )
+      }
+    }
     .task { await tasks.loadDashboardTasks() }
     .onAppear { screenOn = AssistantSettings.shared.screenAnalysisEnabled }
+    .onChange(of: appState.isTranscribing) { _, transcribing in
+      if !transcribing { showLive = false }
+    }
     .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidChange)) { _ in
       screenOn = AssistantSettings.shared.screenAnalysisEnabled
     }

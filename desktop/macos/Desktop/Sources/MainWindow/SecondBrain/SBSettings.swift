@@ -13,6 +13,8 @@ struct SBSettingsLanding: View {
   var onOpenSection: (SettingsContentView.SettingsSection) -> Void
   /// Navigate to an overflow page by SidebarNavItem raw value.
   var onNavigate: (Int) -> Void
+  /// Open the native Account & Billing page.
+  var onOpenAccount: () -> Void
   var onReplayOnboarding: () -> Void
 
   private struct Row: Identifiable {
@@ -39,7 +41,7 @@ struct SBSettingsLanding: View {
   private var groups: [Group] {
     [
       Group(header: "YOU", rows: [
-        Row(name: "Account & Billing", sub: "signed in · Unlimited", value: "Pro") { onOpenSection(.account) },
+        Row(name: "Account & Billing", sub: "signed in · Unlimited", value: "Pro") { onOpenAccount() },
         Row(name: "Memory", sub: "everything I know — each fact links to its source", value: "›") {
           onNavigate(SidebarNavItem.memories.rawValue)
         },

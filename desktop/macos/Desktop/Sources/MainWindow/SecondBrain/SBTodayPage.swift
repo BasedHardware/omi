@@ -50,6 +50,7 @@ struct SBTodayPage: View {
   var onAsk: (String) -> Void
   var onViewAllFollowUps: () -> Void
   var onStartRecording: () -> Void
+  var onOpenLive: () -> Void
 
   var body: some View {
     ScrollView {
@@ -198,9 +199,11 @@ struct SBTodayPage: View {
           }
           Spacer()
           Text("live").geistMono(size: 12.5).foregroundStyle(sb.ink(.w4))
-          Text("now").geistMono(size: 12.5).foregroundStyle(sb.ink(.w25))
+          Text("›").geistMono(size: 12.5).foregroundStyle(sb.ink(.w25))
         }
         .padding(.vertical, 11)
+        .contentShape(Rectangle())
+        .onTapGesture { onOpenLive() }
         .overlay(alignment: .bottom) { Rectangle().fill(sb.ink(.w07)).frame(height: 1) }
       }
 
