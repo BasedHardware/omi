@@ -80,6 +80,22 @@ def _append_unreviewed_workflow(
     )
 
 
+def _restore_parent_preview_credential_shape(path: Path) -> None:
+    """Keep historical-parent regression probes independent of the temporary exception."""
+    _mutate(
+        path,
+        "        - desktop_preview_secrets\n        - appstore_credentials\n        - desktop_secrets\n",
+        "        - desktop_preview_secrets\n",
+    )
+    contract_path = _fixture_path(path.parent)
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    preview = yaml.safe_load(path.read_text(encoding="utf-8"))["workflows"]["omi-desktop-swift-preview"]
+    contract["omi-desktop-swift-preview"]["semantic_sha256"] = hashlib.sha256(
+        json.dumps(preview, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+    contract_path.write_text(json.dumps(contract, indent=2) + "\n", encoding="utf-8")
+
+
 def _fixture_path(root: Path) -> Path:
     return root / ".github/scripts/fixtures/codemagic_workflow_contract/v1.json"
 
@@ -174,15 +190,16 @@ def test_exact_contract_rejects_preview_alias_without_early_exit(tmp_path, monke
     assert any("preview publication script" in error for error in errors)
 
 
-def test_exact_contract_rejects_preview_release_credentials(tmp_path, monkeypatch):
-    errors = _errors_after(
-        tmp_path,
-        monkeypatch,
-        "        - desktop_preview_secrets\n",
-        "        - desktop_preview_secrets\n        - desktop_secrets\n",
+def test_preview_credential_exception_is_exact_and_rejects_group_drift(tmp_path, monkeypatch):
+    codemagic = _copy_contract_tree(tmp_path, monkeypatch)
+    _mutate(
+        codemagic,
+        "        - desktop_secrets\n      vars:\n        PREVIEW_MODE: \"true\"\n",
+        "        - desktop_secrets\n        - unexpected_preview_credentials\n      vars:\n        PREVIEW_MODE: \"true\"\n",
     )
-    _assert_contract_rejects(errors)
-    assert any("normal release credential" in error for error in errors)
+    _approve_current_codemagic_document(tmp_path)
+    errors = GUARDS.check_codemagic_release_publishers()
+    assert any("approved temporary credential groups" in error for error in errors), errors
 
 
 def test_exact_contract_rejects_another_workflow_importing_release_credentials(tmp_path, monkeypatch):
@@ -344,6 +361,7 @@ def test_normal_release_gcp_authority_guard_ignores_harmless_source_comments(tmp
 def test_reviewed_parent_accepts_unreviewed_publisher_bypasses_but_global_lock_rejects(tmp_path, monkeypatch, script):
     codemagic = _copy_contract_tree(tmp_path, monkeypatch)
     _append_unreviewed_workflow(codemagic, script)
+    _restore_parent_preview_credential_shape(codemagic)
 
     parent = _load_parent_guard(tmp_path)
     parent.ROOT = tmp_path
@@ -360,6 +378,7 @@ def test_reviewed_parent_accepts_unknown_credential_group_with_publisher_but_glo
         'X=gh; $X release create "$CM_TAG"',
         credential_group="unrecognized_release_authority",
     )
+    _restore_parent_preview_credential_shape(codemagic)
 
     parent = _load_parent_guard(tmp_path)
     parent.ROOT = tmp_path
@@ -402,6 +421,7 @@ def test_global_document_lock_rejects_every_codemagic_mutation(tmp_path, monkeyp
         _mutate(codemagic, "*desktop_signed_artifact_steps", "*renamed_desktop_signed_artifact_steps")
 
     parent = _load_parent_guard(tmp_path)
+    _restore_parent_preview_credential_shape(codemagic)
     parent.ROOT = tmp_path
     parent_errors = parent.check_codemagic_release_publishers()
     assert (parent_errors == []) is parent_accepts, parent_errors
@@ -422,8 +442,16 @@ def test_global_document_raw_lock_rejects_semantically_equivalent_yaml_rewrite(t
     )
 
     parent = _load_parent_guard(tmp_path)
+    _restore_parent_preview_credential_shape(codemagic)
     parent.ROOT = tmp_path
     assert parent.check_codemagic_release_publishers() == []
+
+    _mutate(
+        codemagic,
+        "        - desktop_preview_secrets\n",
+        "        - desktop_preview_secrets\n        - appstore_credentials\n        - desktop_secrets\n",
+    )
+    shutil.copy2(REPO_ROOT / ".github/scripts/fixtures/codemagic_workflow_contract/v1.json", _fixture_path(tmp_path))
 
     errors = GUARDS.check_codemagic_release_publishers()
     assert any("raw byte digest" in error for error in errors), errors
