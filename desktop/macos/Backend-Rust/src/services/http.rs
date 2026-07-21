@@ -1,11 +1,17 @@
 #![deny(dead_code, unreachable_pub)]
 //! Shared bounded HTTP client construction.
 //!
-//! Every outbound HTTP call must carry a connect timeout and a total-request
-//! deadline: a bare `reqwest::Client::new()` has neither, so one hung upstream
-//! (Pinecone, Sentry, Crisp, ...) pins its handler or background task until the
-//! platform kills it. Related failure class: FC-per-hop-timeout — bounded
-//! per-request budgets instead of per-call-site retail timeouts.
+//! A bare `reqwest::Client::new()` carries neither a connect timeout nor a
+//! total-request deadline, so one hung upstream (Pinecone, Sentry, Crisp, ...)
+//! pins its handler or background task until the platform kills it. This helper
+//! is the covered replacement for those call sites.
+//!
+//! New non-streaming outbound integrations should build their client here
+//! unless they have a documented streaming or route/request-level deadline —
+//! streaming paths (e.g. the Anthropic/Gemini chat transports) deliberately
+//! omit a client-level total timeout and bound their budget elsewhere. Related
+//! failure class: FC-per-hop-timeout — bounded per-request budgets instead of
+//! per-call-site retail timeouts.
 
 use std::time::Duration;
 
@@ -13,7 +19,7 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Build a client whose every request fails after `total_timeout` end to end
 /// (connect included, capped separately at 10s). Callers pick the budget that
-/// fits their upstream; none may opt out of having one.
+/// fits their upstream.
 pub(crate) fn bounded_client(total_timeout: Duration) -> reqwest::Client {
     reqwest::Client::builder()
         .connect_timeout(CONNECT_TIMEOUT)
