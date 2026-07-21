@@ -364,25 +364,6 @@ extension RealtimeHubController {
       ensureWarm()
       return
     }
-    // Managed (Omi-billed) sessions are gated by the monthly free-tier chat limit —
-    // realtime turns count as questions (desktop_chat_realtime), same pool as typed
-    // chat and PTT. The backend enforces this too (mint/relay return 402 past the
-    // cap for the free plan); this guard just avoids warming a session the server
-    // will refuse. Scope guards:
-    //   - free plan only: paid plans past their included allowance are served via
-    //     overage billing, never blocked (isLimitReached alone is plan-blind);
-    //   - never on the barge-in replacement path: the replacement's mint already
-    //     succeeded, and an early return here would strand
-    //     pendingBargeInProvider and fence all future warms.
-    // No popup here — warms are speculative; the user-facing popup comes from the
-    // PTT/chat gates on an actual action.
-    if auth.isEphemeral, pendingBargeInProvider == nil, !APIKeyService.isByokActive,
-      !FloatingBarUsageLimiter.shared.hasPaidPlan,
-      FloatingBarUsageLimiter.shared.isLimitReached
-    {
-      log("RealtimeHub: managed session warm blocked — monthly free-tier chat limit reached")
-      return
-    }
     let topLevelContext = voiceSessionContext(for: ownerScope)
     guard RealtimeWarmSessionStartPolicy.canStart(requirementIsResolved: topLevelContext.isResolved) else {
       log("RealtimeHub: session start deferred until voice context resolves")
