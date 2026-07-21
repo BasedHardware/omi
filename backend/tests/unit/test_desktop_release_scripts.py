@@ -367,9 +367,27 @@ def test_stable_workflow_allows_retained_repoint_but_requires_current_beta_for_p
         "if os.environ['OPERATION'] == 'promote' and text(beta, 'release_id') != os.environ['RELEASE_TAG']:" in workflow
     )
     assert "--allow-stable-channel" in workflow
-    assert "from xml.etree import ElementTree as ET" in workflow
-    assert "sparkle:channel" in workflow
+    assert "appcast.xml?identity=stable" in workflow
+    assert "shortVersionString" in workflow
+    assert "enclosure.get('url') == expected['zip_url']" in workflow
+    assert "edSignature') == expected['ed_signature']" in workflow
+    assert "sparkle:channel" not in workflow
+    assert 'Authorization: Bearer $ACCESS_TOKEN' in workflow
     assert 'ref: main' in workflow
+
+
+def test_qualification_run_is_bound_to_the_exact_main_dispatch_and_workflow():
+    for workflow in (PROMOTE_BETA_WORKFLOW.read_text(), PROMOTE_PROD_WORKFLOW.read_text()):
+        assert 'gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID"' in workflow
+        assert 'jq -r .repository.full_name' in workflow
+        assert 'jq -r .head_repository.full_name' in workflow
+        assert 'jq -r .event' in workflow
+        assert '= workflow_dispatch' in workflow
+        assert 'jq -r .path' in workflow
+        assert '= .github/workflows/desktop_qualify_beta.yml' in workflow
+        assert 'jq -r .head_branch' in workflow
+        assert '= main' in workflow
+        assert 'jq -r .head_sha' in workflow
 
 
 def test_beta_promotion_controls_are_pinned_to_main_and_only_accept_lost_response_generation_plus_one():

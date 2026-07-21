@@ -92,6 +92,10 @@ jobs:
           [[ "$QUALIFICATION_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'qualification_run_id must be numeric' >&2; exit 1; }
           run=$(gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID")
           test "$(jq -r .conclusion <<<"$run")" = success
+          test "$(jq -r .repository.full_name <<<"$run")" = "$REPO"
+          test "$(jq -r .head_repository.full_name <<<"$run")" = "$REPO"
+          test "$(jq -r .event <<<"$run")" = workflow_dispatch
+          test "$(jq -r .path <<<"$run")" = .github/workflows/desktop_qualify_beta.yml
           test "$(jq -r .head_branch <<<"$run")" = main
           test "$(jq -r .name <<<"$run")" = 'Qualify Desktop Beta Candidate'
           test "$(jq -r .head_sha <<<"$run")" = "$TARGET_SHA"

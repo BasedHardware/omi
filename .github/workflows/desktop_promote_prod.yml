@@ -91,6 +91,10 @@ jobs:
           [[ "$QUALIFICATION_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'qualification_run_id must be numeric' >&2; exit 1; }
           run=$(gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID")
           test "$(jq -r .conclusion <<<"$run")" = success
+          test "$(jq -r .repository.full_name <<<"$run")" = "$REPO"
+          test "$(jq -r .head_repository.full_name <<<"$run")" = "$REPO"
+          test "$(jq -r .event <<<"$run")" = workflow_dispatch
+          test "$(jq -r .path <<<"$run")" = .github/workflows/desktop_qualify_beta.yml
           test "$(jq -r .head_branch <<<"$run")" = main
           test "$(jq -r .name <<<"$run")" = 'Qualify Desktop Beta Candidate'
           test "$(jq -r .head_sha <<<"$run")" = "$TARGET_SHA"
@@ -275,15 +279,28 @@ jobs:
           for key in ('zip_sha256', 'dmg_sha256'):
               if manifest.get(key, {}).get('stringValue') != expected[key]: sys.exit(f'manifest {key} mismatch')
           PY
-          curl -fsS https://api.omi.me/v2/desktop/appcast.xml > /tmp/stable-appcast.xml
-          python3 - "$VERSION" /tmp/stable-appcast.xml <<'PY'
+          curl -fsS 'https://api.omi.me/v2/desktop/appcast.xml?identity=stable' > /tmp/stable-appcast.xml
+          python3 - /tmp/desktop-release-manifest.json /tmp/stable-appcast.xml <<'PY'
+          import json
           import sys
           from xml.etree import ElementTree as ET
-          version, path = sys.argv[1:]
+          manifest_path, path = sys.argv[1:]
+          expected = json.load(open(manifest_path))
           root = ET.parse(path).getroot()
           ns = {'sparkle': 'http://www.andymatuschak.org/xml-namespaces/sparkle'}
-          items = [item for item in root.findall('.//item') if item.findtext('sparkle:version', namespaces=ns) == version and item.findtext('sparkle:channel', namespaces=ns) == 'stable']
+          items = []
+          for item in root.findall('.//item'):
+              enclosure = item.find('enclosure')
+              if enclosure is None:
+                  continue
+              if (
+                  item.findtext('sparkle:version', namespaces=ns) == str(expected['build_number'])
+                  and item.findtext('sparkle:shortVersionString', namespaces=ns) == expected['version']
+                  and enclosure.get('url') == expected['zip_url']
+                  and enclosure.get('{http://www.andymatuschak.org/xml-namespaces/sparkle}edSignature') == expected['ed_signature']
+              ):
+                  items.append(item)
           if len(items) != 1:
-              raise SystemExit('stable appcast must contain exactly one requested stable item')
+              raise SystemExit('stable appcast must contain exactly one immutable requested item')
           PY
           echo "Stable pointer, exact manifest hashes, and appcast verified for $RELEASE_TAG." >> "$GITHUB_STEP_SUMMARY"
