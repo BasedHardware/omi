@@ -1,3 +1,0 @@
-{
-  "change": "Right-aligned the remaining Settings dropdowns (voice, voice model, AI provider, system audio, focus cooldown), made the daily summary time picker glide with a native stepper, and slimmed the voice speed value label"
-}

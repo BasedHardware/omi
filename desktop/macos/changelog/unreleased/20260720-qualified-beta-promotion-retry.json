@@ -1,3 +1,0 @@
-{
-  "change": "Improved macOS beta release retries so an already-qualified candidate can still be promoted if the original promotion request fails."
-}

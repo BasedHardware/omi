@@ -771,7 +771,8 @@ def test_full_backend_deploys_verify_the_serving_release_vector_after_promotion(
 
     manual = (root / '.github' / 'workflows' / 'gcp_backend.yml').read_text(encoding='utf-8')
     manual_verification = manual[manual.index('Verify serving backend release vector') :]
-    assert "github.event.inputs.deploy_targets == 'all'" in manual_verification
+    assert "github.event.inputs.deploy_targets" in manual_verification
+    assert "--cloud-run-only" in manual_verification
 
 
 def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_snapshot() -> None:
@@ -816,6 +817,58 @@ def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_sna
         evidence_upload = text[text.index('Upload ') :]
         assert 'cloud-run-pre-promotion-traffic-snapshot.json' in evidence_upload
         assert 'cloud-run-traffic-restore.json' in evidence_upload
+
+
+def test_production_cloud_run_only_boundary_is_early_and_uses_a_cleaned_up_dual_auth_vpc_probe():
+    """Static workflow contract: prod/all cannot reach a mutating deploy step."""
+    root = BACKEND_DIR.parent
+    workflow = (root / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8')
+    boundary = workflow.split('\n  validate-production-boundary:\n', 1)[1].split('\n  repair-traffic:\n', 1)[0]
+
+    assert 'transactional GKE/config rollback parity does not exist' in boundary
+    assert workflow.index('validate-production-boundary') < workflow.index('  firestore_readiness:')
+    assert 'needs: validate-production-boundary' in workflow
+    assert 'needs: [validate-production-boundary, firestore_readiness]' in workflow
+    for forbidden in ('actions/checkout', 'google-github-actions/auth', 'docker build', 'docker push', 'gcloud run'):
+        assert forbidden not in boundary
+
+    resolve = workflow.index('Resolve transcription candidate URL')
+    probe = workflow.index('Gate internal production candidate on known audio from Cloud Run VPC')
+    snapshot = workflow.index('Capture Cloud Run pre-promotion traffic snapshot')
+    traffic = workflow.index('Shift Cloud Run traffic to validated revisions')
+    verify = workflow.index('Verify serving backend release vector')
+    restore = workflow.index('Restore Cloud Run traffic snapshot after failed promotion')
+    assert resolve < probe < snapshot < traffic < verify < restore
+    assert '--tag={0}' in workflow
+    assert '--candidate-url "${{ steps.transcription-candidate.outputs.url }}"' in workflow
+    assert '--firebase-token-file "$RUNNER_TEMP/firebase-production-candidate-token"' in workflow
+    assert 'CLOUD_RUN_ONLY="--cloud-run-only"' in workflow
+
+    probe_script = (root / 'backend/scripts/probe-transcription-candidate-from-cloud-run.sh').read_text(
+        encoding='utf-8'
+    )
+    for required in (
+        '--service-account="$SERVICE_ACCOUNT"',
+        '--network="$NETWORK"',
+        '--subnet="$SUBNET"',
+        '--vpc-egress=all-traffic',
+        'compute networks subnets describe "$SUBNET"',
+        'privateIpGoogleAccess',
+        '--role=roles/run.invoker',
+        'trap cleanup EXIT',
+        'gcloud run jobs delete',
+        'remove-iam-policy-binding backend',
+        'service-accounts delete',
+    ):
+        assert required in probe_script
+
+    vpc_runner = (root / 'backend/scripts/run_vpc_transcription_candidate_probe.py').read_text(encoding='utf-8')
+    probe_source = (root / 'backend/scripts/transcription_capability_probe.py').read_text(encoding='utf-8')
+    assert 'X-Serverless-Authorization' in probe_source
+    assert 'FIREBASE_PROBE_TOKEN' in vpc_runner
+    assert 'identity_token = _identity_token(identity_audience)' in vpc_runner
+    assert 'api_url=candidate_url' in vpc_runner
+    assert 'cloud_run_identity_token=identity_token' in vpc_runner
 
 
 def test_backend_listen_rollout_wait_can_cover_a_real_rollout():

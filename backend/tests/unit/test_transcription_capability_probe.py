@@ -77,6 +77,7 @@ def _config(module, tmp_path, **overrides):
         'manifest_path': manifest_path,
         'api_url': 'https://candidate.invalid',
         'bearer_token': 'probe-token-that-must-not-leak',
+        'cloud_run_identity_token': None,
         'timeout_seconds': 3.0,
     }
     values.update(overrides)
@@ -118,6 +119,7 @@ def test_full_route_posts_versioned_fixture_and_validates_exact_candidate_contra
     assert request.get_method() == 'POST'
     headers = _headers(request)
     assert headers['authorization'] == 'Bearer probe-token-that-must-not-leak'
+    assert 'x-serverless-authorization' not in headers
     assert headers['content-type'].startswith('multipart/form-data; boundary=')
     assert b'name="files"; filename="transcription-release-probe.wav"' in request.data
     assert b'Content-Disposition: form-data; name="language"\r\n\r\nen\r\n' in request.data
@@ -127,6 +129,20 @@ def test_full_route_posts_versioned_fixture_and_validates_exact_candidate_contra
     encoded = json.dumps(report)
     for sensitive in ('fixture-audio-secret', 'probe-token-that-must-not-leak', 'Hello Omi', 'candidate.invalid'):
         assert sensitive not in encoded
+
+
+def test_full_route_uses_cloud_run_identity_and_firebase_auth_together(monkeypatch, tmp_path):
+    module = _load_module()
+    fake_urlopen, calls = _urlopen_responses(_Response(200, b'{"outcome":"success","transcript":"hello omi"}'))
+    monkeypatch.setattr(module.urllib.request, 'urlopen', fake_urlopen)
+
+    report = module.build_report(_config(module, tmp_path, cloud_run_identity_token='serverless-token'))
+
+    assert report['status'] == 'PASS'
+    headers = _headers(calls[0][0])
+    assert headers['authorization'] == 'Bearer probe-token-that-must-not-leak'
+    assert headers['x-serverless-authorization'] == 'Bearer serverless-token'
+    assert 'serverless-token' not in json.dumps(report)
 
 
 def test_full_route_rejects_success_with_incorrect_transcript(monkeypatch, tmp_path):
@@ -156,6 +172,7 @@ def test_fixture_digest_mismatch_fails_closed_without_calling_candidate(monkeypa
             manifest_path=manifest_path,
             api_url='https://candidate.invalid',
             bearer_token='probe-token-that-must-not-leak',
+            cloud_run_identity_token=None,
             timeout_seconds=3.0,
         )
     )

@@ -698,23 +698,81 @@ import XCTest
     XCTAssertTrue(windowSource.contains("      if state.showingAIConversation {\n        return\n      }"))
   }
 
-  func testSpacesTransitionDoesNotReplayNotchRevealPop() throws {
-    let windowSource = try floatingControlBarWindowSource()
-
-    guard let start = windowSource.range(of: "private func performSpacesTransitionGrowIn()"),
-      let end = windowSource.range(of: "private func defaultFrameForCurrentState()")
-    else {
-      return XCTFail("Expected performSpacesTransitionGrowIn section")
+  func testSpacesTransitionPreservesUserResizedNotchChatFrame() {
+    // Force the physical-notch path on any test host so this exercises the
+    // exact branch where the regression previously recomputed chat width.
+    let previousForceNoNotch = getenv("OMI_FORCE_NO_NOTCH").map { String(cString: $0) }
+    let previousForceNotch = getenv("OMI_FORCE_NOTCH").map { String(cString: $0) }
+    unsetenv("OMI_FORCE_NO_NOTCH")
+    setenv("OMI_FORCE_NOTCH", "1", 1)
+    defer {
+      if let previousForceNoNotch {
+        setenv("OMI_FORCE_NO_NOTCH", previousForceNoNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NO_NOTCH")
+      }
+      if let previousForceNotch {
+        setenv("OMI_FORCE_NOTCH", previousForceNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NOTCH")
+      }
     }
-    let body = String(windowSource[start.lowerBound..<end.lowerBound])
 
-    // Switching Spaces must NOT replay the reveal "pop": animateGrowOutFromNotch
-    // resets notchRevealProgress to 0.001 and re-zooms the island. The panel
-    // already lives on every Space (.canJoinAllSpaces), so a Space switch should
-    // keep it fully revealed and only re-assert the frame if it drifted.
-    XCTAssertFalse(body.contains("animateGrowOutFromNotch"))
-    XCTAssertTrue(body.contains("state.notchRevealProgress = 1"))
-    XCTAssertTrue(body.contains("guard !Self.framesEquivalent(frame, targetFrame) else { return }"))
+    let window = FloatingControlBarWindow(
+      contentRect: .zero,
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false
+    )
+    defer { window.close() }
+
+    window.makeKeyAndOrderFront(nil)
+    window.state.present(.mainResponse)
+    let userResizedFrame = NSRect(x: 240, y: 420, width: 640, height: 520)
+    window.setFrame(userResizedFrame, display: false)
+    window.state.notchRevealProgress = 0.25
+
+    window.performSpacesTransitionGrowIn()
+
+    XCTAssertEqual(window.state.notchRevealProgress, 1)
+    XCTAssertEqual(window.frame, userResizedFrame)
+  }
+
+  func testSpacesTransitionRestoresIdleNotchFrameAfterDrift() {
+    let previousForceNoNotch = getenv("OMI_FORCE_NO_NOTCH").map { String(cString: $0) }
+    let previousForceNotch = getenv("OMI_FORCE_NOTCH").map { String(cString: $0) }
+    unsetenv("OMI_FORCE_NO_NOTCH")
+    setenv("OMI_FORCE_NOTCH", "1", 1)
+    defer {
+      if let previousForceNoNotch {
+        setenv("OMI_FORCE_NO_NOTCH", previousForceNoNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NO_NOTCH")
+      }
+      if let previousForceNotch {
+        setenv("OMI_FORCE_NOTCH", previousForceNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NOTCH")
+      }
+    }
+
+    let window = FloatingControlBarWindow(
+      contentRect: .zero,
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false
+    )
+    defer { window.close() }
+
+    window.makeKeyAndOrderFront(nil)
+    window.performSpacesTransitionGrowIn()
+    let expectedFrame = window.frame
+    let driftedFrame = expectedFrame.offsetBy(dx: 37, dy: -29)
+    window.setFrame(driftedFrame, display: false)
+
+    window.performSpacesTransitionGrowIn()
+
+    XCTAssertEqual(window.frame, expectedFrame)
   }
 
   func testAgentSwitcherResizeMatchesContentMorphDurations() throws {
@@ -1533,9 +1591,9 @@ import XCTest
     let providerSource = try chatProviderSource()
 
     XCTAssertTrue(chatBubbleSource.contains("var compact: Bool = false"))
-    XCTAssertTrue(chatBubbleSource.contains("var expandRunning: Bool = true"))
-    XCTAssertTrue(chatBubbleSource.contains("State(initialValue: expandRunning && Self.hasRunningTool(in: calls))"))
-    XCTAssertTrue(chatBubbleSource.contains(".onChange(of: hasRunningTool)"))
+    XCTAssertTrue(chatBubbleSource.contains("enum ToolCallsGroupExpansionPolicy"))
+    XCTAssertTrue(chatBubbleSource.contains("static func initiallyExpanded() -> Bool {\n    false"))
+    XCTAssertTrue(chatBubbleSource.contains("State(initialValue: ToolCallsGroupExpansionPolicy.initiallyExpanded())"))
     XCTAssertTrue(chatBubbleSource.contains("private var header: some View"))
     XCTAssertTrue(chatBubbleSource.contains("private var expandedToolCalls: some View"))
     XCTAssertTrue(chatBubbleSource.contains("VStack(alignment: .leading, spacing: compact ? 0 : 6)"))
@@ -1589,8 +1647,12 @@ import XCTest
     XCTAssertTrue(source.contains("let breadcrumb = Breadcrumb(level: .info, category: \"lifecycle\")"))
     XCTAssertTrue(source.contains("breadcrumb.message = \"App Terminating\""))
     XCTAssertFalse(source.contains("SentrySDK.capture(message: \"App Terminating\")"))
+    XCTAssertFalse(
+      loggerSource.contains("breadcrumb.message = message"),
+      "free-form local log messages must not be sent as Sentry breadcrumbs")
     XCTAssertTrue(
-      loggerSource.contains("if !isDevBuild {\n    let breadcrumb = Breadcrumb(level: .info, category: \"app\")"))
+      loggerSource.contains("writeIncidentDiagnosticsAttachment("),
+      "actionable errors must send bounded redacted diagnostics instead")
     XCTAssertTrue(loggerSource.contains("guard !isDevBuild else { return }"))
   }
 

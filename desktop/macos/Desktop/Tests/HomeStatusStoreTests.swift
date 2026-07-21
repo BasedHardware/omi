@@ -418,6 +418,44 @@ final class HomeStatusStoreTests: XCTestCase {
     XCTAssertEqual(connectorStore.snapshot(for: email).primaryText, "12 emails")
   }
 
+  func testKnowledgeCountChangeRefreshesCountsDuringActivationCooldown() async {
+    let testDefaults = makeDefaults()
+    let defaults = testDefaults.defaults
+    defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
+
+    var knowledgeLoads = 0
+    let store = HomeStatusStore(
+      connectorStatusStore: ImportConnectorStatusStore(defaults: defaults),
+      defaults: defaults,
+      loader: HomeStatusLoader(
+        refreshConnectorStatuses: {},
+        loadScreenshotCount: { nil },
+        loadKnowledgeCounts: { _ in
+          knowledgeLoads += 1
+          return HomeKnowledgeCounts(
+            conversations: nil,
+            memories: knowledgeLoads,
+            tasks: knowledgeLoads,
+            hasOmiDeviceConversations: nil
+          )
+        },
+        loadMemoryExportStatuses: { [:] }
+      )
+    )
+
+    await store.refreshIfNeeded(now: Date(timeIntervalSince1970: 40_000))
+    await Task.detached {
+      NotificationCenter.default.post(name: .homeKnowledgeCountsDidChange, object: nil)
+    }.value
+    for _ in 0..<100 where knowledgeLoads < 2 {
+      await Task.yield()
+    }
+
+    XCTAssertEqual(knowledgeLoads, 2)
+    XCTAssertEqual(store.memoryCount, 2)
+    XCTAssertEqual(store.taskCount, 2)
+  }
+
   private func makeDefaults() -> (defaults: UserDefaults, suiteName: String) {
     let suiteName = "HomeStatusStoreTests.\(UUID().uuidString)"
     return (UserDefaults(suiteName: suiteName)!, suiteName)

@@ -299,8 +299,6 @@ struct SettingsContentView: View {
   @AppStorage("chatBridgeMode") var chatBridgeMode: String = "piMono"
   @AppStorage("realtimeOmniProvider") var realtimeOmniProvider: String = RealtimeOmniProvider.auto.rawValue
   @AppStorage("askModeEnabled") var askModeEnabled = false
-  @AppStorage("claudeMdEnabled") var claudeMdEnabled = true
-  @AppStorage("projectClaudeMdEnabled") var projectClaudeMdEnabled = true
   @AppStorage("aiChatWorkingDirectory") var aiChatWorkingDirectory: String = ""
   @State var aiChatClaudeMdContent: String?
   @State var aiChatClaudeMdPath: String?
@@ -317,6 +315,7 @@ struct SettingsContentView: View {
 
   // Dev Mode setting
   @AppStorage("devModeEnabled") var devModeEnabled = false
+  @AppStorage(BetaEnhancedDiagnosticsConfiguration.defaultsKey) var betaEnhancedDiagnosticsEnabled = true
 
   // Browser Extension settings
   @AppStorage("playwrightUseExtension") var playwrightUseExtension = true

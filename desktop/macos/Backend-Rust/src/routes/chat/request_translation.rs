@@ -12,6 +12,42 @@ pub(super) const DEFAULT_MAX_TOKENS: u64 = 8192;
 
 /// Maximum allowed max_tokens to prevent abuse.
 pub(super) const MAX_TOKENS_CAP: u64 = 16384;
+
+/// Floor for max_tokens on adaptive-thinking turns: `max_tokens` caps the
+/// *total* output (thinking + answer), so a quality turn needs headroom for
+/// the reasoning tokens or a hard question ends mid-answer.
+pub(super) const THINKING_MIN_MAX_TOKENS: u64 = 16384;
+
+/// Cap for adaptive-thinking turns. Higher than MAX_TOKENS_CAP because the
+/// thinking budget shares the same ceiling; only streamed requests can use it
+/// (non-streaming stays at MAX_TOKENS_CAP to avoid HTTP timeouts).
+pub(super) const THINKING_MAX_TOKENS_CAP: u64 = 32768;
+
+/// Per-turn reasoning-effort directive resolved from the
+/// `x-omi-reasoning-effort` header (authoritative, written by the desktop app
+/// per turn) or the OpenAI-compatible `reasoning_effort` body field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(super) enum ReasoningEffort {
+    /// No directive — keep the historical behavior (no thinking field).
+    #[default]
+    Unspecified,
+    /// Speed lane (PTT/voice): no thinking, low output effort.
+    Fast,
+    /// Quality lane (typed chat): adaptive thinking — the model itself decides
+    /// how much reasoning each question deserves, including "think longer"
+    /// requests embedded in the prompt.
+    Adaptive,
+}
+
+impl ReasoningEffort {
+    pub(super) fn parse(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "fast" | "none" | "off" | "minimal" | "low" => Some(Self::Fast),
+            "adaptive" | "quality" | "auto" | "medium" | "high" => Some(Self::Adaptive),
+            _ => None,
+        }
+    }
+}
 /// Anthropic server-side web search tool type (same version the Python
 /// backend's agentic chat uses). Executed entirely upstream by Anthropic —
 /// the OpenAI-side client never sees or executes it.
@@ -95,13 +131,19 @@ pub(super) fn translate_request(
     req: &ChatCompletionRequest,
     upstream_model: &str,
 ) -> Result<AnthropicRequest, String> {
-    translate_request_inner(req, upstream_model, web_search_enabled())
+    translate_request_inner(
+        req,
+        upstream_model,
+        web_search_enabled(),
+        ReasoningEffort::Unspecified,
+    )
 }
 
 pub(super) fn translate_request_inner(
     req: &ChatCompletionRequest,
     upstream_model: &str,
     enable_web_search: bool,
+    reasoning_effort: ReasoningEffort,
 ) -> Result<AnthropicRequest, String> {
     let policy = retrieval_policy(&req.messages);
     let mut system_prompt: Option<String> = None;
@@ -252,11 +294,43 @@ pub(super) fn translate_request_inner(
         "chat_retrieval_policy"
     );
 
-    let max_tokens = req
-        .max_completion_tokens
-        .or(req.max_tokens)
-        .unwrap_or(DEFAULT_MAX_TOKENS)
-        .min(MAX_TOKENS_CAP);
+    // Effort → Anthropic knobs. Haiku (router/synthesis) never thinks — the
+    // effort/output_config surface isn't supported there.
+    //
+    // Tool-loop continuations must NOT think: a continuation request replays
+    // the assistant tool_use turn, but the OpenAI-format history cannot carry
+    // Anthropic thinking/signature blocks, and a thinking-enabled request
+    // whose assistant tool_use turn lacks its thinking block is rejected
+    // upstream. With thinking omitted the same history is valid, so thinking
+    // applies only to the first model call of a user turn (the request whose
+    // final non-system message is the user's).
+    let model_supports_effort = !upstream_model.starts_with("claude-haiku");
+    let tail_is_user = req
+        .messages
+        .iter()
+        .rev()
+        .find(|m| m.role != "system" && m.role != "developer")
+        .is_some_and(|m| m.role == "user");
+    let use_adaptive_thinking =
+        reasoning_effort == ReasoningEffort::Adaptive && model_supports_effort && tail_is_user;
+
+    let max_tokens = if use_adaptive_thinking {
+        let cap = if req.stream {
+            THINKING_MAX_TOKENS_CAP
+        } else {
+            MAX_TOKENS_CAP
+        };
+        req.max_completion_tokens
+            .or(req.max_tokens)
+            .unwrap_or(DEFAULT_MAX_TOKENS)
+            .max(THINKING_MIN_MAX_TOKENS)
+            .min(cap)
+    } else {
+        req.max_completion_tokens
+            .or(req.max_tokens)
+            .unwrap_or(DEFAULT_MAX_TOKENS)
+            .min(MAX_TOKENS_CAP)
+    };
 
     // Translate tool_choice from OpenAI format to Anthropic format.
     // When tool_choice is "none", strip tools entirely — Anthropic has no "none"
@@ -303,14 +377,29 @@ pub(super) fn translate_request_inner(
     // breakpoints, well under Anthropic's cap of 4.)
     mark_latest_user_message_cached(&mut anthropic_messages);
 
+    // Adaptive thinking lets the model itself pick its reasoning depth per
+    // question (Sonnet 4.6+). Thinking rejects a custom temperature, so drop
+    // it on quality turns. Fast (PTT) turns keep thinking off and pin output
+    // effort low so voice answers stay quick and terse.
+    let thinking = use_adaptive_thinking.then(|| json!({ "type": "adaptive" }));
+    let output_config = (reasoning_effort == ReasoningEffort::Fast && model_supports_effort)
+        .then(|| json!({ "effort": "low" }));
+    let temperature = if use_adaptive_thinking {
+        None
+    } else {
+        req.temperature
+    };
+
     Ok(AnthropicRequest {
         model: upstream_model.to_string(),
         max_tokens,
         messages: anthropic_messages,
         // Use the typed system block produced by cached_system_block() above.
         system,
-        temperature: req.temperature,
+        temperature,
         stream: req.stream,
+        thinking,
+        output_config,
         tools: if is_tool_choice_none {
             None
         } else {
@@ -548,6 +637,10 @@ pub(super) fn translate_response(
             | AnthropicContentBlock::WebSearchToolResult {} => {
                 // Server-side tool blocks are consumed upstream — only the
                 // text they produced is surfaced to the client.
+            }
+            AnthropicContentBlock::Thinking { .. } | AnthropicContentBlock::RedactedThinking {} => {
+                // Reasoning blocks are never part of the OpenAI `content`
+                // field — the answer text follows in its own text block.
             }
         }
     }

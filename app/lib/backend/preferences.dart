@@ -735,15 +735,6 @@ class SharedPreferencesUtil {
 
   bool get companionAssociationPrompted => getBool('companionAssociationPrompted');
 
-  //------------------------ TestFlight API Environment ----------------------//
-
-  /// Legacy display preference only. TestFlight routing is always the beta ring.
-  String get testFlightApiEnvironment => getString('testFlightApiEnvironment', defaultValue: 'staging');
-
-  set testFlightApiEnvironment(String value) => saveString('testFlightApiEnvironment', value);
-
-  bool get testFlightUseStagingApi => testFlightApiEnvironment == 'staging';
-
   //--------------------------- Announcements ---------------------------------//
 
   // Last known app version - used to detect app upgrades

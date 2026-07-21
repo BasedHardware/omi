@@ -143,14 +143,8 @@ jobs:
       - name: Check deployment concurrency policy
         run: python3 .github/scripts/check-deployment-concurrency.py
 
-      - name: Check desktop release terminology
-        run: python3 .github/scripts/check-desktop-release-terminology.py
-
       - name: Test desktop qualification metadata writer
         run: python3 desktop/macos/scripts/release-keyvalue.py self-test
-
-      - name: Test desktop release promotion gate
-        run: python3 .github/scripts/test_check_desktop_release_promotion.py
 
       - name: Test automatic desktop beta candidate gate
         run: python3 .github/scripts/test_check_desktop_auto_beta_candidate.py

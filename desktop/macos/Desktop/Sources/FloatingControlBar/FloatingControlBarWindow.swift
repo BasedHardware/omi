@@ -779,15 +779,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     observePttHint()
   }
 
-  private func performSpacesTransitionGrowIn() {
+  // Internal so the regression test can exercise the same workspace-transition
+  // path that the NSWorkspace observer invokes.
+  func performSpacesTransitionGrowIn() {
     updateNotchIslandState()
     guard notchModeEnabled, isVisible else { return }
-    // The panel already lives on every Space (.canJoinAllSpaces), so switching
-    // Spaces must NOT replay the reveal "pop" — doing so re-zoomed the island on
-    // every desktop/app switch, which felt excessive. Keep it fully revealed and
-    // only re-assert the resting frame if the current one has actually drifted
-    // (e.g. the active screen's notch geometry changed).
+    // Do not replay the reveal "pop" on Space changes; preserve chat size while
+    // non-chat surfaces recover their canonical frame from this callback.
     state.notchRevealProgress = 1
+    guard !state.showingAIConversation else { return }
     let targetFrame = defaultFrameForCurrentState()
     guard !Self.framesEquivalent(frame, targetFrame) else { return }
     resizeToFrame(targetFrame, makeResizable: styleMask.contains(.resizable), animated: false)
@@ -1512,19 +1512,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     responseHeightCancellable = nil
     cancelInputHeightObserver()
 
-    OmiMotion.withGated(.spring(response: 0.22, dampingFraction: 0.9)) {
-      state.clearVisibleConversation()
-      state.present(.mainInput)
-      state.inputViewHeight = inputPanelHeight
-    }
-
-    let inputSize = NSSize(width: expandedContentWidth, height: inputPanelHeight)
-    resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
-    setupInputHeightObserver()
-
-    DispatchQueue.main.asyncAfter(deadline: .now() + Self.askOmiSettleDelay) { [weak self] in
-      self?.focusInputField()
-    }
+    // With the typed input retired there is nothing to fall back to after a
+    // clear — collapse the bar instead of presenting an empty compose panel.
+    state.clearVisibleConversation()
+    closeAIConversation()
   }
 
   private func setupInputHeightObserver() {
@@ -2788,10 +2779,9 @@ class FloatingControlBarManager {
       appState.toggleTranscription()
     }
 
-    // Ask AI opens the input panel
-    barWindow.onAskAI = { [weak barWindow] in
-      barWindow?.showAIConversation()
-      barWindow?.makeKeyAndOrderFront(nil)
+    // Typing lives in the main app — the bar's "chat" affordances jump there.
+    barWindow.onAskAI = {
+      (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
     }
 
     // Hide persists the preference so bar stays hidden across restarts
@@ -3397,17 +3387,23 @@ class FloatingControlBarManager {
     }
   }
 
-  /// Toggle AI input: if conversation is open, collapse it; otherwise open it.
+  /// Toggle for the retired typed-input panel: collapsing an open
+  /// conversation still works, but opening now routes to the main app —
+  /// the floating bar no longer offers typing.
   func toggleAIInput() {
-    guard let window = window else { return }
+    guard let window = window else {
+      (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
+      return
+    }
     if window.isVisible && window.state.showingAIConversation {
       window.closeAIConversation()
     } else {
-      openAIInput()
+      (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
     }
   }
 
-  /// Open the AI input panel.
+  /// Open the floating conversation surface. Harness/automation-only entry:
+  /// every user-facing typed-input path now opens the main app instead.
   func openAIInput() {
     guard let window = window else { return }
 

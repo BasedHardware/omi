@@ -16,6 +16,7 @@ PROMOTE=1
 AUTOMATIC=0
 SIGNED_SMOKE_RESULT=""
 CANDIDATE_GATE_RESULT=""
+GITHUB_ACTIONS_ARTIFACT=0
 RELEASE_TAG=""
 
 usage() {
@@ -23,7 +24,7 @@ usage() {
 Qualify a macOS desktop candidate (rebuild tag + T2 core E2E + promote beta).
 
 Usage:
-  qualify-desktop-beta.sh [--keep-stack] [--no-promote] [--automatic] \
+  qualify-desktop-beta.sh [--keep-stack] [--no-promote] [--automatic] [--github-actions-artifact] \
     [--signed-smoke-result PATH --candidate-gate-result PATH] <vX.Y.Z+BUILD-macos>
 
 Options:
@@ -32,6 +33,7 @@ Options:
   --automatic    Run richer automatic gates and require this to remain the newest candidate
   --signed-smoke-result PATH  Codemagic signed-artifact smoke evidence (required with --automatic)
   --candidate-gate-result PATH  Digest-bound candidate gate evidence (required with --automatic)
+  --github-actions-artifact  Leave trusted evidence publication to the workflow artifact
 USAGE
 }
 
@@ -58,6 +60,10 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 && -n "${2:-}" && "${2:-}" != -* ]] || { echo "--candidate-gate-result requires a path" >&2; exit 2; }
       CANDIDATE_GATE_RESULT="$2"
       shift 2
+      ;;
+    --github-actions-artifact)
+      GITHUB_ACTIONS_ARTIFACT=1
+      shift
       ;;
     --help|-h)
       usage
@@ -319,6 +325,12 @@ manifest = json.load(open(sys.argv[1], encoding="utf-8"))
 if manifest.get("passed") is not True or manifest.get("tier") != "fault":
     raise SystemExit("automatic qualification failed: fault-suite manifest did not pass")
 PY
+fi
+
+if [[ "$GITHUB_ACTIONS_ARTIFACT" -eq 1 ]]; then
+  QUALIFICATION_SUCCESS=1
+  echo "Qualified $RELEASE_TAG for beta; trusted workflow will publish immutable Actions evidence."
+  exit 0
 fi
 
 STAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)

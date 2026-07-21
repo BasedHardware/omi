@@ -256,35 +256,27 @@ final class APIClientRoutingTests: XCTestCase {
     XCTAssertEqual(url, "https://desktop-backend-hhibjajaja-uc.a.run.app/")
   }
 
-  func testBetaProductionBundleUsesDedicatedRingRatherThanDevelopment() {
+  func testBetaProductionChannelUsesProductionBackendRatherThanDevelopment() {
     XCTAssertFalse(
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(
         bundleIdentifier: "com.omi.computer-macos",
         updateChannel: "beta"
       ))
-    // "staging" is normalized to "beta" — same ring.
     XCTAssertFalse(
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(
         bundleIdentifier: "com.omi.computer-macos",
         updateChannel: "staging"
       ))
-    XCTAssertTrue(
-      DesktopBackendEnvironment.shouldUseBetaRingBackends(
-        bundleIdentifier: "com.omi.computer-macos",
-        updateChannel: "beta"
-      ))
     XCTAssertEqual(
       DesktopBackendEnvironment.pythonBaseURL(
         useDevelopmentBackends: false,
-        useBetaRingBackends: true,
         environmentValue: nil
       ),
-      "https://api-beta.omi.me/"
+      "https://api.omi.me/"
     )
     XCTAssertEqual(
       DesktopBackendEnvironment.rustBackendURL(
         useDevelopmentBackends: false,
-        useBetaRingBackends: true,
         environmentValue: nil,
         launchEnvironmentValue: nil
       ),
@@ -298,6 +290,20 @@ final class APIClientRoutingTests: XCTestCase {
         bundleIdentifier: "com.omi.computer-macos",
         updateChannel: "stable"
       ))
+  }
+
+  func testBetaIdentityBundleUsesTheProductionBackend() {
+    // The Omi Beta app is production-family: its isolated app identity does not
+    // create a second backend environment.
+    XCTAssertFalse(
+      DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        updateChannel: "beta"
+      ))
+    XCTAssertEqual(
+      DesktopBackendEnvironment.pythonBaseURL(useDevelopmentBackends: false, environmentValue: nil),
+      "https://api.omi.me/"
+    )
   }
 
   func testNonProductionBundlesDefaultToDevelopmentBackends() {

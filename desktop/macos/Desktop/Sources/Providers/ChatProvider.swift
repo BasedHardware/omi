@@ -537,7 +537,7 @@ enum ToolCallStatus: CaseIterable {
 
   static func fromBridgeStatus(_ status: String) -> ToolCallStatus {
     switch status {
-    case "started":
+    case "started", "progress":
       return .running
     case "failed", "cancelled", "interrupted":
       return .failed
@@ -918,6 +918,19 @@ enum ChatTurnOwner: Equatable {
   case taskChat(String)
   case agentPill(UUID)
 
+  /// Per-turn reasoning-effort lane relayed to the desktop gateway.
+  /// Typed chat runs "adaptive": the model decides how much to think per
+  /// question (including explicit "think properly / take 5 minutes" asks).
+  /// PTT/voice runs "fast": thinking off, low effort, latency-optimized.
+  /// Background surfaces (task chat, agent pills) keep the legacy behavior.
+  var reasoningEffort: String? {
+    switch self {
+    case .floatingVoice: return "fast"
+    case .mainChat, .floatingDefault: return "adaptive"
+    case .taskChat, .agentPill: return nil
+    }
+  }
+
   func canInterrupt(_ activeOwner: ChatTurnOwner) -> Bool {
     switch (self, activeOwner) {
     case (.floatingDefault, .floatingDefault),
@@ -1109,7 +1122,7 @@ class ChatProvider: ObservableObject {
   private var activeChatClientTurnId: (generation: Int, id: String)?
   private var activeStopReason: (generation: Int, reason: ChatTurnStopReason)?
 
-  /// Set to a send's generation when the 180s watchdog fires for it, *before*
+  /// Set to a send's generation when the 60s watchdog fires for it, *before*
   /// the watchdog interrupts the bridge. `interrupt()` resumes the in-flight
   /// request with `BridgeError.stopped`, which the send-loop catch would
   /// otherwise treat as a silent user stop — so the catch checks this marker to
@@ -1122,6 +1135,8 @@ class ChatProvider: ObservableObject {
   private var sendToolStallAbortGeneration: Int?
 
   private static let perToolStallAbortMs = 90_000
+  private static let genericWatchdogInactivityMs = 60_000
+  private static let genericWatchdogPollMs = 5_000
 
   /// Set to true during onboarding so the ACP session ID is persisted for restart recovery.
   var isOnboarding = false
@@ -1328,11 +1343,10 @@ class ChatProvider: ObservableObject {
   private var cachedDatabaseSchema: String = ""
   private var schemaLoaded = false
 
-  // MARK: - CLAUDE.md & Skills (Global)
+  // MARK: - CLAUDE.md (reference only) & Skills (Global)
   @Published var claudeMdContent: String?
   @Published var claudeMdPath: String?
   @Published var discoveredSkills: [(name: String, description: String, path: String)] = []
-  @AppStorage("claudeMdEnabled") var claudeMdEnabled = true
   @AppStorage("disabledSkillsJSON") private var disabledSkillsJSON: String = ""
 
   // MARK: - Project-level CLAUDE.md & Skills
@@ -1367,7 +1381,6 @@ class ChatProvider: ObservableObject {
   @Published var projectClaudeMdContent: String?
   @Published var projectClaudeMdPath: String?
   @Published var projectDiscoveredSkills: [(name: String, description: String, path: String)] = []
-  @AppStorage("projectClaudeMdEnabled") var projectClaudeMdEnabled = true
 
   // MARK: - Dev Mode
   @AppStorage("devModeEnabled") var devModeEnabled = false
@@ -1842,7 +1855,7 @@ class ChatProvider: ObservableObject {
         [
           "workingDirectory": workspacePath,
           "databaseSchema": cachedDatabaseSchema,
-          "enabledSkills": getEnabledSkillNames().sorted(),
+          "skillCatalog": skillContextProjection(),
         ],
         nil
       ),
@@ -2897,7 +2910,7 @@ class ChatProvider: ObservableObject {
     )
   }
 
-  /// Discover ~/.claude/CLAUDE.md, skills from ~/.claude/skills/, and project-level equivalents
+  /// Discover CLAUDE.md for Settings reference only, plus skills for the compact agent catalog.
   func discoverClaudeConfig() async {
     let workspace = aiChatWorkingDirectory
     let result = await Task.detached(priority: .utility) {
@@ -2940,13 +2953,6 @@ class ChatProvider: ObservableObject {
       }
     }
     return ""
-  }
-
-  /// Get the set of enabled skill names (all skills minus explicitly disabled ones)
-  func getEnabledSkillNames() -> Set<String> {
-    let allSkillNames = Set(discoveredSkills.map { $0.name } + projectDiscoveredSkills.map { $0.name })
-    let disabled = getDisabledSkillNames()
-    return allSkillNames.subtracting(disabled)
   }
 
   /// Get the set of explicitly disabled skill names from UserDefaults
@@ -3426,12 +3432,14 @@ class ChatProvider: ObservableObject {
       target.onFinalized?(false)
       return false
     }
-    let accepted = await finishJournalUpdate(
-      messageId: target.assistantMessageId,
-      status: status,
-      surface: target.surface,
-      ownerID: target.ownerID
-    )
+    let accepted = await journalWriteCoordinator.retryTerminalization {
+      await self.finishJournalUpdate(
+        messageId: target.assistantMessageId,
+        status: status,
+        surface: target.surface,
+        ownerID: target.ownerID
+      )
+    }
     journalOwnerByMessageID.removeValue(forKey: target.assistantMessageId)
     target.onFinalized?(accepted)
     return accepted
@@ -3457,8 +3465,8 @@ class ChatProvider: ObservableObject {
     let resultResources =
       queryResult.artifacts.map(ChatResource.artifact)
       + queryResult.completionDeltaArtifacts.map(ChatResource.artifact)
-    let accepted =
-      await kernelTurnProjection.terminalizeTurn(
+    let accepted = await journalWriteCoordinator.retryTerminalization {
+      await self.kernelTurnProjection.terminalizeTurn(
         surface: target.surface,
         turnId: target.assistantMessageId,
         message: message,
@@ -3469,6 +3477,7 @@ class ChatProvider: ObservableObject {
         acceptedResources: resultResources,
         ownerID: target.ownerID
       ) != nil
+    }
     journalOwnerByMessageID.removeValue(forKey: target.assistantMessageId)
     target.onFinalized?(accepted)
     return accepted
@@ -3835,112 +3844,123 @@ class ChatProvider: ObservableObject {
       showOmiThresholdAlert = true
     }
 
-    // Safety-net watchdog: if this specific send is still "in flight"
-    // 3 minutes from now, something in the bridge / stream pipeline has
-    // hung (commonly: stale ACP subprocess after laptop sleep emits a
-    // "stray turn_end" that Swift's waitForMessage never sees). Force-
-    // release isSending so the user's next query isn't silently dropped
-    // by the "already sending" guard. The generation check means the
-    // watchdog only fires if no later send has replaced this one.
+    // The generic watchdog owns only a silent bridge with no active tool.
+    // Active tools must reach their 90s no-progress watchdog first so their
+    // terminal cause and correlation survive the bridge interruption.
+    let turnStartMs = ChatProvider.monotonicNowMs()
+    let stallDetector = StallDetector(thresholds: .v1Defaults, startedAtMs: turnStartMs)
     let watchdogAIMessageId = Self.messageIds(forAttemptId: turnAttemptId).assistant
-    Task { [weak self] in
-      do {
-        try await Task.sleep(nanoseconds: 180_000_000_000)
-      } catch {
+    let genericWatchdogTask = Task { [weak self] in
+      while !Task.isCancelled {
+        do {
+          try await Task.sleep(nanoseconds: UInt64(Self.genericWatchdogPollMs) * 1_000_000)
+        } catch {
+          return
+        }
+        let nowMs = ChatProvider.monotonicNowMs()
+        let canFire = await stallDetector.isSilentWithoutActiveTools(
+          durationMs: Self.genericWatchdogInactivityMs,
+          atMs: nowMs
+        )
+        guard canFire, let self else { continue }
+        let stillStuck = await MainActor.run { () -> Bool in
+          guard
+            self.isSending,
+            self.sendGeneration == sendGen,
+            self.activeBridgeSendGeneration == sendGen
+          else { return false }
+          log("ChatProvider: generic watchdog fired after 60s of silence — bridge is stuck; force-resetting")
+          // Mark this generation before interrupting: interrupt() resumes the
+          // in-flight request with `.stopped`, and the catch below uses this
+          // marker to surface the timeout instead of silently dropping the turn.
+          if turnLifecycle.revoke(.watchdogTimeout) {
+            self.sendWatchdogFiredGeneration = sendGen
+          } else if turnLifecycle.revocationReason == .toolStall {
+            log("ChatProvider: send watchdog preserving earlier tool-stall terminal cause")
+          }
+          return true
+        }
+        guard stillStuck else { return }
+        await self.resolvedAgentClient().interrupt()
+        // Fallback for the "stray turn_end" case where interrupt() does not
+        // route through the catch (no active request to resume): if the lock is
+        // somehow still held, force-release it and surface the timeout here.
+        // Deliberately does NOT clear sendWatchdogFiredGeneration — only the
+        // catch clears it, so if this fallback wins the race with the catch, the
+        // catch still sees the marker and surfaces the timeout instead of
+        // re-silencing the turn. A stale marker is harmless: generations only
+        // increase, so it never matches a later send.
+        let shouldTerminalizeJournal = await MainActor.run { () -> Bool in
+          guard self.isSending, self.sendGeneration == sendGen else { return false }
+          let revocationReason = turnLifecycle.revocationReason
+          let toolStallAbortFired =
+            self.sendToolStallAbortGeneration == sendGen
+            || revocationReason == .toolStall
+          let watchdogFired =
+            self.sendWatchdogFiredGeneration == sendGen
+            || revocationReason == .watchdogTimeout
+
+          // Preserve already-delivered output, but make every visible row
+          // terminal before releasing the provider for another send.
+          self.streamingBuffer.cancelPendingFlush()
+          self.flushStreamingBuffer()
+          var partialResponse = false
+          if let index = self.messages.firstIndex(where: { $0.id == watchdogAIMessageId }) {
+            partialResponse =
+              !self.messages[index].text.isEmpty
+              || !self.messages[index].contentBlocks.isEmpty
+            if partialResponse {
+              self.messages[index].isStreaming = false
+              ToolCallBlockUpdater.completeRemainingToolCalls(
+                in: &self.messages[index].contentBlocks,
+                terminalStatus: ChatProvider.lateResultToolStatus(
+                  watchdogFired: watchdogFired,
+                  toolStallAbortFired: toolStallAbortFired,
+                  stopReason: turnLifecycle.stopReason
+                )
+              )
+            } else {
+              self.messages.remove(at: index)
+            }
+          }
+
+          let traceReason = toolStallAbortFired ? "tool_stall" : "watchdog_timeout"
+          tracer?.mark("forced_terminal_fallback", metadata: ["reason": traceReason])
+          tracer?.end("ttft")
+          tracer?.end("generation")
+          tracer?.end("llm_request")
+          tracer?.finalize(tokenCount: 0, model: model ?? self.modelOverride)
+
+          if let terminalMessage = ChatProvider.stoppedTurnErrorMessage(
+            watchdogFired: watchdogFired,
+            toolStallAbortFired: toolStallAbortFired
+          ) {
+            self.currentError = nil
+            self.errorMessage = terminalMessage
+          }
+          if !telemetryAttempt.isTerminal {
+            if toolStallAbortFired {
+              telemetryAttempt.fail(errorClass: .toolStall, partialResponse: partialResponse)
+            } else if watchdogFired {
+              telemetryAttempt.fail(errorClass: .timeout, partialResponse: partialResponse)
+            } else {
+              telemetryAttempt.finish(
+                stopReason: turnLifecycle.stopReason ?? self.stopReason(for: sendGen),
+                partialResponse: partialResponse
+              )
+            }
+          }
+          self.clearChatTelemetryState(for: sendGen)
+          _ = self.releaseSendLock(sendGeneration: sendGen)
+          return true
+        }
+        if shouldTerminalizeJournal {
+          _ = await self.finishJournalTarget(generation: sendGen, status: .failed)
+        }
         return
       }
-      guard let self else { return }
-      let stillStuck = await MainActor.run { () -> Bool in
-        guard self.isSending, self.sendGeneration == sendGen else { return false }
-        log("ChatProvider: send watchdog fired at 180s — bridge is stuck; force-resetting")
-        // Mark this generation before interrupting: interrupt() resumes the
-        // in-flight request with `.stopped`, and the catch below uses this
-        // marker to surface the timeout instead of silently dropping the turn.
-        if turnLifecycle.revoke(.watchdogTimeout) {
-          self.sendWatchdogFiredGeneration = sendGen
-        } else if turnLifecycle.revocationReason == .toolStall {
-          log("ChatProvider: send watchdog preserving earlier tool-stall terminal cause")
-        }
-        return true
-      }
-      guard stillStuck else { return }
-      await self.resolvedAgentClient().interrupt()
-      // Fallback for the "stray turn_end" case where interrupt() does not
-      // route through the catch (no active request to resume): if the lock is
-      // somehow still held, force-release it and surface the timeout here.
-      // Deliberately does NOT clear sendWatchdogFiredGeneration — only the
-      // catch clears it, so if this fallback wins the race with the catch, the
-      // catch still sees the marker and surfaces the timeout instead of
-      // re-silencing the turn. A stale marker is harmless: generations only
-      // increase, so it never matches a later send.
-      let shouldTerminalizeJournal = await MainActor.run { () -> Bool in
-        guard self.isSending, self.sendGeneration == sendGen else { return false }
-        let revocationReason = turnLifecycle.revocationReason
-        let toolStallAbortFired =
-          self.sendToolStallAbortGeneration == sendGen
-          || revocationReason == .toolStall
-        let watchdogFired =
-          self.sendWatchdogFiredGeneration == sendGen
-          || revocationReason == .watchdogTimeout
-
-        // Preserve already-delivered output, but make every visible row
-        // terminal before releasing the provider for another send.
-        self.streamingBuffer.cancelPendingFlush()
-        self.flushStreamingBuffer()
-        var partialResponse = false
-        if let index = self.messages.firstIndex(where: { $0.id == watchdogAIMessageId }) {
-          partialResponse =
-            !self.messages[index].text.isEmpty
-            || !self.messages[index].contentBlocks.isEmpty
-          if partialResponse {
-            self.messages[index].isStreaming = false
-            ToolCallBlockUpdater.completeRemainingToolCalls(
-              in: &self.messages[index].contentBlocks,
-              terminalStatus: ChatProvider.lateResultToolStatus(
-                watchdogFired: watchdogFired,
-                toolStallAbortFired: toolStallAbortFired,
-                stopReason: turnLifecycle.stopReason
-              )
-            )
-          } else {
-            self.messages.remove(at: index)
-          }
-        }
-
-        let traceReason = toolStallAbortFired ? "tool_stall" : "watchdog_timeout"
-        tracer?.mark("forced_terminal_fallback", metadata: ["reason": traceReason])
-        tracer?.end("ttft")
-        tracer?.end("generation")
-        tracer?.end("llm_request")
-        tracer?.finalize(tokenCount: 0, model: model ?? self.modelOverride)
-
-        if let terminalMessage = ChatProvider.stoppedTurnErrorMessage(
-          watchdogFired: watchdogFired,
-          toolStallAbortFired: toolStallAbortFired
-        ) {
-          self.currentError = nil
-          self.errorMessage = terminalMessage
-        }
-        if !telemetryAttempt.isTerminal {
-          if toolStallAbortFired {
-            telemetryAttempt.fail(errorClass: .toolStall, partialResponse: partialResponse)
-          } else if watchdogFired {
-            telemetryAttempt.fail(errorClass: .timeout, partialResponse: partialResponse)
-          } else {
-            telemetryAttempt.finish(
-              stopReason: turnLifecycle.stopReason ?? self.stopReason(for: sendGen),
-              partialResponse: partialResponse
-            )
-          }
-        }
-        self.clearChatTelemetryState(for: sendGen)
-        _ = self.releaseSendLock(sendGeneration: sendGen)
-        return true
-      }
-      if shouldTerminalizeJournal {
-        _ = await self.finishJournalTarget(generation: sendGen, status: .failed)
-      }
     }
+    defer { genericWatchdogTask.cancel() }
 
     // Wait for staged attachments to finish uploading so we can include their
     // server IDs in the saved-message metadata. The bubble shows immediately
@@ -4069,18 +4089,6 @@ class ChatProvider: ObservableObject {
     var screenContextEligibleForTurn = false
     var correlatedTerminalResult: AgentClient.QueryResult?
     var agentQueryStarted = false
-
-    // Stall detection.
-    // The detector observes every bridge event (text deltas, tool
-    // activity, etc.) and a 500ms periodic tick task surfaces stall
-    // promotions even during silent gaps. Transitions become
-    // ToolCallStatus updates on individual tool-call blocks; the
-    // banner appears via ToolCallsGroup's hasStalledTool check.
-    let turnStartMs = ChatProvider.monotonicNowMs()
-    let stallDetector = StallDetector(
-      thresholds: .v1Defaults,
-      startedAtMs: turnStartMs
-    )
 
     // Refresh data inputs each turn. The kernel renders these sources under
     // its own pinned policy; Swift never supplies a system instruction.
@@ -4219,10 +4227,15 @@ class ChatProvider: ObservableObject {
           // synthetic key so the detector's per-tool timer fires.
           let trackedId = ChatProvider.stallTrackingId(toolUseId: toolUseId, name: name)
           let toolStatus = ChatProvider.mapBridgeToolStatus(status)
-          let detectorKind: StallDetector.EventKind =
-            toolStatus == .running
-            ? .toolStarted(id: trackedId)
-            : .toolCompleted(id: trackedId)
+          let detectorKind: StallDetector.EventKind
+          switch status {
+          case "started":
+            detectorKind = .toolStarted(id: trackedId)
+          case "progress":
+            detectorKind = .toolProgress(id: trackedId)
+          default:
+            detectorKind = .toolCompleted(id: trackedId)
+          }
           // Trace mutation is admitted through the same generation gate
           // as UI mutation, so a revoked callback cannot extend a turn.
           let traceToolName =
@@ -4253,7 +4266,7 @@ class ChatProvider: ObservableObject {
             toolUseId: toolUseId,
             input: input
           )
-          if toolStatus == .running {
+          if status == "started" {
             toolTiming.toolNames.append(name)
             responseMetrics.recordToolRequested(name: name)
             toolTiming.toolStartTimes[trackedId] = Date()
@@ -4284,7 +4297,9 @@ class ChatProvider: ObservableObject {
                 FloatingControlBarManager.shared.showTemporarily()
               }
             }
-          } else if let startTime = toolTiming.toolStartTimes.removeValue(forKey: trackedId) {
+          } else if toolStatus != .running,
+            let startTime = toolTiming.toolStartTimes.removeValue(forKey: trackedId)
+          {
             if toolStatus == .completed {
               let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
               AnalyticsManager.shared.chatToolCallCompleted(toolName: name, durationMs: durationMs)
@@ -4347,7 +4362,7 @@ class ChatProvider: ObservableObject {
             }
           }
           if !issuedToolStallAbort {
-            let overdueToolIds = await stallDetector.toolIdsExceeding(
+            let overdueToolIds = await stallDetector.toolIdsWithoutProgress(
               durationMs: Self.perToolStallAbortMs,
               atMs: nowMs
             )
@@ -4358,8 +4373,8 @@ class ChatProvider: ObservableObject {
                 self.sendToolStallAbortGeneration = sendGen
                 turnLifecycle.revoke(.toolStall)
                 log(
-                  "ChatProvider: tool stall guard fired at \\(Self.perToolStallAbortMs / 1_000)s "
-                    + "(active_tools=\\(overdueToolIds.count)); interrupting bridge"
+                  "ChatProvider: tool no-progress guard fired at \(Self.perToolStallAbortMs / 1_000)s "
+                    + "(active_tools=\(overdueToolIds.count)); interrupting bridge"
                 )
                 return true
               }
@@ -4413,6 +4428,7 @@ class ChatProvider: ObservableObject {
         return nil
       }
 
+      _ = await stallDetector.step(kind: .other, atMs: ChatProvider.monotonicNowMs())
       activeBridgeSendGeneration = sendGen
       agentQueryStarted = true
       let queryResult: AgentClient.QueryResult
@@ -4426,6 +4442,7 @@ class ChatProvider: ObservableObject {
           attachments: Self.queryAttachments(attachmentsForMessage),
           producingTurnId: aiMessageId,
           expectedContext: kernelContext.snapshot.freshness,
+          reasoningEffort: turnOwner.reasoningEffort,
           onTextDelta: textDeltaHandler,
           onToolActivity: toolActivityHandler,
           onThinkingDelta: thinkingDeltaHandler,
@@ -5623,7 +5640,7 @@ class ChatProvider: ObservableObject {
   }
 
   /// The banner text to show when a turn ends with `BridgeError.stopped`.
-  /// A user-initiated Stop is silent (`nil`). But when the 180s send watchdog
+  /// A user-initiated Stop is silent (`nil`). But when the 60s send watchdog
   /// fired for the turn, the `.stopped` came from the watchdog's own interrupt —
   /// the turn timed out, so surface "Response took too long" rather than letting
   /// it vanish. Extracted so the watchdog-vs-user-stop distinction is unit-tested.
@@ -5632,7 +5649,7 @@ class ChatProvider: ObservableObject {
     toolStallAbortFired: Bool = false
   ) -> String? {
     if toolStallAbortFired {
-      return "A tool took too long. Try again."
+      return "A tool stopped reporting progress. Try again."
     }
     return watchdogFired ? "Response took too long. Try again." : nil
   }

@@ -1624,7 +1624,8 @@ actor AgentRuntimeProcess {
     imageData: Data?,
     attachments: [AgentQueryAttachment],
     producingTurnId: String?,
-    expectedContext: AgentContextFreshness?
+    expectedContext: AgentContextFreshness?,
+    reasoningEffort: String? = nil
   ) -> [String: Any] {
     var message = protocolEnvelope(
       type: "query",
@@ -1638,6 +1639,7 @@ actor AgentRuntimeProcess {
     if let imageData { message["imageBase64"] = imageData.base64EncodedString() }
     if !attachments.isEmpty { message["attachments"] = attachments.map(\.dictionary) }
     if let producingTurnId, !producingTurnId.isEmpty { message["producingTurnId"] = producingTurnId }
+    if let reasoningEffort, !reasoningEffort.isEmpty { message["reasoningEffort"] = reasoningEffort }
     if let expectedContext {
       message["expectedContextSnapshotVersion"] = expectedContext.version
       message["expectedContextSnapshotGeneration"] = expectedContext.generation
@@ -2393,6 +2395,7 @@ actor AgentRuntimeProcess {
     attachments: [AgentQueryAttachment],
     producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
+    reasoningEffort: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     onTextDelta: @escaping AgentBridge.TextDeltaHandler,
     onToolActivity: @escaping AgentBridge.ToolActivityHandler,
@@ -2435,7 +2438,8 @@ actor AgentRuntimeProcess {
         imageData: imageData,
         attachments: attachments,
         producingTurnId: producingTurnId,
-        expectedContext: expectedContext
+        expectedContext: expectedContext,
+        reasoningEffort: reasoningEffort
       )
       sendJson(queryDict)
     }

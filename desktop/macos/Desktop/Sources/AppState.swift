@@ -542,7 +542,7 @@ class AppState: ObservableObject {
     // singletons that read the key directly.
     UserDefaults.standard.set(false, forKey: "desktop_isPaywalled")
 
-    // Resolve beta/stable before loading backend URLs so beta releases use dev services.
+    // Resolve the production identity before loading its shared production backend URL.
     AppBuild.prepareUpdateChannelForBackendRouting()
 
     // Load API key from environment or .env file
@@ -787,6 +787,12 @@ class AppState: ObservableObject {
 
 extension Notification.Name {
   static let resetOnboardingRequested = Notification.Name("resetOnboardingRequested")
+  /// Posted by the onboarding arrow-key monitor with a "targetStep" Int in
+  /// userInfo. The mounted OnboardingView applies it to its live @AppStorage —
+  /// the monitor closure must not mutate its own captured copy (writes there
+  /// never reach UserDefaults or the UI on all macOS versions).
+  static let onboardingStepNavigationRequested = Notification.Name(
+    "onboardingStepNavigationRequested")
   /// Posted when the system wakes from sleep
   static let systemDidWake = Notification.Name("systemDidWake")
   /// Posted when the screen is locked

@@ -38,6 +38,7 @@ enum DefaultsKey: String {
   case aiChatWorkingDirectory = "aiChatWorkingDirectory"
   case hasCompletedOnboarding = "hasCompletedOnboarding"
   case onboardingStep = "onboardingStep"
+  case onboardingFurthestStep = "onboardingFurthestStep"
   case onboardingMemoryImportOwnerUserId = "onboardingMemoryImportOwnerUserID"
   case homeOmiDeviceAccountHistory = "home-omi-device-account-history"
   case chatScreenshotSharingEnabled = "chatScreenshotSharingEnabled"

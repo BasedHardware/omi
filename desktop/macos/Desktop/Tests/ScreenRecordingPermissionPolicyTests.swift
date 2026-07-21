@@ -157,6 +157,16 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
     XCTAssertLessThanOrEqual(centered.maxY, visible.minY + visible.height / 4)
   }
 
+  @MainActor
+  func testDragCardExpandsForLongBundleDisplayNames() {
+    XCTAssertEqual(
+      CloudConnectorGuidanceOverlay.dragCardSize(appName: "Omi Dev"),
+      CGSize(width: 180, height: 164))
+    XCTAssertEqual(
+      CloudConnectorGuidanceOverlay.dragCardSize(appName: "omi-tool-stall-reliability"),
+      CGSize(width: 240, height: 180))
+  }
+
   func testCaptureKitFailureDoesNotOverrideGrantedTccPermission() {
     XCTAssertFalse(
       ScreenRecordingPermissionPolicy.shouldMarkCaptureKitBroken(tccGranted: true),

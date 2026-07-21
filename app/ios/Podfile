@@ -11,6 +11,9 @@ project 'Runner', {
   'Debug-dev' => :debug,
   'Profile-dev' => :release,
   'Release-dev' => :release,
+  'Debug-raybanDat' => :debug,
+  'Profile-raybanDat' => :release,
+  'Release-raybanDat' => :release,
 }
 
 def flutter_root
@@ -27,16 +30,34 @@ def flutter_root
 end
 
 require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+require_relative 'rayban_dat_plugin_boundary'
 
 flutter_ios_podfile_setup
 
-target 'Runner' do
-  use_frameworks! :linkage => :static
-  use_modular_headers!
+if ENV['OMI_RAYBAN_DAT'] == '1'
+  RayBanDatPluginBoundary.prepare!(
+    app_root: File.expand_path('..', __dir__),
+    env: ENV,
+  )
 
-  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  target 'RunnerRayBanDat' do
+    use_frameworks! :linkage => :static
+    use_modular_headers!
 
-  pod 'TwilioVoice', '~> 6.13'
+    flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
+    pod 'TwilioVoice', '~> 6.13'
+  end
+else
+  # The default graph is untouched, including mcumgr_flutter firmware OTA.
+  target 'Runner' do
+    use_frameworks! :linkage => :static
+    use_modular_headers!
+
+    flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
+    pod 'TwilioVoice', '~> 6.13'
+  end
 end
 
 post_install do |installer|

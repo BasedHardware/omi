@@ -5,6 +5,30 @@ import XCTest
 
 @MainActor
 final class VoiceTurnCoordinatorTests: XCTestCase {
+  func testTerminalTelemetryUsesThePhysicalTurnBoundary() throws {
+    DesktopDiagnosticsManager.shared.resetForTests()
+    defer { DesktopDiagnosticsManager.shared.resetForTests() }
+
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+    let turnID = coordinator.begin(intent: .hold)
+    coordinator.publish(.finish(turnID: turnID, reason: .providerNoResponse))
+
+    let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+    defer { try? FileManager.default.removeItem(at: url) }
+    let data = try Data(contentsOf: url)
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+    let start = try XCTUnwrap(snapshots.first { $0["event"] as? String == "voice_turn_started" })
+    let terminal = try XCTUnwrap(snapshots.first { $0["event"] as? String == "voice_turn_terminal" })
+
+    XCTAssertEqual(start["attempt_id"] as? String, turnID.description)
+    XCTAssertEqual(terminal["attempt_id"] as? String, turnID.description)
+    XCTAssertEqual(terminal["terminal_reason"] as? String, "provider_no_response")
+    XCTAssertEqual(terminal["outcome"] as? String, "failure")
+    XCTAssertEqual(terminal["response_outcome"] as? String, "failure")
+    XCTAssertNotNil(terminal["duration_ms"] as? Int)
+  }
+
   func testNestedDeferredHubCommitQueuesWithoutSynchronousStateMutation() {
     let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
     var sawQueuedPreCommitState = false
@@ -497,6 +521,8 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
   }
 
   func testNonHubJournalAcceptanceWaitsForIndependentPlaybackFence() throws {
+    DesktopDiagnosticsManager.shared.resetForTests()
+    defer { DesktopDiagnosticsManager.shared.resetForTests() }
     let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
     let turnID = coordinator.begin(intent: .hold)
     coordinator.publish(.selectRoute(turnID: turnID, route: .deepgramBatch))
@@ -526,6 +552,95 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
     XCTAssertTrue(coordinator.releaseOutput(lease))
     XCTAssertEqual(coordinator.model.lastTerminal?.turnID, turnID)
     XCTAssertEqual(coordinator.model.lastTerminal?.reason, .success)
+
+    let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+    defer { try? FileManager.default.removeItem(at: url) }
+    let data = try Data(contentsOf: url)
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+    let terminal = try XCTUnwrap(snapshots.first { $0["event"] as? String == "voice_turn_terminal" })
+    XCTAssertEqual(terminal["response_outcome"] as? String, "success")
+    XCTAssertNotNil(terminal["duration_ms"] as? Int)
+  }
+
+  func testDeliveredVoiceAnswerDoesNotBecomeResponseFailureWhenJournalFailsLater() throws {
+    DesktopDiagnosticsManager.shared.resetForTests()
+    defer { DesktopDiagnosticsManager.shared.resetForTests() }
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+    let turnID = coordinator.begin(intent: .hold)
+    coordinator.publish(.selectRoute(turnID: turnID, route: .deepgramBatch))
+    coordinator.publish(.finalize(turnID: turnID))
+    coordinator.publish(.transcriptionStarted(turnID: turnID))
+    coordinator.publish(.transcriptionFinal(turnID: turnID, text: "hello"))
+    let providerIdentity = try XCTUnwrap(coordinator.activeTurn?.providerEffectIdentity)
+    coordinator.publish(
+      .providerResponseStartedScoped(
+        turnID: turnID,
+        identity: providerIdentity,
+        sessionID: nil,
+        responseID: nil))
+    guard
+      case .acquired(let lease) = coordinator.acquireOutput(
+        .selectedVoiceFallback, turnID: turnID)
+    else { return XCTFail("expected output lease") }
+    let token = try XCTUnwrap(coordinator.nonHubCompletionToken(for: turnID))
+
+    XCTAssertTrue(coordinator.releaseOutput(lease))
+    XCTAssertTrue(coordinator.completeNonHubProvider(token, outcome: .journalFailed))
+    XCTAssertEqual(coordinator.model.lastTerminal?.reason, .journalFailed)
+
+    let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+    defer { try? FileManager.default.removeItem(at: url) }
+    let data = try Data(contentsOf: url)
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+    let terminal = try XCTUnwrap(snapshots.first { $0["event"] as? String == "voice_turn_terminal" })
+    XCTAssertEqual(terminal["outcome"] as? String, "failure")
+    XCTAssertEqual(terminal["response_outcome"] as? String, "success")
+  }
+
+  func testFillerDrainDoesNotHideLaterVoicePlaybackFailure() throws {
+    DesktopDiagnosticsManager.shared.resetForTests()
+    defer { DesktopDiagnosticsManager.shared.resetForTests() }
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+    let turnID = coordinator.begin(intent: .hold)
+    coordinator.publish(.selectRoute(turnID: turnID, route: .deepgramBatch))
+    coordinator.publish(.finalize(turnID: turnID))
+    coordinator.publish(.transcriptionStarted(turnID: turnID))
+    coordinator.publish(.transcriptionFinal(turnID: turnID, text: "hello"))
+    let providerIdentity = try XCTUnwrap(coordinator.activeTurn?.providerEffectIdentity)
+    coordinator.publish(
+      .providerResponseStartedScoped(
+        turnID: turnID,
+        identity: providerIdentity,
+        sessionID: nil,
+        responseID: nil))
+
+    guard case .acquired(let filler) = coordinator.acquireOutput(.filler, turnID: turnID) else {
+      return XCTFail("expected filler lease")
+    }
+    XCTAssertTrue(coordinator.releaseOutput(filler))
+    guard
+      case .acquired(let response) = coordinator.acquireOutput(
+        .selectedVoiceFallback, turnID: turnID)
+    else { return XCTFail("expected response lease") }
+
+    coordinator.publish(
+      .playbackFailedScoped(
+        turnID: turnID,
+        identity: response.identity,
+        leaseID: response.id,
+        message: "playback failed"))
+    XCTAssertEqual(coordinator.model.lastTerminal?.reason, .playbackFailed)
+
+    let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+    defer { try? FileManager.default.removeItem(at: url) }
+    let data = try Data(contentsOf: url)
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+    let terminal = try XCTUnwrap(snapshots.first { $0["event"] as? String == "voice_turn_terminal" })
+    XCTAssertEqual(terminal["outcome"] as? String, "failure")
+    XCTAssertEqual(terminal["response_outcome"] as? String, "failure")
   }
 
   func testNonHubCompletionTokenCannotCloseReplacementTurn() throws {

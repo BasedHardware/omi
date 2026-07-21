@@ -296,7 +296,7 @@ def _apply_update_memory_item(
     promotion_audit: Optional[Dict[str, Any]] = None,
     extra_updates: Optional[Dict[str, Any]] = None,
 ) -> MemoryItem:
-    now = datetime.now(timezone.utc)
+    now = max(datetime.now(timezone.utc), existing.captured_at, existing.updated_at)
     if patch.target_tier is not None:
         tier = patch.target_tier
     else:

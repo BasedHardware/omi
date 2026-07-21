@@ -32,7 +32,7 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
-import { isSafeSkillName, loadSkillInstructions } from "../agent/src/runtime/node-tools.ts";
+import { isSafeSkillName, loadSkillInstructions, searchSkills } from "../agent/src/runtime/node-tools.ts";
 import {
   buildToolAvailabilitySnapshot,
   toolNamesForAdapter,
@@ -40,6 +40,49 @@ import {
   type OmiToolInputSchema,
   type OmiToolManifestEntry,
 } from "../agent/src/runtime/omi-tool-manifest.ts";
+
+/**
+ * Opaque, request-scoped correlation ids are the only context forwarded to
+ * the desktop backend. Keep the header bounded and printable so it is safe to
+ * log, and never relay prompt text, account ids, or tool arguments.
+ */
+const OMI_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+
+export function omiRequestIdFromRelayContext(raw: string): string | undefined {
+  try {
+    const parsed = JSON.parse(raw) as { requestId?: unknown };
+    return typeof parsed.requestId === "string" && OMI_REQUEST_ID_PATTERN.test(parsed.requestId)
+      ? parsed.requestId
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Per-turn effort lane. Strict allowlist — the header must never carry
+ *  anything but one of these two opaque tokens. */
+export function omiReasoningEffortFromRelayContext(raw: string): string | undefined {
+  try {
+    const parsed = JSON.parse(raw) as { reasoningEffort?: unknown };
+    return parsed.reasoningEffort === "adaptive" || parsed.reasoningEffort === "fast"
+      ? parsed.reasoningEffort
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function omiRelayContextRaw(): Promise<string | undefined> {
+  const contextFile = process.env.OMI_CONTEXT_FILE;
+  if (!contextFile) return undefined;
+  try {
+    return await readFile(contextFile, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+
 
 // ---------------------------------------------------------------------------
 // Denylist patterns
@@ -636,10 +679,10 @@ function loadSkillTool() {
   return defineTool({
     name: "load_skill",
     label: "Load Skill",
-    description: "Load the full instructions for a named skill listed in available_skills.",
-    promptSnippet: "load_skill - Load the full SKILL.md instructions for an available skill",
+    description: "Load the full instructions for a relevant skill returned by the compact catalog or search_skills.",
+    promptSnippet: "load_skill - Load a relevant skill returned by the catalog or search_skills",
     parameters: Type.Object({
-      name: Type.String({ description: "Skill name exactly as listed in available_skills" }),
+      name: Type.String({ description: "Skill name returned by the compact catalog or search_skills" }),
     }, { additionalProperties: false }),
     async execute(_toolCallId, params) {
       const name = String((params as { name?: unknown }).name ?? "").trim();
@@ -647,7 +690,7 @@ function loadSkillTool() {
         return {
           content: [{
             type: "text" as const,
-            text: "Invalid skill name. Use the exact skill name listed in available_skills.",
+            text: "Invalid skill name. Use a skill returned by the catalog or search_skills.",
           }],
           details: undefined,
         };
@@ -663,13 +706,41 @@ function loadSkillTool() {
   });
 }
 
+function searchSkillsTool() {
+  return defineTool({
+    name: "search_skills",
+    label: "Search Skills",
+    description: "Search installed skill names and compact descriptions for a workflow relevant to the user's request.",
+    promptSnippet: "search_skills - Find a relevant specialized workflow before loading it",
+    promptGuidelines: [
+      "Use only when the current user request plausibly needs a specialized workflow.",
+      "Do not browse skills merely to explore options or because a related term appears in conversation context.",
+    ],
+    parameters: Type.Object({
+      query: Type.String({ description: "Short description of the user's request" }),
+    }, { additionalProperties: false }),
+    async execute(_toolCallId, params) {
+      const query = String((params as { query?: unknown }).query ?? "").trim();
+      return {
+        content: [{
+          type: "text" as const,
+          text: await searchSkills(query),
+        }],
+        details: undefined,
+      };
+    },
+  });
+}
+
 const executionRole = process.env.OMI_EXECUTION_ROLE === "leaf" ? "leaf" : "coordinator";
 const projectionContext = { executionRole } as const;
 
 export function omiToolsForExecutionRole(role: "coordinator" | "leaf") {
-  return toolsForAdapter("pi-mono", { executionRole: role }).map((tool) => (
-    tool.executor.kind === "nodeTool" ? loadSkillTool() : omiManifestTool(tool)
-  ));
+  return toolsForAdapter("pi-mono", { executionRole: role }).map((tool) => {
+    if (tool.name === "load_skill") return loadSkillTool();
+    if (tool.name === "search_skills") return searchSkillsTool();
+    return omiManifestTool(tool);
+  });
 }
 
 export const OMI_TOOLS = omiToolsForExecutionRole(executionRole);
@@ -764,6 +835,20 @@ export default function omiProvider(pi: ExtensionAPI): void {
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       },
     ],
+  });
+
+  // Pi asks for headers once per provider request and keeps them for retries,
+  // which preserves one safe correlation id across an upstream retry chain.
+  pi.on("before_provider_headers", async (event) => {
+    const raw = await omiRelayContextRaw();
+    if (raw === undefined) return;
+    const requestId = omiRequestIdFromRelayContext(raw);
+    if (requestId) event.headers["x-omi-request-id"] = requestId;
+    // Per-turn effort lane: typed chat runs "adaptive" (the model decides its
+    // own thinking depth), PTT runs "fast" (thinking off, low effort). The
+    // gateway translates this into Anthropic thinking/effort parameters.
+    const reasoningEffort = omiReasoningEffortFromRelayContext(raw);
+    if (reasoningEffort) event.headers["x-omi-reasoning-effort"] = reasoningEffort;
   });
 
   pi.on("tool_call", async (event): Promise<ToolCallEventResult | void> => {

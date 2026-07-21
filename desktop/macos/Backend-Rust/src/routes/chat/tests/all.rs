@@ -86,6 +86,7 @@ fn test_request(messages: Vec<ChatMessage>) -> ChatCompletionRequest {
         max_completion_tokens: None,
         tools: None,
         tool_choice: None,
+        reasoning_effort: None,
     }
 }
 
@@ -392,6 +393,7 @@ fn test_translate_request_basic() {
         max_completion_tokens: None,
         tools: None,
         tool_choice: None,
+        reasoning_effort: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -434,6 +436,7 @@ fn test_translate_request_caches_latest_user_message() {
         max_completion_tokens: None,
         tools: None,
         tool_choice: None,
+        reasoning_effort: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -474,6 +477,7 @@ fn test_translate_request_caches_tool_result_turn() {
         max_completion_tokens: None,
         tools: None,
         tool_choice: None,
+        reasoning_effort: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -502,6 +506,7 @@ fn test_translate_request_max_tokens_cap() {
         max_completion_tokens: None,
         tools: None,
         tool_choice: None,
+        reasoning_effort: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -525,6 +530,7 @@ fn test_translate_request_default_max_tokens() {
         max_completion_tokens: None,
         tools: None,
         tool_choice: None,
+        reasoning_effort: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -562,6 +568,7 @@ fn test_translate_request_developer_role_treated_as_system() {
         max_completion_tokens: None,
         tools: None,
         tool_choice: None,
+        reasoning_effort: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -594,6 +601,7 @@ fn test_translate_request_system_prompt_uses_cache_control_blocks() {
         max_completion_tokens: None,
         tools: None,
         tool_choice: None,
+        reasoning_effort: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -642,6 +650,7 @@ fn test_translate_request_splits_ptt_escalation_context_cache_boundary() {
             max_completion_tokens: None,
             tools: None,
             tool_choice: None,
+            reasoning_effort: None,
         };
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
     let system = result.system.unwrap();
@@ -680,6 +689,7 @@ fn test_translate_request_without_system_prompt_omits_system() {
         max_completion_tokens: None,
         tools: None,
         tool_choice: None,
+        reasoning_effort: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -718,6 +728,7 @@ fn test_translate_request_empty_system_prompt_omits_system() {
             max_completion_tokens: None,
             tools: None,
             tool_choice: None,
+            reasoning_effort: None,
         };
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -749,6 +760,7 @@ fn test_translate_request_max_completion_tokens_preferred() {
         max_completion_tokens: Some(2048),
         tools: None,
         tool_choice: None,
+        reasoning_effort: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -773,6 +785,7 @@ fn test_translate_request_max_completion_tokens_only() {
         max_completion_tokens: Some(4096),
         tools: None,
         tool_choice: None,
+        reasoning_effort: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -798,6 +811,7 @@ fn test_translate_request_max_completion_tokens_cap() {
         max_completion_tokens: Some(999_999),
         tools: None,
         tool_choice: None,
+        reasoning_effort: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -844,6 +858,7 @@ fn test_translate_request_tool_result() {
         max_completion_tokens: None,
         tools: None,
         tool_choice: None,
+        reasoning_effort: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -883,9 +898,16 @@ fn test_translate_request_with_tools() {
             },
         }]),
         tool_choice: None,
+        reasoning_effort: None,
     };
 
-    let result = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+    let result = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
     let tools = result.tools.unwrap();
     // Keep ordinary agentic calls on their normal incremental streaming
     // path; the server-side search tool is added only when retrieval
@@ -922,9 +944,16 @@ fn test_translate_request_web_search_disabled() {
             },
         }]),
         tool_choice: None,
+        reasoning_effort: None,
     };
 
-    let result = translate_request_inner(&req, "claude-sonnet-4-6", false).unwrap();
+    let result = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        false,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
     let tools = result.tools.unwrap();
     assert_eq!(tools.len(), 1);
     let only = serde_json::to_value(&tools[0]).unwrap();
@@ -939,7 +968,13 @@ fn test_translate_request_forces_required_web_search_without_client_tools() {
         user_message("look it up"),
     ]);
 
-    let result = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+    let result = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
     let tools = result.tools.unwrap();
     assert_eq!(tools.len(), 1);
     assert_eq!(
@@ -974,7 +1009,13 @@ fn test_translate_request_forces_web_search_for_location_qualified_weather() {
         "function": {"name": "search_memories"}
     }));
 
-    let result = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+    let result = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
     let tools = result.tools.unwrap();
     assert_eq!(
         serde_json::to_value(&tools[0]).unwrap()["name"],
@@ -1000,7 +1041,13 @@ fn test_pause_turn_continuation_preserves_raw_assistant_content_and_tools() {
     let req = test_request(vec![user_message(
         "Search the web for current weather in NYC",
     )]);
-    let mut continuation = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+    let mut continuation = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
     let original_tools = serde_json::to_value(&continuation.tools).unwrap();
     let paused_content = json!([
         {
@@ -1063,7 +1110,13 @@ fn test_pause_turn_server_tool_response_decodes_and_preserves_raw_content() {
     let req = test_request(vec![user_message(
         "Search the web for current weather in NYC",
     )]);
-    let mut continuation = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+    let mut continuation = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
     append_pause_turn_continuation(&mut continuation, raw_response["content"].clone());
     assert_eq!(
         continuation.messages.last().unwrap().content,
@@ -1074,7 +1127,13 @@ fn test_pause_turn_server_tool_response_decodes_and_preserves_raw_content() {
 #[test]
 fn test_translate_request_required_web_search_fails_closed_when_disabled() {
     let req = test_request(vec![user_message("Search the web for HumanPost")]);
-    let error = translate_request_inner(&req, "claude-sonnet-4-6", false).unwrap_err();
+    let error = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        false,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap_err();
     assert!(error.contains("required public web search is unavailable"));
 }
 
@@ -1089,7 +1148,9 @@ fn test_translate_request_guessed_freshness_answers_without_web_search() {
         ("claude-haiku-4-5-20251001", true),
         ("claude-sonnet-4-6", false),
     ] {
-        let result = translate_request_inner(&req, model, enable_web_search).unwrap();
+        let result =
+            translate_request_inner(&req, model, enable_web_search, ReasoningEffort::Unspecified)
+                .unwrap();
         assert!(result.tools.is_none());
         assert!(result.tool_choice.is_none());
         let prompt = serde_json::to_value(&result.messages[0])
@@ -1114,7 +1175,13 @@ fn test_translate_request_private_lookup_excludes_server_web_search() {
         },
     }]);
 
-    let result = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+    let result = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
     let tools = result.tools.unwrap();
     assert_eq!(tools.len(), 1);
     assert_eq!(
@@ -1149,8 +1216,11 @@ fn test_translate_request_no_web_search_on_haiku() {
             },
         }]),
         tool_choice: None,
+        reasoning_effort: None,
     };
-    let result = translate_request_inner(&req, "claude-haiku-4-5", true).unwrap();
+    let result =
+        translate_request_inner(&req, "claude-haiku-4-5", true, ReasoningEffort::Unspecified)
+            .unwrap();
     let tools = result.tools.unwrap();
     assert_eq!(tools.len(), 1);
     assert_eq!(
@@ -1226,8 +1296,15 @@ fn test_translate_request_no_web_search_without_client_tools() {
         max_completion_tokens: None,
         tools: None,
         tool_choice: None,
+        reasoning_effort: None,
     };
-    let result = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+    let result = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
     assert!(result.tools.is_none());
 
     // Same for an explicitly empty tools array.
@@ -1235,7 +1312,13 @@ fn test_translate_request_no_web_search_without_client_tools() {
         tools: Some(vec![]),
         ..req
     };
-    let result = translate_request_inner(&req_empty, "claude-sonnet-4-6", true).unwrap();
+    let result = translate_request_inner(
+        &req_empty,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
     assert_eq!(result.tools.unwrap().len(), 0);
 }
 
@@ -1384,6 +1467,7 @@ fn test_make_chunk_text_delta() {
         ChunkDelta {
             role: None,
             content: Some("Hello".to_string()),
+            reasoning_content: None,
             tool_calls: None,
         },
         None,
@@ -1404,6 +1488,7 @@ fn test_make_chunk_finish() {
         ChunkDelta {
             role: None,
             content: None,
+            reasoning_content: None,
             tool_calls: None,
         },
         Some("stop".to_string()),
@@ -1474,6 +1559,7 @@ fn test_tool_choice_none_strips_tools() {
             },
         }]),
         tool_choice: Some(json!("none")),
+        reasoning_effort: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -1502,6 +1588,7 @@ fn test_translate_request_unsupported_role() {
         max_completion_tokens: None,
         tools: None,
         tool_choice: None,
+        reasoning_effort: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6");
@@ -1603,6 +1690,7 @@ fn test_translate_request_invalid_tool_choice_propagates_error() {
         max_completion_tokens: None,
         tools: None,
         tool_choice: Some(json!("bogus")),
+        reasoning_effort: None,
     };
     let result = translate_request(&req, "claude-sonnet-4-6");
     assert!(result.is_err(), "invalid tool_choice must propagate as Err");
@@ -1627,6 +1715,7 @@ fn test_max_tokens_zero() {
         max_completion_tokens: None,
         tools: None,
         tool_choice: None,
+        reasoning_effort: None,
     };
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
     assert_eq!(
@@ -1652,6 +1741,7 @@ fn test_max_tokens_at_cap() {
         max_completion_tokens: None,
         tools: None,
         tool_choice: None,
+        reasoning_effort: None,
     };
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
     assert_eq!(
@@ -1667,6 +1757,7 @@ fn test_make_chunk_tool_call_delta() {
     let delta = ChunkDelta {
         role: None,
         content: None,
+        reasoning_content: None,
         tool_calls: Some(vec![ChunkToolCall {
             index: 0,
             id: Some("call_123".to_string()),
@@ -1691,6 +1782,7 @@ fn test_make_chunk_finish_reason_stop() {
     let delta = ChunkDelta {
         role: None,
         content: Some("done".to_string()),
+        reasoning_content: None,
         tool_calls: None,
     };
     let chunk = make_chunk(
@@ -1709,6 +1801,7 @@ fn test_make_chunk_with_usage() {
     let delta = ChunkDelta {
         role: None,
         content: None,
+        reasoning_content: None,
         tool_calls: None,
     };
     let usage = Usage {
@@ -1836,4 +1929,217 @@ async fn incremental_translation_terminates_a_partial_stream_at_eof() {
     assert!(lines
         .iter()
         .any(|line| line.contains("\"type\":\"server_error\"")));
+}
+
+// ── Reasoning effort (adaptive thinking / PTT fast lane) ────────────────────
+
+#[test]
+fn adaptive_effort_enables_adaptive_thinking_with_headroom() {
+    let mut req = test_request(vec![user_message("Prove this theorem, think properly")]);
+    req.stream = true;
+    req.temperature = Some(0.3);
+    let result =
+        translate_request_inner(&req, "claude-sonnet-4-6", true, ReasoningEffort::Adaptive)
+            .unwrap();
+
+    assert_eq!(result.thinking, Some(json!({"type": "adaptive"})));
+    assert!(result.output_config.is_none());
+    // Thinking shares the max_tokens budget — floor must rise above the default.
+    assert_eq!(result.max_tokens, THINKING_MIN_MAX_TOKENS);
+    // Anthropic rejects a custom temperature alongside thinking.
+    assert!(result.temperature.is_none());
+}
+
+#[test]
+fn adaptive_effort_streaming_respects_raised_cap() {
+    let mut req = test_request(vec![user_message("hard question")]);
+    req.stream = true;
+    req.max_tokens = Some(1_000_000);
+    let result =
+        translate_request_inner(&req, "claude-sonnet-4-6", true, ReasoningEffort::Adaptive)
+            .unwrap();
+    assert_eq!(result.max_tokens, THINKING_MAX_TOKENS_CAP);
+
+    // Non-streaming keeps the standard cap to avoid HTTP timeouts.
+    let mut req = test_request(vec![user_message("hard question")]);
+    req.max_tokens = Some(1_000_000);
+    let result =
+        translate_request_inner(&req, "claude-sonnet-4-6", true, ReasoningEffort::Adaptive)
+            .unwrap();
+    assert_eq!(result.max_tokens, MAX_TOKENS_CAP);
+}
+
+#[test]
+fn fast_effort_keeps_thinking_off_and_pins_low_output_effort() {
+    let req = test_request(vec![user_message("what's on my calendar")]);
+    let result =
+        translate_request_inner(&req, "claude-sonnet-4-6", true, ReasoningEffort::Fast).unwrap();
+
+    assert!(result.thinking.is_none());
+    assert_eq!(result.output_config, Some(json!({"effort": "low"})));
+    assert_eq!(result.max_tokens, DEFAULT_MAX_TOKENS);
+}
+
+#[test]
+fn unspecified_effort_preserves_legacy_request_shape() {
+    let mut req = test_request(vec![user_message("hello")]);
+    req.temperature = Some(0.7);
+    let result = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
+
+    assert!(result.thinking.is_none());
+    assert!(result.output_config.is_none());
+    assert_eq!(result.temperature, Some(0.7));
+    assert_eq!(result.max_tokens, DEFAULT_MAX_TOKENS);
+}
+
+#[test]
+fn haiku_router_never_gets_thinking_or_effort() {
+    let req = test_request(vec![user_message("classify this")]);
+    let result =
+        translate_request_inner(&req, "claude-haiku-4-5", true, ReasoningEffort::Adaptive).unwrap();
+    assert!(result.thinking.is_none());
+
+    let result =
+        translate_request_inner(&req, "claude-haiku-4-5", true, ReasoningEffort::Fast).unwrap();
+    assert!(result.output_config.is_none());
+}
+
+#[test]
+fn reasoning_effort_parse_allowlist() {
+    assert_eq!(
+        ReasoningEffort::parse("adaptive"),
+        Some(ReasoningEffort::Adaptive)
+    );
+    assert_eq!(
+        ReasoningEffort::parse("Quality"),
+        Some(ReasoningEffort::Adaptive)
+    );
+    assert_eq!(ReasoningEffort::parse("fast"), Some(ReasoningEffort::Fast));
+    assert_eq!(ReasoningEffort::parse("none"), Some(ReasoningEffort::Fast));
+    assert_eq!(ReasoningEffort::parse("bogus"), None);
+    assert_eq!(ReasoningEffort::parse(""), None);
+}
+
+/// Thinking SSE events stream through as OpenAI `reasoning_content` deltas and
+/// never corrupt the answer text; signature deltas and thinking block
+/// start/stop are dropped without ending the stream.
+#[tokio::test]
+async fn thinking_deltas_stream_as_reasoning_content() {
+    let wire = concat!(
+        "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_think\",\"model\":\"claude-sonnet-4-6\",\"usage\":{\"input_tokens\":9}}}\n\n",
+        "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\"}}\n\n",
+        "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"pondering...\"}}\n\n",
+        "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"sig\"}}\n\n",
+        "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+        "data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+        "data: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"the answer\"}}\n\n",
+        "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\n",
+        "data: {\"type\":\"message_stop\"}\n\n"
+    );
+    let upstream = stream::iter(vec![Ok::<Bytes, std::io::Error>(Bytes::from_static(
+        wire.as_bytes(),
+    ))]);
+
+    let output = translate_anthropic_sse_stream(
+        upstream,
+        "omi-sonnet".to_string(),
+        StreamUsageContext {
+            uid: "test-user".to_string(),
+            upstream_model: "claude-sonnet-4-6".to_string(),
+            firestore: None,
+        },
+    )
+    .collect::<Vec<_>>()
+    .await;
+    let lines = output
+        .into_iter()
+        .map(|chunk| String::from_utf8(chunk.unwrap().to_vec()).unwrap())
+        .collect::<Vec<_>>();
+
+    assert_eq!(lines.last().unwrap(), "data: [DONE]\n\n");
+    let chunks = lines[..lines.len() - 1]
+        .iter()
+        .map(|line| serde_json::from_str::<serde_json::Value>(&line[6..line.len() - 2]).unwrap())
+        .collect::<Vec<_>>();
+
+    let reasoning: Vec<&serde_json::Value> = chunks
+        .iter()
+        .filter(|c| !c["choices"][0]["delta"]["reasoning_content"].is_null())
+        .collect();
+    assert_eq!(reasoning.len(), 1);
+    assert_eq!(
+        reasoning[0]["choices"][0]["delta"]["reasoning_content"],
+        "pondering..."
+    );
+    // Reasoning never leaks into the visible answer.
+    assert!(chunks
+        .iter()
+        .all(|c| c["choices"][0]["delta"]["content"] != "pondering..."));
+    assert!(chunks
+        .iter()
+        .any(|c| c["choices"][0]["delta"]["content"] == "the answer"));
+    assert!(chunks
+        .iter()
+        .any(|c| c["choices"][0]["finish_reason"] == "stop"));
+}
+
+/// Adaptive thinking must never be requested on a tool-loop continuation:
+/// the OpenAI-format history cannot replay Anthropic thinking/signature
+/// blocks, so a thinking-enabled continuation whose assistant tool_use turn
+/// lacks its thinking block would be rejected upstream. Thinking applies only
+/// when the request tail is the user's message.
+#[test]
+fn adaptive_effort_is_suppressed_on_tool_result_continuations() {
+    let mut req = test_request(vec![
+        user_message("What's the weather in my calendar city?"),
+        ChatMessage {
+            role: "assistant".to_string(),
+            content: None,
+            name: None,
+            tool_calls: Some(vec![ToolCall {
+                id: "call_1".to_string(),
+                call_type: "function".to_string(),
+                function: FunctionCall {
+                    name: "execute_sql".to_string(),
+                    arguments: "{}".to_string(),
+                },
+            }]),
+            tool_call_id: None,
+        },
+        ChatMessage {
+            role: "tool".to_string(),
+            content: Some(json!("query result rows")),
+            name: None,
+            tool_calls: None,
+            tool_call_id: Some("call_1".to_string()),
+        },
+    ]);
+    req.stream = true;
+    let result =
+        translate_request_inner(&req, "claude-sonnet-4-6", true, ReasoningEffort::Adaptive)
+            .unwrap();
+
+    assert!(result.thinking.is_none());
+    // Continuations also keep the legacy token budget (no thinking headroom).
+    assert_eq!(result.max_tokens, DEFAULT_MAX_TOKENS);
+
+    // Past-turn tool history is fine — only the request tail matters.
+    let mut follow_up = req.clone();
+    follow_up
+        .messages
+        .push(user_message("thanks, now think hard about my week"));
+    let result = translate_request_inner(
+        &follow_up,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Adaptive,
+    )
+    .unwrap();
+    assert_eq!(result.thinking, Some(json!({"type": "adaptive"})));
 }

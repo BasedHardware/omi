@@ -20,7 +20,7 @@ def _as_config_dict(value: object) -> ConfigDict | None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description='Render backend Cloud Run runtime env from the manifest.')
-    parser.add_argument('--env', choices=('dev', 'beta', 'prod'), required=True)
+    parser.add_argument('--env', choices=('dev', 'prod'), required=True)
     parser.add_argument(
         '--job',
         help='render only this Cloud Run job and the shared network flags; services remain full-environment only',

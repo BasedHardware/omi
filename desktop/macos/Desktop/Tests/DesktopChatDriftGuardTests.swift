@@ -26,6 +26,21 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertTrue(inputSource.contains("Used by both ChatPage (main chat) and TaskChatPanel (task sidebar chat)."))
   }
 
+  func testChatComposerUsesAThinUniformShellAndTranscriptFade() {
+    XCTAssertEqual(ChatComposerLayout.shellInset, 8)
+    XCTAssertEqual(ChatComposerLayout.pageMargin, 16)
+    XCTAssertGreaterThan(ChatComposerLayout.fadeHeight, ChatComposerLayout.shellInset)
+  }
+
+  func testMainAndNotchChatShareTheTranscriptFade() throws {
+    let mainChat = try sourceFile("MainWindow/Pages/ChatPage.swift")
+    let notchChat = try sourceFile("FloatingControlBar/AIResponseView.swift")
+
+    XCTAssertTrue(mainChat.contains(".overlay(alignment: .bottom) {\n      ChatComposerFade()"))
+    XCTAssertTrue(notchChat.contains(".overlay(alignment: .bottom) {\n        ChatComposerFade()"))
+    XCTAssertTrue(mainChat.contains(".padding(.vertical, OmiSpacing.sm)"))
+  }
+
   func testNoNewMirroredFromChatProviderTaskChatHelperBlocks() throws {
     let markers = try swiftSourceLines(containingAnyOf: [
       "mirrored from ChatProvider",

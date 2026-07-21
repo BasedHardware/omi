@@ -38,7 +38,11 @@ struct OnboardingView: View {
   @StateObject private var introCoordinator = OnboardingPagedIntroCoordinator()
   @StateObject private var graphViewModel = MemoryGraphViewModel()
   @FocusState private var contentFocused: Bool
-  @State private var keyNavMonitor: Any?
+  /// Static, not @State: SwiftUI can recreate this view mid-flow (parent tree
+  /// identity changes), and a per-identity handle would leak the old monitor —
+  /// which keeps consuming arrow keys — while installing a second one. One
+  /// shared handle means re-install replaces instead of stacking.
+  private static var keyNavMonitor: Any?
 
   let steps = OnboardingFlow.steps
 
@@ -113,7 +117,13 @@ struct OnboardingView: View {
       installKeyNavigationMonitor()
     }
     .onDisappear {
-      removeKeyNavigationMonitor()
+      // Identity churn re-creates this view mid-flow, and the new identity's
+      // onAppear may run before this onDisappear — removing here would tear
+      // down the monitor it just installed. Only remove once onboarding is
+      // actually over; the handler also no-ops after completion.
+      if !isExportPreview, appState.hasCompletedOnboarding {
+        removeKeyNavigationMonitor()
+      }
     }
     .task {
       guard !isExportPreview else { return }
@@ -128,6 +138,16 @@ struct OnboardingView: View {
       log("OnboardingView: resetOnboardingRequested — returning to the first onboarding step")
       currentStep = 0
       furthestStep = 0
+    }
+    .onReceive(
+      NotificationCenter.default.publisher(for: .onboardingStepNavigationRequested)
+    ) { note in
+      guard !isExportPreview, let requested = note.userInfo?["targetStep"] as? Int else { return }
+      guard
+        let target = OnboardingFlow.validatedNavigationTarget(
+          requested, currentStep: currentStep, furthestStep: furthestStep)
+      else { return }
+      currentStep = target
     }
   }
 
@@ -513,43 +533,42 @@ struct OnboardingView: View {
     currentStep = index
   }
 
-  /// Forward navigation. Cleared and skippable steps advance automatically
-  /// (answers/permissions are already fixed, or the step could be skipped
-  /// anyway). At an unanswered required step it defers to the step's own
-  /// Continue gating by re-issuing the default action.
-  private func handleForwardNavigation() -> Bool {
-    let next = currentStep + 1
-    if OnboardingFlow.canJump(to: next, furthestStep: furthestStep) {
-      currentStep = next
-      return true
-    }
-    return handleForwardKey() == .handled
-  }
-
   /// Arrow-key navigation runs off a local `NSEvent` monitor rather than SwiftUI
   /// `.onKeyPress`, because the "Ask a question" steps take key focus away from the
   /// onboarding window (shortcut steps null the app menu + install their own key
   /// monitor; demo steps hand focus to the floating Ask Omi panel). A monitor sees
   /// the keystroke regardless of which of the app's windows is key.
   private func installKeyNavigationMonitor() {
-    guard keyNavMonitor == nil, !isExportPreview else { return }
-    keyNavMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+    // The outer onAppear also runs on the already-completed branch — don't
+    // install an arrow monitor for a flow that isn't showing.
+    guard !isExportPreview, !appState.hasCompletedOnboarding else { return }
+    removeKeyNavigationMonitor()
+    Self.keyNavMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
       handleArrowNavigation(event) ? nil : event
     }
   }
 
   private func removeKeyNavigationMonitor() {
-    if let monitor = keyNavMonitor {
+    if let monitor = Self.keyNavMonitor {
       NSEvent.removeMonitor(monitor)
-      keyNavMonitor = nil
+      Self.keyNavMonitor = nil
     }
   }
 
   /// Returns true when the event was consumed as a back/forward navigation.
   /// Skips plain arrows while the user is typing (any text field, including the
   /// floating Ask Omi bar) so the caret keeps moving instead of navigating.
+  ///
+  /// Runs inside the NSEvent monitor closure, which holds a detached copy of
+  /// this view. Mutating @AppStorage through that copy silently drops the write
+  /// on some macOS versions (it never reaches UserDefaults or the mounted
+  /// view), so this reads the persisted step state directly and posts the
+  /// target step for the mounted view's `.onReceive` to apply.
   private func handleArrowNavigation(_ event: NSEvent) -> Bool {
     guard !isExportPreview else { return false }
+    // The monitor may briefly outlive the flow (removal is deferred across
+    // identity churn); never swallow arrows once onboarding is done.
+    guard !UserDefaults.standard.bool(forKey: .hasCompletedOnboarding) else { return false }
     // Only bare arrows navigate — leave shortcut chords (⌘/⌥/⌃/⇧) to their owners.
     let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
     guard mods.subtracting([.function, .numericPad]).isEmpty else { return false }
@@ -557,16 +576,25 @@ struct OnboardingView: View {
     if NSApp.keyWindow is FloatingControlBarWindow { return false }
     if NSApp.keyWindow?.firstResponder is NSText { return false }
 
-    switch event.keyCode {
-    case 123, 126:  // left, up
-      guard canGoBack else { return false }
-      goBack()
+    let defaults = UserDefaults.standard
+    let step = defaults.integer(forKey: .onboardingStep)
+    let frontier = defaults.integer(forKey: .onboardingFurthestStep)
+
+    switch OnboardingFlow.arrowNavigation(keyCode: event.keyCode, step: step, furthestStep: frontier)
+    {
+    case .jump(let target):
+      postStepNavigation(target)
       return true
-    case 124, 125:  // right, down
-      return handleForwardNavigation()
-    default:
+    case .forwardDefaultAction:
+      return handleForwardKey() == .handled
+    case nil:
       return false
     }
+  }
+
+  private func postStepNavigation(_ target: Int) {
+    NotificationCenter.default.post(
+      name: .onboardingStepNavigationRequested, object: nil, userInfo: ["targetStep": target])
   }
 
   /// Forward arrow == pressing the step's visible Continue button. Re-issuing the

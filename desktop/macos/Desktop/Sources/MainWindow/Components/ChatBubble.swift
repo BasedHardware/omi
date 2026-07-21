@@ -19,6 +19,7 @@ struct ChatBubble: View {
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
 
   @State private var isTimestampHovering = false
+  @State private var isRowHovering = false
   @State private var isExpanded = false
   @State private var showCopied = false
   @State private var showRatingFeedback = false
@@ -89,53 +90,37 @@ struct ChatBubble: View {
     )
 
     HStack(alignment: .top, spacing: OmiSpacing.md) {
-      if message.sender == .ai {
-        // App avatar
-        if let app = app {
-          AsyncImage(url: URL(string: app.image)) { phase in
-            switch phase {
-            case .success(let image):
-              image
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-            default:
-              Circle()
-                .fill(OmiColors.backgroundTertiary)
-            }
-          }
-          .frame(width: 32, height: 32)
-          .clipShape(Circle())
-        } else {
-          if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
-            let logoImage = NSImage(contentsOf: logoURL)
-          {
-            Image(nsImage: logoImage)
+      // Default omi replies render avatar-free for a quieter timeline; only
+      // app personas keep their identity mark.
+      if message.sender == .ai, let app = app {
+        AsyncImage(url: URL(string: app.image)) { phase in
+          switch phase {
+          case .success(let image):
+            image
               .resizable()
-              .scaledToFit()
-              .frame(width: 20, height: 20)
-              .frame(width: 32, height: 32)
-              .background(OmiColors.backgroundTertiary)
-              .clipShape(Circle())
+              .aspectRatio(contentMode: .fill)
+          default:
+            Circle()
+              .fill(OmiColors.backgroundTertiary)
           }
         }
+        .frame(width: 32, height: 32)
+        .clipShape(Circle())
       }
 
+      // Bubbles hug their content up to a readable cap — omi replies sit
+      // left, user messages sit right, neither spans the full column.
       VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xxs) {
         messageContentView(groupedBlocks)
       }
-
-      if message.sender == .user {
-        // User avatar
-        Image(systemName: "person.fill")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textSecondary)
-          .frame(width: 32, height: 32)
-          .background(OmiColors.backgroundTertiary)
-          .clipShape(Circle())
-      }
+      .frame(
+        maxWidth: 640,
+        alignment: message.sender == .user ? .trailing : .leading
+      )
     }
     .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
     .contentShape(Rectangle())
+    .onHover { isRowHovering = $0 }
   }
 
   @ViewBuilder
@@ -201,9 +186,16 @@ struct ChatBubble: View {
             .padding(.vertical, OmiSpacing.sm)
             .background(
               message.sender == .user
-                ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.95)
+                ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.42)
             )
             .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
+            .overlay(
+              RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
+                .stroke(
+                  message.sender == .user ? Color.clear : OmiColors.border.opacity(0.4),
+                  lineWidth: 1
+                )
+            )
             .padding(.top, OmiSpacing.hairline)
         }
 
@@ -259,14 +251,19 @@ struct ChatBubble: View {
         SelectableMarkdown(text: text, sender: .ai)
           .padding(.horizontal, OmiSpacing.md)
           .padding(.vertical, OmiSpacing.sm)
-          .background(OmiColors.backgroundTertiary.opacity(0.92))
+          .background(OmiColors.backgroundTertiary.opacity(0.42))
           .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
+          .overlay(
+            RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
+              .stroke(OmiColors.border.opacity(0.4), lineWidth: 1)
+          )
           .padding(.top, OmiSpacing.hairline)
       )
     case .toolCalls(_, let calls):
       return AnyView(
         ToolCallsGroup(
           calls: calls,
+          compact: true,
           onCancel: onCancelTurn,
           onOpenAgent: onOpenAgent,
           onOpenAgentRef: onOpenAgentRef
@@ -331,7 +328,11 @@ struct ChatBubble: View {
           .transition(.opacity)
       }
     }
+    // Quiet timeline: actions and timestamps only surface while the reader
+    // is on the message (or mid-interaction with them).
+    .opacity(isRowHovering || showRatingFeedback || showCopied || showInfoPopover ? 1 : 0)
     .omiAnimation(.easeInOut(duration: 0.12), value: isTimestampHovering)
+    .omiAnimation(.easeInOut(duration: 0.15), value: isRowHovering)
   }
 
   @ViewBuilder
@@ -958,14 +959,8 @@ enum ContentBlockGroup: Identifiable {
     return groups
   }
 
-  /// Main chat renders the agent's final answer and sub-agent entrypoints, not
-  /// the implementation log of every completed tool. An in-flight tool remains
-  /// visible as progress feedback even if its surrounding text segment already
-  /// reached a terminal streaming state; the tool's own lifecycle is the
-  /// authority. Once that tool completes or fails, only spawned-agent links
-  /// survive. When a structured `.agentSpawn` exists
-  /// for the same pill/run, hide the spawn tool call so the card is the single
-  /// entrypoint (INV-6 structured identity).
+  /// Main chat keeps a durable tool trace, so streamed answers do not appear to lose completed work.
+  /// A structured `.agentSpawn` replaces only its duplicate raw spawn call (INV-6 structured identity).
   static func visibleChatGroups(_ blocks: [ChatContentBlock], isStreaming: Bool) -> [ContentBlockGroup] {
     // The display projection turns a persisted spawn into its terminal card.
     // Both structured forms are therefore authoritative evidence that the
@@ -1009,16 +1004,21 @@ enum ContentBlockGroup: Identifiable {
           }
           return true
         }
-        // Keep unresolved agent links and live work together. A raw spawn can
-        // briefly precede its structured receipt while another tool (for
-        // example a web lookup) is still executing; returning early for the
-        // spawn would hide that truthful active-tool indication.
+        // Keep the complete tool trace together. A raw spawn can briefly
+        // precede its structured receipt; once that receipt arrives, hide only
+        // the duplicate raw spawn and retain every other completed, failed, or
+        // in-flight tool row as visible progress evidence.
         let unresolvedSpawnIDs = Set(spawnedAgentCalls.map(\.id))
         let visibleCalls = calls.filter { block in
           if unresolvedSpawnIDs.contains(block.id) { return true }
-          if case .toolCall(_, _, let status, _, _, _) = block {
-            return status.isInFlight
+          if let ref = block.agentOpenRef {
+            let hasStructuredSpawn =
+              ref.pillId.map { structuredSpawnKeys.contains("pill:\($0.uuidString)") }
+              ?? ref.runId.map { structuredSpawnKeys.contains("run:\($0)") }
+              ?? false
+            if hasStructuredSpawn { return false }
           }
+          if case .toolCall = block { return true }
           return false
         }
         return visibleCalls.isEmpty ? nil : .toolCalls(id: id, calls: visibleCalls)
@@ -1029,12 +1029,18 @@ enum ContentBlockGroup: Identifiable {
 
 // MARK: - Tool Calls Group
 
+/// Keeps streamed tool groups compact until the reader explicitly asks for the details.
+enum ToolCallsGroupExpansionPolicy {
+  static func initiallyExpanded() -> Bool {
+    false
+  }
+}
+
 /// Renders a group of consecutive tool calls as a single summary line with
 /// optional expanded per-step details.
 struct ToolCallsGroup: View {
   let calls: [ChatContentBlock]
   var compact: Bool = false
-  var expandRunning: Bool = true
   /// `ChatProvider` wires this to `agentBridge.interrupt()` via the
   /// parent message view. If no action is available, the banner is hidden
   /// so the UI never presents a no-op Cancel button.
@@ -1048,23 +1054,16 @@ struct ToolCallsGroup: View {
   init(
     calls: [ChatContentBlock],
     compact: Bool = false,
-    expandRunning: Bool = true,
     onCancel: (() -> Void)? = nil,
     onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil,
     onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
   ) {
     self.calls = calls
     self.compact = compact
-    self.expandRunning = expandRunning
     self.onCancel = onCancel
     self.onOpenAgent = onOpenAgent
     self.onOpenAgentRef = onOpenAgentRef
-    self._isExpanded = State(initialValue: expandRunning && Self.hasRunningTool(in: calls))
-  }
-
-  /// Whether any tool in the group is still running.
-  private var hasRunningTool: Bool {
-    Self.hasRunningTool(in: calls)
+    self._isExpanded = State(initialValue: ToolCallsGroupExpansionPolicy.initiallyExpanded())
   }
 
   /// True iff at least one tool in the group is `.stalled` and is not a
@@ -1186,13 +1185,8 @@ struct ToolCallsGroup: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+    .fixedSize(horizontal: false, vertical: true)
     .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.82), radius: compact ? 14 : 16)
-    .onChange(of: hasRunningTool) { _, isRunning in
-      guard expandRunning, isRunning else { return }
-      OmiMotion.withGated(.easeInOut(duration: 0.18)) {
-        isExpanded = true
-      }
-    }
   }
 
   private var header: some View {
@@ -1291,13 +1285,6 @@ struct ToolCallsGroup: View {
       }
       .padding(.horizontal, OmiSpacing.xs)
       .padding(.vertical, OmiSpacing.xs)
-    }
-  }
-
-  private static func hasRunningTool(in calls: [ChatContentBlock]) -> Bool {
-    calls.contains { block in
-      if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
-      return false
     }
   }
 
