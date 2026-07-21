@@ -9745,4 +9745,23 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Vyberte mikrofón Ray-Ban Meta';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Vyberte Bluetooth mikrofón okuliarov. Počas jeho používania aplikáciou Omi sa hudba pozastaví.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Nenašli sa žiadne Bluetooth mikrofóny. Pripojte okuliare v nastaveniach iPhonu a skúste to znova.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth mikrofóny sa nepodarilo načítať. Skontrolujte, či je Bluetooth zapnutý, a skúste to znova.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'K tomuto mikrofónu sa nepodarilo pripojiť. Uistite sa, že je pripojený v nastaveniach iPhonu.';
 }

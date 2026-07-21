@@ -3185,5 +3185,10 @@
     "deviceStorageFree": "{free} boş",
     "deviceStorageNearlyFull": "Cihaz neredeyse dolu — yer açmak için eşitleyin.",
     "phoneMicOfflineFallbackMessage": "Bağlantı yok — yerel olarak kaydediliyor. Tekrar çevrimiçi olduğunuzda yazıya dökülecek.",
-    "dataEncryptedBanner": "Verileriniz varsayılan olarak güçlü şifreleme ile korunur ve nasıl saklanıp kullanılacağını siz kontrol edersiniz."
+    "dataEncryptedBanner": "Verileriniz varsayılan olarak güçlü şifreleme ile korunur ve nasıl saklanıp kullanılacağını siz kontrol edersiniz.",
+    "rayBanMetaMicPickerTitle": "Ray-Ban Meta mikrofonunuzu seçin",
+    "rayBanMetaMicPickerDescription": "Gözlüğünüzün Bluetooth mikrofonunu seçin. Omi mikrofonu kullanırken müzik duraklatılır.",
+    "rayBanMetaMicPickerEmpty": "Bluetooth mikrofonu bulunamadı. Gözlüğünüzü iPhone Ayarları'ndan bağlayıp tekrar deneyin.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth mikrofonları yüklenemedi. Bluetooth'un açık olduğunu kontrol edip tekrar deneyin.",
+    "rayBanMetaMicPickerConnectError": "Bu mikrofona bağlanılamadı. iPhone Ayarları'nda bağlı olduğundan emin olun."
 }

@@ -9576,4 +9576,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => '选择您的 Ray-Ban Meta 麦克风';
+
+  @override
+  String get rayBanMetaMicPickerDescription => '选择眼镜的 Bluetooth 麦克风。Omi 使用麦克风时，音乐会暂停。';
+
+  @override
+  String get rayBanMetaMicPickerEmpty => '未找到 Bluetooth 麦克风。请在 iPhone 设置中连接眼镜，然后重试。';
+
+  @override
+  String get rayBanMetaMicPickerLoadError => '无法加载 Bluetooth 麦克风。请检查 Bluetooth 是否已开启，然后重试。';
+
+  @override
+  String get rayBanMetaMicPickerConnectError => '无法连接到该麦克风。请确保它已在 iPhone 设置中连接。';
 }

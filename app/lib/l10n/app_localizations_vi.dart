@@ -9751,4 +9751,22 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Chọn micrô Ray-Ban Meta của bạn';
+
+  @override
+  String get rayBanMetaMicPickerDescription => 'Chọn micrô Bluetooth của kính. Nhạc sẽ tạm dừng khi Omi sử dụng micrô.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Không tìm thấy micrô Bluetooth. Hãy kết nối kính trong Cài đặt iPhone rồi thử lại.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Không thể tải micrô Bluetooth. Hãy kiểm tra Bluetooth đã bật rồi thử lại.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Không thể kết nối với micrô đó. Hãy đảm bảo micrô đã được kết nối trong Cài đặt iPhone.';
 }

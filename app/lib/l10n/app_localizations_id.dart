@@ -9763,4 +9763,23 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Pilih mikrofon Ray-Ban Meta Anda';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Pilih mikrofon Bluetooth untuk kacamata Anda. Musik dijeda saat Omi menggunakannya.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Tidak ada mikrofon Bluetooth yang ditemukan. Hubungkan kacamata di Pengaturan iPhone, lalu coba lagi.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Mikrofon Bluetooth tidak dapat dimuat. Pastikan Bluetooth aktif, lalu coba lagi.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Tidak dapat terhubung ke mikrofon tersebut. Pastikan mikrofon terhubung di Pengaturan iPhone.';
 }
