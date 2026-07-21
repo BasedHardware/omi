@@ -29,6 +29,16 @@ checks:
     triggers: [".github/schemas/desktop-release-manifest-v1.schema.json", ".github/scripts/desktop_release_manifest.py", ".github/scripts/test_desktop_release_manifest.py", ".github/scripts/fixtures/desktop_release_manifest/**"]
     lanes: ["local", "ci"]
     reason: "immutable desktop app/backend release-unit contract"
+  - id: pr-scope
+    command: ["python3", ".github/scripts/check_pr_scope.py", "--base", "{base}", "--head", "{head}"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    reason: "advisory PR production-source churn report (annotations only, never blocks)"
+  - id: pr-scope-helper-tests
+    command: ["python3", ".github/scripts/test_check_pr_scope.py"]
+    triggers: [".github/scripts/check_pr_scope.py", ".github/scripts/test_check_pr_scope.py"]
+    lanes: ["local", "ci"]
+    reason: "scope advisor classification/annotation contract"
   - id: desktop-release-doctor-v1
     command: ["python3", ".github/scripts/test_desktop_release_doctor.py"]
     triggers: [".github/schemas/desktop-release-evidence-v1.schema.json", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/scripts/test_desktop_release_doctor.py", ".github/workflows/desktop_release_doctor.yml"]
@@ -212,6 +222,11 @@ checks:
     triggers: ["backend/tests/**/*.py", "backend/testing/**/*.py", "backend/tests/.module_stub_legacy_allowlist", "backend/scripts/check_module_stub_pollution.py"]
     lanes: ["local", "ci"]
     reason: "backend tests or their isolation allowlist changed"
+  - id: backend-test-discovery
+    command: ["python3", "backend/scripts/check_unit_test_discovery.py"]
+    triggers: ["backend/tests/**", "backend/testing/**", "backend/scripts/select_backend_unit_tests.py", "backend/scripts/check_unit_test_discovery.py", ".github/workflows/parakeet_gpu_tests.yml", ".github/workflows/backend-hermetic-e2e.yml", ".github/workflows/desktop-backend-contracts.yml", ".github/workflows/backend-unit-tests.yml"]
+    lanes: ["local", "ci"]
+    reason: "every backend test file must be discovered by a verified runner"
   - id: backend-workflow-contracts
     command: ["python3", "backend/scripts/check_workflow_contracts.py", "--changed-files", "{changed_files}"]
     triggers: ["backend/**/*.py", "backend/testing/workflow_contracts.json", ".github/workflows/**/*.yml", ".github/actions/detect-changes/**", "scripts/pre-push", "scripts/changed-files"]

@@ -103,8 +103,7 @@ def load_manifest(path: Path) -> Manifest:
         for item in raw.get("checks", [])
     )
     exempt = tuple(
-        Exemption(path=str(item.get("path", "")), reason=str(item.get("reason", "")))
-        for item in raw.get("exempt", [])
+        Exemption(path=str(item.get("path", "")), reason=str(item.get("reason", ""))) for item in raw.get("exempt", [])
     )
     return Manifest(checks=checks, exempt=exempt)
 

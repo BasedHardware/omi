@@ -72,6 +72,7 @@ The unit of work is the violated contract, not only the line where the symptom a
 - Always work in a git worktree for code changes (`git worktree add`); commit to the current branch and never switch branches mid-task.
 - Make individual commits per feature or testable surface, not per file or unrelated bulk changes.
 - If push fails (remote ahead): `git pull --rebase && git push`.
+- **PR size is reported, not bounded** (`pr-scope` manifest check — advisory annotations, never blocks): 1,500+ changed production-source lines warns; 3,000+ cites the audited history of missed regressions. Split only when the pieces are independently verifiable; otherwise give the one PR proportional review depth.
 - **RELEASE command:** branch from `main`, individual commits, push, open PR, merge without squash, switch back to `main` and pull. **RELEASEWITHBACKEND:** RELEASE + `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
 
 ## Issues
@@ -117,6 +118,9 @@ Click at coordinates: `cliclick c:X,Y`. Mac screenshots: `screencapture -x /tmp/
 - **Coverage grows by ratchet, not mandate:** every bug fix adds the regression test that would have caught it; new features test the core path and main error path — no more. A small test that stays meaningful in a year beats ten brittle ones.
 - **Push gate budget:** `scripts/pre-push` is a bounded local acceptance gate, intentionally smaller than CI: cap broad backend selection at 40 files and use only the desktop debug compile. Do not add full suites, release compiles, or CI-only toolchain pins to it — push-time bloat breaks normal iteration. Use focused feedback while editing; CI remains the full test authority.
 - **CI tests must be hermetic** (no live services, network, sleeps, or ordering dependence) — and hermetic tests must run in CI: put them where the component's runner discovers them. A test needing a live service stays out of CI; note in the PR how you ran it.
+- Backend enforces test discovery mechanically: manifest check `backend-test-discovery` fails on any test file no verified runner discovers.
+- **New fail-closed gates ship with a legacy-principal test** — an existing/unmigrated principal (no state doc, old API key, already-shipped client) asserting the intended fallback; gates without one have shipped day-one breakage.
+- **A test rewritten in the same PR as the code it asserts is suspect** — the PR body must cite an external source (platform doc, wire contract, measurement) for the new expected value, or the rewrite deletes the guard.
 - Delete or fix a flaky/obsolete test you encounter — a suite people distrust is worse than a smaller suite.
 - Component runners and prerequisites: see the component guides (`backend/AGENTS.md` → Testing, `app/AGENTS.md` → Test Strategy). High-risk backend workflows must be listed in `backend/testing/workflow_contracts.json` with contract tests.
 

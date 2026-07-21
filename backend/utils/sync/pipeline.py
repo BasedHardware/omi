@@ -19,7 +19,7 @@ import time
 import wave
 from collections import deque
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import httpx
 import numpy as np
@@ -33,6 +33,7 @@ from database.sync_jobs import (
     RUN_LOCK_HEARTBEAT_SECONDS,
     RUN_LOCK_RENEWAL_SAFETY_SECONDS,
     RUN_LOCK_TTL_SECONDS,
+    FencedSyncJobMutation,
     add_processed_segment,
     add_processed_segment_if_run_owner,
     delete_sync_job_run_lock_epoch,
@@ -393,12 +394,11 @@ class SyncJobRunLeaseLost(RuntimeError):
     """A worker tried to write after its run token stopped owning the job."""
 
 
-def _require_run_owner(mutation, *, job_id: str) -> Dict | None:
+def _require_run_owner(mutation: FencedSyncJobMutation, *, job_id: str) -> Dict | None:
     """Turn a non-applied Redis CAS result into the worker's stop signal."""
-    if getattr(mutation, 'applied', False):
-        return getattr(mutation, 'job', None)
-    outcome = getattr(getattr(mutation, 'outcome', None), 'value', 'unknown')
-    raise SyncJobRunLeaseLost(f'sync job run lease lost: job={job_id} outcome={outcome}')
+    if mutation.applied:
+        return mutation.job
+    raise SyncJobRunLeaseLost(f'sync job run lease lost: job={job_id} outcome={mutation.outcome.value}')
 
 
 def _update_sync_job_for_run(job_id: str, run_lock_token: str | None, updates: Dict) -> Dict | None:
@@ -1287,7 +1287,7 @@ def _finalize_sync_audio_files(uid: str, response: dict):
             )
 
 
-def _cleanup_files(file_paths):
+def _cleanup_files(file_paths: Iterable[str]):
     """Helper to clean up temporary files."""
     for path in file_paths:
         try:
@@ -1462,7 +1462,7 @@ async def _run_sync_vad_phase(wav_paths: list, segmented_paths: set) -> tuple[li
     phase_started = time.monotonic()
     vad_errors: list[str] = []
 
-    def _run_vad_bg(path):
+    def _run_vad_bg(path: str):
         local_errors: list[str] = []
         try:
             retrieve_vad_segments(path, segmented_paths, local_errors)
@@ -1492,7 +1492,7 @@ async def _run_full_pipeline_background_async(
     job_id: str,
     uid: str,
     raw_paths: list,
-    source,
+    source: ConversationSource,
     should_lock: bool,
     job_dir: str,
     target_conversation_id: str = None,
@@ -1935,7 +1935,7 @@ async def _run_full_pipeline_background_async(
             segment_list = sorted(segmented_paths, key=get_timestamp_from_path)
             assignment_turnstile = _OrderedTurnstile(segment_list)
 
-            def _process_one_segment(path):
+            def _process_one_segment(path: str):
                 segment_id = segment_ids_by_path.get(path)
                 if path in already_processed or (segment_id and segment_id in durable_processed_segment_ids):
                     # Release the assignment slot — later segments wait on it
