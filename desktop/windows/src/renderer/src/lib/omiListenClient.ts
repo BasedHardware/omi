@@ -71,10 +71,25 @@ export async function startOmiListen(
       ? await navigator.mediaDevices.getUserMedia({ audio: true })
       : await getSystemAudioStream()
 
-  const audioCtx = new AudioContext({ sampleRate: 16000 })
-  const node = audioCtx.createMediaStreamSource(stream)
-  const processor = audioCtx.createScriptProcessor(4096, 1, 1)
-  node.connect(processor)
+  let audioCtx: AudioContext
+  let node: MediaStreamAudioSourceNode
+  let processor: ScriptProcessorNode
+  try {
+    audioCtx = new AudioContext({ sampleRate: 16000 })
+    node = audioCtx.createMediaStreamSource(stream)
+    processor = audioCtx.createScriptProcessor(4096, 1, 1)
+    node.connect(processor)
+  } catch (e) {
+    // AudioContext setup can throw (e.g. the browser's concurrent-context cap).
+    // The mic/system stream is already live, so stop it before rethrowing — else
+    // the OS mic indicator stays on with no active session.
+    try {
+      stream.getTracks().forEach((t) => t.stop())
+    } catch {
+      /* ignore */
+    }
+    throw e
+  }
 
   let stopped = false
   let connected = false
@@ -130,11 +145,7 @@ export async function startOmiListen(
     } catch {
       /* ignore */
     }
-    try {
-      void audioCtx.close()
-    } catch {
-      /* ignore */
-    }
+    audioCtx.close().catch(() => {})
     throw e
   }
 
@@ -170,12 +181,11 @@ export async function startOmiListen(
       } catch {
         /* ignore */
       }
-      try {
-        void audioCtx.close()
-      } catch {
-        /* ignore */
-      }
-      void window.omi.listenStop(sessionId)
+      // close() and listenStop() return promises; a teardown-time rejection (an
+      // already-closed context, or an IPC reject mid-shutdown) must be caught or
+      // it surfaces as an unhandled rejection.
+      audioCtx.close().catch(() => {})
+      void window.omi.listenStop(sessionId).catch(() => {})
     }
   }
 }

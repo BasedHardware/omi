@@ -156,20 +156,29 @@ function runLoopback(
     })
     server.on('error', fail)
     server.listen(0, '127.0.0.1', () => {
-      const addr = server.address() as AddressInfo
-      const redirectUri = `http://127.0.0.1:${addr.port}`
-      oauthLog('loopback listening, opening consent', { redirectUri })
-      const authUrl = buildAuthUrl({ clientId: clientId(), redirectUri, challenge, state })
-      void shell.openExternal(authUrl)
-      timer = setTimeout(() => {
-        oauthLog('timed out waiting for the OAuth callback')
-        fail(
-          new Error(
-            'Timed out waiting for Google. In the browser, finish the consent: ' +
-              'Advanced → Go to Omi (unsafe) → Allow, then reconnect.'
-          )
+      try {
+        const addr = server.address() as AddressInfo
+        const redirectUri = `http://127.0.0.1:${addr.port}`
+        oauthLog('loopback listening, opening consent', { redirectUri })
+        // clientId()/buildAuthUrl can throw (missing config). Inside this bare
+        // listen callback an uncaught throw would leave connect() hanging and leak
+        // the server + timer, so route any failure through fail().
+        const authUrl = buildAuthUrl({ clientId: clientId(), redirectUri, challenge, state })
+        shell.openExternal(authUrl).catch((e) =>
+          fail(new Error('Could not open the browser for Google sign-in: ' + (e as Error).message))
         )
-      }, LOOPBACK_TIMEOUT_MS)
+        timer = setTimeout(() => {
+          oauthLog('timed out waiting for the OAuth callback')
+          fail(
+            new Error(
+              'Timed out waiting for Google. In the browser, finish the consent: ' +
+                'Advanced → Go to Omi (unsafe) → Allow, then reconnect.'
+            )
+          )
+        }, LOOPBACK_TIMEOUT_MS)
+      } catch (e) {
+        fail(e as Error)
+      }
     })
   })
 }

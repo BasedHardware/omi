@@ -10,7 +10,12 @@ export type GmailMessageJson = {
 }
 
 function header(headers: GmailHeader[] | undefined, name: string): string {
-  const h = headers?.find((x) => x.name.toLowerCase() === name.toLowerCase())
+  // headers come from an untyped res.json(); a member with a missing or
+  // non-string `name` (optional chaining does not short-circuit a number/object)
+  // would otherwise throw on .toLowerCase() and take down the whole message map.
+  const h = headers?.find(
+    (x) => typeof x?.name === 'string' && x.name.toLowerCase() === name.toLowerCase()
+  )
   return h?.value ?? ''
 }
 

@@ -16,7 +16,14 @@ async function syncGmail(existingMemories: string[]): Promise<{ added: number; e
   if (!res.ok) return res.error === 'not_connected' ? { added: 0 } : { added: 0, error: res.error }
   if (res.items.length === 0) return { added: 0 }
 
-  const memories = await extractGmailMemories(res.items, existingMemories)
+  let memories: string[]
+  try {
+    memories = await extractGmailMemories(res.items, existingMemories)
+  } catch (e) {
+    // A synthesis (LLM) failure is this source's error, reported per-source so the
+    // Calendar sync still runs, not a rejection that aborts the whole sync.
+    return { added: 0, error: (e as Error).message }
+  }
   let added = 0
   let writeError = ''
   for (const content of memories) {
@@ -53,7 +60,12 @@ async function syncCalendar(): Promise<{ added: number; error?: string }> {
   if (!res.ok) return res.error === 'not_connected' ? { added: 0 } : { added: 0, error: res.error }
   if (res.items.length === 0) return { added: 0 }
 
-  const tasks = await extractCalendarTasks(res.items)
+  let tasks: Awaited<ReturnType<typeof extractCalendarTasks>>
+  try {
+    tasks = await extractCalendarTasks(res.items)
+  } catch (e) {
+    return { added: 0, error: (e as Error).message }
+  }
   const existing = await openTaskDescriptions()
   let added = 0
   let writeError = ''
