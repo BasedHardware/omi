@@ -1,5 +1,7 @@
 from html import escape as html_escape
 import hmac
+import hashlib
+import json
 import logging
 import os
 import random
@@ -13,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from database.desktop_previews import delist_preview, get_current_preview, get_preview_manifest, publish_preview
 from database.desktop_update_channels import (
+    get_release_manifest,
     promote_channel,
     register_release_manifest,
 )
@@ -976,6 +979,18 @@ async def register_desktop_release(request: DesktopReleaseManifestRequest, secre
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"success": True, "manifest": manifest}
+
+
+@router.get("/v2/desktop/releases/{release_id}")
+async def get_desktop_release_manifest(release_id: str, secret_key: str = Header(...)):
+    """Return the retained manifest used for a pointer transition, not GitHub metadata."""
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    manifest = await run_blocking(db_executor, get_release_manifest, release_id)
+    if manifest is None:
+        raise HTTPException(status_code=404, detail='desktop release manifest not found')
+    canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return {"success": True, "manifest": manifest, "manifest_sha256": hashlib.sha256(canonical).hexdigest()}
 
 
 @router.post("/v2/desktop/channels/promote")

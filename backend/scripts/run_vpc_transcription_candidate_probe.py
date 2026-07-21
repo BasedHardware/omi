@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Run the known-audio candidate gate from a VPC-connected Cloud Run Job.
 
-The temporary job identity mints its own Cloud Run identity token for the exact
-tagged candidate.  The deploy runner supplies the short-lived Firebase token
+The temporary job requests the traffic-tagged candidate, but mints its Cloud
+Run identity token for the canonical receiving service audience. The deploy runner supplies the short-lived Firebase token
 only as a job environment value; neither credential is emitted in the report.
 """
 
@@ -37,10 +37,19 @@ def _identity_token(audience: str) -> str:
     return token
 
 
+def _required_https_url(name: str) -> str:
+    value = _required_env(name)
+    parsed = urllib.parse.urlparse(value)
+    if parsed.scheme != "https" or not parsed.netloc or parsed.params or parsed.query or parsed.fragment:
+        raise RuntimeError(f"invalid {name}")
+    return value.rstrip("/")
+
+
 def main() -> int:
-    candidate_url = _required_env("CANDIDATE_API_URL")
+    candidate_url = _required_https_url("CANDIDATE_API_URL")
+    identity_audience = _required_https_url("CLOUD_RUN_IDENTITY_AUDIENCE")
     firebase_token = _required_env("FIREBASE_PROBE_TOKEN")
-    identity_token = _identity_token(candidate_url)
+    identity_token = _identity_token(identity_audience)
     report = build_report(
         ProbeConfig(
             fixture_path=Path("testing/release_fixtures/transcription-release-probe.wav"),

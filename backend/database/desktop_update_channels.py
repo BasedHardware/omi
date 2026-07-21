@@ -334,3 +334,17 @@ def get_channel_release(platform: str, channel: str, *, firestore_client: Any = 
         },
         "manifest": manifest,
     }
+
+
+def get_release_manifest(release_id: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
+    """Read one retained immutable manifest without consulting release metadata."""
+    release_id = release_id.strip()
+    if not release_id:
+        raise ValueError("release_id is required")
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    snapshot = client.collection(MANIFESTS_COLLECTION).document(release_id).get()
+    if not getattr(snapshot, "exists", False):
+        return None
+    raw: object = snapshot.to_dict()
+    data = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
+    return normalize_release_manifest(data)

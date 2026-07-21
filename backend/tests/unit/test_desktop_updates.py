@@ -846,6 +846,23 @@ class TestDesktopUpdateAdminEndpoints:
         assert "immutable" in resp.json()["detail"]
 
     @pytest.mark.asyncio
+    async def test_reads_the_retained_manifest_with_a_canonical_identity(self):
+        payload = _pointer_release()["manifest"]
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
+            patch("routers.updates.get_release_manifest", return_value=payload) as read_manifest,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get(
+                    f"/v2/desktop/releases/{payload['release_id']}", headers={"secret-key": "real-secret"}
+                )
+
+        assert resp.status_code == 200
+        assert resp.json()["manifest"] == payload
+        assert len(resp.json()["manifest_sha256"]) == 64
+        read_manifest.assert_called_once_with(payload["release_id"])
+
+    @pytest.mark.asyncio
     async def test_promotes_pointer_and_clears_only_live_pointer_cache(self):
         pointer = {
             "platform": "macos",

@@ -8,6 +8,7 @@ PROJECT=""
 REGION=""
 IMAGE=""
 CANDIDATE_URL=""
+IDENTITY_AUDIENCE=""
 NETWORK=""
 SUBNET=""
 FIREBASE_TOKEN_FILE=""
@@ -19,6 +20,7 @@ while [[ $# -gt 0 ]]; do
     --region) REGION="$2"; shift 2 ;;
     --image) IMAGE="$2"; shift 2 ;;
     --candidate-url) CANDIDATE_URL="$2"; shift 2 ;;
+    --identity-audience) IDENTITY_AUDIENCE="$2"; shift 2 ;;
     --network) NETWORK="$2"; shift 2 ;;
     --subnet) SUBNET="$2"; shift 2 ;;
     --firebase-token-file) FIREBASE_TOKEN_FILE="$2"; shift 2 ;;
@@ -27,7 +29,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-for required in PROJECT REGION IMAGE CANDIDATE_URL NETWORK SUBNET FIREBASE_TOKEN_FILE NAME_SUFFIX; do
+for required in PROJECT REGION IMAGE CANDIDATE_URL IDENTITY_AUDIENCE NETWORK SUBNET FIREBASE_TOKEN_FILE NAME_SUFFIX; do
   [[ -n "${!required}" ]] || { echo "ERROR: --${required,,} is required" >&2; exit 2; }
 done
 [[ "$NAME_SUFFIX" =~ ^[a-z0-9-]+$ ]] || { echo 'ERROR: --name-suffix must contain lowercase letters, digits, and hyphens' >&2; exit 2; }
@@ -55,7 +57,7 @@ gcloud run services add-iam-policy-binding backend --project="$PROJECT" --region
 
 gcloud run jobs deploy "$JOB_NAME" --project="$PROJECT" --region="$REGION" --image="$IMAGE" \
   --service-account="$SERVICE_ACCOUNT" --network="$NETWORK" --subnet="$SUBNET" --vpc-egress=private-ranges-only \
-  --set-env-vars="CANDIDATE_API_URL=${CANDIDATE_URL},FIREBASE_PROBE_TOKEN=${FIREBASE_TOKEN}" \
+  --set-env-vars="CANDIDATE_API_URL=${CANDIDATE_URL},CLOUD_RUN_IDENTITY_AUDIENCE=${IDENTITY_AUDIENCE},FIREBASE_PROBE_TOKEN=${FIREBASE_TOKEN}" \
   --command=python --args=scripts/run_vpc_transcription_candidate_probe.py --task-timeout=120s --max-retries=0 --quiet
 FIREBASE_TOKEN=""
 gcloud run jobs execute "$JOB_NAME" --project="$PROJECT" --region="$REGION" --wait --quiet

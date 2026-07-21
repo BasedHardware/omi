@@ -64,7 +64,8 @@ def _evidence():
         "schema_version": 1,
         "release_id": "v0.12.64+12064-macos",
         "source_sha": "a" * 40,
-        "qualification": {"passed": True, "tier": "T2"},
+        "source_qualification": {"passed": True, "tier": "T2", "subject": "source-built named-bundle"},
+        "signed_artifact_verification": {"passed": True, "subject": "exact signed ZIP/DMG bytes"},
         "artifacts": {
             "Omi.zip": {"url": "https://example.com/Omi.zip", "sha256": "b" * 64, "signature": "signature"},
             "omi.dmg": {"url": "https://example.com/omi.dmg", "sha256": "c" * 64},
@@ -104,6 +105,8 @@ def test_prepare_manifest_requires_exact_qualification_and_assets():
     assert manifest["build_number"] == 12064
     assert manifest["qualification"]["tier"] == "T2"
     assert manifest["qualification"]["source"] == "trusted_github_actions_artifact"
+    assert manifest["qualification"]["source_subject"] == "source-built named-bundle"
+    assert manifest["qualification"]["signed_artifact_subject"] == "exact signed ZIP/DMG bytes"
     assert manifest["changelog"] == ["Fixed updates", "Improved recovery"]
 
 
@@ -123,7 +126,8 @@ def test_prepare_manifest_rejects_caller_hashes_that_do_not_match_trusted_eviden
             },
             "omi-beta.dmg": {"url": "https://example.com/omi-beta.dmg", "sha256": "e" * 64},
         },
-        "qualification": {"passed": True, "tier": "T2"},
+        "source_qualification": {"passed": True, "tier": "T2", "subject": "source-built named-bundle"},
+        "signed_artifact_verification": {"passed": True, "subject": "exact signed ZIP/DMG bytes"},
     }
 
     with pytest.raises(ValueError, match="qualification evidence"):
@@ -221,19 +225,15 @@ def test_local_candidate_evidence_beta_stable_repoint_and_retry_simulation():
     assert manifest["beta_ed_signature"] == "beta-signature"
 
 
-def test_stable_repair_bundle_uses_an_immutable_gcs_artifact():
+def test_stable_repair_bundle_uses_the_retained_manifest_installer_identity():
     manifest = _prepare()
 
     bundle = repair_installer.build_repair_bundle(manifest, "gs://omi_macos_updates")
 
-    assert bundle["artifact_object"] == "stable/v0.12.64+12064-macos/Omi.dmg"
     assert bundle["repair_object"] == "stable/v0.12.64+12064-macos/repair.json"
     assert bundle["repair"]["channel"] == "stable"
     assert bundle["repair"]["installer_sha256"] == "c" * 64
-    assert bundle["repair"]["installer_url"] == (
-        "https://storage.googleapis.com/omi_macos_updates/stable/v0.12.64+12064-macos/Omi.dmg"
-    )
-    assert "example.com" not in bundle["latest"]["installer_url"]
+    assert bundle["repair"]["installer_url"] == "https://example.com/omi.dmg"
     assert "/Applications" in bundle["landing_page"]
 
 
@@ -284,8 +284,8 @@ def test_prepare_manifest_allows_an_already_stable_release_only_for_repair_retri
 def test_prepare_manifest_rejects_unqualified_candidate():
     release = _release()
     evidence = _evidence()
-    evidence["qualification"] = {"passed": False, "tier": "T2"}
-    with pytest.raises(ValueError, match="passed T2"):
+    evidence["source_qualification"] = {"passed": False, "tier": "T2"}
+    with pytest.raises(ValueError, match="source-built named-bundle T2"):
         prepare_beta.prepare_manifest(
             release,
             "v0.12.64+12064-macos",
@@ -363,15 +363,13 @@ def test_stable_promotion_remains_manual_only():
 def test_stable_workflow_allows_retained_repoint_but_requires_current_beta_for_promote_and_safe_retries():
     workflow = PROMOTE_PROD_WORKFLOW.read_text()
 
-    assert (
-        "if os.environ['OPERATION'] == 'promote' and text(beta, 'release_id') != os.environ['RELEASE_TAG']:" in workflow
-    )
-    assert "--allow-stable-channel" in workflow
+    assert "check_stable_pointer_precondition.py" in workflow
+    assert "Fetch exact retained qualified manifest" in workflow
+    assert "actions/download-artifact@v7" not in workflow
+    assert "prepare-desktop-beta-promotion.py" not in workflow
+    assert "Register immutable release manifest" not in workflow
     assert "appcast.xml?identity=stable" in workflow
-    assert "shortVersionString" in workflow
-    assert "enclosure.get('url') == expected['zip_url']" in workflow
-    assert "edSignature') == expected['ed_signature']" in workflow
-    assert "sparkle:channel" not in workflow
+    assert "verify_stable_appcast.py" in workflow
     assert 'Authorization: Bearer $ACCESS_TOKEN' in workflow
     assert 'Authorization: Bearer ***' not in workflow
     assert 'ref: main' in workflow
@@ -428,11 +426,10 @@ def test_stable_repair_is_published_immutably_before_stable_pointer_advances():
     latest_route = workflow.index("      - name: Publish latest stable repair route")
 
     assert immutable_repair < pointer < legacy_bridge < latest_route
-    assert "--json tagName,body,isDraft,isPrerelease,publishedAt,assets" in workflow
-    assert "--pattern 'Omi.zip' --pattern 'Omi.dmg' --pattern 'omi.dmg'" in workflow
-    assert "--pattern '*.dmg'" not in workflow
-    assert "Expected exactly one qualified Omi.dmg or omi.dmg release asset." in workflow
+    assert "Fetch exact retained qualified manifest" in workflow
+    assert "gh release download" not in workflow
     assert "--if-generation-match=0" in workflow
+    assert "manifest_sha256" in workflow
     assert '"$BASE/macos-beta"' in workflow
     assert "expected_current_release_id:" in workflow
     assert "expected_generation:" in workflow

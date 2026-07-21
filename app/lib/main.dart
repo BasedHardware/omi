@@ -33,6 +33,7 @@ import 'package:omi/env/prod_env.dart';
 import 'package:omi/firebase_options_dev.dart' as dev;
 import 'package:omi/firebase_options_prod.dart' as prod;
 import 'package:omi/flavors.dart';
+import 'package:omi/startup_routing.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -126,7 +127,7 @@ Future _init() async {
   } else {
     Env.init(DevEnv());
   }
-  Env.validateStartupRouting(productionFamily: F.env == Environment.prod);
+  validateApplicationStartupRouting();
 
   FlutterForegroundTask.initCommunicationPort();
 

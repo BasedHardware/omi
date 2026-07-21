@@ -30,8 +30,9 @@ on:
         required: true
         type: string
       qualification_run_id:
-        description: 'Successful trusted qualification run containing immutable artifact evidence'
-        required: true
+        description: 'Successful trusted qualification run required only for an initial promote'
+        required: false
+        default: ''
         type: string
 
 permissions:
@@ -64,15 +65,8 @@ jobs:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
 
-      - name: Download immutable qualification evidence
-        uses: actions/download-artifact@v7
-        with:
-          name: desktop-qualification-evidence-${{ inputs.release_tag }}
-          run-id: ${{ inputs.qualification_run_id }}
-          github-token: ${{ github.token }}
-          path: /tmp/desktop-qualification-evidence
-
-      - name: Validate and download the exact qualified beta artifact
+      - name: Validate trusted qualification run for initial promotion
+        if: ${{ inputs.operation == 'promote' }}
         id: candidate
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -98,50 +92,30 @@ jobs:
           test "$(jq -r .head_branch <<<"$run")" = main
           test "$(jq -r .name <<<"$run")" = 'Qualify Desktop Beta Candidate'
           test "$(jq -r .head_sha <<<"$run")" = "$TARGET_SHA"
-          mkdir -p /tmp/desktop-stable-assets
-          gh release view "$RELEASE_TAG" --repo "$REPO" --json tagName,body,isDraft,isPrerelease,publishedAt,assets \
-            > /tmp/desktop-stable-release.json
-          gh release download "$RELEASE_TAG" --repo "$REPO" --pattern 'Omi.zip' --pattern 'Omi.dmg' --pattern 'omi.dmg' \
-            --dir /tmp/desktop-stable-assets
-          ZIP_PATH=/tmp/desktop-stable-assets/Omi.zip
-          DMG_COUNT=$(find /tmp/desktop-stable-assets -maxdepth 1 -type f \( -name Omi.dmg -o -name omi.dmg \) | wc -l | tr -d ' ')
-          test -f "$ZIP_PATH"
-          test "$DMG_COUNT" = 1 || { echo 'Expected exactly one qualified Omi.dmg or omi.dmg release asset.' >&2; exit 1; }
-          DMG_PATH=$(find /tmp/desktop-stable-assets -maxdepth 1 -type f \( -name Omi.dmg -o -name omi.dmg \) -print -quit)
-          ZIP_SHA=$(sha256sum "$ZIP_PATH" | cut -d' ' -f1)
-          DMG_SHA=$(sha256sum "$DMG_PATH" | cut -d' ' -f1)
-          BETA_ZIP_PATH=/tmp/desktop-stable-assets/Omi.Beta.zip
-          BETA_DMG_PATH=/tmp/desktop-stable-assets/omi-beta.dmg
-          gh release download "$RELEASE_TAG" --repo "$REPO" --pattern 'Omi.Beta.zip' --pattern 'omi-beta.dmg' --dir /tmp/desktop-stable-assets
-          BETA_ZIP_SHA=$(sha256sum "$BETA_ZIP_PATH" | cut -d' ' -f1)
-          BETA_DMG_SHA=$(sha256sum "$BETA_DMG_PATH" | cut -d' ' -f1)
-          python3 .github/scripts/prepare-desktop-beta-promotion.py \
-            --release-json /tmp/desktop-stable-release.json --release-tag "$RELEASE_TAG" --target-sha "$TARGET_SHA" \
-            --zip-sha256 "$ZIP_SHA" --dmg-sha256 "$DMG_SHA" \
-            --beta-zip-sha256 "$BETA_ZIP_SHA" --beta-dmg-sha256 "$BETA_DMG_SHA" \
-            --qualification-evidence /tmp/desktop-qualification-evidence/qualification-evidence.json \
-            --allow-stable-channel --output /tmp/desktop-release-manifest.json
-          {
-            echo "target_sha=$TARGET_SHA"
-            echo "dmg_path=$DMG_PATH"
-            echo "version=$(python3 -c 'import json; print(json.load(open("/tmp/desktop-release-manifest.json"))["version"])')"
-          } >> "$GITHUB_OUTPUT"
-
       - name: Google Auth
         uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
-      - name: Register immutable release manifest
+      - name: Fetch exact retained qualified manifest
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
           ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
-          curl -fsS -X POST -H 'Content-Type: application/json' -H "secret-key: $ADMIN_KEY" \
-            --data-binary @/tmp/desktop-release-manifest.json https://api.omi.me/v2/desktop/releases \
-            > /tmp/desktop-manifest-response.json
-          python3 -m json.tool /tmp/desktop-manifest-response.json
+          curl -fsS -H "secret-key: $ADMIN_KEY" "https://api.omi.me/v2/desktop/releases/$RELEASE_TAG" > /tmp/desktop-manifest-response.json
+          jq '.manifest' /tmp/desktop-manifest-response.json > /tmp/desktop-release-manifest.json
+          python3 - <<'PY'
+          import hashlib, json
+          response = json.load(open('/tmp/desktop-manifest-response.json'))
+          manifest = json.load(open('/tmp/desktop-release-manifest.json'))
+          if manifest.get('release_id') != __import__('os').environ['RELEASE_TAG']:
+              raise SystemExit('retained manifest does not match requested release')
+          actual = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+          if actual != response.get('manifest_sha256'):
+              raise SystemExit('retained manifest canonical identity mismatch')
+          PY
 
       - name: Verify current beta and stable pointer compare-and-swap inputs
         env:
@@ -156,45 +130,26 @@ jobs:
           BASE="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/desktop_update_channels"
           curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "$BASE/macos-beta" > /tmp/macos-beta-pointer.json
           curl -sS -H "Authorization: Bearer $ACCESS_TOKEN" "$BASE/macos-stable" > /tmp/macos-stable-pointer.json
-          python3 - <<'PY'
-          import json, os, sys
-          def fields(path):
-              data = json.load(open(path))
-              return data.get('fields', {}) if isinstance(data, dict) else {}
-          def text(fields, name): return fields.get(name, {}).get('stringValue', '')
-          def generation(fields): return int(fields.get('generation', {}).get('integerValue', '0'))
-          beta = fields('/tmp/macos-beta-pointer.json')
-          stable = fields('/tmp/macos-stable-pointer.json')
-          if os.environ['OPERATION'] == 'promote' and text(beta, 'release_id') != os.environ['RELEASE_TAG']:
-              sys.exit('Stable promotion requires the exact current qualified beta release ID.')
-          current_id = text(stable, 'release_id')
-          current_generation = generation(stable)
-          if current_id != os.environ['EXPECTED_RELEASE_ID'] or current_generation != int(os.environ['EXPECTED_GENERATION']):
-              sys.exit(f'Stable pointer CAS mismatch: expected {os.environ["EXPECTED_RELEASE_ID"]!r}/'
-                       f'{os.environ["EXPECTED_GENERATION"]}, current {current_id!r}/{current_generation}')
-          if os.environ['OPERATION'] == 'repoint' and not current_id:
-              sys.exit('repoint requires an existing stable pointer')
-          PY
+          python3 .github/scripts/check_stable_pointer_precondition.py \
+            --beta /tmp/macos-beta-pointer.json --stable /tmp/macos-stable-pointer.json \
+            --release-id "$RELEASE_TAG" --expected-release-id "$EXPECTED_RELEASE_ID" \
+            --expected-generation "$EXPECTED_GENERATION" --operation "$OPERATION"
 
       - name: Publish immutable stable repair installer
         env:
           GCS_DESKTOP_UPDATES_BUCKET: ${{ env.GCS_DESKTOP_UPDATES_BUCKET }}
-          DMG_PATH: ${{ steps.candidate.outputs.dmg_path }}
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
           python3 .github/scripts/desktop_repair_installer.py --manifest /tmp/desktop-release-manifest.json \
             --bucket "$GCS_DESKTOP_UPDATES_BUCKET" --output-dir /tmp/desktop-stable-repair
-          DMG_SHA=$(sha256sum "$DMG_PATH" | cut -d' ' -f1)
           REPAIR_SHA=$(sha256sum /tmp/desktop-stable-repair/repair.json | cut -d' ' -f1)
-          for source in "$DMG_PATH" /tmp/desktop-stable-repair/repair.json; do
-            if [ "$source" = "$DMG_PATH" ]; then target="$GCS_DESKTOP_UPDATES_BUCKET/stable/${RELEASE_TAG}/Omi.dmg"; sha="$DMG_SHA"; else target="$GCS_DESKTOP_UPDATES_BUCKET/stable/${RELEASE_TAG}/repair.json"; sha="$REPAIR_SHA"; fi
-            if gcloud storage objects describe "$target" --format='value(metadata.sha256)' > /tmp/remote-sha.txt 2>/dev/null; then
-              test "$(cat /tmp/remote-sha.txt)" = "$sha" || { echo "Immutable stable artifact hash differs: $target" >&2; exit 1; }
-            else
-              gcloud storage cp --if-generation-match=0 --custom-metadata="sha256=$sha" "$source" "$target"
-            fi
-          done
+          target="$GCS_DESKTOP_UPDATES_BUCKET/stable/${RELEASE_TAG}/repair.json"
+          if gcloud storage objects describe "$target" --format='value(metadata.sha256)' > /tmp/remote-sha.txt 2>/dev/null; then
+            test "$(cat /tmp/remote-sha.txt)" = "$REPAIR_SHA" || { echo "Immutable stable repair metadata differs: $target" >&2; exit 1; }
+          else
+            gcloud storage cp --if-generation-match=0 --custom-metadata="sha256=$REPAIR_SHA" /tmp/desktop-stable-repair/repair.json "$target"
+          fi
 
       - name: Advance explicit stable pointer
         env:
@@ -248,6 +203,7 @@ jobs:
           done
 
       - name: Mark GitHub release live stable
+        if: ${{ inputs.operation == 'promote' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
@@ -262,7 +218,6 @@ jobs:
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           RELEASE_TAG: ${{ inputs.release_tag }}
-          VERSION: ${{ steps.candidate.outputs.version }}
         run: |
           set -euo pipefail
           ACCESS_TOKEN=$(gcloud auth print-access-token)
@@ -280,27 +235,5 @@ jobs:
               if manifest.get(key, {}).get('stringValue') != expected[key]: sys.exit(f'manifest {key} mismatch')
           PY
           curl -fsS 'https://api.omi.me/v2/desktop/appcast.xml?identity=stable' > /tmp/stable-appcast.xml
-          python3 - /tmp/desktop-release-manifest.json /tmp/stable-appcast.xml <<'PY'
-          import json
-          import sys
-          from xml.etree import ElementTree as ET
-          manifest_path, path = sys.argv[1:]
-          expected = json.load(open(manifest_path))
-          root = ET.parse(path).getroot()
-          ns = {'sparkle': 'http://www.andymatuschak.org/xml-namespaces/sparkle'}
-          items = []
-          for item in root.findall('.//item'):
-              enclosure = item.find('enclosure')
-              if enclosure is None:
-                  continue
-              if (
-                  item.findtext('sparkle:version', namespaces=ns) == str(expected['build_number'])
-                  and item.findtext('sparkle:shortVersionString', namespaces=ns) == expected['version']
-                  and enclosure.get('url') == expected['zip_url']
-                  and enclosure.get('{http://www.andymatuschak.org/xml-namespaces/sparkle}edSignature') == expected['ed_signature']
-              ):
-                  items.append(item)
-          if len(items) != 1:
-              raise SystemExit('stable appcast must contain exactly one immutable requested item')
-          PY
+          python3 .github/scripts/verify_stable_appcast.py --manifest /tmp/desktop-release-manifest.json --feed /tmp/stable-appcast.xml
           echo "Stable pointer, exact manifest hashes, and appcast verified for $RELEASE_TAG." >> "$GITHUB_STEP_SUMMARY"

@@ -6,6 +6,7 @@ import pytest
 from database.desktop_update_channels import (
     _build_pointer,
     get_channel_release,
+    get_release_manifest,
     normalize_release_manifest,
     register_release_manifest,
 )
@@ -112,6 +113,18 @@ class TestReleaseManifestPersistence:
         assert result is not None
         assert result["pointer"]["generation"] == 4
         assert result["manifest"]["release_id"] == _manifest()["release_id"]
+
+    def test_reads_retained_manifest_without_a_channel_or_release_metadata(self):
+        snapshot = MagicMock(exists=True)
+        snapshot.to_dict.return_value = _manifest()
+        ref = MagicMock()
+        ref.get.return_value = snapshot
+        client = MagicMock()
+        client.collection.return_value.document.return_value = ref
+
+        assert get_release_manifest(_manifest()["release_id"], firestore_client=client) == normalize_release_manifest(
+            _manifest()
+        )
 
 
 class TestChannelPromotionRules:

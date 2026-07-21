@@ -1,5 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/flavors.dart';
+import 'package:omi/startup_routing.dart';
+import 'dart:io';
 
 /// Minimal EnvFields stub for testing Env logic in isolation.
 /// Since Env._instance is late final (can only be set once per process),
@@ -57,12 +60,12 @@ void main() {
     });
 
     test('TestFlight production startup accepts the production API and WebSocket', () {
-      Env.validateStartupRouting(productionFamily: true, configuredApiBaseUrl: 'https://api.omi.me/');
+      validateApplicationStartupRouting(environment: Environment.prod, configuredApiBaseUrl: 'https://api.omi.me/');
       expect(Env.productionAgentProxyWsUrl, 'wss://agent.omi.me/v1/agent/ws');
     });
 
     test('Android production startup accepts the production API and WebSocket', () {
-      Env.validateStartupRouting(productionFamily: true, configuredApiBaseUrl: 'https://api.omi.me/');
+      validateApplicationStartupRouting(environment: Environment.prod, configuredApiBaseUrl: 'https://api.omi.me/');
       expect(Env.productionAgentProxyWsUrl, 'wss://agent.omi.me/v1/agent/ws');
     });
 
@@ -74,7 +77,7 @@ void main() {
         'https://arbitrary.example.test/',
       ]) {
         expect(
-          () => Env.validateStartupRouting(productionFamily: true, configuredApiBaseUrl: endpoint),
+          () => validateApplicationStartupRouting(environment: Environment.prod, configuredApiBaseUrl: endpoint),
           throwsStateError,
           reason: endpoint,
         );
@@ -83,9 +86,18 @@ void main() {
 
     test('development startup remains configurable', () {
       expect(
-        () => Env.validateStartupRouting(productionFamily: false, configuredApiBaseUrl: 'https://api.omi.dev/'),
+        () => validateApplicationStartupRouting(
+            environment: Environment.dev, configuredApiBaseUrl: 'https://api.omi.dev/'),
         returnsNormally,
       );
     });
+  });
+
+  test('main invokes the production startup routing seam before services initialize', () {
+    // Static wiring tripwire: the behavioral cases above call the exact seam.
+    final mainSource = File('lib/main.dart').readAsStringSync();
+    expect(mainSource, contains('validateApplicationStartupRouting();'));
+    expect(mainSource.indexOf('validateApplicationStartupRouting();'),
+        lessThan(mainSource.indexOf('ServiceManager.init()')));
   });
 }

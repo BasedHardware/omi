@@ -684,7 +684,13 @@ jobs:
             --service=${{ env.SERVICE }} \
             --revision=${{ steps.capture-backend-revision.outputs.revision }} \
             --tag="$TRANSCRIPTION_CANDIDATE_TAG")"
+          identity_audience="${{ vars.BACKEND_CLOUD_RUN_IAM_AUDIENCE }}"
+          if [[ -z "$identity_audience" ]]; then
+            identity_audience="$(gcloud run services describe "${{ env.SERVICE }}" \
+              --project="${{ vars.GCP_PROJECT_ID }}" --region="${{ env.REGION }}" --format='value(status.url)')"
+          fi
           printf 'url=%s\n' "$candidate_url" >> "$GITHUB_OUTPUT"
+          printf 'identity_audience=%s\n' "$identity_audience" >> "$GITHUB_OUTPUT"
 
       - name: Gate backend candidate on known audio
         if: ${{ github.event.inputs.environment == 'development' }}
@@ -716,6 +722,7 @@ jobs:
             --region "${{ env.REGION }}" \
             --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
             --candidate-url "${{ steps.transcription-candidate.outputs.url }}" \
+            --identity-audience "${{ steps.transcription-candidate.outputs.identity_audience }}" \
             --network "${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
             --subnet "${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
             --firebase-token-file "$RUNNER_TEMP/firebase-production-candidate-token" \

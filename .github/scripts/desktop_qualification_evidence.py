@@ -93,7 +93,17 @@ def build_evidence(
         "schema_version": 1,
         "release_id": release_tag,
         "source_sha": source_sha,
-        "qualification": {"passed": True, "tier": "T2"},
+        "source_qualification": {
+            "passed": True,
+            "tier": "T2",
+            "subject": "source-built named-bundle",
+            "fault_evidence": "trusted qualification runner",
+        },
+        "signed_artifact_verification": {
+            "passed": True,
+            "subject": "exact signed ZIP/DMG bytes",
+            "checks": ["sha256", "Sparkle signature", "notarization", "signed smoke"],
+        },
         "artifacts": artifacts,
     }
 
@@ -107,8 +117,14 @@ def verify_evidence(
         or evidence.get("source_sha") != source_sha
     ):
         _fail("release ID or source SHA does not match the trusted run")
-    if evidence.get("qualification") != {"passed": True, "tier": "T2"}:
-        _fail("does not prove a passed T2 qualification")
+    source_qualification = evidence.get("source_qualification")
+    signed_artifacts = evidence.get("signed_artifact_verification")
+    if not isinstance(source_qualification, dict) or source_qualification.get("passed") is not True or source_qualification.get("tier") != "T2":
+        _fail("does not prove source-built named-bundle T2 qualification")
+    if not isinstance(signed_artifacts, dict) or signed_artifacts.get("passed") is not True:
+        _fail("does not prove exact signed artifact verification")
+    if signed_artifacts.get("subject") != "exact signed ZIP/DMG bytes":
+        _fail("must not claim signed production bytes ran T2")
     artifacts = evidence.get("artifacts")
     if not isinstance(artifacts, dict):
         _fail("does not contain artifacts")
