@@ -18,12 +18,12 @@ def test_sync_cloud_tasks_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -
     package = json.loads((_REPO_ROOT / 'package.json').read_text(encoding='utf-8'))
     contracts = json.loads((_REPO_ROOT / 'backend' / 'testing' / 'workflow_contracts.json').read_text(encoding='utf-8'))
 
-    assert "- 'package.json'" in workflow
-    assert "- 'package-lock.json'" in workflow
     assert '  sync-cloud-tasks-stack-gauntlet:' in workflow
     job = workflow.split('  sync-cloud-tasks-stack-gauntlet:\n', 1)[1]
 
     assert 'timeout-minutes: 20' in job
+    assert 'needs: scope' in job
+    assert "if: needs.scope.outputs.applies == 'true'" in job
     assert 'uses: actions/setup-python@v6' in job
     assert 'uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84' in job
     assert 'uv venv .venv' in job
