@@ -52,9 +52,9 @@ checks:
     reason: "real Firestore transaction serialization must fence stale qualified Beta admissions after reservation, pause, and generation transitions"
   - id: desktop-changelog-io-tests
     command: ["python3", ".github/scripts/test_desktop_changelog.py"]
-    triggers: [".github/scripts/desktop-changelog.py", ".github/scripts/test_desktop_changelog.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/scripts/check-desktop-changelog.py", ".github/scripts/desktop-changelog.py", ".github/scripts/test_desktop_changelog.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "#9717: changelog JSON I/O must decode/encode as UTF-8 regardless of contributor host locale"
+    reason: "#9717: changelog tooling must preserve UTF-8 I/O and exempt only internal desktop release controls"
   - id: agents-md-lean
     command: ["python3", ".github/scripts/check_agents_md_lean.py"]
     triggers: ["AGENTS.md", ".github/scripts/check_agents_md_lean.py"]
