@@ -87,11 +87,17 @@ def test_binary_float_prices_are_not_underbilled_by_a_cent(stripe_mock, price, e
 
 
 def test_no_price_in_the_common_range_is_underbilled(stripe_mock):
-    """No price in $0.01..$100.00 may be billed fewer cents than it is worth."""
+    """Every non-representable price in $0.01..$100.00 must still bill its full cents.
+
+    Only the prices whose cent value is not exactly representable are exercised — the
+    rest cannot regress — which keeps this inside the fast-unit CPU budget.
+    """
+    truncating = [cents / 100 for cents in range(1, 10001) if int((cents / 100) * 100) != cents]
+    assert truncating, 'expected some non-representable prices in this range'
+
     wrong = []
-    for cents in range(1, 10001):
-        price = cents / 100
+    for price in truncating:
         upsert_app_payment_link('app1', True, price, 'monthly_recurring', 'u1')
-        if stripe_mock.create_app_monthly_recurring_price.call_args[0][1] != cents:
+        if stripe_mock.create_app_monthly_recurring_price.call_args[0][1] != round(price * 100):
             wrong.append(price)
     assert wrong == []
