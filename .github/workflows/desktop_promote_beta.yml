@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   promote:
-    environment: prod
+    environment: beta
     runs-on: ubuntu-latest
     steps:
       - name: Checkout promotion controls

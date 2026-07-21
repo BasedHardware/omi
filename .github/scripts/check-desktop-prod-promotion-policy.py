@@ -4,6 +4,7 @@
 from pathlib import Path
 
 WORKFLOW = Path(".github/workflows/desktop_promote_prod.yml")
+BETA_WORKFLOW = Path(".github/workflows/desktop_promote_beta.yml")
 
 REQUIRED = (
     "on:\n  workflow_dispatch:",
@@ -48,6 +49,16 @@ ORDERED_STEPS = (
     "Verify exact pointer, hashes, and stable feed",
 )
 
+BETA_REQUIRED = (
+    "on:\n  workflow_dispatch:",
+    "automatic:",
+    "qualification_run_id:",
+    "environment: beta",
+    "Validate automatic beta request",
+    "desktop-qualification-evidence-${{ inputs.release_tag }}",
+    "credentials_json: ${{ secrets.GCP_CREDENTIALS }}",
+)
+
 
 def validate(text: str) -> list[str]:
     errors = [f"missing Stable pointer-promotion guard: {fragment}" for fragment in REQUIRED if fragment not in text]
@@ -62,13 +73,21 @@ def validate(text: str) -> list[str]:
     return errors
 
 
+def validate_beta(text: str) -> list[str]:
+    errors = [f"missing Beta pointer-promotion guard: {fragment}" for fragment in BETA_REQUIRED if fragment not in text]
+    if "environment: prod" in text:
+        errors.append("Beta pointer promotion must not request the protected prod environment")
+    return errors
+
+
 def main() -> int:
     errors = validate(WORKFLOW.read_text(encoding="utf-8"))
+    errors.extend(validate_beta(BETA_WORKFLOW.read_text(encoding="utf-8")))
     if errors:
         for error in errors:
             print(f"FAIL: {error}")
         return 1
-    print("desktop Stable pointer-promotion policy OK")
+    print("desktop Stable and Beta pointer-promotion policies OK")
     return 0
 
 
