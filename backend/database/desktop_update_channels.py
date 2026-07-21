@@ -43,7 +43,9 @@ def register_release_manifest(data: dict[str, Any], *, firestore_client: Any = N
             raise ValueError("release_id already exists with different immutable metadata")
         return existing
 
-    ref.create({**manifest, "created_at": datetime.now(timezone.utc)})
+    # ``created_at`` is part of the canonical manifest and its RFC3339 bytes
+    # participate in the immutable digest. Firestore must retain it unchanged.
+    ref.create(manifest)
     return manifest
 
 

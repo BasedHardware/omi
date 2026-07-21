@@ -8,8 +8,10 @@ from database.desktop_update_channels import (
     get_channel_release,
     get_release_manifest,
     normalize_release_manifest,
+    promote_channel,
     register_release_manifest,
 )
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 
 def _manifest(**overrides):
@@ -71,6 +73,44 @@ class TestNormalizeReleaseManifest:
 
 
 class TestReleaseManifestPersistence:
+    def test_registered_manifest_round_trips_through_retry_retained_read_and_promotion(self):
+        """A Firestore snapshot preserves the canonical manifest bytes exactly."""
+        client = StrictFirestore()
+        manifest = _manifest()
+
+        registered = register_release_manifest(manifest, firestore_client=client)
+        stored = client.rows[("desktop_release_manifests", manifest["release_id"])]
+        assert stored == manifest
+        assert stored["created_at"] == manifest["created_at"]
+        assert isinstance(stored["created_at"], str)
+
+        assert register_release_manifest(manifest, firestore_client=client) == registered
+        assert get_release_manifest(manifest["release_id"], firestore_client=client) == registered
+
+        pointer = promote_channel(
+            "macos",
+            "beta",
+            manifest["release_id"],
+            expected_generation=0,
+            firestore_client=client,
+        )
+        resolved = get_channel_release("macos", "beta", firestore_client=client)
+
+        assert pointer["generation"] == 1
+        assert resolved is not None
+        assert resolved["manifest"] == registered
+        assert client.rows[("desktop_release_manifests", manifest["release_id"])] == manifest
+        assert (
+            promote_channel(
+                "macos",
+                "beta",
+                manifest["release_id"],
+                expected_generation=0,
+                firestore_client=client,
+            )
+            == pointer
+        )
+
     def test_register_is_idempotent_for_identical_manifest(self):
         snapshot = MagicMock(exists=True)
         snapshot.to_dict.return_value = _manifest()

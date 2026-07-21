@@ -32,7 +32,7 @@ class UnsupportedFirestoreOperationError(NotImplementedError):
     """Raised for a Firestore operation this narrow fixture does not model."""
 
 
-_SUPPORTED_OPERATIONS = 'transaction-bound document get, transaction set, and transaction update'
+_SUPPORTED_OPERATIONS = 'document get/create, transaction-bound document get, transaction set, and transaction update'
 
 
 class StrictFirestoreSnapshot:
@@ -57,6 +57,11 @@ class StrictFirestoreDocument:
             transaction._assert_reference_belongs(self)
             transaction._assert_read_allowed()
         return StrictFirestoreSnapshot(self._database.rows.get(self.path))
+
+    def create(self, data: dict[str, Any]) -> None:
+        if self.path in self._database.rows:
+            raise RuntimeError('document already exists')
+        self._database.rows[self.path] = deepcopy(data)
 
     def delete(self, *args: Any, **kwargs: Any) -> None:
         raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
@@ -85,6 +90,24 @@ class StrictFirestoreTransaction:
         self.sets: list[tuple[tuple[str, ...], dict[str, Any]]] = []
         self.updates: list[tuple[tuple[str, ...], dict[str, Any]]] = []
         self.has_written = False
+        self._read_only = False
+        self._max_attempts = 1
+        self._id: bytes | None = None
+
+    # The Firestore ``@transactional`` decorator drives these lifecycle hooks.
+    # They deliberately keep this fixture single-attempt: it guards production
+    # read-before-write ordering without pretending to model contention retries.
+    def _clean_up(self) -> None:
+        self._id = None
+
+    def _begin(self, retry_id: bytes | None = None) -> None:
+        self._id = retry_id or b'strict-firestore-transaction'
+
+    def _commit(self) -> None:
+        return None
+
+    def _rollback(self) -> None:
+        return None
 
     def _assert_read_allowed(self) -> None:
         if self.has_written and not self._allow_reads_after_writes:
