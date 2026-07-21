@@ -65,3 +65,13 @@ export {
   parakeetWsUrl,
 } from './stt/index';
 export type { SttEngine, StreamingTranscriber, TranscriptHandler } from './stt/index';
+
+export {
+  createNobleTransport,
+  connectAndListen,
+  scanForDevices,
+  findFirstDevice,
+  requireNoble,
+  NOBLE_MISSING,
+} from './ble/index';
+export type { ScannedDevice } from './ble/index';
