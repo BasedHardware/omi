@@ -109,7 +109,7 @@ def other_step_run_content(target_name):
     return "\n".join(line[other_content_indent:] if line.strip() else "" for line in other_run_lines)
 
 
-run_content += "\n" + other_step_run_content("Mount DMG and Install")
+mount_content = other_step_run_content("Mount DMG and Install")
 
 
 def strip_shell_comment(line):
@@ -140,83 +140,82 @@ def strip_shell_comment(line):
     return "".join(result)
 
 
-executable_lines = [strip_shell_comment(line).rstrip() for line in run_content.splitlines()]
-executable_lines = [line for line in executable_lines if line.strip()]
-executable_content = "\n".join(executable_lines)
-
-logical_commands = []
-pending = ""
-for line in executable_lines:
-    if line.endswith("\\") and not line.endswith("\\\\"):
-        pending += f"{line[:-1].strip()} "
-    else:
-        logical_commands.append(f"{pending}{line.strip()}")
-        pending = ""
-if pending:
-    fail("installer run block has an unterminated command continuation")
-
-
-def token_segments(command):
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=";|&")
-    lexer.whitespace_split = True
-    lexer.commenters = ""
-    tokens = list(lexer)
-    segments = []
-    segment = []
-    for token in tokens:
-        if token and set(token) <= {";", "|", "&"}:
-            if segment:
-                segments.append(segment)
-                segment = []
+def logical_commands(content, description):
+    executable_lines = [strip_shell_comment(line).rstrip() for line in content.splitlines()]
+    executable_lines = [line for line in executable_lines if line.strip()]
+    commands = []
+    pending = ""
+    for line in executable_lines:
+        if line.endswith("\\") and not line.endswith("\\\\"):
+            pending += f"{line[:-1].strip()} "
         else:
-            segment.append(token)
-    if segment:
-        segments.append(segment)
-    return segments
+            commands.append(f"{pending}{line.strip()}")
+            pending = ""
+    if pending:
+        fail(f"{description} has an unterminated command continuation")
+    return commands
 
 
-segments = [segment for command in logical_commands for segment in token_segments(command)]
-assignment = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+installer_commands = logical_commands(run_content, "installer run block")
+canonical_installer_commands = [
+    'echo "=== Downloading DMG ==="',
+    'TAG="${{ github.event.inputs.release_tag }}"',
+    'if [ -z "$TAG" ] || [ "$TAG" = "latest" ]; then',
+    'TAG="${{ github.event.client_payload.release_tag }}"',
+    'fi',
+    'if [ -z "$TAG" ] || [ "$TAG" = "latest" ]; then',
+    "TAG=$(gh release list --repo BasedHardware/omi --limit 1 --json tagName --jq '.[0].tagName')",
+    'fi',
+    'echo "Testing release: $TAG"',
+    'echo "release_tag=$TAG" >> $GITHUB_OUTPUT',
+    'DOWNLOAD_DIR="$RUNNER_TEMP/omi-install-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+    'DMG_PATH="$DOWNLOAD_DIR/omi.dmg"',
+    'mkdir -p "$DOWNLOAD_DIR"',
+    'gh release download "$TAG" --repo BasedHardware/omi --pattern "omi.dmg" --dir "$DOWNLOAD_DIR"',
+    'test -f "$DMG_PATH"',
+    'echo "dmg_path=$DMG_PATH" >> $GITHUB_OUTPUT',
+    'echo "## Release Under Test" >> $GITHUB_STEP_SUMMARY',
+    'echo "**Tag:** \\`$TAG\\`" >> $GITHUB_STEP_SUMMARY',
+    'echo "" >> $GITHUB_STEP_SUMMARY',
+]
+if installer_commands != canonical_installer_commands:
+    fail("installer run block does not match the admitted canonical command grammar")
+
+# The admitted download production is deliberately direct and unwrapped.  Lex it
+# independently so the argument contract remains explicit rather than relying on
+# source-text coincidence.
+download = shlex.split(installer_commands[13], posix=True)
+expected_download = [
+    "gh", "release", "download", "$TAG", "--repo", "BasedHardware/omi",
+    "--pattern", "omi.dmg", "--dir", "$DOWNLOAD_DIR",
+]
+if download != expected_download:
+    fail("installer download must be direct gh release download with one exact --pattern omi.dmg")
 
 
-def executable_tokens(segment):
-    index = 0
-    while index < len(segment) and assignment.match(segment[index]):
-        index += 1
-    return segment[index:]
+mount_executable_content = "\n".join(
+    strip_shell_comment(line).rstrip() for line in mount_content.splitlines() if strip_shell_comment(line).strip()
+)
+mount_commands = [shlex.split(command, posix=True) for command in logical_commands(mount_content, "mount run block")]
 
 
-commands = [executable_tokens(segment) for segment in segments]
-download_commands = [command for command in commands if command[:3] == ["gh", "release", "download"]]
-if len(download_commands) != 1:
-    fail(f"installer step must execute exactly one gh release download command, found {len(download_commands)}")
-
-download = download_commands[0]
-pattern_positions = [index for index, token in enumerate(download) if token == "--pattern"]
-if len(pattern_positions) != 1 or any(token.startswith("--pattern=") for token in download):
-    fail("installer download must use exactly one separate --pattern argument")
-pattern_index = pattern_positions[0]
-if pattern_index + 1 >= len(download) or download[pattern_index + 1] != "omi.dmg":
-    fail("installer download pattern must be exactly lowercase omi.dmg")
+def require_mount_command(prefix, description):
+    if not any(command[:len(prefix)] == prefix for command in mount_commands):
+        fail(f"mount run block missing executable {description}")
 
 
-def require_command(prefix, description):
-    if not any(command[:len(prefix)] == prefix for command in commands):
-        fail(f"installer run block missing executable {description}")
-
-
-if not re.search(r'(?m)^DMG_PATH="\$DOWNLOAD_DIR/omi\.dmg"$', executable_content):
-    fail("installer run block missing exact DMG_PATH assignment")
-require_command(["xattr", "-d", "com.apple.quarantine", "$DMG_PATH"], "xattr dequarantine command")
+if not re.search(r'(?m)^DMG_PATH="\$\{\{ steps\.download\.outputs\.dmg_path \}\}"$', mount_executable_content):
+    fail("mount run block missing exact DMG_PATH assignment")
+require_mount_command(["xattr", "-d", "com.apple.quarantine", "$DMG_PATH"], "xattr dequarantine command")
 if not re.search(
     r'DEVICE=\$\(hdiutil\s+attach\s+"\$DMG_PATH"\s+-nobrowse\s+-readonly\s+-mountpoint\s+"\$MOUNTPOINT"',
-    executable_content,
+    mount_executable_content,
 ):
-    fail("installer run block missing exact device-capturing hdiutil attach command")
-require_command(["hdiutil", "detach", "$DEVICE", "-quiet"], "device hdiutil detach command")
-require_command(["trap", "cleanup", "EXIT"], "cleanup trap")
-require_command(["ditto", "$MOUNTPOINT/Omi.app", "/Applications/Omi.app"], "mounted-app copy command")
-if "/Volumes/Omi" in executable_content:
+    fail("mount run block missing exact device-capturing hdiutil attach command")
+require_mount_command(["hdiutil", "detach", "$DEVICE", "-quiet"], "device hdiutil detach command")
+require_mount_command(["trap", "cleanup", "EXIT"], "cleanup trap")
+require_mount_command(["ditto", "$MOUNTPOINT/Omi.app", "/Applications/Omi.app"], "mounted-app copy command")
+if "/Volumes/Omi" in mount_executable_content:
     fail("installer run block must not discover or detach a pre-existing /Volumes/Omi mount")
 PY
 }
@@ -231,6 +230,7 @@ fi
 run_mutation() {
   local name="$1"
   local mutation="$2"
+  local expected="${3:-reject}"
   local mutated_workflow
   mutated_workflow="$(mktemp "${TMPDIR:-/tmp}/test-install-${name}.XXXXXX")"
   trap 'rm -f "$mutated_workflow"' RETURN
@@ -275,6 +275,96 @@ elif mutation == "commented-command":
         raise SystemExit("canonical download command not found")
     start = starts[0]
     lines[start:start + 4] = [f"          # {line.lstrip()}" for line in lines[start:start + 4]]
+elif mutation == "long-equals":
+    index = pattern_line_index()
+    lines[index] = lines[index].replace('--pattern "omi.dmg"', '--pattern=omi.dmg')
+elif mutation == "short-pattern":
+    index = pattern_line_index()
+    lines[index] = lines[index].replace('--pattern "omi.dmg"', '-p "omi.dmg"')
+elif mutation == "short-pattern-concatenated":
+    index = pattern_line_index()
+    lines[index] = lines[index].replace('--pattern "omi.dmg"', '-pomi.dmg')
+elif mutation == "mixed-long-short-patterns":
+    index = pattern_line_index()
+    lines[index] = lines[index].replace('--pattern "omi.dmg"', '--pattern "omi.dmg" -p "omi.dmg"')
+elif mutation == "repeatable-short-wildcard":
+    index = pattern_line_index()
+    lines[index] = lines[index].replace('--pattern "omi.dmg"', '--pattern "omi.dmg" -p "*.dmg"')
+elif mutation == "extra-direct-download":
+    index = pattern_line_index()
+    lines[index:index] = [
+        '          gh release download "$TAG" --repo BasedHardware/omi --pattern "other.dmg" --dir "$DOWNLOAD_DIR"\n',
+    ]
+elif mutation == "extra-absolute-download":
+    index = pattern_line_index()
+    lines[index:index] = [
+        '          /usr/local/bin/gh release download "$TAG" --repo BasedHardware/omi --pattern "other.dmg" --dir "$DOWNLOAD_DIR"\n',
+    ]
+elif mutation == "extra-command-wrapper-download":
+    index = pattern_line_index()
+    lines[index:index] = [
+        '          command gh release download "$TAG" --repo BasedHardware/omi --pattern "other.dmg" --dir "$DOWNLOAD_DIR"\n',
+    ]
+elif mutation == "extra-env-wrapper-download":
+    index = pattern_line_index()
+    lines[index:index] = [
+        '          env gh release download "$TAG" --repo BasedHardware/omi --pattern "other.dmg" --dir "$DOWNLOAD_DIR"\n',
+    ]
+elif mutation == "alias-gh":
+    index = pattern_line_index()
+    lines[index:index] = ["          alias gh='command gh'\n"]
+elif mutation == "function-gh":
+    index = pattern_line_index()
+    lines[index:index] = ["          gh() { command gh \"$@\"; }\n"]
+elif mutation == "function-keyword-gh":
+    index = pattern_line_index()
+    lines[index:index] = ["          function gh { command gh \"$@\"; }\n"]
+elif mutation == "false-and-canonical":
+    starts = [index for index, line in enumerate(lines) if line.lstrip().startswith('gh release download')]
+    if len(starts) != 1:
+        raise SystemExit("canonical download command not found")
+    lines[starts[0]] = lines[starts[0]].replace('gh release download', 'false && gh release download')
+elif mutation == "semicolon-before-canonical":
+    starts = [index for index, line in enumerate(lines) if line.lstrip().startswith('gh release download')]
+    if len(starts) != 1:
+        raise SystemExit("canonical download command not found")
+    lines[starts[0]] = lines[starts[0]].replace('gh release download', ':; gh release download')
+elif mutation == "and-before-canonical":
+    starts = [index for index, line in enumerate(lines) if line.lstrip().startswith('gh release download')]
+    if len(starts) != 1:
+        raise SystemExit("canonical download command not found")
+    lines[starts[0]] = lines[starts[0]].replace('gh release download', ': && gh release download')
+elif mutation == "or-before-canonical":
+    starts = [index for index, line in enumerate(lines) if line.lstrip().startswith('gh release download')]
+    if len(starts) != 1:
+        raise SystemExit("canonical download command not found")
+    lines[starts[0]] = lines[starts[0]].replace('gh release download', 'false || gh release download')
+elif mutation == "pipeline-before-canonical":
+    starts = [index for index, line in enumerate(lines) if line.lstrip().startswith('gh release download')]
+    if len(starts) != 1:
+        raise SystemExit("canonical download command not found")
+    lines[starts[0]] = lines[starts[0]].replace('gh release download', ': | gh release download')
+elif mutation == "subshell-canonical":
+    starts = [index for index, line in enumerate(lines) if line.lstrip().startswith('gh release download')]
+    if len(starts) != 1:
+        raise SystemExit("canonical download command not found")
+    lines[starts[0]] = lines[starts[0]].replace('gh release download', '( gh release download')
+    lines[starts[0] + 3] = lines[starts[0] + 3].rstrip('\n') + ' )\n'
+elif mutation in {"semicolon-after-canonical", "and-after-canonical", "or-after-canonical", "pipeline-after-canonical"}:
+    starts = [index for index, line in enumerate(lines) if line.lstrip().startswith('gh release download')]
+    if len(starts) != 1:
+        raise SystemExit("canonical download command not found")
+    suffixes = {
+        "semicolon-after-canonical": "; :",
+        "and-after-canonical": "&& :",
+        "or-after-canonical": "|| :",
+        "pipeline-after-canonical": "| cat",
+    }
+    end = starts[0] + 3
+    lines[end] = lines[end].rstrip('\n') + f" {suffixes[mutation]}\n"
+elif mutation == "benign-comment":
+    index = pattern_line_index()
+    lines[index:index] = ['          # This comment is intentionally inert.\n']
 else:
     raise SystemExit(f"unknown mutation: {mutation}")
 
@@ -282,7 +372,11 @@ destination.write_text(''.join(lines))
 PY
 
   if bash "$SCRIPT_DIR/test-test-install-workflow-contract.sh" --check "$mutated_workflow"; then
-    fail "mutation unexpectedly passed: $name"
+    if [[ "$expected" == "reject" ]]; then
+      fail "mutation unexpectedly passed: $name"
+    fi
+  elif [[ "$expected" == "accept" ]]; then
+    fail "benign mutation unexpectedly failed: $name"
   fi
 }
 
@@ -292,5 +386,28 @@ run_mutation beta beta
 run_mutation omitted omitted
 run_mutation duplicate duplicate
 run_mutation commented-command commented-command
+run_mutation long-equals long-equals
+run_mutation short-pattern short-pattern
+run_mutation short-pattern-concatenated short-pattern-concatenated
+run_mutation mixed-long-short-patterns mixed-long-short-patterns
+run_mutation repeatable-short-wildcard repeatable-short-wildcard
+run_mutation extra-direct-download extra-direct-download
+run_mutation extra-absolute-download extra-absolute-download
+run_mutation extra-command-wrapper-download extra-command-wrapper-download
+run_mutation extra-env-wrapper-download extra-env-wrapper-download
+run_mutation alias-gh alias-gh
+run_mutation function-gh function-gh
+run_mutation function-keyword-gh function-keyword-gh
+run_mutation false-and-canonical false-and-canonical
+run_mutation semicolon-before-canonical semicolon-before-canonical
+run_mutation and-before-canonical and-before-canonical
+run_mutation or-before-canonical or-before-canonical
+run_mutation pipeline-before-canonical pipeline-before-canonical
+run_mutation subshell-canonical subshell-canonical
+run_mutation semicolon-after-canonical semicolon-after-canonical
+run_mutation and-after-canonical and-after-canonical
+run_mutation or-after-canonical or-after-canonical
+run_mutation pipeline-after-canonical pipeline-after-canonical
+run_mutation benign-comment benign-comment accept
 
 echo "test-install workflow exact-DMG contract passed"
