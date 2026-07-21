@@ -1,0 +1,41 @@
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBTodayContainer.swift
+  s_2204722b151ea4::t_7f6e7764a4ac18 17,25-28,30-48,51-53
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBTodayPage.swift
+  s_2204722b151ea4::t_31c6f64d391d18 202,205-206
+  s_2204722b151ea4::t_bcc4baa513ca42 53
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBAccountPage.swift
+  s_2204722b151ea4::t_562d8d2f511a31 1-67
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SecondBrainShell.swift
+  s_2204722b151ea4::t_c9661b99f12f49 73,79
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBConversations.swift
+  s_2204722b151ea4::t_3d44f6e845c581 226-233
+  s_2204722b151ea4::t_598a345f8a4a4e 191,193-199,201-202
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_2204722b151ea4::t_b3c2826b9d41e8 1100,1102
+  s_2204722b151ea4::t_eb9322d2649e9a 1167-1177,1189-1192
+  s_2204722b151ea4::t_05a058ef89dbe6 52-53
+  s_2204722b151ea4::t_d9b72bba8bdc50 1243-1249
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBSettings.swift
+  s_2204722b151ea4::t_59bb9561e58d41 16-17
+  s_2204722b151ea4::t_2c69f66408cd64 44
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBLiveTranscript.swift
+  s_2204722b151ea4::t_9a14600d1d4f89 1-60
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
+  s_2204722b151ea4::t_57cc7e7dc50514 75-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "ac2814fdf3acfad6bb2fa93879bbbb6ed3386dab",
+  "prompts": {},
+  "sessions": {
+    "s_2204722b151ea4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28bbfea6-8dc5-4cef-9719-1bec40925231",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
