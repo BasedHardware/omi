@@ -269,7 +269,8 @@ env:
   - name: STRIPE_OPERATOR_ANNUAL_PRICE_ID
     value: "price_1TN7jo1F8wnoWYvw6Xu1zAtC"
   - name: SUBSCRIPTION_LAUNCH_DATE
-    value: "2025-08-21"  - name: GOOGLE_CLOUD_PROJECT
+    value: "2025-08-21"
+  - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
   - name: METRICS_SECRET
     valueFrom:

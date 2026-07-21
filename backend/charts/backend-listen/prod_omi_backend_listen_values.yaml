@@ -201,7 +201,8 @@ env:
     valueFrom:
       secretKeyRef:
         name: prod-omi-backend-secrets
-        key: GOOGLE_APPLICATION_CREDENTIALS  - name: HOSTED_PUSHER_API_URL
+        key: GOOGLE_APPLICATION_CREDENTIALS
+  - name: HOSTED_PUSHER_API_URL
     value: "http://pusher.omi.me"
   - name: BUCKET_PLUGINS_LOGOS
     value: "omi_plugins"

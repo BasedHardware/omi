@@ -296,7 +296,8 @@ env:
   - name: SUBSCRIPTION_LAUNCH_DATE
     value: "2025-08-21"
   - name: BUCKET_PRIVATE_CLOUD_SYNC
-    value: "omi-dev-private-cloud-sync"  - name: GOOGLE_CLOUD_PROJECT
+    value: "omi-dev-private-cloud-sync"
+  - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware-dev"
   - name: GCP_LOCATION
     value: "us-central1"
