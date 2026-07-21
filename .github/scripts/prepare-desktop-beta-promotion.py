@@ -15,6 +15,7 @@ from desktop_release_metadata import (  # noqa: E402
     parse_metadata,
 )
 from desktop_qualification_evidence import verify_evidence  # noqa: E402
+from desktop_release_manifest import validate_manifest  # noqa: E402
 
 TAG_RE = re.compile(r"^v(?P<version>\d+\.\d+(?:\.\d+)?)\+(?P<build>\d+)-macos$")
 
@@ -34,6 +35,7 @@ def prepare_manifest(
     dmg_sha256: str,
     *,
     qualification_evidence: dict,
+    qualification_evidence_sha256: str,
     allow_stable_channel: bool = False,
 ) -> dict:
     if release.get("tagName") != release_tag:
@@ -61,7 +63,7 @@ def prepare_manifest(
         fail(f"release channel must be {accepted}, got {channel!r}")
 
     zip_asset = _asset(release, {"Omi.zip"})
-    dmg_asset = _asset(release, {"Omi.dmg", "omi.dmg"})
+    dmg_asset = _asset(release, {"omi.dmg"})
     signature = metadata.get("edSignature", "").strip()
     if not signature:
         fail("release is missing Sparkle signature")
@@ -82,32 +84,41 @@ def prepare_manifest(
     changelog = [item.strip() for item in metadata.get("changelog", "").split("|") if item.strip()]
     version = match.group("version")
     build = int(match.group("build"))
-    qualification_manifest = {
-        "passed": True,
-        "tier": "T2",
-        "source": "trusted_github_actions_artifact",
-        "evidence_asset": metadata.get("qualifiedBetaEvidence") or f"desktop-qualification-evidence-{release_tag}",
-        "source_subject": "source-built named-bundle",
-        "signed_artifact_subject": "exact signed ZIP/DMG bytes",
-        "signed_artifact_checks": ["sha256", "Sparkle signature", "notarization", "signed smoke"],
-    }
-
-    return {
+    published_at = release.get("publishedAt")
+    if not isinstance(published_at, str):
+        fail("release is missing publishedAt")
+    manifest = {
+        "schema_version": 1,
         "release_id": release_tag,
         "platform": "macos",
-        "version": f"{version}+{build}",
+        "version": version,
         "build_number": build,
+        "app_source_sha": target_sha,
         "zip_url": zip_asset.get("url"),
         "dmg_url": dmg_asset.get("url"),
+        "zip_sha256": f"sha256:{zip_sha256}",
+        "dmg_sha256": f"sha256:{dmg_sha256}",
         "ed_signature": signature,
-        "published_at": release.get("publishedAt"),
+        "qualification_evidence_asset": metadata.get("qualifiedBetaEvidence") or f"qualification-evidence-{release_tag}.json",
+        "qualification_evidence_sha256": qualification_evidence_sha256,
+        "qualification_tier": "T2",
+        "qualification_passed": True,
+        "backend_mode": "app_only",
+        "compatibility_contract": {
+            "schema_version": 1,
+            "app_release_id": release_tag,
+            "app_version": version,
+            "app_build_number": build,
+            "backend_mode": "app_only",
+            "environment_contract_version": "desktop-backend-env-v1",
+        },
+        "environment_contract_version": "desktop-backend-env-v1",
+        "created_at": published_at,
+        "published_at": published_at,
         "changelog": changelog,
         "mandatory": metadata.get("mandatory", "false").lower() in {"true", "1", "yes"},
-        "source_sha": target_sha,
-        "zip_sha256": zip_sha256,
-        "dmg_sha256": dmg_sha256,
-        "qualification": qualification_manifest,
     }
+    return validate_manifest(manifest)
 
 
 def main() -> int:
@@ -119,6 +130,7 @@ def main() -> int:
     parser.add_argument("--dmg-sha256", required=True)
 
     parser.add_argument("--qualification-evidence", required=True)
+    parser.add_argument("--qualification-evidence-sha256", required=True)
     parser.add_argument("--allow-stable-channel", action="store_true")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
@@ -132,6 +144,7 @@ def main() -> int:
         args.zip_sha256,
         args.dmg_sha256,
         qualification_evidence=evidence,
+        qualification_evidence_sha256=args.qualification_evidence_sha256,
         allow_stable_channel=args.allow_stable_channel,
     )
     Path(args.output).write_text(json.dumps(manifest, indent=2) + "\n")
