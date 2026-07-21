@@ -1,3 +1,0 @@
-{
-  "change": "Beta builds now collect additional bounded technical diagnostics by default to help resolve reliability issues faster. You can disable Enhanced Diagnostics in Settings → Advanced."
-}
