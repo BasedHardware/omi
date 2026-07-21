@@ -12,6 +12,8 @@ enum DesktopHealthEventName: String {
   case pttAudioCaptureWatchdogTriggered = "ptt_audio_capture_watchdog_triggered"
   case pttAudioCaptureDeviceRouteChanged = "ptt_audio_capture_device_route_changed"
   case pttCommitted = "ptt_committed"
+  case voiceTurnStarted = "voice_turn_started"
+  case voiceTurnTerminal = "voice_turn_terminal"
   case realtimeTokenMintFailed = "realtime_token_mint_failed"
   case realtimeProviderExpectedIdleTeardown = "realtime_provider_expected_idle_teardown"
   case realtimeProviderExpectedSessionRotation = "realtime_provider_expected_session_rotation"
@@ -390,21 +392,65 @@ final class DesktopDiagnosticsManager {
     lock.unlock()
   }
 
+  func recordVoiceTurnStarted(turnID: String, intent: String) {
+    record(
+      .voiceTurnStarted,
+      properties: [
+        "attempt_id": turnID,
+        "intent": intent,
+        "telemetry_schema_version": 1,
+      ])
+  }
+
   func recordVoiceTurnTerminal(
+    turnID: String,
     reason: String,
     route: String,
+    intent: String,
+    durationMs: Int?,
+    answerDelivered: Bool,
     staleEventCount: Int,
     invalidTransitionCount: Int
   ) {
-    let breadcrumb = Breadcrumb(level: .info, category: "voice.turn.terminal")
-    breadcrumb.message = "Voice turn reached terminal state"
-    breadcrumb.data = [
+    var properties: [String: Any] = [
+      "attempt_id": turnID,
       "terminal_reason": reason,
+      "outcome": Self.voiceTurnOutcome(for: reason),
+      "response_outcome": Self.voiceResponseOutcome(for: reason, answerDelivered: answerDelivered),
       "route": route,
+      "intent": intent,
       "stale_event_count": staleEventCount,
       "invalid_transition_count": invalidTransitionCount,
+      "telemetry_schema_version": 1,
     ]
+    if let durationMs {
+      properties["duration_ms"] = max(0, durationMs)
+    }
+    record(.voiceTurnTerminal, properties: properties)
+
+    let breadcrumb = Breadcrumb(level: .info, category: "voice.turn.terminal")
+    breadcrumb.message = "Voice turn reached terminal state"
+    breadcrumb.data = properties
     SentrySDK.addBreadcrumb(breadcrumb)
+  }
+
+  static func voiceTurnOutcome(for reason: String) -> String {
+    switch reason {
+    case "success":
+      return "success"
+    case "too_short", "silent_rejected", "cancelled", "owner_changed",
+      "interrupted_by_barge_in", "explicit_interrupt", "cleanup":
+      return "excluded"
+    default:
+      return "failure"
+    }
+  }
+
+  static func voiceResponseOutcome(for reason: String, answerDelivered: Bool) -> String {
+    if answerDelivered || reason == "success" {
+      return "success"
+    }
+    return voiceTurnOutcome(for: reason)
   }
 
   func recordVoiceTurnAnomaly(kind: String, phase: String, route: String) {
