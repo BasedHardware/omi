@@ -1,0 +1,23 @@
+desktop/macos/Desktop/Sources/SignInView.swift
+  s_2204722b151ea4::t_fab608ab9dde4e 129,131-132,134-135
+  s_2204722b151ea4::t_1fbff0a74bceb7 61,69
+  s_2204722b151ea4::t_ced1c2d927b097 43-45,55,64,66,70,73,75,86,88-90,92-94,96,100-107,112-113,115
+  s_2204722b151ea4::t_f4df46d4a83dab 111
+  s_2204722b151ea4::t_6f663851263b03 142-151
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "ae5827addd2c696c1d463a73825ec6a9c29316be",
+  "prompts": {},
+  "sessions": {
+    "s_2204722b151ea4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28bbfea6-8dc5-4cef-9719-1bec40925231",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
