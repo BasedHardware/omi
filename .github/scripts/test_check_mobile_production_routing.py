@@ -118,7 +118,7 @@ class MobileProductionRoutingContractTests(unittest.TestCase):
                         target.write_text(text, encoding="utf-8")
                     self.assertTrue(CHECKER.validate(root))
 
-    def test_rejects_mutated_desktop_beta_identity_or_firestore_project(self) -> None:
+    def test_rejects_mutated_desktop_production_identity_or_firestore_project(self) -> None:
         for source_path, fragments in CHECKER.REQUIRED_PRODUCTION_FRAGMENTS.items():
             for fragment in fragments:
                 with self.subTest(source_path=source_path, fragment=fragment), tempfile.TemporaryDirectory() as directory:
@@ -131,6 +131,41 @@ class MobileProductionRoutingContractTests(unittest.TestCase):
                             text = text.replace(fragment, "MUTATED_PRODUCTION_IDENTITY")
                         target.write_text(text, encoding="utf-8")
                     self.assertTrue(CHECKER.validate(root))
+
+    def test_rejects_separate_beta_or_divergent_production_family_identity(self) -> None:
+        original = (ROOT / "desktop/macos/Desktop/Sources/AppBuild.swift").read_text(encoding="utf-8")
+        mutations = {
+            "separate beta identity": (
+                '  static let betaProductionBundleIdentifier = "com.omi.computer-macos.beta"\n'
+                '  static let productionFamilyBundleIdentifiers = [productionBundleIdentifier]',
+                "com.omi.computer-macos.beta",
+            ),
+            "divergent production-family identity": (
+                '  static let betaProductionBundleIdentifier = "com.omi.computer-macos.beta"\n'
+                '  static let productionFamilyBundleIdentifiers = [\n'
+                '    productionBundleIdentifier, "com.omi.computer-macos.canary",\n'
+                '  ]',
+                "com.omi.computer-macos.canary",
+            ),
+        }
+
+        for mutation, (declaration, rejected_identity) in mutations.items():
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                for relative_path in (*CHECKER.LEGACY_BETA_ROUTING_PATHS, *CHECKER.REQUIRED_PRODUCTION_FRAGMENTS):
+                    target = root / relative_path
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    text = (ROOT / relative_path).read_text(encoding="utf-8")
+                    if relative_path == "desktop/macos/Desktop/Sources/AppBuild.swift":
+                        text = original.replace(
+                            'static let productionBundleIdentifier = "com.omi.computer-macos"',
+                            'static let productionBundleIdentifier = "com.omi.computer-macos"\n' + declaration,
+                            1,
+                        )
+                    target.write_text(text, encoding="utf-8")
+
+                errors = CHECKER.validate(root)
+                self.assertTrue(any(rejected_identity in error for error in errors), errors)
 
 
 if __name__ == "__main__":
