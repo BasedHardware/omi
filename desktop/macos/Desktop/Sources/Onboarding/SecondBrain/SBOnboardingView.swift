@@ -126,16 +126,6 @@ struct SBOnboardingView: View {
     }
   }
 
-  private var progressDots: some View {
-    HStack(spacing: 5) {
-      ForEach(0..<model.totalSteps, id: \.self) { i in
-        Circle().fill(i <= model.currentStepIndex ? sb.ink(.w8) : sb.ink(.w15))
-          .frame(width: 5, height: 5)
-      }
-    }
-    .padding(.vertical, 13)
-  }
-
   // MARK: - Widgets per step
 
   @ViewBuilder private var widget: some View {

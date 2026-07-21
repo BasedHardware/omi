@@ -5039,7 +5039,13 @@ class ChatProvider: ObservableObject {
         daysBack: 0, daysForward: 1, maxResults: 50)
     else { return [] }
 
-    let todayPrefix = ISO8601DateFormatter().string(from: Date()).prefix(10)
+    // Compute "today" in the user's local timezone. ISO8601DateFormatter defaults to
+    // UTC, but event start_time date strings carry the calendar's local offset, so a
+    // UTC prefix would drop today's meetings for any user behind/ahead of UTC near the
+    // day boundary.
+    let localDayFormatter = ISO8601DateFormatter()
+    localDayFormatter.timeZone = TimeZone.current
+    let todayPrefix = localDayFormatter.string(from: Date()).prefix(10)
     let plain = ISO8601DateFormatter()
     let fractional = ISO8601DateFormatter()
     fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

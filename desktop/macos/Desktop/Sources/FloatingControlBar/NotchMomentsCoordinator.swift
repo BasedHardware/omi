@@ -20,6 +20,13 @@ final class NotchMomentsCoordinator {
 
   private var wasTranscribing = false
   private var knownTaskIds = Set<String>()
+  /// Open-task ids captured when the current conversation started, so the end card
+  /// counts only the follow-ups this conversation produced — not the whole backlog.
+  private var sessionBaselineTaskIds = Set<String>()
+  /// When the current conversation started. Used as a `createdAt` floor so paginated
+  /// or cross-device-synced older tasks (new ids, but old timestamps) can't inflate
+  /// the end-card count.
+  private var sessionStartedAt: Date?
   /// The task shown in the most recent receipt (so Undo can retract it).
   private var lastReceiptTask: TaskActionItem?
 
@@ -31,6 +38,9 @@ final class NotchMomentsCoordinator {
     self.appState = appState
     wasTranscribing = appState.isTranscribing
     knownTaskIds = Set(TasksStore.shared.incompleteTasks.map(\.id))
+    sessionBaselineTaskIds = knownTaskIds
+    // If we begin monitoring mid-conversation, count follow-ups from now on.
+    sessionStartedAt = appState.isTranscribing ? Date() : nil
 
     appState.$isTranscribing
       .receive(on: RunLoop.main)
@@ -47,12 +57,34 @@ final class NotchMomentsCoordinator {
 
   private func handleTranscribing(_ transcribing: Bool) {
     defer { wasTranscribing = transcribing }
+    // On the start edge, snapshot the existing backlog so the end card can count only
+    // the follow-ups this conversation actually produced.
+    if !wasTranscribing, transcribing {
+      sessionBaselineTaskIds = Set(TasksStore.shared.incompleteTasks.map(\.id))
+      sessionStartedAt = Date()
+      return
+    }
     // Fire only on the stop edge (was recording → now stopped).
     guard wasTranscribing, !transcribing else { return }
-    let open = TasksStore.shared.incompleteTasks.count
-    guard open > 0 else { return }
-    let title = open == 1 ? "1 follow-up ready" : "\(open) follow-ups ready"
+    let newCount = Self.followUpCount(
+      tasks: TasksStore.shared.incompleteTasks,
+      baselineIds: sessionBaselineTaskIds,
+      since: sessionStartedAt)
+    guard newCount > 0 else { return }
+    let title = newCount == 1 ? "1 follow-up ready" : "\(newCount) follow-ups ready"
     post(title: title, message: "Conversation ended", assistantId: NotchMoment.endAssistantId)
+  }
+
+  /// Follow-ups a conversation actually produced: tasks whose id is new since the
+  /// session baseline AND (if a start time is known) created after it. The start-time
+  /// floor keeps paginated/synced older tasks — new ids but stale `createdAt` — out of
+  /// the count, matching the freshness guard the live-receipt path uses.
+  nonisolated static func followUpCount(tasks: [TaskActionItem], baselineIds: Set<String>, since: Date?) -> Int {
+    tasks.filter { task in
+      guard !baselineIds.contains(task.id) else { return false }
+      if let since { return task.createdAt >= since }
+      return true
+    }.count
   }
 
   // MARK: live receipts

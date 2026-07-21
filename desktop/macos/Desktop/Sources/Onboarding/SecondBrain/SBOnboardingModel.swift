@@ -95,16 +95,12 @@ final class SBOnboardingModel: ObservableObject {
   }
 
   var displayName: String {
-    let n = role == nil ? nameDraft.trimmingCharacters(in: .whitespaces) : nameDraft.trimmingCharacters(in: .whitespaces)
+    let n = nameDraft.trimmingCharacters(in: .whitespaces)
     let stored = AuthService.shared.givenName.trimmingCharacters(in: .whitespaces)
     if !n.isEmpty { return n.components(separatedBy: " ").first ?? n }
     if !stored.isEmpty { return stored }
     return "friend"
   }
-
-  var progressFraction: Double { Double(step.rawValue + 1) / Double(Step.allCases.count) }
-  var totalSteps: Int { Step.allCases.count }
-  var currentStepIndex: Int { step.rawValue }
 
   // MARK: lifecycle
 
@@ -290,7 +286,9 @@ final class SBOnboardingModel: ObservableObject {
   }
 
   func connectCalendar() {
-    guard calState == "idle" else { return }
+    // Allow retry after a failed attempt: `needsSignIn` is a terminal-but-retryable
+    // state (nothing else resets it to `idle`), so block only while connecting/connected.
+    guard calState == "idle" || calState == "needsSignIn" else { return }
     calState = "connecting"
     Task { [weak self] in
       let status = await CalendarReaderService.shared.verifyConnection()
@@ -358,7 +356,9 @@ final class SBOnboardingModel: ObservableObject {
       await AgentVMService.shared.startPipeline()
       await GoalGenerationService.shared.generateNow()
     }
-    _ = LaunchAtLoginManager.shared.setEnabled(true)
+    // Preserve the user's launch-at-login choice from the `.launch` step instead of
+    // forcing it back on — declining "Open at login" must survive completion.
+    _ = LaunchAtLoginManager.shared.setEnabled(launchAtLogin)
 
     if AppBuild.usesLazyDevPermissions {
       AssistantSettings.shared.screenAnalysisEnabled = false
