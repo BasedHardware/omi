@@ -11,6 +11,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import yaml
@@ -177,6 +178,14 @@ _DIRECT_RELEASE_CREATE = re.compile(r"(?m)^\s*gh\s+release\s+create\b")
 _DIRECT_GITHUB_RELEASE_API = re.compile(
     r"https://api\.github\.com/repos/[^\s'\"\\]+/releases(?:[/?#]|$)", re.IGNORECASE
 )
+_FORBIDDEN_NORMAL_RELEASE_GCP_AUTHORITIES = (
+    re.compile(r"\bGCP_SERVICE_ACCOUNT_KEY\b"),
+    re.compile(r"\bCloud\s+Run\s+Admin\b", re.IGNORECASE),
+    re.compile(r"\broles/run\.admin\b", re.IGNORECASE),
+    re.compile(r"\bStorage\s+Object\s+Admin\b", re.IGNORECASE),
+    re.compile(r"\broles/storage\.objectAdmin\b", re.IGNORECASE),
+    re.compile(r"\bGCR\s+push\b", re.IGNORECASE),
+)
 
 
 def _canonical_json(value: object) -> str:
@@ -189,6 +198,20 @@ def _sha256_text(value: str) -> str:
 
 def _sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
+
+
+def _iter_semantic_strings(value: object) -> Iterator[str]:
+    """Yield only safely loaded keys and values, deliberately excluding YAML comments."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if isinstance(key, str):
+                yield key
+            yield from _iter_semantic_strings(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _iter_semantic_strings(child)
+    elif isinstance(value, str):
+        yield value
 
 
 class _DuplicateFixtureKeyError(ValueError):
@@ -385,6 +408,14 @@ def check_codemagic_release_publishers() -> list[str]:
         errors.append("preview scripts must be the exact YAML alias node used by the canonical workflow")
     if len(canonical_scripts) != 21:
         errors.append("canonical workflow must retain exactly 21 approved script steps")
+
+    for scalar in _iter_semantic_strings(canonical):
+        for forbidden_authority in _FORBIDDEN_NORMAL_RELEASE_GCP_AUTHORITIES:
+            match = forbidden_authority.search(scalar)
+            if match is not None:
+                errors.append(
+                    f"{CANONICAL_WORKFLOW} contains forbidden broad GCP authority {match.group(0)!r}"
+                )
 
     preview_environment = preview.get("environment")
     preview_groups = preview_environment.get("groups") if isinstance(preview_environment, dict) else None
