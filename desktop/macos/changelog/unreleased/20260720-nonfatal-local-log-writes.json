@@ -1,3 +1,0 @@
-{
-  "change": "Prevent Omi Desktop from quitting when a local diagnostic log write fails, while preserving the failure details for later crash diagnosis"
-}
