@@ -10,6 +10,7 @@ target-attach path consults the same predicate.
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 from database.conversations import eligible_merge_target, select_closest_conversation
 
@@ -55,10 +56,24 @@ def test_eligible_merge_target_predicate():
     assert eligible_merge_target(discarded) is True
 
 
-def test_sync_target_attach_consults_the_shared_predicate():
-    """Static tripwire (source, not behavior): the auto-sync target-attach path
-    must gate its direct conversation fetch through eligible_merge_target so a
-    deleted target falls back to the (also-filtered) timestamp lookup."""
-    pipeline = (Path(__file__).resolve().parents[2] / 'utils' / 'sync' / 'pipeline.py').read_text(encoding='utf-8')
-    attach = pipeline[pipeline.index('if target_conversation_id:') : pipeline.index('if not closest_memory:')]
-    assert 'eligible_merge_target' in attach
+@patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='url')
+@patch('utils.sync.pipeline.schedule_syncing_temporal_file_deletion')
+@patch('utils.sync.pipeline.prerecorded', return_value=(['word'], 'en'))
+@patch('utils.sync.pipeline.postprocess_words')
+@patch('utils.sync.pipeline.conversations_db.get_conversation', return_value={'id': 'deleted', 'deleted': True})
+@patch('utils.sync.pipeline.get_timestamp_from_path', return_value=123)
+@patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', side_effect=RuntimeError("FALLBACK_TAKEN"))
+def test_sync_target_attach_fallback_to_closest(
+    mock_closest, mock_timestamp, mock_get_conv, mock_postprocess, mock_prerecorded, mock_schedule, mock_signed_url
+):
+    """Behavior-level test: if the specified target conversation is deleted/ineligible,
+    the pipeline must fall back to the timestamp-based closest match."""
+    from utils.sync.pipeline import process_segment
+
+    mock_postprocess.return_value = [MagicMock(end=1.0)]
+
+    # process_segment catches exceptions internally, so it will swallow our RuntimeError and return False.
+    result = process_segment('seg_123.wav', 'uid', {'segments': []}, MagicMock(), [], target_conversation_id='deleted')
+
+    assert result is False
+    assert mock_closest.called, "Pipeline did not fall back to get_closest_conversation_to_timestamps"
