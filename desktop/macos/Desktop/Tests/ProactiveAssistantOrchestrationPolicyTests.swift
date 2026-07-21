@@ -552,4 +552,64 @@ final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
         app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: firstHeartbeat.addingTimeInterval(7.5)),
       .preview)
   }
+
+  func testPreviewSimilarityThresholdPolicyByAppClass() {
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(bundleID: "com.apple.Notes", appName: "Notes"),
+      0.98)
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.microsoft.VSCode", appName: "Code"),
+      0.96)
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(bundleID: nil, appName: "Finder"),
+      0.95)
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.tinyspeck.slackmacgap", appName: "Slack"),
+      0.92)
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.apple.Safari", appName: "Safari"),
+      0.90)
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.apple.Music", appName: "Music"),
+      0.88)
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.valvesoftware.steam", appName: "Steam"),
+      0.82)
+  }
+
+  func testPreviewSimilarityThresholdPolicyBrowserWindowTitle() {
+    // Docs in browser → notes tier.
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.google.Chrome",
+        appName: "Google Chrome",
+        windowTitle: "Spec - Google Docs"),
+      0.98)
+    // Code host → code tier.
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.apple.Safari",
+        appName: "Safari",
+        windowTitle: "BasedHardware/omi · GitHub"),
+      0.96)
+    // Social feed → social tier.
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.google.Chrome",
+        appName: "Google Chrome",
+        windowTitle: "Home / X (twitter.com)"),
+      0.85)
+    // Video → game/thrash tier.
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.apple.Safari",
+        appName: "Safari",
+        windowTitle: "Funny Cats - YouTube"),
+      0.82)
+  }
 }

@@ -464,3 +464,219 @@ struct ProactiveCaptureTrigger {
     previewSimilarity(to: hash) >= similarityThreshold
   }
 }
+
+/// Per-app preview-similarity thresholds for heartbeat dedupe.
+/// Similarity ≥ threshold → skip full capture.
+/// Higher = only near-identical frames skip (catch small edits).
+/// Lower = tolerate noisy pixel churn (games/media/social).
+///
+/// Tiers (chosen for 80px dHash noise):
+/// - 0.98 notes/docs:  ~1 bit of 64 may flip from cursor/scroll chrome; keep edits
+/// - 0.96 code/IDE:    text dense but gutter/minimap/status tick often
+/// - 0.95 default:     generic desktop apps
+/// - 0.92 chat:        avatars/typing/unread badges pulse
+/// - 0.90 browser:     tab strip/favicon/network chrome noise; site title can raise/lower
+/// - 0.88 media player: artwork/progress bar animates
+/// - 0.85 social web:  feeds/autoplay thumbs thrash
+/// - 0.82 games:       near-constant pixel motion; keep sparse keyframes only
+enum PreviewSimilarityThresholdPolicy {
+  // Similarity ≥ threshold → skip full capture.
+  // Higher = only near-identical frames skip (catch small edits).
+  // Lower = tolerate noisy pixel churn (games/media/social).
+  //
+  // Tiers for ~80px dHash noise:
+  // 0.98 notes/docs   ~1/64 bit may flip from cursor chrome; keep text edits
+  // 0.96 code/IDE     dense text; gutter/minimap/status tick often
+  // 0.95 default      generic desktop apps
+  // 0.92 chat         avatars/typing/unread badges pulse
+  // 0.90 browser      tab strip/favicon noise; window title can raise/lower
+  // 0.88 media        artwork/progress bar animates
+  // 0.85 social web   feeds/autoplay thumbs thrash
+  // 0.82 games        near-constant motion; sparse keyframes only
+  static let notes: Double = 0.98
+  static let code: Double = 0.96
+  static let `default`: Double = 0.95
+  static let chat: Double = 0.92
+  static let browser: Double = 0.90
+  static let media: Double = 0.88
+  static let social: Double = 0.85
+  static let game: Double = 0.82
+
+  private static let noteBundleIDs: Set<String> = [
+    "com.apple.notes",
+    "com.apple.iwork.pages",
+    "com.apple.textedit",
+    "com.microsoft.word",
+    "com.microsoft.onenote.mac",
+    "md.obsidian",
+    "notion.id",
+    "com.lukilabs.lukiapp",
+    "com.culturedcode.thingsmac",
+    "com.apple.ibooksx",
+    "com.apple.preview",
+    "com.bear-writer.bear",
+    "com.ugmanny.ia-writer-mac",
+    "com.ulyssesapp.mac",
+  ]
+  private static let noteAppNames: Set<String> = [
+    "Notes", "Pages", "TextEdit", "Microsoft Word", "OneNote",
+    "Obsidian", "Notion", "Craft", "Things", "Books", "Preview",
+    "Bear", "iA Writer", "Ulysses",
+  ]
+
+  private static let codeBundleIDs: Set<String> = [
+    "com.microsoft.vscode",
+    "com.microsoft.vscodeinsiders",
+    "com.apple.dt.xcode",
+    "com.googlecode.iterm2",
+    "com.apple.terminal",
+    "net.kovidgoyal.kitty",
+    "com.github.wez.wezterm",
+    "dev.warp.warp-stable",
+    "com.sublimetext.4",
+    "com.panic.nova",
+    "com.jetbrains.intellij",
+    "com.jetbrains.pycharm",
+    "com.jetbrains.webstorm",
+    "com.jetbrains.goland",
+    "com.jetbrains.clion",
+    "com.jetbrains.datagrip",
+  ]
+  private static let codeAppNames: Set<String> = [
+    "Code", "Visual Studio Code", "Xcode", "iTerm2", "Terminal",
+    "kitty", "WezTerm", "Warp", "Sublime Text", "Nova",
+    "IntelliJ IDEA", "PyCharm", "WebStorm", "GoLand", "CLion", "DataGrip",
+  ]
+
+  private static let chatBundleIDs: Set<String> = [
+    "com.tinyspeck.slackmacgap",
+    "com.hnc.discord",
+    "ru.keepcoder.telegram",
+    "net.whatsapp.whatsapp",
+    "com.apple.mobilesms",
+    "com.microsoft.teams2",
+    "com.microsoft.teams",
+    "com.apple.facetime",
+  ]
+  private static let chatAppNames: Set<String> = [
+    "Slack", "Discord", "Telegram", "WhatsApp", "Messages",
+    "Microsoft Teams", "FaceTime",
+  ]
+
+  private static let mediaBundleIDs: Set<String> = [
+    "com.apple.music", "com.apple.podcasts", "com.apple.tv",
+    "com.apple.photos", "com.spotify.client", "com.apple.ibooks",
+    "com.apple.quicktimeplayerx", "com.colliderli.iina", "org.videolan.vlc",
+  ]
+  private static let mediaAppNames: Set<String> = [
+    "Music", "Podcasts", "TV", "Photos", "Spotify", "Books",
+    "QuickTime Player", "IINA", "VLC",
+  ]
+
+  private static let gameBundleIDPrefixes: [String] = [
+    "com.valvesoftware", "com.epicgames", "com.blizzard", "com.ea.",
+    "com.riotgames", "com.unity.", "com.apple.chess",
+  ]
+  private static let gameAppNames: Set<String> = [
+    "Steam", "Chess", "Minecraft", "League of Legends", "Fortnite",
+  ]
+
+  /// Resolve skip threshold for the frontmost app.
+  /// Browser titles can raise (docs) or lower (video/social/game sites).
+  static func threshold(
+    bundleID: String?,
+    appName: String?,
+    windowTitle: String? = nil
+  ) -> Double {
+    let bid = (bundleID ?? "").lowercased()
+    let name = appName ?? ""
+
+    if isGame(bundleID: bid, appName: name) { return game }
+    if isMedia(bundleID: bid, appName: name) { return media }
+    if isChat(bundleID: bid, appName: name) { return chat }
+    if isCode(bundleID: bid, appName: name) { return code }
+    if isNote(bundleID: bid, appName: name) { return notes }
+
+    if isBrowser(bundleID: bid, appName: name) {
+      return browserThreshold(windowTitle: windowTitle)
+    }
+    return `default`
+  }
+
+  private static func isBrowser(bundleID: String, appName: String) -> Bool {
+    if !bundleID.isEmpty, ConferencingApps.isBrowserBundleID(bundleID) { return true }
+    return ConferencingApps.browserApps.contains(appName)
+      || TaskAssistantSettings.isBrowser(appName)
+  }
+
+  private static func isNote(bundleID: String, appName: String) -> Bool {
+    if noteBundleIDs.contains(bundleID) { return true }
+    return noteAppNames.contains(appName)
+  }
+
+  private static func isCode(bundleID: String, appName: String) -> Bool {
+    if codeBundleIDs.contains(bundleID) { return true }
+    return codeAppNames.contains(appName)
+  }
+
+  private static func isChat(bundleID: String, appName: String) -> Bool {
+    if chatBundleIDs.contains(bundleID) { return true }
+    return chatAppNames.contains(appName)
+  }
+
+  private static func isMedia(bundleID: String, appName: String) -> Bool {
+    if mediaBundleIDs.contains(bundleID) { return true }
+    return mediaAppNames.contains(appName)
+  }
+
+  private static func isGame(bundleID: String, appName: String) -> Bool {
+    if gameBundleIDPrefixes.contains(where: { bundleID.hasPrefix($0) }) { return true }
+    return gameAppNames.contains(appName)
+  }
+
+  private static func browserThreshold(windowTitle: String?) -> Double {
+    guard let title = windowTitle?.lowercased(), !title.isEmpty else { return browser }
+
+    let noteSignals = [
+      "docs.google.com", "sheets.google.com", "slides.google.com",
+      "notion.so", "notion.site", "obsidian.md", "roamresearch.com",
+      "coda.io", "paper.dropbox.com", "evernote.com",
+      "google docs", "google sheets", "google slides",
+      "confluence", "hackmd.io", "dropbox paper",
+      "overleaf.com", "quip.com",
+    ]
+    if noteSignals.contains(where: { title.contains($0) }) { return notes }
+
+    let codeSignals = [
+      "github.com", "gitlab.com", "bitbucket.org", "sourceforge.net",
+      "linear.app", "figma.com", "miro.com", "whimsical.com",
+      "codesandbox.io", "replit.com", "stackblitz.com",
+      "jira", "atlassian.net",
+    ]
+    if codeSignals.contains(where: { title.contains($0) }) { return code }
+
+    let chatSignals = [
+      "mail.google.com", "outlook.live.com", "outlook.office",
+      "app.slack.com", "discord.com", "web.whatsapp.com",
+      "web.telegram.org", "teams.microsoft.com", "chat.google.com",
+      "messages.google.com",
+    ]
+    if chatSignals.contains(where: { title.contains($0) }) { return chat }
+
+    let socialSignals = [
+      "twitter.com", "x.com", "instagram.com", "tiktok.com",
+      "reddit.com", "facebook.com", "linkedin.com", "news.ycombinator.com",
+    ]
+    if socialSignals.contains(where: { title.contains($0) }) { return social }
+
+    let thrashSignals = [
+      "youtube.com", "youtu.be", "netflix.com", "twitch.tv",
+      "disneyplus.com", "hulu.com", "spotify.com", "music.apple.com",
+      "steamcommunity.com", "store.steampowered.com",
+      "epicgames.com", "roblox.com", "chess.com", "lichess.org",
+    ]
+    if thrashSignals.contains(where: { title.contains($0) }) { return game }
+
+    return browser
+  }
+}

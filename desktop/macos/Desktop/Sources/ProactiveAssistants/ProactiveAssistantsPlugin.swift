@@ -162,8 +162,6 @@ public class ProactiveAssistantsPlugin: NSObject {
   )
   /// Fast poll interval for checking idle/app/window state without capturing.
   private let capturePollInterval: TimeInterval = 1.0
-  /// Preview similarity index threshold; similarity ≥ this skips the full capture.
-  private let previewSimilarityThreshold = 0.92
   /// Apps whose content changes slowly. The value is the heartbeat interval in seconds.
   /// Uses bundle ID when available, falling back to localized app name.
   private let appSpecificHeartbeatIntervals: [String: TimeInterval] = [
@@ -874,9 +872,10 @@ public class ProactiveAssistantsPlugin: NSObject {
         if case .success(let previewImage) = previewResult {
           let previewHash = RewindOCRService.dHash(of: previewImage)
           let similarity = captureTrigger.previewSimilarity(to: previewHash)
-          if similarity >= previewSimilarityThreshold {
-            captureTrigger.markPreviewSkipped(
-              at: now, similarity: similarity, threshold: previewSimilarityThreshold)
+          let threshold = PreviewSimilarityThresholdPolicy.threshold(
+            bundleID: currentAppBundleID, appName: appName, windowTitle: currentWindowTitle)
+          if similarity >= threshold {
+            captureTrigger.markPreviewSkipped(at: now, similarity: similarity, threshold: threshold)
             return
           }
           captureTrigger.recordPreviewHash(previewHash, at: now)
