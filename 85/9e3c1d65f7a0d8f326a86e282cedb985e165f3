@@ -1,0 +1,27 @@
+desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeKnowsComposer.swift
+  s_77f2b8dfbc2e90::t_0e363623fd4a8c 5-6,10,22
+  s_77f2b8dfbc2e90::t_56027a033aa244 38-41,43,48,54-59,63-65,71-91,94
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_77f2b8dfbc2e90::t_7566b5b37a75d7 225
+  s_77f2b8dfbc2e90::t_884042b03ba954 838,844-858
+  s_77f2b8dfbc2e90::t_ef4142a75fda19 899-900,916
+  s_77f2b8dfbc2e90::t_1ddcd93f72d6f1 2459
+  s_77f2b8dfbc2e90::t_5373c2ae3eee0d 1481
+  s_77f2b8dfbc2e90::t_d940831d6f648e 859-860
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "859e3c1d65f7a0d8f326a86e282cedb985e165f3",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
