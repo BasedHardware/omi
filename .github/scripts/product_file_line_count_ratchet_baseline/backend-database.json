@@ -1,10 +1,10 @@
 {
   "files": {
-    "backend/database/conversations.py": 1601,
+    "backend/database/conversations.py": 1623,
     "backend/database/users.py": 1943
   },
   "raise_justifications": {
-    "backend/database/conversations.py": "Public shared-chat uses the existing conversation storage format for bounded, safe transcript decoding; extraction would duplicate crypto/storage invariants. +21 for the #10033 merge-target eligibility predicate and pure closest-match selector beside the query they filter."
+    "backend/database/conversations.py": "+22 for the folder-preservation guard on upsert: the upsert path now re-reads and preserves an existing conversation's folder assignment instead of clobbering it (#9582)."
   },
   "threshold": 1500
 }
