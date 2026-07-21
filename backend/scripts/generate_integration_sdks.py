@@ -1633,7 +1633,26 @@ def write_tree(root: Path, files: dict[str, str]) -> None:
     for rel, content in files.items():
         path = root / rel
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding='utf-8')
+        # Exactly one trailing newline (diff-hygiene rejects blank line at EOF).
+        text = content.replace('\r\n', '\n').rstrip('\n') + '\n'
+        path.write_text(text, encoding='utf-8')
+
+
+def _format_dart_tree(root: Path) -> None:
+    """Run dart format on generated Dart sources when the tool is available."""
+    dart_dir = root / 'dart'
+    if not dart_dir.exists():
+        return
+    import shutil
+    import subprocess
+
+    dart = shutil.which('dart')
+    if not dart:
+        return
+    targets = [str(path) for path in dart_dir.rglob('*.dart') if path.is_file()]
+    if not targets:
+        return
+    subprocess.run([dart, 'format', '--line-length', '120', *targets], check=False)
 
 
 def generate_all(spec_path: Path) -> dict[str, str]:
@@ -1751,7 +1770,18 @@ def main(argv: list[str] | None = None) -> int:
     out_root = args.out
 
     if args.check:
-        dirty = check_dirty(files, out_root)
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix='omi-integration-sdk-') as tmp:
+            tmp_root = Path(tmp)
+            write_tree(tmp_root, files)
+            _format_dart_tree(tmp_root)
+            # Re-read formatted outputs into expected map
+            expected: dict[str, str] = {}
+            for rel in files:
+                path = tmp_root / rel
+                expected[rel] = path.read_text(encoding='utf-8') if path.exists() else files[rel]
+            dirty = check_dirty(expected, out_root)
         if dirty:
             print('FAIL: integration SDKs are stale:', file=sys.stderr)
             for item in dirty:
@@ -1762,6 +1792,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     write_tree(out_root, files)
+    _format_dart_tree(out_root)
     gen_sh = out_root / 'scripts' / 'generate.sh'
     if gen_sh.exists():
         gen_sh.chmod(gen_sh.stat().st_mode | 0o111)

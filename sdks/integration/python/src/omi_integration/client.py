@@ -172,4 +172,3 @@ class OmiIntegrationClient:
         params: MutableMapping[str, Any] = {}
         params['uid'] = uid
         return self._request('POST', f"/v2/integrations/{self.app_id}/user/memories", params=params, json_body=body)
-

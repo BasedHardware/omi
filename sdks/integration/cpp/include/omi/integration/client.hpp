@@ -79,4 +79,3 @@ class Client {
 
 }  // namespace integration
 }  // namespace omi
-

@@ -170,4 +170,3 @@ JsonValue Client::create_memories(const std::string& uid, const std::string& jso
 
 }  // namespace integration
 }  // namespace omi
-

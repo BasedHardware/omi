@@ -2,7 +2,6 @@
 // Do not edit by hand. Re-run the generator after OpenAPI changes.
 // Spec sha256[0:16]=726f4b3a685da076
 
-
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -216,6 +215,4 @@ class OmiIntegrationClient {
     };
     return _request("POST", "/v2/integrations/$appId/user/memories", query: query, body: body);
   }
-
 }
-
