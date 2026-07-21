@@ -13,4 +13,4 @@ device.sync_time(epoch_seconds)?;
 let battery_percent = device.battery_level()?;
 ```
 
-The ring storage API follows firmware 3.0.20+: status reads are four little-endian `u32` values, while ring control fields are big-endian. `RingRecordReassembler` accepts unaligned data notifications and returns 444-byte records.
+The ring storage API follows firmware 3.0.20+: status reads are four little-endian `u32` values, while ring control fields are big-endian. The [maintained client protocol reference](../../../app/lib/services/devices/ring_protocol.dart) defines the corresponding wire layout. `RingRecordReassembler` accepts unaligned data notifications and returns 444-byte records.
