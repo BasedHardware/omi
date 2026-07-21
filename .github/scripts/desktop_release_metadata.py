@@ -19,20 +19,6 @@ class DesktopQualification:
     source: str
 
 
-@dataclass(frozen=True)
-class StableCandidate:
-    nominated: bool
-    tag: str
-    sha: str
-    nominated_at: str
-    nominated_by: str
-    rationale: str
-    qualification_evidence: str
-    soak_review: str
-    telemetry_review: str
-    release_notes_review: str
-
-
 def fail(message: str) -> NoReturn:
     raise SystemExit(f"FAIL: {message}")
 
@@ -106,52 +92,6 @@ def require_desktop_qualification(
         fail("release qualification is missing its evidence asset")
     if qualification.evidence not in asset_names:
         fail(f"release is missing qualification evidence asset {qualification.evidence!r}")
-
-
-def stable_candidate_from_metadata(metadata: dict[str, str]) -> StableCandidate:
-    return StableCandidate(
-        nominated=metadata.get("stableCandidate", "").strip().lower() in TRUE_VALUES,
-        tag=metadata.get("stableCandidateTag", "").strip(),
-        sha=metadata.get("stableCandidateSha", "").strip(),
-        nominated_at=metadata.get("stableCandidateAt", "").strip(),
-        nominated_by=metadata.get("stableCandidateBy", "").strip(),
-        rationale=metadata.get("stableCandidateRationale", "").strip(),
-        qualification_evidence=metadata.get("stableCandidateQualificationEvidence", "").strip(),
-        soak_review=metadata.get("stableCandidateSoakReview", "").strip(),
-        telemetry_review=metadata.get("stableCandidateTelemetryReview", "").strip(),
-        release_notes_review=metadata.get("stableCandidateReleaseNotesReview", "").strip(),
-    )
-
-
-def require_stable_candidate(
-    candidate: StableCandidate,
-    *,
-    release_tag: str,
-    target_sha: str,
-    qualification_evidence: str,
-) -> None:
-    if not candidate.nominated:
-        fail("release must be explicitly nominated as a stable candidate")
-    required = {
-        "stableCandidateTag": candidate.tag,
-        "stableCandidateSha": candidate.sha,
-        "stableCandidateAt": candidate.nominated_at,
-        "stableCandidateBy": candidate.nominated_by,
-        "stableCandidateRationale": candidate.rationale,
-        "stableCandidateQualificationEvidence": candidate.qualification_evidence,
-        "stableCandidateSoakReview": candidate.soak_review,
-        "stableCandidateTelemetryReview": candidate.telemetry_review,
-        "stableCandidateReleaseNotesReview": candidate.release_notes_review,
-    }
-    missing = [key for key, value in required.items() if not value]
-    if missing:
-        fail(f"stable-candidate nomination is missing: {', '.join(missing)}")
-    if candidate.tag != release_tag:
-        fail("stable-candidate tag does not match the requested release")
-    if candidate.sha != target_sha:
-        fail("stable-candidate SHA does not match the release tag commit")
-    if candidate.qualification_evidence != qualification_evidence:
-        fail("stable-candidate nomination does not reference the current qualification evidence")
 
 
 def update_metadata(body: str, values: dict[str, str]) -> str:

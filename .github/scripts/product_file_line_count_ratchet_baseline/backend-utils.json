@@ -1,15 +1,16 @@
 {
   "files": {
-    "backend/utils/apps.py": 1641,
+    "backend/utils/apps.py": 1652,
     "backend/utils/memory/legacy_backfill.py": 1816,
     "backend/utils/memory_ingestion/pipeline.py": 1711,
     "backend/utils/other/storage.py": 1584,
     "backend/utils/retrieval/tools/calendar_tools.py": 1513,
-    "backend/utils/sync/pipeline.py": 2299
+    "backend/utils/sync/pipeline.py": 2324
   },
   "raise_justifications": {
+    "backend/utils/apps.py": "get_available_app_model_by_id: the set-preferred-app availability authority as a validated App model, so the summary path honors what the setter admitted instead of re-deciding with the installed slice (#10074).",
     "backend/utils/other/storage.py": "delete_app_logo now requires an exact app-logo bucket prefix (startswith) so a foreign URL embedding the prefix later cannot delete an unrelated object on this deletion path (David review on #9873).",
-    "backend/utils/sync/pipeline.py": "Durable-ledger convergence remains beside the Sync pipeline's run-lock ownership and terminal-result transitions instead of splitting one recovery invariant across modules."
+    "backend/utils/sync/pipeline.py": "Plan-aware soft-cap evaluation and its default-tier fallback remain in a small helper beside Sync's idempotent fresh-speech metering rather than overgrowing the durable worker coordinator."
   },
   "threshold": 1500
 }
