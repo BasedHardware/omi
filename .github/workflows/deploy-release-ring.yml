@@ -214,6 +214,7 @@ jobs:
         run: |
           set -euo pipefail
           cloud_run_flags="${{ steps.runtime.outputs.cloud_run_flags }}"
+          release_short_sha="$(git -C artifacts/release-ring/source rev-parse --short=7 HEAD)"
           recorded_output() {
             python3 - "$1" artifacts/release-ring/runtime-outputs.txt <<'PY'
           from pathlib import Path
@@ -256,6 +257,7 @@ jobs:
               --set-env-vars "$env_vars" \
               --update-secrets "$secrets" \
               --tag "ring-${GITHUB_RUN_ID}" \
+              --revision-suffix "${release_short_sha}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
               --no-traffic \
               $cloud_run_flags \
               --quiet
@@ -337,6 +339,21 @@ jobs:
           for deployment in "${RELEASE_RING}-omi-backend-listen" "${RELEASE_RING}-omi-pusher" "${RELEASE_RING}-omi-llm-gateway" "${RELEASE_RING}-omi-agent-proxy"; do
             kubectl -n "$namespace" rollout status "deployment/$deployment" --timeout=300s
           done
+
+      - name: Verify serving release vector
+        id: verify_release_vector
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/verify_backend_release_vector.py \
+            --commit-sha "${{ steps.record.outputs.git_sha }}" \
+            --short-sha "$(git -C artifacts/release-ring/source rev-parse --short=7 HEAD)" \
+            --deploy-run-id "$GITHUB_RUN_ID" \
+            --deploy-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --project "$RELEASE_RUNTIME_PROJECT" \
+            --region "$REGION" \
+            --environment "$RELEASE_RING" \
+            --expected-image "${{ steps.record.outputs.backend_image }}" \
+            --evidence-path artifacts/release-ring/serving-release-vector.json
 
       - name: Advance active pointer with GCS compare-and-swap
         if: success()

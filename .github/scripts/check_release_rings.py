@@ -69,11 +69,21 @@ def check() -> list[str]:
                 "cloud_run_traffic_snapshot.py restore",
                 "release_ring_gke_snapshot.py restore",
                 "wait_external_secret_refresh.py",
+                "Verify serving release vector",
+                "backend/scripts/verify_backend_release_vector.py",
+                '--commit-sha "${{ steps.record.outputs.git_sha }}"',
+                '--deploy-run-id "$GITHUB_RUN_ID"',
+                '--deploy-run-attempt "$GITHUB_RUN_ATTEMPT"',
+                '--expected-image "${{ steps.record.outputs.backend_image }}"',
                 "--hold",
                 "workload_identity_provider:",
             ),
         )
     )
+    promotion = deploy.find("Shift validated Cloud Run revisions to serving traffic")
+    verification = deploy.find("Verify serving release vector")
+    if promotion < 0 or verification < 0 or verification <= promotion:
+        errors.append("release-ring serving release-vector verification must follow traffic promotion")
     if "credentials_json:" in record or "credentials_json:" in deploy:
         errors.append("release-vector workflows must use OIDC, not JSON credentials")
     if deploy.count("${{ inputs.release_id }}") != 1 or deploy.count("${{ inputs.confirm }}") != 1:

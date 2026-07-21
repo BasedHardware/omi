@@ -523,6 +523,22 @@ def test_expectation_derives_a_prod_vector_with_the_matching_environment() -> No
     assert verifier.evaluate(expectation, _documents(expectation)) == []
 
 
+def test_expectation_uses_the_immutable_release_record_image_when_provided() -> None:
+    recorded_image = 'gcr.io/based-hardware/backend@sha256:' + 'a' * 64
+
+    expectation = verifier.build_expectation(
+        commit_sha='abcdef1234567890',
+        deploy_run_id='54321',
+        deploy_run_attempt='2',
+        project='based-hardware',
+        region='us-central1',
+        environment='prod',
+        expected_image=recorded_image,
+    )
+
+    assert expectation.image == recorded_image
+
+
 def test_expectation_uses_the_workflow_short_sha_when_ambiguous() -> None:
     # git rev-parse --short=7 HEAD can return 8+ characters when the 7-character
     # prefix is ambiguous; the workflow tags the image with that longer suffix.
@@ -773,6 +789,21 @@ def test_full_backend_deploys_verify_the_serving_release_vector_after_promotion(
     manual_verification = manual[manual.index('Verify serving backend release vector') :]
     assert "github.event.inputs.deploy_targets" in manual_verification
     assert "--cloud-run-only" in manual_verification
+
+    release_ring = (root / '.github' / 'workflows' / 'deploy-release-ring.yml').read_text(encoding='utf-8')
+    promotion = release_ring.index('Shift validated Cloud Run revisions to serving traffic')
+    verification = release_ring.index('Verify serving release vector')
+    assert promotion < verification
+    release_vector_step = release_ring[verification : release_ring.index('\n      - name:', verification + 1)]
+    assert 'backend/scripts/verify_backend_release_vector.py' in release_vector_step
+    assert '--commit-sha "${{ steps.record.outputs.git_sha }}"' in release_vector_step
+    assert '--short-sha "$(git -C artifacts/release-ring/source rev-parse --short=7 HEAD)"' in release_vector_step
+    assert '--deploy-run-id "$GITHUB_RUN_ID"' in release_vector_step
+    assert '--deploy-run-attempt "$GITHUB_RUN_ATTEMPT"' in release_vector_step
+    assert '--project "$RELEASE_RUNTIME_PROJECT"' in release_vector_step
+    assert '--environment "$RELEASE_RING"' in release_vector_step
+    assert '--expected-image "${{ steps.record.outputs.backend_image }}"' in release_vector_step
+    assert '--revision-suffix "${release_short_sha}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"' in release_ring
 
 
 def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_snapshot() -> None:
