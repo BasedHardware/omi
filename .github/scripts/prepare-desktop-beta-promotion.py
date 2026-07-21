@@ -93,6 +93,8 @@ def prepare_manifest(
         "passed": True,
         "tier": "T2",
         "source": "trusted_github_actions_artifact",
+        "evidence_asset": metadata.get("qualifiedBetaEvidence")
+        or f"desktop-qualification-evidence-{release_tag}",
         "source_subject": "source-built named-bundle",
         "signed_artifact_subject": "exact signed ZIP/DMG bytes",
         "signed_artifact_checks": ["sha256", "Sparkle signature", "notarization", "signed smoke"],
