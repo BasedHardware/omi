@@ -28,6 +28,7 @@ prepare_beta = _load("prepare_desktop_beta_promotion", "prepare-desktop-beta-pro
 repair_installer = _load("desktop_repair_installer", "desktop_repair_installer.py")
 qualification_evidence = _load("desktop_qualification_evidence", "desktop_qualification_evidence.py")
 manifest_contract = _load("desktop_release_manifest", "desktop_release_manifest.py")
+promotion_policy = _load("desktop_prod_promotion_policy", "check-desktop-prod-promotion-policy.py")
 
 
 def _release(body: str | None = None):
@@ -494,6 +495,10 @@ def test_stable_promotion_remains_manual_only():
     assert "\n  push:" not in workflow
     assert "confirm:" in workflow
     assert "promote-stable" in workflow
+
+
+def test_stable_promotion_policy_guard_matches_the_workflow_owned_contract():
+    assert promotion_policy.validate(PROMOTE_PROD_WORKFLOW.read_text()) == []
 
 
 def test_stable_workflow_reads_current_beta_and_owns_its_cas_inputs():
