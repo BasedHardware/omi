@@ -1,0 +1,3 @@
+{
+    "change": "Omi Beta installs stay on the production backend and never terminate the stable app during legacy cleanup"
+}
