@@ -1052,9 +1052,16 @@ def assign_segments_bulk(
             else:
                 raise HTTPException(status_code=400, detail="Invalid assign type")
 
-    conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+    # Persist the assignment as a transactional read-modify-write by segment id, not a whole-array
+    # overwrite of the snapshot read above. update_conversation_segments replaces transcript_segments
+    # wholesale, so a concurrent segment edit (e.g. update_conversation_segment_text from another
+    # tab, or a retried request after a later edit landed) that commits between the read above and
+    # this write would be silently lost. Mirrors that sibling's transactional-by-id fix.
+    result = conversations_db.bulk_assign_segment_speakers(
+        uid, conversation_id, data.segment_ids, data.assign_type, value
     )
+    if result == 'not_found':
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
     # Trigger speaker sample extraction when assigning to a person
     if data.assign_type == 'person_id' and value:

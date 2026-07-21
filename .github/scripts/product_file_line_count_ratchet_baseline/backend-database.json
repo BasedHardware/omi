@@ -1,10 +1,10 @@
 {
   "files": {
-    "backend/database/conversations.py": 1580,
+    "backend/database/conversations.py": 1643,
     "backend/database/users.py": 1943
   },
   "raise_justifications": {
-    "backend/database/conversations.py": "Public shared-chat uses the existing conversation storage format for bounded, safe transcript decoding; extraction would duplicate crypto/storage invariants."
+    "backend/database/conversations.py": "Public shared-chat uses the existing conversation storage format for bounded, safe transcript decoding; extraction would duplicate crypto/storage invariants. The transactional bulk_assign_segment_speakers helper must sit beside update_conversation_segment_text because it reuses this module's private _prepare_conversation_for_read/_prepare_conversation_for_write encryption boundary and conversations collection handle; extracting it would export those internals."
   },
   "threshold": 1500
 }
