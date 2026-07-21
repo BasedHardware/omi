@@ -10,6 +10,8 @@ vi.mock('./firebase', () => ({
   auth: { currentUser: { getIdToken: vi.fn(async () => 'test-token') } }
 }))
 vi.mock('./preferences', () => ({ getPreferences: () => ({ language: 'en' }) }))
+// Node test env has no window.localStorage / WebCrypto subtle for the real hash.
+vi.mock('./clientDevice', () => ({ getWindowsDeviceIdHash: vi.fn(async () => 'abcd1234') }))
 
 import { startOmiListen } from './omiListenClient'
 
