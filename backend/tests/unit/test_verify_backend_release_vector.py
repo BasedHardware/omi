@@ -864,7 +864,9 @@ def test_production_cloud_run_only_boundary_is_early_and_uses_a_cleaned_up_dual_
     probe_source = (root / 'backend/scripts/transcription_capability_probe.py').read_text(encoding='utf-8')
     assert 'X-Serverless-Authorization' in probe_source
     assert 'FIREBASE_PROBE_TOKEN' in vpc_runner
-    assert '_identity_token(candidate_url)' in vpc_runner
+    assert 'identity_token = _identity_token(identity_audience)' in vpc_runner
+    assert 'api_url=candidate_url' in vpc_runner
+    assert 'cloud_run_identity_token=identity_token' in vpc_runner
 
 
 def test_backend_listen_rollout_wait_can_cover_a_real_rollout():
