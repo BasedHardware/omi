@@ -250,6 +250,76 @@ final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
     )
   }
 
+  // Regression: issue #10143 — capture must pause for the whole duration of an active
+  // outgoing screen share, then hold a backoff after it ends before resuming.
+  func testExternalCaptureYieldPausesAcrossActiveShareThenBacksOff() {
+    var yield = ProactiveExternalCaptureYield()
+    let start = Date(timeIntervalSinceReferenceDate: 9_000)
+
+    func tick(_ offset: TimeInterval, screenshotApp: Bool = false, sharing: Bool) -> Bool {
+      yield.shouldYield(
+        isScreenshotAppFrontmost: screenshotApp,
+        isScreenShareActive: sharing,
+        now: start.addingTimeInterval(offset),
+        screenshotBackoffDuration: 10,
+        shareBackoffDuration: 10
+      )
+    }
+
+    // No external capture: proceed.
+    XCTAssertFalse(tick(0, sharing: false))
+    // Share starts: every tick yields for as long as the share lasts.
+    XCTAssertTrue(tick(1, sharing: true))
+    XCTAssertTrue(tick(2, sharing: true))
+    XCTAssertTrue(tick(120, sharing: true))
+    // Share ends: still yield through the backoff window...
+    XCTAssertTrue(tick(121, sharing: false))
+    XCTAssertTrue(tick(129, sharing: false))
+    // ...and resume once the backoff has expired.
+    XCTAssertFalse(tick(131, sharing: false))
+  }
+
+  func testExternalCaptureYieldScreenshotGateShortCircuitsShareCheck() {
+    var yield = ProactiveExternalCaptureYield()
+    let now = Date(timeIntervalSinceReferenceDate: 9_500)
+    var shareChecked = false
+
+    // While a screenshot app is frontmost, the (more expensive) share check must not run.
+    XCTAssertTrue(
+      yield.shouldYield(
+        isScreenshotAppFrontmost: true,
+        isScreenShareActive: {
+          shareChecked = true
+          return false
+        }(),
+        now: now,
+        screenshotBackoffDuration: 10,
+        shareBackoffDuration: 10
+      )
+    )
+    XCTAssertFalse(shareChecked)
+  }
+
+  func testExternalCaptureYieldResetClearsBothGates() {
+    var yield = ProactiveExternalCaptureYield()
+    let now = Date(timeIntervalSinceReferenceDate: 9_800)
+
+    XCTAssertTrue(
+      yield.shouldYield(
+        isScreenshotAppFrontmost: true,
+        isScreenShareActive: true,
+        now: now,
+        screenshotBackoffDuration: 10,
+        shareBackoffDuration: 10
+      )
+    )
+    yield.reset()
+    XCTAssertFalse(yield.screenshotGate.wasScreenshotAppFrontmost)
+    XCTAssertFalse(yield.shareGate.wasScreenshotAppFrontmost)
+    XCTAssertEqual(yield.screenshotGate.backoffUntil, .distantPast)
+    XCTAssertEqual(yield.shareGate.backoffUntil, .distantPast)
+  }
+
   func testVideoCallThrottleGateCarriesCounterAndResetsWhenLeavingCall() {
     var gate = ProactiveVideoCallThrottleGate()
 
