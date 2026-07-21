@@ -2,6 +2,7 @@ import Foundation
 
 enum DesktopBackendEnvironment {
   static let productionPythonAPIURL = "https://api.omi.me/"
+  static let productionRustBackendURL = "https://desktop-backend-hhibjajaja-uc.a.run.app/"
   static let developmentPythonAPIURL = "https://api.omiapi.com/"
   static let developmentRustBackendURL = "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/"
 
@@ -9,7 +10,6 @@ enum DesktopBackendEnvironment {
     shouldUseDevelopmentBackends(
       bundleIdentifier: AppBuild.bundleIdentifier,
       updateChannel: AppBuild.currentUpdateChannel,
-      forceOverride: currentEnvironmentValue("OMI_FORCE_DEV_BACKENDS"),
       externalPreviewBackend: AppBuild.externalPreviewBackend
     )
   }
@@ -17,7 +17,6 @@ enum DesktopBackendEnvironment {
   static func shouldUseDevelopmentBackends(
     bundleIdentifier: String,
     updateChannel: String,
-    forceOverride: String? = nil,
     externalPreviewBackend: AppBuild.ExternalPreviewBackend? = nil
   ) -> Bool {
     // External previews opt into their backend through signed bundle metadata. They must
@@ -31,10 +30,6 @@ enum DesktopBackendEnvironment {
     // URLs still win below so local harnesses and intentionally-targeted tests
     // remain possible.
     if bundleIdentifier != AppBuild.productionBundleIdentifier {
-      return true
-    }
-
-    if isAffirmative(forceOverride) {
       return true
     }
 
@@ -54,20 +49,26 @@ enum DesktopBackendEnvironment {
     useDevelopmentBackends: Bool,
     environmentValue: String?
   ) -> String {
+    // A production-family app must not allow a launch environment or bundled
+    // config to switch its customer data plane. Development identities retain
+    // their explicit override seam for local and signed-preview testing.
+    if !useDevelopmentBackends {
+      return productionPythonAPIURL
+    }
     if let url = normalizedURL(environmentValue) {
       return url
     }
 
-    if useDevelopmentBackends {
-      return developmentPythonAPIURL
-    }
-
-    return productionPythonAPIURL
+    return developmentPythonAPIURL
   }
 
   static func authBaseURL(
+    useDevelopmentBackends: Bool = shouldUseDevelopmentBackends,
     environmentValue: String? = currentEnvironmentValue("OMI_AUTH_API_URL")
   ) -> String {
+    if !useDevelopmentBackends {
+      return productionPythonAPIURL
+    }
     if let url = normalizedURL(environmentValue) {
       return url
     }
@@ -94,6 +95,9 @@ enum DesktopBackendEnvironment {
     environmentValue: String?,
     launchEnvironmentValue: String?
   ) -> String {
+    if !useDevelopmentBackends {
+      return productionRustBackendURL
+    }
     if let url = normalizedURL(environmentValue) {
       return url
     }
@@ -102,11 +106,7 @@ enum DesktopBackendEnvironment {
       return url
     }
 
-    if useDevelopmentBackends {
-      return developmentRustBackendURL
-    }
-
-    return ""
+    return developmentRustBackendURL
   }
 
   static func applyReleaseChannelDefaults() {
@@ -133,11 +133,5 @@ enum DesktopBackendEnvironment {
       return nil
     }
     return string
-  }
-
-  private static func isAffirmative(_ value: String?) -> Bool {
-    guard let value else { return false }
-    let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    return normalized == "1" || normalized == "true" || normalized == "yes"
   }
 }

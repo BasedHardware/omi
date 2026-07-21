@@ -163,8 +163,11 @@ final class APIClientRoutingTests: XCTestCase {
     XCTAssertEqual(url, "https://api.omi.me/")
   }
 
-  func testAuthBackendCanBeExplicitlyOverridden() {
-    let url = DesktopBackendEnvironment.authBaseURL(environmentValue: "http://localhost:8080")
+  func testDevelopmentAuthBackendCanBeExplicitlyOverridden() {
+    let url = DesktopBackendEnvironment.authBaseURL(
+      useDevelopmentBackends: true,
+      environmentValue: "http://localhost:8080"
+    )
     XCTAssertEqual(url, "http://localhost:8080/")
   }
 
@@ -277,7 +280,7 @@ final class APIClientRoutingTests: XCTestCase {
         environmentValue: nil,
         launchEnvironmentValue: nil
       ),
-      ""
+      DesktopBackendEnvironment.productionRustBackendURL
     )
   }
 
@@ -302,25 +305,47 @@ final class APIClientRoutingTests: XCTestCase {
       ))
   }
 
-  func testForceOverrideEnablesDevelopmentBackendsForAnyBundle() {
+  func testProductionFamilyHasNoDevelopmentOverrideSeam() {
     XCTAssertTrue(
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(
         bundleIdentifier: "com.omi.desktop-dev",
-        updateChannel: "stable",
-        forceOverride: "1"
-      ))
-    XCTAssertTrue(
-      DesktopBackendEnvironment.shouldUseDevelopmentBackends(
-        bundleIdentifier: "com.omi.omi-beta-dev-test",
-        updateChannel: "stable",
-        forceOverride: "true"
+        updateChannel: "stable"
       ))
     XCTAssertFalse(
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(
-        bundleIdentifier: "com.omi.computer-macos",
-        updateChannel: "stable",
-        forceOverride: "0"
+        bundleIdentifier: AppBuild.productionBundleIdentifier,
+        updateChannel: "stable"
       ))
+    XCTAssertFalse(
+      DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        updateChannel: "beta"
+      ))
+  }
+
+  func testProductionFamilyIgnoresContaminatedProcessEndpoints() {
+    XCTAssertEqual(
+      DesktopBackendEnvironment.pythonBaseURL(
+        useDevelopmentBackends: false,
+        environmentValue: "https://staging.example.test"
+      ),
+      DesktopBackendEnvironment.productionPythonAPIURL
+    )
+    XCTAssertEqual(
+      DesktopBackendEnvironment.authBaseURL(
+        useDevelopmentBackends: false,
+        environmentValue: "https://staging.example.test"
+      ),
+      DesktopBackendEnvironment.productionPythonAPIURL
+    )
+    XCTAssertEqual(
+      DesktopBackendEnvironment.rustBackendURL(
+        useDevelopmentBackends: false,
+        environmentValue: "https://staging.example.test",
+        launchEnvironmentValue: "https://other.example.test"
+      ),
+      DesktopBackendEnvironment.productionRustBackendURL
+    )
   }
 
   func testBaseURLReadsFromPythonEnvVar() async {
