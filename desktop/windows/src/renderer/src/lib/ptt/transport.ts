@@ -14,6 +14,7 @@ import axios from 'axios'
 import { omiApi } from '../apiClient'
 import { auth } from '../firebase'
 import { getPreferences } from '../preferences'
+import { getWindowsDeviceIdHash } from '../clientDevice'
 import {
   BATCH_TIMEOUT_MS,
   BATCH_TRANSCRIBE_PATH,
@@ -88,6 +89,7 @@ export async function startPttStream(cb: PttStreamCallbacks): Promise<PttStream>
       sessionId,
       source: 'mic',
       token,
+      deviceIdHash: await getWindowsDeviceIdHash(),
       language: getPreferences().language,
       mode: 'ptt'
     })
