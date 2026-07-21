@@ -42,69 +42,99 @@ def leading_spaces(line):
     return len(line) - len(line.lstrip(" "))
 
 
-if re.search(r"(?m)(?:^|[ \t:\[\]{},])(?:&|\*)[A-Za-z_][A-Za-z0-9_-]*", workflow_text):
-    fail("workflow must not use YAML anchors or aliases")
+if re.search(r"(?m)(?:^|[ \t:\[\]{},])(?:&|\*)[A-Za-z_][A-Za-z0-9_-]*", workflow_text) or re.search(
+    r"(?m)^ *<<:", workflow_text
+):
+    fail("workflow must not use YAML anchors, aliases, or merges")
 
 
-def step_end_after(step_start, step_indent):
-    next_step_pattern = re.compile(rf"^{' ' * step_indent}- ")
-    for index in range(step_start + 1, len(lines)):
-        if next_step_pattern.match(without_line_ending(lines[index])):
+def mapping_end_after(mapping_start, mapping_indent, limit=len(lines)):
+    for index in range(mapping_start + 1, limit):
+        bare_line = without_line_ending(lines[index])
+        if bare_line.strip() and leading_spaces(bare_line) <= mapping_indent:
             return index
-    return len(lines)
+    return limit
 
 
-def exact_named_steps(name):
-    pattern = re.compile(rf"^(?P<indent> *)- name: {re.escape(name)}$")
+top_level_key_pattern = re.compile(r"^(?P<key>[^ #][^:]*):")
+top_level_keys = [
+    (index, match.group("key"))
+    for index, line in enumerate(lines)
+    if (match := top_level_key_pattern.match(without_line_ending(line)))
+]
+if any(key not in {"name", "on", "jobs"} for _, key in top_level_keys):
+    fail("workflow may not add top-level execution-affecting fields")
+if any(key.strip("\"'") == "jobs" and key != "jobs" for _, key in top_level_keys):
+    fail("jobs mapping must not use a quoted or alternate spelling")
+top_level_jobs = [index for index, key in top_level_keys if key == "jobs"]
+if len(top_level_jobs) != 1:
+    fail("expected exactly one literal top-level jobs: mapping")
+jobs_start = top_level_jobs[0]
+jobs_end = mapping_end_after(jobs_start, 0)
+
+job_key_pattern = re.compile(r"^  (?P<key>[^ #][^:]*):(?:\s*(?:#.*)?)$")
+job_key_lines = [
+    (index, match.group("key"))
+    for index in range(jobs_start + 1, jobs_end)
+    if (match := job_key_pattern.match(without_line_ending(lines[index])))
+]
+test_install_keys = [index for index, key in job_key_lines if key == "test-install"]
+if len(test_install_keys) != 1:
+    fail("expected exactly one exact unquoted test-install: job key")
+if any(key.strip("\"'") == "test-install" and key != "test-install" for _, key in job_key_lines):
+    fail("test-install job key must not use a quoted or alternate spelling")
+job_start = test_install_keys[0]
+job_end = next((index for index, _ in job_key_lines if index > job_start), jobs_end)
+
+
+def direct_job_field_lines(name):
+    pattern = re.compile(rf"^    {re.escape(name)}:(?P<value>.*)$")
     return [
-        (index, len(match.group("indent")))
-        for index, line in enumerate(lines)
-        if (match := pattern.match(without_line_ending(line)))
+        (index, match.group("value"))
+        for index in range(job_start + 1, job_end)
+        if (match := pattern.match(without_line_ending(lines[index])))
     ]
 
 
-# The name itself is part of the identity contract.  A quoted or otherwise
-# noncanonical spelling is not an alternate representation: it is a decoy.
-name_mentions = [
-    (index, without_line_ending(line))
-    for index, line in enumerate(lines)
-    if re.match(r"^ *-\s+name:", without_line_ending(line)) and target_name in without_line_ending(line)
+for name, expected in (("runs-on", " macos-15"), ("timeout-minutes", " 15"), ("steps", "")):
+    fields = direct_job_field_lines(name)
+    if len(fields) != 1 or fields[0][1] != expected:
+        fail(f"test-install must retain the exact {name}: {expected.strip() or 'mapping'} contract")
+
+allowed_job_fields = {"runs-on", "timeout-minutes", "steps"}
+for index in range(job_start + 1, job_end):
+    match = re.match(r"^    (?P<name>[^ #][^:]*):", without_line_ending(lines[index]))
+    if match and match.group("name") not in allowed_job_fields:
+        fail(f"test-install may not add execution-affecting job field: {match.group('name')}")
+
+steps_start = direct_job_field_lines("steps")[0][0]
+steps_end = mapping_end_after(steps_start, 4, job_end)
+step_starts = [
+    index
+    for index in range(steps_start + 1, steps_end)
+    if re.match(r"^      - ", without_line_ending(lines[index]))
 ]
-for _, line in name_mentions:
-    if line != f"      - name: {target_name}":
-        fail("installer step name must use the one exact unquoted canonical spelling")
+if not step_starts:
+    fail("test-install must contain one literal steps: sequence")
 
-step_matches = exact_named_steps(target_name)
-if len(step_matches) != 1:
-    fail(f"expected one exact {target_name!r} step, found {len(step_matches)}")
 
-step_start, step_indent = step_matches[0]
-step_end = step_end_after(step_start, step_indent)
-field_indent = step_indent + 2
-if without_line_ending(lines[step_start]) != f"{' ' * step_indent}- name: {target_name}":
-    fail("installer step name is not the exact canonical YAML line")
+def step_end_after(step_start):
+    return next((index for index in step_starts if index > step_start), steps_end)
 
-id_pattern = re.compile(r"^(?P<indent> *)id:\s*(?P<value>.*?)$")
-download_ids = []
-for index, line in enumerate(lines):
-    match = id_pattern.match(without_line_ending(line))
-    if match and match.group("value").strip().strip("\"'") == "download":
-        download_ids.append((index, len(match.group("indent")), without_line_ending(line)))
-if len(download_ids) != 1:
-    fail(f"expected one executable id: download, found {len(download_ids)}")
-id_index, id_indent, id_line = download_ids[0]
-if not (step_start < id_index < step_end) or id_indent != field_indent or id_line != f"{' ' * field_indent}id: download":
-    fail("canonical installer step must own the exact literal id: download")
 
-run_key_pattern = re.compile(rf"^{' ' * field_indent}run:")
-run_keys = [index for index in range(step_start + 1, step_end) if run_key_pattern.match(without_line_ending(lines[index]))]
-if len(run_keys) != 1:
-    fail(f"installer step must have exactly one run key, found {len(run_keys)}")
-run_start = run_keys[0]
-run_line = without_line_ending(lines[run_start])
-if run_line != f"{' ' * field_indent}run: |":
-    fail("installer step must use the exact literal run: | indicator without chomping or aliases")
-run_indent = field_indent
+def exact_step_start(name):
+    exact = f"      - name: {name}"
+    mentions = [
+        index
+        for index, line in enumerate(lines)
+        if re.match(r"^ *-\s+name:", without_line_ending(line)) and name in without_line_ending(line)
+    ]
+    if any(without_line_ending(lines[index]) != exact for index in mentions):
+        fail(f"{name} step name must use one exact unquoted canonical spelling")
+    matches = [index for index in step_starts if without_line_ending(lines[index]) == exact]
+    if len(matches) != 1 or mentions != matches:
+        fail(f"expected exactly one executable {name!r} step in jobs.test-install.steps")
+    return matches[0]
 
 
 def literal_body_end(run_start, run_indent, limit):
@@ -115,9 +145,22 @@ def literal_body_end(run_start, run_indent, limit):
     return limit
 
 
+step_start = exact_step_start(target_name)
+step_end = step_end_after(step_start)
+run_start = step_start + 4
+expected_download_header = [
+    f"      - name: {target_name}",
+    "        id: download",
+    "        env:",
+    "          GH_TOKEN: ${{ github.token }}",
+    "        run: |",
+]
+if [without_line_ending(line) for line in lines[step_start:run_start + 1]] != expected_download_header:
+    fail("canonical download step must contain only its exact name, id, env, and run fields")
+run_indent = 8
 run_end = literal_body_end(run_start, run_indent, step_end)
 if run_end != step_end:
-    fail("installer literal run block must occupy the rest of its step")
+    fail("installer literal run block must occupy the rest of its executable step")
 
 canonical_installer_run = '''echo "=== Downloading DMG ==="
 
@@ -160,46 +203,21 @@ canonical_run_body = body_at_indent(canonical_installer_run, run_indent + 2)
 if "".join(lines[run_start + 1:run_end]).encode("utf-8") != canonical_run_body.encode("utf-8"):
     fail("installer literal run block differs from the admitted canonical block")
 
-# The admitted raw body must not be duplicated in another literal scalar.  This
-# blocks skipped canonical-name decoys and anonymous canonical blocks alike.
-any_run_key_pattern = re.compile(r"^(?P<indent> *)run:")
-for index, line in enumerate(lines):
-    match = any_run_key_pattern.match(without_line_ending(line))
-    if not match or index == run_start:
-        continue
-    candidate_indent = len(match.group("indent"))
-    candidate_end = literal_body_end(index, candidate_indent, len(lines))
-    candidate_body = "".join(lines[index + 1:candidate_end])
-    expected_body = body_at_indent(canonical_installer_run, candidate_indent + 2)
-    if candidate_body.encode("utf-8") == expected_body.encode("utf-8"):
-        fail("canonical installer literal run block appears outside id: download")
-
 mount_name = "Mount DMG and Install"
-mount_name_mentions = [
-    (index, without_line_ending(line))
-    for index, line in enumerate(lines)
-    if re.match(r"^ *-\s+name:", without_line_ending(line)) and mount_name in without_line_ending(line)
-]
-for _, line in mount_name_mentions:
-    if line != f"      - name: {mount_name}":
-        fail("mount/install step name must use the one exact unquoted canonical spelling")
-
-mount_matches = exact_named_steps(mount_name)
-if len(mount_matches) != 1:
-    fail(f"expected one exact {mount_name!r} step, found {len(mount_matches)}")
-mount_start, mount_indent = mount_matches[0]
+mount_start = exact_step_start(mount_name)
 if mount_start <= step_start:
     fail("mount/install flow must occur after the download producer")
-mount_end = step_end_after(mount_start, mount_indent)
-mount_field_indent = mount_indent + 2
-if without_line_ending(lines[mount_start]) != f"{' ' * mount_indent}- name: {mount_name}":
-    fail("mount/install step name is not the exact canonical YAML line")
-if mount_start + 1 >= mount_end or without_line_ending(lines[mount_start + 1]) != f"{' ' * mount_field_indent}run: |":
-    fail("mount/install step must consist of the exact run: | literal field")
+mount_end = step_end_after(mount_start)
+mount_field_indent = 8
+if [without_line_ending(line) for line in lines[mount_start:mount_start + 2]] != [
+    f"      - name: {mount_name}",
+    "        run: |",
+]:
+    fail("mount/install step must consist of its exact name and run: | fields")
 mount_run_start = mount_start + 1
 mount_run_end = literal_body_end(mount_run_start, mount_field_indent, mount_end)
 if mount_run_end != mount_end:
-    fail("mount/install literal run block must occupy the rest of its step")
+    fail("mount/install literal run block must occupy the rest of its executable step")
 
 canonical_mount_run = '''set -euo pipefail
 DMG_PATH="${{ steps.download.outputs.dmg_path }}"
@@ -233,18 +251,26 @@ canonical_mount_body = body_at_indent(canonical_mount_run, mount_field_indent + 
 if "".join(lines[mount_run_start + 1:mount_run_end]).encode("utf-8") != canonical_mount_body.encode("utf-8"):
     fail("mount/install literal run block differs from the admitted canonical block")
 
-# The mount consumer is a byte contract too.  A second canonical body under a
-# different name is a decoy, not an alternate installation path.
-for index, line in enumerate(lines):
-    match = any_run_key_pattern.match(without_line_ending(line))
-    if not match or index == mount_run_start or without_line_ending(line) != f"{' ' * len(match.group('indent'))}run: |":
-        continue
-    candidate_indent = len(match.group("indent"))
-    candidate_end = literal_body_end(index, candidate_indent, len(lines))
-    candidate_body = "".join(lines[index + 1:candidate_end])
-    expected_body = body_at_indent(canonical_mount_run, candidate_indent + 2)
-    if candidate_body.encode("utf-8") == expected_body.encode("utf-8"):
-        fail("canonical mount/install literal run block appears outside Mount DMG and Install")
+# Canonical scripts have a single raw owner.  A byte-identical body in any
+# other literal scalar is a decoy, not an alternate execution path.
+literal_scalar_pattern = re.compile(r"^(?P<indent> *)[^#][^:]*:\s*\|[+-]?$")
+for canonical_body, owner, label in (
+    (canonical_installer_run, run_start, "installer"),
+    (canonical_mount_run, mount_run_start, "mount/install"),
+):
+    owners = []
+    for index, line in enumerate(lines):
+        match = literal_scalar_pattern.match(without_line_ending(line))
+        if not match:
+            continue
+        candidate_indent = len(match.group("indent"))
+        candidate_end = literal_body_end(index, candidate_indent, len(lines))
+        if "".join(lines[index + 1:candidate_end]).encode("utf-8") == body_at_indent(
+            canonical_body, candidate_indent + 2
+        ).encode("utf-8"):
+            owners.append(index)
+    if owners != [owner]:
+        fail(f"canonical {label} literal run block must belong only to jobs.test-install.steps")
 PY
 }
 
@@ -314,6 +340,55 @@ def mount_run_body():
     return lines[run_start + 1:end]
 
 
+def test_install_job_start():
+    starts = [index for index, line in enumerate(lines) if line == '  test-install:\n']
+    if len(starts) != 1:
+        raise SystemExit(f"expected one literal test-install job, found {len(starts)}")
+    return starts[0]
+
+
+def alternate_test_install_job(key):
+    return [
+        f"  {key}:\n",
+        "    runs-on: macos-15\n",
+        "    timeout-minutes: 15\n",
+        "    steps:\n",
+        "      - name: Download alternate installer\n",
+        "        run: |\n",
+        "          echo alternate installer\n",
+        "      - name: Install alternate installer\n",
+        "        run: |\n",
+        "          echo alternate install\n",
+    ]
+
+
+def add_canonical_job_decoy(position, quoted):
+    start = test_install_job_start()
+    lines[start] = "  canonical-contract-decoy:\n"
+    alternate = alternate_test_install_job('"test-install"' if quoted else "test-install")
+    if position == "before":
+        lines[start:start] = alternate
+    elif position == "after":
+        lines.extend(alternate)
+    else:
+        raise SystemExit(f"unknown canonical job decoy position: {position}")
+
+
+def prove_canonical_job_decoy_topology_with_ruby(destination, mutation):
+    ruby = r'''
+require "yaml"
+workflow = YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false)
+jobs = workflow.fetch("jobs")
+actual = jobs.fetch("test-install")
+decoy = jobs.fetch("canonical-contract-decoy")
+abort "real test-install is not alternate" if actual.fetch("steps").any? { |step| step["name"] == "Download DMG from GitHub Release" }
+abort "canonical download is missing from decoy" unless decoy.fetch("steps").any? { |step| step["name"] == "Download DMG from GitHub Release" }
+abort "canonical mount is missing from decoy" unless decoy.fetch("steps").any? { |step| step["name"] == "Mount DMG and Install" }
+'''
+    subprocess.run(["ruby", "-e", ruby, str(destination)], check=True)
+    print(f"Ruby YAML executable-topology proof passed: {mutation}")
+
+
 def add_skipped_canonical_decoy(quoted):
     active_starts = [index for index, line in enumerate(lines) if line == '      - name: Download DMG from GitHub Release\n']
     if len(active_starts) != 1:
@@ -368,10 +443,63 @@ abort "mount flow does not install the mounted app" unless mount.include?("ditto
 if mutation == "canonical":
     pass
 elif mutation == "unrelated-yaml":
-    matches = [index for index, line in enumerate(lines) if "timeout-minutes: 15" in line]
+    matches = [index for index, line in enumerate(lines) if line == "name: Test macOS Installation\n"]
     if len(matches) != 1:
-        raise SystemExit(f"expected one unrelated timeout line, found {len(matches)}")
-    lines[matches[0]] = lines[matches[0]].replace("timeout-minutes: 15", "timeout-minutes: 16")
+        raise SystemExit(f"expected one workflow display-name line, found {len(matches)}")
+    lines[matches[0]] = "name: Test macOS Installation contract mutation\n"
+elif mutation in {
+    "canonical-job-decoy-before-unquoted",
+    "canonical-job-decoy-after-unquoted",
+    "canonical-job-decoy-before-quoted",
+    "canonical-job-decoy-after-quoted",
+}:
+    add_canonical_job_decoy(
+        "before" if "-before-" in mutation else "after",
+        quoted=mutation.endswith("-quoted"),
+    )
+elif mutation == "workflow-defaults-shell-override":
+    index = next(index for index, line in enumerate(lines) if line == "on:\n")
+    lines[index:index] = [
+        "defaults:\n",
+        "  run:\n",
+        "    shell: bash -c 'exit 0' {0}\n",
+        "\n",
+    ]
+elif mutation == "test-install-defaults-shell-override":
+    index = test_install_job_start() + 1
+    lines[index:index] = [
+        "    defaults:\n",
+        "      run:\n",
+        "        shell: bash -c 'exit 0' {0}\n",
+    ]
+elif mutation == "download-step-shell-override":
+    index = lines.index("        id: download\n") + 1
+    lines[index:index] = ["        shell: bash -c 'exit 0' {0}\n"]
+elif mutation == "test-install-if-false":
+    index = test_install_job_start() + 1
+    lines[index:index] = ["    if: github.event_name == 'never'\n"]
+elif mutation == "download-step-if-false":
+    index = lines.index("        id: download\n") + 1
+    lines[index:index] = ["        if: github.event_name == 'never'\n"]
+elif mutation == "test-install-env-bash-env":
+    index = test_install_job_start() + 1
+    lines[index:index] = ["    env:\n", "      BASH_ENV: /tmp/skip-canonical-steps\n"]
+elif mutation == "download-step-env-path":
+    index = lines.index("          GH_TOKEN: ${{ github.token }}\n") + 1
+    lines[index:index] = ["          PATH: /tmp/alternate-bin\n"]
+elif mutation == "test-install-continue-on-error":
+    index = test_install_job_start() + 1
+    lines[index:index] = ["    continue-on-error: true\n"]
+elif mutation == "unrelated-job-defaults-shell":
+    lines.extend([
+        "  unrelated-defaults:\n",
+        "    runs-on: macos-15\n",
+        "    defaults:\n",
+        "      run:\n",
+        "        shell: bash -c 'exit 0' {0}\n",
+        "    steps:\n",
+        "      - run: echo unrelated\n",
+    ])
 elif mutation == "unquoted-canonical-decoy-active-wildcard":
     add_skipped_canonical_decoy(quoted=False)
 elif mutation == "quoted-canonical-decoy-active-wildcard":
@@ -574,6 +702,8 @@ else:
 destination.write_text(''.join(lines))
 if mutation in {"unquoted-canonical-decoy-active-wildcard", "quoted-canonical-decoy-active-wildcard"}:
     prove_decoy_topology_with_ruby(destination, mutation)
+if mutation.startswith("canonical-job-decoy-"):
+    prove_canonical_job_decoy_topology_with_ruby(destination, mutation)
 PY
 
   ruby -e 'require "yaml"; YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false)' "$mutated_workflow"
@@ -598,6 +728,19 @@ run_mutation duplicate duplicate
 run_mutation commented-command commented-command
 run_mutation canonical canonical accept
 run_mutation unrelated-yaml unrelated-yaml accept
+run_mutation canonical-job-decoy-before-unquoted canonical-job-decoy-before-unquoted
+run_mutation canonical-job-decoy-after-unquoted canonical-job-decoy-after-unquoted
+run_mutation canonical-job-decoy-before-quoted canonical-job-decoy-before-quoted
+run_mutation canonical-job-decoy-after-quoted canonical-job-decoy-after-quoted
+run_mutation workflow-defaults-shell-override workflow-defaults-shell-override
+run_mutation test-install-defaults-shell-override test-install-defaults-shell-override
+run_mutation download-step-shell-override download-step-shell-override
+run_mutation test-install-if-false test-install-if-false
+run_mutation download-step-if-false download-step-if-false
+run_mutation test-install-env-bash-env test-install-env-bash-env
+run_mutation download-step-env-path download-step-env-path
+run_mutation test-install-continue-on-error test-install-continue-on-error
+run_mutation unrelated-job-defaults-shell unrelated-job-defaults-shell accept
 run_mutation unquoted-canonical-decoy-active-wildcard unquoted-canonical-decoy-active-wildcard
 run_mutation quoted-canonical-decoy-active-wildcard quoted-canonical-decoy-active-wildcard
 run_mutation long-equals long-equals
