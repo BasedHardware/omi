@@ -12,6 +12,18 @@ GATT Omi device and is never spoofed as one; it enters through the same seam
 Apple Watch uses (discoverer → transport → connection), with photos riding the
 OmiGlass image pipeline.
 
+## Connect the glasses in Omi
+
+1. Pair the glasses in **iPhone Settings → Bluetooth** and leave them connected.
+2. In Omi, open **Connect → Connection Guide → Ray-Ban Meta**.
+3. Pick the Bluetooth microphone that belongs to the glasses. Its name may be
+   `Ray-Ban Meta`, `EL AI 000F`, or a custom name set in the Meta AI app.
+
+Omi saves the iOS audio-port UID behind that selection, not the displayed
+Bluetooth name. Renaming the glasses therefore does not break reconnection.
+Selecting the glasses microphone switches Bluetooth to HFP voice mode, so music
+on the phone pauses while Omi is capturing audio.
+
 ```
 Meta Wearables DAT (camera/photos)──┐
                                     ├── RayBanMetaHostApiImpl.swift (iOS)
@@ -34,7 +46,7 @@ Bluetooth HFP route (microphone) ───┘        │  Pigeon: RayBanMetaHost
 |---|---|---|
 | Device type | `app/lib/backend/schema/bt_device/bt_device.dart` | `DeviceType.raybanMeta`; serialized by name; legacy index 9 |
 | Locator | `app/lib/services/devices/discovery/device_locator.dart` | `TransportKind.metaDat` |
-| Discoverer | `app/lib/services/devices/discovery/rayban_meta_discoverer.dart` | Self-gating (iOS + native availability); emits a setup placeholder before Meta AI registration |
+| Discoverer | `app/lib/services/devices/discovery/rayban_meta_discoverer.dart` | Self-gating (iOS + native availability); uses the persisted HFP port UID in audio-only mode and emits a setup placeholder before Meta AI registration |
 | Transport | `app/lib/services/devices/transports/rayban_meta_transport.dart` | Maps native events to `rayban-meta-audio-*` / `rayban-meta-camera-*` streams |
 | Connection | `app/lib/services/devices/connectors/rayban_meta_connection.dart` | `pcm16` codec; image listener emits `OrientedImage`; 30 s auto photo capture while active |
 | Pigeon contract | `app/lib/pigeon_interfaces.dart` | `RayBanMetaHostAPI` / `RayBanMetaFlutterAPI` |
@@ -46,7 +58,9 @@ Bluetooth HFP route (microphone) ───┘        │  Pigeon: RayBanMetaHost
 The Meta Wearables Device Access Toolkit (DAT 0.8) has **no microphone API**.
 Meta's documented input path is the Bluetooth Hands-Free Profile:
 `AVAudioSession` with `.playAndRecord` + `.allowBluetoothHFP`, preferring the
-glasses' `.bluetoothHFP` input port. `RayBanMetaAudioCapture` taps
+user-selected `.bluetoothHFP` input by its stable `AVAudioSession` port UID.
+The displayed port name remains UI-only because users can rename it.
+`RayBanMetaAudioCapture` taps
 `AVAudioEngine`'s input, converts to PCM16 mono 16 kHz with
 `AVAudioConverter`, and streams frames over Pigeon. The Dart connection
 reports `BleAudioCodec.pcm16`, so the live socket opens with
@@ -97,9 +111,10 @@ idiom. `RayBanMetaHostAPI.getAvailabilityMode()` reports:
   (`#if canImport(MWDATCore)`). Audio + photos. Developer Mode deliberately
   runs without `MetaAppID` / `ClientToken`; those credentials are only for
   future beta/distribution builds.
-- **`audio_only`** — no DAT in this build. Only the labeled
-  "Ray-Ban Meta audio-only mode" via the system Bluetooth HFP route. All
-  camera APIs honestly report unavailable; nothing is faked.
+- **`audio_only`** — no DAT in this build. The Connection Guide asks the user
+  to choose the glasses' Bluetooth microphone, then reconnects by its persisted
+  HFP port UID. Product-name matching remains only a first-selection
+  convenience. All camera APIs honestly report unavailable; nothing is faked.
 - **`none`** — non-iOS platforms (Android integration is future work; the
   discoverer yields nothing there).
 

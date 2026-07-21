@@ -9750,4 +9750,23 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Valige Ray-Ban Meta mikrofon';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Valige prillide Bluetooth-mikrofon. Muusika peatub, kui Omi seda kasutab.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Bluetooth-mikrofone ei leitud. Ühendage prillid iPhone\'i seadetes ja proovige uuesti.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth-mikrofone ei saanud laadida. Kontrollige, kas Bluetooth on sisse lülitatud, ja proovige uuesti.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Selle mikrofoniga ei saanud ühendust luua. Veenduge, et see oleks iPhone\'i seadetes ühendatud.';
 }

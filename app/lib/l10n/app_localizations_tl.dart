@@ -9843,4 +9843,23 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Piliin ang mikropono ng Ray-Ban Meta';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Piliin ang Bluetooth na mikropono ng salamin. Hihinto muna ang musika habang ginagamit ito ng Omi.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Walang nahanap na Bluetooth na mikropono. Ikonekta ang salamin sa Mga Setting ng iPhone, pagkatapos ay subukan muli.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Hindi ma-load ang mga Bluetooth na mikropono. Tiyaking naka-on ang Bluetooth, pagkatapos ay subukan muli.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Hindi makakonekta sa mikroponong iyon. Tiyaking nakakonekta ito sa Mga Setting ng iPhone.';
 }

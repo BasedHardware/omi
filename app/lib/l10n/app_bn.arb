@@ -10728,5 +10728,10 @@
     "deviceStorageFree": "{free} খালি",
     "deviceStorageNearlyFull": "ডিভাইস প্রায় পূর্ণ — জায়গা খালি করতে সিঙ্ক করুন।",
     "phoneMicOfflineFallbackMessage": "সংযোগ নেই — স্থানীয়ভাবে রেকর্ড করা হচ্ছে। আপনি আবার অনলাইনে এলে এটি ট্রান্সক্রাইব করা হবে।",
-    "dataEncryptedBanner": "আপনার ডেটা ডিফল্টরূপে শক্তিশালী এনক্রিপশন দিয়ে সুরক্ষিত, এবং এটি কীভাবে সংরক্ষণ ও ব্যবহার করা হয় তা আপনি নিয়ন্ত্রণ করেন।"
+    "dataEncryptedBanner": "আপনার ডেটা ডিফল্টরূপে শক্তিশালী এনক্রিপশন দিয়ে সুরক্ষিত, এবং এটি কীভাবে সংরক্ষণ ও ব্যবহার করা হয় তা আপনি নিয়ন্ত্রণ করেন।",
+    "rayBanMetaMicPickerTitle": "আপনার Ray-Ban Meta মাইক্রোফোন বেছে নিন",
+    "rayBanMetaMicPickerDescription": "আপনার চশমার Bluetooth মাইক্রোফোন নির্বাচন করুন। Omi এটি ব্যবহার করার সময় গান থেমে থাকবে।",
+    "rayBanMetaMicPickerEmpty": "কোনো Bluetooth মাইক্রোফোন পাওয়া যায়নি। iPhone সেটিংসে আপনার চশমা সংযুক্ত করে আবার চেষ্টা করুন।",
+    "rayBanMetaMicPickerLoadError": "Bluetooth মাইক্রোফোন লোড করা যায়নি। Bluetooth চালু আছে কিনা দেখে আবার চেষ্টা করুন।",
+    "rayBanMetaMicPickerConnectError": "ওই মাইক্রোফোনে সংযোগ করা যায়নি। iPhone সেটিংসে এটি সংযুক্ত আছে কিনা নিশ্চিত করুন।"
 }

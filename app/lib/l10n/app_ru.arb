@@ -3185,5 +3185,10 @@
     "deviceStorageFree": "{free} свободно",
     "deviceStorageNearlyFull": "Устройство почти заполнено — синхронизируйте, чтобы освободить место.",
     "phoneMicOfflineFallbackMessage": "Нет подключения — запись ведётся локально. Расшифровка выполнится, когда вы снова будете в сети.",
-    "dataEncryptedBanner": "Ваши данные по умолчанию защищены надёжным шифрованием, и вы контролируете, как они хранятся и используются."
+    "dataEncryptedBanner": "Ваши данные по умолчанию защищены надёжным шифрованием, и вы контролируете, как они хранятся и используются.",
+    "rayBanMetaMicPickerTitle": "Выберите микрофон Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "Выберите Bluetooth-микрофон очков. Музыка приостановится, пока Omi использует его.",
+    "rayBanMetaMicPickerEmpty": "Bluetooth-микрофоны не найдены. Подключите очки в настройках iPhone и повторите попытку.",
+    "rayBanMetaMicPickerLoadError": "Не удалось загрузить Bluetooth-микрофоны. Убедитесь, что Bluetooth включён, и повторите попытку.",
+    "rayBanMetaMicPickerConnectError": "Не удалось подключиться к этому микрофону. Убедитесь, что он подключён в настройках iPhone."
 }

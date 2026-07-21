@@ -10728,5 +10728,10 @@
     "deviceStorageFree": "{free} خالی",
     "deviceStorageNearlyFull": "آلہ تقریباً بھر چکا ہے — جگہ خالی کرنے کے لیے سنک کریں۔",
     "phoneMicOfflineFallbackMessage": "کوئی کنکشن نہیں — مقامی طور پر ریکارڈنگ ہو رہی ہے۔ جب آپ دوبارہ آن لائن ہوں گے تو اسے نقل کر دیا جائے گا۔",
-    "dataEncryptedBanner": "آپ کا ڈیٹا بطورِ ڈیفالٹ مضبوط خفیہ کاری سے محفوظ ہے، اور یہ کیسے محفوظ اور استعمال کیا جاتا ہے اس پر آپ کا کنٹرول رہتا ہے۔"
+    "dataEncryptedBanner": "آپ کا ڈیٹا بطورِ ڈیفالٹ مضبوط خفیہ کاری سے محفوظ ہے، اور یہ کیسے محفوظ اور استعمال کیا جاتا ہے اس پر آپ کا کنٹرول رہتا ہے۔",
+    "rayBanMetaMicPickerTitle": "اپنا Ray-Ban Meta مائیکروفون منتخب کریں",
+    "rayBanMetaMicPickerDescription": "اپنے چشمے کا Bluetooth مائیکروفون منتخب کریں۔ Omi کے استعمال کے دوران موسیقی رک جاتی ہے۔",
+    "rayBanMetaMicPickerEmpty": "کوئی Bluetooth مائیکروفون نہیں ملا۔ iPhone کی ترتیبات میں چشمہ منسلک کریں، پھر دوبارہ کوشش کریں۔",
+    "rayBanMetaMicPickerLoadError": "Bluetooth مائیکروفون لوڈ نہیں ہو سکے۔ چیک کریں کہ Bluetooth آن ہے، پھر دوبارہ کوشش کریں۔",
+    "rayBanMetaMicPickerConnectError": "اس مائیکروفون سے منسلک نہیں ہو سکے۔ یقینی بنائیں کہ یہ iPhone کی ترتیبات میں منسلک ہے۔"
 }

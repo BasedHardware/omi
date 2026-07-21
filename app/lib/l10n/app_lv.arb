@@ -3150,5 +3150,10 @@
     "deviceStorageFree": "{free} brīvi",
     "deviceStorageNearlyFull": "Ierīce ir gandrīz pilna — sinhronizējiet, lai atbrīvotu vietu.",
     "phoneMicOfflineFallbackMessage": "Nav savienojuma — ieraksta lokāli. Tas tiks transkribēts, kad atkal būsiet tiešsaistē.",
-    "dataEncryptedBanner": "Jūsu dati pēc noklusējuma ir aizsargāti ar spēcīgu šifrēšanu, un jūs kontrolējat, kā tie tiek glabāti un izmantoti."
+    "dataEncryptedBanner": "Jūsu dati pēc noklusējuma ir aizsargāti ar spēcīgu šifrēšanu, un jūs kontrolējat, kā tie tiek glabāti un izmantoti.",
+    "rayBanMetaMicPickerTitle": "Izvēlieties Ray-Ban Meta mikrofonu",
+    "rayBanMetaMicPickerDescription": "Izvēlieties briļļu Bluetooth mikrofonu. Mūzika tiek apturēta, kamēr Omi to izmanto.",
+    "rayBanMetaMicPickerEmpty": "Bluetooth mikrofoni nav atrasti. Pievienojiet brilles iPhone iestatījumos un mēģiniet vēlreiz.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth mikrofonus nevarēja ielādēt. Pārbaudiet, vai Bluetooth ir ieslēgts, un mēģiniet vēlreiz.",
+    "rayBanMetaMicPickerConnectError": "Neizdevās izveidot savienojumu ar šo mikrofonu. Pārliecinieties, ka tas ir pievienots iPhone iestatījumos."
 }

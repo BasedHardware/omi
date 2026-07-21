@@ -10728,5 +10728,10 @@
     "deviceStorageFree": "{free} ang libre",
     "deviceStorageNearlyFull": "Halos puno na ang device — mag-sync para magbakante ng espasyo.",
     "phoneMicOfflineFallbackMessage": "Walang koneksyon — nagre-record nang lokal. Ita-transcribe ito kapag online ka na ulit.",
-    "dataEncryptedBanner": "Ang iyong data ay protektado bilang default gamit ang malakas na encryption, at ikaw ang kumokontrol kung paano ito iniimbak at ginagamit."
+    "dataEncryptedBanner": "Ang iyong data ay protektado bilang default gamit ang malakas na encryption, at ikaw ang kumokontrol kung paano ito iniimbak at ginagamit.",
+    "rayBanMetaMicPickerTitle": "Piliin ang mikropono ng Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "Piliin ang Bluetooth na mikropono ng salamin. Hihinto muna ang musika habang ginagamit ito ng Omi.",
+    "rayBanMetaMicPickerEmpty": "Walang nahanap na Bluetooth na mikropono. Ikonekta ang salamin sa Mga Setting ng iPhone, pagkatapos ay subukan muli.",
+    "rayBanMetaMicPickerLoadError": "Hindi ma-load ang mga Bluetooth na mikropono. Tiyaking naka-on ang Bluetooth, pagkatapos ay subukan muli.",
+    "rayBanMetaMicPickerConnectError": "Hindi makakonekta sa mikroponong iyon. Tiyaking nakakonekta ito sa Mga Setting ng iPhone."
 }

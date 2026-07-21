@@ -9823,4 +9823,23 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'உங்கள் Ray-Ban Meta மைக்ரோஃபோனைத் தேர்வுசெய்யவும்';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'உங்கள் கண்ணாடியின் Bluetooth மைக்ரோஃபோனைத் தேர்வுசெய்யவும். Omi அதைப் பயன்படுத்தும்போது இசை இடைநிறுத்தப்படும்.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Bluetooth மைக்ரோஃபோன்கள் எதுவும் கிடைக்கவில்லை. iPhone அமைப்புகளில் கண்ணாடியை இணைத்து மீண்டும் முயலவும்.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth மைக்ரோஃபோன்களை ஏற்ற முடியவில்லை. Bluetooth இயக்கத்தில் உள்ளதா எனச் சரிபார்த்து மீண்டும் முயலவும்.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'அந்த மைக்ரோஃபோனுடன் இணைக்க முடியவில்லை. அது iPhone அமைப்புகளில் இணைக்கப்பட்டுள்ளதா என உறுதிசெய்யவும்.';
 }

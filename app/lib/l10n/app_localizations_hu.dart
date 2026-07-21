@@ -9793,4 +9793,23 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Válaszd ki a Ray-Ban Meta mikrofonját';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Válaszd ki a szemüveg Bluetooth-mikrofonját. A zene szünetel, amíg az Omi használja.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Nem található Bluetooth-mikrofon. Csatlakoztasd a szemüveget az iPhone Beállításokban, majd próbáld újra.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'A Bluetooth-mikrofonokat nem sikerült betölteni. Ellenőrizd, hogy a Bluetooth be van-e kapcsolva, majd próbáld újra.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Nem sikerült csatlakozni ehhez a mikrofonhoz. Ellenőrizd, hogy csatlakoztatva van-e az iPhone Beállításokban.';
 }

@@ -3119,5 +3119,10 @@
     "deviceStorageFree": "{free} lliure",
     "deviceStorageNearlyFull": "El dispositiu és gairebé ple — sincronitza per alliberar espai.",
     "phoneMicOfflineFallbackMessage": "Sense connexió: s'està gravant localment. Es transcriurà quan tornis a tenir connexió.",
-    "dataEncryptedBanner": "Les teves dades estan protegides per defecte amb un xifratge fort, i tu controles com s'emmagatzemen i s'utilitzen."
+    "dataEncryptedBanner": "Les teves dades estan protegides per defecte amb un xifratge fort, i tu controles com s'emmagatzemen i s'utilitzen.",
+    "rayBanMetaMicPickerTitle": "Tria el micròfon de les Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "Selecciona el micròfon Bluetooth de les ulleres. La música s'atura mentre Omi l'utilitza.",
+    "rayBanMetaMicPickerEmpty": "No s'ha trobat cap micròfon Bluetooth. Connecta les ulleres a la configuració de l'iPhone i torna-ho a provar.",
+    "rayBanMetaMicPickerLoadError": "No s'han pogut carregar els micròfons Bluetooth. Comprova que el Bluetooth estigui activat i torna-ho a provar.",
+    "rayBanMetaMicPickerConnectError": "No s'ha pogut connectar a aquest micròfon. Assegura't que estigui connectat a la configuració de l'iPhone."
 }
