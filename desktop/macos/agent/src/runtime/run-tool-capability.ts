@@ -185,6 +185,7 @@ function relayAdapterId(adapterId: string): OmiToolAdapterId {
     case "acp":
     case "hermes":
     case "openclaw":
+    case "codex":
       return "omi-tools-stdio";
     default:
       throw new Error(`Unknown canonical session adapter ${adapterId}`);
