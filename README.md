@@ -134,7 +134,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 | Backend API | [`backend/`](backend/) | Python, FastAPI, Firebase |
 | Firmware | [`omi/`](omi/) | nRF, Zephyr, C |
 | Omi Glass | [`omiGlass/`](omiGlass/) | ESP32-S3, C |
-| SDKs | [`sdks/`](sdks/) | React Native, Swift, Python |
+| SDKs | [`sdks/`](sdks/) | React Native, Swift, Python, Integration (TS/Go/Python/Rust/C++) |
 | AI Personas | [`web/personas-open-source/`](web/personas-open-source/) | Next.js |
 
 </details>
@@ -158,7 +158,8 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 
 ### API & SDKs
 - [API Reference](https://docs.omi.me/api-reference/introduction) — REST endpoints for memories, conversations, action items
-- [Python SDK](sdks/python/)
+- [Integration API SDKs](sdks/integration/) — OpenAPI-generated TypeScript, Go, Python, Rust, C++
+- [Python device SDK](sdks/python/)
 - [Swift SDK](sdks/swift/)
 - [React Native SDK](sdks/react-native/)
 - [MCP Server](mcp/) — Model Context Protocol integration

@@ -9,6 +9,8 @@ on:
       - 'docs/api-reference/openapi.json'
       - 'docs/api-reference/app-client-openapi.json'
       - 'docs/api-reference/integration-public-openapi.json'
+      - 'sdks/integration/**'
+      - 'backend/scripts/generate_integration_sdks.py'
       - 'app/lib/backend/http/api/**'
       - 'app/lib/backend/schema/**'
       - 'app/lib/backend/schema/gen/**'
@@ -27,6 +29,8 @@ on:
       - 'docs/api-reference/openapi.json'
       - 'docs/api-reference/app-client-openapi.json'
       - 'docs/api-reference/integration-public-openapi.json'
+      - 'sdks/integration/**'
+      - 'backend/scripts/generate_integration_sdks.py'
       - 'app/lib/backend/http/api/**'
       - 'app/lib/backend/schema/**'
       - 'app/lib/backend/schema/gen/**'
@@ -113,3 +117,6 @@ jobs:
 
       - name: Check generated desktop Swift DTOs
         run: python backend/scripts/generate_swift_openapi_types.py --check
+
+      - name: Check generated Integration API SDKs
+        run: python backend/scripts/generate_integration_sdks.py --check

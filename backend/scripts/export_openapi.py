@@ -788,6 +788,30 @@ def _normalize_app_client_security(schema: dict[str, Any]) -> None:
                     operation['responses'].setdefault('404', {'$ref': '#/components/responses/Error404'})
 
 
+def _strip_authorization_header_params(operation: dict[str, Any]) -> None:
+    """Drop raw Authorization header params in favor of securitySchemes.
+
+    FastAPI emits optional header parameters for Authorization. Generators treat
+    those as ordinary inputs and miss the bearer scheme. Prefer OpenAPI security.
+    """
+    params = operation.get('parameters')
+    if not params:
+        return
+    filtered = [
+        param
+        for param in params
+        if not (
+            isinstance(param, dict)
+            and param.get('in') == 'header'
+            and str(param.get('name', '')).lower() == 'authorization'
+        )
+    ]
+    if filtered:
+        operation['parameters'] = filtered
+    else:
+        operation.pop('parameters', None)
+
+
 def _normalize_integration_public_security(schema: dict[str, Any]) -> None:
     components = schema.setdefault('components', {})
     security_schemes = components.setdefault('securitySchemes', {})
@@ -804,11 +828,13 @@ def _normalize_integration_public_security(schema: dict[str, Any]) -> None:
                 }
             },
         }
-    schema.pop('security', None)
+    # Global default so generators wire bearer auth without per-op gymnastics.
+    schema['security'] = [{'integrationApiKey': []}]
 
     for path, operations in schema.get('paths', {}).items():
         for method, operation in operations.items():
             if method.upper() in HTTP_METHODS:
+                _strip_authorization_header_params(operation)
                 operation['security'] = [{'integrationApiKey': []}]
                 operation.setdefault('responses', {})['401'] = {'$ref': '#/components/responses/Error401'}
                 operation['responses'].setdefault('403', {'$ref': '#/components/responses/Error403'})
