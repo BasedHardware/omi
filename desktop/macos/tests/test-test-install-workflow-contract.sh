@@ -11,7 +11,7 @@ fail() {
 }
 
 strict_check_workflow() {
-  ruby - "$WORKFLOW" <<'RUBY'
+  ruby - "$WORKFLOW" "$SCRIPT_DIR/fixtures/test-install-job-contract.yml" "$SCRIPT_DIR/fixtures/test-install-workflow-prefix-contract.yml" <<'RUBY'
 require "yaml"
 
 
@@ -20,34 +20,63 @@ def fail(message)
 end
 
 
-workflow_path = ARGV.fetch(0)
+workflow_path, job_contract_path, prefix_contract_path = ARGV
+workflow_bytes = File.binread(workflow_path)
+prefix_bytes = File.binread(prefix_contract_path)
+fail("workflow prefix contract must end with literal jobs:\\n") unless prefix_bytes.end_with?("jobs:\n".b)
+fail("workflow must begin with the canonical top-level prefix exactly once") unless workflow_bytes.start_with?(prefix_bytes) && workflow_bytes.scan(prefix_bytes).length == 1
+
 workflow_text = File.read(workflow_path, encoding: "UTF-8")
+job_contract_text = File.read(job_contract_path, encoding: "UTF-8")
 
 begin
   stream = Psych.parse_stream(workflow_text)
   fail("workflow must contain exactly one YAML document") unless stream.children.length == 1
   root = stream.children.fetch(0).root
   fail("workflow YAML root must be a mapping") unless root.is_a?(Psych::Nodes::Mapping)
-  top_level_key_nodes = root.children.each_slice(2).map(&:first)
-  fail("workflow top-level keys must be scalar") unless top_level_key_nodes.all? { |key| key.is_a?(Psych::Nodes::Scalar) }
+  root_pairs = root.children.each_slice(2).to_a
+  fail("workflow YAML root has an incomplete mapping pair") unless root_pairs.all? { |pair| pair.length == 2 }
+  fail("workflow top-level mapping must contain only the canonical prefix keys") unless root_pairs.length == 3
+  root_key_nodes = root_pairs.map(&:first)
+  fail("workflow top-level keys must be plain, untagged scalars") unless root_key_nodes.all? do |key|
+    key.is_a?(Psych::Nodes::Scalar) && key.plain && !key.quoted && key.tag.nil? && key.anchor.nil?
+  end
+  fail("workflow top-level keys must match the canonical prefix") unless root_key_nodes.map(&:value) == ["name", "on", "jobs"]
+  jobs_pairs = root_pairs.select do |key, _value|
+    key.is_a?(Psych::Nodes::Scalar) && key.plain && !key.quoted && key.tag.nil? && key.anchor.nil? && key.value == "jobs"
+  end
+  fail("workflow must contain exactly one plain top-level jobs mapping") unless jobs_pairs.length == 1
+  jobs_node = jobs_pairs.fetch(0).fetch(1)
+  fail("workflow jobs must be a mapping") unless jobs_node.is_a?(Psych::Nodes::Mapping)
+
+  job_pairs = jobs_node.children.each_slice(2).to_a
+  fail("workflow jobs has an incomplete mapping pair") unless job_pairs.all? { |pair| pair.length == 2 }
+  job_key_nodes = job_pairs.map(&:first)
+  fail("workflow job keys must be plain, untagged scalars") unless job_key_nodes.all? do |key|
+    key.is_a?(Psych::Nodes::Scalar) && key.plain && !key.quoted && key.tag.nil? && key.anchor.nil? && key.value.is_a?(String)
+  end
+  ast_job_keys = job_key_nodes.map(&:value)
+  fail("workflow job keys must be unique") unless ast_job_keys.uniq.length == ast_job_keys.length
+  fail("workflow must contain exactly one literal test-install job key") unless ast_job_keys.count("test-install") == 1
 
   workflow = YAML.safe_load(workflow_text, aliases: false)
+  job_contract = YAML.safe_load(job_contract_text, aliases: false)
 rescue Psych::Exception, ArgumentError, EncodingError => error
   fail("workflow YAML must safely parse without aliases: #{error.message}")
 end
 
 fail("workflow YAML root must safely load as a mapping") unless workflow.is_a?(Hash)
-# Psych follows YAML 1.1 and resolves GitHub Actions' canonical unquoted `on`
-# key as true. Permit only that one known scalar spelling; every other
-# non-string top-level key is invalid.
-non_string_keys = workflow.keys.reject { |key| key.is_a?(String) }
-canonical_on_key = top_level_key_nodes.count { |key| key.value == "on" && key.tag.nil? } == 1
-fail("workflow has an invalid top-level key type") unless non_string_keys.empty? || (non_string_keys == [true] && canonical_on_key)
-fail("workflow may not add top-level defaults or env that affect jobs.test-install") if workflow.key?("defaults") || workflow.key?("env")
-
-semantic_jobs_keys = top_level_key_nodes.count { |key| key.value == "jobs" }
-fail("workflow must contain exactly one semantic top-level jobs key") unless semantic_jobs_keys == 1
 fail("workflow jobs must safely load as a mapping") unless workflow["jobs"].is_a?(Hash)
+fail("workflow loaded job keys must be strings") unless workflow["jobs"].keys.all? { |key| key.is_a?(String) }
+fail("workflow loaded job keys must match the parsed job keys") unless workflow["jobs"].keys.sort == ast_job_keys.sort
+
+fail("test-install job contract fixture must safely load as a mapping") unless job_contract.is_a?(Hash)
+fail("test-install job contract fixture must contain exactly one job") unless job_contract.keys == ["test-install"]
+expected_job = job_contract["test-install"]
+actual_job = workflow["jobs"]["test-install"]
+fail("test-install job contract fixture must define a mapping") unless expected_job.is_a?(Hash)
+fail("workflow test-install job must safely load as a mapping") unless actual_job.is_a?(Hash)
+fail("workflow test-install job must semantically match the complete-job fixture") unless actual_job == expected_job
 RUBY
 
   python3 - "$WORKFLOW" "$SCRIPT_DIR/fixtures/test-install-job-contract.yml" <<'PY'
@@ -95,17 +124,7 @@ def mapping_end_after(mapping_start, mapping_indent, limit):
     return limit
 
 
-top_level_key = re.compile(r"^(?P<key>[^ #][^:]*):")
-top_level_keys = [
-    (index, match.group("key"))
-    for index, line in enumerate(lines)
-    if (match := top_level_key.match(without_line_ending(line)))
-]
-if any(key in {"defaults", "env"} for _, key in top_level_keys):
-    fail("workflow may not add top-level defaults or env that affect jobs.test-install")
-if any(key.strip("\"'") == "jobs" and key != "jobs" for _, key in top_level_keys):
-    fail("jobs mapping must not use a quoted or alternate spelling")
-jobs_starts = [index for index, key in top_level_keys if key == "jobs"]
+jobs_starts = [index for index, line in enumerate(lines) if line == "jobs:\n"]
 if len(jobs_starts) != 1 or lines[jobs_starts[0]] != "jobs:\n":
     fail("expected exactly one literal top-level jobs: mapping")
 jobs_start = jobs_starts[0]
@@ -117,8 +136,6 @@ job_keys = [
     for index in range(jobs_start + 1, jobs_end)
     if (match := job_key.match(without_line_ending(lines[index])))
 ]
-if any(key.strip("\"' ") == "test-install" and key != "test-install" for _, key in job_keys):
-    fail("test-install job key must not use a quoted or alternate spelling")
 test_install_starts = [index for index, key in job_keys if key == "test-install"]
 if len(test_install_starts) != 1 or lines[test_install_starts[0]] != "  test-install:\n":
     fail("expected exactly one exact unquoted jobs.test-install job key")
@@ -309,6 +326,21 @@ elif mutation == "unrelated-yaml":
 elif mutation == "unrelated-top-level-metadata":
     index = next(index for index, line in enumerate(lines) if line == "name: Test macOS Installation\n") + 1
     lines[index:index] = ["run-name: installer-contract ${{ github.event_name }}\n"]
+elif mutation == "workflow-permissions-none":
+    index = next(index for index, line in enumerate(lines) if line == "name: Test macOS Installation\n") + 1
+    lines[index:index] = ["permissions: {}\n"]
+elif mutation == "workflow-permissions-contents-none":
+    index = next(index for index, line in enumerate(lines) if line == "name: Test macOS Installation\n") + 1
+    lines[index:index] = ["permissions: {contents: none}\n"]
+elif mutation == "workflow-concurrency-cancel":
+    index = next(index for index, line in enumerate(lines) if line == "name: Test macOS Installation\n") + 1
+    lines[index:index] = [
+        "concurrency:\n",
+        "  group: installer-contract\n",
+        "  cancel-in-progress: true\n",
+    ]
+elif mutation == "workflow-permissions-after-jobs":
+    lines.extend(["permissions: {contents: none}\n"])
 elif mutation == "pre-download-github-env-bash-env":
     index = next(index for index, line in enumerate(lines) if line == "      - name: Download DMG from GitHub Release\n")
     lines[index:index] = [
@@ -445,6 +477,14 @@ elif mutation == "unrelated-job-defaults-shell":
         "    steps:\n",
         "      - run: echo unrelated\n",
     ])
+elif mutation == "quoted-unrelated-job-key":
+    lines.extend(alternate_test_install_job('"unrelated-quoted"'))
+elif mutation == "binary-test-install-key":
+    lines.extend(alternate_test_install_job("!!binary dGVzdC1pbnN0YWxs"))
+elif mutation == "long-tagged-binary-test-install-key":
+    lines.extend(alternate_test_install_job("!<tag:yaml.org,2002:binary> dGVzdC1pbnN0YWxs"))
+elif mutation in {"workflow-bom", "workflow-crlf"}:
+    pass
 elif mutation == "unquoted-canonical-decoy-active-wildcard":
     add_skipped_canonical_decoy(quoted=False)
 elif mutation == "quoted-canonical-decoy-active-wildcard":
@@ -645,6 +685,10 @@ else:
     raise SystemExit(f"unknown mutation: {mutation}")
 
 destination.write_text(''.join(lines))
+if mutation == "workflow-bom":
+    destination.write_bytes(b"\xef\xbb\xbf" + destination.read_bytes())
+elif mutation == "workflow-crlf":
+    destination.write_bytes(destination.read_bytes().replace(b"\n", b"\r\n"))
 if mutation in {"unquoted-canonical-decoy-active-wildcard", "quoted-canonical-decoy-active-wildcard"}:
     prove_decoy_topology_with_ruby(destination, mutation)
 if mutation.startswith("canonical-job-decoy-"):
@@ -672,8 +716,14 @@ run_mutation omitted omitted
 run_mutation duplicate duplicate
 run_mutation commented-command commented-command
 run_mutation canonical canonical accept
-run_mutation unrelated-yaml unrelated-yaml accept
-run_mutation unrelated-top-level-metadata unrelated-top-level-metadata accept
+run_mutation unrelated-yaml unrelated-yaml
+run_mutation unrelated-top-level-metadata unrelated-top-level-metadata
+run_mutation workflow-permissions-none workflow-permissions-none
+run_mutation workflow-permissions-contents-none workflow-permissions-contents-none
+run_mutation workflow-concurrency-cancel workflow-concurrency-cancel
+run_mutation workflow-permissions-after-jobs workflow-permissions-after-jobs
+run_mutation workflow-bom workflow-bom
+run_mutation workflow-crlf workflow-crlf
 run_mutation pre-download-github-env-bash-env pre-download-github-env-bash-env
 run_mutation pre-download-github-path pre-download-github-path
 run_mutation interposed-replacement interposed-replacement
@@ -702,6 +752,9 @@ run_mutation test-install-env-bash-env test-install-env-bash-env
 run_mutation download-step-env-path download-step-env-path
 run_mutation test-install-continue-on-error test-install-continue-on-error
 run_mutation unrelated-job-defaults-shell unrelated-job-defaults-shell accept
+run_mutation quoted-unrelated-job-key quoted-unrelated-job-key
+run_mutation binary-test-install-key binary-test-install-key
+run_mutation long-tagged-binary-test-install-key long-tagged-binary-test-install-key
 run_mutation unquoted-canonical-decoy-active-wildcard unquoted-canonical-decoy-active-wildcard
 run_mutation quoted-canonical-decoy-active-wildcard quoted-canonical-decoy-active-wildcard
 run_mutation long-equals long-equals
