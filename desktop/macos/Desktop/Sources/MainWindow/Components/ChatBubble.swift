@@ -136,6 +136,7 @@ struct ChatBubble: View {
     .contentShape(Rectangle())
     .onHover { isRowHovering = $0 }
   }
+  }
 
   @ViewBuilder
   private func messageContentView(_ groupedBlocks: [ContentBlockGroup]) -> some View {
