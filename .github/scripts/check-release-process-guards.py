@@ -23,23 +23,39 @@ class SecurityBoundFileError(Exception):
     """A release lock input was not read from one verified ordinary file."""
 
 
+def _security_bound_file_identity(file_stat: os.stat_result) -> tuple[int, int, int]:
+    """Return the pathname identity fields that must agree with the descriptor."""
+    return file_stat.st_dev, file_stat.st_ino, stat.S_IFMT(file_stat.st_mode)
+
+
+def _lstat_security_bound_file(path: Path, description: str) -> os.stat_result:
+    """Inspect one pathname without following a link and require a regular file."""
+    try:
+        path_stat = os.lstat(path)
+    except OSError as exc:
+        raise SecurityBoundFileError(
+            f"{description} could not inspect its security-bound file: {path} ({exc})"
+        ) from exc
+    if not stat.S_ISREG(path_stat.st_mode):
+        raise SecurityBoundFileError(
+            f"{description} must be an ordinary regular file read without following links: {path}"
+        )
+    return path_stat
+
+
 def _read_security_bound_file(path: Path, description: str) -> bytes:
     """Read one bounded ordinary file without following a replacement path.
 
     The descriptor, not a later pathname lookup, is the source for every
-    consumer of this security-bound input. O_NOFOLLOW closes the symlink race
-    where available; the fallback compares lstat and fstat identity.
+    consumer of this security-bound input. Both pathname checks and descriptor
+    checks bind the same ordinary file; O_NOFOLLOW closes the open-time symlink
+    race where available, while the identity comparisons keep the fallback
+    fail-closed.
     """
     nofollow = getattr(os, "O_NOFOLLOW", 0)
     flags = os.O_RDONLY | nofollow | getattr(os, "O_NONBLOCK", 0)
-    before: os.stat_result | None = None
     try:
-        if nofollow == 0:
-            before = os.lstat(path)
-            if stat.S_ISLNK(before.st_mode):
-                raise SecurityBoundFileError(
-                    f"{description} must be an ordinary regular file read without following links: {path}"
-                )
+        before = _lstat_security_bound_file(path, description)
         fd = os.open(path, flags)
     except SecurityBoundFileError:
         raise
@@ -54,7 +70,7 @@ def _read_security_bound_file(path: Path, description: str) -> bytes:
             raise SecurityBoundFileError(
                 f"{description} must be an ordinary regular file read without following links: {path}"
             )
-        if before is not None and (before.st_dev, before.st_ino) != (opened.st_dev, opened.st_ino):
+        if _security_bound_file_identity(before) != _security_bound_file_identity(opened):
             raise SecurityBoundFileError(f"{description} changed while opening its security-bound file: {path}")
         if opened.st_size > MAX_SECURITY_BOUND_FILE_BYTES:
             raise SecurityBoundFileError(f"{description} exceeds the security-bound read limit: {path}")
@@ -72,9 +88,19 @@ def _read_security_bound_file(path: Path, description: str) -> bytes:
 
         completed = os.fstat(fd)
         if (
-            (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns)
-            != (completed.st_dev, completed.st_ino, completed.st_size, completed.st_mtime_ns, completed.st_ctime_ns)
+            *_security_bound_file_identity(opened),
+            opened.st_size,
+            opened.st_mtime_ns,
+            opened.st_ctime_ns,
+        ) != (
+            *_security_bound_file_identity(completed),
+            completed.st_size,
+            completed.st_mtime_ns,
+            completed.st_ctime_ns,
         ):
+            raise SecurityBoundFileError(f"{description} changed while being read: {path}")
+        final_path_stat = _lstat_security_bound_file(path, description)
+        if _security_bound_file_identity(final_path_stat) != _security_bound_file_identity(opened):
             raise SecurityBoundFileError(f"{description} changed while being read: {path}")
         return b"".join(chunks)
     except SecurityBoundFileError:
