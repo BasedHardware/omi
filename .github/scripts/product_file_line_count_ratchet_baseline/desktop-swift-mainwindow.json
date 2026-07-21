@@ -2,7 +2,7 @@
   "files": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 1926,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3643,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4448,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4543,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3298,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5518,
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1570
@@ -10,7 +10,7 @@
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "Keeps all chat tool groups compact and collapsed while streamed steps increment, with an explicit expansion policy, fixed collapsed height, and regression coverage.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": "Rebase reconciliation applies the pinned swift-format to the main-branch app-detail safety fixes; runtime behavior is unchanged.",
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": "Home redesign: chat-as-home surface plus the 2nd-brain knows-list hub replace the wordmark/ribbon/WMN-card layout; a component split is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": "Bridge memory search now awaits the active initial or pagination projection before refreshing, preventing an immediate post-navigation marker search from using stale lifecycle capability state.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": "The Load-more-tasks action reads displayTasks.last at execution time via loadMoreTapped() instead of force-unwrapping (an emptied list no longer crashes); merged with main binding first-load/loading/error/retry state to the selected To Do or Done view.",
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": "Strict concurrency imports annotate legacy AppKit image usage without changing runtime behavior."
