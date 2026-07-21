@@ -15,6 +15,8 @@ DESKTOP_PREFIX = "desktop/macos/"
 EXEMPT_DESKTOP_PATHS = {
     "desktop/macos/CHANGELOG.json",
     "desktop/macos/AGENTS.md",
+    "desktop/macos/docs/release.md",
+    "desktop/macos/scripts/qualify-desktop-beta.sh",
 }
 # Server-side Rust backend changes are internal reliability work, not user-facing app notes.
 EXEMPT_DESKTOP_PATH_PREFIXES = (
