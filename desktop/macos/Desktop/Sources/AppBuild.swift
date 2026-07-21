@@ -2,14 +2,6 @@ import Foundation
 
 enum AppBuild {
   static let productionBundleIdentifier = "com.omi.computer-macos"
-  /// Identity of installed "Omi Beta.app" bundles. The separately packaged beta artifact
-  /// is retired (single-artifact release), but already-installed beta apps keep this
-  /// bundle id, and INV-DATA-1 pins every production-family identity to the canonical
-  /// production customer data plane.
-  static let betaProductionBundleIdentifier = "com.omi.computer-macos.beta"
-  static let productionFamilyBundleIdentifiers: Set<String> = [
-    productionBundleIdentifier, betaProductionBundleIdentifier,
-  ]
   static let desktopDevBundleIdentifier = "com.omi.desktop-dev"
   static let externalPreviewBundleIdentifierPrefix = "com.omi.preview."
   static let externalPreviewMarkerInfoKey = "OMIExternalPreview"
@@ -45,7 +37,7 @@ enum AppBuild {
 
     var isNonProduction: Bool {
       bundleIdentifier.hasPrefix("com.omi.")
-        && !AppBuild.productionFamilyBundleIdentifiers.contains(bundleIdentifier)
+        && bundleIdentifier != AppBuild.productionBundleIdentifier
     }
 
     var allowsLocalAutomation: Bool {
@@ -103,23 +95,11 @@ enum AppBuild {
   }
 
   static var isProductionBundle: Bool {
-    productionFamilyBundleIdentifiers.contains(bundleIdentifier)
+    bundleIdentifier == productionBundleIdentifier
   }
 
   static var isExternalPreview: Bool {
     buildConfiguration.isExternalPreview
-  }
-
-  /// Legacy "Omi Computer.app" cleanup force-terminates running
-  /// `com.omi.computer-macos` processes and deletes the old bundle — strictly
-  /// stable-lineage housekeeping. Only the stable identity may run it: Omi Beta
-  /// or a dev bundle doing so would kill the user's running stable app.
-  static var mayRunLegacyStableAppCleanup: Bool {
-    mayRunLegacyStableAppCleanup(bundleIdentifier: bundleIdentifier)
-  }
-
-  static func mayRunLegacyStableAppCleanup(bundleIdentifier: String) -> Bool {
-    bundleIdentifier == productionBundleIdentifier
   }
 
   /// Only local development bundles expose the loopback automation/debug bridge. Published
