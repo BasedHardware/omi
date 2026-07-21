@@ -65,6 +65,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("run-swift-ci.sh --test", debug_job)
         self.assertIn("run-swift-ci.sh --select-toolchain", release_job)
         self.assertIn("run-swift-ci.sh --release-compile", release_job)
+        self.assertIn("run-swift-ci.sh --release-notification-regression", debug_job)
 
     def test_change_detection_happens_before_macos_allocation(self):
         """#9440: non-desktop changes must not claim a costly macOS runner."""
@@ -91,6 +92,22 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("fetch-depth: 0", debug_job)
         release_job = self.jobs["desktop-swift-release-compile"]
         self.assertIn("fetch-depth: 1", release_job)
+
+    def test_notification_boundary_runs_targeted_release_regression(self):
+        changes = self.jobs["changes"]
+        job = self.jobs["desktop-swift"]
+        for path in (
+            "AppState[+]Permissions[.]swift",
+            "Sources/.*Notification.*[.]swift",
+            "OmiApp[.]swift",
+            "Providers/(ChatToolExecutor|DeviceProvider)[.]swift",
+            "Tests/.*Notification.*Tests[.]swift",
+        ):
+            self.assertIn(path, changes)
+        self.assertIn("runs-on: macos-15", job)
+        self.assertIn("--release-notification-regression", job)
+        self.assertIn("should_notification_release_regression", job)
+        self.assertIn("UserNotificationCallbackBridgeTests/", _runner_text())
 
     def test_canonical_runner_fails_closed_on_the_pinned_toolchain(self):
         runner = _runner_text()

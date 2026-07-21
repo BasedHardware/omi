@@ -180,7 +180,11 @@ def set_output(name: str, value: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repository", required=True)
-    parser.add_argument("--mode", choices=["auto", "release_now", "force_release"], default="auto")
+    parser.add_argument(
+        "--mode",
+        choices=["auto", "release_now", "force_release", "break_glass"],
+        default="auto",
+    )
     args = parser.parse_args()
 
     latest_tag = latest_desktop_tag()
@@ -189,7 +193,9 @@ def main() -> int:
     set_output("latest_tag", latest_tag or "")
     set_output("source_sha", source_sha)
 
-    if not changes and args.mode == "force_release":
+    forced = args.mode in {"force_release", "break_glass"}
+
+    if not changes and forced:
         print("No releasable desktop app changes since the latest desktop tag, but force_release was requested.")
     elif not changes:
         set_output("should_release", "false")
@@ -223,11 +229,18 @@ def main() -> int:
 
     source_check_reason = required_desktop_swift_check_reason(args.repository, source_sha)
     if source_check_reason:
-        set_output("should_release", "false")
-        set_output("reason", f"Desktop candidate source gate blocked: {source_check_reason}.")
-        return 0
+        # break_glass is the only mode that may cut a candidate over a red or
+        # missing source check. Without it a flaky `Desktop Swift Build & Tests`
+        # blocks candidate creation outright, and every downstream stage with it,
+        # with no recovery short of landing another commit and waiting.
+        if args.mode != "break_glass":
+            set_output("should_release", "false")
+            set_output("reason", f"Desktop candidate source gate blocked: {source_check_reason}.")
+            return 0
+        set_output("source_gate_bypassed", "true")
+        print(f"::warning::Desktop candidate source gate bypassed: {source_check_reason}")
 
-    if args.mode != "force_release":
+    if not forced:
         active_reason = active_release_reason(args.repository, latest_tag)
         if active_reason:
             set_output("should_release", "false")

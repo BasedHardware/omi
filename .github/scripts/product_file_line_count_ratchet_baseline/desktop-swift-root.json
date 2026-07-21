@@ -1,16 +1,16 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/AuthService.swift": 3303,
+    "desktop/macos/Desktop/Sources/AuthService.swift": 3298,
     "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": 1678,
-    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4179,
+    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4252,
     "desktop/macos/Desktop/Sources/MemoryExportService.swift": 1578,
-    "desktop/macos/Desktop/Sources/OmiApp.swift": 1634
+    "desktop/macos/Desktop/Sources/OmiApp.swift": 1641
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/AuthService.swift": "Apple first-auth name capture signals observers (authNameDidUpdate) and persists the name to Firebase so it survives reinstalls.",
-    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
+    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": "Reach-error card gains a debug bridge action so the actionable failure surface is verifiable in-process.",
     "desktop/macos/Desktop/Sources/MemoryExportService.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
-    "desktop/macos/Desktop/Sources/OmiApp.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior."
+    "desktop/macos/Desktop/Sources/OmiApp.swift": "Side-by-side Omi Beta: legacy Omi Computer.app cleanup gains a stable-identity guard so the beta app can never terminate or delete a stable install."
   },
   "threshold": 1500
 }
