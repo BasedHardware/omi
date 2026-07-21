@@ -18,7 +18,8 @@ class FlutterBluePlusOmiBle implements OmiBleClient {
   BluetoothDevice? _device;
   List<BluetoothService> _services = const [];
   StreamSubscription<List<int>>? _audioSub;
-  final StreamController<List<int>> _audioController = StreamController<List<int>>.broadcast();
+  final StreamController<List<int>> _audioController =
+      StreamController<List<int>>.broadcast();
 
   static String _norm(String uuid) => uuid.toLowerCase();
 
@@ -26,7 +27,8 @@ class FlutterBluePlusOmiBle implements OmiBleClient {
     final sTarget = _norm(serviceUuid);
     final cTarget = _norm(charUuid);
     for (final s in _services) {
-      if (_norm(s.uuid.str128) != sTarget && _norm(s.uuid.str) != sTarget) continue;
+      if (_norm(s.uuid.str128) != sTarget && _norm(s.uuid.str) != sTarget)
+        continue;
       for (final c in s.characteristics) {
         if (_norm(c.uuid.str128) == cTarget || _norm(c.uuid.str) == cTarget) {
           return c;
@@ -45,7 +47,9 @@ class FlutterBluePlusOmiBle implements OmiBleClient {
   }
 
   @override
-  Future<List<BleDevice>> scan({Duration timeout = const Duration(seconds: 5)}) async {
+  Future<List<BleDevice>> scan({
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
     if (await FlutterBluePlus.isSupported == false) {
       throw UnsupportedError('Bluetooth not supported on this platform');
     }
@@ -56,7 +60,9 @@ class FlutterBluePlusOmiBle implements OmiBleClient {
     final sub = FlutterBluePlus.scanResults.listen((results) {
       for (final r in results) {
         final id = r.device.remoteId.str;
-        final name = r.advertisementData.advName.isNotEmpty ? r.advertisementData.advName : r.device.platformName;
+        final name = r.advertisementData.advName.isNotEmpty
+            ? r.advertisementData.advName
+            : r.device.platformName;
         // Keep strongest RSSI
         final prev = seen[id];
         if (prev == null || r.rssi > prev.rssi) {
@@ -66,7 +72,11 @@ class FlutterBluePlusOmiBle implements OmiBleClient {
     });
 
     try {
-      await FlutterBluePlus.startScan(timeout: timeout, withServices: withServices, androidUsesFineLocation: true);
+      await FlutterBluePlus.startScan(
+        timeout: timeout,
+        withServices: withServices,
+        androidUsesFineLocation: true,
+      );
       await Future<void>.delayed(timeout);
     } finally {
       await FlutterBluePlus.stopScan();
@@ -141,7 +151,8 @@ class FlutterBluePlusOmiBle implements OmiBleClient {
   }
 
   @override
-  Stream<List<int>> audioPayloads() => audioPackets().map(stripPacketHeader).where((p) => p.isNotEmpty);
+  Stream<List<int>> audioPayloads() =>
+      audioPackets().map(stripPacketHeader).where((p) => p.isNotEmpty);
 
   @override
   Future<int> readCodec() async {

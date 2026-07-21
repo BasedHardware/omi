@@ -24,7 +24,11 @@ String parakeetWsUrl(String apiUrl, {int sampleRate = 16000}) {
 }
 
 class DeepgramTranscriber implements StreamingTranscriber {
-  DeepgramTranscriber({required this.apiKey, required this.onTranscript, this.sampleRate = 16000}) {
+  DeepgramTranscriber({
+    required this.apiKey,
+    required this.onTranscript,
+    this.sampleRate = 16000,
+  }) {
     final uri = Uri.parse(
       'wss://api.deepgram.com/v1/listen?punctuate=true&model=nova&language=en-US'
       '&encoding=linear16&sample_rate=$sampleRate&channels=1',
@@ -38,7 +42,9 @@ class DeepgramTranscriber implements StreamingTranscriber {
       try {
         final data = jsonDecode(event) as Map<String, dynamic>;
         final alts = (data['channel'] as Map?)?['alternatives'] as List?;
-        final t = (alts?.isNotEmpty == true) ? (alts!.first as Map)['transcript'] : null;
+        final t = (alts?.isNotEmpty == true)
+            ? (alts!.first as Map)['transcript']
+            : null;
         if (t is String && t.isNotEmpty) onTranscript(t);
       } catch (_) {}
     });
@@ -63,7 +69,11 @@ class DeepgramTranscriber implements StreamingTranscriber {
 }
 
 class ParakeetTranscriber implements StreamingTranscriber {
-  ParakeetTranscriber({required String apiUrl, required this.onTranscript, this.sampleRate = 16000}) {
+  ParakeetTranscriber({
+    required String apiUrl,
+    required this.onTranscript,
+    this.sampleRate = 16000,
+  }) {
     final uri = Uri.parse(parakeetWsUrl(apiUrl, sampleRate: sampleRate));
     _channel = WebSocketChannel.connect(uri);
     _sub = _channel.stream.listen((event) {
@@ -109,7 +119,11 @@ class ParakeetTranscriber implements StreamingTranscriber {
 
 /// Feature-gated Whisper via injected runner.
 class WhisperTranscriber implements StreamingTranscriber {
-  WhisperTranscriber({required this.runner, required this.onTranscript, this.batchSeconds = 5});
+  WhisperTranscriber({
+    required this.runner,
+    required this.onTranscript,
+    this.batchSeconds = 5,
+  });
 
   final FutureOr<String> Function(Uint8List pcm) runner;
   final TranscriptHandler onTranscript;
@@ -154,16 +168,27 @@ StreamingTranscriber createTranscriber({
       if (apiKey == null || apiKey.isEmpty) {
         throw ArgumentError('Deepgram apiKey required');
       }
-      return DeepgramTranscriber(apiKey: apiKey, onTranscript: onTranscript, sampleRate: sampleRate);
+      return DeepgramTranscriber(
+        apiKey: apiKey,
+        onTranscript: onTranscript,
+        sampleRate: sampleRate,
+      );
     case SttEngine.parakeet:
       if (apiUrl == null || apiUrl.isEmpty) {
         throw ArgumentError('Parakeet apiUrl required');
       }
-      return ParakeetTranscriber(apiUrl: apiUrl, onTranscript: onTranscript, sampleRate: sampleRate);
+      return ParakeetTranscriber(
+        apiUrl: apiUrl,
+        onTranscript: onTranscript,
+        sampleRate: sampleRate,
+      );
     case SttEngine.whisper:
       if (whisperRunner == null) {
         throw ArgumentError('Whisper requires whisperRunner');
       }
-      return WhisperTranscriber(runner: whisperRunner!, onTranscript: onTranscript);
+      return WhisperTranscriber(
+        runner: whisperRunner!,
+        onTranscript: onTranscript,
+      );
   }
 }
