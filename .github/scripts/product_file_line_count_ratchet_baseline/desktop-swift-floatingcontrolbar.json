@@ -1,8 +1,8 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": 2375,
-    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": 2928,
-    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": 4846,
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": 2853,
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": 4842,
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": 2423,
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": 1621
   },
