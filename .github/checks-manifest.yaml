@@ -31,9 +31,14 @@ checks:
     reason: "immutable desktop app/backend release-unit contract"
   - id: desktop-release-doctor-v1
     command: ["python3", ".github/scripts/test_desktop_release_doctor.py"]
-    triggers: [".github/schemas/desktop-release-evidence-v1.schema.json", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/scripts/test_desktop_release_doctor.py", ".github/workflows/desktop_release_doctor.yml"]
+    triggers: [".github/schemas/desktop-release-evidence-v1.schema.json", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/scripts/test_desktop_release_doctor.py", ".github/workflows/desktop_release_doctor.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "advisory desktop release evidence and drift report"
+  - id: desktop-qualification-immutable-dispatch
+    command: ["python3", ".github/scripts/test_desktop_qualification_dispatch.py"]
+    triggers: ["codemagic.yaml", ".github/workflows/desktop_qualify_beta.yml", ".github/scripts/test_desktop_qualification_dispatch.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "candidate qualification must dispatch and rebuild at one immutable candidate tag SHA"
   - id: desktop-changelog-io-tests
     command: ["python3", ".github/scripts/test_desktop_changelog.py"]
     triggers: [".github/scripts/desktop-changelog.py", ".github/scripts/test_desktop_changelog.py", ".github/checks-manifest.yaml"]
@@ -375,6 +380,11 @@ checks:
     triggers: [".github/workflows/desktop_promote_prod.yml", ".github/scripts/check_stable_pointer_precondition.py", ".github/scripts/verify_stable_appcast.py", ".github/scripts/test_stable_promotion_verifiers.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#10163 mutation-sensitive Stable retry and default-channel feed fixtures"
+  - id: stable-static-publication-fixtures
+    command: ["python3", ".github/scripts/test_verify_stable_static_artifacts.py"]
+    triggers: [".github/workflows/desktop_promote_prod.yml", ".github/scripts/desktop_repair_installer.py", ".github/scripts/verify_stable_static_artifacts.py", ".github/scripts/test_verify_stable_static_artifacts.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Stable static latest.json and index.html must exactly render the retained qualified manifest"
 
 exempt:
   - path: ".github/scripts/check-desktop-auto-beta-candidate.py"

@@ -32,6 +32,7 @@ REQUIRED = (
     "Authorization: Bearer $ACCESS_TOKEN",
     "appcast.xml?identity=stable",
     "verify_stable_appcast.py",
+    "verify_stable_static_artifacts.py",
     ".event",
     ".path",
     "--if-generation-match=0",

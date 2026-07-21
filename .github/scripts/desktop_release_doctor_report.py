@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import unquote, urlparse
 from datetime import datetime, timezone
 
 
@@ -140,30 +141,52 @@ def _github_surfaces(snapshot: dict[str, object], release_id: str, phase: str) -
         return [_unavailable_surface("github_release", {"release_id": release_id}, github)], {}
 
     metadata_raw = github.get("metadata")
-    metadata = metadata_raw if isinstance(metadata_raw, dict) else {}
+    metadata = dict(metadata_raw) if isinstance(metadata_raw, dict) else {}
     assets = github.get("asset_names")
     asset_names = set(assets) if isinstance(assets, list) and all(isinstance(item, str) for item in assets) else set()
-    expected_assets = {"Omi.zip"}
+    identities = github.get("asset_identities")
+    identities = identities if isinstance(identities, dict) else {}
+    manifest = snapshot.get("manifest")
+    manifest = manifest if isinstance(manifest, dict) else {}
+    expected_assets = {"Omi.zip", "Omi.Beta.zip", "omi-beta.dmg"}
+    dmg_name = _asset_name(_optional_string(manifest.get("dmg_url")))
+    if dmg_name not in {"omi.dmg", "Omi.dmg"}:
+        dmg_name = "omi.dmg"
+    expected_assets.add(dmg_name)
     missing_assets = sorted(expected_assets - asset_names)
+    drifted_assets = _drifted_assets(identities, manifest, metadata, expected_assets)
+    legacy_degraded = (
+        phase in {"beta", "stable"}
+        and _optional_string(metadata.get("isLive")).lower() in {"true", "1", "yes"}
+        and not _optional_string(metadata.get("qualifiedBetaEvidence"))
+        and bool(missing_assets)
+    )
+    metadata["_legacy_degraded"] = legacy_degraded
     valid = (
         github.get("tag_name") == release_id
         and github.get("is_draft") is False
         and github.get("is_prerelease") is False
         and not missing_assets
+        and not drifted_assets
     )
+    status = "PASS" if valid else "WARN" if legacy_degraded else "FAIL"
+    classification = "aligned" if valid else "legacy_degraded" if legacy_degraded else "customer_visible_split"
     release_surface = _surface(
         "github_release",
-        "PASS" if valid else "FAIL",
-        "aligned" if valid else "customer_visible_split",
+        status,
+        classification,
         {"release_id": release_id, "published": True, "required_assets": sorted(expected_assets)},
         {
             "release_id": github.get("tag_name"),
             "is_draft": github.get("is_draft"),
             "is_prerelease": github.get("is_prerelease"),
             "missing_assets": missing_assets,
+            "drifted_assets": drifted_assets,
         },
         "GitHub release identity and required signed artifact are present."
         if valid
+        else "Live legacy release has incomplete four-asset evidence and is explicitly degraded."
+        if legacy_degraded
         else "GitHub release is missing, non-published, or does not match the requested release.",
     )
     prose_surface = _surface(
@@ -187,6 +210,44 @@ def _github_surfaces(snapshot: dict[str, object], release_id: str, phase: str) -
     return [release_surface, prose_surface], metadata
 
 
+def _asset_name(url: str) -> str:
+    return unquote(urlparse(url).path).rsplit("/", 1)[-1] if url else ""
+
+
+def _asset_digest(identity: object) -> str:
+    if not isinstance(identity, dict):
+        return ""
+    return _optional_string(identity.get("sha256")) or _optional_string(identity.get("digest")).removeprefix("sha256:")
+
+
+def _asset_url(identity: object) -> str:
+    if not isinstance(identity, dict):
+        return ""
+    return _optional_string(identity.get("url")) or _optional_string(identity.get("browser_download_url"))
+
+
+def _drifted_assets(
+    identities: dict[str, object], manifest: dict[str, object], metadata: dict[str, object], expected_assets: set[str]
+) -> list[str]:
+    fields = {
+        "Omi.zip": ("zip_url", "zip_sha256"),
+        _asset_name(_optional_string(manifest.get("dmg_url"))): ("dmg_url", "dmg_sha256"),
+        "Omi.Beta.zip": ("beta_zip_url", "beta_zip_sha256"),
+        "omi-beta.dmg": ("beta_dmg_url", "beta_dmg_sha256"),
+    }
+    drifted = []
+    for name in expected_assets:
+        url_key, sha_key = fields.get(name, ("", ""))
+        identity = identities.get(name)
+        if not url_key or _asset_url(identity) != _optional_string(manifest.get(url_key)) or _asset_digest(identity) != _optional_string(manifest.get(sha_key)):
+            drifted.append(name)
+    if _optional_string(metadata.get("edSignature")) != _optional_string(manifest.get("ed_signature")):
+        drifted.append("Omi.zip")
+    if _optional_string(metadata.get("betaEdSignature")) != _optional_string(manifest.get("beta_ed_signature")):
+        drifted.append("Omi.Beta.zip")
+    return sorted(set(drifted))
+
+
 def _manifest_surface(snapshot: dict[str, object], release_id: str, tag_sha: str, phase: str, metadata: dict[str, object]) -> dict[str, object]:
     manifest = snapshot.get("manifest", _unavailable("collector did not provide the canonical manifest"))
     expected = {"release_id": release_id, "source_sha": tag_sha}
@@ -199,7 +260,8 @@ def _manifest_surface(snapshot: dict[str, object], release_id: str, tag_sha: str
     evidence = _optional_string(qualification.get("evidence_asset")) if isinstance(qualification, dict) else ""
     metadata_evidence = _optional_string(metadata.get("qualifiedBetaEvidence"))
     required = phase in {"beta", "stable"}
-    valid = manifest_id == release_id and manifest_sha == tag_sha and (not required or bool(evidence))
+    legacy_degraded = metadata.get("_legacy_degraded") is True
+    valid = manifest_id == release_id and manifest_sha == tag_sha and (not required or bool(evidence) or legacy_degraded)
     if metadata_evidence and evidence and metadata_evidence != evidence:
         valid = False
     raw_plus_lookup = manifest_id == release_id.replace("+", " ")
@@ -213,11 +275,13 @@ def _manifest_surface(snapshot: dict[str, object], release_id: str, tag_sha: str
         repair = "Read the Firestore manifest through a URL-encoded release ID, then repair the manifest or pointer without changing the release tag."
     return _surface(
         "canonical_manifest",
-        "PASS" if valid else "FAIL",
-        "aligned" if valid else "reversible_drift",
+        "WARN" if legacy_degraded and valid else "PASS" if valid else "FAIL",
+        "legacy_degraded" if legacy_degraded and valid else "aligned" if valid else "reversible_drift",
         {**expected, "qualification_evidence": metadata_evidence or None},
         {"release_id": manifest_id or None, "source_sha": manifest_sha or None, "qualification_evidence": evidence or None},
-        message,
+        "Legacy manifest is explicitly degraded because it predates four-asset qualification evidence."
+        if legacy_degraded and valid
+        else message,
         repair,
     )
 

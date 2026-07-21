@@ -89,7 +89,7 @@ jobs:
           test "$(jq -r .head_repository.full_name <<<"$run")" = "$REPO"
           test "$(jq -r .event <<<"$run")" = workflow_dispatch
           test "$(jq -r .path <<<"$run")" = .github/workflows/desktop_qualify_beta.yml
-          test "$(jq -r .head_branch <<<"$run")" = main
+          test "$(jq -r .head_branch <<<"$run")" = "$RELEASE_TAG"
           test "$(jq -r .name <<<"$run")" = 'Qualify Desktop Beta Candidate'
           test "$(jq -r .head_sha <<<"$run")" = "$TARGET_SHA"
       - name: Google Auth
@@ -236,4 +236,11 @@ jobs:
           PY
           curl -fsS 'https://api.omi.me/v2/desktop/appcast.xml?identity=stable' > /tmp/stable-appcast.xml
           python3 .github/scripts/verify_stable_appcast.py --manifest /tmp/desktop-release-manifest.json --feed /tmp/stable-appcast.xml
-          echo "Stable pointer, exact manifest hashes, and appcast verified for $RELEASE_TAG." >> "$GITHUB_STEP_SUMMARY"
+          gcloud storage cat "$GCS_DESKTOP_UPDATES_BUCKET/stable/latest.json" > /tmp/published-stable-latest.json
+          gcloud storage cat "$GCS_DESKTOP_UPDATES_BUCKET/stable/index.html" > /tmp/published-stable-index.html
+          python3 .github/scripts/verify_stable_static_artifacts.py \
+            --manifest /tmp/desktop-release-manifest.json \
+            --latest /tmp/published-stable-latest.json \
+            --index /tmp/published-stable-index.html \
+            --bucket "$GCS_DESKTOP_UPDATES_BUCKET"
+          echo "Stable pointer, exact manifest hashes, appcast, and published static artifacts verified for $RELEASE_TAG." >> "$GITHUB_STEP_SUMMARY"

@@ -16,8 +16,8 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   var id: String { rawValue }
 
-  /// Base of the hosted Omi API for this build — stable channel hits prod
-  /// (api.omi.me), beta hits dev (api.omiapi.com). Always ends with "/".
+  /// Base of the hosted Omi API for this build — Stable and Omi Beta are both
+  /// production-family clients of api.omi.me. Always ends with "/".
   static var mcpBaseURL: String {
     DesktopBackendEnvironment.pythonBaseURL()
   }

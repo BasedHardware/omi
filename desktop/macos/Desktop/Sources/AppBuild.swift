@@ -7,6 +7,8 @@ enum AppBuild {
   /// it runs side-by-side with stable. Must stay in sync with
   /// `DesktopStorageIdentity.betaProductionBundleIdentifier` (asserted by a unit test).
   static let betaProductionBundleIdentifier = "com.omi.computer-macos.beta"
+  /// Stable and Omi Beta use distinct bundle identities but share the same
+  /// production backend family.
   static let productionFamilyBundleIdentifiers: Set<String> = [
     productionBundleIdentifier, betaProductionBundleIdentifier,
   ]

@@ -21,6 +21,41 @@ DIAGNOSTIC = "ERROR: checked-out HEAD $CHECKED_OUT_SHA is not an ancestor of fre
 PERSISTED_IMAGE_IDENTITY = 'echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"'
 
 
+def _has_unadmitted_persistent_image_write(text: str) -> bool:
+    """Reject IMAGE_TAG writes to GITHUB_ENV across complete shell run blocks.
+
+    YAML literal blocks can split a printf/redirection across lines and heredocs
+    put the assignment after the redirection. Search both directions after
+    removing the one exact admitted persistence command.
+    """
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        match = re.match(r"^(?P<indent>\s*)run:\s*(?P<command>.*)$", line)
+        if not match:
+            continue
+        command = match.group("command")
+        if command in {"|", ">", "|-", ">-"}:
+            indent = len(match.group("indent"))
+            block: list[str] = []
+            for body_line in lines[index + 1 :]:
+                if body_line.strip() and len(body_line) - len(body_line.lstrip()) <= indent:
+                    break
+                block.append(body_line)
+            command = "\n".join(block)
+        residual = command.replace(PERSISTED_IMAGE_IDENTITY, "")
+        direct_write = re.search(
+            r"(?m)(?:(?:echo|printf)\b[^\n]*\bIMAGE_TAG\s*=[^\n]*(?:\\\s*\n[^\n]*)*|\bIMAGE_TAG\s*=[^\n]*)>>\s*['\"]?\$GITHUB_ENV['\"]?",
+            residual,
+        )
+        heredoc_write = re.search(
+            r"(?s)(?:cat|tee)\b.*?(?:>>|>)\s*['\"]?\$GITHUB_ENV['\"]?.*?<<.*?\n.*?\bIMAGE_TAG\s*=",
+            residual,
+        )
+        if direct_write or heredoc_write:
+            return True
+    return False
+
+
 def validate(root: Path) -> list[str]:
     errors: list[str] = []
     for relative in WORKFLOWS:
@@ -40,10 +75,6 @@ def validate(root: Path) -> list[str]:
             errors.append(f"{relative} must not check out a second source after production admission")
         if text.count(HEAD_IDENTITY) != 1:
             errors.append(f"{relative} must establish checked-out source identity exactly once")
-        persistent_image_writes = [
-            line.strip()
-            for line in re.findall(r"(?m)^[^\n]*\bIMAGE_TAG=[^\n]*>>\s*[\"']?\$GITHUB_ENV[\"']?[^\n]*$", text)
-        ]
         image_authorities = []
         for line in text.splitlines():
             assignment = re.match(r"^\s*(?:run:\s+)?IMAGE_TAG=(.*)$", line)
@@ -52,7 +83,8 @@ def validate(root: Path) -> list[str]:
         if (
             text.count(IMAGE_IDENTITY) != 1
             or image_authorities != [IMAGE_IDENTITY]
-            or persistent_image_writes != [PERSISTED_IMAGE_IDENTITY]
+            or text.count(PERSISTED_IMAGE_IDENTITY) != 1
+            or _has_unadmitted_persistent_image_write(text)
         ):
             errors.append(f"{relative} must establish its immutable image tag exactly once from checked-out HEAD")
     return errors

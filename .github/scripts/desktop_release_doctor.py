@@ -68,6 +68,8 @@ def _metadata_from_release_body(body: object) -> tuple[dict[str, str], bool]:
         "qualifiedBetaSha",
         "qualifiedBetaTier",
         "qualifiedBetaEvidence",
+        "edSignature",
+        "betaEdSignature",
     )
     public_metadata = {key: metadata[key] for key in safe_keys if key in metadata}
     human_prose = PRIVATE_KEY_VALUE_BLOCK_RE.sub("", body)
@@ -178,15 +180,22 @@ def _project_release_summary(release: object) -> dict[str, object]:
         return _unavailable("GitHub release response was not an object")
     metadata, stale_human_prose = _metadata_from_release_body(release.get("body"))
     assets = release.get("assets", [])
-    asset_names = [
-        asset.get("name") for asset in assets if isinstance(asset, dict) and isinstance(asset.get("name"), str)
-    ]
+    asset_identities = {
+        asset["name"]: {
+            key: asset[key]
+            for key in ("url", "browser_download_url", "digest")
+            if isinstance(asset.get(key), str)
+        }
+        for asset in assets
+        if isinstance(asset, dict) and isinstance(asset.get("name"), str)
+    }
     return {
         "tag_name": _optional_string(release.get("tagName")),
         "is_draft": release.get("isDraft") is True,
         "is_prerelease": release.get("isPrerelease") is True,
         "metadata": metadata,
-        "asset_names": asset_names,
+        "asset_names": sorted(asset_identities),
+        "asset_identities": asset_identities,
         "stale_human_prose": stale_human_prose,
     }
 
@@ -289,7 +298,15 @@ def collect_snapshot(
                 "build_number",
                 "source_sha",
                 "zip_sha256",
+                "zip_url",
                 "dmg_sha256",
+                "dmg_url",
+                "beta_zip_sha256",
+                "beta_zip_url",
+                "beta_dmg_sha256",
+                "beta_dmg_url",
+                "ed_signature",
+                "beta_ed_signature",
                 "qualification",
             ),
         ),

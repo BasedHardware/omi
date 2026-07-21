@@ -49,12 +49,35 @@ def healthy_snapshot(*, phase: str = "beta") -> dict[str, object]:
                 "isLive": "true",
                 "qualifiedBetaEvidence": "qualification-evidence-0.12.72+12072.json",
             },
-            "asset_names": ["Omi.zip", "omi.dmg", "qualification-evidence-0.12.72+12072.json"],
+            "asset_names": ["Omi.zip", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg", "qualification-evidence-0.12.72+12072.json"],
+            "asset_identities": {
+                "Omi.zip": {"url": f"https://example.test/{RELEASE_ID}/Omi.zip", "sha256": "1" * 64},
+                "omi.dmg": {"url": f"https://example.test/{RELEASE_ID}/omi.dmg", "sha256": "2" * 64},
+                "Omi.Beta.zip": {"url": f"https://example.test/{RELEASE_ID}/Omi.Beta.zip", "sha256": "3" * 64},
+                "omi-beta.dmg": {"url": f"https://example.test/{RELEASE_ID}/omi-beta.dmg", "sha256": "4" * 64},
+            },
+            "metadata": {
+                "channel": phase,
+                "isLive": "true",
+                "qualifiedBetaEvidence": "qualification-evidence-0.12.72+12072.json",
+                "edSignature": "stable-signature",
+                "betaEdSignature": "beta-signature",
+            },
             "stale_human_prose": False,
         },
         "manifest": {
             "release_id": RELEASE_ID,
             "source_sha": SOURCE_SHA,
+            "zip_url": f"https://example.test/{RELEASE_ID}/Omi.zip",
+            "zip_sha256": "1" * 64,
+            "dmg_url": f"https://example.test/{RELEASE_ID}/omi.dmg",
+            "dmg_sha256": "2" * 64,
+            "beta_zip_url": f"https://example.test/{RELEASE_ID}/Omi.Beta.zip",
+            "beta_zip_sha256": "3" * 64,
+            "beta_dmg_url": f"https://example.test/{RELEASE_ID}/omi-beta.dmg",
+            "beta_dmg_sha256": "4" * 64,
+            "ed_signature": "stable-signature",
+            "beta_ed_signature": "beta-signature",
             "qualification": {"evidence_asset": "qualification-evidence-0.12.72+12072.json"},
         },
         "pointers": {"beta": pointer, "stable": pointer if phase == "stable" else {"release_id": "v0.12.71+12071-macos"}},
@@ -90,6 +113,42 @@ class DesktopReleaseDoctorTests(unittest.TestCase):
         self.assertEqual(report["overall"], "FAIL")
         self.assertEqual(prose["status"], "FAIL")
         self.assertEqual(prose["classification"], "reversible_drift")
+
+    def test_candidate_missing_any_of_the_four_installers_never_qualifies(self) -> None:
+        snapshot = healthy_snapshot(phase="candidate")
+        snapshot["github_release"]["asset_names"].remove("omi-beta.dmg")
+        snapshot["github_release"]["asset_identities"].pop("omi-beta.dmg")
+        report = doctor.evaluate_snapshot(snapshot)
+        release = surface(report, "github_release")
+        self.assertEqual(report["overall"], "FAIL")
+        self.assertEqual(release["status"], "FAIL")
+        self.assertIn("omi-beta.dmg", release["actual"]["missing_assets"])
+
+    def test_asset_url_hash_or_signature_drift_never_reports_aligned(self) -> None:
+        snapshot = healthy_snapshot()
+        snapshot["github_release"]["asset_identities"]["Omi.Beta.zip"]["sha256"] = "f" * 64
+        snapshot["github_release"]["metadata"]["betaEdSignature"] = "different-signature"
+        report = doctor.evaluate_snapshot(snapshot)
+        release = surface(report, "github_release")
+        self.assertEqual(report["overall"], "FAIL")
+        self.assertEqual(release["classification"], "customer_visible_split")
+        self.assertIn("Omi.Beta.zip", release["actual"]["drifted_assets"])
+
+    def test_live_legacy_record_is_explicitly_degraded_not_a_qualified_pass(self) -> None:
+        snapshot = healthy_snapshot(phase="stable")
+        snapshot["github_release"]["asset_names"] = ["Omi.zip", "omi.dmg"]
+        snapshot["github_release"]["asset_identities"] = {
+            key: value
+            for key, value in snapshot["github_release"]["asset_identities"].items()
+            if key in {"Omi.zip", "omi.dmg"}
+        }
+        snapshot["github_release"]["metadata"]["qualifiedBetaEvidence"] = ""
+        snapshot["manifest"]["qualification"] = {}
+        report = doctor.evaluate_snapshot(snapshot)
+        release = surface(report, "github_release")
+        self.assertEqual(report["overall"], "WARN")
+        self.assertEqual(release["status"], "WARN")
+        self.assertEqual(release["classification"], "legacy_degraded")
 
     def test_plus_tag_pointer_mismatch_fails_with_repair_direction(self) -> None:
         snapshot = healthy_snapshot()

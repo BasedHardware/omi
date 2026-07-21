@@ -2925,6 +2925,7 @@ workflows:
           # duplicate dispatches; this bounded retry only handles dispatch I/O.
           for attempt in 1 2 3; do
             if gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
+              --ref "$CM_TAG" \
               -f release_tag="$CM_TAG"; then
               echo "Trusted qualification dispatch accepted for $CM_TAG on attempt $attempt."
               exit 0

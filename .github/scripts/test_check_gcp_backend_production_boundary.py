@@ -56,6 +56,23 @@ class GcpBackendProductionBoundaryTests(unittest.TestCase):
                 workflow.write_text(original.replace(expected, replacement, 1), encoding="utf-8")
                 self.assertTrue(CHECKER.validate(root))
 
+    def test_rejects_side_effects_before_the_prod_all_rejection(self) -> None:
+        original = (ROOT / ".github/workflows/gcp_backend.yml").read_text(encoding="utf-8")
+        marker = "      - name: Reject unsupported production deployment boundary before side effects\n"
+        mutations = {
+            "checkout": "      - uses: actions/checkout@v7\n",
+            "google_auth": "      - uses: google-github-actions/auth@v3\n",
+            "shell_mutation": "      - run: gcloud run services update unsafe --region us-central1\n",
+        }
+        for name, mutation in mutations.items():
+            with self.subTest(mutation=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                workflow = root / ".github/workflows/gcp_backend.yml"
+                workflow.parent.mkdir(parents=True)
+                self.assertIn(marker, original)
+                workflow.write_text(original.replace(marker, mutation + marker, 1), encoding="utf-8")
+                self.assertTrue(CHECKER.validate(root))
+
 
 if __name__ == "__main__":
     unittest.main()

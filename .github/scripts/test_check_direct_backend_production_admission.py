@@ -70,6 +70,34 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
                     target.write_text(target.read_text(encoding="utf-8") + "\n" + mutation, encoding="utf-8")
                     self.assertTrue(CHECKER.validate(root))
 
+    def test_rejects_multiline_and_heredoc_persistent_image_overrides(self) -> None:
+        mutations = (
+            """      - name: multiline image override
+        run: |
+          printf 'IMAGE_TAG=latest\\n' \\
+            >> \"$GITHUB_ENV\"
+""",
+            """      - name: heredoc image override
+        run: |
+          cat >> \"$GITHUB_ENV\" <<'EOF'
+          IMAGE_TAG=latest
+          EOF
+""",
+        )
+        for relative in CHECKER.WORKFLOWS:
+            for mutation in mutations:
+                with self.subTest(workflow=relative, mutation=mutation.splitlines()[0].strip()):
+                    with tempfile.TemporaryDirectory() as directory:
+                        root = Path(directory)
+                        for fixture_relative in CHECKER.WORKFLOWS:
+                            source = ROOT / fixture_relative
+                            target = root / fixture_relative
+                            target.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(source, target)
+                        target = root / relative
+                        target.write_text(target.read_text(encoding="utf-8") + "\n" + mutation, encoding="utf-8")
+                        self.assertTrue(CHECKER.validate(root))
+
 
 if __name__ == "__main__":
     unittest.main()

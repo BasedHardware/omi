@@ -28,12 +28,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout qualification controls
+      - name: Checkout exact qualification event source
         uses: actions/checkout@v7
         with:
-          # Manual workflow dispatch permits choosing a ref. Never execute
-          # branch-controlled scripts on this privileged self-hosted runner.
-          ref: main
+          # Codemagic dispatches this workflow only at the validated candidate
+          # tag. Pin the checkout to GitHub's immutable event SHA so neither a
+          # later main commit nor a mutable local tag ref can alter the bytes
+          # that qualification rebuilds.
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Generate Omi Bot token
@@ -49,6 +51,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           REPO: ${{ github.repository }}
+          EVENT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           if ! printf '%s\n' "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+-macos$'; then
@@ -70,7 +73,8 @@ jobs:
           LATEST_TAG=$(git for-each-ref --count=1 --sort=-v:refname --format='%(refname:strip=2)' 'refs/tags/v*-macos')
           test -n "$LATEST_TAG"
           TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
-          CHECKOUT_SHA=$(git rev-parse "$RELEASE_TAG")
+          CHECKOUT_SHA=$(git rev-parse HEAD)
+          test "$CHECKOUT_SHA" = "$EVENT_SHA"
           rm -rf /tmp/desktop-beta-qualification
           mkdir -p /tmp/desktop-beta-qualification
           gh release view "$RELEASE_TAG" --repo "$REPO" \
