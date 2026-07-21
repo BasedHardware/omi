@@ -126,6 +126,14 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn('test "$STATIC_RESULT" = success', gate)
         self.assertIn('test "$TEST_RESULT" = success', gate)
 
+    def test_launcher_contract_prerequisites_are_installed(self):
+        """Discovered shell tests may use the repository's pinned workflow linter."""
+        job = self.jobs["desktop-swift-tests"]
+        install_index = job.index("brew install")
+        launcher_index = job.index("Desktop launcher script tests")
+        self.assertLess(install_index, launcher_index)
+        self.assertRegex(job[install_index:launcher_index], r"brew install[^\n]*\bactionlint\b")
+
     def test_canonical_runner_fails_closed_on_the_pinned_toolchain(self):
         runner = _runner_text()
 
