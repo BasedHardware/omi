@@ -118,6 +118,7 @@ import XCTest
       let trail = try XCTUnwrap(
         snapshots.first(where: { $0["event"] as? String == "beta_diagnostic_trail" }))
 
+      XCTAssertNil(root["redacted_log_tail"])
       XCTAssertEqual(trail["component"] as? String, "chat")
       XCTAssertEqual(trail["failure_class"] as? String, "timeout")
       XCTAssertEqual(trail["error_domain"] as? String, "url")
@@ -146,6 +147,28 @@ import XCTest
       XCTAssertFalse(snapshots.contains { $0["event"] as? String == "beta_diagnostic_trail" })
     }
 
+    func testBetaTrailIsBoundedIndependentlyFromIncidentSnapshots() throws {
+      for _ in 0..<55 {
+        DesktopDiagnosticsManager.shared.recordBetaLogError(
+          message: "Chat bridge timed out",
+          error: NSError(domain: NSURLErrorDomain, code: NSURLErrorTimedOut),
+          enabled: true)
+      }
+
+      let url = try XCTUnwrap(
+        DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
+          area: "chat",
+          failureClass: "timeout",
+          phase: "query",
+          includeBetaDiagnostics: true))
+      defer { try? FileManager.default.removeItem(at: url) }
+
+      let data = try Data(contentsOf: url)
+      let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+      let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+      let betaTrail = snapshots.filter { $0["event"] as? String == "beta_diagnostic_trail" }
+      XCTAssertEqual(betaTrail.count, 50)
+    }
     func testPTTSilentTurnCreatesUserVisibleIssueSnapshot() throws {
       DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
         source: "hub",

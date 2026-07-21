@@ -62,7 +62,9 @@ final class DesktopDiagnosticsManager {
 
   private let lock = NSLock()
   private var snapshots: [DesktopHealthSnapshot] = []
+  private var betaTrailSnapshots: [DesktopHealthSnapshot] = []
   private let snapshotLimit = 150
+  private let betaTrailSnapshotLimit = 50
   private var consecutiveNearZeroPTTTurns = 0
   private var lastPTTWatchdogIncidentAt: Date?
   private var lastUserVisibleSentryIncidentAt: [String: Date] = [:]
@@ -368,18 +370,26 @@ final class DesktopDiagnosticsManager {
   ) {
     guard enabled else { return }
     let nsError = error as NSError?
-    record(
-      .betaDiagnosticTrail,
-      properties: [
-        "component": betaComponent(for: message),
-        "operation": "error",
-        "phase": "handling",
-        "outcome": "failed",
-        "failure_class": betaFailureClass(for: nsError),
-        "error_domain": betaErrorDomain(nsError?.domain),
-        "error_code": betaErrorCode(nsError?.code),
-      ],
-      trackRemotely: false)
+    let snapshot = DesktopHealthSnapshot(
+      timestamp: Date(),
+      event: .betaDiagnosticTrail,
+      properties: commonProperties().merging(
+        sanitized([
+          "component": betaComponent(for: message),
+          "operation": "error",
+          "phase": "handling",
+          "outcome": "failed",
+          "failure_class": betaFailureClass(for: nsError),
+          "error_domain": betaErrorDomain(nsError?.domain),
+          "error_code": betaErrorCode(nsError?.code),
+        ])
+      ) { _, new in new })
+    lock.lock()
+    betaTrailSnapshots.append(snapshot)
+    if betaTrailSnapshots.count > betaTrailSnapshotLimit {
+      betaTrailSnapshots.removeFirst(betaTrailSnapshots.count - betaTrailSnapshotLimit)
+    }
+    lock.unlock()
   }
 
   func recordVoiceTurnStarted(turnID: String, intent: String) {
@@ -584,9 +594,12 @@ final class DesktopDiagnosticsManager {
     includeBetaDiagnostics: Bool = BetaEnhancedDiagnosticsConfiguration.isEnabled
   ) -> [[String: Any]] {
     lock.lock()
-    let current = snapshots.compactMap { snapshot -> [String: Any]? in
-      guard includeBetaDiagnostics || snapshot.event != .betaDiagnosticTrail else { return nil }
-      return cloudSafeSnapshot(snapshot, includeBetaDiagnostics: includeBetaDiagnostics)
+    var current = snapshots.map { cloudSafeSnapshot($0, includeBetaDiagnostics: includeBetaDiagnostics) }
+    if includeBetaDiagnostics {
+      current.append(
+        contentsOf: betaTrailSnapshots.map {
+          cloudSafeSnapshot($0, includeBetaDiagnostics: true)
+        })
     }
     lock.unlock()
     return current
@@ -655,16 +668,20 @@ final class DesktopDiagnosticsManager {
       area: area,
       failureClass: failureClass,
       phase: phase)
-    let payload: [String: Any] = [
+    var payload: [String: Any] = [
       "generated_at": ISO8601DateFormatter.desktopDiagnostics.string(from: Date()),
       "privacy": "redacted_incident_context",
       "incident": incident,
       "snapshots": currentCloudSnapshotsForSentry(includeBetaDiagnostics: includeBetaDiagnostics),
-      "redacted_log_tail": redactedLogTail(
+    ]
+    // Beta uploads the independently assembled typed trail only. The free-form
+    // local-log tail remains available exclusively to the existing non-beta path.
+    if !includeBetaDiagnostics {
+      payload["redacted_log_tail"] = redactedLogTail(
         logPath: logPath,
         maxLines: maxLogLines,
-        strictCloudRedaction: true),
-    ]
+        strictCloudRedaction: true)
+    }
     return writeDiagnosticsPayload(payload, prefix: "omi-desktop-incident")
   }
 
@@ -827,6 +844,7 @@ final class DesktopDiagnosticsManager {
     func resetForTests() {
       lock.lock()
       snapshots.removeAll()
+      betaTrailSnapshots.removeAll()
       consecutiveNearZeroPTTTurns = 0
       lastPTTWatchdogIncidentAt = nil
       lastUserVisibleSentryIncidentAt.removeAll()
