@@ -462,9 +462,10 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
 
   /// Tells Sparkle which non-default channels this client wants to see.
   /// Channels are additive: the default (stable) channel is always included.
+  /// Reads `AppBuild.currentUpdateChannel` so the Omi Beta identity stays pinned
+  /// to the beta channel no matter what the defaults key says.
   func allowedChannels(for updater: SPUUpdater) -> Set<String> {
-    let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-    if raw == "beta" || raw == "staging" {
+    if AppBuild.currentUpdateChannel == "beta" {
       return Set(["beta"])
     }
     return Set()  // empty = default (stable) channel only

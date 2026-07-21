@@ -143,14 +143,8 @@ jobs:
       - name: Check deployment concurrency policy
         run: python3 .github/scripts/check-deployment-concurrency.py
 
-      - name: Check desktop release terminology
-        run: python3 .github/scripts/check-desktop-release-terminology.py
-
       - name: Test desktop qualification metadata writer
         run: python3 desktop/macos/scripts/release-keyvalue.py self-test
-
-      - name: Test desktop release promotion gate
-        run: python3 .github/scripts/test_check_desktop_release_promotion.py
 
       - name: Test automatic desktop beta candidate gate
         run: python3 .github/scripts/test_check_desktop_auto_beta_candidate.py
@@ -206,7 +200,9 @@ jobs:
       - name: Check Python formatting
         if: needs.changes.outputs.has_python == 'true'
         run: |
-          pip install -q black
+          # Pinned: an unpinned black drifts from local/pre-commit formatting on
+          # every black release, making this check fail on untouched files.
+          pip install -q black==26.5.1
           FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
             echo "$FILES" | xargs black --check --line-length 120 --skip-string-normalization

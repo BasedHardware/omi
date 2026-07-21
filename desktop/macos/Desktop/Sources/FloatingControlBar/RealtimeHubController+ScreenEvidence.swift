@@ -186,10 +186,10 @@ extension RealtimeHubController {
   ) {
     if case .rejected = screenGroundingState { return }
     guard let token = screenGroundingState.protocolToken else { return }
-    // The screenshot tool already returns a structured `permission_required`
-    // result for this case. Let the provider turn that into its normal spoken
+    // The screenshot tool already returns a structured recoverable result for
+    // unavailable evidence. Let the provider turn that into its normal spoken
     // answer; taking over with the one-shot fallback produces the robotic
-    // system voice and contradicts that recoverable tool contract.
+    // system voice and can consume an otherwise healthy PTT turn.
     if reason == "capture_unavailable",
       RealtimeScreenGroundingPolicy.failureDisposition(for: evidence) == .providerContinuation
     {

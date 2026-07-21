@@ -52,7 +52,7 @@ from database.users import (
     resolve_legacy_deletion_wipe_uid,
     set_user_transcription_preferences,
 )
-from utils.stt.streaming import deepgram_nova3_multi_languages
+from config.stt_provider_policy import supports_live_multilingual_mode
 from database.users import *
 from models.conversation import Conversation
 from models.geolocation import Geolocation
@@ -824,7 +824,7 @@ def set_user_language(data: SetUserLanguageRequest, uid: str = Depends(auth.get_
     if not language:
         raise HTTPException(status_code=400, detail="Language is required")
     set_user_language_preference(uid, language)
-    single_language_mode = language not in deepgram_nova3_multi_languages
+    single_language_mode = not supports_live_multilingual_mode(language)
     set_user_transcription_preferences(uid, single_language_mode=single_language_mode)
     return {'status': 'ok', 'single_language_mode': single_language_mode}
 

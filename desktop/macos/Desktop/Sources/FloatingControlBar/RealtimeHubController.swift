@@ -102,6 +102,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   var legacyVoiceJournalImportTask: Task<Void, Never>?
   var legacyVoiceJournalImportedOwners = Set<String>()
   var deferredSessionRefreshTask: Task<Void, Never>?
+  /// Coalesces idle voice-context updates while chat is still streaming. A
+  /// real PTT press bypasses this delay and preserves its captured audio.
+  var idleVoiceContextRefreshTask: Task<Void, Never>?
   var canceledTurnRewarmTask: Task<Void, Never>?
   var bargeInContinuityTask: Task<Void, Never>?
   var bargeInReplacementGeneration: UInt64 = 0

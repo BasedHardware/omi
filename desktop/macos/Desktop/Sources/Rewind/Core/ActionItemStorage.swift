@@ -553,11 +553,12 @@ actor ActionItemStorage {
     try authorization.require()
     let db = try await ensureInitialized()
 
-    let (skipped, adopted) = try await authorization.withCommitLease {
-      try await db.write { database -> (Int, Int) in
+    let (skipped, adopted, visibilityChanged) = try await authorization.withCommitLease {
+      try await db.write { database -> (Int, Int, Bool) in
         try authorization.require()
         var skipped = 0
         var adopted = 0
+        var visibilityChanged = false
         for item in items {
           if var existingRecord =
             try ActionItemRecord
@@ -577,7 +578,10 @@ actor ActionItemStorage {
               skipped += 1
               continue
             }
+            let wasVisible = !existingRecord.completed && !existingRecord.deleted
             existingRecord.updateFrom(item)
+            visibilityChanged =
+              visibilityChanged || wasVisible != (!existingRecord.completed && !existingRecord.deleted)
             try existingRecord.update(database)
           } else if var orphan =
             try ActionItemRecord
@@ -594,9 +598,11 @@ actor ActionItemStorage {
             // and a stricter match here causes the orphan to never be adopted,
             // leaving the manual unsynced and producing a duplicate row on every
             // pull that returns the same task.
+            let wasVisible = !orphan.completed && !orphan.deleted
             orphan.backendId = item.id
             orphan.backendSynced = true
             orphan.updateFrom(item)
+            visibilityChanged = visibilityChanged || wasVisible != (!orphan.completed && !orphan.deleted)
             try orphan.update(database)
             adopted += 1
           } else {
@@ -613,20 +619,28 @@ actor ActionItemStorage {
               newRecord.relevanceScore = maxScore + 1
               newRecord.scoredAt = Date()
             }
+            if !newRecord.completed && !newRecord.deleted {
+              visibilityChanged = true
+            }
             try newRecord.insert(database)
           }
         }
         try authorization.require()
-        return (skipped, adopted)
+        return (skipped, adopted, visibilityChanged)
       }
     }
 
+    let message: String
     if skipped > 0 || adopted > 0 {
-      log(
+      message =
         "ActionItemStorage: Synced \(items.count) task action items from backend (skipped \(skipped) newer local, adopted \(adopted) orphans)"
-      )
     } else {
-      log("ActionItemStorage: Synced \(items.count) task action items from backend")
+      message = "ActionItemStorage: Synced \(items.count) task action items from backend"
+    }
+    if visibilityChanged {
+      HomeKnowledgeCountInvalidation.post(logMessage: message)
+    } else {
+      log(message)
     }
   }
 
@@ -698,7 +712,9 @@ actor ActionItemStorage {
     }
 
     if reconciled > 0 {
-      log("ActionItemStorage: Reconciled \(reconciled) dashboard visibility fields from backend")
+      HomeKnowledgeCountInvalidation.post(
+        logMessage: "ActionItemStorage: Reconciled \(reconciled) dashboard visibility fields from backend"
+      )
     }
     return reconciled
   }
@@ -743,7 +759,9 @@ actor ActionItemStorage {
     }
 
     if deleted > 0 {
-      log("ActionItemStorage: Hard-deleted \(deleted) absent tasks during full sync")
+      HomeKnowledgeCountInvalidation.post(
+        logMessage: "ActionItemStorage: Hard-deleted \(deleted) absent tasks during full sync"
+      )
     }
   }
 
@@ -796,7 +814,7 @@ actor ActionItemStorage {
     }
 
     if deleted > 0 {
-      log("ActionItemStorage: hard-deleted \(deleted) absent tasks")
+      HomeKnowledgeCountInvalidation.post(logMessage: "ActionItemStorage: hard-deleted \(deleted) absent tasks")
     }
 
     return deleted
@@ -833,7 +851,8 @@ actor ActionItemStorage {
       }
     }
 
-    log("ActionItemStorage: Hard deleted action item with backendId \(backendId)")
+    HomeKnowledgeCountInvalidation.post(
+      logMessage: "ActionItemStorage: Hard deleted action item with backendId \(backendId)")
   }
 
   // MARK: - Local Extraction Operations
@@ -880,7 +899,8 @@ actor ActionItemStorage {
         }
       }
     }
-    log("ActionItemStorage: Inserted local action item (id: \(inserted.id ?? -1))")
+    HomeKnowledgeCountInvalidation.post(
+      logMessage: "ActionItemStorage: Inserted local action item (id: \(inserted.id ?? -1))")
     return inserted
   }
 
@@ -983,7 +1003,8 @@ actor ActionItemStorage {
       }
     }
 
-    log("ActionItemStorage: Locally set completed=\(completed) for \(backendId)")
+    HomeKnowledgeCountInvalidation.post(
+      logMessage: "ActionItemStorage: Locally set completed=\(completed) for \(backendId)")
   }
 
   /// Optimistically update task fields locally (before API call)
@@ -1115,7 +1136,8 @@ actor ActionItemStorage {
       }
     }
 
-    log("ActionItemStorage: Hard-deleted action item with backendId \(backendId)")
+    HomeKnowledgeCountInvalidation.post(
+      logMessage: "ActionItemStorage: Hard-deleted action item with backendId \(backendId)")
   }
 
   // MARK: - FTS5 Search & Context Methods

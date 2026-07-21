@@ -32,10 +32,11 @@ SH
 exercise_fault_suite_launch_command() {
   local fixture="$TMP_ROOT/fault-suite"
   local bin_dir="$TMP_ROOT/fault-suite-bin"
-  local bridge_port fault_port capture output
+  local bridge_port fault_port capture ready_capture output
   bridge_port="47791"
   fault_port="19081"
   capture="$fixture/fault-run.env"
+  ready_capture="$fixture/fault-ready.env"
   output="$fixture/fault-suite.out"
 
   mkdir -p "$fixture/scripts" "$fixture/e2e/flows"
@@ -66,6 +67,15 @@ esac
 SH
   chmod +x "$fixture/scripts/omi-fault-inject.sh"
 
+  cat >"$fixture/scripts/omi-ctl" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ "${1:-}" == "wait-ready" && "${2:-}" == "90" ]]
+printf '%s\n' "OMI_AUTOMATION_PORT=${OMI_AUTOMATION_PORT:?}" >"${OMI_FAULT_READY_CAPTURE:?}"
+SH
+  chmod +x "$fixture/scripts/omi-ctl"
+
   cat >"$fixture/run.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -86,13 +96,14 @@ SH
   PATH="$bin_dir:$PATH" \
     OMI_FAULT_TEST_PORT="$fault_port" \
     OMI_FAULT_ENV_CAPTURE="$capture" \
+    OMI_FAULT_READY_CAPTURE="$ready_capture" \
     "$fixture/scripts/desktop-core-harness.sh" --fault-suite --port "$bridge_port" >"$output" 2>&1 \
     || {
       cat "$output" >&2
       fail "fault suite fixture did not complete"
     }
 
-  python3 - "$capture" "$bridge_port" "$fault_port" <<'PY'
+  python3 - "$capture" "$ready_capture" "$bridge_port" "$fault_port" <<'PY'
 import sys
 
 captured = {}
@@ -100,10 +111,25 @@ for line in open(sys.argv[1], encoding="utf-8"):
     key, value = line.rstrip("\n").split("=", 1)
     captured[key] = value
 
-fault_url = f"http://127.0.0.1:{sys.argv[3]}"
+fault_url = f"http://127.0.0.1:{sys.argv[4]}"
 expected = {
     "OMI_APP_NAME": "omi-fault",
-    "OMI_AUTOMATION_PORT": sys.argv[2],
+    "OMI_AUTOMATION_PORT": sys.argv[3],
+    "OMI_DESKTOP_LOCAL_PROFILE": "1",
+    "OMI_HARNESS_INSTANCE": "fault-suite",
+    "OMI_SKIP_AUTH_SEED": "1",
+    "OMI_SKIP_SETTINGS_SEED": "1",
+    "OMI_LOCAL_PROFILE_STORAGE_NAME": "omi-fault",
+    "OMI_LOCAL_AUTH_USER": "alice",
+    "OMI_LOCAL_AUTH_EMAIL": "alice@local.omi.invalid",
+    "OMI_LOCAL_AUTH_PASSWORD": "alice-local-password-030",
+    "OMI_LOCAL_AUTH_DISPLAY_NAME": "Synthetic Alice",
+    "FIREBASE_AUTH_EMULATOR_HOST": "127.0.0.1:9099",
+    "FIREBASE_PROJECT_ID": "demo-omi-local",
+    "FIREBASE_AUTH_PROJECT_ID": "demo-omi-local",
+    "FIRESTORE_DATABASE_ID": "(default)",
+    "FIREBASE_API_KEY": "local-firebase-auth-emulator-api-key",
+    "OMI_ALLOW_ADHOC_SIGN": "1",
     "OMI_SKIP_BACKEND": "1",
     "OMI_SKIP_TUNNEL": "1",
     "OMI_PYTHON_API_URL": fault_url,
@@ -113,6 +139,9 @@ expected = {
 }
 for key, value in expected.items():
     assert captured.get(key) == value, (key, captured.get(key), value)
+
+ready = dict(line.rstrip("\n").split("=", 1) for line in open(sys.argv[2], encoding="utf-8"))
+assert ready.get("OMI_AUTOMATION_PORT") == sys.argv[3], ready
 PY
 }
 

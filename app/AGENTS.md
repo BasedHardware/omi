@@ -5,8 +5,9 @@ Inherits all rules from the root [`../AGENTS.md`](../AGENTS.md). This file adds 
 ## Build Bootstrap
 
 ### Flavors
-- **dev**: `com.friend.ios.dev` — uses `.dev.env`, Firebase project `based-hardware-dev`
-- **prod**: `com.friend.ios` — uses `.prod.env`, Firebase project `based-hardware-prod`
+- **dev**: Android `com.friend.ios.dev`, iOS `com.friend-app-with-wearable.ios12.development` — uses `.dev.env`, Firebase project `based-hardware-dev`
+- **prod**: Android `com.friend.ios`, iOS `com.friend-app-with-wearable.ios12` — uses `.prod.env`, Firebase project `based-hardware-prod`
+- **raybanDat**: camera-capable iOS target with the same iOS development identity; use `scripts/rayban_dat.sh`, which excludes mcumgr only for that transaction and restores the default graph.
 
 ### Generated Files (never edit manually)
 | Generator | Source | Output | Command |

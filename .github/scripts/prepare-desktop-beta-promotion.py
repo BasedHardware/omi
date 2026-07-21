@@ -11,11 +11,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from desktop_release_metadata import (  # noqa: E402
-    desktop_qualification_from_metadata,
     fail,
     parse_metadata,
-    require_desktop_qualification,
 )
+from desktop_qualification_evidence import verify_evidence  # noqa: E402
 
 TAG_RE = re.compile(r"^v(?P<version>\d+\.\d+(?:\.\d+)?)\+(?P<build>\d+)-macos$")
 
@@ -34,8 +33,10 @@ def prepare_manifest(
     zip_sha256: str,
     dmg_sha256: str,
     *,
+    beta_zip_sha256: str,
+    beta_dmg_sha256: str,
+    qualification_evidence: dict,
     allow_stable_channel: bool = False,
-    emergency_evidence: dict | None = None,
 ) -> dict:
     if release.get("tagName") != release_tag:
         fail(f"release tag mismatch: expected {release_tag}, got {release.get('tagName')}")
@@ -61,35 +62,43 @@ def prepare_manifest(
         accepted = "candidate, beta, or stable" if allow_stable_channel else "candidate or beta"
         fail(f"release channel must be {accepted}, got {channel!r}")
 
-    asset_names = {asset.get("name") for asset in release.get("assets", []) if asset.get("name")}
-    qualification = desktop_qualification_from_metadata(metadata)
-    if emergency_evidence is None:
-        require_desktop_qualification(qualification, target_sha=target_sha, asset_names=asset_names)
-    elif emergency_evidence.get("release_tag") != release_tag or emergency_evidence.get("source_sha") != target_sha:
-        fail("emergency evidence does not bind the requested release tag and source SHA")
-    elif emergency_evidence.get("emergencyPromotion") is not True:
-        fail("emergency evidence must explicitly declare emergencyPromotion")
-
     zip_asset = _asset(release, {"Omi.zip"})
     dmg_asset = _asset(release, {"Omi.dmg", "omi.dmg"})
+    beta_zip_asset = _asset(release, {"Omi.Beta.zip"})
+    beta_dmg_asset = _asset(release, {"omi-beta.dmg"})
     signature = metadata.get("edSignature", "").strip()
-    if not signature:
-        fail("release is missing edSignature")
+    beta_signature = metadata.get("betaEdSignature", "").strip()
+    if not signature or not beta_signature:
+        fail("release is missing stable or beta Sparkle signature")
+    try:
+        verify_evidence(
+            qualification_evidence,
+            release,
+            release_tag,
+            target_sha,
+            {
+                "Omi.zip": zip_sha256,
+                dmg_asset["name"]: dmg_sha256,
+                "Omi.Beta.zip": beta_zip_sha256,
+                "omi-beta.dmg": beta_dmg_sha256,
+            },
+        )
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
 
     changelog = [item.strip() for item in metadata.get("changelog", "").split("|") if item.strip()]
     version = match.group("version")
     build = int(match.group("build"))
-    if emergency_evidence is not None:
-        qualification_manifest = {"passed": False, "tier": "emergency", "emergency_evidence": emergency_evidence}
-    else:
-        qualification_manifest = {"passed": True, "tier": "T2", "evidence_asset": qualification.evidence}
-    if emergency_evidence is None and qualification.source == "legacy":
-        # Preserve the immutable manifest shape used by releases registered
-        # before canonical qualification metadata existed. This keeps exact
-        # beta-promotion retries idempotent.
-        qualification_manifest["blessed_at"] = qualification.qualified_at
-    elif emergency_evidence is None:
-        qualification_manifest["qualified_at"] = qualification.qualified_at
+    qualification_manifest = {
+        "passed": True,
+        "tier": "T2",
+        "source": "trusted_github_actions_artifact",
+        "evidence_asset": metadata.get("qualifiedBetaEvidence")
+        or f"desktop-qualification-evidence-{release_tag}",
+        "source_subject": "source-built named-bundle",
+        "signed_artifact_subject": "exact signed ZIP/DMG bytes",
+        "signed_artifact_checks": ["sha256", "Sparkle signature", "notarization", "signed smoke"],
+    }
 
     return {
         "release_id": release_tag,
@@ -98,13 +107,18 @@ def prepare_manifest(
         "build_number": build,
         "zip_url": zip_asset.get("url"),
         "dmg_url": dmg_asset.get("url"),
+        "beta_zip_url": beta_zip_asset.get("url"),
+        "beta_dmg_url": beta_dmg_asset.get("url"),
         "ed_signature": signature,
+        "beta_ed_signature": beta_signature,
         "published_at": release.get("publishedAt"),
         "changelog": changelog,
         "mandatory": metadata.get("mandatory", "false").lower() in {"true", "1", "yes"},
         "source_sha": target_sha,
         "zip_sha256": zip_sha256,
         "dmg_sha256": dmg_sha256,
+        "beta_zip_sha256": beta_zip_sha256,
+        "beta_dmg_sha256": beta_dmg_sha256,
         "qualification": qualification_manifest,
     }
 
@@ -116,23 +130,25 @@ def main() -> int:
     parser.add_argument("--target-sha", required=True)
     parser.add_argument("--zip-sha256", required=True)
     parser.add_argument("--dmg-sha256", required=True)
+    parser.add_argument("--beta-zip-sha256", required=True)
+    parser.add_argument("--beta-dmg-sha256", required=True)
+    parser.add_argument("--qualification-evidence", required=True)
     parser.add_argument("--allow-stable-channel", action="store_true")
-    parser.add_argument("--emergency-evidence-json")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
     release = json.loads(Path(args.release_json).read_text())
-    emergency_evidence = (
-        json.loads(Path(args.emergency_evidence_json).read_text(encoding="utf-8")) if args.emergency_evidence_json else None
-    )
+    evidence = json.loads(Path(args.qualification_evidence).read_text())
     manifest = prepare_manifest(
         release,
         args.release_tag,
         args.target_sha,
         args.zip_sha256,
         args.dmg_sha256,
+        beta_zip_sha256=args.beta_zip_sha256,
+        beta_dmg_sha256=args.beta_dmg_sha256,
+        qualification_evidence=evidence,
         allow_stable_channel=args.allow_stable_channel,
-        emergency_evidence=emergency_evidence,
     )
     Path(args.output).write_text(json.dumps(manifest, indent=2) + "\n")
     print(f"qualified beta manifest prepared: {args.release_tag}")

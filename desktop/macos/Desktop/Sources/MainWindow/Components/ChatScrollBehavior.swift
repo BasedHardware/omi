@@ -2,6 +2,17 @@ import AppKit
 import OmiTheme
 import SwiftUI
 
+/// The narrow distance from the live edge that means the reader has actually
+/// returned to it. A generous threshold makes a deliberate small upward scroll
+/// look like "follow the stream" and pulls the reader back down on the next token.
+enum ChatScrollLiveEdge {
+  static let intentEpsilon: CGFloat = 2
+
+  static func isAtBottom(visibleMaxY: CGFloat, documentHeight: CGFloat) -> Bool {
+    visibleMaxY >= documentHeight - intentEpsilon
+  }
+}
+
 /// Detects scroll position changes by observing the underlying NSScrollView.
 struct ScrollPositionDetector: NSViewRepresentable {
   let onScrollPositionChange: (Bool) -> Void  // true if at bottom
@@ -64,8 +75,10 @@ struct ScrollPositionDetector: NSViewRepresentable {
         let clipBounds = scrollView.contentView.bounds
         let documentHeight = documentView.frame.height
         let visibleMaxY = clipBounds.origin.y + clipBounds.height
-        let threshold: CGFloat = 100
-        let isAtBottom = visibleMaxY >= documentHeight - threshold
+        let isAtBottom = ChatScrollLiveEdge.isAtBottom(
+          visibleMaxY: visibleMaxY,
+          documentHeight: documentHeight
+        )
         guard isAtBottom != lastReportedValue else { return }
 
         coalesceWorkItem?.cancel()
@@ -188,8 +201,10 @@ struct UserScrollDetector: NSViewRepresentable {
         let clipBounds = scrollView.contentView.bounds
         let documentHeight = documentView.frame.height
         let visibleMaxY = clipBounds.origin.y + clipBounds.height
-        let threshold: CGFloat = 100
-        return visibleMaxY >= documentHeight - threshold
+        return ChatScrollLiveEdge.isAtBottom(
+          visibleMaxY: visibleMaxY,
+          documentHeight: documentHeight
+        )
       }
     }
 

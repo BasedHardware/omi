@@ -916,8 +916,14 @@ def _make_trigger_conversation(suggested_apps=None):
     return conv
 
 
-def _trigger_apps_context(default_apps=None):
-    """Context manager that patches all external dependencies of _trigger_apps."""
+def _trigger_apps_context(default_apps=None, availability_app=None):
+    """Context manager that patches all external dependencies of _trigger_apps.
+
+    `availability_app` stands in for `get_available_app_model_by_id` — the
+    set-preferred route's availability authority (#10074): None models a
+    deleted/inaccessible app; an app object models one the setter admitted even
+    though it is outside the enabled-installed slice.
+    """
     suggestion_mock = MagicMock(return_value=(["suggested-app"], "reasoning"))
     app_result_mock = MagicMock(return_value="App result content")
     record_mock = MagicMock()
@@ -929,6 +935,7 @@ def _trigger_apps_context(default_apps=None):
         patch.object(process_conversation, "get_suggested_apps_for_conversation", suggestion_mock),
         patch.object(process_conversation, "get_app_result", app_result_mock),
         patch.object(process_conversation, "record_app_usage", record_mock),
+        patch.object(process_conversation, "get_available_app_model_by_id", return_value=availability_app),
     )
 
 
@@ -938,11 +945,11 @@ def test_trigger_apps_uses_preferred_app_skips_llm_suggestion():
     _setup_trigger_apps_mocks(preferred_app_id="preferred-app-1", available_apps=[preferred])
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5 = _trigger_apps_context()
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
     # Override get_available_apps to return the preferred app
     p2 = patch.object(process_conversation, "get_available_apps", return_value=[preferred])
 
-    with p1, p2, p3, p4, p5:
+    with p1, p2, p3, p4, p5, p6:
         process_conversation._trigger_apps("user-preferred", conv)
 
     # The suggestion LLM call must NOT have been invoked
@@ -959,9 +966,9 @@ def test_trigger_apps_stale_preferred_app_falls_through_to_suggestion():
     _setup_trigger_apps_mocks(preferred_app_id="deleted-app-999")
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5 = _trigger_apps_context(default_apps=[suggestion_app])
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(default_apps=[suggestion_app])
 
-    with p1, p2, p3, p4, p5:
+    with p1, p2, p3, p4, p5, p6:
         process_conversation._trigger_apps("user-stale", conv)
 
     # The suggestion LLM call SHOULD have been invoked since preferred app was invalid
@@ -974,10 +981,47 @@ def test_trigger_apps_no_preferred_app_runs_suggestion():
     _setup_trigger_apps_mocks(preferred_app_id=None)
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5 = _trigger_apps_context(default_apps=[suggestion_app])
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(default_apps=[suggestion_app])
 
-    with p1, p2, p3, p4, p5:
+    with p1, p2, p3, p4, p5, p6:
         process_conversation._trigger_apps("user-no-pref", conv)
 
     # The suggestion LLM call SHOULD have been invoked
+    suggestion_mock.assert_called_once()
+
+
+def test_trigger_apps_preferred_app_outside_installed_slice_is_still_used():
+    """#10074: the set-preferred route admits apps the enabled-installed slice
+    does not contain (e.g. a template whose enable call failed). The reader must
+    honor the setter's availability authority instead of silently ignoring it."""
+    preferred = _make_mock_app("template-app-1", "MyTemplate")
+    _setup_trigger_apps_mocks(preferred_app_id="template-app-1")
+    conv = _make_trigger_conversation()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(availability_app=preferred)
+
+    with p1, p2, p3, p4, p5, p6:
+        process_conversation._trigger_apps("user-template", conv)
+
+    suggestion_mock.assert_not_called()
+    app_result_mock.assert_called_once()
+    assert len(conv.apps_results) == 1
+
+
+def test_trigger_apps_preferred_app_without_memories_capability_falls_through():
+    """A resolvable preferred app that cannot summarize (no memories capability)
+    falls back to suggestions rather than running as a summarizer."""
+    persona = _make_mock_app("persona-app-1", "ChatPersona")
+    persona.works_with_memories.return_value = False
+    suggestion_app = _make_mock_app("suggested-app", "SuggestedApp")
+    _setup_trigger_apps_mocks(preferred_app_id="persona-app-1")
+    conv = _make_trigger_conversation()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(
+        default_apps=[suggestion_app], availability_app=persona
+    )
+
+    with p1, p2, p3, p4, p5, p6:
+        process_conversation._trigger_apps("user-persona", conv)
+
     suggestion_mock.assert_called_once()

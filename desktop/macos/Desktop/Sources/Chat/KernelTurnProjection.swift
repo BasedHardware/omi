@@ -451,16 +451,15 @@ final class KernelTurnProjection {
   ) async -> KernelJournalTurn? {
     guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return nil }
     guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return nil }
-    let acceptedText = message.flatMap { $0.text.isEmpty ? nil : $0.text } ?? acceptedContent
+    let acceptedText = Self.acceptedTerminalContent(message: message, acceptedContent: acceptedContent)
+    let acceptedBlocks = Self.acceptedTerminalContentBlocks(message: message, acceptedContent: acceptedContent)
     let terminalization = KernelJournalTurnTerminalization(
       turnId: turnId,
       producingRunId: producingRunId,
       producingAttemptId: producingAttemptId,
       disposition: disposition,
       content: disposition == .accept ? acceptedText : nil,
-      contentBlocksJSON: disposition == .accept
-        ? message.flatMap { ChatContentBlockCodec.encode($0.contentBlocks) }
-        : nil,
+      contentBlocksJSON: disposition == .accept ? ChatContentBlockCodec.encode(acceptedBlocks) : nil,
       resourcesJSON: disposition == .accept
         ? message.flatMap { ChatResource.encodeResourcesForPersistence($0.displayResources) }
           ?? acceptedResources.flatMap { resources in
@@ -481,6 +480,28 @@ final class KernelTurnProjection {
       log("KernelTurnProjection: journal terminalization failed (code=journal_terminalize_failed)")
       return nil
     }
+  }
+
+  /// The query result is the authoritative final material. The streaming row is
+  /// an optimistic projection and can lag its terminal callback; use it only
+  /// when the final result intentionally contains no text.
+  static func acceptedTerminalContent(message: ChatMessage?, acceptedContent: String?) -> String? {
+    if let acceptedContent, !acceptedContent.isEmpty { return acceptedContent }
+    return message.flatMap { $0.text.isEmpty ? nil : $0.text }
+  }
+
+  static func acceptedTerminalContentBlocks(
+    message: ChatMessage?,
+    acceptedContent: String?
+  ) -> [ChatContentBlock] {
+    guard let acceptedContent, !acceptedContent.isEmpty else { return message?.contentBlocks ?? [] }
+    let nonTextBlocks =
+      message?.contentBlocks.filter {
+        if case .text = $0 { return false }
+        return true
+      } ?? []
+    let messageID = message?.id ?? "terminal"
+    return [.text(id: "\(messageID):terminal", text: acceptedContent)] + nonTextBlocks
   }
 
   /// Terminalize an existing turn without sourcing payload from the current UI

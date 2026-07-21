@@ -489,13 +489,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {
       AnalyticsManager.shared.identify()
-      // Set Sentry user context (now enabled for dev builds too)
-      if let email = AuthState.shared.userEmail {
-        let sentryUser = Sentry.User()
-        sentryUser.email = email
-        sentryUser.username =
-          AuthService.shared.displayName.isEmpty ? nil : AuthService.shared.displayName
-        SentrySDK.setUser(sentryUser)
+      // Set an opaque Sentry user identifier for incident correlation. Do not
+      // attach email or display name to crash/error reports.
+      if let userID = AuthState.shared.userId {
+        SentrySDK.setUser(Sentry.User(userId: userID))
       }
       // Fetch API keys after first-window warmup settles. First-use paths call waitForKeys().
       scheduleAPIKeyFetch()
@@ -1037,6 +1034,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
   @MainActor @objc private func openOmiFromMenu() {
     AnalyticsManager.shared.menuBarActionClicked(action: "open_omi")
+    openMainAppWindow()
+  }
+
+  /// Bring the main Omi window to the front, creating it if needed. Shared by
+  /// the menu-bar "Open Omi" item, the global Open Omi (formerly Ask Omi)
+  /// shortcut, and the floating bar's "Continue in Omi" affordance.
+  @MainActor func openMainAppWindow() {
     NSApp.activate()
     var foundWindow = revealMainWindowIfAvailable()
     if !foundWindow {
@@ -1046,7 +1050,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Dock icon is always visible; just activate the app
     NSApp.activate()
     if !foundWindow {
-      log("AppDelegate: [MENUBAR] WARNING - No Omi window found when opening from menu bar")
+      log("AppDelegate: [MENUBAR] WARNING - No Omi window found when opening main window")
     }
   }
 
@@ -1459,6 +1463,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   }
 
   private func cleanupLegacyAppBundles() {
+    // Stable-only: this takeover kills running com.omi.computer-macos processes
+    // and deletes the legacy bundle. From Omi Beta or a dev bundle it would
+    // terminate the user's running stable app instead of a stale duplicate.
+    guard AppBuild.mayRunLegacyStableAppCleanup else {
+      log("Skipping legacy app cleanup: not the stable production identity")
+      return
+    }
     let currentPath = Bundle.main.bundlePath
     let oldAppPaths = [
       "/Applications/Omi Computer.app",

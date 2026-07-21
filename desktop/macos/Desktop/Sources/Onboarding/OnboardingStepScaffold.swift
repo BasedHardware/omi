@@ -2,6 +2,46 @@ import AppKit
 import OmiTheme
 import SwiftUI
 
+/// Back action for the current onboarding step, injected by `OnboardingView`.
+/// `nil` on the first step (nothing to return to), which hides the back button.
+private struct OnboardingBackActionKey: EnvironmentKey {
+  static let defaultValue: (@MainActor () -> Void)? = nil
+}
+
+extension EnvironmentValues {
+  var onboardingBack: (@MainActor () -> Void)? {
+    get { self[OnboardingBackActionKey.self] }
+    set { self[OnboardingBackActionKey.self] = newValue }
+  }
+}
+
+/// Jump straight to a step index, injected by `OnboardingView`. Powers the
+/// clickable progress dots so the user can move to any step directly.
+private struct OnboardingJumpActionKey: EnvironmentKey {
+  static let defaultValue: (@MainActor (Int) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+  var onboardingJumpTo: (@MainActor (Int) -> Void)? {
+    get { self[OnboardingJumpActionKey.self] }
+    set { self[OnboardingJumpActionKey.self] = newValue }
+  }
+}
+
+/// Highest step the user has cleared. Combined with `OnboardingFlow.canJump`,
+/// this decides which progress dots are clickable: anything already cleared, plus
+/// forward jumps that only pass over skippable steps.
+private struct OnboardingFurthestStepKey: EnvironmentKey {
+  static let defaultValue: Int = .max
+}
+
+extension EnvironmentValues {
+  var onboardingFurthestStep: Int {
+    get { self[OnboardingFurthestStepKey.self] }
+    set { self[OnboardingFurthestStepKey.self] = newValue }
+  }
+}
+
 enum OnboardingRightPaneMode {
   case graph
   case message(title: String, detail: String)
@@ -14,6 +54,7 @@ enum OnboardingLayoutMode {
 
 struct OnboardingStepScaffold<Content: View>: View {
   @ObservedObject private var graphViewModel: MemoryGraphViewModel
+  @Environment(\.onboardingJumpTo) private var onboardingJumpTo
 
   let stepIndex: Int
   let totalSteps: Int
@@ -23,6 +64,10 @@ struct OnboardingStepScaffold<Content: View>: View {
   let layoutMode: OnboardingLayoutMode
   let rightPaneMode: OnboardingRightPaneMode
   let rightPaneFooterText: String?
+  /// When true (split layout only), the graph/second-brain pane renders on the
+  /// leading side and the step content on the trailing side — the mirror of the
+  /// default. Used by the exports step.
+  let graphLeading: Bool
   let showsSkip: Bool
   let onSkip: (() -> Void)?
   let onForceComplete: (() -> Void)?
@@ -38,6 +83,7 @@ struct OnboardingStepScaffold<Content: View>: View {
     layoutMode: OnboardingLayoutMode = .split,
     rightPaneMode: OnboardingRightPaneMode = .graph,
     rightPaneFooterText: String? = nil,
+    graphLeading: Bool = false,
     showsSkip: Bool = false,
     onSkip: (() -> Void)? = nil,
     onForceComplete: (() -> Void)? = nil,
@@ -52,6 +98,7 @@ struct OnboardingStepScaffold<Content: View>: View {
     self.layoutMode = layoutMode
     self.rightPaneMode = rightPaneMode
     self.rightPaneFooterText = rightPaneFooterText
+    self.graphLeading = graphLeading
     self.showsSkip = showsSkip
     self.onSkip = onSkip
     self.onForceComplete = onForceComplete
@@ -62,18 +109,51 @@ struct OnboardingStepScaffold<Content: View>: View {
     switch layoutMode {
     case .split:
       HStack(spacing: 0) {
-        splitPane
-          .frame(minWidth: 470, idealWidth: 520, maxWidth: 560)
+        if graphLeading {
+          OnboardingSecondBrainPane(
+            graphViewModel: graphViewModel,
+            mode: rightPaneMode,
+            footerText: rightPaneFooterText
+          )
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-        Divider()
-          .background(OmiColors.backgroundTertiary)
+          // Directional flow: memories (left) export to your tools (right).
+          // The chip is overlaid on the divider so it sits dead-center on the
+          // dividing line. Muted to blend in; shape matches the chat send button.
+          // Fixed-width column so the chip isn't clipped by the neighboring pane;
+          // the line runs full height and the chip sits centered on it.
+          ZStack {
+            Rectangle()
+              .fill(OmiColors.backgroundTertiary)
+              .frame(width: 1)
+              .frame(maxHeight: .infinity)
+            Image(systemName: "arrow.right.circle.fill")
+              .scaledFont(size: 24)
+              .foregroundColor(OmiColors.textTertiary)
+              .padding(4)
+              .background(Circle().fill(OmiColors.backgroundPrimary))
+              // Raised to sit at the vertical middle of the graph, which centers
+              // higher than the full pane (the footer summary sits below it).
+              .offset(y: -64)
+          }
+          .frame(width: 40)
 
-        OnboardingSecondBrainPane(
-          graphViewModel: graphViewModel,
-          mode: rightPaneMode,
-          footerText: rightPaneFooterText
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+          splitPane
+            .frame(minWidth: 470, idealWidth: 520, maxWidth: 560)
+        } else {
+          splitPane
+            .frame(minWidth: 470, idealWidth: 520, maxWidth: 560)
+
+          Divider()
+            .background(OmiColors.backgroundTertiary)
+
+          OnboardingSecondBrainPane(
+            graphViewModel: graphViewModel,
+            mode: rightPaneMode,
+            footerText: rightPaneFooterText
+          )
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .background(OmiColors.backgroundPrimary)
@@ -100,6 +180,9 @@ struct OnboardingStepScaffold<Content: View>: View {
             .padding(.horizontal, OmiSpacing.page)
             .padding(.vertical, OmiSpacing.section)
           }
+          // Only scroll when content genuinely overflows — no elastic bounce
+          // on steps (e.g. the permission steps) whose content already fits.
+          .scrollBounceBehavior(.basedOnSize)
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -124,6 +207,9 @@ struct OnboardingStepScaffold<Content: View>: View {
         .padding(.horizontal, OmiSpacing.page)
         .padding(.vertical, OmiSpacing.section)
       }
+      // Only scroll when content genuinely overflows — no elastic bounce on
+      // steps (e.g. the permission steps) whose content already fits.
+      .scrollBounceBehavior(.basedOnSize)
     }
     .background(OmiColors.backgroundPrimary)
   }
@@ -148,14 +234,8 @@ struct OnboardingStepScaffold<Content: View>: View {
   }
 
   private func progressRow(centered: Bool) -> some View {
-    HStack(spacing: OmiSpacing.sm) {
-      ForEach(0..<totalSteps, id: \.self) { index in
-        Capsule()
-          .fill(index <= stepIndex ? Color.white : Color.white.opacity(0.1))
-          .frame(width: index == stepIndex ? 28 : 8, height: 6)
-      }
-    }
-    .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
+    OnboardingProgressBar(stepIndex: stepIndex, totalSteps: totalSteps)
+      .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
   }
 
   private func titleBlock(centered: Bool) -> some View {
@@ -209,6 +289,210 @@ struct OnboardingLogoMark: View {
       onForceComplete?()
     }
     .accessibilityLabel("omi")
+  }
+}
+
+/// Segmented progress bar shown at the top of an onboarding step: one capsule
+/// per phase (`OnboardingFlow.phases`), sized by its page count. The fill tip
+/// stands at the end of the completed pages, and clicking any part puts the
+/// tip there (via the injected `onboardingJumpTo` action, gated by
+/// `OnboardingFlow.canJump`). Hovering a segment reveals tick marks at its
+/// page boundaries. Used by `OnboardingStepScaffold` and by the custom
+/// full-width steps (floating-bar shortcut/demo) that don't use the scaffold.
+struct OnboardingProgressBar: View {
+  let stepIndex: Int
+  let totalSteps: Int
+  @Environment(\.onboardingJumpTo) private var onboardingJumpTo
+  @Environment(\.onboardingFurthestStep) private var furthestStep
+  @State private var hoveredPhase: Int?
+  @State private var settledStep: Int?
+
+  private static let pageWidth: CGFloat = 14
+  private static let barHeight: CGFloat = 5
+
+  /// The step the previous page's bar instance last showed. Each page hosts
+  /// its own bar, so cross-page fill animation is faked by first rendering the
+  /// previous page's fill and animating to the real value on appear — forward
+  /// navigation grows the fill, backward navigation shrinks it back.
+  @MainActor private static var lastRenderedStep: Int?
+
+  /// The page the fill has animated up to. Before the on-appear animation
+  /// settles, the starting fill is clamped to one page away from the target:
+  /// pages already behind you render complete instantly and only the slice of
+  /// the page being entered (or left, going backward) animates — a jump across
+  /// several pages never sweeps them all.
+  private var filledUpTo: Int {
+    if let settledStep { return settledStep }
+    guard let last = Self.lastRenderedStep else { return stepIndex }
+    return last <= stepIndex ? max(last, stepIndex - 1) : stepIndex + 1
+  }
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      ForEach(OnboardingFlow.phases.indices, id: \.self) { index in
+        segment(index)
+      }
+    }
+    .onAppear {
+      // The fill capsule's .animation(value: filled) turns this into the
+      // one-slice grow/drain transition.
+      settledStep = stepIndex
+      Self.lastRenderedStep = stepIndex
+    }
+  }
+
+  private func segment(_ phaseIndex: Int) -> some View {
+    let phase = OnboardingFlow.phases[phaseIndex]
+    let pages = phase.steps.count
+    let width = CGFloat(pages) * Self.pageWidth
+    // A page counts as filled only once you've moved past it, so the fill
+    // always stands at the start of the current page's slot — the first page
+    // shows no fill at all.
+    let filled = phase.steps.filter { $0 < filledUpTo }.count
+
+    return ZStack(alignment: .leading) {
+      Capsule()
+        .fill(Color.white.opacity(0.22))
+        .frame(width: width, height: Self.barHeight)
+      Capsule()
+        .fill(Color.white)
+        .frame(width: width * CGFloat(filled) / CGFloat(pages), height: Self.barHeight)
+        .animation(.snappy(duration: 0.2), value: filled)
+      HStack(spacing: 0) {
+        ForEach(phase.steps, id: \.self) { step in
+          pageSlice(step, phase: phase, showTicks: hoveredPhase == phaseIndex)
+        }
+      }
+    }
+    .frame(width: width)
+    .onHover { inside in
+      if inside {
+        hoveredPhase = phaseIndex
+      } else if hoveredPhase == phaseIndex {
+        hoveredPhase = nil
+      }
+    }
+    .help(phase.title)
+  }
+
+  @ViewBuilder
+  private func pageSlice(_ step: Int, phase: OnboardingFlow.Phase, showTicks: Bool) -> some View {
+    let localIndex = step - phase.steps.lowerBound
+    // The fill tip reads as "where you are", standing at the end of the
+    // completed parts. Clicking any part — in any segment, forward or back —
+    // means "put the tip at the end of this part": navigate to the page after
+    // it (rolling into the next segment from a segment's last part).
+    let target = min(step + 1, OnboardingFlow.lastStepIndex)
+    // Pad the hit area vertically so the thin bar is comfortably clickable
+    // without changing the row's visual layout.
+    let slice = Color.clear
+      .frame(width: Self.pageWidth, height: Self.barHeight)
+      .padding(.vertical, OmiSpacing.sm)
+      .contentShape(Rectangle())
+      .overlay(alignment: .leading) {
+        // Page-boundary tick, revealed on hover. Background-colored so it
+        // reads as the same notch over the filled and unfilled parts alike.
+        if showTicks, localIndex > 0 {
+          RoundedRectangle(cornerRadius: 0.75)
+            .fill(OmiColors.backgroundPrimary)
+            .frame(width: 1.5, height: Self.barHeight + 4)
+            .offset(x: -0.75)
+        }
+      }
+
+    // Clickable when the jump policy allows it: cleared steps always, forward
+    // jumps only over skippable steps (see OnboardingFlow.canJump).
+    if let onboardingJumpTo, OnboardingFlow.canJump(to: target, furthestStep: furthestStep) {
+      Button {
+        onboardingJumpTo(target)
+      } label: {
+        slice
+      }
+      .buttonStyle(.plain)
+      .onHover { inside in
+        if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+      }
+      .help("\(phase.title) — step \(localIndex + 1) of \(phase.steps.count)")
+    } else {
+      slice
+    }
+  }
+}
+
+/// A keycap styled like a physical Mac keyboard key: the symbol with the key's
+/// name written under it (⌘ over "command"), and a wide cap for Return/Space.
+/// Plain letter keys show just the letter. Used by the shortcut-setup steps.
+struct OnboardingKeyCapView: View {
+  let token: String
+  var isActive: Bool = false
+
+  private static let keyNames: [String: String] = [
+    "⌘": "command", "⇧": "shift", "⌥": "option", "⌃": "control",
+    "⇪": "caps lock", "↩": "return", "⏎": "return", "␣": "space",
+    "Space": "space", "⎋": "esc", "⇥": "tab", "Right ⌘": "command",
+  ]
+  private static let wideTokens: Set<String> = ["↩", "⏎", "␣", "Space"]
+
+  private var keyName: String? { Self.keyNames[token] }
+  private var isWide: Bool { Self.wideTokens.contains(token) }
+
+  var body: some View {
+    // The label is part of layout (not an overlay) so the cap widens to keep
+    // the key's name on a single line instead of wrapping ("comman/d").
+    Group {
+      if let keyName {
+        // Named keys mirror a physical Mac key: symbol in the top-left
+        // corner, name on one line along the bottom.
+        VStack(spacing: 0) {
+          Text(token)
+            .font(.system(size: 18, weight: .semibold))
+            .frame(maxWidth: .infinity, alignment: .leading)
+          Spacer(minLength: 4)
+          // Wide keys (return/space) carry their name in the bottom-right
+          // corner like a physical keyboard; square keys center it.
+          Text(keyName)
+            .font(.system(size: 10, weight: .medium))
+            .lineLimit(1)
+            .fixedSize()
+            .frame(maxWidth: .infinity, alignment: isWide ? .trailing : .center)
+        }
+      } else {
+        // Plain letter keys show just the letter, centered.
+        Text(token)
+          .font(.system(size: 22, weight: .semibold))
+      }
+    }
+    .foregroundColor(isActive ? .black : OmiColors.textPrimary)
+    .padding(.horizontal, 10)
+    .padding(.vertical, 8)
+    .frame(minWidth: isWide ? 116 : 64, minHeight: 64)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+        .fill(isActive ? Color.white : OmiColors.backgroundTertiary)
+        .overlay(
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+            .stroke(
+              isActive ? Color.white : OmiColors.textTertiary.opacity(0.3),
+              lineWidth: 2
+            )
+        )
+    )
+    .fixedSize()
+  }
+}
+
+/// Grey "Back" button that returns to the previous onboarding step. Renders
+/// nothing on the first step (where the injected `onboardingBack` action is nil).
+/// Place it to the left of a step's Continue button.
+struct OnboardingBackButton: View {
+  @Environment(\.onboardingBack) private var onboardingBack
+
+  var body: some View {
+    if let onboardingBack {
+      Button("Back", action: onboardingBack)
+        .buttonStyle(OmiButtonStyle(.secondary))
+        .accessibilityLabel("Back")
+    }
   }
 }
 
@@ -412,24 +696,28 @@ struct OnboardingInsightCard: View {
 
 struct OnboardingSelectableChip: View {
   let title: String
+  var leading: AnyView? = nil
   let isSelected: Bool
   let action: () -> Void
 
   var body: some View {
     Button(action: action) {
-      Text(title)
-        .font(.system(size: 14, weight: .semibold))
-        .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
-        .padding(.horizontal, OmiSpacing.lg)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(
-          Capsule()
-            .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
-        )
-        .overlay(
-          Capsule()
-            .stroke(Color.white.opacity(isSelected ? 0 : 0.08), lineWidth: 1)
-        )
+      HStack(spacing: 7) {
+        if let leading { leading }
+        Text(title)
+          .font(.system(size: 14, weight: .semibold))
+          .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
+      }
+      .padding(.horizontal, OmiSpacing.lg)
+      .padding(.vertical, OmiSpacing.sm)
+      .background(
+        Capsule()
+          .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
+      )
+      .overlay(
+        Capsule()
+          .stroke(Color.white.opacity(isSelected ? 0 : 0.08), lineWidth: 1)
+      )
     }
     .buttonStyle(.plain)
   }

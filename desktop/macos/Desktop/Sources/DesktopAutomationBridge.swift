@@ -714,6 +714,65 @@ final class DesktopAutomationActionRegistry {
       return nil
     }
 
+    // Posts a real keyDown+keyUp pair through the app's own event queue, so local
+    // NSEvent monitors and SwiftUI key equivalents see it exactly like a physical
+    // keypress — lets a headless harness drive keyboard navigation without
+    // Accessibility permission or a frontmost window. Non-prod only.
+    register(
+      name: "post_key",
+      summary:
+        "Post a keyDown+keyUp NSEvent through the app event queue (e.g. key_code=124 for right arrow). Non-prod only.",
+      params: ["key_code", "modifiers"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "post_key is disabled on production bundles"]
+      }
+      guard let codeText = params["key_code"], let keyCode = UInt16(codeText) else {
+        throw DesktopAutomationActionError.invalidParams("key_code must be a numeric macOS key code")
+      }
+      var modifiers: NSEvent.ModifierFlags = []
+      for token in (params["modifiers"] ?? "").split(separator: ",") {
+        switch token.trimmingCharacters(in: .whitespaces).lowercased() {
+        case "command", "cmd": modifiers.insert(.command)
+        case "shift": modifiers.insert(.shift)
+        case "option", "alt": modifiers.insert(.option)
+        case "control", "ctrl": modifiers.insert(.control)
+        case "function", "fn": modifiers.insert(.function)
+        case "": break
+        default:
+          throw DesktopAutomationActionError.invalidParams("unknown modifier '\(token)'")
+        }
+      }
+      // Arrow keys carry their function-key character and the flags a physical
+      // press would have, so consumers that look at characters/flags match too.
+      let arrowCharacters: [UInt16: String] = [
+        123: "\u{F702}", 124: "\u{F703}", 125: "\u{F701}", 126: "\u{F700}",
+      ]
+      let characters = arrowCharacters[keyCode] ?? ""
+      if arrowCharacters[keyCode] != nil {
+        modifiers.formUnion([.function, .numericPad])
+      }
+      let window = NSApp.keyWindow ?? NSApp.mainWindow
+      var posted = 0
+      for phase in [NSEvent.EventType.keyDown, .keyUp] {
+        if let event = NSEvent.keyEvent(
+          with: phase, location: .zero, modifierFlags: modifiers,
+          timestamp: ProcessInfo.processInfo.systemUptime,
+          windowNumber: window?.windowNumber ?? 0, context: nil,
+          characters: characters, charactersIgnoringModifiers: characters,
+          isARepeat: false, keyCode: keyCode)
+        {
+          NSApp.postEvent(event, atStart: false)
+          posted += 1
+        }
+      }
+      return [
+        "posted_events": "\(posted)",
+        "key_code": "\(keyCode)",
+        "window": window.map { $0.title.isEmpty ? "untitled" : $0.title } ?? "none",
+      ]
+    }
+
     // CHAT-05: read the free-tier monthly chat usage-limiter state so a harness can
     // prove the counter is deterministic without spending LLM calls. Read-only.
     register(
@@ -1555,6 +1614,20 @@ final class DesktopAutomationActionRegistry {
         return ["error": "a non-debug voice turn is active"]
       }
       return ["state": s, "usesNotchIsland": bar.usesNotchIsland ? "true" : "false"]
+    }
+
+    register(
+      name: "debug_reach_error",
+      summary: "Show the actionable 'Couldn't reach Omi' card on the bar (Retry/Skip) for visual verification",
+      params: []
+    ) { _ in
+      let mgr = FloatingControlBarManager.shared
+      guard mgr.barState != nil else { return ["error": "no bar state"] }
+      if !mgr.isVisible { mgr.show() }
+      mgr.showReachError(message: "Error 502") {
+        log("debug_reach_error: Retry tapped")
+      }
+      return ["shown": "true"]
     }
 
     register(
@@ -3226,18 +3299,14 @@ final class DesktopAutomationActionRegistry {
     }
 
     // SET-02: assemble the exact payload FeedbackView.submitFeedback() would
-    // attach — the report title + the desktop_diagnostics.json attachment + the
-    // log-attachment metadata — WITHOUT calling SentrySDK, so a harness can grep
-    // the diagnostics JSON for secrets without firing a real Sentry event. The
-    // title and diagnostics JSON come from the same builders the real submit
-    // uses (feedbackReportTitle / writeDiagnosticsAttachment), so the dry-run
-    // can't diverge from what ships. The raw log is attached unredacted to Sentry
-    // by design (trusted sink, explicit user report); we surface only its
-    // metadata here — never its contents — so the bridge response can't leak it.
+    // attach — the report title plus a redacted incident diagnostics attachment —
+    // WITHOUT calling SentrySDK. The dry-run uses the same builders as the real
+    // submit path, so a harness can secret-scan the attachment without a cloud
+    // side effect and cannot drift toward a raw-log upload.
     register(
       name: "dump_feedback_payload_dryrun",
       summary:
-        "Assemble the feedback report payload (title + desktop_diagnostics.json + log-attachment metadata) without submitting to Sentry; returns the diagnostics JSON for secret-scanning. Non-prod only.",
+        "Assemble the feedback report payload (title + redacted desktop_diagnostics.json) without submitting to Sentry; returns the diagnostics JSON for secret-scanning. Non-prod only.",
       params: ["message"]
     ) { params in
       guard AppBuild.isNonProduction else {
@@ -3251,7 +3320,11 @@ final class DesktopAutomationActionRegistry {
         "would_submit_to_sentry": "false",
       ]
 
-      if let url = DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment() {
+      if let url = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
+        area: "other",
+        failureClass: "user_report",
+        phase: "other"
+      ) {
         defer { try? FileManager.default.removeItem(at: url) }
         if let data = try? Data(contentsOf: url), let json = String(data: data, encoding: .utf8) {
           detail["diagnostics_json"] = json
@@ -3261,18 +3334,6 @@ final class DesktopAutomationActionRegistry {
         }
       } else {
         detail["diagnostics_error"] = "attachment_write_failed"
-      }
-
-      let logPath = omiLogFilePath()
-      let logExists = FileManager.default.fileExists(atPath: logPath)
-      detail["log_attachment_filename"] = (logPath as NSString).lastPathComponent
-      detail["log_attachment_exists"] = logExists ? "true" : "false"
-      if logExists,
-        let attributes = try? FileManager.default.attributesOfItem(atPath: logPath),
-        let size = attributes[.size] as? NSNumber
-      {
-        // int64Value, not intValue (Int32): the log can exceed 2 GB in a long dev session.
-        detail["log_attachment_bytes"] = "\(size.int64Value)"
       }
       return detail
     }
@@ -3649,8 +3710,7 @@ final class DesktopAutomationBridge: @unchecked Sendable {
           logLaunchID: omiLogLaunchID(),
           bridgePort: DesktopAutomationLaunchOptions.port,
           requiresAuth: true,
-          backendEnvironment: DesktopBackendEnvironment.shouldUseBetaRingBackends
-            ? "beta" : (DesktopBackendEnvironment.shouldUseDevelopmentBackends ? "development" : "production"),
+          backendEnvironment: DesktopBackendEnvironment.shouldUseDevelopmentBackends ? "development" : "production",
           pythonBackendURL: DesktopBackendEnvironment.pythonBaseURL(),
           rustBackendURL: DesktopBackendEnvironment.rustBackendURL(),
           agentRuntimeRunning: runtime.running,

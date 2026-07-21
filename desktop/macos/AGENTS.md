@@ -28,6 +28,10 @@ When debugging issues for a specific user, check Sentry dashboard for crashes an
 - A desktop chat query starts after local concurrency/quota preflight and must
   emit exactly one terminal outcome: `completed`, `failed`, or `cancelled`.
   Intentional Stop and supersession are cancellations, never errors.
+- A physical voice shortcut turn emits one start and one terminal outcome from
+  the coordinator. Full-answer duration ends at playback drain; a later journal
+  failure does not rewrite a delivered response as missing. Intentional and
+  too-short endings are excluded from response-failure rates.
 - Query latency ends when the final answer is visible. Persistence, title
   generation, and other post-answer work have their own reliability signals and
   must not inflate user-visible query duration.
@@ -52,7 +56,7 @@ Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.
 
 Merging `desktop/macos/**` changes queues them for the next daily or manually dispatched candidate. A candidate advances to beta automatically only after every qualification gate passes:
 
-1. **GitHub Actions** (`desktop_auto_release.yml`) — batches mainline changes, auto-increments the version, and pushes a `v*-macos` build-candidate tag. It fail-closes before changelog or tag mutation unless `Desktop Swift Build & Tests` completed successfully for the newest queued releasable desktop source SHA; unrelated later commits do not block the queue, and the tag includes the newly consolidated release notes. `force_release` does not bypass this source gate
+1. **GitHub Actions** (`desktop_auto_release.yml`) — batches mainline changes, auto-increments the version, and pushes a `v*-macos` build-candidate tag. It fail-closes before changelog or tag mutation unless `Desktop Swift Build & Tests` completed successfully for the newest queued releasable desktop source SHA; unrelated later commits do not block the queue, and the tag includes the newly consolidated release notes. `force_release` does not bypass this source gate — use `release_mode=break_glass` when the source check itself is broken; it records `source_gate_bypassed`
 2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — triggered by the tag, runs on Mac mini M2:
    - Builds universal binary (arm64 + x86_64)
    - Signs with Developer ID, notarizes with Apple
@@ -71,14 +75,11 @@ Signed artifact smoke scope:
 - Artifact creation and user visibility are split: create/upload the immutable candidate first, then advance beta/stable visibility only after digest-matched qualification passes.
 - Automatic beta is fail-closed: any signed-smoke, digest, static, T2, fault-suite, newest-tag, manifest, or pointer failure leaves the candidate non-live. Set `DESKTOP_AUTO_BETA_ENABLED=false` in Codemagic or the GitHub `prod` environment to pause automatic qualification/promotion without changing stable.
 
-Stable/prod is manual:
-- Automatic qualification never nominates or promotes stable. Stable workflows remain `workflow_dispatch` only.
-- Nominate the current qualified beta with `desktop_nominate_stable_candidate.yml`. Nomination records the tag/SHA, operator, rationale, soak review, telemetry review, release-note review, and qualification evidence. It never changes beta/stable pointers or deploys production.
-- Before preparing stable/prod promotion, follow `docs/agent-prod-promotion-runbook.md` for target discovery, curated stable release-log creation, shared-backend coupling, approval shape, and deterministic post-promotion checks. External readiness is handled separately.
-- Run GitHub Actions workflow `desktop_promote_prod.yml` with the nominated `release_tag=v*-macos` stable candidate and `confirm=promote-stable`.
-- The workflow runs `.github/scripts/check-desktop-release-promotion.py`, deploys the Rust backend from that exact tag, verifies `/health` reports the release tag/SHA, promotes the Firestore bridge release, marks the GitHub release `channel: stable`, then moves `desktop-backend-prod-deployed`.
-- Do not manually edit a release to stable before the backend is promoted; the promotion workflow owns that mutation.
-- The promotion workflow is roll-forward only. Stable rollback needs a newer fixed release or a separate manual infrastructure rollback plan, because both desktop feeds choose the newest stable app release.
+Stable is manual:
+- Automatic qualification never promotes Stable. `desktop_promote_prod.yml` remains `workflow_dispatch` only and protected by the `prod` environment.
+- Run it with the current qualified Beta `release_tag`, `confirm=promote-stable`, and the observed Stable pointer release ID/generation. It verifies the exact Beta artifact, advances only the Stable pointer, updates the existing legacy/static bridges, and verifies hashes and feed output.
+- `operation=repoint` selects a retained qualified manifest with exact current pointer CAS. It cannot downgrade clients Sparkle has already upgraded; issue a higher-version hotfix for those clients.
+- Backend deployments remain independent in their established workflows. Do not manually edit release visibility or pointers outside the promotion workflow.
 
 **Codemagic CLI & API:**
 - Token: `$CODEMAGIC_API_TOKEN` (set in `~/.zshrc`)
@@ -257,7 +258,7 @@ See `.claude/settings.json` for connection details.
 
 ### App Names & Build Artifacts
 - `./run.sh` builds **"Omi Dev"** → installs to `/Applications/Omi Dev.app` (bundle ID: `com.omi.desktop-dev`)
-- **"Omi Beta"** (bundle ID: `com.omi.computer-macos`) is built by Codemagic CI only
+- **"Omi"** stable (bundle ID: `com.omi.computer-macos`) and **"Omi Beta"** (bundle ID: `com.omi.computer-macos.beta`, isolated "Omi Beta" storage root, runs side-by-side with stable) are built by Codemagic CI only
 - To check which app is currently running: `ps aux | grep "Omi"`
 
 ### Testing with Named Bundles
@@ -508,7 +509,7 @@ agent-swift screenshot /tmp/evidence.png             # capture app window
 - Argument order: `get <property> <ref>`, `is <condition> <ref>`, `wait <condition> [<target>]`, `find <locator> <value>`.
 - 15 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `click`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
 - No app-side instrumentation needed — works via macOS Accessibility API on any Cocoa/SwiftUI app.
-- Dev bundle ID: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos` (never automate prod).
+- Dev bundle ID: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos` (stable) and `com.omi.computer-macos.beta` (Omi Beta) — never automate prod.
 
 ### Changelog Entries
 

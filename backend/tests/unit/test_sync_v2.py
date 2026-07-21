@@ -23,6 +23,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.routing import APIRoute
+from models.users import PlanType
 from utils.executors import run_blocking as _production_run_blocking
 
 PIPELINE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
@@ -2373,6 +2374,67 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ('subscription', 'expected_plan', 'lookup_error'),
+        [
+            (types.SimpleNamespace(plan=PlanType.unlimited_v2), PlanType.unlimited_v2, None),
+            (types.SimpleNamespace(plan=PlanType.basic), PlanType.basic, None),
+            (None, None, None),
+            (None, None, RuntimeError('subscription store unavailable')),
+        ],
+        ids=['unlimited', 'basic', 'missing-subscription', 'subscription-read-failure'],
+    )
+    async def test_fresh_soft_caps_use_the_current_subscription_plan(self, subscription, expected_plan, lookup_error):
+        """Queued fresh work applies the persisted plan instead of the default cap tier."""
+        module, stubs = self._load_sync_module()
+        try:
+            pipeline = stubs['pipeline']
+            pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            pipeline._cleanup_files = MagicMock()
+
+            def _vad_with_segments(path, segmented_paths, errors):
+                segmented_paths.add('/tmp/seg_1700000001.wav')
+
+            speech_totals = {'daily_ms': 5_000, 'three_day_ms': 5_000, 'weekly_ms': 5_000}
+            pipeline.retrieve_vad_segments = _vad_with_segments
+            pipeline.get_wav_duration = MagicMock(return_value=5.0)
+            pipeline.FAIR_USE_ENABLED = True
+            pipeline.FAIR_USE_RESTRICT_DAILY_DG_MS = 0
+            pipeline.record_speech_ms = MagicMock()
+            pipeline.get_rolling_speech_ms = MagicMock(return_value=speech_totals)
+            pipeline.check_soft_caps = MagicMock(return_value=[])
+            pipeline.users_db = MagicMock()
+            pipeline.users_db.get_existing_user_subscription = MagicMock(return_value=subscription)
+            if lookup_error:
+                pipeline.users_db.get_existing_user_subscription.side_effect = lookup_error
+            pipeline.users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            pipeline.users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=False)
+            pipeline.users_db.get_data_protection_level = MagicMock(return_value=None)
+            pipeline.build_person_embeddings_cache = MagicMock(return_value={})
+            pipeline.process_segment = MagicMock()
+            pipeline.record_dg_usage_ms = MagicMock()
+            pipeline.record_usage = MagicMock()
+
+            await module._run_full_pipeline_background_async('j-plan', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job')
+
+            pipeline.users_db.get_existing_user_subscription.assert_called_once_with('uid')
+            pipeline.check_soft_caps.assert_called_once_with('uid', speech_totals=speech_totals, plan=expected_plan)
+            stubs['sync_jobs'].finalize_sync_job.assert_called_once()
+            if lookup_error:
+                pipeline.record_fallback.assert_called_once_with(
+                    component='other',
+                    from_mode='subscription_plan',
+                    to_mode='default_cap',
+                    reason='policy',
+                    outcome='degraded',
+                    log=pipeline.logger,
+                )
+            else:
+                pipeline.record_fallback.assert_not_called()
+        finally:
+            self._cleanup(stubs['saved_modules'])
+
+    @pytest.mark.asyncio
     async def test_partial_segment_failure_completes(self):
         """Partial segment failure must complete (not fail) with error count."""
         module, stubs = self._load_sync_module()
@@ -2789,6 +2851,7 @@ class TestV2EndpointExecution:
         # Set up fair_use defaults
         sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
         sys.modules['utils.fair_use'].get_hard_restriction_status = MagicMock(return_value=(False, None))
+        sys.modules['utils.fair_use'].is_daily_audio_ceiling_exceeded = MagicMock(return_value=False)
         sys.modules['utils.fair_use'].is_dg_budget_exhausted = MagicMock(return_value=False)
         sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
         sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
