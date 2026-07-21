@@ -35,6 +35,7 @@ def prepare_manifest(
     dmg_sha256: str,
     *,
     allow_stable_channel: bool = False,
+    allow_unqualified: bool = False,
 ) -> dict:
     if release.get("tagName") != release_tag:
         fail(f"release tag mismatch: expected {release_tag}, got {release.get('tagName')}")
@@ -62,7 +63,8 @@ def prepare_manifest(
 
     asset_names = {asset.get("name") for asset in release.get("assets", []) if asset.get("name")}
     qualification = desktop_qualification_from_metadata(metadata)
-    require_desktop_qualification(qualification, target_sha=target_sha, asset_names=asset_names)
+    if not allow_unqualified:
+        require_desktop_qualification(qualification, target_sha=target_sha, asset_names=asset_names)
 
     zip_asset = _asset(release, {"Omi.zip"})
     dmg_asset = _asset(release, {"Omi.dmg", "omi.dmg"})
@@ -73,17 +75,16 @@ def prepare_manifest(
     changelog = [item.strip() for item in metadata.get("changelog", "").split("|") if item.strip()]
     version = match.group("version")
     build = int(match.group("build"))
-    qualification_manifest = {
-        "passed": True,
-        "tier": "T2",
-        "evidence_asset": qualification.evidence,
-    }
-    if qualification.source == "legacy":
+    if allow_unqualified:
+        qualification_manifest = {"passed": False, "tier": "emergency"}
+    else:
+        qualification_manifest = {"passed": True, "tier": "T2", "evidence_asset": qualification.evidence}
+    if not allow_unqualified and qualification.source == "legacy":
         # Preserve the immutable manifest shape used by releases registered
         # before canonical qualification metadata existed. This keeps exact
         # beta-promotion retries idempotent.
         qualification_manifest["blessed_at"] = qualification.qualified_at
-    else:
+    elif not allow_unqualified:
         qualification_manifest["qualified_at"] = qualification.qualified_at
 
     return {
@@ -112,6 +113,7 @@ def main() -> int:
     parser.add_argument("--zip-sha256", required=True)
     parser.add_argument("--dmg-sha256", required=True)
     parser.add_argument("--allow-stable-channel", action="store_true")
+    parser.add_argument("--allow-unqualified", action="store_true")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
@@ -123,6 +125,7 @@ def main() -> int:
         args.zip_sha256,
         args.dmg_sha256,
         allow_stable_channel=args.allow_stable_channel,
+        allow_unqualified=args.allow_unqualified,
     )
     Path(args.output).write_text(json.dumps(manifest, indent=2) + "\n")
     print(f"qualified beta manifest prepared: {args.release_tag}")
