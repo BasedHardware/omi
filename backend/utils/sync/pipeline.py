@@ -1550,7 +1550,7 @@ async def _run_sync_vad_phase(wav_paths: list, segmented_paths: set) -> tuple[li
     return vad_errors, vad_ms
 
 
-async def _run_full_pipeline_background_async(
+async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,
     raw_paths: list,
