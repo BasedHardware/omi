@@ -9594,4 +9594,19 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get errorLoadingAudio => '音声の読み込みエラー';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Ray-Ban Meta のマイクを選択';
+
+  @override
+  String get rayBanMetaMicPickerDescription => 'メガネの Bluetooth マイクを選択してください。Omi の使用中は音楽が一時停止します。';
+
+  @override
+  String get rayBanMetaMicPickerEmpty => 'Bluetooth マイクが見つかりません。iPhone の設定でメガネを接続してから、もう一度お試しください。';
+
+  @override
+  String get rayBanMetaMicPickerLoadError => 'Bluetooth マイクを読み込めませんでした。Bluetooth がオンになっていることを確認して、もう一度お試しください。';
+
+  @override
+  String get rayBanMetaMicPickerConnectError => 'そのマイクに接続できませんでした。iPhone の設定で接続されていることを確認してください。';
 }

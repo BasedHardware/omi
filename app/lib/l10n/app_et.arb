@@ -3150,5 +3150,10 @@
     "deviceStorageFree": "{free} vaba",
     "deviceStorageNearlyFull": "Seade on peaaegu täis — sünkroonige ruumi vabastamiseks.",
     "phoneMicOfflineFallbackMessage": "Ühendus puudub – salvestatakse lokaalselt. See transkribeeritakse, kui oled taas võrgus.",
-    "dataEncryptedBanner": "Sinu andmed on vaikimisi kaitstud tugeva krüptimisega ja sina kontrollid, kuidas neid salvestatakse ja kasutatakse."
+    "dataEncryptedBanner": "Sinu andmed on vaikimisi kaitstud tugeva krüptimisega ja sina kontrollid, kuidas neid salvestatakse ja kasutatakse.",
+    "rayBanMetaMicPickerTitle": "Valige Ray-Ban Meta mikrofon",
+    "rayBanMetaMicPickerDescription": "Valige prillide Bluetooth-mikrofon. Muusika peatub, kui Omi seda kasutab.",
+    "rayBanMetaMicPickerEmpty": "Bluetooth-mikrofone ei leitud. Ühendage prillid iPhone'i seadetes ja proovige uuesti.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth-mikrofone ei saanud laadida. Kontrollige, kas Bluetooth on sisse lülitatud, ja proovige uuesti.",
+    "rayBanMetaMicPickerConnectError": "Selle mikrofoniga ei saanud ühendust luua. Veenduge, et see oleks iPhone'i seadetes ühendatud."
 }

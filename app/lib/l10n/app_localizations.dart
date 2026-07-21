@@ -18188,6 +18188,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error loading audio'**
   String get errorLoadingAudio;
+
+  /// Title for the Bluetooth microphone picker used to connect Ray-Ban Meta glasses
+  ///
+  /// In en, this message translates to:
+  /// **'Choose your Ray-Ban Meta microphone'**
+  String get rayBanMetaMicPickerTitle;
+
+  /// Explains how to choose the glasses microphone and the Bluetooth HFP music tradeoff
+  ///
+  /// In en, this message translates to:
+  /// **'Select the Bluetooth microphone for your glasses. Music pauses while Omi uses it.'**
+  String get rayBanMetaMicPickerDescription;
+
+  /// Empty state when iOS reports no Bluetooth HFP microphone inputs
+  ///
+  /// In en, this message translates to:
+  /// **'No Bluetooth microphones found. Connect your glasses in iPhone Settings, then try again.'**
+  String get rayBanMetaMicPickerEmpty;
+
+  /// Error state when available Bluetooth HFP inputs cannot be read
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth microphones could not be loaded. Check that Bluetooth is on, then try again.'**
+  String get rayBanMetaMicPickerLoadError;
+
+  /// Error shown when the selected Bluetooth HFP microphone cannot connect
+  ///
+  /// In en, this message translates to:
+  /// **'Could not connect to that microphone. Make sure it is connected in iPhone Settings.'**
+  String get rayBanMetaMicPickerConnectError;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

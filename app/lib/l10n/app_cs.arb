@@ -3119,5 +3119,10 @@
     "deviceStorageFree": "{free} volných",
     "deviceStorageNearlyFull": "Zařízení je téměř plné — synchronizujte pro uvolnění místa.",
     "phoneMicOfflineFallbackMessage": "Bez připojení – nahrává se lokálně. Přepíše se, až budete znovu online.",
-    "dataEncryptedBanner": "Vaše data jsou ve výchozím nastavení zabezpečena silným šifrováním a vy máte kontrolu nad tím, jak jsou ukládána a používána."
+    "dataEncryptedBanner": "Vaše data jsou ve výchozím nastavení zabezpečena silným šifrováním a vy máte kontrolu nad tím, jak jsou ukládána a používána.",
+    "rayBanMetaMicPickerTitle": "Vyberte mikrofon Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "Vyberte Bluetooth mikrofon brýlí. Při jeho používání aplikací Omi se hudba pozastaví.",
+    "rayBanMetaMicPickerEmpty": "Nebyly nalezeny žádné Bluetooth mikrofony. Připojte brýle v Nastavení iPhonu a zkuste to znovu.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth mikrofony se nepodařilo načíst. Zkontrolujte, zda je Bluetooth zapnutý, a zkuste to znovu.",
+    "rayBanMetaMicPickerConnectError": "K tomuto mikrofonu se nepodařilo připojit. Ověřte, že je připojený v Nastavení iPhonu."
 }
