@@ -15,6 +15,8 @@ class _TestEnvFields implements EnvFields {
   @override
   String? get apiBaseUrl => 'https://api.omi.me/';
   @override
+  String? get stagingApiUrl => null;
+  @override
   String? get googleMapsApiKey => null;
   @override
   String? get intercomAppId => null;
@@ -99,5 +101,38 @@ void main() {
     expect(mainSource, contains('validateApplicationStartupRouting();'));
     expect(mainSource.indexOf('validateApplicationStartupRouting();'),
         lessThan(mainSource.indexOf('ServiceManager.init()')));
+  });
+
+  group('staging routing stays TestFlight-only', () {
+    test('isUsingStagingApi is false when staging is not configured', () {
+      // Android/production builds bake no STAGING_API_URL, so nothing can match.
+      expect(Env.isStagingConfigured, isFalse);
+      expect(Env.isUsingStagingApi, isFalse);
+    });
+
+    test('the staging override is reachable only inside the TestFlight branch', () {
+      // Regression guard: a compile-time/build-identity flag once routed Android
+      // beta to staging. The override must stay nested under isTestFlight.
+      final mainSource = File('lib/main.dart').readAsStringSync();
+      final testFlightBranch = mainSource.indexOf('if (isTestFlight) {');
+      final override = mainSource.indexOf('Env.overrideApiBaseUrl(staging)');
+      expect(testFlightBranch, greaterThan(-1));
+      expect(override, greaterThan(testFlightBranch));
+      // It must also be gated on the user's opt-in preference.
+      final optIn = mainSource.indexOf('testFlightUseStagingApi');
+      expect(optIn, greaterThan(testFlightBranch));
+      expect(optIn, lessThan(override));
+    });
+
+    test('no build-identity flag can opt a non-TestFlight build into staging', () {
+      final mainSource = File('lib/main.dart').readAsStringSync();
+      final detectorSource = File('lib/utils/environment_detector.dart').readAsStringSync();
+      for (final source in [mainSource, detectorSource]) {
+        expect(source, isNot(contains('OMI_BETA_RELEASE_RING')));
+        expect(source, isNot(contains('shouldUseBetaReleaseRing')));
+      }
+      // TestFlight detection itself must remain iOS-only.
+      expect(detectorSource, contains('if (!Platform.isIOS) return false;'));
+    });
   });
 }
