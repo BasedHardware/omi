@@ -2,6 +2,7 @@ import io
 import os
 import sys
 import wave
+from types import SimpleNamespace
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import numpy as np
@@ -9,6 +10,7 @@ import pytest
 import soundfile as sf
 
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
@@ -159,6 +161,54 @@ class TestBatchMetricsEndpoint:
         resp = client.get("/batch/metrics")
         assert resp.status_code == 200
         assert resp.json() == {}
+
+
+class TestStreamAdmissionEndpoint:
+    def test_capacity_rejection_happens_before_stream_session_construction(self):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        mod.stream_admission = MagicMock()
+        mod.stream_admission.try_acquire.return_value = SimpleNamespace(lease=None, reason='capacity_full')
+
+        with patch.object(mod, 'StreamSession') as stream_session:
+            client = TestClient(app, raise_server_exceptions=False)
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                with client.websocket_connect('/v3/stream') as websocket:
+                    websocket.receive_json()
+
+        assert exc_info.value.code == 1013
+        stream_session.assert_not_called()
+
+    def test_session_construction_failure_releases_admission_lease(self):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        lease = MagicMock()
+        mod.stream_admission = MagicMock()
+        mod.stream_admission.try_acquire.return_value = SimpleNamespace(lease=lease, reason='admitted')
+
+        with patch.object(mod, 'StreamSession', side_effect=RuntimeError('construction failed')):
+            client = TestClient(app, raise_server_exceptions=False)
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                with client.websocket_connect('/v3/stream') as websocket:
+                    websocket.receive_json()
+
+        assert exc_info.value.code == 1011
+        lease.release.assert_called_once_with()
+
+    def test_disconnect_releases_admission_lease_after_ready_handshake(self):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        lease = MagicMock()
+        mod.stream_admission = MagicMock()
+        mod.stream_admission.try_acquire.return_value = SimpleNamespace(lease=lease, reason='admitted')
+        session = MagicMock()
+        session.flush = AsyncMock(return_value=[])
+        session.cleanup = MagicMock()
+
+        with patch.object(mod, 'StreamSession', return_value=session):
+            client = TestClient(app, raise_server_exceptions=False)
+            with client.websocket_connect('/v3/stream') as websocket:
+                assert websocket.receive_json() == {'type': 'ready'}
+
+        lease.release.assert_called_once_with()
+        session.cleanup.assert_called_once_with()
 
 
 class TestV1TranscribeEndpoint:

@@ -120,6 +120,8 @@ def upsert_vector(uid: str, conversation_id: str, vector: List[float]) -> None:
 
 
 def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: Dict[str, Any]) -> None:
+    if index is None:
+        return
     data: VectorRecordDoc = _get_data(uid, conversation_id, vector)
     typed_metadata: Dict[str, Any] = data['metadata']
     typed_metadata.update(metadata)
@@ -128,6 +130,8 @@ def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata
 
 
 def update_vector_metadata(uid: str, conversation_id: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    if index is None:
+        return {}
     metadata['uid'] = uid
     metadata['memory_id'] = conversation_id
     result: Dict[str, Any] = index.update(f'{uid}-{conversation_id}', set_metadata=metadata, namespace="ns1")
@@ -188,6 +192,8 @@ def query_vectors_by_metadata(
     dates: List[str],
     limit: int = 5,
 ) -> List[str]:
+    if index is None:
+        return []
     and_clauses: List[Dict[str, Any]] = [{'uid': {'$eq': uid}}]
     filter_data: Dict[str, Any] = {'$and': and_clauses}
     if people or topics or entities or dates:
@@ -211,7 +217,12 @@ def query_vectors_by_metadata(
         vector=vector, filter=filter_data, namespace="ns1", include_values=False, include_metadata=True, top_k=1000
     )
     if not xc['matches']:
-        if len(and_clauses) == 3:
+        # Relax-retry when the structured people/topics/entities $or clause produced no hits, dropping
+        # it and re-querying uid-only. The $or clause, when present, is always and_clauses[1] (the date
+        # range is appended after it). The previous len == 3 guard only relaxed when a date filter was
+        # ALSO present, so the common no-date query (uid + $or, len == 2) fell through to return [] and
+        # never broadened. Never pop a date-only clause.
+        if len(and_clauses) > 1 and '$or' in and_clauses[1]:
             and_clauses.pop(1)
             logger.warning(f'query_vectors_by_metadata retrying without structured filters: {json.dumps(filter_data)}')
             xc = index.query(

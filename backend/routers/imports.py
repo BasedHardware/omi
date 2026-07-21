@@ -15,8 +15,9 @@ import database.import_jobs as import_jobs_db
 from models.import_job import ImportJobResponse, ImportJobStatus, ImportSourceType
 from utils.other import endpoints as auth
 from utils.imports.limitless import create_import_job, process_limitless_import
+from utils.multipart import IMPORT_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 
-router = APIRouter()
+router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ class DeleteLimitlessConversationsResponse(BaseModel):
     response_model=ImportJobResponse,
     tags=['import'],
 )
+@max_part_size(IMPORT_MAX_PART_SIZE)
 async def import_limitless_data(
     file: UploadFile = File(...),
     language: str = 'en',

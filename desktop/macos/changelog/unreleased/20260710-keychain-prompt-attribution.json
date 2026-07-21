@@ -1,3 +1,0 @@
-{
-  "change": "Fixed the onboarding browser-import keychain prompt showing a confusing \"security wants to access\" dialog — it now clearly asks on behalf of Omi"
-}

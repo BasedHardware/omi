@@ -10,6 +10,8 @@ from models.transcript_segment import TranscriptSegment
 from database.users import get_user_language_preference
 from utils.prompts import extract_memories_prompt, extract_learnings_prompt, extract_memories_text_content_prompt
 from utils.llms.memory import get_prompt_memories
+from utils.llm.temporal import current_date_for_uid
+from utils.llm.usage_tracker import Features, track_usage
 from .clients import get_llm
 import logging
 
@@ -105,6 +107,7 @@ def new_memories_extractor(
     user_name: Optional[str] = None,
     memories_str: Optional[str] = None,
     language: Optional[str] = None,
+    content_date: Optional[str] = None,
     high_recall: bool = False,
 ) -> List[Memory]:
     # print('new_memories_extractor', uid, 'segments', len(segments), user_name, 'len(memories_str)', len(memories_str))
@@ -112,7 +115,7 @@ def new_memories_extractor(
         user_name, memories_str = get_prompt_memories(uid)
 
     person_ids = list(set([s.person_id for s in segments if s.person_id]))
-    people = [Person(**p) for p in users_db.get_people_by_ids(uid, person_ids)] if person_ids else []
+    people = Person.deserialize_many_safe(users_db.get_people_by_ids(uid, person_ids)) if person_ids else []
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=people)
     if not content or len(content) < 25:  # less than 5 words, probably nothing
         return []
@@ -124,16 +127,18 @@ def new_memories_extractor(
 
     try:
         parser = PydanticOutputParser(pydantic_object=HighRecallMemories if high_recall else Memories)
-        chain = extract_memories_prompt | get_llm('memories') | parser
-        response: Memories | HighRecallMemories = chain.invoke(
-            {
-                'user_name': user_name,
-                'conversation': content,
-                'memories_str': memories_str,
-                'language_instruction': language_instruction,
-                'format_instructions': parser.get_format_instructions(),
-            }
-        )
+        with track_usage(uid, Features.MEMORIES):
+            chain = extract_memories_prompt | get_llm('memories') | parser
+            response: Memories | HighRecallMemories = chain.invoke(
+                {
+                    'user_name': user_name,
+                    'conversation': content,
+                    'memories_str': memories_str,
+                    'language_instruction': language_instruction,
+                    'current_date': content_date or current_date_for_uid(uid),
+                    'format_instructions': parser.get_format_instructions(),
+                }
+            )
 
         # Ensure all new memories use the new category format
         memories = response.facts if isinstance(response, HighRecallMemories) else response.to_memories()
@@ -154,6 +159,7 @@ def extract_memories_from_text(
     user_name: Optional[str] = None,
     memories_str: Optional[str] = None,
     language: Optional[str] = None,
+    content_date: Optional[str] = None,
 ) -> List[Memory]:
     """Extract memories from external integration text sources like email, posts, messages"""
     if user_name is None or memories_str is None:
@@ -166,17 +172,19 @@ def extract_memories_from_text(
 
     try:
         parser = PydanticOutputParser(pydantic_object=MemoriesByTexts)
-        chain = extract_memories_text_content_prompt | get_llm('memories') | parser
-        response: MemoriesByTexts = chain.invoke(
-            {
-                'user_name': user_name,
-                'text_content': text,
-                'text_source': text_source,
-                'memories_str': memories_str,
-                'language_instruction': language_instruction,
-                'format_instructions': parser.get_format_instructions(),
-            }
-        )
+        with track_usage(uid, Features.MEMORIES):
+            chain = extract_memories_text_content_prompt | get_llm('memories') | parser
+            response: MemoriesByTexts = chain.invoke(
+                {
+                    'user_name': user_name,
+                    'text_content': text,
+                    'text_source': text_source,
+                    'memories_str': memories_str,
+                    'language_instruction': language_instruction,
+                    'current_date': content_date or current_date_for_uid(uid),
+                    'format_instructions': parser.get_format_instructions(),
+                }
+            )
 
         # Ensure all new memories use the new category format
         memories = response.to_memories()
@@ -210,7 +218,7 @@ def new_learnings_extractor(
         user_name, learnings_str = get_prompt_memories(uid)
 
     person_ids = list(set([s.person_id for s in segments if s.person_id]))
-    people = [Person(**p) for p in users_db.get_people_by_ids(uid, person_ids)] if person_ids else []
+    people = Person.deserialize_many_safe(users_db.get_people_by_ids(uid, person_ids)) if person_ids else []
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=people)
     if not content or len(content) < 100:
         return []
@@ -219,16 +227,17 @@ def new_learnings_extractor(
 
     try:
         parser = PydanticOutputParser(pydantic_object=Learnings)
-        chain = extract_learnings_prompt | get_llm('learnings') | parser
-        response: Learnings = chain.invoke(
-            {
-                'user_name': user_name,
-                'conversation': content,
-                'learnings_str': learnings_str,
-                'language_instruction': language_instruction,
-                'format_instructions': parser.get_format_instructions(),
-            }
-        )
+        with track_usage(uid, Features.MEMORIES):
+            chain = extract_learnings_prompt | get_llm('learnings') | parser
+            response: Learnings = chain.invoke(
+                {
+                    'user_name': user_name,
+                    'conversation': content,
+                    'learnings_str': learnings_str,
+                    'language_instruction': language_instruction,
+                    'format_instructions': parser.get_format_instructions(),
+                }
+            )
         return list(map(lambda x: Memory(content=x, category=MemoryCategory.interesting), response.result))
     except Exception as e:
         logger.error(f'Error extracting new facts: {e}')

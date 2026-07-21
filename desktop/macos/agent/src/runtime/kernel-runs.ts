@@ -311,7 +311,14 @@ export class KernelRuns extends KernelCore {
       sessionId: accepted.session.sessionId,
       runId: accepted.run.runId,
     });
-    void this.executeAcceptedRun(runInput, accepted)
+    const execution = this.executeAcceptedRun(runInput, accepted);
+    // `executeAcceptedRun` creates the durable first attempt before its first
+    // asynchronous adapter boundary. Re-read that exact lifecycle snapshot so
+    // realtime spawn receipts never report a queued parent run without the
+    // admitted child attempt (and preserve an immediate pre-adapter failure).
+    const receiptRun = this.readRun(accepted.run.runId);
+    const receiptAttempt = this.readSpawnReceiptAttempt(accepted.run.runId);
+    void execution
       .then(() => {
         if (!producerJournal) return;
         try {
@@ -339,7 +346,8 @@ export class KernelRuns extends KernelCore {
       });
     return {
       session: accepted.session,
-      run: accepted.run,
+      run: receiptRun,
+      attempt: receiptAttempt,
     };
   }
 
@@ -401,7 +409,17 @@ export class KernelRuns extends KernelCore {
 
     if (input.mode === "spawn") {
       const runningDelegation = this.updateDelegationStatus(created.delegation, "running");
-      void this.executeDelegationAsync(childRunInput, { ...created, delegation: runningDelegation }, false)
+      const execution = this.executeDelegationAsync(
+        childRunInput,
+        { ...created, delegation: runningDelegation },
+        false,
+      );
+      // The child attempt is created synchronously before the first adapter
+      // await. Return the persisted lifecycle, rather than the stale accepted
+      // objects, so realtime receives queued/started/failed truth.
+      const receiptRun = this.readRun(created.run.runId);
+      const receiptAttempt = this.readSpawnReceiptAttempt(created.run.runId);
+      void execution
         .then(() => {
           if (!producerJournal) return;
           try {
@@ -430,11 +448,26 @@ export class KernelRuns extends KernelCore {
       return {
         delegation: runningDelegation,
         childSession: created.session,
-        childRun: created.run,
+        childRun: receiptRun,
+        childAttempt: receiptAttempt,
       };
     }
 
     return this.executeDelegationAsync(childRunInput, created);
+  }
+
+  /**
+   * A background spawn may fail before `executeAcceptedRun` creates its first
+   * attempt (for example, a revoked execution lease). The realtime boundary
+   * must reject that incomplete receipt rather than throwing after the parent
+   * run was accepted, so absence is represented explicitly here.
+   */
+  private readSpawnReceiptAttempt(runId: string): RunAttempt | undefined {
+    const row = this.store.getOptionalRow(
+      "SELECT * FROM run_attempts WHERE run_id = ? ORDER BY attempt_no DESC LIMIT 1",
+      [runId],
+    );
+    return row ? attemptFromRow(row) : undefined;
   }
 
   async cancelRun(runId: string, input: { ownerId?: string } = {}): Promise<CancelRunResult> {

@@ -1,0 +1,153 @@
+name: Deploy public build
+description: Build, validate, and promote one browser application through a no-traffic Cloud Run candidate.
+inputs:
+  target:
+    description: Canonical public-build target name declared in config/public-build-contract.json.
+    required: true
+  environment:
+    description: Deployment environment declared by the public-build contract.
+    required: true
+  project_id:
+    description: Google Cloud project that owns the Cloud Run service.
+    required: true
+  gcp_credentials:
+    description: Google Cloud credentials used only by the deploy actions.
+    required: true
+  service_account:
+    description: Optional Cloud Run service identity supplied by the owning workflow.
+    required: false
+    default: ""
+  runtime_env_vars:
+    description: Optional newline-delimited runtime environment entries supplied by the owning workflow.
+    required: false
+    default: ""
+outputs:
+  service:
+    description: Cloud Run service deployed from the checked-in target contract.
+    value: ${{ steps.contract.outputs.service }}
+  region:
+    description: Cloud Run region deployed from the checked-in target contract.
+    value: ${{ steps.contract.outputs.region }}
+  revision:
+    description: Exact no-traffic candidate revision promoted by this action.
+    value: ${{ steps.candidate.outputs.revision }}
+  image:
+    description: Immutable image reference promoted by this action.
+    value: ${{ steps.candidate.outputs.image }}
+runs:
+  using: composite
+  steps:
+    - name: Resolve checked deployment contract
+      id: contract
+      shell: bash
+      run: |
+        set -euo pipefail
+        contract=config/public-build-contract.json
+        target='${{ inputs.target }}'
+        target_json="$(jq -ce --arg target "$target" '.targets[$target]' "$contract")"
+        output_string() {
+          local key="$1"
+          local filter="$2"
+          printf '%s=%s\n' "$key" "$(jq -er "$filter" <<<"$target_json")" >> "$GITHUB_OUTPUT"
+        }
+        output_string service '.service'
+        output_string dockerfile '.dockerfile'
+        output_string region '.deployment.region'
+        output_string build_context '.deployment.build_context'
+        {
+          echo 'platforms<<EOF'
+          jq -er '.deployment.platforms[]' <<<"$target_json"
+          echo EOF
+          printf 'flags=%s\n' "$(jq -r '[.deployment.flags[]?] | join(" ")' <<<"$target_json")"
+          echo 'runtime_secrets<<EOF'
+          jq -r '.deployment.runtime_secrets | to_entries[]? | "\(.key)=\(.value)"' <<<"$target_json"
+          echo EOF
+          echo 'runtime_env_vars<<EOF'
+          jq -r '(.deployment.runtime_env_vars // {}) | to_entries[]? | "\(.key)=\(.value)"' <<<"$target_json"
+          echo EOF
+          printf 'remove_runtime_secrets=%s\n' "$(
+            jq -r '(.deployment.remove_runtime_secrets // []) | if length == 0 then "" else "--remove-secrets=" + join(",") end' \
+              <<<"$target_json"
+          )"
+          # preserve_runtime_secrets are validated by the runtime preflight. The
+          # explicit merge strategy below retains their live secret references.
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Prepare reviewed public build inputs
+      id: public-build
+      uses: ./.github/actions/prepare-public-build
+      with:
+        target: ${{ inputs.target }}
+        environment: ${{ inputs.environment }}
+
+    - name: Google Auth
+      uses: google-github-actions/auth@v3
+      with:
+        credentials_json: ${{ inputs.gcp_credentials }}
+
+    - name: Preflight declared Cloud Run runtime
+      shell: bash
+      run: |
+        python3 .github/scripts/preflight_public_build_runtime.py \
+          --target "${{ inputs.target }}" \
+          --project-id "${{ inputs.project_id }}"
+
+    - name: Compute immutable candidate identity
+      id: candidate
+      shell: bash
+      run: |
+        set -euo pipefail
+        short_sha="${GITHUB_SHA::7}"
+        revision_suffix="${short_sha}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        service='${{ steps.contract.outputs.service }}'
+        {
+          echo "short_sha=${short_sha}"
+          echo "revision_suffix=${revision_suffix}"
+          echo "revision=${service}-${revision_suffix}"
+          echo "tag=public-${{ inputs.target }}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "image=gcr.io/${{ inputs.project_id }}/${service}:${short_sha}"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Configure Docker authentication
+      shell: bash
+      run: gcloud auth configure-docker --quiet
+
+    - name: Build and push immutable Docker image
+      uses: docker/build-push-action@v7
+      with:
+        context: ${{ steps.contract.outputs.build_context }}
+        file: ${{ steps.contract.outputs.dockerfile }}
+        push: true
+        platforms: ${{ steps.contract.outputs.platforms }}
+        tags: ${{ steps.candidate.outputs.image }}
+        build-args: ${{ steps.public-build.outputs.build_args }}
+
+    - name: Deploy no-traffic candidate revision
+      uses: google-github-actions/deploy-cloudrun@v3
+      with:
+        service: ${{ steps.contract.outputs.service }}
+        region: ${{ steps.contract.outputs.region }}
+        image: ${{ steps.candidate.outputs.image }}
+        no_traffic: true
+        flags: >-
+          --revision-suffix=${{ steps.candidate.outputs.revision_suffix }}
+          --tag=${{ steps.candidate.outputs.tag }}
+          ${{ inputs.service_account != '' && format('--service-account={0}', inputs.service_account) || '' }}
+          ${{ steps.contract.outputs.remove_runtime_secrets }}
+          ${{ steps.contract.outputs.flags }}
+        env_vars: |-
+          ${{ steps.contract.outputs.runtime_env_vars }}
+          ${{ inputs.runtime_env_vars }}
+        env_vars_update_strategy: merge
+        secrets: ${{ steps.contract.outputs.runtime_secrets }}
+        secrets_update_strategy: merge
+
+    - name: Promote browser-accepted candidate
+      uses: ./.github/actions/public-build-candidate-promotion
+      with:
+        target: ${{ inputs.target }}
+        service: ${{ steps.contract.outputs.service }}
+        project_id: ${{ inputs.project_id }}
+        region: ${{ steps.contract.outputs.region }}
+        revision: ${{ steps.candidate.outputs.revision }}
+        tag: ${{ steps.candidate.outputs.tag }}

@@ -3,12 +3,15 @@ Shared service functions for memory retrieval.
 Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 """
 
+from datetime import timezone
 from typing import Optional, Any, Dict, List, cast
 
 import database.memories as memory_db
+import database.notifications as notification_db
 import database.vector_db as vector_db
 from database._client import db as firestore_db
 from models.memories import MemoryDB
+from utils.conversations.render import format_local_date, resolve_display_tz
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
@@ -133,6 +136,14 @@ def search_memories_text(
 
     limit = max(1, min(limit, 20))
 
+    # Memory dates go to the chat model; the UTC date rolls over at a different instant than
+    # the user's, so a raw UTC date is a day late for them in the evening (issue #6214).
+    try:
+        display_tz, _ = resolve_display_tz(notification_db.get_user_time_zone(uid))
+    except Exception as tz_error:
+        logger.warning(f"search_memories_text - timezone lookup failed, formatting dates in UTC: {tz_error}")
+        display_tz = timezone.utc
+
     memory_system = pin_memory_system(uid, db_client=firestore_db)
     if memory_system == MemorySystem.CANONICAL:
         matches = MemoryService(db_client=firestore_db).search(uid, query, limit=limit)
@@ -141,7 +152,7 @@ def search_memories_text(
         result = f"Found {len(matches)} memories matching '{query}':\n\n"
         for match in matches:
             memory = match.memory
-            date_str = memory.created_at.strftime('%Y-%m-%d') if memory.created_at else 'Unknown'
+            date_str = format_local_date(memory.created_at, display_tz) if memory.created_at else 'Unknown'
             result += (
                 f"- {memory.content} (relevance: {match.score:.2f}, "
                 f"category: {memory.category.value}, date: {date_str})\n"
@@ -202,7 +213,7 @@ def search_memories_text(
         for item in memory_objects:
             memory = item['memory']
             score = item['score']
-            date_str = memory.created_at.strftime('%Y-%m-%d') if memory.created_at else 'Unknown'
+            date_str = format_local_date(memory.created_at, display_tz) if memory.created_at else 'Unknown'
             result += (
                 f"- {memory.content} (relevance: {score:.2f}, category: {memory.category.value}, date: {date_str})\n"
             )

@@ -1,7 +1,7 @@
 import AppKit
 import CoreServices
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 import SwiftUI
 
 @MainActor
@@ -74,7 +74,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   @Published var isLoadingInsights = false
   @Published var insightStatusText: String = ""
   @Published var isResearchComplete = false
-  @Published var goalDraft: String = ""
+  @Published var goalDraft: String = "" {
+    didSet { UserDefaults.standard.set(goalDraft, forKey: goalDraftKey) }
+  }
   @Published var suggestedGoals: [String] = []
   @Published var goalSaved = OnboardingChatPersistence.isGoalCompleted
   @Published var isSavingGoal = false
@@ -99,6 +101,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   private var webResearchTask: Task<Void, Never>?
   private var localFileMemoryImportTask: Task<Int, Never>?
 
+  private let goalDraftKey = "onboardingGoalDraft"
   private let chatGPTImportedMemoriesKey = "onboardingChatGPTImportedMemoriesCount"
   private let chatGPTImportSummaryKey = "onboardingChatGPTImportSummary"
   private let claudeImportedMemoriesKey = "onboardingClaudeImportedMemoriesCount"
@@ -110,13 +113,17 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   /// the views render from.
   static weak var current: OnboardingPagedIntroCoordinator?
 
+  // Assigned only on the main actor at init; the nonisolated deinit needs
+  // unchecked access to remove the observer.
+  nonisolated(unsafe) private var nameObserver: NSObjectProtocol?
+
   init() {
     let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
     let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
     let initialName = givenName.isEmpty ? (displayName.isEmpty ? "there" : displayName) : givenName
 
     preferredName = initialName
-    draftName = initialName
+    draftName = OnboardingFlow.nameFieldPrefill(initialName)
 
     // Fresh installs start EMPTY so the user's first pick genuinely defines the
     // primary — pre-selecting the "en" fallback would make English primary for everyone.
@@ -127,7 +134,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let defaults = UserDefaults.standard
     let currentUserID = Self.normalizedUserID(defaults.string(forKey: .authUserId))
     var ownerUserID = Self.normalizedUserID(defaults.string(forKey: .onboardingMemoryImportOwnerUserId))
-    let hasLegacyImport = defaults.object(forKey: chatGPTImportedMemoriesKey) != nil
+    let hasLegacyImport =
+      defaults.object(forKey: chatGPTImportedMemoriesKey) != nil
       || defaults.object(forKey: chatGPTImportSummaryKey) != nil
       || defaults.object(forKey: claudeImportedMemoriesKey) != nil
       || defaults.object(forKey: claudeImportSummaryKey) != nil
@@ -136,26 +144,67 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       ownerUserID = currentUserID
     }
     let canRestoreMemoryImports = ownerUserID == nil || ownerUserID == currentUserID
-    chatGPTImportedMemoriesCount = canRestoreMemoryImports
+    chatGPTImportedMemoriesCount =
+      canRestoreMemoryImports
       ? defaults.integer(forKey: chatGPTImportedMemoriesKey) : 0
-    claudeImportedMemoriesCount = canRestoreMemoryImports
+    claudeImportedMemoriesCount =
+      canRestoreMemoryImports
       ? defaults.integer(forKey: claudeImportedMemoriesKey) : 0
-    chatGPTImportSummary = canRestoreMemoryImports
+    chatGPTImportSummary =
+      canRestoreMemoryImports
       ? defaults.string(forKey: chatGPTImportSummaryKey) ?? "" : ""
-    claudeImportSummary = canRestoreMemoryImports
+    claudeImportSummary =
+      canRestoreMemoryImports
       ? defaults.string(forKey: claudeImportSummaryKey) ?? "" : ""
+
+    // Restore the goal text so revisiting the Goal step (incl. across the
+    // permission-step app restart) shows what the user already entered.
+    goalDraft = defaults.string(forKey: goalDraftKey) ?? ""
+
+    // The name can arrive asynchronously — Apple only sends it on first auth, and
+    // otherwise it's fetched from the backend after sign-in. `givenName` is plain
+    // UserDefaults (not observable), so `preferredName` was a frozen snapshot that
+    // stayed "there". Refresh it when AuthService signals the name is known.
+    nameObserver = NotificationCenter.default.addObserver(
+      forName: .authNameDidUpdate, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.refreshNameFromAuthIfUnedited() }
+    }
   }
 
   deinit {
+    if let nameObserver {
+      NotificationCenter.default.removeObserver(nameObserver)
+    }
     gmailTask?.cancel()
     calendarTask?.cancel()
     appleNotesTask?.cancel()
     webResearchTask?.cancel()
+    localFileMemoryImportTask?.cancel()
+  }
+
+  /// Adopt a name that landed after init — but only replace the "there"
+  /// placeholder, never a value the user has typed into the name field.
+  private func refreshNameFromAuthIfUnedited() {
+    let given = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let display = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let resolved = given.isEmpty ? display : given
+    guard !resolved.isEmpty else { return }
+    if preferredName == "there" || preferredName.isEmpty {
+      preferredName = resolved
+    }
+    if draftName == "there" || draftName.isEmpty {
+      draftName = resolved
+    }
   }
 
   func prepare(appState: AppState) {
     ChatToolExecutor.onboardingAppState = appState
     appState.checkAllPermissions()
+
+    // Pull the name from the backend if we don't have it locally yet; when it
+    // lands, `.authNameDidUpdate` refreshes `preferredName` (no more "there").
+    AuthService.shared.loadNameFromBackendIfNeeded()
 
     // Clear graph only on first onboarding start, not mid-onboarding restarts.
     let isResuming = OnboardingChatPersistence.isMidOnboarding
@@ -532,6 +581,19 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     }
   }
 
+  /// The onboarding file scan is a best-effort profile builder. The user must be
+  /// able to advance once it reaches ANY terminal state — `.complete` (even with
+  /// zero indexed files) or `.failed` — not only when a non-empty `scanSnapshot`
+  /// exists. Gating the Continue button on `scanSnapshot != nil` traps a user
+  /// whose scan failed or indexed nothing (e.g. they skipped Full Disk Access)
+  /// on a perpetual "Scanning…" screen with no way forward but Skip.
+  static func fileScanReachedTerminalState(_ state: ScanState) -> Bool {
+    switch state {
+    case .complete, .failed: return true
+    case .idle, .scanning: return false
+    }
+  }
+
   func startFileScanIfNeeded(appState: AppState) async {
     guard case .idle = scanState else { return }
     lastActionError = nil
@@ -548,6 +610,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     if result.lowercased().hasPrefix("error") {
       scanState = .failed(result)
       lastActionError = result
+      scanStatusText = "We couldn't finish scanning your workspace."
       return
     }
 
@@ -1083,9 +1146,11 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       - entities: at most 12
       - node_type must be one of: person, organization, place, thing, concept
       - relation must connect the user to the entity, like works_on, uses, works_with, follows, plans_with, researches
-      - goals: at most 6, concrete and specific, not generic
-      - Prefer project names, organizations, tools, products, repositories, and recurring commitments
-      - Favor labels that will make a graph visually informative, not generic filler
+      - goals: exactly 4, each a short first-person objective of 3-6 words the user would pick as their focus (e.g. "Ship the desktop launch", "Land the billing migration")
+      - Every goal must name something real from the context — a specific project, product, company, deadline, or repository. Never a generic self-improvement line.
+      - Banned: "Be more productive", "Stay focused", "Organize my work", or any goal that could apply to anyone. If the context can't ground 4, return fewer.
+      - No trailing punctuation, no filler adjectives, phrased so it reads well as a selectable chip
+      - Favor entity labels that will make a graph visually informative, not generic filler
       """
 
     do {
@@ -1120,9 +1185,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         }
         return EnrichmentEntity(label: label, nodeType: nodeType, relation: relation)
       }
-      let goals = (parsed["goals"] as? [String] ?? []).filter {
-        !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      }
+      let goals = (parsed["goals"] as? [String] ?? [])
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
 
       return EnrichmentAnalysis(summary: summary, entities: entities, goals: goals)
     } catch {

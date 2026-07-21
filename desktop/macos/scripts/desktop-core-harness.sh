@@ -557,10 +557,26 @@ start_fault_stack() {
   # Do not pre-seed here — without the installed .app path, seed refuses to write tokens.
   (
     cd "$DESKTOP_DIR"
-    OMI_SKIP_BACKEND=1 OMI_SKIP_TUNNEL=1 \
+    OMI_DESKTOP_LOCAL_PROFILE=1 \
+      OMI_HARNESS_INSTANCE="${OMI_HARNESS_INSTANCE:-${OMI_LOCAL_INSTANCE:-fault-suite}}" \
+      OMI_SKIP_AUTH_SEED=1 \
+      OMI_SKIP_SETTINGS_SEED=1 \
+      OMI_LOCAL_PROFILE_STORAGE_NAME="$FAULT_BUNDLE" \
+      OMI_LOCAL_AUTH_USER=alice \
+      OMI_LOCAL_AUTH_EMAIL=alice@local.omi.invalid \
+      OMI_LOCAL_AUTH_PASSWORD=alice-local-password-030 \
+      OMI_LOCAL_AUTH_DISPLAY_NAME='Synthetic Alice' \
+      FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 \
+      FIREBASE_PROJECT_ID=demo-omi-local \
+      FIREBASE_AUTH_PROJECT_ID=demo-omi-local \
+      FIRESTORE_DATABASE_ID='(default)' \
+      FIREBASE_API_KEY=local-firebase-auth-emulator-api-key \
+      OMI_ALLOW_ADHOC_SIGN=1 \
+      OMI_SKIP_BACKEND=1 OMI_SKIP_TUNNEL=1 \
       OMI_PYTHON_API_URL="$OMI_FAULT_URL" \
       OMI_DESKTOP_API_URL="$OMI_FAULT_URL" \
       OMI_AUTH_API_URL="$OMI_FAULT_URL" \
+      OMI_FAULT_MODEL_AUTH_TOKEN=omi-fault-model-token \
       OMI_AUTOMATION_PORT="$PORT" \
       OMI_APP_NAME="$FAULT_BUNDLE" \
       ./run.sh
@@ -571,6 +587,7 @@ start_fault_stack() {
   local attempt
   for attempt in $(seq 1 90); do
     if verify_fault_bundle_health "$PORT" "$expected_bundle" 2>/dev/null; then
+      OMI_AUTOMATION_PORT="$PORT" "$SCRIPT_DIR/omi-ctl" wait-ready 90
       echo "desktop-core-harness: $FAULT_BUNDLE bridge ready on port $PORT (bundle: $expected_bundle)"
       return 0
     fi

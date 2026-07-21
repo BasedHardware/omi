@@ -15,6 +15,13 @@
         "query": {
           "type": "string",
           "description": "SQL query to execute"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional positional values bound to ? placeholders in query. Use this instead of interpolating values into SQL literals."
         }
       },
       "required": [
@@ -320,7 +327,8 @@
     "promptSnippet": "list_agent_sessions - List Omi-managed agent sessions and active runs",
     "promptGuidelines": [
       "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and floating-bar pills.",
-      "Returns task_agents and floating_agent_pills alongside canonical session summaries."
+      "Returns task_agents and floating_agent_pills alongside canonical session summaries.",
+      "For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then call get_agent_run with the returned runId and answer from run.finalText without exposing the internal id."
     ],
     "latency": "fast local",
     "inputSchema": {
@@ -340,7 +348,7 @@
         },
         "surfaceKind": {
           "type": "string",
-          "description": "Filter to a canonical surface kind.",
+          "description": "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces.",
           "enum": [
             "main_chat",
             "task_chat",
@@ -380,7 +388,7 @@
         },
         "surfaceKind": {
           "type": "string",
-          "description": "Filter to a canonical surface kind.",
+          "description": "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces.",
           "enum": [
             "main_chat",
             "task_chat",
@@ -425,19 +433,10 @@
       ]
     },
     "voice": {
-      "realtimeDescription": "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
+      "realtimeDescription": "List canonical Omi-managed agents and subagents, including their sessions/runs, across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, omit status filters: session archive state is not run completion. List recent sessions, then answer from latestRun.finalText or inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
       "schemaOverride": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": "string",
-            "enum": [
-              "open",
-              "archived",
-              "closed"
-            ],
-            "description": "Optional session status filter."
-          },
           "surfaceKind": {
             "type": "string",
             "enum": [
@@ -449,7 +448,7 @@
               "floating_bar",
               "floating_pill"
             ],
-            "description": "Optional canonical surface filter."
+            "description": "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces."
           },
           "limit": {
             "type": "number",
@@ -480,7 +479,8 @@
     "promptSnippet": "get_agent_run - Inspect one Omi agent run",
     "promptGuidelines": [
       "Use a runId from list_agent_sessions or a correlated Omi result.",
-      "Returns the run, attempts, adapter bindings, events, and artifact metadata."
+      "Returns the run, attempts, adapter bindings, events, and artifact metadata.",
+      "For a completed child, use run.finalText to answer the user and keep the internal runId out of the user-visible response."
     ],
     "latency": "fast local",
     "inputSchema": {
@@ -555,7 +555,7 @@
       ]
     },
     "voice": {
-      "realtimeDescription": "Inspect one canonical Omi-managed agent run. Prefer an agentRef from list_agent_sessions.",
+      "realtimeDescription": "Inspect one canonical Omi-managed agent run. Prefer an agentRef or runId from list_agent_sessions. For a completed child, answer from run.finalText and do not expose the internal id.",
       "schemaOverride": {
         "type": "object",
         "properties": {
@@ -1828,6 +1828,230 @@
     }
   },
   {
+    "name": "read_tool_output",
+    "label": "Read Tool Output",
+    "description": "Read a bounded excerpt from a canonical Omi tool-output artifact.",
+    "promptSnippet": "read_tool_output - Read a bounded excerpt from a saved Omi tool result",
+    "promptGuidelines": [
+      "Use an artifactId returned by a toolResultEnvelope fullOutputRef or inspect_agent_artifacts.",
+      "The response is bounded; use search_tool_output for targeted retrieval."
+    ],
+    "latency": "fast local",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "description": "Canonical tool-output artifact_id."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Owner guard. Defaults to the active signed-in owner."
+        },
+        "maxBytes": {
+          "type": "number",
+          "description": "Maximum excerpt size in bytes. Default 4096, max 8192."
+        }
+      },
+      "required": [
+        "artifactId"
+      ],
+      "additionalProperties": false
+    },
+    "mcpInputSchema": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "description": "Canonical tool-output artifact_id."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Owner guard. Defaults to the active signed-in owner."
+        },
+        "maxBytes": {
+          "type": "number",
+          "description": "Maximum excerpt size in bytes. Default 4096, max 8192."
+        }
+      },
+      "required": [
+        "artifactId"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "runtimeControl"
+    },
+    "surfaces": [
+      "desktop_chat",
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Read Tool Output",
+      "summary": "Read a bounded excerpt from a canonical Omi tool-output artifact.",
+      "bullets": [
+        "Requires a canonical artifact id and keeps provider payloads bounded."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Read a bounded excerpt from an Omi tool-output artifact referenced by a prior toolResultEnvelope. Never request an arbitrary file path.",
+      "schemaOverride": {
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "type": "string",
+            "description": "Canonical tool-output artifact id."
+          },
+          "maxBytes": {
+            "type": "number",
+            "description": "Maximum excerpt size in bytes. Default 4096, max 8192."
+          }
+        },
+        "required": [
+          "artifactId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Artifact must be a local canonical tool_output owned by the active user."
+    ],
+    "adapters": {
+      "pi-mono": {
+        "advertised": true
+      },
+      "omi-tools-stdio": {
+        "advertised": true
+      }
+    }
+  },
+  {
+    "name": "search_tool_output",
+    "label": "Search Tool Output",
+    "description": "Search a canonical Omi tool-output artifact without sending the complete artifact to a provider.",
+    "promptSnippet": "search_tool_output - Search a saved Omi tool result",
+    "promptGuidelines": [
+      "Use after a truncated toolResultEnvelope to find the relevant local output."
+    ],
+    "latency": "fast local",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "description": "Canonical tool-output artifact_id."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Owner guard. Defaults to the active signed-in owner."
+        },
+        "query": {
+          "type": "string",
+          "description": "Text to find in the saved output."
+        },
+        "maxMatches": {
+          "type": "number",
+          "description": "Maximum matching lines. Default 5, max 20."
+        }
+      },
+      "required": [
+        "artifactId",
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "mcpInputSchema": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "description": "Canonical tool-output artifact_id."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Owner guard. Defaults to the active signed-in owner."
+        },
+        "query": {
+          "type": "string",
+          "description": "Text to find in the saved output."
+        },
+        "maxMatches": {
+          "type": "number",
+          "description": "Maximum matching lines. Default 5, max 20."
+        }
+      },
+      "required": [
+        "artifactId",
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "runtimeControl"
+    },
+    "surfaces": [
+      "desktop_chat",
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Search Tool Output",
+      "summary": "Search a canonical Omi tool-output artifact without returning the complete artifact.",
+      "bullets": [
+        "Requires a canonical artifact id and returns bounded matching lines."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Search a saved Omi tool-output artifact for matching lines without returning the complete artifact.",
+      "schemaOverride": {
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "type": "string",
+            "description": "Canonical tool-output artifact id."
+          },
+          "query": {
+            "type": "string",
+            "description": "Text to find in the saved output."
+          },
+          "maxMatches": {
+            "type": "number",
+            "description": "Maximum matching lines. Default 5."
+          }
+        },
+        "required": [
+          "artifactId",
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Artifact must be a local canonical tool_output owned by the active user."
+    ],
+    "adapters": {
+      "pi-mono": {
+        "advertised": true
+      },
+      "omi-tools-stdio": {
+        "advertised": true
+      }
+    }
+  },
+  {
     "name": "update_agent_artifact_lifecycle",
     "label": "Update Agent Artifact Lifecycle",
     "description": "Update metadata-only lifecycle state for one canonical Omi agent artifact.\n\nThis only records artifact metadata state and ordered kernel events. It does not open files, delete files, retain blobs, or read artifact contents.",
@@ -2402,7 +2626,8 @@
     "promptGuidelines": [
       "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
       "Use visible=false for parent-linked background work that should not appear as a pill.",
-      "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes'.",
+      "The primary coordinator decides in its model loop whether to call spawn_agent. When the current user explicitly asks OpenClaw or Hermes to do work, call spawn_agent in that same turn with that provider; do not delegate that instruction to another agent, use a text-pattern handoff, or narrate that only another chat surface can do it.",
+      "Pass provider='openclaw' or provider='hermes' only when the current user explicitly names that provider; otherwise omit provider so Omi starts its regular managed agent.",
       "Inspect progress with list_agent_sessions or get_agent_run."
     ],
     "latency": "async background",
@@ -2419,7 +2644,7 @@
         },
         "provider": {
           "type": "string",
-          "description": "Optional local provider override.",
+          "description": "Optional local provider override only when the current user explicitly names it; omit for a regular Omi agent.",
           "enum": [
             "openclaw",
             "hermes"
@@ -2489,7 +2714,7 @@
         },
         "provider": {
           "type": "string",
-          "description": "Optional local provider override.",
+          "description": "Optional local provider override only when the current user explicitly names it; omit for a regular Omi agent.",
           "enum": [
             "openclaw",
             "hermes"
@@ -2581,7 +2806,7 @@
               "openclaw",
               "hermes"
             ],
-            "description": "Optional local provider override."
+            "description": "Optional local provider override only when the current user explicitly names it; omit for a regular Omi agent."
           },
           "parent_run_id": {
             "type": "string",
@@ -3111,15 +3336,15 @@
   {
     "name": "load_skill",
     "label": "Load Skill",
-    "description": "Load the full instructions for a named skill listed in available_skills.",
-    "promptSnippet": "load_skill - Load the full SKILL.md instructions for an available skill",
+    "description": "Load the full instructions for a relevant skill returned by the compact catalog or search_skills.",
+    "promptSnippet": "load_skill - Load a relevant skill returned by the catalog or search_skills",
     "latency": "fast local",
     "inputSchema": {
       "type": "object",
       "properties": {
         "name": {
           "type": "string",
-          "description": "Skill name exactly as listed in available_skills"
+          "description": "Skill name returned by the compact catalog or search_skills"
         }
       },
       "required": [
@@ -3156,6 +3381,62 @@
       "summary": "Load the full instructions for a named skill listed in available_skills.",
       "bullets": [
         "Use the exact skill name from available_skills."
+      ]
+    }
+  },
+  {
+    "name": "search_skills",
+    "label": "Search Skills",
+    "description": "Search installed skill names and compact descriptions for a workflow relevant to the user's request.",
+    "promptSnippet": "search_skills - Find a relevant specialized workflow before loading it",
+    "promptGuidelines": [
+      "Use only when the current user request plausibly needs a specialized workflow.",
+      "Do not browse skills merely to explore options or because a related term appears in conversation context."
+    ],
+    "latency": "fast local",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Short description of the user's request"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "nodeTool"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Requires a local SKILL.md under the configured skill roots."
+    ],
+    "adapters": {
+      "pi-mono": {
+        "advertised": true
+      },
+      "omi-tools-stdio": {
+        "advertised": true
+      }
+    },
+    "surfaces": [
+      "desktop_chat"
+    ],
+    "capabilityDoc": {
+      "title": "Search Skills",
+      "summary": "Search installed skill names and compact descriptions before loading a specialized workflow.",
+      "bullets": [
+        "Use only when the user's request may benefit from a specialized workflow.",
+        "Load a returned skill only when it is relevant to the user's request."
       ]
     }
   },
@@ -3768,12 +4049,14 @@
   {
     "name": "capture_screen",
     "label": "Capture Screen",
-    "description": "Capture raw screenshot pixels only when get_work_context is insufficient. Returns the file path to the saved JPEG image after approval. Use the Read tool to view the image after capturing.",
+    "description": "Capture a live current-screen image. Returns the saved full-screen image path plus native-resolution detail tiles on large screens, after approval. Use the Read tool to view the images after capturing.",
     "promptSnippet": "capture_screen - Take a screenshot of the user's current screen",
     "promptGuidelines": [
-      "Call get_work_context first when the user asks about what's on their screen or what they're looking at.",
+      "For a direct current-screen question, capture a live image instead of using get_work_context as current visual evidence.",
       "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
-      "After capture_screen returns a file path, use Read to view the image.",
+      "After capture_screen returns, use Read to view the full-screen image.",
+      "The full screenshot is downscaled before you see it — before quoting small on-screen text (titles, prices, sizes, labels) or choosing between similar-looking items, Read the detail tile covering that item and take the exact text from the tile.",
+      "Keep every detail you cite (title, price, badge, position) bound to one on-screen item; if text is not legible even in a tile, say so instead of inferring.",
       "Do NOT use bash screencapture - always use this tool instead."
     ],
     "latency": "fast local",
@@ -3811,11 +4094,11 @@
     ],
     "capabilityDoc": {
       "title": "Capture Screen",
-      "summary": "Capture raw screenshot pixels after screen summary context is not enough.",
+      "summary": "Capture a live current-screen image after the user asks about what is visible now.",
       "bullets": [
-        "For screen-awareness questions, call get_work_context first.",
+        "For a direct current-screen question, use this live capture instead of treating screen history as current evidence.",
         "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
-        "After capture_screen returns a file path, use Read to view the image."
+        "The result lists the full-screen image path plus native-resolution detail tiles on large screens; use Read to view them."
       ]
     }
   },
@@ -3886,10 +4169,11 @@
   {
     "name": "request_permission",
     "label": "Request Permission",
-    "description": "Open the native macOS permission prompt or Settings pane for one required permission after the user explicitly asks for it.",
+    "description": "Open the native macOS permission prompt or Settings pane for one required permission after the user explicitly asks for it. Screen share, screen sharing, and screen-share mean screen_recording.",
     "promptSnippet": "request_permission - Request a macOS permission",
     "promptGuidelines": [
-      "Call only when the current user message explicitly requests one named permission, or clearly affirms your immediately preceding missing-permission request.",
+      "Call only when the current user message explicitly requests one named permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
+      "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
       "For generic or multi-permission requests, ask the user which permission they want to grant.",
       "Use strict permission types only. Do not invent permission names.",
       "After requesting, explain any returned requires_restart or pending status."
@@ -3945,15 +4229,16 @@
     ],
     "capabilityDoc": {
       "title": "Request Permission",
-      "summary": "Open or guide the user through granting a required macOS permission.",
+      "summary": "Open or guide the user through granting a required macOS permission. Screen sharing is the macOS Screen Recording permission.",
       "bullets": [
-        "Call only when the current user message names one permission or clearly affirms your immediately preceding permission request.",
+        "Call only when the current user message names one permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
+        "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
         "Ask the user to choose when their request is generic or names multiple permissions.",
         "The user must still complete the native macOS prompt or Settings toggle."
       ]
     },
     "voice": {
-      "realtimeDescription": "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access."
+      "realtimeDescription": "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Screen share, screen sharing, and screen-share mean Screen Recording. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access."
     }
   },
   {
@@ -4448,7 +4733,11 @@
     "runtimePreconditions": [
       "Realtime voice only; requires Screen Recording permission."
     ],
-    "adapters": {},
+    "adapters": {
+      "pi-mono": {
+        "advertised": true
+      }
+    },
     "surfaces": [
       "realtime_voice"
     ],
@@ -4461,6 +4750,55 @@
     },
     "voice": {
       "realtimeDescription": "Capture the user's current screen so you can see what they're looking at."
+    }
+  },
+  {
+    "name": "report_screen_observation",
+    "label": "Report Screen Observation",
+    "description": "Verify one current-screen observation after screenshot succeeds.",
+    "promptSnippet": "report_screen_observation - Verify grounding before answering a current-screen request",
+    "latency": "fast local",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "observation": {
+          "type": "string",
+          "description": "Concise visual grounding observation from the attached image; this is not the user-facing answer."
+        }
+      },
+      "required": [
+        "observation"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "realtimeHub"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Realtime voice only; screenshot evidence must belong to the active PTT turn."
+    ],
+    "adapters": {},
+    "surfaces": [
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Report Screen Observation",
+      "summary": "Verify grounding from the current-screen image.",
+      "bullets": [
+        "Only call after screenshot returns the current image.",
+        "Submit a concise visual observation, then answer the user's original request naturally."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "After screenshot succeeds for a current-screen question, report exactly one concise grounding observation. This report is internal verification, not the user-facing answer: when it succeeds, answer the user's original request naturally from the attached image."
     }
   },
   {
@@ -4626,12 +4964,12 @@
   {
     "name": "get_work_context",
     "label": "Get Work Context",
-    "description": "Get the user's current screen plus a compressed timeline of recent on-screen activity without sharing raw screenshot pixels. Call this first when seeing the user's current work would help.",
-    "promptSnippet": "get_work_context - Get current screen and recent work context",
+    "description": "Get a compressed timeline of recent on-screen activity without sharing raw screenshot pixels. It is historical context, not current visual evidence.",
+    "promptSnippet": "get_work_context - Get recent work context",
     "promptGuidelines": [
-      "Call get_work_context first for \"what is on my screen\", \"do you see my screen\", and current-work questions.",
-      "Use its screen_now and timeline fields to answer directly when possible.",
-      "Only request get_screenshot or capture_screen approval if raw image pixels are necessary after get_work_context."
+      "Use this for recent work/activity history, not for direct current-screen questions.",
+      "Its screen_now and timeline fields are historical unless this turn separately attached a live image.",
+      "For current visual detail, use capture_screen when approval is available rather than answering from this tool."
     ],
     "latency": "fast local",
     "inputSchema": {

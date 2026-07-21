@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import platform as _platform_mod
 import subprocess
 import sys
 import tempfile
@@ -15,6 +16,19 @@ from pathlib import Path, PurePath
 from typing import Any
 
 
+VALID_PLATFORMS = {"all", "macos", "linux"}
+
+
+def detect_platform() -> str:
+    """Map the host OS to a manifest platform tag."""
+    system = _platform_mod.system()
+    if system == "Darwin":
+        return "macos"
+    if system == "Linux":
+        return "linux"
+    return system.lower()
+
+
 @dataclass(frozen=True)
 class Check:
     id: str
@@ -22,6 +36,8 @@ class Check:
     triggers: tuple[str, ...]
     lanes: tuple[str, ...]
     reason: str
+    requires_pr_body: bool = False
+    platforms: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -81,6 +97,8 @@ def load_manifest(path: Path) -> Manifest:
             triggers=tuple(item.get("triggers", ())),
             lanes=tuple(item.get("lanes", ())),
             reason=str(item.get("reason", "")),
+            requires_pr_body=item.get("requires_pr_body", False),
+            platforms=tuple(item.get("platforms", ())),
         )
         for item in raw.get("checks", [])
     )
@@ -121,6 +139,11 @@ def validate_manifest(manifest: Manifest, root: Path) -> list[str]:
             errors.append(f"{check.id}: missing required lanes: {', '.join(missing_lanes)}")
         if not check.reason:
             errors.append(f"{check.id}: reason must not be empty")
+        if not isinstance(check.requires_pr_body, bool):
+            errors.append(f"{check.id}: requires_pr_body must be a boolean")
+        invalid_platforms = sorted(set(check.platforms) - VALID_PLATFORMS)
+        if invalid_platforms:
+            errors.append(f"{check.id}: invalid platforms: {', '.join(invalid_platforms)}")
     for exemption in manifest.exempt:
         if not exemption.path or not exemption.reason:
             errors.append("exempt entries require non-empty path and reason")
@@ -145,9 +168,9 @@ def merge_base(root: Path, base: str, head: str) -> str:
 
 def changed_files(root: Path, base: str, head: str, include_worktree: bool = False) -> list[str]:
     resolved_base = merge_base(root, base, head)
-    files = set(run_git(root, "diff", "--name-only", "--diff-filter=ACMR", f"{resolved_base}...{head}").splitlines())
+    files = set(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", f"{resolved_base}...{head}").splitlines())
     if include_worktree and head == "HEAD":
-        files.update(run_git(root, "diff", "--name-only", "--diff-filter=ACMR", "HEAD").splitlines())
+        files.update(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", "HEAD").splitlines())
         files.update(run_git(root, "ls-files", "--others", "--exclude-standard").splitlines())
     return sorted(path for path in files if path)
 
@@ -164,11 +187,40 @@ def trigger_matches(pattern: str, path: str) -> bool:
     return False
 
 
-def resolve_checks(manifest: Manifest, files: list[str], lane: str) -> list[Check]:
+def _platform_matches(check: Check, platform: str) -> bool:
+    return not check.platforms or "all" in check.platforms or platform in check.platforms
+
+
+def resolve_checks(
+    manifest: Manifest,
+    files: list[str],
+    lane: str,
+    *,
+    include_pr_body_checks: bool = True,
+    platform: str = "all",
+) -> list[Check]:
     return [
         check
         for check in manifest.checks
         if lane in check.lanes
+        and (include_pr_body_checks or not check.requires_pr_body)
+        and _platform_matches(check, platform)
+        and (
+            "all" in check.triggers
+            or any(trigger_matches(pattern, path) for pattern in check.triggers for path in files)
+        )
+    ]
+
+
+def skipped_platform_checks(
+    manifest: Manifest, files: list[str], lane: str, platform: str
+) -> list[Check]:
+    """Checks that match lane+triggers but are skipped due to platform."""
+    return [
+        check
+        for check in manifest.checks
+        if lane in check.lanes
+        and not _platform_matches(check, platform)
         and (
             "all" in check.triggers
             or any(trigger_matches(pattern, path) for pattern in check.triggers for path in files)
@@ -244,9 +296,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--changed-files", type=Path)
     parser.add_argument("--pr-body-file", type=Path)
+    parser.add_argument(
+        "--skip-pr-body-checks",
+        action="store_true",
+        help="Exclude checks declared as requiring pull-request metadata.",
+    )
     parser.add_argument("--skip-changelog", action="store_true")
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--root", type=Path)
+    parser.add_argument(
+        "--platform",
+        choices=sorted(VALID_PLATFORMS),
+        default=None,
+        help="Platform filter (auto-detected if omitted). macOS-only checks are skipped on other platforms.",
+    )
     return parser.parse_args()
 
 
@@ -268,10 +331,22 @@ def main() -> int:
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"FAIL: could not resolve manifest checks: {exc}", file=sys.stderr)
         return 2
-    checks = resolve_checks(manifest, files, args.lane)
-    print(f"Check manifest: lane={args.lane} base={resolved_base[:12]} head={args.head} files={len(files)}")
+    detected_platform = args.platform or detect_platform()
+    checks = resolve_checks(
+        manifest,
+        files,
+        args.lane,
+        include_pr_body_checks=not args.skip_pr_body_checks,
+        platform=detected_platform,
+    )
+    print(
+        f"Check manifest: lane={args.lane} platform={detected_platform} "
+        f"base={resolved_base[:12]} head={args.head} files={len(files)}"
+    )
     for check in checks:
         print(f"  SELECTED {check.id}: {check.reason}")
+    for skip in skipped_platform_checks(manifest, files, args.lane, detected_platform):
+        print(f"  SKIPPED {skip.id}: platform-only (requires {', '.join(skip.platforms)}, running on {detected_platform})")
     if args.list:
         return 0
 

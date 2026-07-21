@@ -1,5 +1,5 @@
-import XCTest
 import GRDB
+import XCTest
 
 @testable import Omi_Computer
 
@@ -18,7 +18,8 @@ final class ActionItemsFTSRepairTests: XCTestCase {
 
     let appSupport = FileManager.default
       .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-    userDir = appSupport
+    userDir =
+      appSupport
       .appendingPathComponent("Omi", isDirectory: true)
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)
@@ -57,10 +58,12 @@ final class ActionItemsFTSRepairTests: XCTestCase {
         db,
         sql: "SELECT description FROM action_items ORDER BY id")
     }
-    XCTAssertEqual(durableDescriptions, [
-      "preserve existing durable row",
-      "insert after fts repair"
-    ])
+    XCTAssertEqual(
+      durableDescriptions,
+      [
+        "preserve existing durable row",
+        "insert after fts repair",
+      ])
 
     let ftsDescriptions = try await dbQueue.read { db in
       try String.fetchAll(

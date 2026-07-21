@@ -329,6 +329,13 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       "Use the exact skill name from available_skills.",
     ]),
   },
+  search_skills: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc("Search Skills", "Search installed skill names and compact descriptions before loading a specialized workflow.", [
+      "Use only when the user's request may benefit from a specialized workflow.",
+      "Load a returned skill only when it is relevant to the user's request.",
+    ]),
+  },
   save_knowledge_graph: {
     surfaces: ["desktop_chat"],
     capabilityDoc: doc(
@@ -485,11 +492,11 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     surfaces: ["desktop_chat"],
     capabilityDoc: doc(
       "Capture Screen",
-      "Capture raw screenshot pixels after screen summary context is not enough.",
+      "Capture a live current-screen image after the user asks about what is visible now.",
       [
-        "For screen-awareness questions, call get_work_context first.",
+        "For a direct current-screen question, use this live capture instead of treating screen history as current evidence.",
         "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
-        "After capture_screen returns a file path, use Read to view the image.",
+        "The result lists the full-screen image path plus native-resolution detail tiles on large screens; use Read to view them.",
       ],
     ),
   },
@@ -506,14 +513,15 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
   },
   request_permission: {
     surfaces: ["desktop_chat", "realtime_voice", "onboarding"],
-    capabilityDoc: doc("Request Permission", "Open or guide the user through granting a required macOS permission.", [
-      "Call only when the current user message names one permission or clearly affirms your immediately preceding permission request.",
+    capabilityDoc: doc("Request Permission", "Open or guide the user through granting a required macOS permission. Screen sharing is the macOS Screen Recording permission.", [
+      "Call only when the current user message names one permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
+      "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
       "Ask the user to choose when their request is generic or names multiple permissions.",
       "The user must still complete the native macOS prompt or Settings toggle.",
     ]),
     voice: {
       realtimeDescription:
-        "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access.",
+        "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Screen share, screen sharing, and screen-share mean Screen Recording. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access.",
     },
   },
   scan_files: {
@@ -606,6 +614,18 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       realtimeDescription: "Capture the user's current screen so you can see what they're looking at.",
     },
   },
+  report_screen_observation: {
+    surfaces: ["realtime_voice"],
+    capabilityDoc: doc("Report Screen Observation", "Verify grounding from the current-screen image.", [
+      "Only call after screenshot returns the current image.",
+      "Submit a concise visual observation, then answer the user's original request naturally.",
+    ]),
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    voice: {
+      realtimeDescription:
+        "After screenshot succeeds for a current-screen question, report exactly one concise grounding observation. This report is internal verification, not the user-facing answer: when it succeeds, answer the user's original request naturally from the attached image.",
+    },
+  },
   point_click: {
     surfaces: ["realtime_voice"],
     capabilityDoc: doc("Point Click", "Click at on-screen pixel coordinates.", [
@@ -637,7 +657,18 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       "Use semantic_search instead for fuzzy or conceptual queries about screen content.",
     ],
     latency: "fast local",
-    inputSchema: schema({ query: { type: "string", description: "SQL query to execute" } }, ["query"]),
+    inputSchema: schema(
+      {
+        query: { type: "string", description: "SQL query to execute" },
+        parameters: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Optional positional values bound to ? placeholders in query. Use this instead of interpolating values into SQL literals.",
+        },
+      },
+      ["query"],
+    ),
     annotations: readOnlyLocal,
     timeoutClass: "normal",
     executor: { kind: "swiftTool" },
@@ -805,10 +836,28 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
   {
     name: "load_skill",
     label: "Load Skill",
-    description: "Load the full instructions for a named skill listed in available_skills.",
-    promptSnippet: "load_skill - Load the full SKILL.md instructions for an available skill",
+    description: "Load the full instructions for a relevant skill returned by the compact catalog or search_skills.",
+    promptSnippet: "load_skill - Load a relevant skill returned by the catalog or search_skills",
     latency: "fast local",
-    inputSchema: schema({ name: { type: "string", description: "Skill name exactly as listed in available_skills" } }, ["name"]),
+    inputSchema: schema({ name: { type: "string", description: "Skill name returned by the compact catalog or search_skills" } }, ["name"]),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "nodeTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots."],
+    adapters: piAndStdio(),
+  },
+  {
+    name: "search_skills",
+    label: "Search Skills",
+    description: "Search installed skill names and compact descriptions for a workflow relevant to the user's request.",
+    promptSnippet: "search_skills - Find a relevant specialized workflow before loading it",
+    promptGuidelines: [
+      "Use only when the current user request plausibly needs a specialized workflow.",
+      "Do not browse skills merely to explore options or because a related term appears in conversation context.",
+    ],
+    latency: "fast local",
+    inputSchema: schema({ query: { type: "string", description: "Short description of the user's request" } }, ["query"]),
     annotations: readOnlyLocal,
     timeoutClass: "normal",
     executor: { kind: "nodeTool" },
@@ -1016,12 +1065,14 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "capture_screen",
     label: "Capture Screen",
     description:
-      "Capture raw screenshot pixels only when get_work_context is insufficient. Returns the file path to the saved JPEG image after approval. Use the Read tool to view the image after capturing.",
+      "Capture a live current-screen image. Returns the saved full-screen image path plus native-resolution detail tiles on large screens, after approval. Use the Read tool to view the images after capturing.",
     promptSnippet: "capture_screen - Take a screenshot of the user's current screen",
     promptGuidelines: [
-      "Call get_work_context first when the user asks about what's on their screen or what they're looking at.",
+      "For a direct current-screen question, capture a live image instead of using get_work_context as current visual evidence.",
       "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
-      "After capture_screen returns a file path, use Read to view the image.",
+      "After capture_screen returns, use Read to view the full-screen image.",
+      "The full screenshot is downscaled before you see it — before quoting small on-screen text (titles, prices, sizes, labels) or choosing between similar-looking items, Read the detail tile covering that item and take the exact text from the tile.",
+      "Keep every detail you cite (title, price, badge, position) bound to one on-screen item; if text is not legible even in a tile, say so instead of inferring.",
       "Do NOT use bash screencapture - always use this tool instead.",
     ],
     latency: "fast local",
@@ -1057,10 +1108,11 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "request_permission",
     label: "Request Permission",
     description:
-      "Open the native macOS permission prompt or Settings pane for one required permission after the user explicitly asks for it.",
+      "Open the native macOS permission prompt or Settings pane for one required permission after the user explicitly asks for it. Screen share, screen sharing, and screen-share mean screen_recording.",
     promptSnippet: "request_permission - Request a macOS permission",
     promptGuidelines: [
-      "Call only when the current user message explicitly requests one named permission, or clearly affirms your immediately preceding missing-permission request.",
+      "Call only when the current user message explicitly requests one named permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
+      "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
       "For generic or multi-permission requests, ask the user which permission they want to grant.",
       "Use strict permission types only. Do not invent permission names.",
       "After requesting, explain any returned requires_restart or pending status.",
@@ -1238,6 +1290,35 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     intendedForAgents: true,
     runtimePreconditions: ["Realtime voice only; requires Screen Recording permission."],
+    // Realtime voice invokes this through the same pi-mono runtime capability
+    // fence as other kernel-authorized tools. The surface still limits the
+    // Swift executor to realtime voice; without this projection the runtime
+    // rejects every provider screenshot call as tool_not_allowed.
+    adapters: {
+      "pi-mono": { advertised: true },
+    },
+  },
+  {
+    name: "report_screen_observation",
+    label: "Report Screen Observation",
+    description:
+      "Verify one current-screen observation after screenshot succeeds.",
+    promptSnippet: "report_screen_observation - Verify grounding before answering a current-screen request",
+    latency: "fast local",
+    inputSchema: schema(
+      {
+        observation: {
+          type: "string",
+          description: "Concise visual grounding observation from the attached image; this is not the user-facing answer.",
+        },
+      },
+      ["observation"],
+    ),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Realtime voice only; screenshot evidence must belong to the active PTT turn."],
     adapters: {},
   },
   {
@@ -1293,12 +1374,12 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "get_work_context",
     label: "Get Work Context",
     description:
-      "Get the user's current screen plus a compressed timeline of recent on-screen activity without sharing raw screenshot pixels. Call this first when seeing the user's current work would help.",
-    promptSnippet: "get_work_context - Get current screen and recent work context",
+      "Get a compressed timeline of recent on-screen activity without sharing raw screenshot pixels. It is historical context, not current visual evidence.",
+    promptSnippet: "get_work_context - Get recent work context",
     promptGuidelines: [
-      "Call get_work_context first for \"what is on my screen\", \"do you see my screen\", and current-work questions.",
-      "Use its screen_now and timeline fields to answer directly when possible.",
-      "Only request get_screenshot or capture_screen approval if raw image pixels are necessary after get_work_context.",
+      "Use this for recent work/activity history, not for direct current-screen questions.",
+      "Its screen_now and timeline fields are historical unless this turn separately attached a live image.",
+      "For current visual detail, use capture_screen when approval is available rather than answering from this tool.",
     ],
     latency: "fast local",
     inputSchema: schema({ minutes: { type: "number", description: "Minutes of recent activity to summarize (default 10, max 120)" } }),
@@ -1323,7 +1404,7 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
     schemaOverride: schema(
       {
         objective: { type: "string", description: "Self-contained background-agent objective." },
-        provider: { type: "string", enum: ["openclaw", "hermes"], description: "Optional local provider override." },
+        provider: { type: "string", enum: ["openclaw", "hermes"], description: "Optional local provider override only when the current user explicitly names it; omit for a regular Omi agent." },
         parent_run_id: { type: "string", description: "Optional parent run to link via delegation." },
         visible: { type: "boolean", description: "Whether to project into floating-bar pill UI. Default true." },
         title: { type: "string", description: "Optional visible session title." },
@@ -1334,14 +1415,13 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
   },
   list_agent_sessions: {
     realtimeDescription:
-      "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
+      "List canonical Omi-managed agents and subagents, including their sessions/runs, across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, omit status filters: session archive state is not run completion. List recent sessions, then answer from latestRun.finalText or inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
     schemaOverride: schema(
       {
-        status: { type: "string", enum: ["open", "archived", "closed"], description: "Optional session status filter." },
         surfaceKind: {
           type: "string",
           enum: ["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_bar", "floating_pill"],
-          description: "Optional canonical surface filter.",
+          description: "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces.",
         },
         limit: { type: "number", description: "Maximum sessions to return. Default 50." },
       },
@@ -1349,7 +1429,7 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
     ),
   },
   get_agent_run: {
-    realtimeDescription: "Inspect one canonical Omi-managed agent run. Prefer an agentRef from list_agent_sessions.",
+    realtimeDescription: "Inspect one canonical Omi-managed agent run. Prefer an agentRef or runId from list_agent_sessions. For a completed child, answer from run.finalText and do not expose the internal id.",
     schemaOverride: schema(
       {
         agentRef: { type: "string", description: "Opaque agent handle from list_agent_sessions." },
@@ -1390,6 +1470,29 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
         limit: { type: "number", description: "Maximum artifacts to return. Default 50." },
       },
       [],
+    ),
+  },
+  read_tool_output: {
+    realtimeDescription:
+      "Read a bounded excerpt from an Omi tool-output artifact referenced by a prior toolResultEnvelope. Never request an arbitrary file path.",
+    schemaOverride: schema(
+      {
+        artifactId: { type: "string", description: "Canonical tool-output artifact id." },
+        maxBytes: { type: "number", description: "Maximum excerpt size in bytes. Default 4096, max 8192." },
+      },
+      ["artifactId"],
+    ),
+  },
+  search_tool_output: {
+    realtimeDescription:
+      "Search a saved Omi tool-output artifact for matching lines without returning the complete artifact.",
+    schemaOverride: schema(
+      {
+        artifactId: { type: "string", description: "Canonical tool-output artifact id." },
+        query: { type: "string", description: "Text to find in the saved output." },
+        maxMatches: { type: "number", description: "Maximum matching lines. Default 5." },
+      },
+      ["artifactId", "query"],
     ),
   },
   update_agent_artifact_lifecycle: {

@@ -46,26 +46,42 @@ jobs:
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
             exit 1
           fi
-
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.inputs.branch || github.ref }}
+          ref: ${{ github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch }}
+          fetch-depth: 0
+
+      - name: Admit checked-out production source and image identity
+        run: |
+          set -euo pipefail
+          CHECKED_OUT_SHA=$(git rev-parse HEAD)
+          if [[ "${{ github.event.inputs.environment }}" == prod ]]; then
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            if ! git merge-base --is-ancestor "$CHECKED_OUT_SHA" origin/main; then
+              echo "ERROR: checked-out HEAD $CHECKED_OUT_SHA is not an ancestor of fresh origin/main $(git rev-parse origin/main)." >&2
+              exit 1
+            fi
+          fi
+          IMAGE_TAG=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")
+          echo "Admitted deployment source: $CHECKED_OUT_SHA"
+          echo "CHECKED_OUT_SHA=$CHECKED_OUT_SHA" >> "$GITHUB_ENV"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
 
       - name: Install Helm
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@v5
 
       - name: Google Auth
         id: auth
-        uses: 'google-github-actions/auth@v2'
+        uses: 'google-github-actions/auth@v3'
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@v2
+        uses: google-github-actions/get-gke-credentials@v3
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
           location: ${{ env.REGION }}
@@ -81,6 +97,32 @@ jobs:
             exit 1
           fi
           echo "BACKEND_LISTEN_IMAGE_TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Apply non-secret backend runtime config
+        env:
+          ENVIRONMENT: ${{ vars.ENV }}
+          CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          MCP_AUTHORIZATION_SERVER_URL: ${{ vars.MCP_AUTHORIZATION_SERVER_URL }}
+          MCP_OAUTH_CHATGPT_CLIENT_ID: ${{ vars.MCP_OAUTH_CHATGPT_CLIENT_ID }}
+          MCP_OAUTH_CHATGPT_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CHATGPT_REDIRECT_URIS }}
+          MCP_OAUTH_CLAUDE_CLIENT_ID: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_ID }}
+          MCP_OAUTH_CLAUDE_CLIENT_NAME: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_NAME }}
+          MCP_OAUTH_CLAUDE_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CLAUDE_REDIRECT_URIS }}
+          MCP_OAUTH_PUBLIC_CLIENT_ID: ${{ vars.MCP_OAUTH_PUBLIC_CLIENT_ID }}
+          MCP_OAUTH_PUBLIC_REDIRECT_URIS: ${{ vars.MCP_OAUTH_PUBLIC_REDIRECT_URIS }}
+          MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
+          RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
+          REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
+          STT_PRERECORDED_MODEL: modulate-velma-2,parakeet
+          STT_SERVICE_MODELS: modulate-velma-2,parakeet
+          TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
+          TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
+          TWILIO_API_KEY_SID: ${{ vars.TWILIO_API_KEY_SID }}
+          TWILIO_TWIML_APP_SID: ${{ vars.TWILIO_TWIML_APP_SID }}
+          X_OAUTH_CLIENT_ID: ${{ vars.X_OAUTH_CLIENT_ID }}
+          X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
+        run: backend/scripts/deploy-backend-config.sh
 
       - name: Helm diff (dry run)
         run: |
@@ -125,7 +167,9 @@ jobs:
 
       - name: Verify rollout
         run: |
-          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s; then
+          # See gcp_backend.yml: 300s cannot cover a full backend-listen roll; a
+          # stalled rollout still fails on progressDeadlineSeconds.
+          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=1800s; then
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
             exit 1
           fi

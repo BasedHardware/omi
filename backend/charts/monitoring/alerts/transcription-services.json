@@ -122,7 +122,12 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "19",
-      "threshold": "1"
+      "threshold": "1",
+      "summary": "Omi live transcription alert: Backend-listen - 4XX error rate is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "isPaused": false,
     "notification_settings": {
@@ -131,7 +136,10 @@
     "record": null,
     "labels": {
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "bevzeigrns5xca",
+      "component": "live-transcription",
+      "impact": "product"
     }
   },
   {
@@ -257,11 +265,19 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "19",
-      "threshold": "1"
+      "threshold": "1",
+      "summary": "Omi live transcription alert: Backend-listen - 5XX error rate is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "labels": {
       "instatus_component": "live-transcription",
-      "severity": "critical"
+      "severity": "critical",
+      "alert_identity": "cevzen5b94z5sb",
+      "component": "live-transcription",
+      "impact": "product"
     },
     "isPaused": false,
     "notification_settings": {
@@ -393,7 +409,12 @@
     "annotations": {
       "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
       "__panelId__": "9",
-      "threshold": "0.8 (80%)"
+      "threshold": "0.8 (80%)",
+      "summary": "Omi live transcription alert: Backend-listen Memory usage is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
@@ -402,7 +423,10 @@
     "record": null,
     "labels": {
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "eew9yw583gnwgd",
+      "component": "live-transcription",
+      "impact": "infrastructure"
     }
   },
   {
@@ -533,7 +557,12 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "21",
-      "threshold": "50"
+      "threshold": "50",
+      "summary": "Omi live transcription alert: Backend-listen replica count is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
@@ -542,7 +571,10 @@
     "record": null,
     "labels": {
       "severity": "ticket",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "aevzf0r8z6ayoe",
+      "component": "live-transcription",
+      "impact": "infrastructure"
     }
   },
   {
@@ -673,7 +705,12 @@
     "annotations": {
       "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
       "__panelId__": "15",
-      "threshold": "8"
+      "threshold": "8",
+      "summary": "Omi live transcription alert: Backend-listen request per pod is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
@@ -682,7 +719,10 @@
     "record": null,
     "labels": {
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "bevzfbkx3fuo0c",
+      "component": "live-transcription",
+      "impact": "infrastructure"
     }
   },
   {
@@ -820,7 +860,12 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "13",
-      "threshold": "5"
+      "threshold": "5",
+      "summary": "Omi live transcription alert: Deepgram Engine replica count is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
@@ -829,7 +874,10 @@
     "record": null,
     "labels": {
       "severity": "ticket",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "fevzfwkmrjncwc",
+      "component": "live-transcription",
+      "impact": "infrastructure"
     }
   },
   {
@@ -960,11 +1008,19 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "11",
-      "threshold": "2s"
+      "threshold": "2s",
+      "summary": "Omi live transcription alert: Deepgram Engine stream latency by p99 is high.",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
     "labels": {
       "instatus_component": "live-transcription",
-      "severity": "critical"
+      "severity": "critical",
+      "alert_identity": "bevykefxxe0owd",
+      "component": "live-transcription",
+      "impact": "user-experience"
     },
     "isPaused": false,
     "notification_settings": {
@@ -1103,11 +1159,19 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "60",
-      "threshold": "2"
+      "threshold": "2",
+      "summary": "Omi live transcription alert: Transcription Service Error Rate.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "labels": {
       "instatus_component": "live-transcription",
-      "severity": "warning"
+      "severity": "warning",
+      "alert_identity": "devzd05c0bocgc",
+      "component": "live-transcription",
+      "impact": "product"
     },
     "isPaused": false,
     "notification_settings": {
@@ -1242,11 +1306,19 @@
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "63"
+      "__panelId__": "63",
+      "summary": "Omi live transcription alert: Transcription Service Error Rate: Data corrupted.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "labels": {
       "instatus_component": "live-transcription",
-      "severity": "ticket"
+      "severity": "ticket",
+      "alert_identity": "df2a40h2fbjswe",
+      "component": "live-transcription",
+      "impact": "infrastructure"
     },
     "isPaused": false,
     "notification_settings": {

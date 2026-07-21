@@ -11,14 +11,15 @@ import sys
 import tempfile
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def main() -> int:
     errors: list[str] = []
     errors.extend(check_desktop_codemagic_release())
+    errors.extend(check_desktop_preview_publishing())
     errors.extend(check_desktop_qualification_runner())
+    errors.extend(check_no_unprovisioned_beta_backend_hosts())
     errors.extend(check_mobile_codemagic_release_triggers())
     errors.extend(check_docs_workflow_scripts())
     errors.extend(check_python_cli_release_version_source())
@@ -101,10 +102,27 @@ def check_desktop_codemagic_release() -> list[str]:
         errors.append("desktop release must dispatch trusted macOS qualification after GitHub candidate publication")
     if "desktop_qualify_beta.yml" not in desktop_workflow_body:
         errors.append("desktop release must dispatch the trusted macOS qualification workflow")
+    for required_fragment in (
+        "for attempt in 1 2 3",
+        "preserving immutable evidence",
+        "duplicate dispatches",
+    ):
+        if required_fragment not in desktop_workflow_body:
+            errors.append(f"desktop qualification handoff is missing reliable dispatch fragment: {required_fragment}")
+    dispatch_start = desktop_workflow_body.find("Dispatch trusted macOS beta qualification")
+    dispatch_body = desktop_workflow_body[dispatch_start:] if dispatch_start != -1 else ""
+    if "gh release edit \"$CM_TAG\"" in dispatch_body:
+        errors.append("Codemagic must not write release-body dispatch state outside the trusted workflow serialiser")
+    if "candidate remains non-live" not in desktop_workflow_body:
+        errors.append("desktop qualification handoff must state that a failed dispatch cannot publish beta")
+    if "gh release delete \"$CM_TAG\"" in desktop_workflow_body:
+        errors.append("desktop candidate retries must not delete immutable qualification evidence")
     if "docker info" in desktop_workflow_body:
         errors.append("Codemagic desktop release must not run Docker-backed beta qualification")
     if "scripts/smoke-signed-desktop-artifact.sh" not in desktop_workflow_body:
         errors.append("desktop release smoke step must invoke scripts/smoke-signed-desktop-artifact.sh")
+    if "--notification-callback-canary" not in desktop_workflow_body:
+        errors.append("desktop release smoke must prove the UserNotifications callback before publishing a candidate")
 
     smoke_script = ROOT / "desktop/macos/scripts/smoke-signed-desktop-artifact.sh"
     if smoke_script.exists():
@@ -120,6 +138,9 @@ def check_desktop_codemagic_release() -> list[str]:
             "Runtime Version",
             "https://api.omi.me/v2/desktop/appcast.xml",
             "audit-desktop-bundle-deps.sh",
+            "notification-callback-canary",
+            "UserNotifications settings callback completion canary passed",
+            "OMI_NOTIFICATION_CALLBACK_SMOKE_RESULT_PATH",
         ):
             if required_fragment not in smoke_text:
                 errors.append(f"signed artifact smoke is missing required guard fragment: {required_fragment}")
@@ -127,7 +148,10 @@ def check_desktop_codemagic_release() -> list[str]:
     automation_bridge = ROOT / "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift"
     if automation_bridge.exists():
         automation_text = automation_bridge.read_text(encoding="utf-8")
-        if "guard AppBuild.isNonProduction else" not in automation_text:
+        if (
+            "AppBuild.allowsLocalAutomation" not in automation_text
+            or "guard allowsLocalAutomation else" not in automation_text
+        ):
             errors.append("desktop automation bridge must stay disabled for the production bundle")
 
     for required_fragment in (
@@ -139,6 +163,119 @@ def check_desktop_codemagic_release() -> list[str]:
     ):
         if required_fragment not in desktop_workflow_body:
             errors.append(f"desktop release is missing signed smoke result artifact fragment: {required_fragment}")
+
+    return errors
+
+
+def check_desktop_preview_publishing() -> list[str]:
+    """Keep the preview lane isolated from normal release authority and state."""
+    errors: list[str] = []
+    dispatcher = ROOT / ".github/workflows/desktop_publish_preview.yml"
+    codemagic = ROOT / "codemagic.yaml"
+    runtime_env = ROOT / "backend/deploy/runtime_env.yaml"
+    app_build = ROOT / "desktop/macos/Desktop/Sources/AppBuild.swift"
+    updater = ROOT / "desktop/macos/Desktop/Sources/UpdaterViewModel.swift"
+    smoke = ROOT / "desktop/macos/scripts/smoke-signed-desktop-artifact.sh"
+    preview_router = ROOT / "backend/routers/updates.py"
+    preview_registry = ROOT / "backend/database/desktop_previews.py"
+
+    if not dispatcher.exists():
+        return ["desktop previews are missing the protected GitHub dispatcher"]
+    dispatcher_text = dispatcher.read_text(encoding="utf-8")
+    for required in (
+        "workflow_dispatch:",
+        "source_ref:",
+        "ref: main",
+        "git ls-remote --exit-code origin",
+        "^preview/",
+        "environment: desktop-preview-publish",
+        "CODEMAGIC_API_TOKEN",
+        'workflowId: "omi-desktop-swift-preview"',
+        'branch: "main"',
+        "PREVIEW_SOURCE_SHA",
+        "### Preview approval context",
+        "https://github.com/${GITHUB_REPOSITORY}/commit/${PREVIEW_SOURCE_SHA}",
+    ):
+        if required not in dispatcher_text:
+            errors.append(f"desktop preview dispatcher is missing required guard fragment: {required}")
+    if "pull_request:" in dispatcher_text or "push:" in dispatcher_text:
+        errors.append("desktop preview dispatcher must be manual-only")
+
+    codemagic_text = codemagic.read_text(encoding="utf-8") if codemagic.exists() else ""
+    preview_workflow_match = re.search(
+        r"\n  omi-desktop-swift-preview:\n(?P<body>.*?)(?=\n  [A-Za-z0-9_-]+:\n|\Z)",
+        codemagic_text,
+        flags=re.DOTALL,
+    )
+    if preview_workflow_match is None:
+        errors.append("codemagic.yaml is missing the preview publishing workflow")
+    else:
+        preview_workflow = preview_workflow_match.group("body")
+        for required in (
+            "desktop_preview_secrets",
+            'PREVIEW_MODE: "true"',
+            'DMGBUILD_VERSION: "1.6.7"',
+            'DESKTOP_PREVIEW_REGISTRY_URL: "https://api.omi.me"',
+            "git checkout --detach \"$PREVIEW_SOURCE_SHA\"",
+            "--if-generation-match=0",
+            "/previews/${PREVIEW_SLUG}/${PREVIEW_SOURCE_SHA}/Omi-Preview.dmg",
+            "${DESKTOP_PREVIEW_REGISTRY_URL%/}/v2/desktop/previews/publish",
+            "External previews do not create GitHub releases.",
+            "External previews do not enter beta or stable qualification.",
+        ):
+            if required not in preview_workflow and required not in codemagic_text:
+                errors.append(f"desktop preview workflow is missing required guard fragment: {required}")
+        if re.search(r"(?m)^\s*- desktop_secrets$", preview_workflow):
+            errors.append("desktop preview workflow must not inherit normal desktop_secrets")
+        if "${OMI_PYTHON_API_URL%/}/v2/desktop/previews/publish" in codemagic_text:
+            errors.append("desktop preview registry must not use the artifact runtime Python API URL")
+
+    runtime_env_text = runtime_env.read_text(encoding="utf-8") if runtime_env.exists() else ""
+    required_runtime_secret = (
+        "            DESKTOP_PREVIEW_PUBLISH_KEY:\n"
+        "              secret: DESKTOP_PREVIEW_PUBLISH_KEY\n"
+        "              version: latest"
+    )
+    if required_runtime_secret not in runtime_env_text:
+        errors.append("production backend must receive the preview publishing key from Secret Manager")
+
+    preview_router_text = preview_router.read_text(encoding="utf-8") if preview_router.exists() else ""
+    for required in (
+        '@router.delete("/v2/desktop/previews/{slug}")',
+        "DesktopPreviewDelistRequest",
+        "delist_preview,",
+        "expected_generation=request.expected_generation",
+    ):
+        if required not in preview_router_text:
+            errors.append(f"desktop preview delisting is missing required router guard fragment: {required}")
+
+    preview_registry_text = preview_registry.read_text(encoding="utf-8") if preview_registry.exists() else ""
+    for required in (
+        "def delist_preview(",
+        "def _delist_preview_transaction(",
+        "transaction.delete(pointer_ref)",
+    ):
+        if required not in preview_registry_text:
+            errors.append(f"desktop preview delisting is missing required registry guard fragment: {required}")
+
+    app_build_text = app_build.read_text(encoding="utf-8") if app_build.exists() else ""
+    for required in (
+        'externalPreviewBundleIdentifierPrefix = "com.omi.preview."',
+        "allowsLocalAutomation",
+        "allowsSparkleUpdates",
+        "hasValidExternalPreviewConfiguration",
+    ):
+        if required not in app_build_text:
+            errors.append(f"external preview build classification is missing: {required}")
+
+    updater_text = updater.read_text(encoding="utf-8") if updater.exists() else ""
+    if "startingUpdater: AppBuild.allowsSparkleUpdates" not in updater_text:
+        errors.append("external preview builds must not start the shared Sparkle updater")
+
+    smoke_text = smoke.read_text(encoding="utf-8") if smoke.exists() else ""
+    for required in ("--preview", "IS_EXTERNAL_PREVIEW", "external preview must not carry a shared Sparkle feed"):
+        if required not in smoke_text:
+            errors.append(f"signed artifact smoke is missing external-preview check: {required}")
 
     return errors
 
@@ -163,10 +300,59 @@ def check_desktop_qualification_runner() -> list[str]:
         "--automatic",
         "--no-promote",
         "desktop_promote_beta.yml",
-        "actions/create-github-app-token@v1",
+        "actions/create-github-app-token@v3",
+        "desktop-beta-qualification-${{ inputs.release_tag }}",
+        "cancel-in-progress: false",
+        "safe without a second release-body claim state machine",
     ):
         if required_fragment not in text:
             errors.append(f"desktop qualification runner is missing required guard fragment: {required_fragment}")
+
+    candidate_gate = ROOT / ".github/scripts/check-desktop-auto-beta-candidate.py"
+    candidate_gate_text = candidate_gate.read_text(encoding="utf-8") if candidate_gate.exists() else ""
+    for required_fragment in (
+        "UserNotifications settings callback completion canary passed",
+        "notification_callback_canary",
+        "callback canary",
+    ):
+        if required_fragment not in candidate_gate_text:
+            errors.append(
+                f"desktop beta candidate gate is missing UserNotifications callback evidence guard: {required_fragment}"
+            )
+    return errors
+
+
+def check_no_unprovisioned_beta_backend_hosts() -> list[str]:
+    """Production-family clients must share the established production backend.
+
+    This keeps the #10090 beta-host routing regression from returning while
+    deliberately excluding docs and Git history, where the retired names are
+    useful migration evidence rather than shipped routing.
+    """
+    hosts = ("api-beta.omi.me", "pusher-beta.omi.me", "agent-beta.omi.me")
+    paths = [ROOT / "app", ROOT / "desktop/macos", ROOT / "codemagic.yaml", ROOT / ".github/workflows"]
+    non_shipped_parts = {".build", ".dart_tool", "Pods", "test", "tests", "Tests", "test_driver"}
+    errors: list[str] = []
+    for path in paths:
+        files = (
+            [path]
+            if path.is_file()
+            else [
+                item
+                for item in path.rglob("*")
+                if item.is_file() and not non_shipped_parts.intersection(item.relative_to(path).parts)
+            ]
+        )
+        for file in files:
+            try:
+                text = file.read_text(encoding="utf-8")
+            except (FileNotFoundError, UnicodeDecodeError):
+                continue
+            for host in hosts:
+                if host in text:
+                    errors.append(
+                        f"shipped release source references unprovisioned beta backend host {host}: {file.relative_to(ROOT)}"
+                    )
     return errors
 
 
@@ -182,7 +368,11 @@ def check_mobile_codemagic_release_triggers() -> list[str]:
             errors.append(f"codemagic.yaml is missing {workflow_id}")
             continue
         body = match.group("body")
-        if re.search(r"\n    triggering:\n(?:(?!\n    [A-Za-z_]).)*\n      events:\n(?:(?!\n    [A-Za-z_]).)*\n        - push\b", body, flags=re.DOTALL):
+        if re.search(
+            r"\n    triggering:\n(?:(?!\n    [A-Za-z_]).)*\n      events:\n(?:(?!\n    [A-Za-z_]).)*\n        - push\b",
+            body,
+            flags=re.DOTALL,
+        ):
             errors.append(f"{workflow_id} must not directly trigger on push; GitHub paths filtering dispatches it")
 
     workflow = ROOT / ".github/workflows/mobile_internal_auto.yml"

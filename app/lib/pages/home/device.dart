@@ -16,6 +16,7 @@ import 'package:omi/services/devices/connectors/rayban_meta_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/device.dart';
+import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -250,6 +251,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
   Widget _buildActionsSection(DeviceProvider provider) {
     final syncProvider = context.watch<SyncProvider>();
     final pendingSeconds = syncProvider.missingWalsInSeconds;
+    const firmwarePolicy = FirmwareUpdateBuildPolicy.current;
+    final allowsFirmwareUpdate = firmwarePolicy.allowsFirmwareUpdateForDevice(provider.pairedDevice);
 
     return Container(
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
@@ -286,23 +289,20 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             const Divider(height: 1, color: Color(0xFF3C3C43)),
           ],
           // Firmware Update
-          if (provider.pairedDevice?.type != DeviceType.raybanMeta)
+          if (provider.pairedDevice?.type != DeviceType.raybanMeta && allowsFirmwareUpdate)
             _buildProfileStyleItem(
               icon: FontAwesomeIcons.download,
               title: context.l10n.productUpdate,
               chipValue: provider.connectedDevice == null
                   ? context.l10n.offline
                   : provider.havingNewFirmware
-                      ? context.l10n.available
-                      : null,
+                  ? context.l10n.available
+                  : null,
               onTap: provider.connectedDevice != null
                   ? () {
                       // Route to OmiGlass OTA page for openglass devices
                       final deviceName = provider.connectedDevice!.name.toLowerCase();
-                      final isOpenGlass = provider.connectedDevice!.type == DeviceType.openglass ||
-                          deviceName.contains('openglass') ||
-                          deviceName.contains('omiglass') ||
-                          deviceName.contains('glass');
+                      final isOpenGlass = firmwarePolicy.isOpenGlassDevice(provider.connectedDevice);
                       debugPrint('ProductUpdate: connectedDevice type: ${provider.connectedDevice?.type}');
                       debugPrint('ProductUpdate: connectedDevice name: "${provider.connectedDevice?.name}"');
                       debugPrint('ProductUpdate: deviceName lowercase: "$deviceName"');
@@ -329,6 +329,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             ),
           // Roll back to stable firmware (only when current firmware differs from latest stable)
           if (provider.pairedDevice?.type != DeviceType.raybanMeta &&
+              firmwarePolicy.allowsOmiFirmwareUpdate &&
               provider.connectedDevice != null &&
               provider.latestStableFirmwareVersion.isNotEmpty &&
               provider.pairedDevice?.firmwareRevision != provider.latestStableFirmwareVersion) ...[
@@ -368,8 +369,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               chipColor: pendingSeconds > 0 ? const Color(0xFF3D3520) : null,
               chipTextColor: pendingSeconds > 0 ? const Color(0xFFFFD060) : null,
               onTap: () {
-                final page =
-                    context.read<DeviceProvider>().supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
+                final page = context.read<DeviceProvider>().supportsMultiFileSync
+                    ? const AutoSyncPage()
+                    : const SyncPage();
                 Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
               },
             ),
@@ -590,8 +592,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             _buildProfileStyleItem(
               icon: FontAwesomeIcons.microphone,
               title: context.l10n.microphone,
-              chipValue:
-                  provider.connectedDevice != null ? context.l10n.raybanMetaMicrophoneReady : context.l10n.offline,
+              chipValue: provider.connectedDevice != null
+                  ? context.l10n.raybanMetaMicrophoneReady
+                  : context.l10n.offline,
               showChevron: false,
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),

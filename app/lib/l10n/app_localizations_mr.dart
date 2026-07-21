@@ -1468,7 +1468,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get payYourSttProvider => 'Omi मुक्तपणे वापरा. आपण केवळ आपल्या STT प्रदाता ला थेट भुगतान करा.';
 
   @override
-  String get freeMinutesMonth => '600 मुक्त मिनिटे/महिना समाविष्ट. अमर्यादित ';
+  String get freeMinutesMonth => '300 मुक्त मिनिटे/महिना समाविष्ट. अमर्यादित ';
 
   @override
   String get omiUnlimited => 'Omi अमर्यादित';
@@ -6008,7 +6008,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते.';
+      '300 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते.';
 
   @override
   String get viewUsage => 'वापर पहा';
@@ -6090,7 +6090,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते. ';
+      '300 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8999,7 +8999,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get billingYearly => 'वार्षिक';
 
   @override
-  String get savePercent => '~17% बचत करा';
+  String savePercent(int percent) {
+    return '~$percent% बचत करा';
+  }
 
   @override
   String get popular => 'लोकप्रिय';
@@ -9353,7 +9355,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'सध्या Omi आणि Limitless डिव्हाइससोबत चालते. तुम्ही अपलोड करण्याचे ठरवेपर्यंत ऑडिओ तुमच्या फोनवरच राहते.';
+      'फोनचा मायक्रोफोन, Omi आणि Limitless डिव्हाइससोबत चालते. तुम्ही अपलोड करण्याचे ठरवेपर्यंत ऑडिओ तुमच्या फोनवरच राहते.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9582,4 +9584,201 @@ class AppLocalizationsMr extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Ray-Ban Meta शी कनेक्ट करताना त्रुटी: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'डिव्हाइस स्टोरेज';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% भरले';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total पैकी $used वापरले';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free रिकामे';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'डिव्हाइस जवळजवळ भरले आहे — जागा मोकळी करण्यासाठी सिंक करा.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'कनेक्शन नाही — स्थानिकरित्या रेकॉर्ड होत आहे. तुम्ही पुन्हा ऑनलाइन झाल्यावर याचे ट्रान्सक्रिप्शन केले जाईल.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'तुमचा डेटा डीफॉल्टनुसार मजबूत एन्क्रिप्शनने सुरक्षित आहे आणि तो कसा साठवला व वापरला जातो यावर तुमचे नियंत्रण असते.';
+
+  @override
+  String get sttModelAccuracy => 'Accuracy';
+
+  @override
+  String get whisperModelSizeBase => 'Base';
+
+  @override
+  String get cloudTranscription => 'Cloud Transcription';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Delete Model';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Downloaded';
+
+  @override
+  String get sttModelFaster => 'Faster';
+
+  @override
+  String get sttFilterAuto => 'Auto';
+
+  @override
+  String get sttModelHigher => 'Higher';
+
+  @override
+  String get whisperModelSizeLarge => 'Large';
+
+  @override
+  String get sttModelLower => 'Lower';
+
+  @override
+  String get whisperModelSizeMedium => 'Medium';
+
+  @override
+  String get onDeviceModelDeleted => 'Model deleted';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Model download failed';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+
+  @override
+  String get onDeviceModelSize => 'Model Size';
+
+  @override
+  String get sttNone => 'None';
+
+  @override
+  String get onDeviceTranscription => 'On-Device Transcription';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transcription is processed locally on your device';
+
+  @override
+  String get sttModelSlower => 'Slower';
+
+  @override
+  String get whisperModelSizeSmall => 'Small';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Speech-to-Text Provider';
+
+  @override
+  String get speechToTextProviderDesc => 'Choose the service used for transcription';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Speed';
+
+  @override
+  String get whisperModelSizeTiny => 'Tiny';
+
+  @override
+  String get transcriptionLanguage => 'Transcription Language';
+
+  @override
+  String get transcriptionLanguageDesc => 'Choose the language for speech transcription';
+
+  @override
+  String get whisperModel => 'Whisper Model';
+
+  @override
+  String get whisperModelDesc => 'Choose the model for on-device transcription';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+
+  @override
+  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+
+  @override
+  String get downgradeLimitBattery => '7x battery consumption';
+
+  @override
+  String get downgradeLimitQuality => '30% less transcription quality';
+
+  @override
+  String get downgradeLimitDelay => '5-7 second delay';
+
+  @override
+  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+
+  @override
+  String get downgradeAnyway => 'Downgrade Anyway';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+
+  @override
+  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Linked to \"$title\"';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+
+  @override
+  String get thanksForYourFeedback => 'Thanks for your feedback!';
+
+  @override
+  String get copyMessage => 'Copy message';
+
+  @override
+  String get searchSettings => 'Search settings…';
+
+  @override
+  String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'तुमचा Ray-Ban Meta मायक्रोफोन निवडा';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'तुमच्या चष्म्याचा Bluetooth मायक्रोफोन निवडा. Omi तो वापरत असताना संगीत थांबते.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'कोणताही Bluetooth मायक्रोफोन सापडला नाही. iPhone सेटिंग्जमध्ये चष्मा कनेक्ट करा आणि पुन्हा प्रयत्न करा.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth मायक्रोफोन लोड करता आले नाहीत. Bluetooth सुरू असल्याची खात्री करा आणि पुन्हा प्रयत्न करा.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'त्या मायक्रोफोनशी कनेक्ट करता आले नाही. तो iPhone सेटिंग्जमध्ये कनेक्ट असल्याची खात्री करा.';
 }

@@ -18,8 +18,6 @@
 #![allow(clippy::wrong_self_convention)]
 
 use axum::Router;
-use std::fs::OpenOptions;
-use std::io::LineWriter;
 use std::sync::Arc;
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::cors::{Any, CorsLayer};
@@ -96,19 +94,9 @@ pub(crate) struct AppState {
 
 #[tokio::main]
 async fn main() {
-    // Open log file (same as Swift dev app: /tmp/omi-dev.log)
-    // Wrap in LineWriter to flush after each line (ensures logs appear immediately)
-    let log_file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("/tmp/omi-dev.log")
-        .expect("Failed to open log file");
-    let line_writer = LineWriter::new(log_file);
-
-    // Use non_blocking for proper async file writing
-    let (non_blocking, _guard) = tracing_appender::non_blocking(line_writer);
-
-    // Initialize tracing with both stdout and file output
+    // The launcher owns backend log isolation and redirects stdout to a unique
+    // per-launch file. Do not open a process-global developer log here: named
+    // QA bundles and qualification harnesses can run concurrently.
     // Format: [HH:mm:ss] [backend] message
     tracing_subscriber::registry()
         .with(
@@ -122,15 +110,6 @@ async fn main() {
                 .with_target(false)
                 .with_level(false)
                 .with_ansi(true),
-        )
-        // File layer (same format, no ANSI colors)
-        .with(
-            fmt::layer()
-                .with_timer(BackendTimer)
-                .with_target(false)
-                .with_level(false)
-                .with_ansi(false)
-                .with_writer(non_blocking),
         )
         .init();
 

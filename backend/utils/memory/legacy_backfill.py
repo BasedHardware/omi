@@ -39,9 +39,9 @@ from models.memory_contracts import DurablePatchDecision, LifecycleState, determ
 from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, MemoryItem
 from utils.memory.atom_keyword_index import sync_atom_keyword_index_for_item
-from utils.memory.canonical_memory_adapter import extraction_memory_id
+from utils.memory.canonical_memory_adapter import extraction_memory_id, invalidate_kg_for_memory_retraction
 from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
-from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
+from utils.memory.canonical_vector_sync import delete_canonical_memory_vector, sync_canonical_memory_vector
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 from utils.memory.required_promotion import (
@@ -215,6 +215,35 @@ class LegacyBackfillRemediationPlan:
     candidate_count: int
     action_counts: Dict[str, int]
     samples: Dict[str, List[LegacyBackfillRemediationEntry]]
+
+
+@dataclass(frozen=True)
+class LegacyBackfillRemediationApplyReport:
+    """Result of the deliberately narrow legacy-backfill archive transition."""
+
+    uid: str
+    dry_run: bool
+    expected_archive_count: Optional[int]
+    candidate_count: int
+    archived_count: int
+    idempotent_count: int
+    vector_sync_failures: int
+    keyword_sync_failures: int
+    kg_invalidation_failures: int
+    cohort_gated: bool = False
+    errors: List[str] = field(default_factory=_empty_str_list)
+
+
+@dataclass(frozen=True)
+class LegacyBackfillRemediationArchiveResult:
+    """Named result for one durable archive transition and its derived repairs."""
+
+    control: MemoryControlState
+    archived: bool
+    idempotent: bool
+    vector_sync_failed: bool
+    keyword_sync_failed: bool
+    kg_invalidation_failed: bool
 
 
 def legacy_backfill_memory_id(*, uid: str, legacy_memory_id: str) -> str:
@@ -503,6 +532,252 @@ def build_legacy_backfill_remediation_plan(
         candidate_count=len(candidates),
         action_counts=action_counts,
         samples={action: entries for action, entries in samples.items() if entries},
+    )
+
+
+def _archive_remediation_candidates(uid: str, *, db_client: Any) -> List[MemoryItem]:
+    """Return only active, explicitly attributed rows the deterministic planner archives."""
+
+    return [
+        item
+        for item in fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+        if item.tier == MemoryLayer.long_term
+        and item.status == MemoryItemStatus.active
+        and _is_legacy_backfill_item(item)
+        and classify_legacy_backfill_remediation(item).action == LegacyBackfillRemediationAction.archive
+    ]
+
+
+def _archive_legacy_backfill_item_via_apply(
+    *,
+    uid: str,
+    item: MemoryItem,
+    control: MemoryControlState,
+    run_id: str,
+    db_client: Any,
+) -> LegacyBackfillRemediationArchiveResult:
+    """Archive one planner-approved item through the canonical apply ledger.
+
+    The expected revision and content hash turn concurrent edits into a safe failure
+    rather than archiving an item whose classification may no longer be valid.
+    """
+
+    entry = classify_legacy_backfill_remediation(item)
+    if entry.action != LegacyBackfillRemediationAction.archive:
+        raise ValueError(f"remediation item is no longer archive-eligible: {item.memory_id}")
+    evidence_ids = [evidence.evidence_id for evidence in item.evidence]
+    logical_payload: Payload = {
+        "decision": DurablePatchDecision.update.value,
+        "target_memory_id": item.memory_id,
+        "result_status": LifecycleState.active.value,
+    }
+    operation = MemoryOperation.new(
+        uid=uid,
+        operation_type=MemoryOperationType.archive_transition,
+        source_packet_id=(
+            f"legacy_backfill_remediation_archive:{item.memory_id}:"
+            f"r{item.item_revision}:head:{control.head_commit_id}"
+        ),
+        target_memory_id=item.memory_id,
+        evidence_ids=evidence_ids,
+        logical_payload=logical_payload,
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        observed_head_commit_id=control.head_commit_id,
+    )
+    operation_ref = db_client.document(f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}")
+    if not operation_ref.get().exists:
+        operation_ref.set(operation.model_dump(mode="json"))
+    idempotency_key = deterministic_contract_id(
+        "legacy-backfill-remediation-archive",
+        {
+            "uid": uid,
+            "memory_id": item.memory_id,
+            "item_revision": item.item_revision,
+            "content_hash": item.content_hash,
+        },
+    )
+    promotion = dict(item.promotion or {})
+    promotion["remediation"] = {
+        "action": LegacyBackfillRemediationAction.archive.value,
+        "reason": entry.reason,
+        "run_id": run_id,
+        "previous_tier": item.tier.value,
+    }
+    result = apply_long_term_patch_firestore(
+        uid=uid,
+        operation_id=operation.operation_id,
+        patch_payload={
+            "patch_id": f"patch_lb_remediate_{idempotency_key[:20]}",
+            "packet_id": f"legacy_backfill_remediation_archive:{item.memory_id}",
+            "run_id": run_id,
+            "observed_head_commit_id": control.head_commit_id,
+            "idempotency_key": idempotency_key,
+            **logical_payload,
+            # archive_explicit: this operator path intentionally changes default visibility.
+            "target_tier": MemoryLayer.archive.value,
+            "evidence_ids": evidence_ids,
+            "expected_item_revision": item.item_revision,
+            "expected_content_hash": item.content_hash,
+            "promotion_audit": promotion,
+        },
+        db_client=db_client,
+    )
+    if result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
+        raise RuntimeError(f"archive remediation failed: {result.status} ({result.reason})")
+
+    archived = (
+        result.memory_items[0]
+        if result.memory_items
+        else _load_canonical_item(uid, item.memory_id, db_client=db_client)
+    )
+    # archive_explicit postcondition: default readers must no longer see this item.
+    if archived is None or archived.tier != MemoryLayer.archive:
+        raise RuntimeError("archive remediation did not persist an archive-tier memory")
+
+    vector_sync_failed = False
+
+    def _record_vector_sync_failure() -> None:
+        nonlocal vector_sync_failed
+        vector_sync_failed = True
+
+    keyword_sync_succeeded = sync_atom_keyword_index_for_item(archived, db_client=db_client)
+    # The existing long-term vector is eligible for default retrieval. Remove it
+    # before publishing the archive vector so an upsert failure fails closed for
+    # default access rather than leaving stale long-term metadata queryable.
+    deleted_prior_vector = delete_canonical_memory_vector(uid, archived.memory_id)
+    synced_archive_vector = sync_canonical_memory_vector(archived, on_hard_failure=_record_vector_sync_failure)
+    if not deleted_prior_vector and not synced_archive_vector:
+        _record_vector_sync_failure()
+    kg_invalidation_failed = False
+    try:
+        invalidate_kg_for_memory_retraction(uid, [archived.memory_id], db_client=db_client)
+    except Exception:
+        kg_invalidation_failed = True
+        logger.exception(
+            "legacy backfill remediation KG invalidation failed uid=%s memory_id=%s", uid, archived.memory_id
+        )
+    return LegacyBackfillRemediationArchiveResult(
+        control=result.control_state,
+        archived=result.status == ApplyStatus.committed,
+        idempotent=result.status == ApplyStatus.idempotent_skip,
+        vector_sync_failed=vector_sync_failed,
+        keyword_sync_failed=not keyword_sync_succeeded,
+        kg_invalidation_failed=kg_invalidation_failed,
+    )
+
+
+def apply_legacy_backfill_remediation_archives(
+    uid: str,
+    *,
+    expected_archive_count: Optional[int] = None,
+    dry_run: bool = True,
+    run_id: Optional[str] = None,
+    allow_admin_override: bool = False,
+    acknowledge_non_canonical_uid: bool = False,
+    operator_context: Optional[str] = None,
+    db_client: Any = None,
+) -> LegacyBackfillRemediationApplyReport:
+    """Archive only the deterministic planner's legacy-backfill noise recommendations.
+
+    This is intentionally a count-locked, per-account operator action. It never
+    deletes memory content or touches ambiguous, sensitive, manually asserted, or
+    unattributed rows. Actual transitions use ``apply_long_term_patch_firestore``.
+    """
+
+    client: Any = db_client if db_client is not None else default_db_client
+    try:
+        assert_canonical_cohort_for_backfill(
+            uid,
+            allow_admin_override=allow_admin_override,
+            acknowledge_non_canonical_uid=acknowledge_non_canonical_uid,
+            operator_context=operator_context,
+            db_client=client,
+        )
+    except BackfillCohortGateError as exc:
+        return LegacyBackfillRemediationApplyReport(
+            uid=uid,
+            dry_run=dry_run,
+            expected_archive_count=expected_archive_count,
+            candidate_count=0,
+            archived_count=0,
+            idempotent_count=0,
+            vector_sync_failures=0,
+            keyword_sync_failures=0,
+            kg_invalidation_failures=0,
+            cohort_gated=True,
+            errors=[str(exc)],
+        )
+
+    candidates = _archive_remediation_candidates(uid, db_client=client)
+    candidate_count = len(candidates)
+    if not dry_run and expected_archive_count is None:
+        raise ValueError("expected_archive_count is required for an archive remediation apply")
+    if expected_archive_count is not None and candidate_count != expected_archive_count:
+        return LegacyBackfillRemediationApplyReport(
+            uid=uid,
+            dry_run=dry_run,
+            expected_archive_count=expected_archive_count,
+            candidate_count=candidate_count,
+            archived_count=0,
+            idempotent_count=0,
+            vector_sync_failures=0,
+            keyword_sync_failures=0,
+            kg_invalidation_failures=0,
+            errors=[
+                f"expected_archive_count={expected_archive_count} does not match candidate_count={candidate_count}"
+            ],
+        )
+    if dry_run:
+        return LegacyBackfillRemediationApplyReport(
+            uid=uid,
+            dry_run=True,
+            expected_archive_count=expected_archive_count,
+            candidate_count=candidate_count,
+            archived_count=0,
+            idempotent_count=0,
+            vector_sync_failures=0,
+            keyword_sync_failures=0,
+            kg_invalidation_failures=0,
+        )
+
+    control = _read_control_state(uid, db_client=client, create_if_missing=False)
+    effective_run_id = run_id or f"legacy_backfill_remediation_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    archived_count = 0
+    idempotent_count = 0
+    vector_sync_failures = 0
+    keyword_sync_failures = 0
+    kg_invalidation_failures = 0
+    errors: List[str] = []
+    for item in candidates:
+        try:
+            result = _archive_legacy_backfill_item_via_apply(
+                uid=uid,
+                item=item,
+                control=control,
+                run_id=effective_run_id,
+                db_client=client,
+            )
+            control = result.control
+            archived_count += int(result.archived)
+            idempotent_count += int(result.idempotent)
+            vector_sync_failures += int(result.vector_sync_failed)
+            keyword_sync_failures += int(result.keyword_sync_failed)
+            kg_invalidation_failures += int(result.kg_invalidation_failed)
+        except Exception as exc:
+            errors.append(f"{item.memory_id}: {sanitize(str(exc))}")
+            logger.exception("legacy backfill remediation archive failed uid=%s memory_id=%s", uid, item.memory_id)
+    return LegacyBackfillRemediationApplyReport(
+        uid=uid,
+        dry_run=False,
+        expected_archive_count=expected_archive_count,
+        candidate_count=candidate_count,
+        archived_count=archived_count,
+        idempotent_count=idempotent_count,
+        vector_sync_failures=vector_sync_failures,
+        keyword_sync_failures=keyword_sync_failures,
+        kg_invalidation_failures=kg_invalidation_failures,
+        errors=errors,
     )
 
 

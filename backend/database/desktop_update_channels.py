@@ -111,13 +111,18 @@ def normalize_release_manifest(data: dict[str, Any]) -> dict[str, Any]:
         "build_number": _positive_int(data, "build_number"),
         "zip_url": _https_url(data, "zip_url", required=True),
         "dmg_url": _https_url(data, "dmg_url", required=platform == "macos"),
+        "beta_zip_url": _https_url(data, "beta_zip_url", required=platform == "macos"),
+        "beta_dmg_url": _https_url(data, "beta_dmg_url", required=platform == "macos"),
         "ed_signature": _required_string(data, "ed_signature"),
+        "beta_ed_signature": _required_string(data, "beta_ed_signature"),
         "published_at": published_at,
         "changelog": [item.strip() for item in changelog if item.strip()],
         "mandatory": data.get("mandatory") is True,
         "source_sha": _digest(data, "source_sha", SHA40_RE, required=True),
         "zip_sha256": _digest(data, "zip_sha256", SHA256_RE, required=False),
         "dmg_sha256": _digest(data, "dmg_sha256", SHA256_RE, required=False),
+        "beta_zip_sha256": _digest(data, "beta_zip_sha256", SHA256_RE, required=platform == "macos"),
+        "beta_dmg_sha256": _digest(data, "beta_dmg_sha256", SHA256_RE, required=platform == "macos"),
         "qualification": cast(dict[str, Any], qualification),
     }
     return manifest
@@ -141,37 +146,69 @@ def register_release_manifest(data: dict[str, Any], *, firestore_client: Any = N
     return manifest
 
 
-def _build_channel_pointer(
+#: Pointer transitions differ only in which preconditions they enforce, so the
+#: policy is data and :func:`_build_pointer` is the single mutation authority.
+#: ``direction`` is the permitted build-number movement; every transition
+#: requires the manifest's passed T2 qualification evidence.
+TRANSITIONS: dict[str, dict[str, Any]] = {
+    "promote": {"direction": "forward", "require_qualified": True, "require_current_release_id": False},
+    "repoint": {"direction": "either", "require_qualified": True, "require_current_release_id": True},
+}
+
+
+def _build_pointer(
     current: dict[str, Any],
     manifest: dict[str, Any],
     *,
+    transition: str,
     platform: str,
     channel: str,
     release_id: str,
     expected_generation: int | None,
+    expected_current_release_id: str | None = None,
     updated_at: datetime | None = None,
 ) -> dict[str, Any]:
+    """Build the next channel pointer under the named transition policy.
+
+    This is the only place a channel pointer is constructed. A repoint is an
+    explicit compare-and-swap to an existing qualified manifest.
+    """
+    policy = TRANSITIONS[transition]
+
     if manifest["platform"] != platform:
         raise ValueError("release manifest platform does not match pointer platform")
-    qualification = cast(dict[str, Any], manifest["qualification"])
-    if qualification.get("passed") is not True or str(qualification.get("tier", "")).upper() != "T2":
-        raise ValueError("release manifest is missing passed T2 qualification evidence")
+    if policy["require_qualified"]:
+        qualification = cast(dict[str, Any], manifest["qualification"])
+        if qualification.get("passed") is not True or str(qualification.get("tier", "")).upper() != "T2":
+            raise ValueError("release manifest is missing passed T2 qualification evidence")
+
+    current_release_id = current.get("release_id")
+    # An acknowledged pointer target is a safe exact retry. It still had to
+    # resolve to this qualified immutable manifest above, but does not require
+    # callers to guess the generation created by a lost response.
+    if current_release_id == release_id:
+        return current
+
+    if policy["require_current_release_id"] or expected_current_release_id is not None:
+        if current_release_id != expected_current_release_id:
+            raise ValueError(
+                f"current release mismatch: expected {expected_current_release_id}, "
+                f"current {current_release_id or 'missing'}"
+            )
 
     current_generation = _generation(current.get("generation", 0))
     if expected_generation is not None and expected_generation != current_generation:
         raise ValueError(f"generation mismatch: expected {expected_generation}, current {current_generation}")
-    if current.get("release_id") == release_id:
-        return current
+
     current_build_raw = current.get("build_number")
-    if current_build_raw is not None:
-        current_build = _generation(current_build_raw)
-        if manifest["build_number"] <= current_build:
+    if policy["direction"] == "forward":
+        if current_build_raw is not None and manifest["build_number"] <= _generation(current_build_raw):
             raise ValueError(
-                f"channel pointers are roll-forward only: current build {current_build}, "
+                f"channel pointers are roll-forward only: current build {_generation(current_build_raw)}, "
                 f"requested build {manifest['build_number']}"
             )
 
-    return {
+    pointer = {
         "platform": platform,
         "channel": channel,
         "release_id": release_id,
@@ -180,6 +217,7 @@ def _build_channel_pointer(
         "generation": current_generation + 1,
         "updated_at": updated_at or datetime.now(timezone.utc),
     }
+    return pointer
 
 
 @transactional
@@ -188,10 +226,12 @@ def _promote_channel_transaction(
     pointer_ref: Any,
     manifest_ref: Any,
     *,
+    transition: str,
     platform: str,
     channel: str,
     release_id: str,
     expected_generation: int | None,
+    expected_current_release_id: str | None = None,
 ) -> dict[str, Any]:
     manifest_snapshot = manifest_ref.get(transaction=transaction)
     if not getattr(manifest_snapshot, "exists", False):
@@ -203,13 +243,15 @@ def _promote_channel_transaction(
     pointer_snapshot = pointer_ref.get(transaction=transaction)
     current_raw: object = pointer_snapshot.to_dict() if getattr(pointer_snapshot, "exists", False) else {}
     current = cast(dict[str, Any], current_raw) if isinstance(current_raw, dict) else {}
-    pointer = _build_channel_pointer(
+    pointer = _build_pointer(
         current,
         manifest,
+        transition=transition,
         platform=platform,
         channel=channel,
         release_id=release_id,
         expected_generation=expected_generation,
+        expected_current_release_id=expected_current_release_id,
     )
     if pointer is not current:
         transaction.set(pointer_ref, pointer)
@@ -222,8 +264,11 @@ def promote_channel(
     release_id: str,
     *,
     expected_generation: int | None = None,
+    expected_current_release_id: str | None = None,
+    operation: str = "promote",
     firestore_client: Any = None,
 ) -> dict[str, Any]:
+    """Advance or explicitly repoint a channel pointer to a qualified manifest."""
     platform = platform.strip().lower()
     channel = channel.strip().lower()
     release_id = release_id.strip()
@@ -233,6 +278,10 @@ def promote_channel(
         raise ValueError("invalid channel")
     if not release_id:
         raise ValueError("release_id is required")
+    if operation not in TRANSITIONS:
+        raise ValueError("invalid pointer operation")
+    if operation == "repoint" and (expected_current_release_id is None or expected_generation is None):
+        raise ValueError("repoint requires expected_current_release_id and expected_generation")
 
     client = firestore_client if firestore_client is not None else get_firestore_client()
     pointer_ref = client.collection(CHANNELS_COLLECTION).document(f"{platform}-{channel}")
@@ -242,10 +291,12 @@ def promote_channel(
         transaction,
         pointer_ref,
         manifest_ref,
+        transition=operation,
         platform=platform,
         channel=channel,
         release_id=release_id,
         expected_generation=expected_generation,
+        expected_current_release_id=expected_current_release_id,
     )
 
 
@@ -283,3 +334,17 @@ def get_channel_release(platform: str, channel: str, *, firestore_client: Any = 
         },
         "manifest": manifest,
     }
+
+
+def get_release_manifest(release_id: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
+    """Read one retained immutable manifest without consulting release metadata."""
+    release_id = release_id.strip()
+    if not release_id:
+        raise ValueError("release_id is required")
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    snapshot = client.collection(MANIFESTS_COLLECTION).document(release_id).get()
+    if not getattr(snapshot, "exists", False):
+        return None
+    raw: object = snapshot.to_dict()
+    data = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
+    return normalize_release_manifest(data)

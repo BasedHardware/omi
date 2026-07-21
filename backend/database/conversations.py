@@ -1,17 +1,15 @@
 import copy
-import inspect
 import json
 import logging
-import threading
 import uuid
 import zlib
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Callable
 
 from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
-from prometheus_client import Counter
 
 import utils.other.hume as hume
 from database import users as users_db
@@ -20,7 +18,7 @@ from models.conversation_enums import ConversationStatus, PostProcessingModel, P
 from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
-from ._client import db
+from ._client import db, get_firestore_client
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.storage import list_audio_chunks
 
@@ -29,62 +27,11 @@ logger = logging.getLogger(__name__)
 conversations_collection = 'conversations'
 
 
-# This is intentionally a temporary inventory, not a new lifecycle abstraction.
-# #9516 first characterizes the current many-writer state so the convergence
-# change can prove every legacy writer reached zero before removal.
-# Prometheus registration mutates the process-global collector registry. Keep it
-# lazy so importing this database module remains pure.
-CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS: Optional[Counter] = None
-_LEGACY_LIFECYCLE_METRIC_LOCK = threading.Lock()
-
-_LIFECYCLE_WRITER_LABELS = {
-    'routers.transcribe': 'transcribe',
-    'routers.pusher': 'pusher',
-    'routers.conversations': 'conversations_router',
-    'routers.sync': 'sync_router',
-    'routers.developer': 'developer_router',
-    'utils.sync.pipeline': 'sync_pipeline',
-    'utils.conversations.process_conversation': 'process_conversation',
-    'utils.conversations.postprocess_conversation': 'postprocess_conversation',
-    'utils.conversations.merge_conversations': 'merge_conversations',
-    'utils.imports.limitless': 'limitless_import',
-}
 _LIFECYCLE_FIELDS = frozenset({'status', 'discarded'})
-
-
-def lifecycle_writer_label(module_name: str) -> str:
-    """Return a bounded label for the module that initiated a lifecycle write."""
-    return _LIFECYCLE_WRITER_LABELS.get(module_name, 'other')
-
-
-def _legacy_lifecycle_writer() -> str:
-    """Find the first caller outside this database module and its write decorators."""
-    frame = inspect.currentframe()
-    try:
-        frame = frame.f_back if frame is not None else None
-        while frame is not None:
-            module_name = frame.f_globals.get('__name__', '')
-            if module_name not in {__name__, 'database.helpers'}:
-                return lifecycle_writer_label(module_name)
-            frame = frame.f_back
-    finally:
-        # Frame references retain local variables. Clear ours promptly because this
-        # helper runs on every currently-direct lifecycle mutation.
-        del frame
-    return 'other'
-
-
-def _record_legacy_lifecycle_mutation(operation: str) -> None:
-    global CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS
-    if CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS is None:
-        with _LEGACY_LIFECYCLE_METRIC_LOCK:
-            if CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS is None:
-                CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS = Counter(
-                    'conversation_lifecycle_legacy_mutations_total',
-                    'Conversation lifecycle mutations by the current direct writer and operation',
-                    ['writer', 'operation'],
-                )
-    CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS.labels(writer=_legacy_lifecycle_writer(), operation=operation).inc()
+_PUBLIC_TRANSCRIPT_MAX_STORED_BYTES = 256 * 1024
+_PUBLIC_TRANSCRIPT_MAX_DECODED_BYTES = 512 * 1024
+_PUBLIC_TRANSCRIPT_MAX_SEGMENTS = 4096
+_PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS = 24_000
 
 
 def get_conversation_ids(uid: str) -> List[str]:
@@ -190,6 +137,142 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
     return data
 
 
+def encode_conversation_for_write(
+    uid: str, conversation_data: Dict[str, Any], level: str = 'standard'
+) -> Dict[str, Any]:
+    """Encode a conversation exactly as the write path stores it.
+
+    The seam exists for harnesses that seed Firestore directly: a hand-written
+    document with a plain ``transcript_segments`` list is a state production
+    never writes, and seeding one hides encoding-aware guard bugs.
+    """
+    return _prepare_conversation_for_write(conversation_data, uid, level)
+
+
+def _decode_transcript_segments_strict(uid: str, raw_segments: Any, compressed: bool) -> List[Any]:
+    """Decode a stored ``transcript_segments`` blob, raising when it cannot be read.
+
+    The read path swallows decode failures into an empty list, which is safe for
+    rendering but unsafe for a caller deciding whether a conversation is empty.
+    """
+    if isinstance(raw_segments, list):
+        return raw_segments
+    if isinstance(raw_segments, str):
+        payload = encryption.decrypt(raw_segments, uid)
+        if compressed:
+            return json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
+        return json.loads(payload)
+    if isinstance(raw_segments, bytes) and compressed:
+        return json.loads(zlib.decompress(raw_segments).decode('utf-8'))
+    raise ValueError(f'undecodable transcript_segments: {type(raw_segments).__name__} compressed={compressed}')
+
+
+def _decode_public_transcript_segments_bounded(
+    uid: str,
+    raw_segments: Any,
+    *,
+    compressed: bool,
+    max_stored_bytes: int = _PUBLIC_TRANSCRIPT_MAX_STORED_BYTES,
+    max_decoded_bytes: int = _PUBLIC_TRANSCRIPT_MAX_DECODED_BYTES,
+    max_segments: int = _PUBLIC_TRANSCRIPT_MAX_SEGMENTS,
+    max_segment_text_chars: int = _PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS,
+    decompressor_factory: Callable[[], Any] = zlib.decompressobj,
+) -> List[Dict[str, Any]]:
+    """Decode only the bounded compressed transcript shape used by public chat."""
+
+    def invalid() -> ValueError:
+        return ValueError('invalid bounded public transcript')
+
+    if (
+        compressed is not True
+        or max_stored_bytes <= 0
+        or max_decoded_bytes <= 0
+        or max_segments < 0
+        or max_segment_text_chars < 0
+    ):
+        raise invalid()
+
+    try:
+        if isinstance(raw_segments, str):
+            # Enhanced storage encrypts the hex-encoded compressed bytes. Check
+            # the encoded representation before invoking the decryptor so a
+            # malformed Firestore value cannot allocate without a fixed bound.
+            max_encrypted_chars = (((max_stored_bytes * 2) + 28 + 2) // 3) * 4
+            if not raw_segments.isascii() or len(raw_segments) > max_encrypted_chars:
+                raise invalid()
+            decrypted_hex = encryption.decrypt(raw_segments, uid)
+            if len(decrypted_hex) > max_stored_bytes * 2 or len(decrypted_hex) % 2 != 0:
+                raise invalid()
+            compressed_bytes = bytes.fromhex(decrypted_hex)
+        elif isinstance(raw_segments, (bytes, bytearray, memoryview)):
+            if len(raw_segments) > max_stored_bytes:
+                raise invalid()
+            compressed_bytes = bytes(raw_segments)
+        else:
+            raise invalid()
+
+        if len(compressed_bytes) > max_stored_bytes:
+            raise invalid()
+
+        decompressor = decompressor_factory()
+        decoded = decompressor.decompress(compressed_bytes, max_decoded_bytes + 1)
+        if (
+            len(decoded) > max_decoded_bytes
+            or decompressor.unconsumed_tail
+            or not decompressor.eof
+            or decompressor.unused_data
+        ):
+            raise invalid()
+
+        parsed = json.loads(decoded.decode('utf-8'))
+        if not isinstance(parsed, list) or len(parsed) > max_segments:
+            raise invalid()
+
+        safe_segments: List[Dict[str, Any]] = []
+        for segment in parsed:
+            if not isinstance(segment, Mapping):
+                raise invalid()
+            text = segment.get('text')
+            if not isinstance(text, str) or len(text) > max_segment_text_chars:
+                raise invalid()
+            safe_segment: Dict[str, Any] = {'text': text}
+            is_user = segment.get('is_user')
+            if isinstance(is_user, bool):
+                safe_segment['is_user'] = is_user
+            speaker_id = segment.get('speaker_id')
+            if isinstance(speaker_id, int) and not isinstance(speaker_id, bool):
+                safe_segment['speaker_id'] = speaker_id
+            safe_segments.append(safe_segment)
+        return safe_segments
+    except (json.JSONDecodeError, RecursionError, TypeError, UnicodeDecodeError, ValueError, zlib.error) as exc:
+        if isinstance(exc, ValueError) and str(exc) == 'invalid bounded public transcript':
+            raise
+        raise invalid() from exc
+
+
+def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool:
+    """Decide whether an un-decoded Firestore snapshot holds user content.
+
+    ``transcript_segments`` is written compressed (and encrypted for enhanced
+    users), so an empty segment list is a non-empty blob on the raw document.
+    Only the decoded value distinguishes an empty recording from a real one.
+    Undecodable segments count as content: never delete data we cannot read.
+    """
+    if conversation.get('has_content') or conversation.get('photos'):
+        return True
+    raw_segments = conversation.get('transcript_segments')
+    if not raw_segments:
+        return False
+    try:
+        segments = _decode_transcript_segments_strict(
+            uid, raw_segments, bool(conversation.get('transcript_segments_compressed'))
+        )
+    except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
+        logger.error(f'raw_conversation_has_content: undecodable segments, assuming content. {uid} {e}')
+        return True
+    return bool(segments)
+
+
 def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
     if not conversation_data:
         return None
@@ -272,7 +355,7 @@ def get_conversation_photos(uid: str, conversation_id: str):
 
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
-def upsert_conversation(uid: str, conversation_data: dict):
+def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     # `updated_at` is Firestore document metadata exposed by reads, never an
     # application-owned field to replay into a later write.
     conversation_data.pop('updated_at', None)
@@ -324,13 +407,76 @@ def upsert_conversation(uid: str, conversation_data: dict):
         transaction.set(conversation_ref, write_data)
 
     _write_processing_result(transaction)
-    if _LIFECYCLE_FIELDS.intersection(conversation_data):
-        _record_legacy_lifecycle_mutation('upsert')
 
 
 @set_data_protection_level(data_arg_name='conversation_data')
-@prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
-def create_conversation_if_absent(uid: str, conversation_data: dict) -> bool:
+@prepare_for_write(
+    data_arg_name='conversation_data',
+    prepare_func=_prepare_conversation_for_write,
+    preserve_result=True,
+)
+def persist_processing_result_with_lifecycle(
+    uid: str,
+    conversation_data: dict,
+    *,
+    expected_statuses: set[str],
+) -> bool:
+    """Persist a processor result only while its lifecycle generation remains current.
+
+    A processor works from an in-memory snapshot.  This transaction fences that
+    snapshot against a concurrent discard, delete, or terminal transition before
+    merging generated content back into the conversation document.
+    """
+    conversation_data.pop('updated_at', None)
+    if 'audio_base64_url' in conversation_data:
+        del conversation_data['audio_base64_url']
+    if 'photos' in conversation_data:
+        del conversation_data['photos']
+
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def _persist(transaction) -> bool:
+        write_data = copy.deepcopy(conversation_data)
+        existing_snapshot = conversation_ref.get(transaction=transaction)
+        if not getattr(existing_snapshot, 'exists', False):
+            # A processor is never an authority to recreate a conversation.
+            # Treat deletion as the same terminal fence as a discard so a
+            # finalizer cannot resurrect it and emit derived side effects.
+            return False
+
+        existing = existing_snapshot.to_dict() or {}
+        if existing.get('discarded') or existing.get('status') not in expected_statuses:
+            return False
+
+        # Generated processing content never owns user-managed fields.
+        for field in ('starred', 'folder_id', 'visibility', 'user_title'):
+            if field in existing:
+                write_data[field] = existing[field]
+
+        user_title = existing.get('user_title')
+        if isinstance(user_title, str):
+            structured = write_data.get('structured')
+            if not isinstance(structured, dict):
+                structured = {}
+                write_data['structured'] = structured
+            structured['title'] = user_title
+
+        transaction.set(conversation_ref, write_data, merge=True)
+        return True
+
+    return _persist(transaction)
+
+
+@set_data_protection_level(data_arg_name='conversation_data')
+@prepare_for_write(
+    data_arg_name='conversation_data',
+    prepare_func=_prepare_conversation_for_write,
+    preserve_result=True,
+)
+def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: dict) -> bool:
     """Atomically create a conversation document if it does not already exist."""
     conversation_data.pop('updated_at', None)
     if 'audio_base64_url' in conversation_data:
@@ -342,8 +488,6 @@ def create_conversation_if_absent(uid: str, conversation_data: dict) -> bool:
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     try:
         conversation_ref.create(conversation_data)
-        if _LIFECYCLE_FIELDS.intersection(conversation_data):
-            _record_legacy_lifecycle_mutation('create_if_absent')
         return True
     except (AlreadyExists, Conflict):
         return False
@@ -356,6 +500,51 @@ def get_conversation(uid, conversation_id):
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_data = _document_data_with_revision(conversation_ref.get())
     return conversation_data
+
+
+def get_public_shared_conversation_bounded(
+    uid: str,
+    conversation_id: str,
+    *,
+    firestore_client: Any = None,
+) -> Optional[Dict[str, Any]]:
+    """Read only public-chat fields and decode the transcript within fixed bounds."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    conversation_ref = (
+        client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    )
+    snapshot = conversation_ref.get(
+        field_paths=[
+            'visibility',
+            'is_locked',
+            'transcript_segments_compressed',
+            'transcript_segments',
+        ]
+    )
+    if not snapshot.exists:
+        return None
+    raw = snapshot.to_dict()
+    if not isinstance(raw, dict):
+        return None
+
+    visibility = raw.get('visibility')
+    is_locked = raw.get('is_locked', False)
+    public_conversation: Dict[str, Any] = {
+        'visibility': visibility,
+        'is_locked': is_locked,
+    }
+    if not isinstance(visibility, str) or visibility not in {'shared', 'public'} or is_locked:
+        return public_conversation
+
+    try:
+        public_conversation['transcript_segments'] = _decode_public_transcript_segments_bounded(
+            uid,
+            raw.get('transcript_segments'),
+            compressed=raw.get('transcript_segments_compressed') is True,
+        )
+    except ValueError:
+        return None
+    return public_conversation
 
 
 def get_conversation_audio_stamp(uid: str, conversation_id: str) -> Optional[dict]:
@@ -518,6 +707,12 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
 
 
 def update_conversation(uid: str, conversation_id: str, update_data: dict):
+    lifecycle_fields = _LIFECYCLE_FIELDS.intersection(update_data)
+    if lifecycle_fields:
+        raise ValueError(
+            'lifecycle fields may only be changed through utils.conversations.lifecycle: '
+            + ', '.join(sorted(lifecycle_fields))
+        )
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
     doc_snapshot = doc_ref.get()
     if not doc_snapshot.exists:
@@ -526,8 +721,6 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict):
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
     doc_ref.update(prepared_data)
-    if _LIFECYCLE_FIELDS.intersection(update_data):
-        _record_legacy_lifecycle_mutation('generic_update')
 
 
 def create_audio_files_from_chunks(
@@ -959,11 +1152,10 @@ def get_processing_conversations(uid: str):
     return conversations
 
 
-def update_conversation_status(uid: str, conversation_id: str, status: str):
+def transition_conversation_status(uid: str, conversation_id: str, status: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'status': status})
-    _record_legacy_lifecycle_mutation('status_update')
 
 
 def claim_conversation_status(
@@ -984,7 +1176,7 @@ def claim_conversation_status(
         if not snapshot.exists:
             raise NotFound(f'Conversation {conversation_id} not found')
         current = snapshot.to_dict() or {}
-        if current.get('status') != expected_status.value:
+        if current.get('discarded') or current.get('status') != expected_status.value:
             return False
         updates = {'status': claimed_status.value}
         if extra_updates:
@@ -993,8 +1185,6 @@ def claim_conversation_status(
         return True
 
     claimed = _claim(transaction)
-    if claimed:
-        _record_legacy_lifecycle_mutation('conditional_claim')
     return claimed
 
 
@@ -1002,7 +1192,12 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'discarded': True})
-    _record_legacy_lifecycle_mutation('discard')
+
+
+def restore_conversation_from_discarded(uid: str, conversation_id: str):
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({'discarded': False})
 
 
 # *********************************
@@ -1145,24 +1340,36 @@ def update_conversation_segments(
     segments: List[dict],
     finished_at: datetime = None,
     data_protection_level: str = None,
+    *,
+    started_at: datetime = None,
+    firestore_client: Any = None,
 ):
-    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    if data_protection_level is not None:
-        doc_level = data_protection_level
-    else:
-        doc_snapshot = doc_ref.get(field_paths=['data_protection_level'])
-        if not doc_snapshot.exists:
-            return
-        doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
-    update_payload = {'transcript_segments': segments}
-    if finished_at:
-        update_payload['finished_at'] = finished_at
-    prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
-    try:
-        doc_ref.update(prepared_payload)
-    except NotFound:
-        # Document was deleted between cache read and write — safe to skip
-        return
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def _write_segments(transaction) -> bool:
+        doc_snapshot = doc_ref.get(transaction=transaction)
+        if not getattr(doc_snapshot, 'exists', False):
+            return False
+        current = doc_snapshot.to_dict() or {}
+        doc_level = data_protection_level or current.get('data_protection_level', 'standard')
+        update_payload = {
+            'transcript_segments': segments,
+            # Once a live generation has received content, empty cleanup must
+            # never reclaim it even if an older in-memory snapshot is empty.
+            'has_content': bool(current.get('has_content')) or bool(segments),
+        }
+        if finished_at:
+            update_payload['finished_at'] = finished_at
+        if started_at:
+            update_payload['started_at'] = started_at
+        prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
+        transaction.update(doc_ref, prepared_payload)
+        return True
+
+    return _write_segments(transaction)
 
 
 # ***********************************
@@ -1292,30 +1499,68 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
 # ***********************************
 
 
-def store_conversation_photos(uid: str, conversation_id: str, photos: List[ConversationPhoto]):
-    user_ref = db.collection('users').document(uid)
+def store_conversation_photos(
+    uid: str,
+    conversation_id: str,
+    photos: List[ConversationPhoto],
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-
-    conversation_snapshot = conversation_ref.get(field_paths=['data_protection_level'])
-    level = 'standard'
-    if conversation_snapshot.exists:
-        level = conversation_snapshot.to_dict().get('data_protection_level', 'standard')
-
     photos_ref = conversation_ref.collection('photos')
-    batch = db.batch()
-    for photo in photos:
-        photo_id = photo.id or str(uuid.uuid4())
-        photo_ref = photos_ref.document(photo_id)
-        data = photo.model_dump()
-        data['id'] = photo_id
-        prepared_data = _prepare_photo_for_write(data, uid, level)
-        batch.set(photo_ref, prepared_data)
-    batch.commit()
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def _store(transaction) -> bool:
+        conversation_snapshot = conversation_ref.get(transaction=transaction)
+        if not getattr(conversation_snapshot, 'exists', False):
+            return False
+        level = (conversation_snapshot.to_dict() or {}).get('data_protection_level', 'standard')
+        for photo in photos:
+            photo_id = photo.id or str(uuid.uuid4())
+            photo_ref = photos_ref.document(photo_id)
+            data = photo.model_dump()
+            data['id'] = photo_id
+            transaction.set(photo_ref, _prepare_photo_for_write(data, uid, level))
+        transaction.update(conversation_ref, {'has_content': True})
+        return True
+
+    return _store(transaction)
 
 
 # ********************************
 # ********** SYNCING *************
 # ********************************
+
+
+def eligible_merge_target(conversation: Optional[dict]) -> bool:
+    """Whether synced audio may merge into this conversation (#10033).
+
+    A soft-deleted tombstone must never absorb new segments: the user cannot
+    see it, so merged audio disappears — recordings that "never create a
+    conversation". Discarded rows stay eligible; the merge path reprocesses
+    and revives them.
+    """
+    return bool(conversation) and not conversation.get('deleted')
+
+
+def select_closest_conversation(conversations, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
+    """Pure closest-by-boundary choice among eligible merge targets (#10033)."""
+    closest_conversation = None
+    min_diff = float('inf')
+    for conversation in conversations:
+        if not eligible_merge_target(conversation):
+            continue
+        conversation_start_timestamp = conversation['started_at'].timestamp()
+        conversation_end_timestamp = conversation['finished_at'].timestamp()
+        diff1 = abs(conversation_start_timestamp - start_timestamp)
+        diff2 = abs(conversation_end_timestamp - end_timestamp)
+        if diff1 < min_diff or diff2 < min_diff:
+            min_diff = min(diff1, diff2)
+            closest_conversation = conversation
+    return closest_conversation
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
@@ -1342,17 +1587,10 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
     for conversation in conversations:
         logger.info(f"- {conversation['id']} {conversation['started_at']} {conversation['finished_at']}")
 
-    # get the conversation that has the closest start timestamp or end timestamp
-    closest_conversation = None
-    min_diff = float('inf')
-    for conversation in conversations:
-        conversation_start_timestamp = conversation['started_at'].timestamp()
-        conversation_end_timestamp = conversation['finished_at'].timestamp()
-        diff1 = abs(conversation_start_timestamp - start_timestamp)
-        diff2 = abs(conversation_end_timestamp - end_timestamp)
-        if diff1 < min_diff or diff2 < min_diff:
-            min_diff = min(diff1, diff2)
-            closest_conversation = conversation
+    closest_conversation = select_closest_conversation(conversations, start_timestamp, end_timestamp)
+    if closest_conversation is None:
+        logger.info('get_closest_conversation_to_timestamps: no eligible merge target (deleted rows excluded)')
+        return None
 
     logger.info(f"get_closest_conversation_to_timestamps closest_conversation: {closest_conversation['id']}")
     return closest_conversation

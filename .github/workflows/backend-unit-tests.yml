@@ -7,48 +7,92 @@ on:
     paths:
       - '.gitignore'
       - 'backend/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'config/deployment-setting-classification.json'
+      - 'firestore.indexes.json'
       - '.github/actions/detect-changes/**'
+      - '.github/actions/release-eligibility/action.yml'
+      - '.github/actions/transcription-release-candidate-probe/**'
       - '.github/workflows/backend-checks.yml'
+      - '.github/workflows/backend-hermetic-e2e.yml'
       - '.github/workflows/backend-unit-tests.yml'
       - '.github/workflows/desktop-checks.yml'
       - '.github/workflows/desktop-swift-ci.yml'
+      - '.github/workflows/desktop_backend_auto_dev.yml'
       - '.github/workflows/repo-checks.yml'
+      - '.github/workflows/release-eligibility.yml'
       - '.github/workflows/desktop_promote_beta.yml'
       - '.github/workflows/desktop_promote_prod.yml'
+      - '.github/workflows/gcp_backend.yml'
+      - '.github/workflows/gcp_backend_auto_dev.yml'
+      - '.github/workflows/gcp_firestore_indexes.yml'
       - '.github/workflows/gcp_backend*.yml'
+      - '.github/workflows/gcp_llm_gateway.yml'
+      - '.github/workflows/gcp_llm_gateway_auto_dev.yml'
       - '.github/workflows/gcp_memory_maintenance_job.yml'
       - '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
       - '.github/workflows/gcp_notifications_job.yml'
+      - '.github/scripts/check_backend_deploy_source_admission.py'
+      - '.github/scripts/verify_auto_backend_release_admission.py'
+      - '.github/scripts/verify_backend_release_admission.py'
+      - '.github/scripts/verify_release_eligibility.py'
       - '.github/workflows/sync_ledger_fence_cutover.yml'
       - 'scripts/changed-files'
       - 'scripts/install-git-hooks.sh'
       - 'scripts/pre-push'
       - 'scripts/pre-push-singleflight'
+      - 'scripts/voice-provider-probe.sh'
   pull_request:
     paths:
       - '.gitignore'
       - 'backend/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'config/deployment-setting-classification.json'
+      - 'firestore.indexes.json'
       - '.github/actions/detect-changes/**'
+      - '.github/actions/release-eligibility/action.yml'
+      - '.github/actions/transcription-release-candidate-probe/**'
       - '.github/workflows/backend-checks.yml'
+      - '.github/workflows/backend-hermetic-e2e.yml'
       - '.github/workflows/backend-unit-tests.yml'
       - '.github/workflows/desktop-checks.yml'
       - '.github/workflows/desktop-swift-ci.yml'
+      - '.github/workflows/desktop_backend_auto_dev.yml'
       - '.github/workflows/repo-checks.yml'
+      - '.github/workflows/release-eligibility.yml'
       - '.github/workflows/desktop_promote_beta.yml'
       - '.github/workflows/desktop_promote_prod.yml'
+      - '.github/workflows/gcp_backend.yml'
+      - '.github/workflows/gcp_backend_auto_dev.yml'
+      - '.github/workflows/gcp_firestore_indexes.yml'
       - '.github/workflows/gcp_backend*.yml'
+      - '.github/workflows/gcp_llm_gateway.yml'
+      - '.github/workflows/gcp_llm_gateway_auto_dev.yml'
       - '.github/workflows/gcp_memory_maintenance_job.yml'
       - '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
       - '.github/workflows/gcp_notifications_job.yml'
+      - '.github/scripts/check_backend_deploy_source_admission.py'
+      - '.github/scripts/verify_auto_backend_release_admission.py'
+      - '.github/scripts/verify_backend_release_admission.py'
+      - '.github/scripts/verify_release_eligibility.py'
       - '.github/workflows/sync_ledger_fence_cutover.yml'
       - 'scripts/changed-files'
       - 'scripts/install-git-hooks.sh'
       - 'scripts/pre-push'
       - 'scripts/pre-push-singleflight'
+      - 'scripts/voice-provider-probe.sh'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  # PR updates supersede earlier test runs; main and manual runs retain an
+  # independent result for every dispatch.
+  group: backend-unit-tests-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: true
 
 jobs:
   backend-unit-tests:
@@ -58,23 +102,23 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version-file: backend/.python-version
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
           enable-cache: true
           cache-dependency-glob: backend/pylock*.toml
 
       - name: Set up Helm
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@v5
 
       - name: Install backend dependencies
         working-directory: backend
@@ -83,43 +127,12 @@ jobs:
           uv pip sync pylock.toml --python .venv/bin/python
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
-      - name: Run preflight
-        working-directory: backend
-        run: bash test-preflight.sh
-
-      - name: Type-check backend typed boundary
-        working-directory: backend
-        run: bash scripts/typecheck.sh
-
-      - name: Select backend unit tests
-        id: select-tests
+      - name: Run authoritative backend unit contract
         working-directory: backend
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             ../scripts/changed-files "${{ github.event.pull_request.base.sha }}"...HEAD > /tmp/backend-changed-files.txt
-            python scripts/select_backend_unit_tests.py \
-              --changed-files /tmp/backend-changed-files.txt \
-              --output /tmp/backend-unit-tests.txt \
-              --reason-output /tmp/backend-unit-tests-reason.txt
+            bash scripts/run-unit-ci.sh --changed-files /tmp/backend-changed-files.txt
           else
-            python scripts/select_backend_unit_tests.py \
-              --all \
-              --output /tmp/backend-unit-tests.txt \
-              --reason-output /tmp/backend-unit-tests-reason.txt
+            bash scripts/run-unit-ci.sh --all
           fi
-          echo "reason=$(cat /tmp/backend-unit-tests-reason.txt)" >> "$GITHUB_OUTPUT"
-          echo "count=$(wc -l < /tmp/backend-unit-tests.txt | tr -d ' ')" >> "$GITHUB_OUTPUT"
-
-      - name: Run backend unit suite
-        working-directory: backend
-        env:
-          BACKEND_UNIT_TEST_FILE_LIST: /tmp/backend-unit-tests.txt
-          BACKEND_FAST_UNIT_WARN_SECONDS: "0.1"
-          BACKEND_FAST_UNIT_FAIL_SECONDS: "0.25"
-          BACKEND_PYTEST_FILE_ISOLATION: "1"
-          BACKEND_PYTEST_MARK_EXPR: "not integration and not slow"
-          BACKEND_PYTEST_XDIST: auto
-          BACKEND_PYTEST_WORKERS: auto
-        run: |
-          echo "Selected ${{ steps.select-tests.outputs.count }} backend unit test files: ${{ steps.select-tests.outputs.reason }}"
-          bash test.sh

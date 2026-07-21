@@ -1,0 +1,37 @@
+version: 2
+name: rewind-artifact-recovery
+tier: 2
+description: Hermetic Rewind artifact lifecycle — synthetic frames through encoder, SQLite, finalized video readback, privacy admission, and database reopen
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindModels.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindStorage.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
+  - desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Exercise the local Rewind artifact and recovery gauntlet
+    bridge.action:
+      name: rewind_artifact_recovery_gauntlet
+    expect:
+      ok: true
+      result.detail.protected_frame_blocked: "true"
+      result.detail.protected_row_count: "0"
+      result.detail.persisted_frame_count: "2"
+      result.detail.readback_colors: "red,green"
+      result.detail.database_reopened: "true"
+      result.detail.rows_survived_reopen: "true"
+      result.detail.cleanup_removed_rows: "2"
+      result.detail.artifact_file_removed: "true"
+
+  - id: S2
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

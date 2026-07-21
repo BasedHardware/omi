@@ -19,7 +19,10 @@ backwards compat) and the router-layer key derivation.
 
 from unittest.mock import MagicMock
 
+from google.api_core.exceptions import Aborted
+
 from database import action_items as action_items_db  # noqa: E402
+from database import firestore_transaction_retry
 from routers import action_items as action_items_router  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -200,6 +203,43 @@ def test_reserved_document_id_is_idempotent_across_crash_retry(monkeypatch):
     assert first == second == 'task-reserved'
     assert list(captured['set']) == ['task-reserved']
     assert captured['added'] == []
+
+
+def test_create_retries_precommit_contention_without_duplicate_write(monkeypatch):
+    captured = _stub_collection(monkeypatch, [])
+    attempts = 0
+
+    def transactional(function):
+        def wrapped(transaction):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise Aborted('read contention')
+            return function(transaction)
+
+        return wrapped
+
+    def fast_retry(transaction_factory, operation, **kwargs):
+        return firestore_transaction_retry.run_with_transaction_contention_retry(
+            transaction_factory,
+            operation,
+            **kwargs,
+            sleep=lambda _delay: None,
+            random_value=lambda: 0.0,
+        )
+
+    monkeypatch.setattr(action_items_db.firestore, 'transactional', transactional)
+    monkeypatch.setattr(action_items_db, 'run_with_transaction_contention_retry', fast_retry)
+
+    result = action_items_db.create_action_item(
+        'uid',
+        {'description': 'Buy milk', 'completed': False},
+        idempotency_key='abc123',
+    )
+
+    assert result == 'newly-created-id'
+    assert attempts == 2
+    assert len(captured['added']) == 1
 
 
 # ---------------------------------------------------------------------------

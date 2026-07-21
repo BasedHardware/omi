@@ -511,7 +511,7 @@ export class KernelCore {
         ? `voice:${externalTurnId.toLowerCase()}`
         : `agent_spawn:${input.invocationId}`,
       pillId,
-      ...(producerTurnId ? { producerTurnId } : {}),
+      ...(producerTurnId ? { producerRunId: run.runId, producerTurnId } : {}),
       userText: typeof runInput.prompt === "string" ? runInput.prompt : "",
       assistantText: "I started a background agent for that.",
       objective,
@@ -815,7 +815,14 @@ export class KernelCore {
       adapterId,
       model: accepted.session.modelProfile ?? undefined,
       cwd: accepted.session.defaultCwd ?? undefined,
-      systemPrompt: kernelSystemPolicy(accepted.session.surfaceKind, accepted.session.executionRole),
+      systemPrompt: kernelSystemPolicy(
+        accepted.session.surfaceKind,
+        accepted.session.executionRole,
+        accepted.contextSnapshot.contextPlan,
+      ),
+      systemPromptCacheIdentity: accepted.contextSnapshot.contextPlan.stableCacheIdentity,
+      dynamicContextIdentity: accepted.contextSnapshot.contextPlan.dynamicContextIdentity,
+      contextPlanId: accepted.contextSnapshot.contextPlan.planId,
       admittedContextSnapshot: accepted.contextSnapshot,
     };
     if (!input.recoverAfterError) {
@@ -1589,7 +1596,8 @@ export class KernelCore {
     if (input.input.model !== undefined && binding.modelId !== input.input.model) {
       return false;
     }
-    const requestedSystemPromptHash = stableHash(input.input.systemPrompt);
+    const requestedSystemPromptHash = stableHash(
+      input.input.systemPromptCacheIdentity ?? input.input.systemPrompt);
     if (binding.systemPromptHash !== null && binding.systemPromptHash !== requestedSystemPromptHash) {
       return false;
     }
@@ -1647,7 +1655,7 @@ export class KernelCore {
           adapterInstanceId: this.runtimeNodeId,
           cwd: input.input.cwd ?? binding.cwd ?? input.session.defaultCwd ?? null,
           modelId: input.input.model ?? binding.modelId ?? null,
-          systemPromptHash: stableHash(input.input.systemPrompt),
+          systemPromptHash: stableHash(input.input.systemPromptCacheIdentity ?? input.input.systemPrompt),
           metadataJson: bindingMetadata(input.input, input.adapter),
           lastUsedAtMs: Date.now(),
           updatedAtMs: Date.now(),
@@ -1661,6 +1669,9 @@ export class KernelCore {
             bindingId: binding.bindingId,
             adapterId: input.adapterId,
             bindingGeneration: binding.bindingGeneration,
+            systemPromptCacheIdentity: input.input.systemPromptCacheIdentity ?? null,
+            dynamicContextIdentity: input.input.dynamicContextIdentity ?? null,
+            contextPlanId: input.input.contextPlanId ?? null,
           },
         });
       });
@@ -1717,7 +1728,7 @@ export class KernelCore {
         status: "active",
         cwd: opened.cwd,
         modelId: opened.model ?? input.input.model ?? null,
-        systemPromptHash: stableHash(input.input.systemPrompt),
+        systemPromptHash: stableHash(input.input.systemPromptCacheIdentity ?? input.input.systemPrompt),
         metadataJson: bindingMetadata(input.input, input.adapter),
         lastUsedAtMs: Date.now(),
       });
@@ -1732,6 +1743,9 @@ export class KernelCore {
           bindingGeneration: created.bindingGeneration,
           adapterId: input.adapterId,
           resumeFidelity: created.resumeFidelity,
+          systemPromptCacheIdentity: input.input.systemPromptCacheIdentity ?? null,
+          dynamicContextIdentity: input.input.dynamicContextIdentity ?? null,
+          contextPlanId: input.input.contextPlanId ?? null,
         },
       });
       return created;
@@ -1793,22 +1807,26 @@ export class KernelCore {
       });
       const emittedArtifacts = result.artifacts ?? [];
       const existingArtifacts = this.readArtifacts({ sessionId: session.sessionId, limit: 500 });
+      const runScope = {
+        ownerId: session.ownerId,
+        sessionId: session.sessionId,
+        runId,
+        attemptId: attempt.attemptId,
+      };
+      const runDirectoryArtifacts = this.artifactStorage?.discoverRunArtifacts(
+        runScope,
+        [...emittedArtifacts, ...existingArtifacts]
+      ) ?? [];
       const artifacts = [
         ...emittedArtifacts,
-        ...(this.artifactStorage?.discoverRunArtifacts({
-          ownerId: session.ownerId,
-          sessionId: session.sessionId,
-          runId,
-          attemptId: attempt.attemptId,
-        }, [...emittedArtifacts, ...existingArtifacts]) ?? []),
+        ...runDirectoryArtifacts,
+        ...(this.artifactStorage?.discoverReportedTerminalArtifacts(
+          result.text,
+          [...emittedArtifacts, ...existingArtifacts, ...runDirectoryArtifacts]
+        ) ?? []),
       ];
       for (const rawArtifact of artifacts) {
-        const artifact = this.artifactStorage?.normalizeArtifact(rawArtifact, {
-          ownerId: session.ownerId,
-          sessionId: session.sessionId,
-          runId,
-          attemptId: attempt.attemptId,
-        }) ?? rawArtifact;
+        const artifact = this.artifactStorage?.normalizeArtifact(rawArtifact, runScope) ?? rawArtifact;
         this.persistArtifactInTransaction({
           sessionId: session.sessionId,
           runId,

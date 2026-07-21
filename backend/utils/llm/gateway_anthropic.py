@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import time
 import uuid
 from collections.abc import Mapping
 from typing import Any, cast
@@ -18,9 +19,11 @@ from utils.llm.gateway_client import (
     feature_auto_lane_id,
     get_llm_gateway_base_url,
     get_llm_gateway_service_token,
+    llm_gateway_headers,
     should_route_features_through_gateway,
 )
 from utils.llm.gateway_observability import record_gateway_request_result
+from utils.llm.gateway_resilience import gateway_circuit, gateway_transport_timeout, observe_gateway_first_byte
 from utils.llm.gateway_serving import is_gateway_transport_failure, record_gateway_fallback_terminal
 
 _CHAT_AGENT_FEATURE = 'chat_agent'
@@ -31,6 +34,12 @@ _GATEWAY_CLIENT_CACHE: TTLCache[str, anthropic.AsyncAnthropic] = TTLCache(
     ttl=_GATEWAY_CLIENT_CACHE_TTL_SECONDS,
 )
 _REQUEST_ID_HEADER = 'X-Omi-Request-ID'
+
+
+def _gateway_request_headers(existing: object) -> dict[str, str]:
+    headers = dict(existing) if isinstance(existing, Mapping) else {}
+    headers.update(llm_gateway_headers(feature=_CHAT_AGENT_FEATURE))
+    return headers
 
 
 def get_gateway_first_anthropic_client(
@@ -68,7 +77,7 @@ def _get_or_create_gateway_anthropic_client(*, byok_api_key: str | None = None) 
     client = anthropic.AsyncAnthropic(
         api_key='gateway-managed',
         base_url=get_llm_gateway_base_url(),
-        timeout=120.0,
+        timeout=gateway_transport_timeout(),
         max_retries=0,
         default_headers=default_headers,
     )
@@ -118,6 +127,7 @@ class _GatewayFirstAnthropicMessages:
     def stream(self, **kwargs: Any) -> '_GatewayAnthropicStreamWithFallback':
         gateway_kwargs = dict(kwargs)
         gateway_kwargs['model'] = CHAT_AGENT_AUTO_LANE_ID
+        gateway_kwargs['extra_headers'] = _gateway_request_headers(gateway_kwargs.get('extra_headers'))
         legacy_kwargs = dict(kwargs)
         legacy_kwargs['model'] = self._agent_model
         return _GatewayAnthropicStreamWithFallback(
@@ -131,7 +141,11 @@ class _GatewayFirstAnthropicMessages:
     async def create(self, **kwargs: Any) -> Any:
         gateway_kwargs = dict(kwargs)
         gateway_kwargs['model'] = CHAT_AGENT_AUTO_LANE_ID
+        gateway_kwargs['extra_headers'] = _gateway_request_headers(gateway_kwargs.get('extra_headers'))
         request_id = _set_request_id(gateway_kwargs)
+        if not gateway_circuit.allow_request():
+            return await self._legacy_create(kwargs, request_id=request_id, gateway_reason='circuit_open')
+        gateway_started_at = time.monotonic()
         try:
             result = await self._gateway_messages.create(**gateway_kwargs)
         except asyncio.CancelledError:
@@ -157,43 +171,51 @@ class _GatewayFirstAnthropicMessages:
                     credential_source=self._credential_source,
                 )
                 raise
-            gateway_reason = _fallback_reason(exc)
-            try:
-                result = await self._legacy_messages.create(**kwargs)
-            except asyncio.CancelledError:
-                record_gateway_fallback_terminal(
-                    feature=_CHAT_AGENT_FEATURE,
-                    gateway_reason=gateway_reason,
-                    outcome='exhausted',
-                    request_id=request_id,
-                    credential_source=self._credential_source,
-                    request_outcome='cancelled',
-                    request_reason='client_cancelled',
-                )
-                raise
-            except Exception:
-                record_gateway_fallback_terminal(
-                    feature=_CHAT_AGENT_FEATURE,
-                    gateway_reason=gateway_reason,
-                    outcome='exhausted',
-                    request_id=request_id,
-                    credential_source=self._credential_source,
-                )
-                raise
-            record_gateway_fallback_terminal(
-                feature=_CHAT_AGENT_FEATURE,
-                gateway_reason=gateway_reason,
-                outcome='recovered',
-                request_id=request_id,
-                credential_source=self._credential_source,
+            gateway_circuit.record_transport_failure()
+            observe_gateway_first_byte(
+                feature=_CHAT_AGENT_FEATURE, started_at=gateway_started_at, outcome='transport_failure'
             )
-            return result
+            return await self._legacy_create(kwargs, request_id=request_id, gateway_reason=_fallback_reason(exc))
+        gateway_circuit.record_transport_success()
+        observe_gateway_first_byte(feature=_CHAT_AGENT_FEATURE, started_at=gateway_started_at, outcome='success')
         record_gateway_request_result(
             feature=_CHAT_AGENT_FEATURE,
             outcome='success',
             reason='ok',
             route=feature_auto_lane_id(_CHAT_AGENT_FEATURE),
             mode='serving',
+            request_id=request_id,
+            credential_source=self._credential_source,
+        )
+        return result
+
+    async def _legacy_create(self, kwargs: dict[str, Any], *, request_id: str, gateway_reason: str) -> Any:
+        try:
+            result = await self._legacy_messages.create(**kwargs)
+        except asyncio.CancelledError:
+            record_gateway_fallback_terminal(
+                feature=_CHAT_AGENT_FEATURE,
+                gateway_reason=gateway_reason,
+                outcome='exhausted',
+                request_id=request_id,
+                credential_source=self._credential_source,
+                request_outcome='cancelled',
+                request_reason='client_cancelled',
+            )
+            raise
+        except Exception:
+            record_gateway_fallback_terminal(
+                feature=_CHAT_AGENT_FEATURE,
+                gateway_reason=gateway_reason,
+                outcome='exhausted',
+                request_id=request_id,
+                credential_source=self._credential_source,
+            )
+            raise
+        record_gateway_fallback_terminal(
+            feature=_CHAT_AGENT_FEATURE,
+            gateway_reason=gateway_reason,
+            outcome='recovered',
             request_id=request_id,
             credential_source=self._credential_source,
         )
@@ -223,8 +245,13 @@ class _GatewayAnthropicStreamWithFallback:
         self._gateway_fallback_reason: str | None = None
         self._saw_output = False
         self._terminal_recorded = False
+        self._gateway_started_at: float | None = None
 
     async def __aenter__(self):
+        if not gateway_circuit.allow_request():
+            self._gateway_fallback_reason = 'circuit_open'
+            return await self._start_legacy_fallback()
+        self._gateway_started_at = time.monotonic()
         try:
             self._active = await self._gateway_messages.stream(**self._gateway_kwargs).__aenter__()
         except asyncio.CancelledError:
@@ -252,34 +279,78 @@ class _GatewayAnthropicStreamWithFallback:
                 )
                 self._terminal_recorded = True
                 raise
+            gateway_circuit.record_transport_failure()
+            self._observe_gateway_first_byte('transport_failure')
             self._gateway_fallback_reason = _fallback_reason(exc)
+            return await self._start_legacy_fallback()
+        self._using_gateway = True
+        return self
+
+    async def _switch_to_legacy_fallback_before_output(
+        self, *, gateway_reason: str, error: BaseException | None
+    ) -> None:
+        """Close an unproductive gateway stream before replaying it directly.
+
+        The caller has not received an event yet, so replaying is safe.  Once
+        an event has escaped this wrapper, retrying through the legacy provider
+        could duplicate output and is intentionally prohibited.
+        """
+
+        active = self._active
+        self._active = None
+        self._iterator = None
+        self._using_gateway = False
+        self._gateway_fallback_reason = gateway_reason
+        if active is not None:
             try:
-                self._active = await self._legacy_messages.stream(**self._legacy_kwargs).__aenter__()
+                if error is None:
+                    await active.__aexit__(None, None, None)
+                else:
+                    await active.__aexit__(type(error), error, error.__traceback__)
             except asyncio.CancelledError:
-                record_gateway_fallback_terminal(
-                    feature=_CHAT_AGENT_FEATURE,
-                    gateway_reason=self._gateway_fallback_reason,
-                    outcome='exhausted',
-                    request_id=self._request_id,
-                    credential_source=self._credential_source,
-                    request_outcome='cancelled',
-                    request_reason='client_cancelled',
-                )
-                self._terminal_recorded = True
                 raise
             except Exception:
-                record_gateway_fallback_terminal(
-                    feature=_CHAT_AGENT_FEATURE,
-                    gateway_reason=self._gateway_fallback_reason,
-                    outcome='exhausted',
-                    request_id=self._request_id,
-                    credential_source=self._credential_source,
-                )
-                self._terminal_recorded = True
-                raise
-            self._using_legacy_fallback = True
-            return self
-        self._using_gateway = True
+                # The transport failure is already known; cleanup must not
+                # prevent the safe no-output legacy fallback.
+                pass
+        await self._start_legacy_fallback()
+
+    def _observe_gateway_first_byte(self, outcome: str) -> None:
+        if self._gateway_started_at is None:
+            return
+        observe_gateway_first_byte(
+            feature=_CHAT_AGENT_FEATURE,
+            started_at=self._gateway_started_at,
+            outcome=outcome,
+        )
+        self._gateway_started_at = None
+
+    async def _start_legacy_fallback(self):
+        try:
+            self._active = await self._legacy_messages.stream(**self._legacy_kwargs).__aenter__()
+        except asyncio.CancelledError:
+            record_gateway_fallback_terminal(
+                feature=_CHAT_AGENT_FEATURE,
+                gateway_reason=self._gateway_fallback_reason or 'unexpected_error',
+                outcome='exhausted',
+                request_id=self._request_id,
+                credential_source=self._credential_source,
+                request_outcome='cancelled',
+                request_reason='client_cancelled',
+            )
+            self._terminal_recorded = True
+            raise
+        except Exception:
+            record_gateway_fallback_terminal(
+                feature=_CHAT_AGENT_FEATURE,
+                gateway_reason=self._gateway_fallback_reason or 'unexpected_error',
+                outcome='exhausted',
+                request_id=self._request_id,
+                credential_source=self._credential_source,
+            )
+            self._terminal_recorded = True
+            raise
+        self._using_legacy_fallback = True
         return self
 
     async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> Any:
@@ -344,15 +415,28 @@ class _GatewayAnthropicStreamWithFallback:
                 self._record_terminal(outcome='cancelled', reason='client_cancelled')
             raise
         except StopAsyncIteration:
+            if self._using_gateway and not self._saw_output:
+                await self._switch_to_legacy_fallback_before_output(
+                    gateway_reason='empty_stream_before_output', error=None
+                )
+                return await self.__anext__()
             if self._should_record_terminal():
                 self._record_terminal(outcome='error', reason='stream_eof_before_message_stop')
             raise
         except Exception as exc:
+            if self._using_gateway and not self._saw_output and is_gateway_transport_failure(exc):
+                gateway_circuit.record_transport_failure()
+                self._observe_gateway_first_byte('transport_failure')
+                await self._switch_to_legacy_fallback_before_output(gateway_reason=_fallback_reason(exc), error=exc)
+                return await self.__anext__()
             if self._should_record_terminal():
                 phase = 'midstream' if self._saw_output else 'before_output'
                 self._record_terminal(outcome='error', reason=f'stream_{phase}_{_gateway_error_reason(exc)}')
             raise
 
+        if self._using_gateway and not self._saw_output:
+            gateway_circuit.record_transport_success()
+            self._observe_gateway_first_byte('success')
         self._saw_output = True
         event_type = getattr(event, 'type', None)
         if event_type == 'message_stop' and self._should_record_terminal():

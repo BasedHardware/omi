@@ -227,6 +227,9 @@ def _apply_query_order(query: Any) -> Any:
         document_id_field = firestore.FieldPath.document_id()  # type: ignore[reportAttributeAccessIssue,reportUnknownMemberType,reportUnknownVariableType]  # firestore.FieldPath absent from stubs; runtime-guarded by except fallback to "__name__"
     except AttributeError:
         document_id_field = _DOCUMENT_ID_ORDER
+    # Firestore serves this deterministic document-id tie-breaker from the
+    # built-in single-field created_at index. Do not declare it as a composite
+    # index: Firebase rejects that redundant declaration during deployment.
     return query.order_by("created_at", direction=firestore.Query.DESCENDING).order_by(
         document_id_field, direction=firestore.Query.DESCENDING
     )

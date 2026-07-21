@@ -139,11 +139,14 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .checkPermissionStatus: stub = "Screen Recording: not granted."
     case .requestPermission: stub = "Screen Recording permission request opened."
     case .listAgentSessions:
-      stub = "Canonical Omi agent sessions. Use agentRef values internally for follow-up tool calls; do not say them aloud.\n- agent_1: Example agent, running"
+      stub =
+        "Canonical Omi agent sessions. Use agentRef values internally for follow-up tool calls; do not say them aloud.\n- agent_1: Example agent, running"
     case .getAgentRun: stub = "The selected canonical run is running, mode ask. Attempts: 1. Events returned: 3."
-    case .cancelAgentRun: stub = "Cancel request: accepted=true, dispatched=true, acknowledged=true. Current status: cancelling."
+    case .cancelAgentRun:
+      stub = "Cancel request: accepted=true, dispatched=true, acknowledged=true. Current status: cancelling."
     case .inspectAgentArtifacts:
-      stub = "Canonical agent artifacts. Use artifactRef values internally for follow-up tool calls; do not say them aloud.\n- artifact_1: role result, state retained"
+      stub =
+        "Canonical agent artifacts. Use artifactRef values internally for follow-up tool calls; do not say them aloud.\n- artifact_1: role result, state retained"
     case .updateAgentArtifactLifecycle: stub = "Artifact lifecycle is now retained. Changed: true."
     case .getDailyRecap: stub = "Yesterday: 3 hrs in Xcode, 1 hr in Safari; 2 conversations; 1 task created."
     case .searchScreenHistory: stub = "Found it: yesterday afternoon you were reading the launch doc in Safari."
@@ -153,6 +156,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .spawnAgent: stub = "Started a background agent."
     case .setDesktopAttentionOverride: stub = "Attention override applied."
     case .screenshot: stub = "Screen captured."
+    case .reportScreenObservation: stub = "Screen observation accepted."
     case .pointClick: stub = "Clicked."
     case .none: stub = "ok"
     }

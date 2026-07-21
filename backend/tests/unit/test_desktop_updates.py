@@ -16,6 +16,7 @@ from routers.updates import (
     _get_sparkle_zip_download_url,
     _parse_changelog_to_changes,
     _parse_desktop_version,
+    _preview_download_landing_html,
     _xml_attr,
     router as updates_router,
 )
@@ -24,6 +25,29 @@ from database.desktop_update_policy import get_desktop_update_policy
 # Minimal test app mounting only the updates router
 _test_app = FastAPI()
 _test_app.include_router(updates_router)
+
+
+PREVIEW_SLUG = "new-onboarding"
+PREVIEW_SHA = "a" * 40
+
+
+def _preview_manifest(**overrides):
+    manifest = {
+        "slug": PREVIEW_SLUG,
+        "source_sha": PREVIEW_SHA,
+        "dmg_url": f"https://storage.googleapis.com/omi_macos_updates/previews/{PREVIEW_SLUG}/{PREVIEW_SHA}/Omi-Preview.dmg",
+        "dmg_sha256": "b" * 64,
+        "app_name": "Omi Preview – new-onboarding",
+        "bundle_id": "com.omi.preview.p04a26d265d",
+        "url_scheme": "omi-preview-p04a26d265d",
+        "built_at": "2026-07-15T12:00:00Z",
+        "signer": "Developer ID Application: Omi, Inc.",
+        "notarization": "stapled",
+        "notes": "Try the redesigned onboarding.",
+        "backend_url": "https://api.omi.me",
+    }
+    manifest.update(overrides)
+    return manifest
 
 
 # --- _parse_desktop_version ---
@@ -349,13 +373,18 @@ def _pointer_release(channel="beta", build=200):
             "build_number": build,
             "zip_url": f"https://example.com/{build}/Omi.zip",
             "dmg_url": f"https://example.com/{build}/Omi.dmg",
+            "beta_zip_url": f"https://example.com/{build}/Omi.Beta.zip",
+            "beta_dmg_url": f"https://example.com/{build}/omi-beta.dmg",
             "ed_signature": "signature",
+            "beta_ed_signature": "beta-signature",
             "published_at": "2026-03-01T00:00:00Z",
             "changelog": ["Qualified release"],
             "mandatory": False,
             "source_sha": "a" * 40,
             "zip_sha256": None,
             "dmg_sha256": None,
+            "beta_zip_sha256": "d" * 64,
+            "beta_dmg_sha256": "e" * 64,
             "qualification": {"tier": "T2", "passed": True},
         },
     }
@@ -817,6 +846,23 @@ class TestDesktopUpdateAdminEndpoints:
         assert "immutable" in resp.json()["detail"]
 
     @pytest.mark.asyncio
+    async def test_reads_the_retained_manifest_with_a_canonical_identity(self):
+        payload = _pointer_release()["manifest"]
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
+            patch("routers.updates.get_release_manifest", return_value=payload) as read_manifest,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get(
+                    f"/v2/desktop/releases/{payload['release_id']}", headers={"secret-key": "real-secret"}
+                )
+
+        assert resp.status_code == 200
+        assert resp.json()["manifest"] == payload
+        assert len(resp.json()["manifest_sha256"]) == 64
+        read_manifest.assert_called_once_with(payload["release_id"])
+
+    @pytest.mark.asyncio
     async def test_promotes_pointer_and_clears_only_live_pointer_cache(self):
         pointer = {
             "platform": "macos",
@@ -842,8 +888,54 @@ class TestDesktopUpdateAdminEndpoints:
                 )
 
         assert resp.status_code == 200
-        promote.assert_called_once_with("macos", "beta", "v1.0.0+200-macos", expected_generation=1)
+        promote.assert_called_once_with(
+            "macos",
+            "beta",
+            "v1.0.0+200-macos",
+            expected_generation=1,
+            expected_current_release_id=None,
+            operation="promote",
+        )
         delete_cache.assert_called_once_with("desktop_update_pointer:macos:beta")
+
+    @pytest.mark.asyncio
+    async def test_repoint_routes_through_the_shared_pointer_authority(self):
+        pointer = {
+            "platform": "macos",
+            "channel": "stable",
+            "release_id": "v0.12.73+12073-macos",
+            "generation": 10,
+        }
+        with (
+            patch("routers.updates.os.getenv", return_value="real-secret"),
+            patch("routers.updates.promote_channel", return_value=pointer) as promote,
+            patch("routers.updates.delete_generic_cache") as delete_cache,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/v2/desktop/channels/promote",
+                    headers={"secret-key": "real-secret"},
+                    json={
+                        "platform": "macos",
+                        "channel": "stable",
+                        "release_id": "v0.12.73+12073-macos",
+                        "expected_current_release_id": "v0.12.86+12086-macos",
+                        "expected_generation": 9,
+                        "operation": "repoint",
+                    },
+                )
+
+        assert resp.status_code == 200
+        assert resp.json()["pointer"]["release_id"] == pointer["release_id"]
+        promote.assert_called_once_with(
+            "macos",
+            "stable",
+            "v0.12.73+12073-macos",
+            expected_generation=9,
+            expected_current_release_id="v0.12.86+12086-macos",
+            operation="repoint",
+        )
+        delete_cache.assert_called_once_with("desktop_update_pointer:macos:stable")
 
 
 # --- Update policy endpoint ---
@@ -878,6 +970,27 @@ class TestDesktopUpdatePolicyEndpoint:
             resp = await client.get("/v2/desktop/update-policy?platform=ios")
         assert resp.status_code == 422
 
+    @pytest.mark.asyncio
+    async def test_firestore_failure_returns_inactive_policy_and_records_fallback(self):
+        with (
+            patch("routers.updates.get_desktop_update_policy", side_effect=RuntimeError("unavailable")),
+            patch("routers.updates.record_fallback") as fallback,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/update-policy?platform=macos&current_build=11400")
+
+        assert resp.status_code == 200
+        assert resp.json()["active"] is False
+        assert resp.json()["download_url"].endswith("/v2/desktop/download/latest?channel=stable")
+        fallback.assert_called_once_with(
+            component="other",
+            from_mode="desktop_update_policy",
+            to_mode="desktop_update_appcast",
+            reason="other",
+            outcome="recovered",
+            log=ANY,
+        )
+
 
 class TestDesktopUpdatePolicyDatabase:
     def _mock_doc(self, exists=True, data=None):
@@ -894,6 +1007,22 @@ class TestDesktopUpdatePolicyDatabase:
 
         assert policy["active"] is False
         assert policy["severity"] == "none"
+        assert policy["download_url"].endswith("/v2/desktop/download/latest?channel=stable")
+
+    def test_invalid_policy_download_url_uses_stable_manual_download_path(self):
+        doc = self._mock_doc(
+            data={
+                "active": True,
+                "severity": "required",
+                "download_url": "file:///Applications/Omi.app",
+            }
+        )
+        mock_db = MagicMock()
+        mock_db.collection.return_value.document.return_value.get.return_value = doc
+
+        policy = get_desktop_update_policy(current_build=11400, firestore_client=mock_db)
+
+        assert policy["active"] is True
         assert policy["download_url"].endswith("/v2/desktop/download/latest?channel=stable")
 
     def test_required_policy_applies_through_maximum_build(self):
@@ -942,3 +1071,275 @@ class TestDesktopUpdatePolicyDatabase:
         policy = get_desktop_update_policy(current_build=11400, platform="macos", firestore_client=mock_db)
 
         assert policy["active"] is False
+
+
+class TestDesktopPreviewEndpoints:
+    def test_landing_page_escapes_publisher_supplied_text(self):
+        html = _preview_download_landing_html(
+            _preview_manifest(
+                app_name='<img src=x onerror="alert(1)">',
+                notes='<script>alert("xss")</script>',
+            )
+        )
+
+        assert '<script>alert("xss")</script>' not in html
+        assert "&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;" in html
+        assert "onerror=&quot;alert(1)&quot;" in html
+
+    @pytest.mark.asyncio
+    async def test_current_preview_landing_uses_only_preview_registry(self):
+        preview = {"pointer": {"generation": 1}, "manifest": _preview_manifest()}
+        with patch("routers.updates.get_current_preview", return_value=preview) as get_current:
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                response = await client.get(f"/v2/desktop/previews/{PREVIEW_SLUG}")
+
+        assert response.status_code == 200
+        assert PREVIEW_SHA in response.text
+        assert "Omi-Preview.dmg" in response.text
+        assert response.headers["cache-control"] == "no-store"
+        get_current.assert_called_once_with(PREVIEW_SLUG)
+
+    @pytest.mark.asyncio
+    async def test_immutable_preview_landing_uses_slug_and_full_sha(self):
+        with patch("routers.updates.get_preview_manifest", return_value=_preview_manifest()) as get_manifest:
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                response = await client.get(f"/v2/desktop/previews/{PREVIEW_SLUG}/{PREVIEW_SHA}")
+
+        assert response.status_code == 200
+        assert PREVIEW_SHA in response.text
+        get_manifest.assert_called_once_with(PREVIEW_SLUG, PREVIEW_SHA)
+
+    @pytest.mark.asyncio
+    async def test_preview_publish_rejects_admin_key_and_accepts_preview_only_key(self):
+        payload = _preview_manifest(expected_generation=0)
+        published = {"manifest": _preview_manifest(), "pointer": {"generation": 1}}
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": "admin-key", "DESKTOP_PREVIEW_PUBLISH_KEY": "preview-key"}),
+            patch("routers.updates.publish_preview", return_value=published) as publish,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                rejected = await client.post(
+                    "/v2/desktop/previews/publish",
+                    headers={"secret-key": "admin-key"},
+                    json=payload,
+                )
+                accepted = await client.post(
+                    "/v2/desktop/previews/publish",
+                    headers={"secret-key": "preview-key"},
+                    json=payload,
+                )
+
+        assert rejected.status_code == 403
+        assert accepted.status_code == 201
+        assert accepted.json()["pointer"]["generation"] == 1
+        publish.assert_called_once_with(_preview_manifest(), expected_generation=0)
+
+    @pytest.mark.asyncio
+    async def test_preview_delist_requires_preview_key_and_current_generation(self):
+        delisted = {"slug": PREVIEW_SLUG, "deleted": True, "generation": 2}
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": "admin-key", "DESKTOP_PREVIEW_PUBLISH_KEY": "preview-key"}),
+            patch("routers.updates.delist_preview", return_value=delisted) as delist,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                rejected = await client.request(
+                    "DELETE",
+                    f"/v2/desktop/previews/{PREVIEW_SLUG}",
+                    headers={"secret-key": "admin-key"},
+                    json={"expected_generation": 2},
+                )
+                accepted = await client.request(
+                    "DELETE",
+                    f"/v2/desktop/previews/{PREVIEW_SLUG}",
+                    headers={"secret-key": "preview-key"},
+                    json={"expected_generation": 2},
+                )
+
+        assert rejected.status_code == 403
+        assert accepted.status_code == 200
+        assert accepted.json() == {"success": True, **delisted}
+        delist.assert_called_once_with(PREVIEW_SLUG, expected_generation=2)
+
+
+# --- Beta identity (side-by-side "Omi Beta" app) ---
+
+
+def _beta_zip_asset(url="https://example.com/Omi.Beta.zip"):
+    return {"name": "Omi.Beta.zip", "browser_download_url": url}
+
+
+def _beta_dmg_asset(url="https://example.com/omi-beta.dmg"):
+    return {"name": "omi-beta.dmg", "browser_download_url": url}
+
+
+def _live_entry(channel="beta", assets=None, metadata=None, tag="v1.0.0+100-macos"):
+    return {
+        "channel": channel,
+        "release": {"tag_name": tag, "published_at": "2026-03-01T00:00:00Z", "body": "", "assets": assets or []},
+        "version_info": {"version": "1.0.0", "build": "100", "tag_name": tag},
+        "metadata": metadata or {},
+    }
+
+
+class TestBetaIdentityServing:
+    def test_beta_pointer_projects_only_registered_enclosure_hash_and_signature(self):
+        from routers.updates import _pointer_release_to_entry
+
+        entry = _pointer_release_to_entry(_pointer_release("beta"), "beta", "pointer")
+        beta_zip = next(asset for asset in entry["release"]["assets"] if asset["name"] == "Omi.Beta.zip")
+        assert beta_zip["browser_download_url"] == "https://example.com/200/Omi.Beta.zip"
+        assert entry["metadata"]["betaEdSignature"] == "beta-signature"
+        assert entry["metadata"]["betaZipSha256"] == "d" * 64
+
+    @pytest.mark.asyncio
+    async def test_appcast_identity_beta_serves_beta_enclosure_and_drops_stable_items(self):
+        entries = [
+            _live_entry(channel="stable", assets=[_zip_asset(), _dmg_asset()], metadata={"edSignature": "stable-sig"}),
+            _live_entry(
+                channel="beta",
+                assets=[_zip_asset(), _beta_zip_asset(), _beta_dmg_asset()],
+                metadata={"edSignature": "stable-sig", "betaEdSignature": "beta-sig"},
+            ),
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/appcast.xml", params={"identity": "beta"})
+
+        assert resp.status_code == 200
+        xml = resp.text
+        assert xml.count("<item>") == 1
+        assert "Omi.Beta.zip" in xml
+        assert 'edSignature="beta-sig"' in xml
+        assert "stable-sig" not in xml
+
+    @pytest.mark.asyncio
+    async def test_appcast_default_identity_is_unchanged_by_beta_assets(self):
+        entries = [
+            _live_entry(
+                channel="beta",
+                assets=[_zip_asset(), _beta_zip_asset()],
+                metadata={"edSignature": "stable-sig", "betaEdSignature": "beta-sig"},
+            ),
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/appcast.xml")
+
+        assert resp.status_code == 200
+        xml = resp.text
+        assert "Omi.Beta.zip" not in xml
+        assert "https://example.com/Omi.zip" in xml
+        assert 'edSignature="stable-sig"' in xml
+
+    @pytest.mark.asyncio
+    async def test_appcast_identity_beta_omits_releases_without_beta_artifacts(self):
+        entries = [_live_entry(channel="beta", assets=[_zip_asset()], metadata={"edSignature": "sig"})]
+        gh_release_without_beta = _make_github_release(
+            "v1.0.0+100-macos", body_kv={"isLive": "true"}, assets=[_zip_asset()]
+        )
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries),
+            patch(
+                "routers.updates.get_omi_github_releases",
+                new_callable=AsyncMock,
+                return_value=[gh_release_without_beta],
+            ),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/appcast.xml", params={"identity": "beta"})
+
+        assert resp.status_code == 200
+        assert resp.text.count("<item>") == 0
+
+    @pytest.mark.asyncio
+    async def test_appcast_identity_beta_never_resolves_mutable_release_assets_after_promotion(self):
+        entries = [
+            _live_entry(
+                channel="beta",
+                assets=[_zip_asset(), _beta_zip_asset("https://immutable.example/Omi.Beta.zip")],
+                metadata={"edSignature": "sig", "betaEdSignature": "immutable-beta-sig"},
+            )
+        ]
+        gh_release = _make_github_release(
+            "v1.0.0+100-macos",
+            body_kv={"isLive": "false", "betaEdSignature": "beta-sig-from-body"},
+            assets=[_zip_asset(), _beta_zip_asset("https://example.com/by-tag/Omi.Beta.zip")],
+        )
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries),
+            patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=[gh_release]),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/appcast.xml", params={"identity": "beta"})
+
+        assert resp.status_code == 200
+        xml = resp.text
+        assert "https://immutable.example/Omi.Beta.zip" in xml
+        assert 'edSignature="immutable-beta-sig"' in xml
+        assert "by-tag" not in xml
+
+    def test_stable_dmg_picker_never_returns_the_beta_dmg(self):
+        release = {
+            "assets": [_beta_dmg_asset(), {"name": "omi.dmg", "browser_download_url": "https://example.com/omi.dmg"}]
+        }
+        assert _get_dmg_download_url(release) == "https://example.com/omi.dmg"
+        assert _get_dmg_download_url({"assets": [_beta_dmg_asset()]}) is None
+
+    @pytest.mark.asyncio
+    async def test_download_latest_identity_beta_serves_beta_dmg(self):
+        entries = [
+            _live_entry(
+                channel="beta",
+                assets=[_zip_asset(), _dmg_asset(), _beta_dmg_asset("https://example.com/dl/omi-beta.dmg")],
+                metadata={"edSignature": "sig"},
+            ),
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/latest", params={"identity": "beta"})
+
+        assert resp.status_code == 200
+        assert "https://example.com/dl/omi-beta.dmg" in resp.text
+
+    @pytest.mark.asyncio
+    async def test_download_beta_endpoint_serves_the_beta_identity_dmg(self):
+        entries = [
+            _live_entry(
+                channel="beta",
+                assets=[_zip_asset(), _dmg_asset(), _beta_dmg_asset("https://example.com/dl/omi-beta.dmg")],
+                metadata={"edSignature": "sig"},
+            ),
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/beta")
+
+        assert resp.status_code == 200
+        assert "https://example.com/dl/omi-beta.dmg" in resp.text
+
+    @pytest.mark.asyncio
+    async def test_download_beta_endpoint_falls_back_to_stable_identity_before_rollout(self):
+        # Until the first dual-identity release is live, the public beta link keeps
+        # serving the stable-identity DMG instead of breaking.
+        entries = [
+            _live_entry(channel="beta", assets=[_zip_asset(), _dmg_asset()], metadata={"edSignature": "sig"}),
+        ]
+        gh_release_without_beta = _make_github_release(
+            "v1.0.0+100-macos", body_kv={"isLive": "true"}, assets=[_zip_asset(), _dmg_asset()]
+        )
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries),
+            patch(
+                "routers.updates.get_omi_github_releases",
+                new_callable=AsyncMock,
+                return_value=[gh_release_without_beta],
+            ),
+            patch("routers.updates.record_fallback") as fallback,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/beta")
+
+        assert resp.status_code == 200
+        assert "https://example.com/Omi.dmg" in resp.text
+        fallback.assert_called_once()
+        assert fallback.call_args.kwargs["from_mode"] == "desktop_download_beta_identity"

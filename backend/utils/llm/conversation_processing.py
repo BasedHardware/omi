@@ -995,6 +995,10 @@ def get_transcript_structure(
     calendar_meeting_context: Optional['CalendarMeetingContext'] = None,
     output_language_code: Optional[str] = None,
 ) -> Structured:
+    # Keep this import at the invocation boundary: selected unit tests load
+    # this pure processing module in isolation without the full LLM package.
+    from utils.llm.usage_tracker import Features, track_usage
+
     conversation_context = _build_conversation_context(transcript, photos, calendar_meeting_context)
     if not conversation_context:
         return Structured()  # Should be caught by discard logic, but as a safeguard.
@@ -1050,7 +1054,6 @@ def get_transcript_structure(
     # Second system message: conversation context (dynamic, per-conversation)
     context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}'
     prompt = cast(Any, ChatPromptTemplate).from_messages([('system', instructions_text), ('system', context_message)])
-    chain = prompt | get_llm('conv_structure', cache_key='omi-transcript-structure') | parser
     legacy_prompt_values = {
         'conversation_context': conversation_context,
         'format_instructions': parser.get_format_instructions(),
@@ -1060,7 +1063,9 @@ def get_transcript_structure(
         'tz': tz or 'UTC',
     }
 
-    response = _coerce_structured(chain.invoke(legacy_prompt_values))
+    with track_usage(uid, Features.CONVERSATION_STRUCTURE):
+        chain = prompt | get_llm('conv_structure', cache_key='omi-transcript-structure') | parser
+        response = _coerce_structured(chain.invoke(legacy_prompt_values))
     if _should_run_conversation_structure_shadow(uid, started_at, conversation_context):
         _submit_conversation_structure_shadow(
             prompt,

@@ -161,6 +161,30 @@ def get_quota_snapshot(uid: str) -> QuotaSnapshot:
     )
 
 
+def reserve_phone_call_quota(uid: str) -> QuotaSnapshot:
+    """Resolve plan/config and reserve one free-tier call slot atomically."""
+    subscription = users_db.get_user_valid_subscription(uid)
+    plan = subscription.plan if subscription else None
+    paid = bool(subscription and is_paid_plan(subscription.plan))
+    config = get_config_for_plan(paid)
+    monthly_limit = config.get('monthly_call_limit')
+
+    if paid or monthly_limit is None:
+        used, reset_at = phone_call_usage_db.get_current_month_count(uid)
+    else:
+        _, used, reset_at = phone_call_usage_db.reserve_current_month_slot(uid, monthly_limit)
+
+    return QuotaSnapshot(
+        plan=plan,
+        is_paid=paid,
+        monthly_limit=monthly_limit,
+        monthly_used=used,
+        max_duration_seconds=config.get('max_duration_seconds'),
+        allowed_countries=config.get('allowed_countries') or [],
+        reset_at=reset_at,
+    )
+
+
 def check_call_access(uid: str) -> QuotaSnapshot:
     """Raise 402/403 if the user cannot access the phone call feature.
 

@@ -3,6 +3,26 @@ import XCTest
 @testable import Omi_Computer
 
 final class KernelContractWireTests: XCTestCase {
+  func testContextReadinessContractsHaveAnExplicitStartupTolerantDeadline() {
+    XCTAssertEqual(
+      AgentRuntimeKernelContractTimeoutPolicy.deadlineNanoseconds(for: "resolve_surface_session"),
+      15_000_000_000
+    )
+    XCTAssertEqual(
+      AgentRuntimeKernelContractTimeoutPolicy.deadlineNanoseconds(for: "context_source_update"),
+      15_000_000_000
+    )
+    XCTAssertEqual(
+      AgentRuntimeKernelContractTimeoutPolicy.deadlineNanoseconds(for: "get_context_snapshot"),
+      15_000_000_000
+    )
+    XCTAssertEqual(
+      AgentRuntimeKernelContractTimeoutPolicy.deadlineNanoseconds(for: "journal_record_exchange"),
+      5_000_000_000,
+      "The model query and journal paths must not inherit the context-readiness budget."
+    )
+  }
+
   func testJournalExchangeWireCarriesBothTurnsInOneOwnerBoundRequest() throws {
     let turns = [
       KernelJournalTurnWrite(
@@ -102,13 +122,15 @@ final class KernelContractWireTests: XCTestCase {
         capabilityVersion: "capability-v2")
     )
 
-    XCTAssertEqual(Set(message.keys), Set([
-      "type", "protocolVersion", "requestId", "clientId", "ownerId",
-      "sessionId", "prompt", "mode", "imageBase64", "attachments",
-      "producingTurnId",
-      "expectedContextSnapshotVersion", "expectedContextSnapshotGeneration",
-      "expectedContextRendererFingerprint", "expectedCapabilityVersion",
-    ]))
+    XCTAssertEqual(
+      Set(message.keys),
+      Set([
+        "type", "protocolVersion", "requestId", "clientId", "ownerId",
+        "sessionId", "prompt", "mode", "imageBase64", "attachments",
+        "producingTurnId",
+        "expectedContextSnapshotVersion", "expectedContextSnapshotGeneration",
+        "expectedContextRendererFingerprint", "expectedCapabilityVersion",
+      ]))
     XCTAssertEqual(message["type"] as? String, "query")
     XCTAssertEqual(message["sessionId"] as? String, "session-1")
     XCTAssertEqual(message["producingTurnId"] as? String, "turn-assistant")
@@ -177,10 +199,12 @@ final class KernelContractWireTests: XCTestCase {
       profileGeneration: 4
     )
 
-    XCTAssertEqual(Set(message.keys), Set([
-      "type", "protocolVersion", "requestId", "clientId", "ownerId",
-      "sessionId", "profileGeneration",
-    ]))
+    XCTAssertEqual(
+      Set(message.keys),
+      Set([
+        "type", "protocolVersion", "requestId", "clientId", "ownerId",
+        "sessionId", "profileGeneration",
+      ]))
     XCTAssertEqual(message["type"] as? String, "warmup")
     XCTAssertNil(message["model"])
     XCTAssertNil(message["systemPrompt"])
@@ -295,6 +319,7 @@ final class KernelContractWireTests: XCTestCase {
       "rendererFingerprint": "renderer-2",
       "capabilityVersion": "1:digest",
       "renderedContext": "[Kernel Context Snapshot]\n{\"sourceOutcomes\":[]}",
+      "contextPlan": contextPlan(),
       "ownerId": "owner",
       "sessionId": "session",
       "conversationId": "conversation",
@@ -309,13 +334,17 @@ final class KernelContractWireTests: XCTestCase {
       ],
     ]
     let snapshot = try XCTUnwrap(AgentContextSnapshot(dictionary: snapshotDictionary))
-    XCTAssertEqual(snapshot.freshness, AgentContextFreshness(
-      version: "version-a",
-      generation: 11,
-      rendererFingerprint: "renderer-2",
-      capabilityVersion: "1:digest"))
+    XCTAssertEqual(
+      snapshot.freshness,
+      AgentContextFreshness(
+        version: "version-a",
+        generation: 11,
+        rendererFingerprint: "renderer-2",
+        capabilityVersion: "1:digest"))
     XCTAssertEqual(snapshot.sourceRevision(for: .screen), "sha256:abc")
     XCTAssertEqual(snapshot.renderedContext, "[Kernel Context Snapshot]\n{\"sourceOutcomes\":[]}")
+    XCTAssertEqual(snapshot.contextPlan.planId, "sha256:plan")
+    XCTAssertEqual(snapshot.contextPlan.olderHistoryStrategy, "none")
   }
 
   func testExplicitProfileMigrationCarriesGenerationFenceAndReason() {
@@ -378,6 +407,10 @@ final class KernelContractWireTests: XCTestCase {
       projection.freshnessIdentity,
       "version-a:renderer-2:1:digest"
     )
+    XCTAssertEqual(projection.contextPlanID, snapshot.contextPlan.planId)
+    XCTAssertEqual(projection.stableCacheIdentity, snapshot.contextPlan.stableCacheIdentity)
+    XCTAssertEqual(projection.dynamicContextIdentity, snapshot.contextPlan.dynamicContextIdentity)
+    XCTAssertEqual(projection.semanticGuidance, snapshot.contextPlan.semanticGuidance)
     XCTAssertEqual(projection.turnIDs, Set(["system", "user", "assistant", "pending"]))
   }
 
@@ -432,32 +465,53 @@ final class KernelContractWireTests: XCTestCase {
     generation: Int = 11,
     renderedContext: String = "[Kernel Context Snapshot]\n{\"sourceOutcomes\":[]}"
   ) throws -> AgentContextSnapshot {
-    try XCTUnwrap(AgentContextSnapshot(dictionary: [
-      "snapshotId": "snapshot-id",
-      "version": version,
-      "snapshotGeneration": generation,
-      "rendererPolicyVersion": "kernel-context-renderer@1",
-      "rendererFingerprint": "renderer-2",
-      "capabilityVersion": "1:digest",
-      "renderedContext": renderedContext,
-      "ownerId": "owner",
-      "sessionId": "session",
-      "conversationId": "conversation",
-      "recentTurns": recentTurns,
-      "sourceOutcomes": [[
-        "source": "screen",
-        "sourceRevision": "revision",
-        "outcome": "available",
-        "payload": ["policy": "SOURCE_POLICY_MUST_NOT_RENDER"],
-      ]],
-      "activeRuns": [],
-      "capabilities": [
-        "executionRole": "coordinator",
-        "manifestVersion": 1,
-        "manifestDigest": "sha256:digest",
-        "allowedToolNames": ["dangerous_capability_name"],
-      ],
-    ]))
+    try XCTUnwrap(
+      AgentContextSnapshot(dictionary: [
+        "snapshotId": "snapshot-id",
+        "version": version,
+        "snapshotGeneration": generation,
+        "rendererPolicyVersion": "kernel-context-renderer@1",
+        "rendererFingerprint": "renderer-2",
+        "capabilityVersion": "1:digest",
+        "renderedContext": renderedContext,
+        "contextPlan": contextPlan(retainedTurnCount: recentTurns.count),
+        "ownerId": "owner",
+        "sessionId": "session",
+        "conversationId": "conversation",
+        "recentTurns": recentTurns,
+        "sourceOutcomes": [
+          [
+            "source": "screen",
+            "sourceRevision": "revision",
+            "outcome": "available",
+            "payload": ["policy": "SOURCE_POLICY_MUST_NOT_RENDER"],
+          ]
+        ],
+        "activeRuns": [],
+        "capabilities": [
+          "executionRole": "coordinator",
+          "manifestVersion": 1,
+          "manifestDigest": "sha256:digest",
+          "allowedToolNames": ["dangerous_capability_name"],
+        ],
+      ]))
+  }
+
+  private func contextPlan(retainedTurnCount: Int = 0) -> [String: Any] {
+    [
+      "version": 1,
+      "planId": "sha256:plan",
+      "semanticGuidanceVersion": "kernel-semantic-guidance@1",
+      "semanticGuidance": "Kernel-owned semantic guidance.",
+      "retainedTurnStartSeq": retainedTurnCount == 0 ? NSNull() : 1,
+      "retainedTurnEndSeq": retainedTurnCount == 0 ? NSNull() : retainedTurnCount,
+      "retainedTurnCount": retainedTurnCount,
+      "totalTurnCount": retainedTurnCount,
+      "omittedTurnCount": 0,
+      "olderHistoryStrategy": "none",
+      "stableCacheIdentity": "sha256:stable",
+      "dynamicContextIdentity": "sha256:dynamic",
+    ]
   }
 
   private func recentTurn(

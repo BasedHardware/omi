@@ -50,8 +50,8 @@ bool syncJobIsBackendBusy(SyncJobStatusResponse status) {
 
 SyncUploadLane syncUploadLaneForTimestamp(int captureSeconds, int nowSeconds, {required bool hasServerCaptureProof}) =>
     hasServerCaptureProof && nowSeconds - captureSeconds <= _freshSyncCutoffSeconds
-        ? SyncUploadLane.fresh
-        : SyncUploadLane.backfill;
+    ? SyncUploadLane.fresh
+    : SyncUploadLane.backfill;
 
 SyncUploadLane _syncLaneForWal(Wal wal, int nowSeconds) =>
     syncUploadLaneForTimestamp(wal.timerStart, nowSeconds, hasServerCaptureProof: wal.conversationId != null);
@@ -75,8 +75,8 @@ List<Wal> nextSyncUploadBatch(
 }) {
   SyncUploadLane effectiveLane(Wal wal) =>
       wal.conversationId != null && forcedBackfillConversationIds.contains(wal.conversationId)
-          ? SyncUploadLane.backfill
-          : _syncLaneForWal(wal, nowSeconds);
+      ? SyncUploadLane.backfill
+      : _syncLaneForWal(wal, nowSeconds);
 
   final ordered = List<Wal>.from(pending)
     ..sort((a, b) {
@@ -123,7 +123,10 @@ class LocalWalSyncImpl implements LocalWalSync {
   SyncLocalFilesResponse? _accumulatedResponse;
   SyncLocalFilesResponse? get accumulatedResponse => _accumulatedResponse;
 
-  LocalWalSyncImpl(this.listener);
+  final SyncUploadGate? _uploadGateOverride;
+  SyncUploadGate get _uploadGate => _uploadGateOverride ?? SyncUploadGate.instance;
+
+  LocalWalSyncImpl(this.listener, {SyncUploadGate? uploadGate}) : _uploadGateOverride = uploadGate;
 
   @visibleForTesting
   List<WalFrame> get testFrames => _frames;
@@ -568,8 +571,21 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   @override
   Future<void> deleteAllPendingWals() async {
-    final pendingWals = _wals.where((w) => w.status == WalStatus.miss || w.status == WalStatus.corrupted).toList();
+    final pendingWals = _wals.where((w) => w.status == WalStatus.miss).toList();
     for (final wal in pendingWals) {
+      await _deleteWal(wal);
+    }
+    await _saveWalsToFile();
+    listener.onWalUpdated();
+  }
+
+  /// Removes terminally unavailable recordings when the user explicitly
+  /// clears all local recordings. They are intentionally excluded from the
+  /// retryable Pending action.
+  @override
+  Future<void> deleteAllCorruptedWals() async {
+    final corruptedWals = _wals.where((w) => w.status == WalStatus.corrupted).toList();
+    for (final wal in corruptedWals) {
       await _deleteWal(wal);
     }
     await _saveWalsToFile();
@@ -646,8 +662,8 @@ class LocalWalSyncImpl implements LocalWalSync {
       forcedBackfillConversationIds.addAll(oversizedFreshConversationIds(candidates, batchNowSeconds));
       SyncUploadLane effectiveLane(Wal wal) =>
           wal.conversationId != null && forcedBackfillConversationIds.contains(wal.conversationId)
-              ? SyncUploadLane.backfill
-              : _syncLaneForWal(wal, batchNowSeconds);
+          ? SyncUploadLane.backfill
+          : _syncLaneForWal(wal, batchNowSeconds);
       final pending = candidates
           .where(
             (wal) =>
@@ -665,8 +681,8 @@ class LocalWalSyncImpl implements LocalWalSync {
       attemptedWalIds.addAll(batch.map((wal) => wal.id));
       final batchLane =
           batch.first.conversationId != null && forcedBackfillConversationIds.contains(batch.first.conversationId)
-              ? SyncUploadLane.backfill
-              : _syncLaneForWal(batch.first, batchNowSeconds);
+          ? SyncUploadLane.backfill
+          : _syncLaneForWal(batch.first, batchNowSeconds);
       if (_isCancelled) {
         Logger.debug("LocalWalSync: Upload cancelled");
         DebugLogManager.logWarning('Local upload cancelled', {
@@ -695,7 +711,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         Logger.debug("sync id ${wal.id} ${wal.timerStart}");
         if (wal.filePath == null) {
           Logger.debug("file path is not found. wal id ${wal.id}");
-          wal.status = WalStatus.corrupted;
+          wal.markCorrupted();
           corruptedCount++;
           DebugLogManager.logWarning('WAL corrupted: file path missing', {'walId': wal.id});
           continue;
@@ -707,7 +723,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         try {
           if (fullPath == null) {
             Logger.debug("could not construct file path for wal id ${wal.id}");
-            wal.status = WalStatus.corrupted;
+            wal.markCorrupted();
             corruptedCount++;
             DebugLogManager.logWarning('WAL corrupted: cannot construct path', {'walId': wal.id});
             continue;
@@ -716,7 +732,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           File file = File(fullPath);
           if (!file.existsSync()) {
             Logger.debug("file $fullPath does not exist");
-            wal.status = WalStatus.corrupted;
+            wal.markCorrupted();
             corruptedCount++;
             DebugLogManager.logWarning('WAL corrupted: file not found on disk', {
               'walId': wal.id,
@@ -728,7 +744,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           wal.isSyncing = true;
           batchWals.add(wal);
         } catch (e) {
-          wal.status = WalStatus.corrupted;
+          wal.markCorrupted();
           corruptedCount++;
           Logger.debug(e.toString());
           DebugLogManager.logError(e, null, 'WAL corrupted: unexpected error - ${e.toString()}', {'walId': wal.id});
@@ -754,11 +770,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         // wait for server-side processing here; the reconciler resolves the
         // job_id later. Only WALs that actually became files (batchWals) are
         // mutated — corrupted ones already short-circuited above.
-        final result = await SyncUploadGate.instance.upload(
-          files,
-          lane: batchLane,
-          conversationId: batchWals.first.conversationId,
-        );
+        final result = await _uploadGate.upload(files, lane: batchLane, conversationId: batchWals.first.conversationId);
 
         if (result.completed != null) {
           // 200 fast-path: server processed synchronously and returned a result.
@@ -836,6 +848,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       'updatedConversations': resp.updatedConversationIds.length,
     });
 
+    resp.localUploadFailures = batchesFailed;
     progress?.onWalSyncedProgress(1.0);
     return resp;
   }
@@ -862,20 +875,20 @@ class LocalWalSyncImpl implements LocalWalSync {
     File? walFile;
     if (wal.filePath == null) {
       Logger.debug("file path is not found. wal id ${wal.id}");
-      wal.status = WalStatus.corrupted;
+      wal.markCorrupted();
       DebugLogManager.logWarning('Single WAL corrupted: file path missing', {'walId': wal.id});
     } else {
       try {
         final fullPath = await Wal.getFilePath(wal.filePath);
         if (fullPath == null) {
           Logger.debug("could not construct file path for wal id ${wal.id}");
-          wal.status = WalStatus.corrupted;
+          wal.markCorrupted();
           DebugLogManager.logWarning('Single WAL corrupted: cannot construct path', {'walId': wal.id});
         } else {
           File file = File(fullPath);
           if (!file.existsSync()) {
             Logger.debug("file $fullPath does not exist");
-            wal.status = WalStatus.corrupted;
+            wal.markCorrupted();
             DebugLogManager.logWarning('Single WAL corrupted: file not found', {'walId': wal.id});
           } else {
             walFile = file;
@@ -883,7 +896,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           }
         }
       } catch (e) {
-        wal.status = WalStatus.corrupted;
+        wal.markCorrupted();
         print(e.toString());
         DebugLogManager.logError(e, null, 'Single WAL corrupted: unexpected error - ${e.toString()}', {
           'walId': wal.id,
@@ -912,11 +925,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         // conversation batching.
         if (pendingForConversation.length > 1) lane = SyncUploadLane.backfill;
       }
-      final result = await SyncUploadGate.instance.upload(
-        [walFile],
-        lane: lane,
-        conversationId: walToSync.conversationId,
-      );
+      final result = await _uploadGate.upload([walFile], lane: lane, conversationId: walToSync.conversationId);
 
       if (result.completed != null) {
         final r = result.completed!;
@@ -1029,7 +1038,7 @@ class LocalWalSyncImpl implements LocalWalSync {
                 w.retryCount += 1;
                 w.lastRetryAt = nowSecs;
               } else {
-                w.status = WalStatus.corrupted; // nothing left to recover
+                w.markCorrupted(); // nothing left to recover
               }
               DebugLogManager.logEvent('reconcile_revert', {
                 'walId': w.id,

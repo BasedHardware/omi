@@ -73,11 +73,6 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: ANTHROPIC_API_KEY
-  - name: GEMINI_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: GEMINI_API_KEY
   - name: OPENROUTER_API_KEY
     valueFrom:
       secretKeyRef:
@@ -88,12 +83,24 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: METRICS_SECRET
+  - name: GOOGLE_CLOUD_PROJECT
+    value: "based-hardware-dev"
+  - name: GCP_LOCATION
+    value: "us-central1"
   - name: DD_SERVICE
     value: "llm-gateway"
   - name: DD_ENV
     value: "dev"
   - name: DD_TRACE_ENABLED
     value: "false"
+  - name: LLM_GATEWAY_ACCOUNTING_ENABLED
+    value: "true"
+  - name: LLM_GATEWAY_ACCOUNTING_WRITE_TIMEOUT_SECONDS
+    value: "1"
+  - name: LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES
+    value: "1000"
+  - name: OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS
+    value: "public_shared_conversation_chat"
   - name: LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS
     value: "true"
 

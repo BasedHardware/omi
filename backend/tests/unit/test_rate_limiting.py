@@ -188,6 +188,35 @@ class TestShadowMode(unittest.TestCase):
             self.assertFalse(rlc.RATE_LIMIT_SHADOW)
         importlib.reload(rlc)
 
+    def test_shadow_mode_non_true_values_stay_off(self):
+        """Shadow is opt-in via 'true'; any other value must NOT silently enable it.
+
+        The flag defaults OFF (enforcement active). Only an explicit truthy
+        'true' should turn shadow/log-only mode on. Values like '0', 'off',
+        'no', or an empty string mean "not true", so enforcement must stay on —
+        otherwise setting the env var to disable shadow would fail open and
+        silently drop all rate-limit enforcement.
+        """
+        import utils.rate_limit_config as rlc
+
+        for value in ("0", "off", "no", "", "1", "disabled", "False ", "yes"):
+            with patch.dict(os.environ, {"RATE_LIMIT_SHADOW_MODE": value}):
+                importlib.reload(rlc)
+                self.assertFalse(
+                    rlc.RATE_LIMIT_SHADOW,
+                    f"RATE_LIMIT_SHADOW_MODE={value!r} must not enable shadow mode",
+                )
+        importlib.reload(rlc)
+
+    def test_shadow_mode_true_is_case_insensitive(self):
+        import utils.rate_limit_config as rlc
+
+        for value in ("true", "TRUE", "True"):
+            with patch.dict(os.environ, {"RATE_LIMIT_SHADOW_MODE": value}):
+                importlib.reload(rlc)
+                self.assertTrue(rlc.RATE_LIMIT_SHADOW, f"{value!r} should enable shadow mode")
+        importlib.reload(rlc)
+
 
 class TestGetEffectiveLimit(unittest.TestCase):
     """Test get_effective_limit edge cases."""

@@ -1,21 +1,22 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// Connect sheet for a grouped agent (Claude → Claude Code + Cloud, ChatGPT →
-/// Codex + Cloud). Both options are shown on screen at once as cards — no
-/// picker — each with a prominent "Do it for me" primary and a quiet "Copy
-/// command" secondary. Claude Code / Codex (the CLI) is listed first.
+/// Codex + directory app). Both options are shown on screen at once as cards — no
+/// picker — each with a prominent primary action and a quiet manual fallback.
+/// The ChatGPT directory option is listed first so the one-click path leads.
 struct ConnectDestinationSheet: View {
   let destination: MemoryExportDestination
   @Binding var statuses: [MemoryExportDestination: MemoryExportStatus]
   let onDismiss: () -> Void
 
-  /// CLI+cloud pair for an anchor destination (CLI first).
+  /// Cloud/CLI pair for an anchor destination. ChatGPT leads with its approved
+  /// directory listing; Claude keeps its established CLI-first order.
   static func group(for d: MemoryExportDestination) -> [MemoryExportDestination] {
     switch d {
     case .claude, .claudeCode: return [.claudeCode, .claude]
-    case .chatgpt, .codex: return [.codex, .chatgpt]
+    case .chatgpt, .codex: return [.chatgpt, .codex]
     default: return [d]
     }
   }
@@ -25,7 +26,7 @@ struct ConnectDestinationSheet: View {
   private var groupName: String {
     switch destination {
     case .claude, .claudeCode: return "Claude"
-    case .chatgpt, .codex: return "ChatGPT"
+    case .chatgpt, .codex: return "ChatGPT / Codex"
     default: return destination.title
     }
   }
@@ -158,16 +159,36 @@ private struct ConnectOptionCard: View {
 
         // Secondary — full manual instructions in a quiet dropdown.
         if let setup = destination.mcpSetup(key: mcpKey ?? "YOUR_OMI_KEY") {
-          ManualInstallationDisclosure(isExpanded: $showManual, fontSize: 12) {
+          ManualInstallationDisclosure(
+            isExpanded: $showManual,
+            title: destination == .chatgpt ? "Developer-mode fallback" : "Manual installation",
+            fontSize: 12
+          ) {
             VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-              ForEach(Array(setup.steps.enumerated()), id: \.offset) { idx, step in
-                Text("\(idx + 1). \(step)")
+              if destination == .chatgpt {
+                Text("Use this only when your workspace requires a developer-mode custom app.")
                   .scaledFont(size: OmiType.caption)
                   .foregroundColor(OmiColors.textTertiary)
                   .fixedSize(horizontal: false, vertical: true)
                   .frame(maxWidth: .infinity, alignment: .leading)
+                manualBlock(chatGPTDeveloperModeText)
+              } else {
+                ForEach(Array(setup.steps.enumerated()), id: \.offset) { idx, step in
+                  Text("\(idx + 1). \(step)")
+                    .scaledFont(size: OmiType.caption)
+                    .foregroundColor(OmiColors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if let copyText = setup.copyText {
+                  manualBlock(copyText)
+                } else {
+                  manualBlock("Server URL: \(setup.serverURL)", copy: setup.serverURL)
+                  if destination.requiresHostedMCPKeyForSetup {
+                    manualBlock("Key: \(mcpKey ?? "YOUR_OMI_KEY")", copy: mcpKey ?? "YOUR_OMI_KEY")
+                  }
+                }
               }
-              manualBlock(manualText(for: setup))
             }
             .padding(.top, OmiSpacing.sm)
           }
@@ -187,21 +208,31 @@ private struct ConnectOptionCard: View {
         .fill(OmiColors.backgroundSecondary)
     )
     .task {
-      statuses[destination] = await MemoryExportService.shared.status(for: destination)
+      statuses[destination] =
+        destination == .chatgpt
+        ? await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
+        : await MemoryExportService.shared.status(for: destination)
       await prepareMCPKeyIfNeeded()
     }
     .onReceive(permissionRefreshTimer) { _ in
       refreshPermissionStateIfNeeded()
     }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       refreshPermissionStateIfNeeded()
+      refreshChatGPTDirectoryConnectionIfNeeded()
     }
   }
 
   private func refreshPermissionStateIfNeeded() {
     guard MemoryExportExecutor.requiresAccessibilityPreflight(destination) else { return }
     permissionRefreshID += 1
+  }
+
+  private func refreshChatGPTDirectoryConnectionIfNeeded() {
+    guard destination == .chatgpt else { return }
+    Task {
+      statuses[.chatgpt] = await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
+    }
   }
 
   private var isConnected: Bool {
@@ -239,7 +270,10 @@ private struct ConnectOptionCard: View {
         case .completed:
           resultMessage = .success(outcome.taskTitle)
         }
-        statuses[destination] = await MemoryExportService.shared.status(for: destination)
+        statuses[destination] =
+          destination == .chatgpt
+          ? await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
+          : await MemoryExportService.shared.status(for: destination)
       } catch {
         resultMessage = .failure(setupFailureMessage(for: error))
       }
@@ -257,10 +291,14 @@ private struct ConnectOptionCard: View {
         Text(completion.title)
           .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
-        Text(completion.subtitle)
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
-          .fixedSize(horizontal: false, vertical: true)
+        if destination == .claudeCode {
+          ClaudeCodeRestartSubtitle()
+        } else {
+          Text(completion.subtitle)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(OmiColors.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
     }
     .padding(OmiSpacing.sm)
@@ -296,17 +334,24 @@ private struct ConnectOptionCard: View {
     return "Omi couldn't finish setup. Try again."
   }
 
-  private func manualText(for setup: MCPSetup) -> String {
-    if let copyText = setup.copyText {
-      return copyText
-    }
-    if destination.requiresHostedMCPKeyForSetup {
-      return "Server URL: \(setup.serverURL)\nKey: \(mcpKey ?? "YOUR_OMI_KEY")"
-    }
-    return "Server URL: \(setup.serverURL)"
+  private var chatGPTDeveloperModeText: String {
+    let clientID = destination.cloudOAuthClientID ?? ""
+    let tokenAuthMethod = destination.cloudTokenAuthMethod ?? "none"
+    return [
+      "Name: Omi Memory",
+      "Connection / server URL: \(MemoryExportDestination.mcpServerURL)",
+      "Authentication: OAuth",
+      "OAuth Client ID: \(clientID)",
+      "OAuth Client Secret: leave blank",
+      "Token auth method: \(tokenAuthMethod)",
+      "Auth URL: \(MemoryExportDestination.mcpAuthorizeURL)",
+      "Token URL: \(MemoryExportDestination.mcpTokenURL)",
+    ].joined(separator: "\n")
   }
 
-  private func manualBlock(_ text: String) -> some View {
+  /// `copy` overrides what the Copy button writes — used by label:value rows so
+  /// the clipboard gets the paste-able value, never the display label.
+  private func manualBlock(_ text: String, copy: String? = nil) -> some View {
     VStack(alignment: .leading, spacing: OmiSpacing.xs) {
       Text(text)
         .font(.system(size: 11, design: .monospaced))
@@ -316,7 +361,7 @@ private struct ConnectOptionCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
       Button {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        NSPasteboard.general.setString(copy ?? text, forType: .string)
         resultMessage = .success("Copied.")
       } label: {
         Text("Copy")
@@ -332,6 +377,36 @@ private struct ConnectOptionCard: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous).fill(OmiColors.backgroundTertiary))
+  }
+}
+
+/// Setup-complete subtitle for Claude Code. Detects running CLI sessions: none →
+/// "you're all set"; some → the restart note plus an explicit button that stops
+/// them (SIGTERM; `claude --continue` resumes). Shared by ConnectOptionCard and
+/// MemoryExportDestinationSheet.
+struct ClaudeCodeRestartSubtitle: View {
+  @State private var pids: [pid_t] = []
+  @State private var didStop = false
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+      Text(ClaudeCodeSessions.completionSubtitle(sessionCount: pids.count, didStop: didStop))
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(OmiColors.textTertiary)
+        .fixedSize(horizontal: false, vertical: true)
+      if !didStop && !pids.isEmpty {
+        Button("Restart \(pids.count) running session\(pids.count == 1 ? "" : "s")") {
+          ClaudeCodeSessions.stop(pids)
+          didStop = true
+        }
+        .buttonStyle(.plain)
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .foregroundColor(OmiColors.textSecondary)
+      }
+    }
+    .task {
+      pids = await Task.detached { ClaudeCodeSessions.runningPIDs() }.value
+    }
   }
 }
 

@@ -1,3 +1,0 @@
-{
-  "change": "Fixed unbounded audio buffering that could grow memory if a voice session stalled while connecting"
-}

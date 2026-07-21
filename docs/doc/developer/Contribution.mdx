@@ -27,7 +27,7 @@ Maintainers declining a PR for direction or taste will cite an invariant ID or o
   </Step>
   <Step title="Test Your Changes">
     Add focused tests and include the commands or manual steps you used to verify the change. Before pushing, draft the PR body and run
-    `make preflight`, then run `scripts/pr-preflight --pr-body-file /path/to/draft-pr-body.md` when invariant citations apply (use `scripts/pr-preflight --suggest` to get the paste-ready invariant ID block). The manifest-backed checks are identical locally and in CI.
+    `make preflight`, then run `scripts/pr-preflight --pr-body-file /path/to/draft-pr-body.md` to validate invariant citations and any required failure-class declaration. Use `scripts/pr-preflight --suggest` before drafting the body to get the paste-ready invariant section and failure-class guidance. The manifest-backed checks are identical locally and in CI.
   </Step>
   <Step title="Create a Pull Request">
     Submit a PR and specify which issue it relates to. Name any product invariants your change affects.
@@ -41,14 +41,32 @@ Maintainers declining a PR for direction or taste will cite an invariant ID or o
 Good PRs are easy to review and come with evidence that the change works.
 
 - **Bug fixes** include the regression test that would have caught the bug.
-- **Close the failure class.** For a bug fix, describe the violated contract and
-  the durable guard. If recent history contains the same cause, fix the shared
-  boundary, state model, harness, compatibility check, or static contract rather
-  than adding another call-site exception.
+- **Classify reactive fixes.** A `fix:` commit responds to a triggering defect
+  and must declare `Failure-Class: FC-<slug> | new | none` in its PR body. A
+  `harden:` commit strengthens a boundary or contract without a triggering
+  incident; it may cite a class but needs no declaration. The validator is
+  offline and required; its `report` command is advisory and only identifies
+  classes eligible for a maintainer to mark `dormant`.
+- **Keep instance fixes compact.** An existing-class declaration replaces the
+  root-cause and durable-guard narrative. Provide that extended narrative only
+  when declaring `new`, changing a class's canonical prevention primitive or
+  owner, or making a registry-only lifecycle transition. An instance-fix PR never
+  edits registry data. To mark a class dormant, a separate registry-only PR sets
+  `status` to `dormant` with a UTC ISO-8601 `dormant_since`. When `report` flags a
+  recurrence after that timestamp, merge a separate registry-only reopen PR that
+  sets `status` to `open` and removes `dormant_since`, then classify the instance
+  fix. IDs use stable semantic lower-kebab slugs such as `FC-malformed-doc-read`;
+  use `scripts/failure-class prepare` or `explain` for the exact field and
+  relevant context.
+- **Prefer primitives to guards.** Before adding a check or ratchet, answer in
+  the PR body: “Why isn't this a shared primitive instead?” A new guard must
+  cite the real merged PR or incident it would have caught; no real instance
+  means the check does not land.
 - **Small features** can go straight to PR when they are well scoped: test the core path and the main error path, and describe any manual verification you did.
 - **Large or ambiguous features** should start as a GitHub issue so maintainers can align on scope and direction before major implementation work begins.
 - **Show your verification.** List the commands you ran and what they showed in the PR description. "It compiles" is not evidence — exercising the real user-facing path is.
 - **Tests that run in CI must be hermetic** — no live services, no network. Validation against a live service is welcome as extra evidence, but it can never be the only proof a PR works.
+- **Backend hermetic gate** — every PR reports `Backend Hermetic Merge Gate`. Backend, lockfile, and gate-workflow changes run the backend E2E harness plus both emulator gauntlets; other changes report an explicit out-of-scope success instead of leaving a required check pending.
 - **Behavioral tests execute production behavior.** Source-string assertions are
   static tripwires only; they do not prove lifecycle, concurrency, or integration
   behavior.

@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest-m
     steps:
       - name: Checkout cutover controls
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Validate deliberate immutable-digest request
         env:
@@ -78,7 +78,7 @@ jobs:
 
       - name: Download prior standby state artifact
         if: steps.prior-stage-state.outputs.found == 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: sync-ledger-fence-stage-${{ github.run_id }}
           path: ${{ runner.temp }}/prior-stage-state
@@ -95,12 +95,12 @@ jobs:
           echo "path=$state_path" >> "$GITHUB_OUTPUT"
 
       - name: Google Auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Stage standby barrier and pause queues
         env:
@@ -119,7 +119,7 @@ jobs:
       # leaves queues paused; do not add an always() resume command here.
       - name: Upload standby cutover state
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sync-ledger-fence-stage-${{ github.run_id }}
           path: ${{ runner.temp }}/sync-ledger-fence-state.json
@@ -138,7 +138,7 @@ jobs:
     runs-on: ubuntu-latest-m
     steps:
       - name: Checkout cutover controls
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Validate deliberate immutable-digest request
         env:
@@ -168,13 +168,13 @@ jobs:
 
       - name: Download prior activation state artifact
         if: steps.prior-activation-state.outputs.found == 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: sync-ledger-fence-activation-${{ github.run_id }}
           path: ${{ runner.temp }}/prior-activation-state
 
       - name: Download standby cutover state
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: sync-ledger-fence-stage-${{ github.run_id }}
           path: ${{ runner.temp }}/standby-state
@@ -240,12 +240,12 @@ jobs:
           PY
 
       - name: Google Auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Deploy active candidate with a no-traffic probe tag
         id: prepare
@@ -266,20 +266,12 @@ jobs:
 
       - name: Gate the tagged candidate through the full transcription route
         if: steps.activation-plan.outputs.probe == 'true'
-        env:
-          CANDIDATE_PROBE_URL: ${{ steps.prepare.outputs.candidate_probe_url }}
-          OMI_TRANSCRIPTION_SYNTHETIC_AUDIO_URL: ${{ secrets.OMI_TRANSCRIPTION_SYNTHETIC_AUDIO_URL }}
-          OMI_TRANSCRIPTION_SYNTHETIC_BEARER_TOKEN: ${{ secrets.OMI_TRANSCRIPTION_SYNTHETIC_BEARER_TOKEN }}
-          OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PHRASE: ${{ secrets.OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PHRASE }}
-          OMI_TRANSCRIPTION_SYNTHETIC_LANGUAGE: ${{ vars.OMI_TRANSCRIPTION_SYNTHETIC_LANGUAGE }}
-          OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_MODEL: ${{ vars.OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_MODEL }}
-          OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PROVIDER: ${{ vars.OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PROVIDER }}
-        run: |
-          set -euo pipefail
-          python3 backend/scripts/transcription_capability_probe.py \
-            --candidate-api-url "$CANDIDATE_PROBE_URL" \
-            --require-route-identity \
-            --json-only | tee "$RUNNER_TEMP/transcription-capability-probe.json"
+        uses: ./.github/actions/transcription-release-candidate-probe
+        with:
+          candidate_api_url: ${{ steps.prepare.outputs.candidate_probe_url }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          firebase_auth_project_id: based-hardware
+          evidence_path: ${{ runner.temp }}/transcription-capability-probe.json
 
       - name: Record protected full-route probe proof
         if: steps.activation-plan.outputs.probe == 'true'
@@ -311,7 +303,7 @@ jobs:
 
       - name: Upload redacted candidate probe evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sync-ledger-fence-probe-${{ github.run_id }}
           path: ${{ runner.temp }}/transcription-capability-probe.json
@@ -323,7 +315,7 @@ jobs:
       # origins, while queues remain paused until activate-promote succeeds.
       - name: Upload activation cutover state
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sync-ledger-fence-activation-${{ github.run_id }}
           path: ${{ runner.temp }}/sync-ledger-fence-state.json
