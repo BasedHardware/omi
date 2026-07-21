@@ -16,9 +16,11 @@ import {
 
 import type { ChartItem } from "@/components/dashboard/resizable-chart-grid";
 import { authenticatedFetcher } from "@/hooks/useAuthToken";
-import type {
-  ResponseReliabilityPayload,
-  ResponseReliabilitySeries,
+import {
+  trimDailyToCoverage,
+  type ReliabilityDailyPoint,
+  type ResponseReliabilityPayload,
+  type ResponseReliabilitySeries,
 } from "@/lib/response-reliability";
 
 const tooltipStyle = {
@@ -44,20 +46,32 @@ const formatDay = (value: string) =>
     timeZone: "UTC",
   });
 
+const rateWithCounts = (
+  value: number,
+  success: number,
+  failure: number,
+): string => `${formatRate(value)} (${success}/${success + failure})`;
+
 function ChannelReliabilityChart({
   data,
+  daily,
 }: {
   data: ResponseReliabilitySeries;
+  daily: ReliabilityDailyPoint[];
 }) {
   const chat = data.summary.chat;
   const voice = data.summary.voice;
   const failures = (chat?.failure ?? 0) + (voice?.failure ?? 0);
-  const hasData = data.daily.some(
-    (point) => point.chatSuccessRate != null || point.voiceSuccessRate != null,
-  );
+  const hasData = daily.length > 0;
 
   return (
     <div className="flex h-full min-w-0 flex-col gap-2">
+      {data.partial && (
+        <div className="flex items-center gap-1.5 text-xs text-amber-500">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          Partial data — a telemetry source failed or rows were truncated.
+        </div>
+      )}
       <div
         className="grid divide-x border-y py-2 text-xs"
         style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}
@@ -89,7 +103,7 @@ function ChannelReliabilityChart({
       <div className="min-h-0 flex-1">
         {hasData ? (
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data.daily}>
+            <LineChart data={daily}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis
                 dataKey="date"
@@ -107,10 +121,23 @@ function ChannelReliabilityChart({
               />
               <Tooltip
                 labelFormatter={(value) => formatDay(String(value))}
-                formatter={(value: number, name: string) => [
-                  `${Number(value).toFixed(1)}%`,
-                  name,
-                ]}
+                formatter={(
+                  value: number,
+                  name: string,
+                  item: { payload?: ReliabilityDailyPoint },
+                ) => {
+                  const point = item.payload;
+                  if (!point) return [formatRate(value), name];
+                  const isChat = name === "Chat success";
+                  return [
+                    rateWithCounts(
+                      value,
+                      isChat ? point.chatSuccess : point.voiceSuccess,
+                      isChat ? point.chatFailure : point.voiceFailure,
+                    ),
+                    name,
+                  ];
+                }}
                 contentStyle={tooltipStyle}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -120,7 +147,7 @@ function ChannelReliabilityChart({
                 name="Chat success"
                 stroke="#22c55e"
                 strokeWidth={2}
-                dot={false}
+                dot={{ r: 2, fill: "#22c55e", strokeWidth: 0 }}
                 connectNulls
                 isAnimationActive={false}
               />
@@ -130,7 +157,7 @@ function ChannelReliabilityChart({
                 name="Voice success"
                 stroke="#06b6d4"
                 strokeWidth={2}
-                dot={false}
+                dot={{ r: 2, fill: "#06b6d4", strokeWidth: 0 }}
                 connectNulls
                 isAnimationActive={false}
               />
@@ -161,6 +188,15 @@ export function useResponseReliabilityItems({
   );
 
   return useMemo(() => {
+    const covered = (channel: "production" | "beta") => {
+      const series = data?.channels?.[channel];
+      return series ? trimDailyToCoverage(series.daily) : [];
+    };
+    const coveredByChannel = {
+      production: covered("production"),
+      beta: covered("beta"),
+    };
+
     const render = (channel: "production" | "beta") => {
       if (isLoading || !token) {
         return <div className="h-full animate-pulse rounded-md bg-muted/20" />;
@@ -173,7 +209,12 @@ export function useResponseReliabilityItems({
           </div>
         );
       }
-      return <ChannelReliabilityChart data={data.channels[channel]} />;
+      return (
+        <ChannelReliabilityChart
+          data={data.channels[channel]}
+          daily={coveredByChannel[channel]}
+        />
+      );
     };
 
     const subtitle = (channel: "production" | "beta") => {
@@ -186,7 +227,12 @@ export function useResponseReliabilityItems({
         (chat?.failure ?? 0) +
         (voice?.success ?? 0) +
         (voice?.failure ?? 0);
-      return `Last 30 days · ${judged.toLocaleString()} judged responses`;
+      const trimmed = coveredByChannel[channel];
+      const range =
+        trimmed.length > 0 && trimmed.length < series.daily.length
+          ? `Since ${formatDay(trimmed[0].date)}`
+          : `Last ${series.days} days`;
+      return `${range} · ${judged.toLocaleString()} judged responses`;
     };
 
     return [

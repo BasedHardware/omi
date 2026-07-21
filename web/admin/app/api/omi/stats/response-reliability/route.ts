@@ -6,6 +6,7 @@ import { posthogResults } from "@/lib/posthog";
 import {
   buildChannelReliabilityPayloads,
   buildResponseReliabilityPayload,
+  RELIABILITY_ROW_LIMIT,
   type ReliabilityChannel,
   responseReliabilityQueries,
 } from "@/lib/response-reliability";
@@ -26,12 +27,16 @@ async function getReliabilityChannels(
   const channelByActor = new Map<string, ReliabilityChannel>();
   const db = getDb();
 
-  for (const actorIdChunk of chunk(actorIds, 30)) {
-    const snapshot = await db
-      .collection("users")
-      .where(admin.firestore.FieldPath.documentId(), "in", actorIdChunk)
-      .select("update_channel")
-      .get();
+  const snapshots = await Promise.all(
+    chunk(actorIds, 30).map((actorIdChunk) =>
+      db
+        .collection("users")
+        .where(admin.firestore.FieldPath.documentId(), "in", actorIdChunk)
+        .select("update_channel")
+        .get(),
+    ),
+  );
+  for (const snapshot of snapshots) {
     for (const doc of snapshot.docs) {
       const updateChannel = String(doc.get("update_channel") || "");
       channelByActor.set(
@@ -102,6 +107,16 @@ export async function GET(request: NextRequest) {
 
   const chatRows = chatAvailable ? chatResult.value : [];
   const voiceRows = voiceAvailable ? voiceResult.value : [];
+  const truncated =
+    chatRows.length >= RELIABILITY_ROW_LIMIT ||
+    voiceRows.length >= RELIABILITY_ROW_LIMIT;
+  if (truncated) {
+    console.warn("Response reliability rows hit the HogQL limit", {
+      chatRows: chatRows.length,
+      voiceRows: voiceRows.length,
+      limit: RELIABILITY_ROW_LIMIT,
+    });
+  }
   const actorIds = Array.from(
     new Set(
       [
@@ -121,6 +136,7 @@ export async function GET(request: NextRequest) {
     voiceRows,
     chatAvailable,
     voiceAvailable,
+    truncated,
   });
 
   return NextResponse.json({
@@ -132,6 +148,7 @@ export async function GET(request: NextRequest) {
       chatAvailable,
       voiceAvailable,
       channelByActor,
+      truncated,
     }),
   });
 }

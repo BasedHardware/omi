@@ -101,6 +101,20 @@ const CHAT_COMPLETED = "chat_agent_query_completed";
 const CHAT_FAILED = "chat_agent_error";
 const CHAT_CANCELLED = "chat_agent_query_cancelled";
 
+// PostHog's query API silently applies LIMIT 100 when a query has no LIMIT.
+// These queries group by actor_id and order by day ASC, so the default limit
+// truncated exactly the newest days off the charts. In HogQL a trailing
+// ORDER BY/LIMIT after UNION ALL binds to the last arm only (verified against
+// PostHog: `SELECT 1 UNION ALL SELECT 2 LIMIT 1` returns 2 rows), so the voice
+// union is wrapped in a subquery with one outer LIMIT.
+//
+// 50_000 is PostHog's served maximum, verified live: LIMIT 100000 returns
+// exactly 50000 rows. The route's overflow tripwire compares row counts
+// against this constant, so it must equal the effective cap — a larger value
+// would make `rows.length >= RELIABILITY_ROW_LIMIT` unreachable and
+// truncation undetectable (the tests pin this).
+export const RELIABILITY_ROW_LIMIT = 50_000;
+
 const emptyMetric = (): MutableMetric => ({
   attempts: 0,
   success: 0,
@@ -223,8 +237,10 @@ export function responseReliabilityQueries(days: number): {
         AND toString(properties.surface) != 'floating_voice'
       GROUP BY day, event, surface, reason, actor_id
       ORDER BY day ASC
+      LIMIT ${RELIABILITY_ROW_LIMIT}
     `,
     voice: `
+      SELECT * FROM (
       SELECT
         toString(toDate(timestamp)) AS day,
         toString(properties.health_event) AS health_event,
@@ -265,9 +281,31 @@ export function responseReliabilityQueries(days: number): {
         AND toIntOrZero(toString(properties.telemetry_schema_version)) >= 2
         AND toString(properties.surface) = 'floating_voice'
       GROUP BY day, health_event, outcome, reason, route, intent, actor_id
+      )
       ORDER BY day ASC
+      LIMIT ${RELIABILITY_ROW_LIMIT}
     `,
   };
+}
+
+/**
+ * Drop leading days with no telemetry activity so charts start where coverage
+ * actually begins instead of rendering weeks of empty axis. A day with only
+ * excluded turns (cancellations, silent voice) still counts as coverage —
+ * an all-cancelled first day is a signal, not a gap. Interior gaps are kept —
+ * those are real usage gaps.
+ */
+export function trimDailyToCoverage(
+  daily: ReliabilityDailyPoint[],
+): ReliabilityDailyPoint[] {
+  const first = daily.findIndex(
+    (point) =>
+      point.chatSuccessRate != null ||
+      point.voiceSuccessRate != null ||
+      point.chatExcluded > 0 ||
+      point.voiceExcluded > 0,
+  );
+  return first === -1 ? [] : daily.slice(first);
 }
 
 export function buildResponseReliabilityPayload({
@@ -276,6 +314,7 @@ export function buildResponseReliabilityPayload({
   voiceRows,
   chatAvailable,
   voiceAvailable,
+  truncated = false,
   now = new Date(),
 }: {
   days: number;
@@ -283,6 +322,7 @@ export function buildResponseReliabilityPayload({
   voiceRows: unknown[];
   chatAvailable: boolean;
   voiceAvailable: boolean;
+  truncated?: boolean;
   now?: Date;
 }): ResponseReliabilitySeries {
   const safeDays = Math.min(Math.max(Math.trunc(days), 1), 90);
@@ -451,7 +491,7 @@ export function buildResponseReliabilityPayload({
   return {
     days: safeDays,
     generatedAt: now.getTime(),
-    partial: !chatAvailable || !voiceAvailable,
+    partial: !chatAvailable || !voiceAvailable || truncated,
     availability: {
       chat: chatAvailable,
       voice: voiceAvailable,
@@ -476,6 +516,7 @@ export function buildChannelReliabilityPayloads({
   chatAvailable,
   voiceAvailable,
   channelByActor,
+  truncated = false,
   now = new Date(),
 }: {
   days: number;
@@ -484,6 +525,7 @@ export function buildChannelReliabilityPayloads({
   chatAvailable: boolean;
   voiceAvailable: boolean;
   channelByActor: Map<string, ReliabilityChannel>;
+  truncated?: boolean;
   now?: Date;
 }): Record<ReliabilityChannel, ResponseReliabilitySeries> {
   const rowsForChannel = (
@@ -504,6 +546,7 @@ export function buildChannelReliabilityPayloads({
       voiceRows: rowsForChannel(voiceRows, 9, channel),
       chatAvailable,
       voiceAvailable,
+      truncated,
       now,
     });
 
