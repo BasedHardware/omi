@@ -332,6 +332,46 @@ def test_qualified_artifact_replacement_is_rejected_before_beta_or_stable_pointe
             )
 
 
+def test_qualification_evidence_accepts_the_side_by_side_beta_artifact_pair():
+    # INV-BETA-1: releases shipping the Omi Beta identity qualify all four
+    # artifacts; the beta zip's appcast signature comes from betaEdSignature.
+    body = _release()["body"].replace(
+        "edSignature: signature", "edSignature: signature\nbetaEdSignature: beta-signature"
+    )
+    release = _release(body=body)
+    release["assets"] = [
+        {"name": name, "url": f"https://example.com/{name}", "digest": ""}
+        for name in ("Omi.zip", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg")
+    ]
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        paths = {}
+        for name, content in (
+            ("Omi.zip", b"stable zip"),
+            ("omi.dmg", b"stable dmg"),
+            ("Omi.Beta.zip", b"beta zip"),
+            ("omi-beta.dmg", b"beta dmg"),
+        ):
+            path = root / name
+            path.write_bytes(content)
+            paths[name] = path
+        gate = root / "gate.json"
+        gate.write_text(json.dumps({"passed": True, "release_tag": release["tagName"], "source_sha": "a" * 40}))
+        evidence = qualification_evidence.build_evidence(
+            release, release["tagName"], "a" * 40, {**paths, "__candidate_gate__": gate}
+        )
+        assert set(evidence["artifacts"]) == {"Omi.zip", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg"}
+        assert evidence["artifacts"]["Omi.Beta.zip"]["signature"] == "beta-signature"
+
+        # A partial beta pair must fail closed.
+        partial = dict(paths)
+        del partial["omi-beta.dmg"]
+        with pytest.raises(ValueError, match="exact qualified"):
+            qualification_evidence.build_evidence(
+                release, release["tagName"], "a" * 40, {**partial, "__candidate_gate__": gate}
+            )
+
+
 def test_qualification_evidence_rejects_candidate_gate_from_a_different_source():
     release = _release()
     with tempfile.TemporaryDirectory() as directory:
