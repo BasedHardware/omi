@@ -251,6 +251,11 @@ struct DashboardPage: View {
   @State private var homeMode: HomeStageMode = .hub
   @FocusState private var homeAskFieldFocused: Bool
 
+  /// Rotation index for the home knows-list; a timer advances it so the hub
+  /// cycles through fresh suggestions while you're looking at it.
+  @State private var knowsRotation = 0
+  private let knowsRotationTimer = Timer.publish(every: 7, on: .main, in: .common).autoconnect()
+
   private var selectedApp: OmiApp? {
     guard let appId = chatProvider.selectedAppId else { return nil }
     return appProvider.chatApps.first { $0.id == appId }
@@ -853,7 +858,18 @@ struct DashboardPage: View {
       },
       tip: homeActionTip,
       questions: homeSuggestedQuestions,
-      dismissedTaskIDs: dismissedKnowsTaskIDs
+      dismissedTaskIDs: dismissedKnowsTaskIDs,
+      rotation: knowsRotation
+    )
+  }
+
+  /// True when there are more candidates than the hub shows, so rotating cycles
+  /// to genuinely different rows instead of the same set.
+  private var homeKnowsCanRotate: Bool {
+    HomeKnowsListComposer.canRotate(
+      taskCount: homeKnowsTaskCandidates.filter { !dismissedKnowsTaskIDs.contains($0.id) }.count,
+      insightCount: intelligenceStore.recommendations.count,
+      questionCount: homeSuggestedQuestions.count
     )
   }
 
@@ -926,9 +942,17 @@ struct DashboardPage: View {
           onDismiss: knowsDismissHandler(for: row),
           onLater: knowsLaterHandler(for: row)
         )
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
       }
     }
     .frame(width: width)
+    .omiAnimation(.easeInOut(duration: 0.45), value: knowsRotation)
+    .onReceive(knowsRotationTimer) { _ in
+      // Only rotate on the resting hub, when idle, and when there's genuinely
+      // more to show — so the set feels alive without churning under you.
+      guard homeMode == .hub, !chatProvider.isSending, homeKnowsCanRotate else { return }
+      knowsRotation += 1
+    }
     .accessibilityIdentifier("home-knows-list")
   }
 
