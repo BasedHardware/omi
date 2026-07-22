@@ -47,7 +47,9 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
       "Sources/MainWindow/Pages/PermissionsPage.swift",
       "Sources/MainWindow/SidebarView.swift",
       "Sources/Rewind/UI/RewindPage.swift",
-      "Sources/MainWindow/Pages/DashboardPage.swift",
+      // DashboardPage's capture toggle now delegates to CaptureListeningLogic,
+      // which owns the register-first screen-recording grant.
+      "Sources/MainWindow/CaptureListeningLogic.swift",
       "Sources/OmiApp.swift",
       "Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift",
       "Sources/MainWindow/RewindOnlyView.swift",
@@ -62,6 +64,7 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
       "Sources/MainWindow/SidebarView.swift",
       "Sources/Rewind/UI/RewindPage.swift",
       "Sources/MainWindow/Pages/DashboardPage.swift",
+      "Sources/MainWindow/CaptureListeningLogic.swift",
     ] {
       let src = try sourceFile(path)
       XCTAssertNil(

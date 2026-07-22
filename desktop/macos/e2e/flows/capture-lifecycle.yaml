@@ -64,6 +64,8 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/ProactiveModels.swift
   - desktop/macos/Desktop/Sources/ScreenActivitySyncService.swift
   - desktop/macos/Desktop/Sources/SingleInstanceGuard.swift
+  - desktop/macos/Desktop/Sources/MainWindow/CaptureListeningControls.swift
+  - desktop/macos/Desktop/Sources/MainWindow/CaptureListeningLogic.swift
 preconditions:
   - automation_bridge_ready
 

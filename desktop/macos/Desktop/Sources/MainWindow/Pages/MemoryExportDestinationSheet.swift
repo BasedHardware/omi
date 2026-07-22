@@ -65,12 +65,12 @@ struct ExportsSection: View {
         .scaledFont(size: OmiType.heading, weight: .semibold)
         .foregroundColor(OmiColors.textPrimary)
 
-      VStack(spacing: 0) {
-        ForEach(Array(entries.enumerated()), id: \.element.destination.id) { index, entry in
-          if index > 0 {
-            Divider()
-              .background(OmiColors.backgroundTertiary)
-          }
+      LazyVGrid(
+        columns: [GridItem(.adaptive(minimum: 260), spacing: OmiSpacing.md)],
+        alignment: .leading,
+        spacing: OmiSpacing.md
+      ) {
+        ForEach(entries, id: \.destination.id) { entry in
           MemoryExportRow(
             destination: entry.destination,
             titleOverride: entry.title,
@@ -137,9 +137,15 @@ private struct MemoryExportRow: View {
         ImportConnectorActionButton(
           title: actionTitle, isConnected: showsConnectedState)
       }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.md)
-      .background(isHovering ? OmiColors.backgroundSecondary : Color.clear)
+      .padding(OmiSpacing.md)
+      .background(
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+          .fill(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+          .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
+      )
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
