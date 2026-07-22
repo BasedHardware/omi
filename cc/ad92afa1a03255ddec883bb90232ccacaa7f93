@@ -1,0 +1,52 @@
+desktop/macos/Desktop/Sources/ScreenActivitySyncService.swift
+  s_838ede91b21776::t_ef7540ee6e1427 30,37-38,52,54-56
+desktop/macos/Desktop/Sources/Stores/TasksStore.swift
+  s_838ede91b21776::t_85808e42a13084 161
+  s_838ede91b21776::t_35f465c76e0f4a 160
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_838ede91b21776::t_368f1b1d6d639c 223-226,415,422,435-436,438-439,1170-1174,1339-1395,1397-1401,1405-1416
+desktop/macos/Desktop/Sources/APIClient.swift
+  s_838ede91b21776::t_8015bfc99b7ad7 1712-1716
+desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  s_838ede91b21776::t_ef7540ee6e1427 979,1924-1929,1956-1959
+desktop/macos/Desktop/Sources/MainWindow/CrispManager.swift
+  s_838ede91b21776::t_ef7540ee6e1427 65-72,84-92,131,180-182
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  s_838ede91b21776::t_ef7540ee6e1427 473-477,962-963
+desktop/macos/Desktop/Sources/Stores/DashboardTaskRefreshService.swift
+  s_838ede91b21776::t_85808e42a13084 1-129
+desktop/macos/Desktop/Sources/StartupWarmupCoordinator.swift
+  s_838ede91b21776::t_abd951e08d1f1c 9,23,151-155
+  s_838ede91b21776::t_9dfd7f7e943f97 1-8,10-22,24-150,156-175
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_838ede91b21776::t_ee111aabfa5560 53
+desktop/macos/Desktop/Sources/Providers/AppProvider.swift
+  s_838ede91b21776::t_ef7540ee6e1427 37-49
+desktop/macos/Desktop/Sources/ViewModelContainer.swift
+  s_838ede91b21776::t_9dfd7f7e943f97 17-22,24-25,39,42-45,50,86,90,93-95,110
+  s_838ede91b21776::t_abd951e08d1f1c 23,99-100,113,116
+desktop/macos/Desktop/Sources/Stores/DashboardTaskRefreshPolicy.swift
+  s_838ede91b21776::t_368f1b1d6d639c 1-129
+desktop/macos/Desktop/Tests/StartupWarmupPolicyTests.swift
+  s_838ede91b21776::t_bd5b8a2c27e9c6 132-133
+desktop/macos/Desktop/Sources/StartupWarmupPolicy.swift
+  s_838ede91b21776::t_f67c984fb9ce20 54-56
+desktop/macos/Desktop/Tests/DashboardTaskRefreshPolicyTests.swift
+  s_838ede91b21776::t_368f1b1d6d639c 1-112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "ccad92afa1a03255ddec883bb90232ccacaa7f93",
+  "prompts": {},
+  "sessions": {
+    "s_838ede91b21776": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019edbef-bac9-7702-bb66-f7c1129ca6f9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Drake Thomsen <drake@draket.xyz>"
+    }
+  }
+}

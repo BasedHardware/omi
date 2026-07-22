@@ -1,0 +1,50 @@
+desktop/macos/CHANGELOG.json
+  s_838ede91b21776::t_ac22b8430e3bf6 6-14
+app/lib/pages/memories/widgets/memory_graph_page.dart
+  s_838ede91b21776::t_ac22b8430e3bf6 43-45
+AGENTS.md
+  s_838ede91b21776::t_ac22b8430e3bf6 33-36
+app/lib/providers/phone_call_provider.dart
+  s_838ede91b21776::t_ac22b8430e3bf6 441-443
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_838ede91b21776::t_ac22b8430e3bf6 220,259-269,521,534,537,540,543,546,569,572,575,578,1054-1055,1077-1078,1134-1135,1174-1175,1382,1384,1534,1536,1567,1572,1578,1582,1588,1592,1598,1614-1619,1646,2033,2171,2182
+app/lib/pages/settings/daily_summary_detail_page.dart
+  s_838ede91b21776::t_ac22b8430e3bf6 94-95,299-300,392-394,629-631,874-875,974,976,992
+app/lib/models/stt_result.dart
+  s_838ede91b21776::t_ac22b8430e3bf6 152-154
+app/lib/models/stt_response_schema.dart
+  s_838ede91b21776::t_ac22b8430e3bf6 137-148
+app/lib/services/sockets/pure_polling.dart
+  s_838ede91b21776::t_ac22b8430e3bf6 157-160
+desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
+  s_838ede91b21776::t_ac22b8430e3bf6 218,2090
+app/lib/providers/user_speech_samples_provider.dart
+  s_838ede91b21776::t_ac22b8430e3bf6 74-84
+app/lib/utils/wal_file_manager.dart
+  s_838ede91b21776::t_ac22b8430e3bf6 42-48,104-110
+desktop/windows/src/main/integrations/syncStateLogic.test.ts
+  s_838ede91b21776::t_ac22b8430e3bf6 5,21-53
+  s_838ede91b21776::t_4dd2f14d542539 54-55
+desktop/windows/src/main/integrations/syncStateLogic.ts
+  s_838ede91b21776::t_ac22b8430e3bf6 15-43
+desktop/macos/Desktop/Sources/MemoryBankConnector.swift
+  s_838ede91b21776::t_ac22b8430e3bf6 87-88,91-101,103-112,114-145
+desktop/windows/src/main/integrations/syncState.ts
+  s_838ede91b21776::t_ac22b8430e3bf6 6-11,25-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "a54feb5f53b901c1e34ceee0d140d52102c5e853",
+  "prompts": {},
+  "sessions": {
+    "s_838ede91b21776": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019edbef-bac9-7702-bb66-f7c1129ca6f9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Drake Thomsen <drake@draket.xyz>"
+    }
+  }
+}
