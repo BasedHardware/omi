@@ -351,11 +351,15 @@ jobs:
           ref: ${{ github.sha }}
           path: .workflow-source
 
-      - name: Stage workflow-owned deployment-control scripts
+      - name: Stage immutable workflow validation source and deploy-control scripts
         run: |
           set -euo pipefail
+          workflow_source="$RUNNER_TEMP/backend-deploy-workflow-source"
           control_scripts="$RUNNER_TEMP/backend-deploy-control-scripts"
+          rm -rf "$workflow_source"
           rm -rf "$control_scripts"
+          mkdir -p "$workflow_source"
+          cp -a .workflow-source/.github "$workflow_source/.github"
           cp -a .workflow-source/backend/scripts "$control_scripts"
           rm -rf .workflow-source
 
@@ -364,15 +368,21 @@ jobs:
         with:
           ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}
 
-      - name: Install workflow-owned deployment-control scripts in admitted workspace
+      - name: Install immutable workflow validation source and deploy-control scripts
         run: |
           set -euo pipefail
+          workflow_root="$GITHUB_WORKSPACE/.deploy-workflow-source"
           control_scripts="$GITHUB_WORKSPACE/.deploy-control/scripts"
+          rm -rf "$workflow_root"
           rm -rf "$GITHUB_WORKSPACE/.deploy-control"
+          mkdir -p "$workflow_root"
           mkdir -p "$(dirname "$control_scripts")"
+          cp -a "$RUNNER_TEMP/backend-deploy-workflow-source/.github" "$workflow_root/.github"
           cp -a "$RUNNER_TEMP/backend-deploy-control-scripts" "$control_scripts"
+          rm -rf "$RUNNER_TEMP/backend-deploy-workflow-source"
           rm -rf "$RUNNER_TEMP/backend-deploy-control-scripts"
           printf 'DEPLOY_CONTROL_SCRIPTS=%s\n' "$control_scripts" >> "$GITHUB_ENV"
+          printf 'DEPLOY_WORKFLOW_ROOT=%s\n' "$workflow_root" >> "$GITHUB_ENV"
 
       - name: Google Auth
         id: auth
@@ -483,7 +493,7 @@ jobs:
         env:
           SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
-          python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" --env ${{ vars.ENV }} --check-workflows --check-rendered-cloud-run
+          python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" --env ${{ vars.ENV }} --check-workflows --workflow-root "$DEPLOY_WORKFLOW_ROOT" --check-rendered-cloud-run
 
       - name: Build runtime image
         uses: docker/build-push-action@v7
@@ -695,7 +705,7 @@ jobs:
         env:
           SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
-          python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" --env ${{ vars.ENV }} --check-workflows --check-live-cloud-run
+          python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" --env ${{ vars.ENV }} --check-workflows --workflow-root "$DEPLOY_WORKFLOW_ROOT" --check-live-cloud-run
 
       # Development probes the no-traffic tagged revision directly from the
       # runner. Production has no tagged candidate URL or private probe job.
