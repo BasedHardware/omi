@@ -1,0 +1,3 @@
+{
+    "change": "Onboarding now primes system-audio permission so Omi no longer re-asks to record your screen and audio after setup"
+}
