@@ -9,6 +9,11 @@ checks:
     triggers: ["scripts/pre-push", "scripts/pre-push-diff-base", "scripts/test-pre-push-diff-base.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "pre-push check selection must use the final PR diff rather than a stale remote feature tip"
+  - id: setup-pre-push-prerequisites
+    command: ["bash", "scripts/test-make-setup.sh"]
+    triggers: ["Makefile", "backend/scripts/sync-python-deps.sh", "scripts/pre-push", "scripts/test-make-setup.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "make setup must provision the minimal, rerunnable backend environment required by selected pre-push checks"
   - id: check-manifest-contract
     command: ["python3", ".github/scripts/test_run_checks.py"]
     triggers: ["all"]
