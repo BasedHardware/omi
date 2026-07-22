@@ -148,6 +148,13 @@ def test_rollback_emits_contract_json(gate: SimpleNamespace, rollout_fixture: Pa
     assert "captured at runtime" in payload["prior_restore"]
     assert "helm upgrade" in payload["restore_command"]
 
+    # Capture must extract ONLY the tag or digest, not the full image ref,
+    # and restore must use --set-string (matches the deploy workflows).
+    assert "sed 's/.*://'" in payload["capture_command"]
+    assert "sha256:[a-f0-9]" in payload["capture_command"]
+    assert "--set-string image.tag=" in payload["restore_command"]
+    assert "--set-string image.digest=" in payload["restore_command"]
+
     # Traffic vs data rollback separation.
     assert "SAFE" in payload["traffic_rollback"]
     assert "always available" in payload["traffic_rollback"]

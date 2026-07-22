@@ -316,20 +316,23 @@ async def _websocket_util_trigger(
 ) -> None:
     logger.info(f'_websocket_util_trigger {uid}')
 
-    # Defense-in-depth: during drain the LB should already have removed us from
-    # the NEG, but reject straggler NEW connections without accepting so we do
-    # not start a session we are about to terminate. Existing in-flight sessions
-    # keep draining via their own background-drain logic (BG_DRAIN_TIMEOUT).
-    # Code 1001 (Going Away) signals the client to reconnect elsewhere.
-    if not ReadinessGate.is_serving():
-        logger.info(f'Rejecting new WS for {uid}: pusher is draining')
-        await websocket.close(code=1001)
-        return
     try:
         await websocket.accept()
     except RuntimeError as e:
         logger.error(e)
         await websocket.close(code=1011, reason="Dirty state")
+        return
+
+    # Defense-in-depth: during drain the LB should already have removed us from
+    # the NEG, but reject straggler NEW connections.  We accept the handshake
+    # FIRST so the client sees a clean WS close frame (1001 Going Away) rather
+    # than a failed HTTP upgrade — a pre-accept close is surfaced as an
+    # exception by the websockets client and recorded as a circuit-breaker
+    # failure in backend-listen (backend/utils/pusher.py), which can trip the
+    # pod's pusher circuit during a normal rollout.
+    if not ReadinessGate.is_serving():
+        logger.info(f'Rejecting new WS for {uid}: pusher is draining')
+        await websocket.close(code=1001)
         return
 
     journey_attempt = JourneyAttempt('pusher_session')

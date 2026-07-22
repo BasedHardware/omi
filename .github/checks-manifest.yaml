@@ -264,6 +264,11 @@ checks:
     triggers: ["backend/charts/pusher/**", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", "backend/scripts/verify_pusher_rollout_budget.py", "backend/tests/unit/test_verify_pusher_rollout_budget.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9988: Pusher's Kubernetes deadline and workflow wait must cover chart-derived availability at the HPA ceiling"
+  - id: pusher-rollout-quality-gate
+    command: ["python3", "backend/scripts/verify_pusher_rollout_gate.py"]
+    triggers: ["backend/charts/pusher/**", "backend/utils/metrics.py", "backend/routers/pusher.py", "backend/utils/readiness.py", "backend/scripts/verify_pusher_rollout_gate.py", "backend/tests/unit/test_verify_pusher_rollout_gate.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-39: static preflight that fails closed when a pusher rollout cannot be verified safe (capacity, image identity, readiness/health split, telemetry)"
   - id: conversation-lifecycle-write-guard
     command: ["python3", "backend/scripts/check_conversation_lifecycle_writes.py"]
     triggers: ["backend/**/*.py", "backend/scripts/check_conversation_lifecycle_writes.py"]

@@ -223,3 +223,29 @@ def test_real_app_registers_readiness_routes_and_shutdown_drain(handlers):
     assert table['/ready'] == {'GET'}
     assert table['/__internal/drain'] == {'POST'}
     assert handlers.shutdown_calls_begin_drain() is True
+
+
+def test_ws_drain_rejects_after_accept_not_before():
+    """The drain rejection in _websocket_util_trigger must accept the WS handshake
+    FIRST, then close 1001. A pre-accept close is surfaced as a failed HTTP
+    upgrade by the websockets client and recorded as a circuit-breaker failure
+    in backend-listen (backend/utils/pusher.py), which can trip the pusher
+    circuit during a normal rollout.
+    """
+    import inspect
+
+    from routers import pusher as pusher_router
+
+    source = inspect.getsource(pusher_router._websocket_util_trigger)
+    accept_pos = source.find('await websocket.accept()')
+    drain_check_pos = source.find('if not ReadinessGate.is_serving()')
+    close_1001_pos = source.find('await websocket.close(code=1001)')
+
+    assert accept_pos != -1, "websocket.accept() must be called in _websocket_util_trigger"
+    assert drain_check_pos != -1, "ReadinessGate.is_serving() drain check must be present"
+    assert close_1001_pos != -1, "close(code=1001) drain rejection must be present"
+    assert accept_pos < drain_check_pos, (
+        "accept() must come BEFORE the drain check so the client receives a "
+        "clean WS close frame instead of a failed HTTP upgrade"
+    )
+    assert drain_check_pos < close_1001_pos, "the drain check must precede the close(1001) call"
