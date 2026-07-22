@@ -162,6 +162,23 @@ def test_check_spec_detects_stale_file(tmp_path):
         export_openapi.check_spec(spec_path, json.dumps({'fresh': True}) + '\n')
 
 
+def test_stale_hint_includes_surface_flag_for_non_public_surfaces(tmp_path):
+    # Regression for #10217: following the hint verbatim must not silently
+    # export the default public surface into a non-public surface's file.
+    spec_path = tmp_path / 'spec.json'
+    spec_path.write_text(json.dumps({'stale': True}) + '\n')
+    generated = json.dumps({'fresh': True}) + '\n'
+
+    with pytest.raises(export_openapi.OpenAPIContractError, match=r'--app-client --write'):
+        export_openapi.check_spec(spec_path, generated, 'app-client')
+    with pytest.raises(export_openapi.OpenAPIContractError, match=r'--surface integration-public --write'):
+        export_openapi.check_spec(spec_path, generated, 'integration-public')
+
+    # Public surface stays flag-free so the default invocation is unchanged.
+    with pytest.raises(export_openapi.OpenAPIContractError, match=r'export_openapi\.py --write'):
+        export_openapi.check_spec(spec_path, generated, 'public')
+
+
 def test_network_recorder_fails_even_when_blocked_attempt_is_swallowed():
     with export_openapi.record_and_block_outbound_network() as attempts:
         try:

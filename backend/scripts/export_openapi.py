@@ -985,12 +985,29 @@ def write_spec(path: Path, generated: str) -> None:
     path.write_text(generated)
 
 
-def check_spec(path: Path, generated: str) -> None:
+def surface_flag(surface: str) -> str:
+    """CLI flag that selects `surface`, empty for the default public surface.
+
+    Surface selection is a separate flag from the output path, so a hint that
+    omits it silently exports the public surface into another surface's file
+    (issue #10217).
+    """
+    if surface == 'public':
+        return ''
+    if surface == 'app-client':
+        return '--app-client '
+    if surface == 'integration-public':
+        return '--surface integration-public '
+    raise OpenAPIContractError(f'unknown OpenAPI surface: {surface}')
+
+
+def check_spec(path: Path, generated: str, surface: str = 'public') -> None:
+    flag = surface_flag(surface)
     if not path.exists():
-        raise OpenAPIContractError(f'{path} does not exist; run export_openapi.py --write {path}')
+        raise OpenAPIContractError(f'{path} does not exist; run backend/scripts/export_openapi.py {flag}--write {path}')
     current = path.read_text()
     if current != generated:
-        raise OpenAPIContractError(f'{path} is stale; run backend/scripts/export_openapi.py --write {path}')
+        raise OpenAPIContractError(f'{path} is stale; run backend/scripts/export_openapi.py {flag}--write {path}')
 
 
 def parse_args() -> argparse.Namespace:
@@ -1043,7 +1060,7 @@ def main() -> int:
             print(f'wrote {path}')
         elif args.check is not None:
             path = resolve_spec_path(args.surface, args.check)
-            check_spec(path, generated)
+            check_spec(path, generated, args.surface)
             print(f'{path} is up to date')
         return 0
     except OpenAPIContractError as e:
