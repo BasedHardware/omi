@@ -57,7 +57,7 @@ Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.
 Merging `desktop/macos/**` changes queues them for the next hourly candidate retry. A candidate advances to beta automatically only after every qualification gate passes:
 
 1. **GitHub Actions** (`desktop_auto_release.yml`) — batches mainline changes, auto-increments the version, and pushes a `v*-macos` build-candidate tag. It is schedule-only and fails closed before changelog or tag mutation unless `Release Eligibility`, `Desktop Swift Build & Tests`, and `Desktop Swift Release Compile` all completed successfully for the exact newest queued releasable desktop SHA. Later backend/docs-only commits do not replace that immutable source with a SHA where desktop CI was skipped; the tag includes the newly consolidated release notes.
-2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — triggered by the tag, runs on Mac mini M2:
+2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — triggered by the tag, runs on Mac mini M4:
    - Builds universal binary (arm64 + x86_64)
    - Signs with Developer ID, notarizes with Apple
    - Creates DMG + Sparkle ZIP
