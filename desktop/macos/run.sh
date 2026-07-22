@@ -1240,6 +1240,20 @@ fi
 
 fi # full bundle path
 
+signal_desktop_launch() {
+    local signal_file="${OMI_DESKTOP_LAUNCH_SIGNAL_FILE:-}"
+    local signal_dir signal_tmp
+    [ -n "$signal_file" ] || return 0
+    signal_dir="$(dirname "$signal_file")"
+    if [ ! -d "$signal_dir" ]; then
+        echo "ERROR: desktop launch signal directory does not exist: $signal_dir" >&2
+        return 1
+    fi
+    signal_tmp="${signal_file}.tmp.$$"
+    printf 'bundle_id=%s\napp_path=%s\n' "$BUNDLE_ID" "$APP_PATH" > "$signal_tmp"
+    mv -f "$signal_tmp" "$signal_file"
+}
+
 step "Starting app..."
 
 # Print summary
@@ -1281,10 +1295,15 @@ printf 'launch_mode=%s fast_reason=%s bundle_id=%s profile_root=%q\n' \
 
 auth_debug "BEFORE launch: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 if [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
-    open "$APP_PATH" --args "${AUTOMATION_ARGS[@]}" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" "${AUTOMATION_ARGS[@]}" &
+    if ! open "$APP_PATH" --args "${AUTOMATION_ARGS[@]}"; then
+        "$APP_PATH/Contents/MacOS/$BINARY_NAME" "${AUTOMATION_ARGS[@]}" &
+    fi
 else
-    open "$APP_PATH" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
+    if ! open "$APP_PATH"; then
+        "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
+    fi
 fi
+signal_desktop_launch
 
 # Launch finished — free this worktree's lock so other checkouts (and a later
 # rebuild here) are not blocked by the long-running wait below. Kept through

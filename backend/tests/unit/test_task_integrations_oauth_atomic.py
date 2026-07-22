@@ -124,3 +124,11 @@ def test_consume_is_single_use():
 
     assert first == {'uid': 'u1', 'app_key': 'a1'}
     assert second is None
+
+
+def test_callback_template_receives_request_as_first_argument():
+    request = MagicMock()
+    with patch.object(ti.templates, 'TemplateResponse', return_value=MagicMock()) as response:
+        ti.render_oauth_response(request, 'todoist')
+
+    assert response.call_args.args[:2] == (request, 'oauth_callback.html')

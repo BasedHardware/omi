@@ -224,7 +224,7 @@ struct DashboardPage: View {
   @ObservedObject private var homeSuggestionsStore = HomeSuggestionsStore.shared
   @StateObject private var intelligenceStore = DashboardIntelligenceStore()
   @State private var dismissedKnowsTaskIDs: Set<String> = []
-  @State private var didAutoOpenChatForHistory = false
+  @State private var homeHistoryAutoOpenPolicy = HomeStageHistoryAutoOpenPolicy()
   @Binding var selectedIndex: Int
   @State private var citedConversation: ServerConversation? = nil
   @State private var selectedCatalogApp: OmiApp?
@@ -1149,13 +1149,12 @@ struct DashboardPage: View {
     }
   }
 
-  /// Chat with history is the default Home surface: whenever prior messages
-  /// exist, the hub greeting yields to the chat panel. Runs once per page
-  /// visit so an explicit Esc back to the hub is respected afterwards.
+  /// Chat with history is the default Home surface. An explicit hub close consumes
+  /// the one-shot so a late history update cannot immediately undo that action.
   private func autoOpenChatForExistingHistoryIfNeeded() {
-    guard !didAutoOpenChatForHistory else { return }
-    guard !useLegacyHomeDesign, homeMode == .hub, !chatProvider.messages.isEmpty else { return }
-    didAutoOpenChatForHistory = true
+    guard homeHistoryAutoOpenPolicy.shouldAutoOpen(
+      isLegacy: useLegacyHomeDesign, mode: homeMode, hasMessages: !chatProvider.messages.isEmpty)
+    else { return }
     homeMode = .chat
     reportHomeAutomationMode()
   }
@@ -1208,6 +1207,7 @@ struct DashboardPage: View {
 
   private func closeHomeStagePanel() {
     homeAskFieldFocused = false
+    homeHistoryAutoOpenPolicy.suppressAutoOpenForExplicitHubClose()
     OmiMotion.withGated(Self.homeStageAnimation) {
       homeMode = .hub
     }
@@ -2123,7 +2123,7 @@ private enum HomeDestinationProminence {
   case quiet
 }
 
-private enum HomeStageMode: Equatable {
+enum HomeStageMode: Equatable {
   case hub
   case chat
   case connect

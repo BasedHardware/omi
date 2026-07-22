@@ -108,9 +108,13 @@
       "risk": "high",
       "sources": [
         "backend/database/desktop_update_channels.py",
+        "backend/database/desktop_beta_breakglass.py",
+        "backend/utils/beta_breakglass_evidence.py",
         "backend/utils/desktop_update_resolver.py",
         "backend/routers/updates.py",
         ".github/workflows/desktop_promote_beta.yml",
+        ".github/workflows/desktop_rollback_beta.yml",
+        ".github/workflows/desktop_breakglass_rollout_beta.yml",
         ".github/workflows/desktop_promote_prod.yml"
       ],
       "tests": [

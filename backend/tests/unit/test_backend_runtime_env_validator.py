@@ -114,7 +114,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     )
 
 
-def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Path):
+def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Path, workflow_root: Path | None = None):
     """Exercise a workflow fixture without unrelated full-manifest rollout contracts."""
     manifest = validator._load_yaml(manifest_path)
     return validator._validate_cloud_run_workflows(
@@ -123,6 +123,7 @@ def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Pat
         strict_provisional=False,
         manifest_path=manifest_path,
         manifest=manifest,
+        workflow_root=workflow_root,
     )
 
 
@@ -305,6 +306,80 @@ def test_repo_prod_cloud_run_workflows_match_manifest(monkeypatch):
     assert errors == []
 
 
+def test_workflow_validation_uses_immutable_workflow_root_with_admitted_runtime_manifest(tmp_path):
+    validator = load_validator()
+    workflow_path = ROOT.parent / '.github/workflows/gcp_backend.yml'
+    admitted_workflow = validator._load_yaml(workflow_path)
+    old_admitted_workflow = copy.deepcopy(admitted_workflow)
+    old_admitted_workflow['jobs']['deploy']['steps'] = [
+        step
+        for step in old_admitted_workflow['jobs']['deploy']['steps']
+        if step.get('name') != 'Checkout workflow-owned deploy-control source'
+    ]
+    assert validator.ValidationError(
+        f'cloud_run_workflow/{workflow_path}',
+        'backend deploy checkout must remain bound to the readiness-approved commit',
+    ) in validator._validate_firestore_readiness_workflow_contract(str(workflow_path), old_admitted_workflow)
+
+    workflow_root = tmp_path / 'workflow-source'
+    staged_workflow_path = workflow_root / '.github/workflows/deploy.yml'
+    staged_workflow_path.parent.mkdir(parents=True)
+    write_yaml(staged_workflow_path, {'jobs': {}})
+    manifest_path = tmp_path / 'admitted-runtime-env.yaml'
+    write_yaml(
+        manifest_path,
+        {
+            'schema_version': 1,
+            'environments': {
+                'dev': {
+                    'gcp_project': 'deployment-project',
+                    'runtime_gcp_project': 'serving-project',
+                    'region': 'us-central1',
+                    'gke': {},
+                    'cloud_run': {'workflow_files': ['.github/workflows/deploy.yml'], 'services': {}, 'jobs': {}},
+                }
+            },
+        },
+    )
+
+    assert (
+        validate_cloud_run_workflows_only(
+            validator, env='dev', manifest_path=manifest_path, workflow_root=workflow_root
+        )
+        == []
+    )
+
+
+def test_local_composite_actions_resolve_from_workflow_root(tmp_path):
+    validator = load_validator()
+    workflow_root = tmp_path / 'workflow-source'
+    action_path = workflow_root / '.github/actions/workflow-root-only/action.yml'
+    action_path.parent.mkdir(parents=True)
+    write_yaml(
+        action_path,
+        {
+            'runs': {
+                'using': 'composite',
+                'steps': [
+                    {
+                        'uses': 'google-github-actions/deploy-cloudrun@v2',
+                        'with': {'service': 'backend', 'env_vars': 'RUNTIME_SOURCE=admitted\n'},
+                    }
+                ],
+            }
+        },
+    )
+
+    assert validator._expand_cloud_run_deploy_steps(
+        {'uses': './.github/actions/workflow-root-only'}, workflow_root=workflow_root
+    ) == [
+        {
+            'uses': 'google-github-actions/deploy-cloudrun@v2',
+            'with': {'service': 'backend', 'env_vars': 'RUNTIME_SOURCE=admitted\n'},
+        }
+    ]
+
+
 @pytest.mark.parametrize(
     ('run', 'message'),
     [
@@ -461,6 +536,29 @@ def test_automatic_firestore_readiness_contract_requires_readiness_admitted_sha_
     )
     deploy_checkout['with']['ref'] = '${{ github.event.workflow_run.head_sha }}'
 
+    errors = validator._validate_firestore_readiness_workflow_contract(str(workflow_path), workflow)
+
+    assert (
+        validator.ValidationError(
+            f'cloud_run_workflow/{workflow_path}',
+            'backend deploy checkout must remain bound to the readiness-approved commit',
+        )
+        in errors
+    )
+
+
+def test_manual_firestore_readiness_contract_allows_one_staged_workflow_control_checkout():
+    validator = load_validator()
+    workflow_path = ROOT.parent / '.github/workflows/gcp_backend.yml'
+    workflow = validator._load_yaml(workflow_path)
+
+    assert validator._validate_firestore_readiness_workflow_contract(str(workflow_path), workflow) == []
+
+    workflow['jobs']['deploy']['steps'] = [
+        step
+        for step in workflow['jobs']['deploy']['steps']
+        if step.get('name') != 'Checkout workflow-owned deploy-control source'
+    ]
     errors = validator._validate_firestore_readiness_workflow_contract(str(workflow_path), workflow)
 
     assert (

@@ -61,6 +61,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Non-throwing variant of [conversation]. Build paths must use this so a
   /// transient miss (conversation deleted under us, day-group emptied) returns
   /// null instead of throwing from inside a Consumer's builder.
+  ///
+  /// Once a conversation is selected this only ever resolves to that same id.
+  /// Substituting another conversation would silently retarget the page, and
+  /// destructive actions (delete, visibility, rename) act on whatever this
+  /// returns.
   ServerConversation? get conversationOrNull {
     final list = conversationProvider?.groupedConversations[selectedDate];
     final id = _cachedConversationId;
@@ -70,12 +75,14 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (list != null && list.isNotEmpty) {
       if (id != null) {
         result = list.firstWhereOrNull((c) => c.id == id);
+      } else {
+        result = list.first;
+        _cachedConversationId = result.id;
       }
-      result ??= list.first;
-      _cachedConversationId = result.id;
     }
 
     result ??= _cachedConversation;
+    if (result != null && id != null && result.id != id) return null;
     if (result != null) {
       // Validate against the same effective date used to group conversations
       // (startedAt ?? createdAt). Using createdAt alone breaks for

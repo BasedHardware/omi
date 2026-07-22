@@ -4,24 +4,20 @@ import 'dart:io';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:collection/collection.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
-import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -32,6 +28,7 @@ import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
+import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
@@ -72,6 +69,8 @@ class CaptureController extends ChangeNotifier
   static const MethodChannel _nativeBleTranscriptChannel = MethodChannel('com.friend.ios/native_ble_transcript');
   static const int _maxInProgressConversationRefreshAttempts = 30;
   static const Duration _inProgressConversationRefreshInterval = Duration(seconds: 2);
+
+  final ConversationLocationCapture _conversationLocationCapture = ConversationLocationCapture();
 
   CaptureExternalActions externalActions;
   DeviceOnboardingProvider? deviceOnboardingProvider;
@@ -1315,36 +1314,12 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  /// Sends current geolocation to backend if location services are enabled and permission is granted
-  Future<void> _sendCurrentGeolocation() async {
-    try {
-      if (!await Geolocator.isLocationServiceEnabled()) {
-        Logger.log('Location service is not enabled, skipping geolocation update');
-        return;
-      }
-
-      final permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-        Logger.log('Location permission not granted, skipping geolocation update');
-        return;
-      }
-
-      final position = await Geolocator.getCurrentPosition();
-      final geolocation = Geolocation(
-        latitude: position.latitude,
-        longitude: position.longitude,
-        altitude: position.altitude,
-        accuracy: position.accuracy,
-        time: position.timestamp.toUtc(),
-      );
-
-      await updateUserGeolocation(geolocation: geolocation);
-    } catch (e) {
-      Logger.error('Error sending geolocation: $e');
-    }
-  }
-
   streamRecording() async {
+    // The backend snapshots its cached location when finalizing a conversation.
+    // Complete this bounded update before any live or batch capture path can
+    // create/finalize that conversation.
+    await _conversationLocationCapture.captureAndUpload();
+
     // Mode is fixed for the whole session at start. On iOS and Android the phone
     // mic can capture Transcribe Later (batch) audio: explicitly when the user
     // enabled it, or automatically as an offline fallback when there is no
@@ -1366,9 +1341,6 @@ class CaptureController extends ChangeNotifier
       updateRecordingState(RecordingState.stop);
       return;
     }
-
-    // Send current location when conversation starts
-    _sendCurrentGeolocation();
 
     // prepare
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
@@ -1541,8 +1513,9 @@ class CaptureController extends ChangeNotifier
 
     bool wasPaused = _isPaused;
 
-    // Send current location when conversation starts
-    _sendCurrentGeolocation();
+    // Ensure even very short device recordings have a location in Redis before
+    // the backend is able to finalize their conversation.
+    await _conversationLocationCapture.captureAndUpload();
 
     await _resetStateVariables();
     await _resetState();

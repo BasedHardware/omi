@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
+import runpy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from database import conversation_finalization_jobs as jobs_db
 from database.firestore_transaction_retry import FirestoreContentionExhausted
@@ -19,6 +23,141 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils import cloud_tasks
 from utils.conversations.finalizer import ConversationFinalizationDisposition, ConversationFinalizationError
 import utils.conversations.finalizer as persisted_finalizer
+
+
+def _prod_backend_sync_runtime_env(monkeypatch):
+    """Render the production backend-sync contract instead of duplicating it here."""
+    backend_root = Path(__file__).resolve().parents[2]
+    renderer = runpy.run_path(
+        str(backend_root / 'scripts/render_backend_runtime_env.py'), run_name='render_backend_runtime_env_contract'
+    )
+    validator = runpy.run_path(
+        str(backend_root / 'scripts/validate-backend-runtime-env.py'), run_name='validate_backend_runtime_env_contract'
+    )
+    assert validator['validate_runtime_env'](env='prod', check_workflows=True, check_rendered_cloud_run=True) == []
+
+    manifest = renderer['_load_yaml'](renderer['DEFAULT_MANIFEST'])
+    env_entries = manifest['environments']['prod']['cloud_run']['services']['backend-sync']['env']
+    for entry in env_entries.values():
+        if env_var := entry.get('env_var'):
+            monkeypatch.setenv(env_var, f'{env_var.lower()}.contract.invalid')
+
+    handler_path = next(
+        route.path for route in finalization_router.router.routes if route.name == 'run_listen_finalization_job'
+    )
+    handler_url = f'https://backend-sync.contract.invalid{handler_path}'
+    invoker_sa = 'finalization-contract@project.iam.gserviceaccount.com'
+    monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_HANDLER_URL', handler_url)
+    monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_INVOKER_SA', invoker_sa)
+
+    rendered_env = dict(line.split('=', 1) for line in renderer['_render_env_vars'](env_entries).splitlines())
+    return renderer, env_entries, rendered_env, handler_path
+
+
+@pytest.fixture
+def prod_backend_sync_runtime_env(monkeypatch):
+    return _prod_backend_sync_runtime_env(monkeypatch)
+
+
+def _finalization_task_client():
+    app = FastAPI()
+    app.include_router(finalization_router.router)
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def _cloud_tasks_headers():
+    return {
+        'authorization': 'Bearer contract-token',
+        'x-cloudtasks-taskretrycount': '2',
+    }
+
+
+def _opaque_finalization_task():
+    return {'job_id': 'opaque-finalization-job', 'dispatch_generation': 7}
+
+
+def test_prod_backend_sync_finalization_task_route_uses_rendered_oidc_contract(
+    monkeypatch, prod_backend_sync_runtime_env
+):
+    _, _, rendered_env, handler_path = prod_backend_sync_runtime_env
+    verified_claims = {
+        'email': rendered_env['LISTEN_FINALIZATION_TASKS_INVOKER_SA'],
+        'email_verified': True,
+    }
+    verify = MagicMock(return_value=verified_claims)
+    monkeypatch.setattr(cloud_tasks.id_token, 'verify_oauth2_token', verify)
+    # A lock contention is the narrow post-auth dependency seam: it proves the
+    # real FastAPI route accepted the task without touching a durable job.
+    monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda _key: None)
+
+    with _finalization_task_client() as client:
+        response = client.post(
+            handler_path,
+            json=_opaque_finalization_task(),
+            headers=_cloud_tasks_headers(),
+        )
+
+    assert response.status_code == 409
+    assert response.json() == {'status': 'locked'}
+    assert verify.call_args.kwargs['audience'] == rendered_env['LISTEN_FINALIZATION_TASKS_HANDLER_URL']
+    assert verify.call_args.args[0] == 'contract-token'
+
+
+def test_prod_backend_sync_finalization_task_route_fails_closed_without_rendered_handler_binding(
+    monkeypatch, prod_backend_sync_runtime_env
+):
+    renderer, env_entries, _, handler_path = prod_backend_sync_runtime_env
+    monkeypatch.delenv('LISTEN_FINALIZATION_TASKS_HANDLER_URL')
+
+    with pytest.raises(ValueError, match='LISTEN_FINALIZATION_TASKS_HANDLER_URL requires'):
+        renderer['_render_env_vars'](env_entries)
+
+    verify = MagicMock()
+    monkeypatch.setattr(cloud_tasks.id_token, 'verify_oauth2_token', verify)
+    with _finalization_task_client() as client:
+        response = client.post(handler_path, json=_opaque_finalization_task(), headers=_cloud_tasks_headers())
+
+    assert response.status_code == 403
+    verify.assert_not_called()
+
+
+def test_prod_backend_sync_finalization_task_route_rejects_wrong_audience(monkeypatch, prod_backend_sync_runtime_env):
+    _, _, rendered_env, handler_path = prod_backend_sync_runtime_env
+    expected_audience = rendered_env['LISTEN_FINALIZATION_TASKS_HANDLER_URL']
+
+    def reject_wrong_audience(_token, _request, *, audience):
+        if audience != expected_audience:
+            raise ValueError('wrong audience')
+        return {
+            'email': rendered_env['LISTEN_FINALIZATION_TASKS_INVOKER_SA'],
+            'email_verified': True,
+        }
+
+    monkeypatch.setattr(cloud_tasks.id_token, 'verify_oauth2_token', reject_wrong_audience)
+    monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_OIDC_AUDIENCE', 'https://wrong-audience.contract.invalid')
+    with _finalization_task_client() as client:
+        wrong_audience = client.post(handler_path, json=_opaque_finalization_task(), headers=_cloud_tasks_headers())
+
+    assert wrong_audience.status_code == 403
+
+
+def test_prod_backend_sync_finalization_task_route_rejects_untrusted_identity(
+    monkeypatch, prod_backend_sync_runtime_env
+):
+    _, _, rendered_env, handler_path = prod_backend_sync_runtime_env
+    monkeypatch.setattr(
+        cloud_tasks.id_token,
+        'verify_oauth2_token',
+        MagicMock(return_value={'email': 'untrusted@project.iam.gserviceaccount.com', 'email_verified': True}),
+    )
+    with _finalization_task_client() as client:
+        untrusted_identity = client.post(
+            handler_path,
+            json=_opaque_finalization_task(),
+            headers=_cloud_tasks_headers(),
+        )
+
+    assert untrusted_identity.status_code == 403
 
 
 def _mock_lifecycle_conversation(monkeypatch, *, status: str = 'in_progress'):

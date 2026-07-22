@@ -43,7 +43,7 @@ Starts the Windows desktop app from source using the public config in `.env.exam
 
 > **Requirements:** [Node.js](https://nodejs.org/)
 
-For development worktrees, run the cheap local setup once:
+For development worktrees, run the baseline local setup once. It installs the Git hooks and syncs the pinned backend Python environment used by selected pre-push checks; mobile and desktop runtime environments remain opt-in.
 
 ```bash
 make setup
