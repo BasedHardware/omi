@@ -1593,14 +1593,13 @@ struct AppNavRail: View {
   }
 
   /// Simplified, merged navigation: "Memory" folds in Conversations + Memories,
-  /// "Focus" folds in Focus + Insights, and Rewind moved off the rail (it opens
-  /// from a right-click on Capture). Each entry drives the shared selectedIndex.
+  /// Rewind moved off the rail (it opens from a right-click on Capture), and
+  /// Insights/Focus are hidden from navigation. Each entry drives selectedIndex.
   private var items: [RailItem] {
     [
       RailItem(index: SidebarNavItem.dashboard.rawValue, title: "Home", icon: "house.fill"),
       RailItem(index: SidebarNavItem.conversations.rawValue, title: "Memory", icon: "brain"),
       RailItem(index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist"),
-      RailItem(index: SidebarNavItem.focus.rawValue, title: "Insights", icon: "lightbulb.fill"),
       RailItem(index: SidebarNavItem.apps.rawValue, title: "Apps", icon: "puzzlepiece.fill"),
     ]
   }

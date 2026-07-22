@@ -2744,14 +2744,10 @@ struct TasksPage: View {
         && suggestedStore.candidates.isEmpty && !suggestedStore.isLoading
       {
         emptyView
-      } else if tasksViewIsBoard && !viewModel.isInlineCreating {
-        // Notion-style status board: one column per time bucket, tasks as cards.
-        tasksBoardView
       } else {
-        // Render the list view (which hosts the InlineTaskCreationRow) whenever
-        // the user is inline-creating, even if the underlying task list is empty.
-        // Without this guard, clicking "+" on an empty list flips isInlineCreating
-        // but the empty view ignores it, so the input field never appears.
+        // Board view is hidden — Tasks always uses the list. The list view hosts
+        // the InlineTaskCreationRow, so it renders whenever the user is
+        // inline-creating even if the underlying task list is empty.
         tasksListView
       }
     }
@@ -2888,7 +2884,6 @@ struct TasksPage: View {
       .cornerRadius(OmiChrome.elementRadius)
 
       if !viewModel.isMultiSelectMode {
-        viewModeToggle
         completedToggleButton
       } else {
         multiSelectControls
