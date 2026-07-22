@@ -318,6 +318,14 @@ def reprocess_conversation(
     :return: The updated conversation after reprocessing.
     """
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    # Reprocess force-processes a *discarded* conversation to revive it, but a
+    # soft-deleted tombstone is invisible to the user and must not be reprocessed:
+    # process_conversation would regenerate structured data, action items, memories
+    # and embeddings from content the user deleted, resurrecting it. Same
+    # tombstone-eligibility contract as sync (#10119) and merge (#10262). Checked
+    # on the raw doc because the Conversation model does not carry `deleted`.
+    if conversations_db.is_soft_deleted(conversation):
+        raise HTTPException(status_code=404, detail="Conversation not found")
     conversation = deserialize_conversation(conversation)
     if not language_code:
         language_code = conversation.language or 'en'
