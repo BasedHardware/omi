@@ -104,109 +104,40 @@ struct CaptureListeningControls: View {
   // MARK: Derived state (mirrors DashboardPage)
 
   private var captureStatus: HomeStatusState {
-    if appState.isScreenCaptureKitBroken || appState.isScreenRecordingStale || !appState.hasScreenRecordingPermission {
-      return .blocked
-    }
-    return isCaptureLive ? .active : .inactive
+    CaptureListeningLogic.captureStatus(appState: appState, isCaptureMonitoring: isCaptureMonitoring)
   }
 
   private var isCaptureLive: Bool {
-    isCaptureMonitoring || ProactiveAssistantsPlugin.shared.isMonitoring
+    CaptureListeningLogic.isCaptureLive(isCaptureMonitoring: isCaptureMonitoring)
   }
 
   private var listeningCaptureMode: AssistantSettings.SystemAudioCaptureMode {
-    AssistantSettings.SystemAudioCaptureMode(rawValue: systemAudioCaptureModeRaw) ?? .onlyDuringMeetings
+    CaptureListeningLogic.listeningCaptureMode(raw: systemAudioCaptureModeRaw)
   }
 
   private var listeningModeTitle: String {
-    switch listeningCaptureMode {
-    case .always:
-      return "Always"
-    case .onlyDuringMeetings:
-      return appState.isAwaitingMeeting ? "Meetings only" : "In meeting"
-    case .never:
-      return "Mic only"
-    }
+    CaptureListeningLogic.listeningModeTitle(appState: appState, raw: systemAudioCaptureModeRaw)
   }
 
-  // MARK: Actions (mirrors DashboardPage)
+  // MARK: Actions (shared with DashboardPage via CaptureListeningLogic)
 
   private func toggleListening() {
-    let enabled = !appState.isTranscribing
-    if enabled && !appState.hasMicrophonePermission {
-      appState.requestMicrophonePermission()
-      return
-    }
-
-    isTogglingListening = true
-    transcriptionEnabled = enabled
-    AssistantSettings.shared.transcriptionEnabled = enabled
-    AnalyticsManager.shared.settingToggled(setting: "transcription", enabled: enabled)
-    NotificationCenter.default.post(
-      name: .toggleTranscriptionRequested,
-      object: nil,
-      userInfo: ["enabled": enabled]
-    )
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-      isTogglingListening = false
-    }
+    CaptureListeningLogic.toggleListening(
+      appState: appState, transcriptionEnabled: $transcriptionEnabled, isTogglingListening: $isTogglingListening)
   }
 
   private func toggleListeningMode() {
-    let nextMode: AssistantSettings.SystemAudioCaptureMode =
-      listeningCaptureMode == .onlyDuringMeetings ? .always : .onlyDuringMeetings
-    systemAudioCaptureModeRaw = nextMode.rawValue
-    AssistantSettings.shared.systemAudioCaptureMode = nextMode
-    AnalyticsManager.shared.settingToggled(
-      setting: "meetings_only_listening",
-      enabled: nextMode == .onlyDuringMeetings
-    )
+    CaptureListeningLogic.toggleListeningMode(raw: $systemAudioCaptureModeRaw)
   }
 
   private func toggleCapture() {
-    syncCaptureState()
-    let enabled = !isCaptureLive
-    isTogglingCapture = true
-
-    if enabled {
-      ProactiveAssistantsPlugin.shared.refreshScreenRecordingPermission()
-      guard ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission else {
-        screenAnalysisEnabled = false
-        isCaptureMonitoring = false
-        isTogglingCapture = false
-        ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
-        return
-      }
-    }
-
-    screenAnalysisEnabled = enabled
-    AssistantSettings.shared.screenAnalysisEnabled = enabled
-    AnalyticsManager.shared.settingToggled(setting: "monitoring", enabled: enabled)
-
-    if enabled {
-      ProactiveAssistantsPlugin.shared.startMonitoring { success, _ in
-        DispatchQueue.main.async {
-          isTogglingCapture = false
-          isCaptureMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
-          if !success {
-            screenAnalysisEnabled = false
-            AssistantSettings.shared.screenAnalysisEnabled = false
-            isCaptureMonitoring = false
-          }
-        }
-      }
-    } else {
-      ProactiveAssistantsPlugin.shared.stopMonitoring()
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-        isTogglingCapture = false
-        isCaptureMonitoring = false
-      }
-    }
+    CaptureListeningLogic.toggleCapture(
+      appState: appState, screenAnalysisEnabled: $screenAnalysisEnabled,
+      isCaptureMonitoring: $isCaptureMonitoring, isTogglingCapture: $isTogglingCapture)
   }
 
   private func syncCaptureState() {
-    ProactiveAssistantsPlugin.shared.refreshScreenRecordingPermission()
-    screenAnalysisEnabled = AssistantSettings.shared.screenAnalysisEnabled
-    isCaptureMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
+    CaptureListeningLogic.syncCaptureState(
+      screenAnalysisEnabled: $screenAnalysisEnabled, isCaptureMonitoring: $isCaptureMonitoring)
   }
 }
