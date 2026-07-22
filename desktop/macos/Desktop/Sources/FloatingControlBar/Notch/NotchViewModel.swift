@@ -122,11 +122,12 @@ final class NotchViewModel: ObservableObject {
 
   var currentOpenContentSize: CGSize { openContentSize(for: selectedTab) }
 
-  /// Fixed, restrained width for the expanded voice states; only the HEIGHT
-  /// grows with the measured content (transcript / streaming reply), so the
-  /// island grows downward out of the notch as the user speaks or the answer
-  /// streams — the Dynamic Island grow, not a wide pop.
-  var voiceWidth: CGFloat { clampValue(screenFrame.width * 0.24, 300, 380) }
+  /// Fixed width for the expanded voice states (listening / responding); only
+  /// the HEIGHT grows with the measured content, so the island grows downward
+  /// out of the notch as the user speaks or the answer streams — the Dynamic
+  /// Island grow, not a wide pop. Thinking narrows to a compact pill and the
+  /// width morphs between them.
+  var voiceWidth: CGFloat { clampValue(screenFrame.width * 0.27, 340, 430) }
   var voiceMinHeight: CGFloat { clampValue(closedNotchSize.height + 82, 120, 168) }
 
   var voiceExpandedSize: CGSize {
@@ -135,9 +136,10 @@ final class NotchViewModel: ObservableObject {
   }
 
   /// The compact pill between listening and responding: camera strip + the orb
-  /// (now the rotating ring), centered — no text.
+  /// (now the rotating ring), centered — no text. Distinctly narrower than the
+  /// expanded voice width so the width visibly contracts into "thinking".
   var thinkingSize: CGSize {
-    CGSize(width: clampValue(closedNotchSize.width - 60, 200, 260), height: closedNotchSize.height + 42)
+    CGSize(width: clampValue(closedNotchSize.width * 0.6, 170, 215), height: closedNotchSize.height + 42)
   }
 
   var hintSize: CGSize {

@@ -90,8 +90,10 @@ final class OrbModel {
     let n = Self.count
     let side = min(size.width, size.height)
     let center = CGPoint(x: size.width / 2, y: size.height / 2)
-    let ringRadius = side * 0.32
-    let dotDiameter = side * 0.20
+    // Match NotchOmiMark exactly so the ring reads as the Omi logo: the same 8
+    // dots that then stretch into the waveform bars.
+    let ringRadius = side * 0.33
+    let dotDiameter = side * 0.18
 
     let span = size.width * 0.86
     let step = span / CGFloat(n)
