@@ -92,6 +92,32 @@ def test_recovery_profile_allows_only_exact_image_and_redis_transition(recovery:
     ]
 
 
+def test_recovery_profile_strips_only_hpa_owned_live_replicas(recovery: SimpleNamespace):
+    live = deployment(
+        "gcr.io/project/pusher:2ae7f78", {"secretKeyRef": {"name": "prod-omi-backend-secrets", "key": "REDIS_DB_HOST"}}
+    )
+    live["spec"]["replicas"] = 7
+    rendered = deployment(f"gcr.io/project/pusher@{DIGEST}")
+
+    assert recovery.allowed_recovery_drift(live, rendered, autoscaling_enabled=True) == []
+    assert recovery.allowed_recovery_drift(live, rendered, autoscaling_enabled=False) == [
+        "recovery profile would change Deployment fields outside the exact image and REDIS_DB_HOST transition"
+    ]
+
+    rendered["spec"]["replicas"] = 8
+    assert recovery.allowed_recovery_drift(live, rendered, autoscaling_enabled=True) == [
+        "recovery profile would change Deployment fields outside the exact image and REDIS_DB_HOST transition"
+    ]
+
+
+def test_hpa_replica_normalization_requires_the_exact_deployment_target(recovery: SimpleNamespace):
+    hpa = {"spec": {"scaleTargetRef": {"apiVersion": "apps/v1", "kind": "Deployment", "name": "prod-omi-pusher"}}}
+    assert recovery.hpa_controls_deployment(hpa, "prod-omi-pusher")
+
+    hpa["spec"]["scaleTargetRef"]["name"] = "other-deployment"
+    assert not recovery.hpa_controls_deployment(hpa, "prod-omi-pusher")
+
+
 def test_recovery_profile_ignores_api_server_deployment_defaults(recovery: SimpleNamespace):
     """Live Deployments include controller-populated fields absent from helm template output."""
     live = deployment(
@@ -250,6 +276,20 @@ def test_chart_only_workflow_skips_build_push_and_normal_paths_stay_available():
     assert "if: env.SERVICE == 'pusher' && env.CHART_ONLY != 'true'" in workflow
     assert "if: env.SERVICE == 'pusher' && env.CHART_ONLY == 'true'" in workflow
     assert "--expected-evidence pusher-recovery-evidence.json" in workflow
+
+
+def test_chart_only_preapply_gate_recaptures_all_chart_owned_resources():
+    workflow = (SCRIPT.parents[2] / ".github/workflows/gcp_backend_pusher.yml").read_text(encoding="utf-8")
+    preapply = workflow.split("# Re-read the live objects immediately before mutation.", 1)[1].split(
+        'helm -n "$NAMESPACE" upgrade', 1
+    )[0]
+
+    for kind, snapshot in (("service", "service"), ("hpa", "hpa"), ("pdb", "pdb")):
+        assert (
+            f'kubectl -n "$NAMESPACE" get {kind} "$RELEASE" -o json > .pusher-recovery-snapshot/preapply-{snapshot}.json'
+            in preapply
+        )
+        assert f"--live-{kind} .pusher-recovery-snapshot/preapply-{snapshot}.json" in preapply
 
 
 def test_chart_renders_exact_digest_and_rejects_ambiguous_or_mutated_repository():

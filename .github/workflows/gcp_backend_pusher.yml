@@ -354,6 +354,9 @@ jobs:
               RELEASE="${{ vars.ENV }}-omi-pusher"
               kubectl -n "$NAMESPACE" get deployment "$RELEASE" -o json > .pusher-recovery-snapshot/preapply-deployment.json
               kubectl -n "$NAMESPACE" get configmap "${{ vars.ENV }}-omi-backend-config" -o json > .pusher-recovery-snapshot/preapply-configmap.json
+              kubectl -n "$NAMESPACE" get service "$RELEASE" -o json > .pusher-recovery-snapshot/preapply-service.json
+              kubectl -n "$NAMESPACE" get hpa "$RELEASE" -o json > .pusher-recovery-snapshot/preapply-hpa.json
+              kubectl -n "$NAMESPACE" get pdb "$RELEASE" -o json > .pusher-recovery-snapshot/preapply-pdb.json
               kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/instance="$RELEASE" -o json > .pusher-recovery-snapshot/preapply-pods.json
               kubectl -n "$NAMESPACE" get ingress "$RELEASE" -o json > .pusher-recovery-snapshot/preapply-ingress.json
               kubectl -n "$NAMESPACE" get serviceaccount "$RELEASE" -o json > .pusher-recovery-snapshot/preapply-serviceaccount.json
@@ -364,9 +367,9 @@ jobs:
                 --digest "${{ github.event.inputs.image_digest }}" --ready-baseline "${{ github.event.inputs.ready_baseline }}" \
                 --live-deployment .pusher-recovery-snapshot/preapply-deployment.json \
                 --live-configmap .pusher-recovery-snapshot/preapply-configmap.json \
-                --live-service .pusher-recovery-snapshot/service.json \
-                --live-hpa .pusher-recovery-snapshot/hpa.json \
-                --live-pdb .pusher-recovery-snapshot/pdb.json \
+                --live-service .pusher-recovery-snapshot/preapply-service.json \
+                --live-hpa .pusher-recovery-snapshot/preapply-hpa.json \
+                --live-pdb .pusher-recovery-snapshot/preapply-pdb.json \
                 --live-ingress .pusher-recovery-snapshot/preapply-ingress.json \
                 --live-serviceaccount .pusher-recovery-snapshot/preapply-serviceaccount.json \
                 --live-backendconfig .pusher-recovery-snapshot/preapply-backendconfig.json \

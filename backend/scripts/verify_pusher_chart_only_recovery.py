@@ -248,7 +248,9 @@ def strategic_merge(live: Any, desired: Any) -> Any:
     return merged
 
 
-def allowed_recovery_drift(live: dict[str, Any], rendered: dict[str, Any]) -> list[str]:
+def allowed_recovery_drift(
+    live: dict[str, Any], rendered: dict[str, Any], *, autoscaling_enabled: bool = False
+) -> list[str]:
     """Compare chart-owned objects after replacing only image and REDIS source."""
     adapted = copy.deepcopy(live)
     try:
@@ -258,11 +260,22 @@ def allowed_recovery_drift(live: dict[str, Any], rendered: dict[str, Any]) -> li
         live_container["env"] = replace_env_by_name(live_container.get("env", []), redis_entry(rendered))
     except ValueError as exc:
         return [str(exc)]
+    # The HPA is the replica-count authority.  Helm intentionally omits the
+    # Deployment replica count when that HPA is present; only discard the
+    # live controller value in that exact case.  Never strip a rendered value.
+    if autoscaling_enabled:
+        adapted.get("spec", {}).pop("replicas", None)
     return (
         []
         if normalize(adapted) == normalize(rendered)
         else ["recovery profile would change Deployment fields outside the exact image and REDIS_DB_HOST transition"]
     )
+
+
+def hpa_controls_deployment(hpa: dict[str, Any], deployment_name: str) -> bool:
+    """Return true only for an apps/v1 HPA targetting this exact Deployment."""
+    target = hpa.get("spec", {}).get("scaleTargetRef")
+    return target == {"apiVersion": "apps/v1", "kind": "Deployment", "name": deployment_name}
 
 
 def validate_chart_owned_resource_drift(live: dict[str, Any], rendered: dict[str, Any], kind: str) -> list[str]:
@@ -354,7 +367,19 @@ def preflight(args: argparse.Namespace) -> list[str]:
     except ValueError as exc:
         failures.append(str(exc))
     failures += validate_redis_source(rendered, configmap_name)
-    failures += allowed_recovery_drift(live, rendered)
+    autoscaling_enabled = False
+    if args.live_hpa:
+        try:
+            live_hpa = load_object(args.live_hpa)
+            rendered_hpa = rendered_resource(args.rendered, "HorizontalPodAutoscaler", release)
+            autoscaling_enabled = hpa_controls_deployment(live_hpa, deployment_name) and hpa_controls_deployment(
+                rendered_hpa, deployment_name
+            )
+        except ValueError:
+            # The normal chart-owned resource validation below reports the
+            # malformed or missing HPA.  Keep Deployment replicas fail-closed.
+            pass
+    failures += allowed_recovery_drift(live, rendered, autoscaling_enabled=autoscaling_enabled)
     if not args.live_pods:
         failures.append("recovery preflight is missing live Pusher pod image-status evidence")
     else:
