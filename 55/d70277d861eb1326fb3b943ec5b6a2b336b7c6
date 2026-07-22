@@ -1,0 +1,26 @@
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_77f2b8dfbc2e90::t_ccf57ebfac34ca 254
+  s_77f2b8dfbc2e90::t_0ba1a0f9c223ee 799-805,816-862
+  s_77f2b8dfbc2e90::t_dc31dfe6670e2a 1295-1296,1298
+  s_77f2b8dfbc2e90::t_28aaf523be9993 863
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_77f2b8dfbc2e90::t_7dbd514c77dcd0 5,13
+desktop/macos/changelog/unreleased/20260722-sb-home-chat.json
+  s_77f2b8dfbc2e90::t_809a759894f9e1 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "55d70277d861eb1326fb3b943ec5b6a2b336b7c6",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
