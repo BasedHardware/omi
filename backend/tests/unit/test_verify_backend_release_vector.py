@@ -1065,7 +1065,7 @@ def test_production_cloud_run_only_boundary_smokes_serving_after_promotion():
     assert 'https://api.omi.me/v2/desktop/beta/candidates/reserve' in workflow
     assert '--candidate-api-url https://api.omi.me' in workflow
     assert 'firebase-production-serving-token' in workflow
-    assert '--data \'{"tag":"macos-unauthenticated-smoke"}\'' in workflow
+    assert '--data \'{"tag":"v0.0.0+1-macos"}\'' in workflow
     assert "--data '{}')" not in workflow
     assert "steps.smoke-promoted-production-serving-api.outcome == 'failure'" in workflow
     assert 'CLOUD_RUN_ONLY="--cloud-run-only"' in workflow

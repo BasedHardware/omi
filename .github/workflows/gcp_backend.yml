@@ -897,7 +897,7 @@ jobs:
             --token-output "$token_file"
           reservation_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
             --request POST https://api.omi.me/v2/desktop/beta/candidates/reserve \
-            --header 'Content-Type: application/json' --data '{"tag":"macos-unauthenticated-smoke"}')"
+            --header 'Content-Type: application/json' --data '{"tag":"v0.0.0+1-macos"}')"
           # A schema-valid inert tag reaches the authorization wall without reserving a real candidate.
           test "$reservation_status" = 401
           python3 "$DEPLOY_CONTROL_SCRIPTS/transcription_capability_probe.py" \
