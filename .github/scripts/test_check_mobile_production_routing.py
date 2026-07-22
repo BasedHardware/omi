@@ -167,13 +167,11 @@ class MobileProductionRoutingContractTests(unittest.TestCase):
                     self.assertTrue(CHECKER.validate(root))
 
     def test_rejects_separate_beta_or_divergent_production_family_identity(self) -> None:
+        # INV-BETA-1: com.omi.computer-macos.beta is the single sanctioned second
+        # production identity (side-by-side Omi Beta); only OTHER divergent
+        # identities remain rejected.
         original = (ROOT / "desktop/macos/Desktop/Sources/AppBuild.swift").read_text(encoding="utf-8")
         mutations = {
-            "separate beta identity": (
-                '  static let betaProductionBundleIdentifier = "com.omi.computer-macos.beta"\n'
-                '  static let productionFamilyBundleIdentifiers = [productionBundleIdentifier]',
-                "com.omi.computer-macos.beta",
-            ),
             "divergent production-family identity": (
                 '  static let betaProductionBundleIdentifier = "com.omi.computer-macos.beta"\n'
                 '  static let productionFamilyBundleIdentifiers = [\n'
