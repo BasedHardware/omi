@@ -228,7 +228,7 @@ struct DashboardPage: View {
   /// knows-list alongside tasks and asks, not just on the Insights page.
   @ObservedObject private var insightStorage = InsightStorage.shared
   @State private var dismissedKnowsTaskIDs: Set<String> = []
-  @State private var homeHistoryAutoOpenPolicy = HomeStageHistoryAutoOpenPolicy()
+  @State private var homeAskFocusPolicy = HomeAskFocusPolicy()
   @Binding var selectedIndex: Int
   @State private var citedConversation: ServerConversation? = nil
   @State private var selectedCatalogApp: OmiApp?
@@ -566,7 +566,7 @@ struct DashboardPage: View {
       }
       .onReceive(NotificationCenter.default.publisher(for: .homeStageClose)) { _ in
         guard !useLegacyHomeDesign else { return }
-        closeHomeStagePanel()
+        collapseHomeStagePanel()
       }
       .onReceive(NotificationCenter.default.publisher(for: .homeStageAsk)) { note in
         guard !useLegacyHomeDesign,
@@ -1318,8 +1318,13 @@ struct DashboardPage: View {
   }
 
   private func focusHomeAskFieldAfterStageTransition() {
+    let token = homeAskFocusPolicy.currentToken()
     Task { @MainActor in
       await Task.yield()
+      // A deferred focus is stale once anything connects / collapses / closes
+      // (each bumps the policy's generation), and must never land on a non-chat
+      // stage — both would route back through the focus observer into chat.
+      guard homeAskFocusPolicy.isCurrent(token), homeMode == .chat else { return }
       homeAskFieldFocused = true
     }
   }
@@ -1332,11 +1337,12 @@ struct DashboardPage: View {
     .chat
   }
 
-  /// User-facing collapse (click outside, Esc, connect ×): returns to the
-  /// resting surface. The automation bridge's `home_close_panel` keeps the
-  /// unconditional hub jump via `closeHomeStagePanel`.
+  /// User-facing collapse (click outside, Esc, connect ×) and the automation
+  /// bridge's `home_close_panel`: returns to the resting surface. There is a
+  /// single close path now — the bridge no longer force-jumps to the hub.
   private func collapseHomeStagePanel() {
     homeAskFieldFocused = false
+    homeAskFocusPolicy.invalidate()
     OmiMotion.withGated(Self.homeStageAnimation) {
       homeMode = homeRestingMode
     }
@@ -1344,21 +1350,13 @@ struct DashboardPage: View {
   }
 
   private func toggleHomeConnectPanel() {
+    homeAskFocusPolicy.invalidate()
     let target: HomeStageMode = homeMode == .connect ? homeRestingMode : .connect
     if target == .connect {
       homeAskFieldFocused = false
     }
     OmiMotion.withGated(Self.homeStageAnimation) {
       homeMode = target
-    }
-    reportHomeAutomationMode()
-  }
-
-  private func closeHomeStagePanel() {
-    homeAskFieldFocused = false
-    homeHistoryAutoOpenPolicy.suppressAutoOpenForExplicitHubClose()
-    OmiMotion.withGated(Self.homeStageAnimation) {
-      homeMode = .hub
     }
     reportHomeAutomationMode()
   }

@@ -1539,7 +1539,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "home_close_panel",
-      summary: "Collapse Home back to the hub (same as Esc / the close buttons)"
+      summary: "Collapse Home back to its resting surface (same as Esc / the close buttons)"
     ) { _ in
       NotificationCenter.default.post(name: .homeStageClose, object: nil)
       return nil
