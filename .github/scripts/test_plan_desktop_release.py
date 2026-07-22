@@ -94,10 +94,10 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertNotIn(f"source_sha={LATER_NON_DESKTOP_SHA}", outputs)
         self.assertIn("should_release=true", outputs)
 
-    def test_workflow_is_schedule_only_and_tags_the_changelog_commit(self) -> None:
+    def test_workflow_has_no_input_manual_trigger_and_tags_the_changelog_commit(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("workflow_dispatch:\n  schedule:", workflow)
         self.assertIn("- cron: '17 * * * *'", workflow)
-        self.assertNotIn("workflow_dispatch:", workflow)
         self.assertNotIn("break_glass", workflow)
         self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
