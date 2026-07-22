@@ -11,7 +11,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 GITLINK_RELATIVE = Path("omiGlass/firmware/.pio/libdeps/seeed_xiao_esp32s3/libopus")
 PRECLEAN_NAME = "Remove stale uninitialized PlatformIO gitlink"
@@ -168,16 +167,12 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertEqual(beta.count("/v2/desktop/beta/promote-qualified"), 1)
 
     def test_beta_qualification_workflow_uses_supported_exact_cli(self) -> None:
-        qualification_script = (ROOT / "desktop/macos/scripts/qualify-desktop-beta.sh").read_text(
-            encoding="utf-8"
-        )
+        qualification_script = (ROOT / "desktop/macos/scripts/qualify-desktop-beta.sh").read_text(encoding="utf-8")
         supported_options = set(re.findall(r"^    (--[a-z0-9-]+)\)$", qualification_script, re.MULTILINE))
         for job_id, job in zip(self.FALLBACK_JOB_IDS, self._fallback_jobs()):
             with self.subTest(job=job_id):
                 qualify_step = self._qualification_step("Qualify exact candidate on hermetic stack", job)
-                invoked_options = tuple(
-                    re.findall(r"^\s+(--[a-z0-9-]+)(?:\s+[^\\]+)? \\$", qualify_step, re.MULTILINE)
-                )
+                invoked_options = tuple(re.findall(r"^\s+(--[a-z0-9-]+)(?:\s+[^\\]+)? \\$", qualify_step, re.MULTILINE))
                 self.assertEqual(
                     invoked_options,
                     (
@@ -214,9 +209,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
                 self.assertLess(qualify_job.index(PRECLEAN_NAME), qualify_job.index(checkout_name))
                 self.assertLess(qualify_job.index(checkout_name), qualify_job.index(POSTCLEAN_NAME))
                 self.assertLess(qualify_job.index(attach_name), qualify_job.index(POSTCLEAN_NAME))
-                self.assertEqual(
-                    re.findall(r"^      - name: (.+)$", qualify_job, re.MULTILINE)[-1], POSTCLEAN_NAME
-                )
+                self.assertEqual(re.findall(r"^      - name: (.+)$", qualify_job, re.MULTILINE)[-1], POSTCLEAN_NAME)
 
                 preclean_step = self._qualification_step(PRECLEAN_NAME, qualify_job)
                 postclean_step = self._qualification_step(POSTCLEAN_NAME, qualify_job)
@@ -239,12 +232,8 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         # Each fallback lane pins its own machine label on top of the shared
         # qualification labels, so one sick-but-online machine cannot absorb
         # the only fallback attempt.
-        self.assertIn(
-            "runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m1-studio]", m1_job
-        )
-        self.assertIn(
-            "runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m4-mini]", m4_job
-        )
+        self.assertIn("runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m1-studio]", m1_job)
+        self.assertIn("runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m4-mini]", m4_job)
 
         # Lanes are serialized and each runs only when no earlier lane
         # qualified; offline runners are skipped rather than queue-stalled.
@@ -377,7 +366,15 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             self.assertNotIn("beta-breakglass", hatch)
             self.assertIn("/v2/desktop/beta/breakglass", hatch)
             self.assertIn(operation, hatch)
-            for required in ("incident_url", "reason", "current_release_id", "target_release_id", "expected_generation", "github.run_id", "github.actor"):
+            for required in (
+                "incident_url",
+                "reason",
+                "current_release_id",
+                "target_release_id",
+                "expected_generation",
+                "github.run_id",
+                "github.actor",
+            ):
                 self.assertIn(required, hatch)
             self.assertNotIn("stable", hatch.lower().replace("macos-beta", ""))
         self.assertIn("normal_path_unavailable", rollout)

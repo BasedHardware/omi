@@ -91,9 +91,7 @@ def test_preflight_docker_runtime_reports_dead_daemon(monkeypatch: pytest.Monkey
     assert any("docker daemon" in item for item in missing)
 
 
-def test_native_command_uses_binary_and_pinned_loopback_port(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_native_command_uses_binary_and_pinned_loopback_port(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     binary = tmp_path / "typesense-server"
     binary.write_text("#!/bin/sh\n", encoding="utf-8")
     monkeypatch.setenv("OMI_TYPESENSE_RUNTIME", "native")
@@ -128,9 +126,7 @@ def test_docker_command_keeps_pinned_image(monkeypatch: pytest.MonkeyPatch, tmp_
     assert f"typesense/typesense:{config.TYPESENSE_PINNED_VERSION}" in command
 
 
-def test_preflight_native_runtime_reports_missing_binary(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_preflight_native_runtime_reports_missing_binary(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("PROVIDER_MODE", "offline")
     monkeypatch.setenv("OMI_TYPESENSE_RUNTIME", "native")
     monkeypatch.delenv("OMI_TYPESENSE_SERVER_BIN", raising=False)
