@@ -287,20 +287,10 @@ def decide(
     }
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--ref-json", type=Path, required=True)
-    parser.add_argument("--annotated-tag-json", type=Path)
-    parser.add_argument("--runs-json", type=Path, required=True)
-    parser.add_argument("--jobs-dir", type=Path, required=True)
-    parser.add_argument("--release-tag", required=True)
-    parser.add_argument("--current-run-id", type=int)
-    parser.add_argument("--output", type=Path)
-    parser.add_argument("--require-admitted", action="store_true")
-    args = parser.parse_args()
-
+def load_attempt_authority(jobs_dir: Path) -> dict[int, dict[int, Any]]:
+    """Load the exact `(run_id, attempt)` evidence tree, rejecting ambiguity."""
     jobs_by_run: dict[int, dict[int, Any]] = {}
-    for run_directory in args.jobs_dir.iterdir():
+    for run_directory in jobs_dir.iterdir():
         try:
             if not run_directory.is_dir():
                 raise ValueError("attempt authority entry is not a directory")
@@ -319,6 +309,22 @@ def main() -> int:
                 raise ValueError(f"jobs directory has duplicate authority for workflow run {run_id} attempt {attempt}")
             attempts[attempt] = _load(path)
         jobs_by_run[run_id] = attempts
+    return jobs_by_run
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ref-json", type=Path, required=True)
+    parser.add_argument("--annotated-tag-json", type=Path)
+    parser.add_argument("--runs-json", type=Path, required=True)
+    parser.add_argument("--jobs-dir", type=Path, required=True)
+    parser.add_argument("--release-tag", required=True)
+    parser.add_argument("--current-run-id", type=int)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--require-admitted", action="store_true")
+    args = parser.parse_args()
+
+    jobs_by_run = load_attempt_authority(args.jobs_dir)
     decision = decide(
         _load(args.ref_json),
         _load(args.runs_json),

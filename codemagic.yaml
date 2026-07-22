@@ -2896,22 +2896,14 @@ workflows:
           dispatch_dir=/tmp/desktop-beta-qualification-dispatch
           rm -rf "$dispatch_dir"
           mkdir -p "$dispatch_dir"
-          GH_TOKEN="${GITHUB_TOKEN:?desktop_secrets GITHUB_TOKEN is required for qualification dispatch}" \
-            gh api "repos/$GITHUB_REPO/git/ref/tags/$CM_TAG" > "$dispatch_dir/ref.json"
-          tag_type=$(jq -r '.object.type // empty' "$dispatch_dir/ref.json")
-          case "$tag_type" in
-            commit)
-              CANDIDATE_SHA=$(jq -r '.object.sha // empty' "$dispatch_dir/ref.json")
-              ;;
-            tag)
-              tag_object_sha=$(jq -r '.object.sha // empty' "$dispatch_dir/ref.json")
-              [[ "$tag_object_sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'ERROR: malformed annotated candidate tag ref.' >&2; exit 1; }
-              GH_TOKEN="$GITHUB_TOKEN" gh api "repos/$GITHUB_REPO/git/tags/$tag_object_sha" > "$dispatch_dir/annotated-tag.json"
-              CANDIDATE_SHA=$(jq -r '.object.sha // empty' "$dispatch_dir/annotated-tag.json")
-              ;;
-            *) echo 'ERROR: malformed candidate tag ref.' >&2; exit 1 ;;
-          esac
+          [[ "$CM_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+-macos$ ]] || { echo 'ERROR: invalid immutable macOS candidate tag.' >&2; exit 1; }
+          git show-ref --verify --quiet "refs/tags/$CM_TAG" || { echo 'ERROR: local immutable candidate tag is absent.' >&2; exit 1; }
+          CANDIDATE_SHA=$(git rev-parse "$CM_TAG^{}")
+          CHECKOUT_SHA=$(git rev-parse 'HEAD^{}')
           [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'ERROR: malformed candidate commit SHA.' >&2; exit 1; }
+          [[ "$CHECKOUT_SHA" == "$CANDIDATE_SHA" ]] || { echo 'ERROR: checked-out source does not bind the immutable candidate tag.' >&2; exit 1; }
+          jq -n --arg tag "$CM_TAG" --arg sha "$CANDIDATE_SHA" \
+            '{ref: ("refs/tags/" + $tag), object: {type: "commit", sha: $sha}}' > "$dispatch_dir/ref.json"
           GH_TOKEN="$GITHUB_TOKEN" \
             gh api --paginate --slurp --method GET "repos/$GITHUB_REPO/actions/workflows/desktop_qualify_beta.yml/runs" \
               -f event=workflow_dispatch -f branch="$CM_TAG" -F per_page=100 \
@@ -2944,9 +2936,6 @@ workflows:
             --release-tag "$CM_TAG"
             --output "$dispatch_dir/decision.json"
           )
-          if [[ "$tag_type" == tag ]]; then
-            admission_args+=(--annotated-tag-json "$dispatch_dir/annotated-tag.json")
-          fi
           python3 ../../.github/scripts/desktop_beta_qualification_admission.py "${admission_args[@]}"
           if ! jq -e '.admitted == true' "$dispatch_dir/decision.json" >/dev/null; then
             echo "Skipping duplicate trusted qualification dispatch: $(jq -r .reason "$dispatch_dir/decision.json")"

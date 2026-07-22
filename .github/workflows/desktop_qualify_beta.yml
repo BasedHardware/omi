@@ -70,18 +70,23 @@ jobs:
           esac
           [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Malformed candidate commit SHA.' >&2; exit 1; }
           gh api --paginate --slurp --method GET "repos/$REPO/actions/workflows/desktop_qualify_beta.yml/runs" \
-            -f event=workflow_dispatch -f branch="$RELEASE_TAG" -F per_page=100 > "$admission_dir/runs.json"
+            -f event=workflow_dispatch -f branch="$RELEASE_TAG" -F per_page=100 \
+            > "$admission_dir/runs.json"
           mkdir -p "$admission_dir/jobs"
           [[ "$CURRENT_RUN_ID" =~ ^[1-9][0-9]*$ ]] || { echo 'Malformed current workflow run ID.' >&2; exit 1; }
           attempt_authorities=0
           while IFS=$'\t' read -r run_id run_attempt; do
             [[ "$run_id" =~ ^[1-9][0-9]*$ ]] || { echo 'Malformed workflow run ID.' >&2; exit 1; }
-            if ! [[ "$run_attempt" =~ ^[1-9][0-9]*$ ]] || (( run_attempt > 10 )); then echo 'Malformed or excessive workflow run attempt.' >&2; exit 1; fi
+            if ! [[ "$run_attempt" =~ ^[1-9][0-9]*$ ]] || (( run_attempt > 10 )); then
+              echo 'Malformed or excessive workflow run attempt.' >&2
+              exit 1
+            fi
             attempt_authorities=$((attempt_authorities + run_attempt))
             (( attempt_authorities <= 30 )) || { echo 'Excessive workflow attempt authority.' >&2; exit 1; }
             mkdir -p "$admission_dir/jobs/$run_id"
             for ((attempt = 1; attempt <= run_attempt; attempt++)); do
-              gh api --paginate --slurp --method GET "repos/$REPO/actions/runs/$run_id/attempts/$attempt/jobs" -F per_page=100 > "$admission_dir/jobs/$run_id/$attempt.json"
+              gh api --paginate --slurp --method GET "repos/$REPO/actions/runs/$run_id/attempts/$attempt/jobs" -F per_page=100 \
+                > "$admission_dir/jobs/$run_id/$attempt.json"
             done
           done < <(jq -r --arg tag "$RELEASE_TAG" --arg sha "$CANDIDATE_SHA" --argjson current "$CURRENT_RUN_ID" '
             [].workflow_runs[] | select(.id != $current and .path == ".github/workflows/desktop_qualify_beta.yml" and .event == "workflow_dispatch" and .head_branch == $tag and .head_sha == $sha) | [.id, .run_attempt] | @tsv
@@ -205,9 +210,10 @@ jobs:
           STABLE_DMG=/tmp/desktop-beta-qualification/assets/omi.dmg
           test -n "$STABLE_DMG"
           # Side-by-side Omi Beta assets are optional until every release ships them.
-          BETA_EVIDENCE_ASSETS=""
+          beta_evidence_assets=()
           if [ -f /tmp/desktop-beta-qualification/assets/Omi.Beta.zip ]; then
-            BETA_EVIDENCE_ASSETS="--asset Omi.Beta.zip=/tmp/desktop-beta-qualification/assets/Omi.Beta.zip --asset omi-beta.dmg=/tmp/desktop-beta-qualification/assets/omi-beta.dmg"
+            beta_evidence_assets+=(--asset Omi.Beta.zip=/tmp/desktop-beta-qualification/assets/Omi.Beta.zip)
+            beta_evidence_assets+=(--asset omi-beta.dmg=/tmp/desktop-beta-qualification/assets/omi-beta.dmg)
           fi
           python3 .github/scripts/desktop_qualification_evidence.py build \
             --release-json /tmp/desktop-beta-qualification/release.json \
@@ -216,7 +222,7 @@ jobs:
             --qualification-run-id "$GITHUB_RUN_ID" \
             --asset Omi.zip=/tmp/desktop-beta-qualification/assets/Omi.zip \
             --asset "omi.dmg=$STABLE_DMG" \
-            $BETA_EVIDENCE_ASSETS \
+            "${beta_evidence_assets[@]}" \
             --evidence /tmp/desktop-beta-qualification/qualification-evidence.json
 
       - name: Upload immutable qualification evidence

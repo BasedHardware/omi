@@ -50,9 +50,10 @@ def _release(*, tag: str = TAG, channel: str = "candidate", is_live: str = "fals
 
 
 def _run(*, status="completed", conclusion="failure", branch=TAG, sha=SHA,
-         updated=NOW_ISO, run_id=1) -> dict:
+         updated=NOW_ISO, run_id=1, run_attempt=1) -> dict:
     return {
         "id": run_id,
+        "run_attempt": run_attempt,
         "status": status,
         "conclusion": conclusion,
         "event": "workflow_dispatch",
@@ -65,10 +66,26 @@ def _run(*, status="completed", conclusion="failure", branch=TAG, sha=SHA,
     }
 
 
-def _decide(release, runs, **overrides):
+def _jobs(*, conclusion="failure", started=True):
+    qualify = {"id": 2, "name": "qualify", "status": "completed", "conclusion": conclusion}
+    if started:
+        qualify["started_at"] = NOW_ISO
+    return {"total_count": 2, "jobs": [{"id": 1, "name": "admit", "status": "completed", "conclusion": "success"}, qualify]}
+
+
+def _response(runs):
+    return {"total_count": len(runs), "workflow_runs": runs}
+
+
+def _decide(release, runs, *, jobs_by_run=None, **overrides):
+    if jobs_by_run is None:
+        jobs_by_run = {
+            run["id"]: {attempt: _jobs() for attempt in range(1, run["run_attempt"] + 1)}
+            for run in runs if run.get("head_branch") == TAG and run.get("head_sha") == SHA
+        }
     kwargs = dict(release_tag=TAG, tag_sha=SHA, max_attempts=3, max_age_hours=24)
     kwargs.update(overrides)
-    return retry.decide(release, runs, **kwargs)
+    return retry.decide(release, _response(runs), jobs_by_run=jobs_by_run, **kwargs)
 
 
 class RetryDecisionTests(unittest.TestCase):
@@ -142,9 +159,9 @@ class RetryDecisionTests(unittest.TestCase):
         self.assertIn("unattempted", d["reason"])
 
     def test_in_progress_denies(self):
-        for status in ("in_progress", "queued", "waiting"):
+        for status in ("in_progress", "queued"):
             with self.subTest(status=status):
-                d = _decide(_release(), [_run(status=status)])
+                d = _decide(_release(), [_run(status=status, conclusion=None)])
                 self.assertFalse(d["should_retry"])
                 self.assertIn("in-progress", d["reason"])
 
@@ -210,11 +227,11 @@ class RetryDecisionTests(unittest.TestCase):
         self.assertEqual(d["attempts_so_far"], 3)
         self.assertIn("bound", d["reason"])
 
-    def test_duplicate_run_records_count_as_one_attempt(self):
+    def test_duplicate_run_records_fail_closed(self):
         run = _run(conclusion="failure", run_id=7)
         d = _decide(_release(), [run, copy.deepcopy(run)])
-        self.assertTrue(d["should_retry"])
-        self.assertEqual(d["attempts_so_far"], 1)
+        self.assertFalse(d["should_retry"])
+        self.assertIn("authority", d["reason"])
 
     # --- exact tag + SHA binding (ignore other candidates' runs) ---
 
@@ -267,6 +284,52 @@ class RetryDecisionTests(unittest.TestCase):
         self.assertFalse(d["should_retry"])
         self.assertIn("in-progress", d["reason"])
 
+    # --- shared attempt-authority accounting ---
+
+    def test_admission_only_cancellations_do_not_consume_retry_bound(self):
+        runs = [_run(run_id=1, conclusion="cancelled"), _run(run_id=2, conclusion="cancelled"), _run(run_id=3)]
+        skipped = _jobs(conclusion="skipped")
+        d = _decide(
+            _release(), runs,
+            jobs_by_run={1: {1: skipped}, 2: {1: skipped}, 3: {1: _jobs(conclusion="failure")}},
+        )
+        self.assertTrue(d["should_retry"])
+        self.assertEqual(d["attempts_so_far"], 1)
+
+    def test_rerun_attempts_two_plus_one_reach_the_shared_bound(self):
+        runs = [_run(run_id=29949128798, run_attempt=2), _run(run_id=29946139071)]
+        d = _decide(
+            _release(), runs,
+            jobs_by_run={
+                29949128798: {1: _jobs(conclusion="failure"), 2: _jobs(conclusion="cancelled")},
+                29946139071: {1: _jobs(conclusion="failure")},
+            },
+        )
+        self.assertFalse(d["should_retry"])
+        self.assertEqual(d["attempts_so_far"], 3)
+
+    def test_earlier_started_rerun_counts_when_latest_prestart_cancelled(self):
+        run = _run(run_id=1, run_attempt=2, conclusion="cancelled")
+        d = _decide(
+            _release(), [run],
+            jobs_by_run={1: {1: _jobs(conclusion="failure"), 2: _jobs(conclusion="cancelled", started=False)}},
+        )
+        self.assertTrue(d["should_retry"])
+        self.assertEqual(d["attempts_so_far"], 1)
+
+    def test_missing_malformed_or_incomplete_attempt_authority_denies(self):
+        run = _run(run_id=1, run_attempt=2)
+        cases = (
+            {1: {1: _jobs()}},
+            {1: {1: {"total_count": 1, "jobs": []}, 2: _jobs()}},
+            {1: None},
+        )
+        for authority in cases:
+            with self.subTest(authority=authority):
+                d = _decide(_release(), [run], jobs_by_run=authority)
+                self.assertFalse(d["should_retry"])
+                self.assertIn("authority", d["reason"])
+
     def test_non_workflow_dispatch_runs_ignored(self):
         # Only workflow_dispatch qualification runs are authoritative.
         run = _run()
@@ -293,16 +356,20 @@ class CliOutputContractTests(unittest.TestCase):
         root = script.parent
         release_path = root / "_tmp_retry_release.json"
         runs_path = root / "_tmp_retry_runs.json"
+        jobs_dir = root / "_tmp_retry_jobs"
         out_path = root / "_tmp_retry_decision.json"
         try:
             release_path.write_text(json.dumps(_release()), encoding="utf-8")
-            runs_path.write_text(json.dumps([_run(conclusion="failure")]), encoding="utf-8")
+            runs_path.write_text(json.dumps(_response([_run(conclusion="failure")])), encoding="utf-8")
+            (jobs_dir / "1").mkdir(parents=True)
+            (jobs_dir / "1" / "1.json").write_text(json.dumps(_jobs()), encoding="utf-8")
             import subprocess
 
             result = subprocess.run(
                 ["python3", str(script), "decide",
                  "--release-json", str(release_path),
                  "--runs-json", str(runs_path),
+                 "--jobs-dir", str(jobs_dir),
                  "--release-tag", TAG, "--tag-sha", SHA,
                  "--output", str(out_path)],
                 check=True, text=True, capture_output=True,
@@ -314,6 +381,8 @@ class CliOutputContractTests(unittest.TestCase):
         finally:
             for p in (release_path, runs_path, out_path):
                 p.unlink(missing_ok=True)
+            import shutil
+            shutil.rmtree(jobs_dir, ignore_errors=True)
 
 
 class WorkflowContractTests(unittest.TestCase):
@@ -322,6 +391,17 @@ class WorkflowContractTests(unittest.TestCase):
                     "desktop_retry_beta_qualification.yml").read_text(encoding="utf-8")
         self.assertIn("          permission-actions: write\n", workflow)
         self.assertIn("          permission-contents: read\n", workflow)
+
+    def test_retry_gathers_bounded_exact_attempt_authority(self):
+        workflow = (Path(__file__).resolve().parents[1] / "workflows" /
+                    "desktop_retry_beta_qualification.yml").read_text(encoding="utf-8")
+        self.assertIn("gh api --paginate --slurp --method GET", workflow)
+        self.assertIn('branch="$LATEST_TAG"', workflow)
+        self.assertIn("actions/runs/$run_id/attempts/$attempt/jobs", workflow)
+        self.assertIn("run_attempt > 10", workflow)
+        self.assertIn("attempt_authorities > 30", workflow)
+        self.assertIn("--jobs-dir /tmp/desktop-beta-retry/jobs", workflow)
+        self.assertNotIn("runs?event=workflow_dispatch&per_page=100", workflow)
 
 
 if __name__ == "__main__":

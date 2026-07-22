@@ -62,16 +62,42 @@ jobs:
             --format='%(refname:strip=2)' 'refs/tags/v*-macos')
           test -n "$LATEST_TAG"
           TAG_SHA=$(git rev-list -n1 "$LATEST_TAG")
-          # Read-only production state: a release view plus the qualification
-          # run list. Transient API errors degrade to empty JSON, which the
-          # decision script turns into a safe "no" rather than a failed job.
+          # Read-only production state: exact-tag, paginated workflow attempts
+          # plus their attempt-specific job authority. Any API fault is fed to
+          # the decision script as malformed authority, which is always no-retry.
           gh release view "$LATEST_TAG" --repo "$REPO" \
             --json tagName,body,isDraft,isPrerelease,publishedAt,assets \
             > /tmp/desktop-beta-retry/release.json 2>/dev/null \
             || echo '{}' > /tmp/desktop-beta-retry/release.json
-          gh api "repos/$REPO/actions/workflows/desktop_qualify_beta.yml/runs?event=workflow_dispatch&per_page=100" \
-            --jq '.workflow_runs' > /tmp/desktop-beta-retry/runs.json 2>/dev/null \
-            || echo '[]' > /tmp/desktop-beta-retry/runs.json
+          mkdir -p /tmp/desktop-beta-retry/jobs
+          if ! gh api --paginate --slurp --method GET "repos/$REPO/actions/workflows/desktop_qualify_beta.yml/runs" \
+            -f event=workflow_dispatch -f branch="$LATEST_TAG" -F per_page=100 \
+            > /tmp/desktop-beta-retry/runs.json; then
+            echo '[]' > /tmp/desktop-beta-retry/runs.json
+          fi
+          attempt_authorities=0
+          while IFS=$'\t' read -r run_id run_attempt; do
+            [[ "$run_id" =~ ^[1-9][0-9]*$ ]] || { echo '[]' > /tmp/desktop-beta-retry/runs.json; break; }
+            if ! [[ "$run_attempt" =~ ^[1-9][0-9]*$ ]] || (( run_attempt > 10 )); then
+              echo '[]' > /tmp/desktop-beta-retry/runs.json
+              break
+            fi
+            attempt_authorities=$((attempt_authorities + run_attempt))
+            if (( attempt_authorities > 30 )); then
+              echo '[]' > /tmp/desktop-beta-retry/runs.json
+              break
+            fi
+            mkdir -p "/tmp/desktop-beta-retry/jobs/$run_id"
+            for ((attempt = 1; attempt <= run_attempt; attempt++)); do
+              if ! gh api --paginate --slurp --method GET "repos/$REPO/actions/runs/$run_id/attempts/$attempt/jobs" -F per_page=100 \
+                > "/tmp/desktop-beta-retry/jobs/$run_id/$attempt.json"; then
+                echo '[]' > /tmp/desktop-beta-retry/runs.json
+                break 2
+              fi
+            done
+          done < <(jq -r --arg tag "$LATEST_TAG" --arg sha "$TAG_SHA" '
+            [].workflow_runs[] | select(.path == ".github/workflows/desktop_qualify_beta.yml" and .event == "workflow_dispatch" and .head_branch == $tag and .head_sha == $sha) | [.id, .run_attempt] | @tsv
+          ' /tmp/desktop-beta-retry/runs.json)
           {
             echo "latest_tag=$LATEST_TAG"
             echo "tag_sha=$TAG_SHA"
@@ -84,6 +110,7 @@ jobs:
           python3 .github/scripts/desktop_beta_qualification_retry.py decide \
             --release-json /tmp/desktop-beta-retry/release.json \
             --runs-json /tmp/desktop-beta-retry/runs.json \
+            --jobs-dir /tmp/desktop-beta-retry/jobs \
             --release-tag "${{ steps.gather.outputs.latest_tag }}" \
             --tag-sha "${{ steps.gather.outputs.tag_sha }}" \
             --output /tmp/desktop-beta-retry/decision.json

@@ -71,6 +71,13 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertEqual(qualify_job.count(marker), 1)
         return qualify_job.split(marker, 1)[1].split("\n      - name:", 1)[0]
 
+    def _admission_step(self) -> str:
+        qualification = workflow("desktop_qualify_beta.yml")
+        admission = qualification.split("  admit:\n", 1)[1].split("\n  codemagic-lane:", 1)[0]
+        marker = "      - name: Fail-closed exact-candidate admission"
+        self.assertEqual(admission.count(marker), 1)
+        return admission.split(marker, 1)[1]
+
     def _gitlink_cleanup_script(self, name: str) -> str:
         script = self._qualification_step(name).split("        run: |\n", 1)[1]
         dedented = "\n".join(line[10:] if line.startswith("          ") else line for line in script.splitlines())
@@ -350,7 +357,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertIn("group: desktop-beta-qualification\n", qualification)
         self.assertNotIn("group: desktop-beta-qualification-${{ inputs.release_tag }}", qualification)
         self.assertIn("cancel-in-progress: false", qualification)
-        admission = self._qualification_step("Fail-closed exact-candidate admission")
+        admission = self._admission_step()
         self.assertIn("desktop_beta_qualification_admission.py", admission)
         self.assertIn("--current-run-id \"$CURRENT_RUN_ID\"", admission)
         self.assertIn("--require-admitted", admission)
@@ -407,6 +414,39 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertIn('--jobs-dir "$dispatch_dir/jobs"', dispatch)
         self.assertIn('gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO"', dispatch)
         self.assertIn('-f release_tag="$CM_TAG" --ref "$CM_TAG"', dispatch)
+
+    def test_codemagic_advisory_binds_the_local_immutable_tag_without_contents_api(self) -> None:
+        dispatch = codemagic().split("Dispatch trusted macOS beta qualification", 1)[1]
+        self.assertNotIn('repos/$GITHUB_REPO/git/ref/tags/', dispatch)
+        self.assertNotIn('repos/$GITHUB_REPO/git/tags/', dispatch)
+        binding = re.search(
+            r'(\[\[ "\$CM_TAG" =~ \^v.+?\]\].+?jq -n --arg tag "\$CM_TAG" --arg sha "\$CANDIDATE_SHA" \\\n'
+            r'\s+\'.+?\' > "\$dispatch_dir/ref\.json")',
+            dispatch,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(binding)
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+            for args in (("init", "-q"), ("config", "user.name", "Contract Test"), ("config", "user.email", "contract@example.com")):
+                subprocess.run(["git", *args], cwd=repo, env=env, check=True)
+            (repo / "candidate").write_text("candidate\n", encoding="utf-8")
+            subprocess.run(["git", "add", "candidate"], cwd=repo, env=env, check=True)
+            subprocess.run(["git", "commit", "-qm", "candidate"], cwd=repo, env=env, check=True)
+            tag = "v1.2.3+1234-macos"
+            subprocess.run(["git", "tag", "-a", tag, "-m", "candidate"], cwd=repo, env=env, check=True)
+            (repo / "other").write_text("other\n", encoding="utf-8")
+            subprocess.run(["git", "add", "other"], cwd=repo, env=env, check=True)
+            subprocess.run(["git", "commit", "-qm", "other"], cwd=repo, env=env, check=True)
+            binding_env = {**env, "CM_TAG": tag, "dispatch_dir": str(repo / "dispatch")}
+            (repo / "dispatch").mkdir()
+            mismatch = subprocess.run(["bash", "-c", binding.group(1)], cwd=repo, env=binding_env, check=False)
+            self.assertNotEqual(mismatch.returncode, 0)
+            subprocess.run(["git", "checkout", "-q", tag], cwd=repo, env=env, check=True)
+            matched = subprocess.run(["bash", "-c", binding.group(1)], cwd=repo, env=binding_env, check=False)
+            self.assertEqual(matched.returncode, 0)
+            self.assertTrue((repo / "dispatch" / "ref.json").exists())
 
     def test_beta_qualification_cleanup_accepts_missing_gitlink(self) -> None:
         for name, script in self._gitlink_cleanup_scripts():

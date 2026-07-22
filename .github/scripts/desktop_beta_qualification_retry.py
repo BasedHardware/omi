@@ -30,6 +30,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+import desktop_beta_qualification_admission as admission
+
 QUALIFICATION_WORKFLOW = ".github/workflows/desktop_qualify_beta.yml"
 # The three immutable assets Codemagic attaches to every canonical candidate.
 CANONICAL_ASSETS = ("Omi.zip", "omi.dmg", "desktop-smoke-result.json")
@@ -106,44 +108,21 @@ def _candidate_age(release: Any) -> tuple[timedelta | None, str | None]:
     return age, None
 
 
-def _runs_for_tag(runs: Any, release_tag: str, tag_sha: str) -> list[dict[str, Any]]:
-    """Select qualification runs bound to the exact candidate tag and SHA."""
-    selected: list[dict[str, Any]] = []
-    if not isinstance(runs, list):
-        return selected
-    for run in runs:
-        if not isinstance(run, dict):
-            continue
-        if run.get("path") != QUALIFICATION_WORKFLOW:
-            continue
-        if run.get("event") != "workflow_dispatch":
-            continue
-        if run.get("head_branch") != release_tag:
-            continue
-        if tag_sha and run.get("head_sha") != tag_sha:
-            continue
-        selected.append(run)
-    return selected
+def _attempt_authority(
+    runs_response: Any, jobs_by_run: dict[int, dict[int, Any]], release_tag: str, tag_sha: str
+) -> tuple[list[dict[str, Any]], int | None, str | None]:
+    """Share admission's normalized run and started-qualify authority exactly."""
+    try:
+        selected = admission._exact_runs(admission._workflow_runs(runs_response), release_tag, tag_sha)
+        return selected, admission._qualification_attempts(selected, jobs_by_run), None
+    except (AttributeError, TypeError, ValueError) as exc:
+        return [], None, f"qualification attempt authority is malformed or incomplete: {exc}"
 
 
 def _newest(runs: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not runs:
         return None
     return max(runs, key=lambda r: r.get("updated_at") or r.get("created_at") or "")
-
-
-def _count_attempts(selected: list[dict[str, Any]]) -> int:
-    """Count every unique exact-candidate qualification run as an attempt."""
-    identities: set[tuple[str, Any]] = set()
-    for index, run in enumerate(selected):
-        run_id = run.get("id")
-        if isinstance(run_id, int) and not isinstance(run_id, bool) and run_id > 0:
-            identities.add(("id", run_id))
-        else:
-            # GitHub run IDs are positive integers. A malformed/missing ID must
-            # not make the retry bound fail open by collapsing distinct records.
-            identities.add(("record", index))
-    return len(identities)
 
 
 def _decision(
@@ -167,21 +146,25 @@ def _decision(
 
 def decide(
     release: Any,
-    runs: Any,
+    runs_response: Any,
     *,
     release_tag: str,
     tag_sha: str,
+    jobs_by_run: dict[int, dict[int, Any]],
     max_attempts: int,
     max_age_hours: int,
 ) -> dict[str, Any]:
     valid, candidate_reason = _valid_candidate(release, release_tag)
-    selected = _runs_for_tag(runs, release_tag, tag_sha) if valid else []
-    attempts = _count_attempts(selected)
 
     if not valid:
         return _decision(
-            release_tag=release_tag, should_retry=False, reason=candidate_reason, attempts=attempts, newest=None
+            release_tag=release_tag, should_retry=False, reason=candidate_reason, attempts=0, newest=None
         )
+
+    selected, attempts, authority_error = _attempt_authority(runs_response, jobs_by_run, release_tag, tag_sha)
+    if authority_error is not None:
+        return _decision(release_tag=release_tag, should_retry=False, reason=authority_error, attempts=0, newest=None)
+    assert attempts is not None
 
     age, age_error = _candidate_age(release)
     if age_error is not None:
@@ -270,6 +253,7 @@ def main() -> int:
     parser.add_argument("command", choices=["decide"])
     parser.add_argument("--release-json", type=Path, required=True)
     parser.add_argument("--runs-json", type=Path, required=True)
+    parser.add_argument("--jobs-dir", type=Path, required=True)
     parser.add_argument("--release-tag", required=True)
     parser.add_argument("--tag-sha", required=True)
     parser.add_argument("--max-attempts", type=int, default=DEFAULT_MAX_ATTEMPTS)
@@ -277,14 +261,17 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
-    decision = decide(
-        _load(args.release_json),
-        _load(args.runs_json),
-        release_tag=args.release_tag,
-        tag_sha=args.tag_sha,
-        max_attempts=args.max_attempts,
-        max_age_hours=args.max_age_hours,
-    )
+    try:
+        decision = decide(
+            _load(args.release_json), _load(args.runs_json), release_tag=args.release_tag, tag_sha=args.tag_sha,
+            jobs_by_run=admission.load_attempt_authority(args.jobs_dir), max_attempts=args.max_attempts,
+            max_age_hours=args.max_age_hours,
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        decision = _decision(
+            release_tag=release_tag if (release_tag := args.release_tag) else "", should_retry=False,
+            reason=f"qualification attempt authority is malformed or unreadable: {exc}", attempts=0, newest=None,
+        )
     args.output.write_text(json.dumps(decision, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(decision["reason"])
     return 0
