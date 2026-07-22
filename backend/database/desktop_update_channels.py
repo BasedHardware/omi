@@ -228,6 +228,10 @@ def register_release_manifest(data: dict[str, Any], *, firestore_client: Any = N
 TRANSITIONS: dict[str, dict[str, Any]] = {
     "promote": {"direction": "forward", "require_qualified": True, "require_current_release_id": False},
     "repoint": {"direction": "either", "require_qualified": True, "require_current_release_id": True},
+    # Private to desktop_beta_breakglass.  The public generic promotion API
+    # rejects it, so an emergency manifest can never become Stable or bypass
+    # the dedicated audit/admission-pause transaction.
+    "breakglass": {"direction": "either", "require_qualified": False, "require_current_release_id": True},
 }
 
 
@@ -354,7 +358,7 @@ def promote_channel(
         raise ValueError("invalid channel")
     if not release_id:
         raise ValueError("release_id is required")
-    if operation not in TRANSITIONS:
+    if operation not in {"promote", "repoint"}:
         raise ValueError("invalid pointer operation")
     if operation == "repoint" and (expected_current_release_id is None or expected_generation is None):
         raise ValueError("repoint requires expected_current_release_id and expected_generation")
@@ -493,3 +497,11 @@ def get_release_manifest(release_id: str, *, firestore_client: Any = None) -> di
     raw: object = snapshot.to_dict()
     data = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
     return normalize_release_manifest(data)
+
+
+# Public reuse surface for the dedicated Beta break-glass transaction. Keeping
+# these aliases here preserves one pointer/admission implementation without
+# requiring another module to import private names or duplicate safety logic.
+parse_pointer_generation = _generation
+validate_beta_admission_control = _validate_beta_admission_control
+build_channel_pointer = _build_pointer
