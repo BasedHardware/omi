@@ -119,7 +119,7 @@ LAUNCH_LOG=""
 LAUNCH_SIGNAL_FILE=""
 DESKTOP_LAUNCH_PID=""
 QUALIFICATION_SUCCESS=0
-DESKTOP_PREPARE_WAIT_SECS=1800
+DESKTOP_PREPARE_WAIT_SECS=3600
 BRIDGE_WAIT_SECS=900
 
 gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,isPrerelease,publishedAt,assets,body \

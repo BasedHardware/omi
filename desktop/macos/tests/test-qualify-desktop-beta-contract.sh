@@ -61,12 +61,21 @@ fi
 require_text 'derive_omi_app_config "$BUNDLE"' "$CORE_HARNESS"
 require_text 'wrong bundle on port' "$CORE_HARNESS"
 
-# Static timing contract: cold preparation has its own bounded phase and run.sh
-# explicitly signals successful launch dispatch before the 900-second bridge
-# readiness budget starts. This guards the trusted-runner failure from attempts
-# 1 and 2 of https://github.com/BasedHardware/omi/actions/runs/29896814913.
-require_text 'DESKTOP_PREPARE_WAIT_SECS=1800'
+# Static timing contract: cold preparation has its own bounded 3600-second phase
+# and run.sh explicitly signals successful launch dispatch before the separate
+# 900-second bridge readiness phase starts. The combined bound remains 4500
+# seconds. This guards https://github.com/BasedHardware/omi/actions/runs/29904736566,
+# where Swift was still compiling at 1107/1182 units when the 1800-second
+# preparation phase expired.
+require_text 'DESKTOP_PREPARE_WAIT_SECS=3600'
 require_text 'BRIDGE_WAIT_SECS=900'
+prepare_wait_secs="$(sed -n 's/^DESKTOP_PREPARE_WAIT_SECS=//p' "$QUALIFIER")"
+bridge_wait_secs="$(sed -n 's/^BRIDGE_WAIT_SECS=//p' "$QUALIFIER")"
+if [[ "$prepare_wait_secs" -ne 3600 || "$bridge_wait_secs" -ne 900 \
+  || $((prepare_wait_secs + bridge_wait_secs)) -ne 4500 ]]; then
+  echo "FAIL: qualification timing bounds must remain 3600s preparation + 900s bridge = 4500s total" >&2
+  exit 1
+fi
 require_text 'OMI_DESKTOP_LAUNCH_SIGNAL_FILE="$LAUNCH_SIGNAL_FILE"'
 require_text 'signal_desktop_launch' "$RUN_SH"
 require_order "$QUALIFIER" \
