@@ -27,6 +27,26 @@ RELEASABLE_PATH = "desktop/macos/Desktop/Sources/AppDelegate.swift"
 
 
 class DesktopCandidateSourceCheckTests(unittest.TestCase):
+    def test_codemagic_config_is_a_releasable_desktop_input(self) -> None:
+        expected_args = [
+            "diff",
+            "--name-only",
+            "--diff-filter=ACDMR",
+            f"{LATEST_TAG}..HEAD",
+            "--",
+            "desktop/macos",
+            "codemagic.yaml",
+            ".github/scripts/plan-desktop-release.py",
+            ".github/workflows/desktop_auto_release.yml",
+            ".github/workflows/desktop-swift-ci.yml",
+        ]
+
+        with patch.object(planner, "git", return_value="codemagic.yaml\ndesktop/macos/AGENTS.md") as git:
+            changes = planner.releasable_desktop_changes_since(LATEST_TAG)
+
+        git.assert_called_once_with(expected_args)
+        self.assertEqual(changes, ["codemagic.yaml"])
+
     def test_exact_source_sha_success_for_every_required_check_passes_the_gate(self) -> None:
         checked: list[tuple[str, str]] = []
 
