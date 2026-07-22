@@ -5,7 +5,7 @@
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4454,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3298,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5711,
-    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1692
+    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1693
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "SB redesign: Omi-mark avatar on replies that spins while thinking, plus gating tool-call chips to the streaming turn only; a component split is tracked follow-up.",

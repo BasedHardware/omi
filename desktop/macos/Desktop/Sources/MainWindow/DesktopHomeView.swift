@@ -929,22 +929,23 @@ struct DesktopHomeView: View {
 
   // MARK: - Post-onboarding UI walkthrough (coach-marks)
 
+  // Anchored to the redesign's AppNavRail items (Home, Memory, Tasks, Insights, Apps).
   private static let walkthroughSteps: [OnboardingCoachStep] = [
     .init(
       itemRawValue: SidebarNavItem.dashboard.rawValue, title: "Home",
-      body: "Your day at a glance: what happened, and what's next."),
+      body: "Your day at a glance, and where you talk to me."),
     .init(
-      itemRawValue: SidebarNavItem.conversations.rawValue, title: "Conversations",
-      body: "Everything I hear, with a live transcript as you speak."),
+      itemRawValue: SidebarNavItem.conversations.rawValue, title: "Memory",
+      body: "Everything I hear and remember, with a live transcript as you speak."),
     .init(
       itemRawValue: SidebarNavItem.tasks.rawValue, title: "Tasks",
       body: "The to-dos I pull out of your day, all in one place."),
     .init(
-      itemRawValue: SidebarNavItem.focus.rawValue, title: "Focus",
+      itemRawValue: SidebarNavItem.focus.rawValue, title: "Insights",
       body: "What deserves your attention right now."),
     .init(
-      itemRawValue: SidebarNavItem.chat.rawValue, title: "Chat",
-      body: "Talk to me anytime. Ask about anything I know."),
+      itemRawValue: SidebarNavItem.apps.rawValue, title: "Apps",
+      body: "Connect tools and extend what I can do."),
   ]
 
   @ViewBuilder private func walkthroughOverlay(_ anchors: [Int: Anchor<CGRect>]) -> some View {
@@ -971,8 +972,9 @@ struct DesktopHomeView: View {
   private func finishWalkthrough() {
     walkthroughStep = nil
     isSidebarCollapsed = true
-    selectedIndex = SidebarNavItem.chat.rawValue
-    viewModelContainer.chatProvider.presentOnboardingOpener()
+    // Land in the normal chat-first Home (the regular chat the user uses day to
+    // day), not a separate Chat tab — onboarding shouldn't have its own chat UI.
+    selectedIndex = SidebarNavItem.dashboard.rawValue
   }
 
   private var mainContent: some View {
