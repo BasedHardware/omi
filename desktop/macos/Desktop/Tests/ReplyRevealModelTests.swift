@@ -21,10 +21,12 @@ final class ReplyRevealModelTests: XCTestCase {
   func testRestartsWhenTextShrinks() {
     let model = ReplyRevealModel()
     // Reveal a long buffer partway, then hand it a shorter buffer (new turn).
-    for i in 0..<10 {
-      _ = model.revealed(at: Date(timeIntervalSinceReferenceDate: Double(i) * 0.05), full: "one two three four")
+    for i in 0..<20 {
+      _ = model.revealed(
+        at: Date(timeIntervalSinceReferenceDate: Double(i) * 0.05), full: "one two three four five six")
     }
-    let shown = model.revealed(at: Date(timeIntervalSinceReferenceDate: 1), full: "hi")
-    XCTAssertEqual(shown, "")
+    // The new reply restarts from its opening word, not the old progress.
+    let shown = model.revealed(at: Date(timeIntervalSinceReferenceDate: 2), full: "hi there friend")
+    XCTAssertEqual(shown, "hi")
   }
 }

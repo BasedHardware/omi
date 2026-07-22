@@ -10,6 +10,10 @@ struct JustifiedText: NSViewRepresentable {
   var size: CGFloat = 13
   var weight: NSFont.Weight = .regular
   var opacity: CGFloat = 0.9
+  /// Force an alignment; nil = the center/justify heuristic. Live-updating text
+  /// (the transcript) uses `.left` so it flows as words arrive instead of
+  /// re-centering on every word.
+  var alignment: NSTextAlignment?
 
   final class Coordinator { var width: CGFloat = 300 }
   func makeCoordinator() -> Coordinator { Coordinator() }
@@ -42,12 +46,15 @@ struct JustifiedText: NSViewRepresentable {
 
   private func attributed(width: CGFloat) -> NSAttributedString {
     let font = NSFont.systemFont(ofSize: size, weight: weight)
-    // Justify only when the text actually wraps; a single line justified would
-    // pin left, so center it. Result: short replies center, long ones justify
-    // to clean edges.
-    let singleLineWidth = (text as NSString).size(withAttributes: [.font: font]).width
     let paragraph = NSMutableParagraphStyle()
-    paragraph.alignment = singleLineWidth <= width ? .center : .justified
+    if let alignment {
+      paragraph.alignment = alignment
+    } else {
+      // Justify only when the text actually wraps; a single line justified
+      // would pin left, so center it. Short replies center, long ones justify.
+      let singleLineWidth = (text as NSString).size(withAttributes: [.font: font]).width
+      paragraph.alignment = singleLineWidth <= width ? .center : .justified
+    }
     paragraph.lineBreakMode = .byWordWrapping
     return NSAttributedString(
       string: text,
@@ -83,8 +90,9 @@ struct StreamingReplyText: View {
 /// Paces the reply reveal a whole word at a time toward the buffered text.
 @MainActor
 final class ReplyRevealModel {
-  /// ~3 words/sec — close to a natural TTS speaking rate. Tune to taste.
-  private let charsPerSecond: Double = 15
+  /// ~4 words/sec — keeps pace with (or slightly ahead of) the spoken voice so
+  /// the words don't lag the audio. Tune to taste.
+  private let charsPerSecond: Double = 20
 
   private var revealed: Double = 0
   private var lastTime: CFTimeInterval?
@@ -93,13 +101,22 @@ final class ReplyRevealModel {
   func revealed(at date: Date, full: String) -> String {
     let count = full.count
     // A shorter buffer means a new turn started — restart the reveal.
-    if count < lastFullCount { revealed = 0 }
+    if count < lastFullCount {
+      revealed = 0
+      lastTime = nil
+    }
     lastFullCount = count
 
     let now = date.timeIntervalSinceReferenceDate
-    let dt = lastTime.map { min(0.1, max(0, now - $0)) } ?? 0
+    if let last = lastTime {
+      let dt = min(0.1, max(0, now - last))
+      revealed = min(Double(count), revealed + charsPerSecond * dt)
+    } else {
+      // First frame: show the opening word right away so the reveal starts in
+      // step with the audio instead of lagging by a word.
+      revealed = Double(firstWordLength(of: full))
+    }
     lastTime = now
-    revealed = min(Double(count), revealed + charsPerSecond * dt)
 
     let shown = Int(revealed)
     guard shown < count else { return full }
@@ -109,6 +126,10 @@ final class ReplyRevealModel {
     if let lastSpace = prefix.lastIndex(of: " ") {
       return String(prefix[..<lastSpace])
     }
-    return ""
+    return String(prefix)
+  }
+
+  private func firstWordLength(of text: String) -> Int {
+    text.firstIndex(of: " ").map { text.distance(from: text.startIndex, to: $0) } ?? text.count
   }
 }
