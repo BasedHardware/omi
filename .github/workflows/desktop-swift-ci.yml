@@ -54,7 +54,7 @@ jobs:
             case "$path" in
               desktop/macos/Backend-Rust/*|desktop/macos/changelog/*|desktop/macos/CHANGELOG[.]json|desktop/macos/AGENTS[.]md)
                 ;;
-              desktop/macos/*)
+              desktop/macos/*|codemagic.yaml|.github/scripts/plan-desktop-release.py|.github/workflows/desktop_auto_release.yml|.github/workflows/desktop-swift-ci.yml)
                 RELEASABLE_DESKTOP=true
                 break
                 ;;
