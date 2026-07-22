@@ -1,0 +1,53 @@
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
+  s_77f2b8dfbc2e90::t_463183e43abf87 191-193
+  s_77f2b8dfbc2e90::t_b4f0ae0111daba 76-79
+  s_77f2b8dfbc2e90::t_914a5926aa0db0 176-177,179
+desktop/macos/changelog/unreleased/20260722-onboarding-agent-detection.json
+  s_77f2b8dfbc2e90::t_422915c3e7590f 1-3
+desktop/macos/changelog/unreleased/20260722-onboarding-continue-when-done.json
+  s_77f2b8dfbc2e90::t_8902ca818f8aef 1-3
+desktop/macos/Desktop/Sources/MemoryBankConnector.swift
+  s_77f2b8dfbc2e90::t_ac10524dbb69aa 32-60
+desktop/macos/changelog/unreleased/20260722-onboarding-shortcut-keycaps.json
+  s_77f2b8dfbc2e90::t_30389705ffb163 1-3
+desktop/macos/changelog/unreleased/20260722-onboarding-no-repeat-audio-prompt.json
+  s_77f2b8dfbc2e90::t_11ddd57ccb3b2e 1-3
+desktop/macos/changelog/unreleased/20260722-onboarding-apple-notes-status.json
+  s_77f2b8dfbc2e90::t_a064180bc6466c 1-3
+desktop/macos/Desktop/Sources/SystemAudioCaptureService.swift
+  s_77f2b8dfbc2e90::t_54379eb0150094 95-200
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel+Steps.swift
+  s_77f2b8dfbc2e90::t_d08b0962da4d42 211-226
+  s_77f2b8dfbc2e90::t_19b5756f7eb682 504
+  s_77f2b8dfbc2e90::t_212185ad15a110 128-137
+  s_77f2b8dfbc2e90::t_fc296587a9dad3 83-92
+  s_77f2b8dfbc2e90::t_aea0a493f10940 515-520
+  s_77f2b8dfbc2e90::t_71b3c1fb960a30 163-171
+  s_77f2b8dfbc2e90::t_c8329814387a8f 565-573
+  s_77f2b8dfbc2e90::t_f0399bb3c4bd1c 435
+  s_77f2b8dfbc2e90::t_c948715fe049d0 93-99
+  s_77f2b8dfbc2e90::t_c085877f590316 405,411-416
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
+  s_77f2b8dfbc2e90::t_ce77acf0d9959e 555-564
+  s_77f2b8dfbc2e90::t_cb58886527a312 455-469
+desktop/macos/changelog/unreleased/20260722-onboarding-auto-advance-permissions.json
+  s_77f2b8dfbc2e90::t_0b8efefad666fc 1-3
+desktop/macos/Desktop/Tests/MemoryBankConnectorTests.swift
+  s_77f2b8dfbc2e90::t_df6da4ff78e3c0 547-584
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "9e8073d56d768960f9034a6f84b844e672e527b1",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
