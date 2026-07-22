@@ -127,4 +127,7 @@ def test_manual_development_smoke_keeps_its_existing_external_hostname_path():
 
     assert 'OMI_TASK_INTELLIGENCE_SMOKE_UID' not in workflow
     assert '--secret=ADMIN_KEY' in workflow
-    assert 'smoke_what_matters_now.py --base-url https://api.omi.dev' in workflow
+    assert (
+        'smoke_what_matters_now.py" --base-url https://api.omi.dev' in workflow
+        or 'smoke_what_matters_now.py --base-url https://api.omi.dev' in workflow
+    )
