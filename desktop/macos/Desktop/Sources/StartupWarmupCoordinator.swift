@@ -7,6 +7,13 @@ final class StartupWarmupCoordinator {
   private let appProvider: AppProvider
   private let chatProvider: ChatProvider
   private let retryDatabaseInit: () async -> Bool
+  /// Warmup delays protect the busy launch window, so they count down from
+  /// launch — not from when the warmup is scheduled. When the main content
+  /// first appears long after launch (onboarding just completed, account
+  /// switch), the window has already elapsed and warmups run immediately
+  /// instead of leaving conversations/tasks/memories stale for seconds.
+  /// Deliberately never reset by reset(): it anchors to process launch.
+  private let launchAnchor: Date
 
   private var scheduleState = StartupWarmupScheduleState()
   private var sessionTasks: [StartupWarmupTaskID: Task<Void, Never>] = [:]
@@ -17,13 +24,19 @@ final class StartupWarmupCoordinator {
     dashboardViewModel: DashboardViewModel,
     appProvider: AppProvider,
     chatProvider: ChatProvider,
+    launchAnchor: Date = Date(),
     retryDatabaseInit: @escaping () async -> Bool
   ) {
     self.tasksStore = tasksStore
     self.dashboardViewModel = dashboardViewModel
     self.appProvider = appProvider
     self.chatProvider = chatProvider
+    self.launchAnchor = launchAnchor
     self.retryDatabaseInit = retryDatabaseInit
+  }
+
+  func remainingStartupDelay(_ delay: TimeInterval, now: Date = Date()) -> TimeInterval {
+    StartupWarmupPolicy.remainingDelay(delay, elapsedSinceLaunch: now.timeIntervalSince(launchAnchor))
   }
 
   func cancel() {
@@ -50,9 +63,10 @@ final class StartupWarmupCoordinator {
     sessionTasks[id]?.cancel()
     let token = UUID()
     sessionTaskTokens[id] = token
+    let effectiveDelay = remainingStartupDelay(delay)
     sessionTasks[id] = Task { [weak self] in
       guard let self else { return }
-      guard await self.sleepForStartupDelay(delay) else {
+      guard await self.sleepForStartupDelay(effectiveDelay) else {
         await MainActor.run { onCancel?() }
         return
       }
@@ -103,7 +117,8 @@ final class StartupWarmupCoordinator {
   }
 
   private func runDatabaseWarmup() async {
-    guard await sleepForStartupDelay(StartupWarmupPolicy.immediateWarmupDelay) else { return }
+    guard await sleepForStartupDelay(remainingStartupDelay(StartupWarmupPolicy.immediateWarmupDelay))
+    else { return }
 
     await measurePerfAsync("DATA LOAD: Immediate warmup") { [self] in
       async let tasks: Void = measurePerfAsync("DATA LOAD: TasksStore dashboard snapshot") {
@@ -115,7 +130,8 @@ final class StartupWarmupCoordinator {
       _ = await (tasks, dashboard)
     }
 
-    guard await sleepForStartupDelay(StartupWarmupPolicy.deferredWarmupDelay) else { return }
+    guard await sleepForStartupDelay(remainingStartupDelay(StartupWarmupPolicy.deferredWarmupDelay))
+    else { return }
     guard AuthState.shared.isSignedIn else {
       log("DATA LOAD: Skipping DB lifecycle warmup because user is signed out")
       scheduleState.releaseDatabaseWarmup()
@@ -141,7 +157,8 @@ final class StartupWarmupCoordinator {
   private func runServiceWarmup() async {
     guard
       await sleepForStartupDelay(
-        StartupWarmupPolicy.immediateWarmupDelay + StartupWarmupPolicy.deferredWarmupDelay
+        remainingStartupDelay(
+          StartupWarmupPolicy.immediateWarmupDelay + StartupWarmupPolicy.deferredWarmupDelay)
       )
     else { return }
 

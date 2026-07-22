@@ -109,14 +109,15 @@ enum StartupWarmupPolicy {
   static let recurringTaskSchedulerInitialDelay: TimeInterval = 12.0
   static let initialFileIndexingDelay: TimeInterval = 45.0
 
-  /// Remaining delay before proactive monitoring may start, measured from a
-  /// launch anchor rather than from the triggering event. The warmup delay
-  /// exists to keep capture out of the busy launch window, so late triggers
-  /// (API-key load, app re-activation) must not re-pay the full delay —
-  /// that compounding is what made the Capture pill sit "paused" for
-  /// 30-60+ seconds after launch. Negative elapsed values (clock changes)
-  /// clamp to the full delay.
-  static func remainingProactiveAssistantsStartDelay(elapsedSinceLaunch: TimeInterval) -> TimeInterval {
-    max(0, proactiveAssistantsStartDelay - max(0, elapsedSinceLaunch))
+  /// Remaining warmup delay, measured from a launch anchor rather than from
+  /// the triggering event. Warmup delays exist to keep heavy work out of the
+  /// busy launch window, so late triggers must not re-pay the full delay:
+  /// that compounding made the Capture pill sit "paused" for 30-60+ seconds
+  /// after launch, and made conversations/tasks/memories show stale or empty
+  /// data for several seconds when the main UI first appears long after
+  /// launch (finishing onboarding, switching accounts). Negative elapsed
+  /// values (clock changes) clamp to the full delay.
+  static func remainingDelay(_ delay: TimeInterval, elapsedSinceLaunch: TimeInterval) -> TimeInterval {
+    max(0, delay - max(0, elapsedSinceLaunch))
   }
 }
