@@ -276,13 +276,18 @@ class ShortcutSettings: ObservableObject {
     modifiers: [.command, .shift]
   )
   static let askOmiCommandJShortcut = KeyboardShortcut(keyCode: 38, keyDisplay: "J", modifiers: .command)
-  static let defaultAskOmiShortcut = askOmiCommandOShortcut
+  // ⌘O collides with the universal "Open" shortcut, so Carbon refuses to
+  // register it as a global hotkey and it silently never fired. ⌃⌥O is a safe,
+  // near-conflict-free global combo (same family as the ⌃⌥R Rewind hotkey).
+  static let askOmiControlOptionOShortcut = KeyboardShortcut(
+    keyCode: 31, keyDisplay: "O", modifiers: [.control, .option])
+  static let defaultAskOmiShortcut = askOmiControlOptionOShortcut
 
   static let askOmiPresets: [KeyboardShortcut] = [
-    askOmiCommandOShortcut,
+    askOmiControlOptionOShortcut,
+    askOmiCommandJShortcut,
     askOmiCommandReturnShortcut,
     askOmiCommandShiftReturnShortcut,
-    askOmiCommandJShortcut,
   ]
 
   static let pttPresets: [KeyboardShortcut] = [
@@ -565,11 +570,23 @@ class ShortcutSettings: ObservableObject {
         legacyMapper: Self.legacyPTTShortcut
       ) ?? Self.pttPresets[0]
 
-    self.askOmiShortcut =
+    // Migration: ⌘O silently failed to register as a global hotkey (it collides
+    // with the universal "Open" shortcut), so the Ask-Omi hotkey never fired.
+    // Move anyone still on the old ⌘O binding to the safe ⌃⌥O default and
+    // persist it so the Settings UI stays in sync.
+    let loadedAskOmi =
       Self.loadShortcut(
         forKey: Self.askOmiShortcutDefaultsKey,
         legacyMapper: Self.legacyAskOmiShortcut
       ) ?? Self.defaultAskOmiShortcut
+    let migratedAskOmi =
+      loadedAskOmi == Self.askOmiCommandOShortcut ? Self.defaultAskOmiShortcut : loadedAskOmi
+    self.askOmiShortcut = migratedAskOmi
+    if loadedAskOmi == Self.askOmiCommandOShortcut,
+      let data = try? JSONEncoder().encode(Self.defaultAskOmiShortcut)
+    {
+      UserDefaults.standard.set(data, forKey: Self.askOmiShortcutDefaultsKey)
+    }
 
     self.askOmiEnabled = UserDefaults.standard.object(forKey: "shortcut_askOmiEnabled") as? Bool ?? true
     self.pttEnabled = UserDefaults.standard.object(forKey: "shortcut_pttEnabled") as? Bool ?? true
