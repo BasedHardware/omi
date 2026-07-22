@@ -12,19 +12,26 @@ references a ConfigMap/Secret source or key that the proposed state removes or
 reclassifies. It reads only object and key NAMES — it never reads, prints, or
 stores ConfigMap/Secret VALUES.
 
+It scans BOTH binding styles a pod uses to consume shared config:
+
+* explicit per-key refs (``env[].valueFrom.configMapKeyRef`` / ``secretKeyRef``);
+* whole-object bulk loads (``envFrom[].configMapRef`` / ``secretRef``) — every
+  key in a bulk-loaded object becomes a pod env var, so removing ANY key from a
+  bulk-loaded object is the same outage class and is flagged when a previous
+  inventory is supplied to model the transition.
+
 Inputs (all name-only, value-free):
   * ``--rendered`` (repeatable): Helm ``template`` output (one or more YAML
-    documents; every ``Deployment`` is scanned for ``env.valueFrom`` refs).
+    documents; every pod-template workload — Deployment/StatefulSet/DaemonSet/
+    Job/CronJob/ReplicaSet — is scanned, including ``initContainers``).
   * ``--source-inventory``: proposed state — which keys each ConfigMap/Secret
     object will carry after the change.
-  * ``--previous-inventory`` (optional): current live source key names. When
-    supplied, a key that *moves* between objects is allowed only once no
-    rendered reference still points at the removed old source — the exact
-    partial-transition that caused the outage.
+  * ``--previous-inventory`` (optional): current live source key names. Required
+    to detect a key *removed* from a bulk-loaded (``envFrom``) object.
 
-Exit 0 only when every rendered reference resolves to a key present in the
-proposed inventory (and, for a transition, no stale old-source reference
-remains). Anything ambiguous or missing fails closed.
+Exit 0 only when every reference resolves to a key present in the proposed
+inventory and no key was removed from a bulk-loaded object. Anything ambiguous
+or missing fails closed.
 
 Run as::
 
@@ -44,10 +51,16 @@ from typing import Any
 
 import yaml
 
-# A ConfigMap/Secret reference extracted from a rendered container env entry.
+# An explicit per-key ConfigMap/Secret reference extracted from a container env.
 # (env_name, kind, object_name, key) — kind is "configmap" or "secret".
 Reference = tuple[str, str, str, str]
-_KIND_BY_FIELD = {"configMapKeyRef": "configmap", "secretKeyRef": "secret"}
+_ENVFROM_KIND_BY_FIELD = {"configMapRef": "configmap", "secretRef": "secret"}
+_VALUEFROM_KIND_BY_FIELD = {"configMapKeyRef": "configmap", "secretKeyRef": "secret"}
+
+# Workload kinds that carry a pod template we know how to reach.
+POD_TEMPLATE_KINDS = {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob", "ReplicaSet"}
+# Container lists inside a pod spec that may declare env bindings.
+_CONTAINER_LIST_KEYS = ("initContainers", "containers", "ephemeralContainers")
 
 
 class MigrationGuardError(ValueError):
@@ -65,50 +78,81 @@ def _documents(path: str) -> list[dict[str, Any]]:
     return docs
 
 
-def deployment_references(doc: dict[str, Any]) -> list[Reference]:
-    """Return every env valueFrom ConfigMap/Secret reference in one Deployment.
+def _pod_spec(doc: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the pod-template spec for a workload kind, or None."""
+    if doc.get("kind") == "CronJob":
+        return doc.get("spec", {}).get("jobTemplate", {}).get("spec", {}).get("template", {}).get("spec")
+    return doc.get("spec", {}).get("template", {}).get("spec")
+
+
+def workload_references(doc: dict[str, Any]) -> tuple[list[Reference], set[tuple[str, str]]]:
+    """Return (explicit valueFrom refs, envFrom bulk-loaded object sources).
 
     Rejects ambiguous/malformed identity (missing name or key, a valueFrom that
-    carries both sources) loudly — a partial or malformed binding is exactly the
-    drift this guard exists to catch.
+    carries both sources) loudly — partial or malformed bindings are exactly the
+    drift this guard exists to catch. Scans initContainers too.
     """
     name = doc.get("metadata", {}).get("name", "<unnamed>")
+    pod_spec = _pod_spec(doc)
     refs: list[Reference] = []
-    containers = doc.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
-    for container in containers if isinstance(containers, list) else []:
-        if not isinstance(container, dict):
-            continue
-        for entry in container.get("env", []) or []:
-            if not isinstance(entry, dict) or not isinstance(entry.get("name"), str):
+    envfrom_sources: set[tuple[str, str]] = set()
+    if not isinstance(pod_spec, dict):
+        return refs, envfrom_sources
+    for list_key in _CONTAINER_LIST_KEYS:
+        for container in pod_spec.get(list_key, []) or []:
+            if not isinstance(container, dict):
                 continue
-            env_name = entry["name"]
-            value_from = entry.get("valueFrom")
-            if not isinstance(value_from, dict):
-                continue
-            found: list[Reference] = []
-            for field, kind in _KIND_BY_FIELD.items():
-                ref = value_from.get(field)
-                if ref is None:
-                    continue  # an explicit ``null`` clears a historical source — not a binding.
-                if not isinstance(ref, dict):
-                    raise MigrationGuardError(f"{name}/{env_name}: {field} is not a mapping")
-                obj_name, key = ref.get("name"), ref.get("key")
-                if not isinstance(obj_name, str) or not isinstance(key, str) or not obj_name or not key:
-                    raise MigrationGuardError(f"{name}/{env_name}: {field} must declare a non-empty name and key")
-                found.append((env_name, kind, obj_name, key))
-            if len(found) > 1:
-                raise MigrationGuardError(f"{name}/{env_name}: declares multiple binding sources")
-            refs.extend(found)
-    return refs
+            container_name = container.get("name", "?")
+            # envFrom: whole-object bulk loads. No per-key binding, so we track
+            # the consumed object and detect key *removal* from it in validate().
+            for entry in container.get("envFrom", []) or []:
+                if not isinstance(entry, dict):
+                    continue
+                for field, kind in _ENVFROM_KIND_BY_FIELD.items():
+                    ref = entry.get(field)
+                    if ref is None:
+                        continue
+                    if not isinstance(ref, dict) or not isinstance(ref.get("name"), str) or not ref["name"]:
+                        raise MigrationGuardError(
+                            f"{name}/{container_name}: envFrom {field} must declare a non-empty name"
+                        )
+                    envfrom_sources.add((kind, ref["name"]))
+            for entry in container.get("env", []) or []:
+                if not isinstance(entry, dict) or not isinstance(entry.get("name"), str):
+                    continue
+                env_name = entry["name"]
+                value_from = entry.get("valueFrom")
+                if not isinstance(value_from, dict):
+                    continue
+                found: list[Reference] = []
+                for field, kind in _VALUEFROM_KIND_BY_FIELD.items():
+                    ref = value_from.get(field)
+                    if ref is None:
+                        continue  # an explicit ``null`` clears a historical source — not a binding.
+                    if not isinstance(ref, dict):
+                        raise MigrationGuardError(f"{name}/{env_name}: {field} is not a mapping")
+                    obj_name, key = ref.get("name"), ref.get("key")
+                    if not isinstance(obj_name, str) or not isinstance(key, str) or not obj_name or not key:
+                        raise MigrationGuardError(
+                            f"{name}/{container_name}/{env_name}: {field} must declare a non-empty name and key"
+                        )
+                    found.append((env_name, kind, obj_name, key))
+                if len(found) > 1:
+                    raise MigrationGuardError(f"{name}/{env_name}: declares multiple binding sources")
+                refs.extend(found)
+    return refs, envfrom_sources
 
 
-def all_references(rendered_paths: list[str]) -> list[Reference]:
+def all_references(rendered_paths: list[str]) -> tuple[list[Reference], set[tuple[str, str]]]:
     refs: list[Reference] = []
+    envfrom: set[tuple[str, str]] = set()
     for path in rendered_paths:
         for doc in _documents(path):
-            if doc.get("kind") == "Deployment":
-                refs.extend(deployment_references(doc))
-    return refs
+            if doc.get("kind") in POD_TEMPLATE_KINDS:
+                doc_refs, doc_envfrom = workload_references(doc)
+                refs.extend(doc_refs)
+                envfrom.update(doc_envfrom)
+    return refs, envfrom
 
 
 def _load_inventory(path: str) -> dict[tuple[str, str], set[str]]:
@@ -171,6 +215,7 @@ def _moved_keys(
 
 def validate(
     refs: list[Reference],
+    envfrom_sources: set[tuple[str, str]],
     proposed: dict[tuple[str, str], set[str]],
     previous: dict[tuple[str, str], set[str]] | None,
 ) -> list[str]:
@@ -178,6 +223,7 @@ def validate(
     failures: list[str] = []
     moved = _moved_keys(previous, proposed) if previous else {}
 
+    # Explicit per-key refs: each must resolve to a present key.
     for env_name, kind, obj_name, key in sorted(refs):
         source = (kind, obj_name)
         keys = proposed.get(source)
@@ -196,6 +242,24 @@ def validate(
             failures.append(
                 f"{env_name} references {kind}/{obj_name}#{key} which is not present in the proposed source inventory{note}"
             )
+
+    # envFrom bulk loads: the consumed object must still exist, and — when a
+    # previous inventory models the transition — no key may have been removed
+    # from it. Removing a key from a bulk-loaded ConfigMap is the exact shape of
+    # the 2026-07-22 outage (an env var the pod depends on silently disappears).
+    for kind, obj_name in sorted(envfrom_sources):
+        source = (kind, obj_name)
+        keys = proposed.get(source)
+        if keys is None:
+            failures.append(f"envFrom bulk-loads {kind}/{obj_name} which is absent from the proposed source inventory")
+            continue
+        if previous is not None:
+            removed = sorted((previous.get(source) or set()) - keys)
+            if removed:
+                failures.append(
+                    f"envFrom bulk-loads {kind}/{obj_name} but key(s) {removed} were removed from it; "
+                    "a pod env var the workload depends on may disappear — the 2026-07-22 outage class"
+                )
     return failures
 
 
@@ -206,7 +270,7 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         required=True,
         metavar="PATH",
-        help="Helm template output to scan (repeatable); every Deployment is checked",
+        help="Helm template output to scan (repeatable); every pod-template workload is checked",
     )
     parser.add_argument(
         "--source-inventory",
@@ -217,27 +281,27 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--previous-inventory",
         metavar="PATH",
-        help="current live source key names; enables transition/reclassification checks",
+        help="current live source key names; required to detect a key removed from a bulk-loaded (envFrom) object",
     )
     args = parser.parse_args(argv)
 
-    failures: list[str] = []
     try:
-        refs = all_references(args.rendered)
+        refs, envfrom_sources = all_references(args.rendered)
         proposed = _load_inventory(args.source_inventory)
         previous = _load_inventory(args.previous_inventory) if args.previous_inventory else None
     except MigrationGuardError as exc:
         print(f"FAIL: {exc}")
         return 1
-    failures.extend(validate(refs, proposed, previous))
+    failures = validate(refs, envfrom_sources, proposed, previous)
 
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}")
         return 1
     print(
-        f"shared-config migration guard passed: {len(refs)} reference(s) resolve to the proposed "
-        "source key inventory (ConfigMap/Secret values were never read)."
+        f"shared-config migration guard passed: {len(refs)} per-key reference(s) and "
+        f"{len(envfrom_sources)} envFrom source(s) resolve to the proposed source key inventory "
+        "(ConfigMap/Secret values were never read)."
     )
     return 0
 
