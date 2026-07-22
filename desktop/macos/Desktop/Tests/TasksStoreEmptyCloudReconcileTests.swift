@@ -433,30 +433,34 @@ final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
     automationOverrideID: String?
   ) async {
     let plannedOwner = normalizedOwner(automationOverrideID) ?? normalizedOwner(authOwnerID)
-    _ = await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
-      allowAutomationOverride: true,
-      plannedNextOwner: { _, _ in plannedOwner },
-      quiesceVoice: { _, _ in },
-      revokeKernelOwner: { _, _ in },
-      retargetLocalStorage: { _, _ in },
-      ownerDidChange: {
-        await MainActor.run {
-          NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+    do {
+      _ = try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+        allowAutomationOverride: true,
+        plannedNextOwner: { _, _ in plannedOwner },
+        quiesceVoice: { _, _ in },
+        revokeKernelOwner: { _, _ in },
+        retargetLocalStorage: { _, _ in },
+        ownerDidChange: {
+          await MainActor.run {
+            NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+          }
+        },
+        { defaults in
+          if let authOwnerID {
+            defaults.set(authOwnerID, forKey: .authUserId)
+          } else {
+            defaults.removeObject(forKey: .authUserId)
+          }
+          if let automationOverrideID {
+            defaults.set(automationOverrideID, forKey: .automationOwnerOverride)
+          } else {
+            defaults.removeObject(forKey: .automationOwnerOverride)
+          }
         }
-      },
-      { defaults in
-        if let authOwnerID {
-          defaults.set(authOwnerID, forKey: .authUserId)
-        } else {
-          defaults.removeObject(forKey: .authUserId)
-        }
-        if let automationOverrideID {
-          defaults.set(automationOverrideID, forKey: .automationOwnerOverride)
-        } else {
-          defaults.removeObject(forKey: .automationOwnerOverride)
-        }
-      }
-    )
+      )
+    } catch {
+      XCTFail("owner transition failed: \(error)")
+    }
   }
 
   private func normalizedOwner(_ value: String?) -> String? {
