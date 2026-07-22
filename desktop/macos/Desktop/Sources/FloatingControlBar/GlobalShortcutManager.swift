@@ -75,18 +75,10 @@ class GlobalShortcutManager: @unchecked Sendable {
 
   private enum HotKeyID: UInt32 {
     case askOmi = 2
+    case commandO = 3
   }
 
   private var shortcutObserver: NSObjectProtocol?
-
-  // ⌘O can't be registered as a global Carbon hotkey (it collides with the
-  // system-wide "Open" command, which is why the configurable Ask-Omi shortcut
-  // defaults to ⌃⌥O). Users still expect ⌘O to summon Omi, so we always watch
-  // for it with NSEvent monitors: the global monitor fires when another app is
-  // frontmost (observe-only — that app still gets its own ⌘O), and the local
-  // monitor fires when Omi itself is focused.
-  private var commandOGlobalMonitor: Any?
-  private var commandOLocalMonitor: Any?
 
   private init() {
     registrar = Self.registerWithCarbon
@@ -154,34 +146,29 @@ class GlobalShortcutManager: @unchecked Sendable {
     guard !isRegistrationSuspended else { return }
     // Register Ask Omi shortcut from user settings
     registerAskOmi()
-    installCommandOMonitor()
+    registerCommandO()
   }
 
-  /// Always-on ⌘O watcher that summons Omi (fronts the app and opens chat),
-  /// independent of the configurable Carbon hotkey.
-  private func installCommandOMonitor() {
-    guard commandOGlobalMonitor == nil, commandOLocalMonitor == nil else { return }
-    let matches: (NSEvent) -> Bool = { event in
-      event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
-        && event.charactersIgnoringModifiers?.lowercased() == "o"
+  /// Registers ⌘O as a dedicated global Carbon hotkey that summons Omi (fronts
+  /// the app + opens chat). A Carbon hotkey fires system-wide without the
+  /// Accessibility/Input-Monitoring permission an NSEvent monitor needs, and it
+  /// consumes the key so it reliably reaches Omi. This is separate from the
+  /// user-configurable Ask-Omi shortcut (⌃⌥O by default) — ⌘O always works.
+  private func registerCommandO() {
+    if let ref = hotKeyRefs.removeValue(forKey: .commandO) {
+      _ = unregisterHotKey(ref)
     }
-    commandOGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-      if matches(event) { self?.openOmiFromShortcut() }
-    }
-    commandOLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-      if matches(event) { self?.openOmiFromShortcut() }
-      return event
-    }
-  }
-
-  private func removeCommandOMonitor() {
-    if let monitor = commandOGlobalMonitor {
-      NSEvent.removeMonitor(monitor)
-      commandOGlobalMonitor = nil
-    }
-    if let monitor = commandOLocalMonitor {
-      NSEvent.removeMonitor(monitor)
-      commandOLocalMonitor = nil
+    var hotKeyRef: EventHotKeyRef?
+    let hotKeyID = EventHotKeyID(signature: FourCharCode(0x4F4D_4921), id: HotKeyID.commandO.rawValue)  // "OMI!"
+    let status = RegisterEventHotKey(
+      UInt32(kVK_ANSI_O), UInt32(cmdKey), hotKeyID,
+      GetApplicationEventTarget(), 0, &hotKeyRef
+    )
+    if status == noErr, let hotKeyRef {
+      hotKeyRefs[.commandO] = .carbon(hotKeyRef)
+      logger("GlobalShortcutManager: Registered ⌘O Omi summon hotkey")
+    } else {
+      logger("GlobalShortcutManager: Failed to register ⌘O hotkey, error: \(status)")
     }
   }
 
@@ -324,7 +311,7 @@ class GlobalShortcutManager: @unchecked Sendable {
     }
 
     switch id {
-    case .askOmi:
+    case .askOmi, .commandO:
       openOmiFromShortcut()
     }
 
@@ -354,6 +341,5 @@ class GlobalShortcutManager: @unchecked Sendable {
       _ = unregisterHotKey(ref)
     }
     hotKeyRefs.removeAll()
-    removeCommandOMonitor()
   }
 }
