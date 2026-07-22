@@ -1601,7 +1601,7 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "debug_bar_state",
       summary: "Force floating-bar state: idle|listening|thinking|answering (visual verification)",
-      params: ["state"]
+      params: ["state", "text"]
     ) { params in
       let s = (params["state"] ?? "thinking").lowercased()
       guard let debugState = VoiceTurnDebugPresentationState(rawValue: s) else {
@@ -1612,6 +1612,16 @@ final class DesktopAutomationActionRegistry {
       if s != "idle", !mgr.isVisible { mgr.show() }
       guard VoiceTurnCoordinator.shared.applyDebugPresentationState(debugState) else {
         return ["error": "a non-debug voice turn is active"]
+      }
+      // Optional sample transcript/reply so the notch's live text + dynamic
+      // height grow can be exercised without a mic. Listening fills the user
+      // transcript; answering fills the streamed reply mirror.
+      if let text = params["text"], !text.isEmpty {
+        switch s {
+        case "listening": bar.liveVoiceUserText = text
+        case "answering": bar.liveVoiceAssistantText = text
+        default: break
+        }
       }
       return ["state": s, "usesNotchIsland": bar.usesNotchIsland ? "true" : "false"]
     }
@@ -2179,9 +2189,12 @@ final class DesktopAutomationActionRegistry {
         return ["error": "missing 'path'"]
       }
       return await MainActor.run { () -> [String: String] in
+        // The notch build has no legacy FloatingControlBarWindow; capture the
+        // visible notch panel instead so this bridge works in both builds.
         guard
-          let window = NSApp.windows.compactMap({ $0 as? FloatingControlBarWindow }).first,
-          window.isVisible,
+          let window = NSApp.windows.first(where: {
+            ($0 is FloatingControlBarWindow || $0 is NotchWindow) && $0.isVisible
+          }),
           let contentView = window.contentView
         else {
           return ["error": "no_floating_bar_window"]
