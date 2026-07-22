@@ -1,0 +1,37 @@
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_77f2b8dfbc2e90::t_6b04e04318250d 856-869,873
+  s_77f2b8dfbc2e90::t_f808f069e28f05 227-229
+  s_77f2b8dfbc2e90::t_aa8fb81114b575 886
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_77f2b8dfbc2e90::t_462dbe360bba29 1250-1252,1261,1263-1264
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  s_77f2b8dfbc2e90::t_dba3581684cad9 134-138,143
+desktop/macos/Desktop/Sources/FloatingControlBar/GlobalShortcutManager.swift
+  s_77f2b8dfbc2e90::t_b95264eb2de3de 157-185
+  s_77f2b8dfbc2e90::t_a9b660da925919 357
+  s_77f2b8dfbc2e90::t_b57009725a9774 82-90
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  s_77f2b8dfbc2e90::t_3ca03c267196de 2236-2237
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_77f2b8dfbc2e90::t_4afcf3475944ef 11
+  s_77f2b8dfbc2e90::t_f4604425760794 13
+  s_77f2b8dfbc2e90::t_9a46ea2d313802 3,5
+desktop/macos/changelog/unreleased/20260722-sb-review-fixes.json
+  s_77f2b8dfbc2e90::t_686eef6c189cb0 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "bdff578fd95bf2cf475cfea69714bf847a9e35fc",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
