@@ -411,8 +411,10 @@ def check_codemagic_release_publishers() -> list[str]:
         return [*errors, "canonical and preview workflows must both have scripts"]
     if canonical_scripts is not preview_scripts:
         errors.append("preview scripts must be the exact YAML alias node used by the canonical workflow")
-    if len(canonical_scripts) != 21:
-        errors.append("canonical workflow must retain exactly 21 approved script steps")
+    # 22 = 21 hardening-approved steps + the INV-BETA-1 "Create Omi Beta variant"
+    # step (founder-reviewed re-land, PR #10317).
+    if len(canonical_scripts) != 22:
+        errors.append("canonical workflow must retain exactly 22 approved script steps")
 
     for scalar in _iter_semantic_strings(canonical):
         for forbidden_authority in _FORBIDDEN_NORMAL_RELEASE_GCP_AUTHORITIES:
