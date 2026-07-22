@@ -172,8 +172,8 @@ def main() -> int:
     files: dict[str, Path] = {}
     for raw in args.asset:
         name, sep, path = raw.partition("=")
-        if not sep or name not in ARTIFACTS:
-            raise SystemExit("--asset must be NAME=PATH for a required release artifact")
+        if not sep or name not in (*ARTIFACTS, *BETA_ARTIFACTS):
+            raise SystemExit("--asset must be NAME=PATH for a qualified release artifact")
         files[name] = Path(path)
     if args.command == "build":
         if not args.candidate_gate:
