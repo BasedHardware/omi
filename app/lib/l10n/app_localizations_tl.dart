@@ -9696,153 +9696,154 @@ class AppLocalizationsTl extends AppLocalizations {
       'Ang iyong data ay protektado bilang default gamit ang malakas na encryption, at ikaw ang kumokontrol kung paano ito iniimbak at ginagamit.';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => 'Katumpakan';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => 'Batayan';
 
   @override
-  String get cloudTranscription => 'Cloud Transcription';
+  String get cloudTranscription => 'Transkripsyon sa Cloud';
 
   @override
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => 'Tanggalin ang Modelo';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'Sigurado ka bang gusto mong tanggalin ang modelong ito?';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => 'Na-download';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => 'Mas mabilis';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => 'Awtomatiko';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => 'Mas mataas';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => 'Malaki';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => 'Mas mababa';
 
   @override
-  String get whisperModelSizeMedium => 'Medium';
+  String get whisperModelSizeMedium => 'Katamtaman';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => 'Natanggal ang modelo';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => 'Nabigo ang pag-download ng modelo';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc => 'Nabigong i-download ang modelong Whisper. Pakisubukan muli.';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => 'Na-download ang modelo';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'Matagumpay na na-download ang modelong Whisper';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => 'Laki ng Modelo';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => 'Wala';
 
   @override
-  String get onDeviceTranscription => 'On-Device Transcription';
+  String get onDeviceTranscription => 'Transkripsyon sa Device';
 
   @override
-  String get onDeviceTranscriptionDesc => 'Transcription is processed locally on your device';
+  String get onDeviceTranscriptionDesc => 'Ang transkripsyon ay pinoproseso lokal sa iyong device';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => 'Mas mabagal';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => 'Maliit';
 
   @override
   String get sttProviderSoniox => 'Soniox';
 
   @override
-  String get speechToTextProvider => 'Speech-to-Text Provider';
+  String get speechToTextProvider => 'Serbisyo ng Boses-sa-Teksto';
 
   @override
-  String get speechToTextProviderDesc => 'Choose the service used for transcription';
+  String get speechToTextProviderDesc => 'Piliin ang serbisyong gagamitin para sa transkripsyon';
 
   @override
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => 'Bilis';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => 'Napakaliit';
 
   @override
-  String get transcriptionLanguage => 'Transcription Language';
+  String get transcriptionLanguage => 'Wika ng Transkripsyon';
 
   @override
-  String get transcriptionLanguageDesc => 'Choose the language for speech transcription';
+  String get transcriptionLanguageDesc => 'Piliin ang wika para sa transkripsyon ng pagsasalita';
 
   @override
-  String get whisperModel => 'Whisper Model';
+  String get whisperModel => 'Modelong Whisper';
 
   @override
-  String get whisperModelDesc => 'Choose the model for on-device transcription';
+  String get whisperModelDesc => 'Piliin ang modelo para sa transkripsyon sa device';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => 'I-downgrade sa libreng plano?';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => 'Mararanasan mo ang mga limitasyong ito:';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => '7x na paggamit ng baterya';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => '30% na mas mababang kalidad ng transkripsyon';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => '5-7 segundong pagkaantala';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => 'Hindi makikilala ang mga nagsasalita';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => 'I-downgrade Pa Rin';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => 'Hindi Nakakonekta ang Google Calendar';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt =>
+      'Ikonekta ang iyong Google Calendar upang mai-link ang mga pag-uusap sa mga kaganapan sa kalendaryo.';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return 'Naka-link sa \"$title\"';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => 'Nabigong i-link ang kaganapan sa kalendaryo';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => 'Salamat sa iyong puna!';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => 'Kopyahin ang mensahe';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => 'Maghanap ng setting…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => 'Nagkaproblema sa pag-load ng audio';
 
   @override
   String get rayBanMetaMicPickerTitle => 'Piliin ang mikropono ng Ray-Ban Meta';
