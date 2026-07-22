@@ -1,0 +1,49 @@
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
+  s_882b8f33fd02fa::t_7fc6dbbf73fce5 202-207
+  s_882b8f33fd02fa::t_ce445380893a7a 139
+  s_882b8f33fd02fa::t_11d88d4899a3ca 91-92
+  s_882b8f33fd02fa::t_69c0b059853242 539-540,546,550,552,560-599
+  s_882b8f33fd02fa::t_3ee6de0079475f 359-363,365,368,384,388-407,410
+  s_882b8f33fd02fa::t_9d28eaa7362dab 210-253,255-256,259
+  s_882b8f33fd02fa::t_49a129efe918a9 157-158
+  s_882b8f33fd02fa::t_6928a36c2160bf 10-11
+  s_882b8f33fd02fa::t_2c060d678d8c09 600
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_882b8f33fd02fa::t_8f55fa1d11076e 912,916,918-919,924,927-928
+  s_882b8f33fd02fa::t_600c45bab1685f 955-957
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
+  s_882b8f33fd02fa::t_137af0912874d1 240-249
+  s_882b8f33fd02fa::t_2ae93afa9b4e0f 109
+  s_882b8f33fd02fa::t_7e84c6ab1e5b0c 151,153-154
+  s_882b8f33fd02fa::t_46e2ee0390c698 206
+  s_882b8f33fd02fa::t_958c5609ef1199 127-130
+  s_882b8f33fd02fa::t_a634ec7362988b 199
+  s_882b8f33fd02fa::t_a5a39a2f54dfb9 226
+  s_882b8f33fd02fa::t_18aa981346f952 19
+  s_882b8f33fd02fa::t_7975091af92236 17,22-25
+  s_882b8f33fd02fa::t_6d1f37cadb41c2 261-271
+  s_882b8f33fd02fa::t_bd2b8cdf671c59 26
+desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
+  s_882b8f33fd02fa::t_8749c915e119fa 1618
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel+Steps.swift
+  s_882b8f33fd02fa::t_4608bfda18a4dc 149-150,152-163
+  s_882b8f33fd02fa::t_7bd11b4b4c8e45 227-232,235-241,244-248
+  s_882b8f33fd02fa::t_62a5ee277028c4 143
+  s_882b8f33fd02fa::t_76e4700f570efd 173-177
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "8d049fbcc44c3f3c4bdf7af8fdb9619d556a7614",
+  "prompts": {},
+  "sessions": {
+    "s_882b8f33fd02fa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9cfbb7d1-8d4d-4dd8-9026-6bbe8ee74af4",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
