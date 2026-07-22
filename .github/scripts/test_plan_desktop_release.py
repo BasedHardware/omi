@@ -20,6 +20,7 @@ SPEC.loader.exec_module(planner)
 
 REPOSITORY = "BasedHardware/omi"
 SOURCE_SHA = "a" * 40
+LATER_NON_DESKTOP_SHA = "b" * 40
 LATEST_TAG = "v0.0.1+1-macos"
 RELEASABLE_PATH = "desktop/macos/Desktop/Sources/AppDelegate.swift"
 
@@ -40,28 +41,35 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
             [(SOURCE_SHA, check_name) for check_name in planner.REQUIRED_SOURCE_CHECK_NAMES],
         )
 
-    def test_each_missing_or_failed_exact_source_check_blocks_the_gate(self) -> None:
+    def test_each_missing_skipped_or_failed_exact_source_check_blocks_the_gate(self) -> None:
         for blocked_name in (
             "Release Eligibility",
             "Desktop Swift Build & Tests",
             "Desktop Swift Release Compile",
         ):
-            with self.subTest(check=blocked_name):
-                def check_status(_repository: str, _sha: str, check_name: str):
-                    if check_name == blocked_name:
-                        return None, None, None
-                    return "completed", "success", None
+            for blocked_status, blocked_conclusion, expected in (
+                (None, None, "missing"),
+                ("completed", "skipped", "skipped"),
+                ("completed", "failure", "failure"),
+            ):
+                with self.subTest(check=blocked_name, conclusion=blocked_conclusion):
+                    def check_status(_repository: str, _sha: str, check_name: str):
+                        if check_name == blocked_name:
+                            return blocked_status, blocked_conclusion, None
+                        return "completed", "success", None
 
-                with patch.object(planner, "github_check_status", side_effect=check_status):
-                    reason = planner.required_source_checks_reason(REPOSITORY, SOURCE_SHA) or ""
-                self.assertIn(blocked_name, reason)
-                self.assertIn("missing", reason)
+                    with patch.object(planner, "github_check_status", side_effect=check_status):
+                        reason = planner.required_source_checks_reason(REPOSITORY, SOURCE_SHA) or ""
+                    self.assertIn(blocked_name, reason)
+                    self.assertIn(expected, reason)
 
-    def test_automatic_planner_gates_exact_head_release_eligibility(self) -> None:
+    def test_backend_or_docs_commit_after_desktop_commit_keeps_exact_releasable_source(self) -> None:
         checked_shas: list[str] = []
 
         def fake_git(args: list[str], *, check: bool = True) -> str:
             if args == ["rev-parse", "HEAD"]:
+                return LATER_NON_DESKTOP_SHA
+            if args == ["log", "--first-parent", "-1", "--format=%H", "HEAD", "--", RELEASABLE_PATH]:
                 return SOURCE_SHA
             self.fail(f"unexpected git invocation: {args}")
 
@@ -82,6 +90,7 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
 
         self.assertEqual(checked_shas, [SOURCE_SHA])
         self.assertIn(f"source_sha={SOURCE_SHA}", outputs)
+        self.assertNotIn(f"source_sha={LATER_NON_DESKTOP_SHA}", outputs)
         self.assertIn("should_release=true", outputs)
 
     def test_workflow_is_schedule_only_and_tags_the_changelog_commit(self) -> None:
@@ -89,6 +98,8 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn("- cron: '17 * * * *'", workflow)
         self.assertNotIn("workflow_dispatch:", workflow)
         self.assertNotIn("break_glass", workflow)
+        self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
+        self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
         self.assertLess(workflow.index('git commit -m "chore: consolidate changelog for v${VERSION}"'), workflow.index('git tag "$RELEASE_TAG"'))
 
 
