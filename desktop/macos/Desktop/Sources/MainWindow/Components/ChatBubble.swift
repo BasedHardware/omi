@@ -90,22 +90,27 @@ struct ChatBubble: View {
     )
 
     HStack(alignment: .top, spacing: OmiSpacing.md) {
-      // Default omi replies render avatar-free for a quieter timeline; only
-      // app personas keep their identity mark.
-      if message.sender == .ai, let app = app {
-        AsyncImage(url: URL(string: app.image)) { phase in
-          switch phase {
-          case .success(let image):
-            image
-              .resizable()
-              .aspectRatio(contentMode: .fill)
-          default:
-            Circle()
-              .fill(OmiColors.backgroundTertiary)
+      // Omi texts you: its replies carry the Omi mark on the left, and it spins
+      // while it's thinking of a response. App personas keep their own image.
+      if message.sender == .ai {
+        if let app = app {
+          AsyncImage(url: URL(string: app.image)) { phase in
+            switch phase {
+            case .success(let image):
+              image
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+            default:
+              Circle()
+                .fill(OmiColors.backgroundTertiary)
+            }
           }
+          .frame(width: 32, height: 32)
+          .clipShape(Circle())
+        } else {
+          SBLogo(size: 22, spinning: message.isStreaming)
+            .frame(width: 32, height: 32, alignment: .center)
         }
-        .frame(width: 32, height: 32)
-        .clipShape(Circle())
       }
 
       // Bubbles hug their content up to a readable cap — omi replies sit
@@ -1024,6 +1029,11 @@ enum ContentBlockGroup: Identifiable {
           if case .toolCall = block { return true }
           return false
         }
+        // Tool-call chips are live progress, not history: show them only while
+        // the reply is streaming (tools actively being called) and drop them
+        // once omi has finished replying, so the timeline reads like a clean
+        // text conversation.
+        if !isStreaming { return nil }
         return visibleCalls.isEmpty ? nil : .toolCalls(id: id, calls: visibleCalls)
       }
     }
