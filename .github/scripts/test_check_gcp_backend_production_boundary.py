@@ -27,7 +27,14 @@ class GcpBackendProductionBoundaryTests(unittest.TestCase):
             "permits_prod_all": (CHECKER.PROD_ALL_REJECTION, "if false; then"),
             "reintroduces_tagged_url": ("Production has no tagged candidate URL", "Production has no tagged candidate URL\n# resolve_cloud_run_tagged_url.py"),
             "moves_smoke_before_serving_verification": (CHECKER.PROD_SMOKE, "Smoke production candidate API"),
-            "omits_route_presence_smoke": ("expected validation response", "unexpected response"),
+            "omits_schema_valid_unauthenticated_smoke": (
+                "schema-valid inert tag reaches the authorization wall",
+                "unexpected response",
+            ),
+            "uses_invalid_empty_reservation_body": (
+                '--data \'{"tag":"macos-unauthenticated-smoke"}\'',
+                "--data '{}')",
+            ),
             "omits_smoke_rollback": (CHECKER.ROLLBACK_CONDITION, "false"),
             "leaks_smoke_token_to_output": (
                 "trap 'rm -f \"$token_file\"' EXIT",
