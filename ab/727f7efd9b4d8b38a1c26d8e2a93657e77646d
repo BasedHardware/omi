@@ -1,0 +1,21 @@
+desktop/macos/Desktop/Tests/DashboardCaptureStateTests.swift
+  s_62099ccfd5cc12::t_4c23809aea0fef 333-339
+  s_62099ccfd5cc12::t_f95cfd93822955 6,8,10-11,13,15,18-21,23,30,33-38,41-44,46,53,57,60
+  s_62099ccfd5cc12::t_9cec2e29fbe62f 340-341
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "ab727f7efd9b4d8b38a1c26d8e2a93657e77646d",
+  "prompts": {},
+  "sessions": {
+    "s_62099ccfd5cc12": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bce3b3b3-c244-4ae8-bb2a-1ff7eccbcdbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
