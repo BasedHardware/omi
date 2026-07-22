@@ -1,4 +1,5 @@
 import ast
+import asyncio
 import importlib.util
 import threading
 from pathlib import Path
@@ -16,6 +17,7 @@ AGENT_PROXY_DIR = BACKEND_DIR / "agent-proxy"
 @pytest.fixture
 def agent_proxy(monkeypatch) -> ModuleType:
     monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    monkeypatch.syspath_prepend(str(AGENT_PROXY_DIR))
     initialize_app = MagicMock(return_value=object())
     firestore_client = MagicMock(return_value=object())
     monkeypatch.setattr(firebase_admin, "initialize_app", initialize_app)
@@ -50,6 +52,65 @@ class _AsyncClient:
 
     async def get(self, _url, *, headers):
         self.headers = headers
+        return _Response()
+
+
+class _AgentWebSocket:
+    headers = {"authorization": "Bearer firebase-token"}
+
+    def __init__(self):
+        self.accepted = False
+        self.sent = []
+        self.closed = []
+
+    async def accept(self):
+        self.accepted = True
+
+    async def send_text(self, text):
+        self.sent.append(text)
+
+    async def close(self, *, code, reason):
+        self.closed.append((code, reason))
+
+    async def iter_text(self):
+        yield '{"type":"query","prompt":"hello"}'
+
+
+class _VMProtocol:
+    def __init__(self):
+        self.sent = []
+        self.closed = False
+        self.message_sent = asyncio.Event()
+
+    async def send(self, message):
+        self.sent.append(message)
+        self.message_sent.set()
+
+    async def close(self):
+        self.closed = True
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        await self.message_sent.wait()
+        raise StopAsyncIteration
+
+
+class _ProxyHTTPClient:
+    def __init__(self, *_args, **_kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, _exc_type, _exc, _traceback):
+        return False
+
+    async def get(self, _url, **_kwargs):
+        return _Response()
+
+    async def post(self, _url, **_kwargs):
         return _Response()
 
 
@@ -92,6 +153,38 @@ async def test_gce_credential_refresh_failure_still_propagates(agent_proxy, monk
 
     with pytest.raises(RuntimeError, match="credential refresh failed"):
         await agent_proxy._check_gce_status("omi-agent-test", "us-central1-a")
+
+
+@pytest.mark.asyncio
+async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy, monkeypatch):
+    phone_ws = _AgentWebSocket()
+    vm_ws = _VMProtocol()
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    async def connect(*_args, **_kwargs):
+        return vm_ws
+
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "user-1"})
+    monkeypatch.setattr(
+        agent_proxy,
+        "_get_user_context",
+        lambda _uid: ({"status": "ready", "ip": "127.0.0.1", "authToken": "vm-token"}, "standard"),
+    )
+    monkeypatch.setattr(agent_proxy, "_get_or_create_chat_session", lambda _uid: {"id": "session-1"})
+    monkeypatch.setattr(agent_proxy, "_fetch_chat_history", lambda *_args: [])
+    monkeypatch.setattr(agent_proxy, "_save_message", lambda *_args: None)
+    monkeypatch.setattr(agent_proxy.httpx, "AsyncClient", _ProxyHTTPClient)
+    monkeypatch.setattr(agent_proxy.websockets, "connect", connect)
+
+    await agent_proxy.agent_ws(phone_ws)
+
+    assert phone_ws.accepted is True
+    assert vm_ws.sent == ['{"type": "query", "prompt": "hello"}']
+    assert vm_ws.closed is True
+    assert phone_ws.closed == [(1000, "Session ended")]
 
 
 def test_firestore_client_is_initialized_lazily_and_cached(agent_proxy, monkeypatch):

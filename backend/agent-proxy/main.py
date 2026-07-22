@@ -582,8 +582,16 @@ async def agent_ws(websocket: WebSocket):
                     pass
                 await asyncio.sleep(attempt)
 
+    @asynccontextmanager
+    async def _connected_vm() -> AsyncIterator[Any]:
+        vm_ws = await _connect_vm_with_retry()
+        try:
+            yield vm_ws
+        finally:
+            await vm_ws.close()
+
     try:
-        async with await _connect_vm_with_retry() as vm_ws:
+        async with _connected_vm() as vm_ws:
             logger.info(f"[agent-proxy] uid={uid} connected")
 
             # Send Firebase token to VM so it can fetch backend tools (calendar, gmail, etc.)
