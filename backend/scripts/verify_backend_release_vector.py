@@ -271,8 +271,13 @@ def evaluate_cloud_run_service(
         errors.append(f'cloud_run/{service}: template image is not {expected_image}')
     if require_serving_traffic and (not expected_traffic or _mapping(expected_traffic[0]).get('percent') != 100):
         errors.append(f'cloud_run/{service}: expected revision does not receive 100% traffic')
-    if not require_serving_traffic and any(_mapping(entry).get('percent') != 0 for entry in expected_traffic):
-        errors.append(f'cloud_run/{service}: expected revision carries traffic before promotion')
+    if not require_serving_traffic:
+        for entry in expected_traffic:
+            allocation = _effective_candidate_traffic_percent(_mapping(entry).get('percent'))
+            if allocation is None:
+                errors.append(f'cloud_run/{service}: candidate traffic allocation is ambiguous')
+            elif allocation > 0:
+                errors.append(f'cloud_run/{service}: expected revision carries traffic before promotion')
     timeout = template_spec.get('timeoutSeconds')
     if not isinstance(timeout, int) or timeout < MIN_CLOUD_RUN_TIMEOUT_SECONDS:
         errors.append(f'cloud_run/{service}: timeoutSeconds must be at least {MIN_CLOUD_RUN_TIMEOUT_SECONDS}')
@@ -430,6 +435,23 @@ def _container_env(containers: Sequence[Any]) -> dict[str, str]:
         for entry in _list(_mapping(containers[0]).get('env'))
         if _mapping(entry).get('name') and 'value' in _mapping(entry)
     }
+
+
+def _effective_candidate_traffic_percent(percent: Any) -> float | None:
+    """Effective default-domain allocation for a candidate traffic target.
+
+    Cloud Run omits ``percent`` (serialized as ``null``) on a tagged, no-allocation
+    candidate revision, which carries 0% of serving traffic until promotion. A real
+    non-negative numeric percent is its allocation; any other shape (bool, string,
+    negative) is ambiguous and must not be trusted as zero, so it returns ``None``
+    for the caller to reject. Only ``revisionName``-pinned targets reach this path;
+    ``latestRevision`` remainder targets never match the candidate name.
+    """
+    if percent is None:
+        return 0.0
+    if isinstance(percent, bool) or not isinstance(percent, (int, float)) or percent < 0:
+        return None
+    return float(percent)
 
 
 def main() -> int:
