@@ -34,13 +34,15 @@ FORBIDDEN_ROUTING_TOKENS = (
 )
 REQUIRED_PRODUCTION_FRAGMENTS = {
     "desktop/macos/Desktop/Sources/AppBuild.swift": (
-        'betaProductionBundleIdentifier = "com.omi.computer-macos.beta"',
-        "productionFamilyBundleIdentifiers",
+        'productionBundleIdentifier = "com.omi.computer-macos"',
+        "externalPreviewBundleIdentifierPrefix",
     ),
     "desktop/macos/Desktop/Sources/GoogleService-Info.plist": (
         "<string>based-hardware</string>",
     ),
 }
+CANONICAL_MACOS_PRODUCTION_BUNDLE_IDENTIFIER = "com.omi.computer-macos"
+MACOS_PRODUCTION_BUNDLE_IDENTIFIER_PATTERN = re.compile(r'"(com\.omi\.computer-macos(?:\.[^"]+)?)"')
 
 
 def _workflow_block(text: str, workflow: str) -> str | None:
@@ -59,6 +61,14 @@ def validate(root: Path) -> list[str]:
                 f"{workflow} must contain exactly one immutable API_BASE_URL=https://api.omi.me/ assignment"
             )
     desktop_block = _workflow_block(text, DESKTOP_WORKFLOW)
+    desktop_bundle_identifiers = re.findall(
+        r"(?m)^\s*BUNDLE_ID:\s*[\"']?([^\"'\s]+)[\"']?\s*$", desktop_block or ""
+    )
+    if desktop_bundle_identifiers != [CANONICAL_MACOS_PRODUCTION_BUNDLE_IDENTIFIER]:
+        errors.append(
+            f"{DESKTOP_WORKFLOW} must contain exactly one immutable "
+            f"BUNDLE_ID={CANONICAL_MACOS_PRODUCTION_BUNDLE_IDENTIFIER} assignment"
+        )
     desktop_assignments = re.findall(r"(?m)^\s*OMI_PYTHON_API_URL:\s*[\"']?([^\"'\s]+)[\"']?\s*$", desktop_block or "")
     if desktop_assignments != [DESKTOP_PIN]:
         errors.append(
@@ -90,6 +100,13 @@ def validate(root: Path) -> list[str]:
         for fragment in required_fragments:
             if fragment not in source:
                 errors.append(f"{relative_path} must retain protected production identity fragment {fragment!r}")
+        if relative_path == "desktop/macos/Desktop/Sources/AppBuild.swift":
+            for bundle_identifier in MACOS_PRODUCTION_BUNDLE_IDENTIFIER_PATTERN.findall(source):
+                if bundle_identifier != CANONICAL_MACOS_PRODUCTION_BUNDLE_IDENTIFIER:
+                    errors.append(
+                        f"{relative_path} must not define divergent production-family bundle identity "
+                        f"{bundle_identifier!r}"
+                    )
     return errors
 
 

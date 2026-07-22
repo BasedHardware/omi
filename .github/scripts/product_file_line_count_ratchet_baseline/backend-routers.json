@@ -1,10 +1,10 @@
 {
   "files": {
     "backend/routers/apps.py": 2335,
-    "backend/routers/chat.py": 1577,
+    "backend/routers/chat.py": 1588,
     "backend/routers/developer.py": 2195,
     "backend/routers/mcp_sse.py": 1858,
-    "backend/routers/sync.py": 2035,
+    "backend/routers/sync.py": 2056,
     "backend/routers/users.py": 2046
   },
   "raise_justifications": {
