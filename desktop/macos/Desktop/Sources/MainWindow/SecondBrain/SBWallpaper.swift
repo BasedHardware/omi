@@ -37,15 +37,18 @@ struct SBWallpaper: View {
         )
 
         // Three ridgeline hills, back-to-front, each drifting on its own slow cycle.
-        hill(color1: sb.hillC, color2: sb.hillC2, width: w * 1.5, height: h * 0.78,
-             baseX: w * 0.5, baseY: h * 1.16, drift: animate ? w * 0.06 : -w * 0.02,
-             duration: 8)
-        hill(color1: sb.hillB, color2: sb.hillB2, width: w * 1.35, height: h * 0.80,
-             baseX: w * 0.62, baseY: h * 1.14, drift: animate ? -w * 0.07 : w * 0.03,
-             duration: 15)
-        hill(color1: sb.hillA, color2: sb.hillA2, width: w * 1.25, height: h * 0.78,
-             baseX: w * 0.32, baseY: h * 1.18, drift: animate ? w * 0.08 : -w * 0.03,
-             duration: 11)
+        hill(
+          color1: sb.hillC, color2: sb.hillC2, width: w * 1.5, height: h * 0.78,
+          baseX: w * 0.5, baseY: h * 1.16, drift: animate ? w * 0.06 : -w * 0.02,
+          duration: 8)
+        hill(
+          color1: sb.hillB, color2: sb.hillB2, width: w * 1.35, height: h * 0.80,
+          baseX: w * 0.62, baseY: h * 1.14, drift: animate ? -w * 0.07 : w * 0.03,
+          duration: 15)
+        hill(
+          color1: sb.hillA, color2: sb.hillA2, width: w * 1.25, height: h * 0.78,
+          baseX: w * 0.32, baseY: h * 1.18, drift: animate ? w * 0.08 : -w * 0.03,
+          duration: 11)
       }
       .ignoresSafeArea()
     }

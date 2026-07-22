@@ -859,7 +859,8 @@ struct DashboardPage: View {
           .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(HomePalette.tile.opacity(0.5)))
           .overlay(
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-              .stroke(HomePalette.hairline.opacity(0.55), lineWidth: 1))
+              .stroke(HomePalette.hairline.opacity(0.55), lineWidth: 1)
+          )
           .contentShape(.rect(cornerRadius: 11))
         }
         .buttonStyle(.plain)
@@ -952,7 +953,8 @@ struct DashboardPage: View {
     if focusStorage.currentStatus == .distracted {
       return "Help me get back on track"
     }
-    let openCount = homeKnowsTaskCandidates
+    let openCount =
+      homeKnowsTaskCandidates
       .filter { !dismissedKnowsTaskIDs.contains($0.id) }
       .count
     if openCount >= 5 {
@@ -965,7 +967,8 @@ struct DashboardPage: View {
   /// much is waiting — shown under the greeting. It absorbs the focus status so
   /// the action rows below stay purely actionable.
   private var homeDailyBrief: String {
-    let openCount = homeKnowsTaskCandidates
+    let openCount =
+      homeKnowsTaskCandidates
       .filter { !dismissedKnowsTaskIDs.contains($0.id) }
       .count
     let tail: String
@@ -1755,7 +1758,6 @@ struct DashboardPage: View {
     selectedImportConnector = nil
     selectedExportDestination = nil
   }
-
 
   private func openOmiDeviceWebsite() {
     if let url = URL(string: "https://www.omi.me") {

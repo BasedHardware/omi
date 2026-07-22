@@ -226,15 +226,21 @@ extension SBOnboardingModel {
     let mask: NSEvent.EventTypeMask = [.keyDown, .keyUp, .flagsChanged]
     // Local monitor fires when the app is key and can consume the event; global
     // monitor fires when another app is focused (it can only observe).
-    if let l = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { [weak self] event in
-      let matched = self?.handleShortcutEvent(event) ?? false
-      return matched ? nil : event
-    }) {
+    if let l = NSEvent.addLocalMonitorForEvents(
+      matching: mask,
+      handler: { [weak self] event in
+        let matched = self?.handleShortcutEvent(event) ?? false
+        return matched ? nil : event
+      })
+    {
       shortcutMonitors.append(l)
     }
-    if let g = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] event in
-      _ = self?.handleShortcutEvent(event)
-    }) {
+    if let g = NSEvent.addGlobalMonitorForEvents(
+      matching: mask,
+      handler: { [weak self] event in
+        _ = self?.handleShortcutEvent(event)
+      })
+    {
       shortcutMonitors.append(g)
     }
   }
@@ -479,13 +485,15 @@ extension SBOnboardingModel {
       Task { [weak self] in
         let s = await CalendarReaderService.shared.verifyConnection()
         let needsSignIn = { if case .needsSignIn = s { return true } else { return false } }()
-        self?.resolveGoogleConnect("calendar", connected: s.isConnected, needsSignIn: needsSignIn, signInURL: "https://calendar.google.com")
+        self?.resolveGoogleConnect(
+          "calendar", connected: s.isConnected, needsSignIn: needsSignIn, signInURL: "https://calendar.google.com")
       }
     case "gmail":
       Task { [weak self] in
         let s = await GmailReaderService.shared.verifyConnection()
         let needsSignIn = { if case .needsSignIn = s { return true } else { return false } }()
-        self?.resolveGoogleConnect("gmail", connected: s.isConnected, needsSignIn: needsSignIn, signInURL: "https://mail.google.com")
+        self?.resolveGoogleConnect(
+          "gmail", connected: s.isConnected, needsSignIn: needsSignIn, signInURL: "https://mail.google.com")
       }
     case "applenotes":
       Task { [weak self] in

@@ -148,7 +148,9 @@ struct SBOnboardingView: View {
     case .systemAudio:
       permStepWidget("system_audio", "System audio", "the other side — Zoom, Meet, calls") { model.answerSystemAudio() }
     case .screen:
-      permStepWidget("screen_recording", "Screen Recording", "so I can see what you're looking at") { model.answerScreen() }
+      permStepWidget("screen_recording", "Screen Recording", "so I can see what you're looking at") {
+        model.answerScreen()
+      }
     case .files:
       permStepWidget("full_disk_access", "Full Disk Access", "cite your files · read-only, stays on this Mac") {
         model.answerFiles()
@@ -158,7 +160,9 @@ struct SBOnboardingView: View {
         model.answerAccessibility()
       }
     case .automation:
-      permStepWidget("automation", "Automation", "drive your other apps to get things done") { model.answerAutomation() }
+      permStepWidget("automation", "Automation", "drive your other apps to get things done") {
+        model.answerAutomation()
+      }
     case .shortcutOpen: shortcutWidget(isTalk: false)
     case .shortcutTalk: shortcutWidget(isTalk: true)
     case .screenDemo: screenDemoWidget
@@ -184,7 +188,8 @@ struct SBOnboardingView: View {
 
   private func trustRow(_ tag: String, _ text: String) -> some View {
     HStack(alignment: .top, spacing: 12) {
-      Text(tag).geistMono(size: 11.5, weight: .medium).foregroundStyle(sb.ink(.w4)).frame(width: 52, alignment: .leading)
+      Text(tag).geistMono(size: 11.5, weight: .medium).foregroundStyle(sb.ink(.w4)).frame(
+        width: 52, alignment: .leading)
       Text(text).geist(size: 14).foregroundStyle(sb.ink(.w85))
       Spacer(minLength: 0)
     }
@@ -227,7 +232,9 @@ struct SBOnboardingView: View {
             model.answerLanguageText()
           }
         }
-        Button { languageChanging = true } label: {
+        Button {
+          languageChanging = true
+        } label: {
           Text("Change language").geist(size: 13).foregroundStyle(sb.ink(.w45))
         }
         .buttonStyle(.plain)
@@ -247,7 +254,9 @@ struct SBOnboardingView: View {
         if !matches.isEmpty {
           VStack(spacing: 0) {
             ForEach(matches, id: \.code) { lang in
-              Button { model.pickLanguage(code: lang.code, name: lang.name) } label: {
+              Button {
+                model.pickLanguage(code: lang.code, name: lang.name)
+              } label: {
                 HStack {
                   Text(lang.name).geist(size: 14).foregroundStyle(sb.ink(.w85))
                   Spacer()
@@ -298,7 +307,9 @@ struct SBOnboardingView: View {
         Text(why).geist(size: 12.5).foregroundStyle(sb.ink(.w45))
       }
       if state == .on {
-        Button { onContinue() } label: {
+        Button {
+          onContinue()
+        } label: {
           HStack(spacing: 6) {
             Text("✓  \(name) on").geist(size: 14, weight: .semibold)
             Spacer()
@@ -312,7 +323,9 @@ struct SBOnboardingView: View {
         }
         .buttonStyle(.plain)
       } else {
-        Button { if state == .ask { model.requestPerm(key) } } label: {
+        Button {
+          if state == .ask { model.requestPerm(key) }
+        } label: {
           Text(state == .waiting ? "Waiting for macOS…" : "Allow \(name)")
             .geist(size: 14, weight: .semibold).foregroundStyle(sb.inkInverted)
             .frame(maxWidth: .infinity).padding(.vertical, 11)
@@ -321,7 +334,9 @@ struct SBOnboardingView: View {
         }
         .buttonStyle(.plain)
         .disabled(state == .waiting)
-        Button { onContinue() } label: {
+        Button {
+          onContinue()
+        } label: {
           Text("Skip for now").geist(size: 13).foregroundStyle(sb.ink(.w35))
         }
         .buttonStyle(.plain)
@@ -354,7 +369,9 @@ struct SBOnboardingView: View {
     .frame(minWidth: 34, minHeight: 34)
     .padding(.horizontal, 7).padding(.vertical, 5)
     .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(active ? sb.ink : sb.ink(.w06)))
-    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(active ? sb.ink : sb.ink(.w18), lineWidth: 1.5))
+    .overlay(
+      RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(active ? sb.ink : sb.ink(.w18), lineWidth: 1.5)
+    )
     .shadow(color: .black.opacity(0.28), radius: 1, y: 1)
     .fixedSize()
   }
@@ -365,7 +382,9 @@ struct SBOnboardingView: View {
     let options = isTalk ? model.talkShortcutOptions : model.openShortcutOptions
     return VStack(alignment: .leading, spacing: 9) {
       ForEach(options, id: \.id) { opt in
-        Button { model.pickShortcut(opt.shortcut, isTalk: isTalk) } label: {
+        Button {
+          model.pickShortcut(opt.shortcut, isTalk: isTalk)
+        } label: {
           HStack(spacing: 8) {
             HStack(spacing: 5) {
               ForEach(opt.shortcut.displayTokens, id: \.self) { tok in keycap(tok) }
@@ -406,7 +425,9 @@ struct SBOnboardingView: View {
         if model.shortcutPressed {
           SBInkButton(title: "Continue") { isTalk ? model.answerShortcutTalk() : model.answerShortcutOpen() }
         } else {
-          Button { isTalk ? model.answerShortcutTalk() : model.answerShortcutOpen() } label: {
+          Button {
+            isTalk ? model.answerShortcutTalk() : model.answerShortcutOpen()
+          } label: {
             Text("Skip for now").geist(size: 13).foregroundStyle(sb.ink(.w35))
           }
           .buttonStyle(.plain)
@@ -478,7 +499,9 @@ struct SBOnboardingView: View {
     VStack(alignment: .leading, spacing: 12) {
       VStack(spacing: 0) {
         ForEach(Array(model.contextRows.enumerated()), id: \.element.id) { i, row in
-          connectRow(row.name, row.detail, state: model.contextStates[row.id] ?? "idle") { model.connectContext(row.id) }
+          connectRow(row.name, row.detail, state: model.contextStates[row.id] ?? "idle") {
+            model.connectContext(row.id)
+          }
           if i < model.contextRows.count - 1 { Divider().overlay(sb.ink(.w08)) }
         }
       }
@@ -510,9 +533,11 @@ struct SBOnboardingView: View {
     case "unavailable": Text("not installed").geist(size: 12).foregroundStyle(sb.ink(.w35))
     default:
       Button(action: action) {
-        Text(state == "needsSignIn" ? "Retry" : "Connect").geist(size: 13, weight: .semibold).foregroundStyle(sb.inkInverted)
-          .padding(.horizontal, 12).padding(.vertical, 4)
-          .background(RoundedRectangle(cornerRadius: 7).fill(sb.ink))
+        Text(state == "needsSignIn" ? "Retry" : "Connect").geist(size: 13, weight: .semibold).foregroundStyle(
+          sb.inkInverted
+        )
+        .padding(.horizontal, 12).padding(.vertical, 4)
+        .background(RoundedRectangle(cornerRadius: 7).fill(sb.ink))
       }
       .buttonStyle(.plain)
     }
@@ -522,13 +547,17 @@ struct SBOnboardingView: View {
 
   private var captureWidget: some View {
     VStack(spacing: 8) {
-      Button { model.captureContinuous() } label: {
+      Button {
+        model.captureContinuous()
+      } label: {
         Text("● Start listening — continuously").geist(size: 14, weight: .semibold).foregroundStyle(sb.inkInverted)
           .frame(maxWidth: .infinity).padding(.vertical, 11)
           .background(RoundedRectangle(cornerRadius: 11).fill(sb.ink))
       }
       .buttonStyle(.plain)
-      Button { model.captureMeetingsOnly() } label: {
+      Button {
+        model.captureMeetingsOnly()
+      } label: {
         HStack(spacing: 4) {
           Text("Only during meetings").geist(size: 14).foregroundStyle(sb.ink(.w85))
           Text("· from my calendar").geist(size: 12).foregroundStyle(sb.ink(.w4))
@@ -551,7 +580,9 @@ private struct FlowChips: View {
   var body: some View {
     ChipFlowLayout(spacing: 8, lineSpacing: 8) {
       ForEach(items, id: \.self) { item in
-        Button { onPick(item) } label: {
+        Button {
+          onPick(item)
+        } label: {
           Text(item).geist(size: 14).foregroundStyle(sb.ink(.w85))
             .padding(.horizontal, 15).padding(.vertical, 8)
             .overlay(Capsule().stroke(sb.ink(.w14), lineWidth: 1))

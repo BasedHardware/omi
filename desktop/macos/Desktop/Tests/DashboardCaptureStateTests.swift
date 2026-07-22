@@ -7,7 +7,8 @@ final class DashboardCaptureStateTests: XCTestCase {
 
     // The header derives capture status from the shared CaptureListeningLogic…
     XCTAssertTrue(
-      source.contains("CaptureListeningLogic.captureStatus(appState: appState, isCaptureMonitoring: isCaptureMonitoring)"),
+      source.contains(
+        "CaptureListeningLogic.captureStatus(appState: appState, isCaptureMonitoring: isCaptureMonitoring)"),
       "DashboardPage should derive capture status from the shared CaptureListeningLogic"
     )
     // …which lights up from the LIVE monitor, never stale persisted intent.

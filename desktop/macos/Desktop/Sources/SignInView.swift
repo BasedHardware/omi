@@ -97,7 +97,9 @@ struct SignInView: View {
             if authState.isLoading {
               HStack(spacing: 10) {
                 ProgressView().scaleEffect(0.7).tint(sb.ink(.w6))
-                Button { AuthService.shared.cancelSignIn() } label: {
+                Button {
+                  AuthService.shared.cancelSignIn()
+                } label: {
                   Text("Cancel").geist(size: 12.5).foregroundStyle(sb.ink(.w45))
                 }
                 .buttonStyle(.plain)

@@ -102,7 +102,8 @@ final class NotchMomentsCoordinator {
     // so the pill only shows "✓ Noted" the instant Omi actually writes something down.
     let freshCutoff = Date().addingTimeInterval(-120)
     guard
-      let newTask = tasks
+      let newTask =
+        tasks
         .filter({ newIds.contains($0.id) && $0.createdAt >= freshCutoff })
         .max(by: { $0.createdAt < $1.createdAt })
     else { return }

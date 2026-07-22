@@ -96,7 +96,9 @@ package struct SBTheme: Equatable, Sendable {
   package var panel2: Color { isLight ? Color(hex: 0xFFFFFF).opacity(0.98) : Color(hex: 0x12121A).opacity(0.98) }
 
   // MARK: Notch pill — BLACK GLASS IN BOTH THEMES (final design decision)
-  package var pillBackground: Color { isLight ? Color(hex: 0x0A0A0C).opacity(0.85) : Color(hex: 0x0A0A0C).opacity(0.80) }
+  package var pillBackground: Color {
+    isLight ? Color(hex: 0x0A0A0C).opacity(0.85) : Color(hex: 0x0A0A0C).opacity(0.80)
+  }
   /// Ink scale *inside* the pill is always the dark (white-on-black) scale.
   package func pillInk(_ token: SBInk) -> Color { Color.white.opacity(token.alphas.dark) }
   package var pillInkSolid: Color { .white }
