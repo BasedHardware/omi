@@ -9607,153 +9607,154 @@ class AppLocalizationsCs extends AppLocalizations {
       'Vaše data jsou ve výchozím nastavení zabezpečena silným šifrováním a vy máte kontrolu nad tím, jak jsou ukládána a používána.';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => 'Přesnost';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => 'Základní';
 
   @override
-  String get cloudTranscription => 'Cloud Transcription';
+  String get cloudTranscription => 'Cloudový přepis';
 
   @override
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => 'Smazat model';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'Opravdu chcete tento model smazat?';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => 'Staženo';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => 'Rychlejší';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => 'Automaticky';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => 'Vyšší';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => 'Velký';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => 'Nižší';
 
   @override
-  String get whisperModelSizeMedium => 'Medium';
+  String get whisperModelSizeMedium => 'Střední';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => 'Model smazán';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => 'Stažení modelu se nezdařilo';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc => 'Model Whisper se nepodařilo stáhnout. Zkuste to prosím znovu.';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => 'Model stažen';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'Model Whisper byl úspěšně stažen';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => 'Velikost modelu';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => 'Žádný';
 
   @override
-  String get onDeviceTranscription => 'On-Device Transcription';
+  String get onDeviceTranscription => 'Přepis v zařízení';
 
   @override
-  String get onDeviceTranscriptionDesc => 'Transcription is processed locally on your device';
+  String get onDeviceTranscriptionDesc => 'Přepis se zpracovává lokálně ve vašem zařízení';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => 'Pomalejší';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => 'Malý';
 
   @override
   String get sttProviderSoniox => 'Soniox';
 
   @override
-  String get speechToTextProvider => 'Speech-to-Text Provider';
+  String get speechToTextProvider => 'Poskytovatel převodu řeči na text';
 
   @override
-  String get speechToTextProviderDesc => 'Choose the service used for transcription';
+  String get speechToTextProviderDesc => 'Vyberte službu používanou pro přepis';
 
   @override
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => 'Rychlost';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => 'Nejmenší';
 
   @override
-  String get transcriptionLanguage => 'Transcription Language';
+  String get transcriptionLanguage => 'Jazyk přepisu';
 
   @override
-  String get transcriptionLanguageDesc => 'Choose the language for speech transcription';
+  String get transcriptionLanguageDesc => 'Vyberte jazyk pro přepis řeči';
 
   @override
-  String get whisperModel => 'Whisper Model';
+  String get whisperModel => 'Model Whisper';
 
   @override
-  String get whisperModelDesc => 'Choose the model for on-device transcription';
+  String get whisperModelDesc => 'Vyberte model pro přepis v zařízení';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => 'Přejít na bezplatný plán?';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => 'Setkáte se s těmito omezeními:';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => '7× vyšší spotřeba baterie';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => 'O 30 % nižší kvalita přepisu';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => 'Zpoždění 5–7 sekund';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => 'Nelze rozpoznat řečníky';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => 'Přesto přejít níž';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => 'Kalendář Google není připojen';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt =>
+      'Připojte Kalendář Google, abyste mohli propojovat konverzace s událostmi v kalendáři.';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return 'Propojeno s „$title“';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => 'Propojení s událostí v kalendáři se nezdařilo';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => 'Děkujeme za zpětnou vazbu!';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => 'Kopírovat zprávu';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => 'Hledat v nastavení…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => 'Chyba při načítání zvuku';
 
   @override
   String get rayBanMetaMicPickerTitle => 'Vyberte mikrofon Ray-Ban Meta';

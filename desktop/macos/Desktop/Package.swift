@@ -157,7 +157,7 @@ let package = Package(
       dependencies: [],
       path: "Tests/SemanticFeatureSentinels",
       swiftSettings: [
-        .unsafeFlags(["-strict-concurrency=complete"]),
+        .unsafeFlags(["-strict-concurrency=complete"])
       ]
     ),
   ],

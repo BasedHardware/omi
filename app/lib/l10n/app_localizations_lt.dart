@@ -9623,10 +9623,10 @@ class AppLocalizationsLt extends AppLocalizations {
       'Jūsų duomenys pagal numatytuosius nustatymus apsaugoti stipriu šifravimu, o jūs valdote, kaip jie saugomi ir naudojami.';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => 'Tikslumas';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => 'Bazinis';
 
   @override
   String get cloudTranscription => 'Debesies transkripcija';
@@ -9635,52 +9635,52 @@ class AppLocalizationsLt extends AppLocalizations {
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => 'Ištrinti modelį';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'Ar tikrai norite ištrinti šį modelį?';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => 'Atsisiųsta';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => 'Greičiau';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => 'Automatiškai';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => 'Didesnis';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => 'Didelis';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => 'Mažesnis';
 
   @override
-  String get whisperModelSizeMedium => 'Medium';
+  String get whisperModelSizeMedium => 'Vidutinis';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => 'Modelis ištrintas';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => 'Nepavyko atsisiųsti modelio';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc => 'Nepavyko atsisiųsti Whisper modelio. Bandykite dar kartą.';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => 'Modelis atsisiųstas';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper modelis sėkmingai atsisiųstas';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => 'Modelio dydis';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => 'Nėra';
 
   @override
   String get onDeviceTranscription => 'Transkripcija įrenginyje';
@@ -9689,10 +9689,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onDeviceTranscriptionDesc => 'Transkripcija apdorojama vietoje jūsų įrenginyje';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => 'Lėčiau';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => 'Mažas';
 
   @override
   String get sttProviderSoniox => 'Soniox';
@@ -9707,10 +9707,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => 'Greitis';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => 'Mažytis';
 
   @override
   String get transcriptionLanguage => 'Transkripcijos kalba';
@@ -9725,51 +9725,52 @@ class AppLocalizationsLt extends AppLocalizations {
   String get whisperModelDesc => 'Pasirinkite modelį transkripcijai įrenginyje';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => 'Pereiti į nemokamą planą?';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => 'Susidursite su šiais apribojimais:';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => '7 kartus didesnės baterijos sąnaudos';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => '30% prastesnė transkripcijos kokybė';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => '5-7 sekundžių vėlavimas';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => 'Neįmanoma atpažinti kalbėtojų';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => 'Vis tiek pereiti';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => 'Google kalendorius neprijungtas';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt =>
+      'Prijunkite Google kalendorių, kad galėtumėte susieti pokalbius su kalendoriaus įvykiais.';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return 'Susieta su „$title“';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => 'Nepavyko susieti kalendoriaus įvykio';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => 'Ačiū už atsiliepimą!';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => 'Kopijuoti žinutę';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => 'Ieškoti nustatymuose…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => 'Klaida įkeliant garso įrašą';
 
   @override
   String get rayBanMetaMicPickerTitle => 'Pasirinkite „Ray-Ban Meta“ mikrofoną';

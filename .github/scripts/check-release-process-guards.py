@@ -807,7 +807,6 @@ def check_desktop_qualification_runner() -> list[str]:
         "docker info",
         "check-desktop-auto-beta-candidate.py",
         "--automatic",
-        "desktop_promote_beta.yml",
         "actions/create-github-app-token@v3",
         "desktop-beta-qualification-${{ inputs.release_tag }}",
         "cancel-in-progress: false",
@@ -815,6 +814,23 @@ def check_desktop_qualification_runner() -> list[str]:
     ):
         if required_fragment not in text:
             errors.append(f"desktop qualification runner is missing required guard fragment: {required_fragment}")
+    if "desktop_promote_beta.yml" in text:
+        errors.append("desktop qualification runner must not promote beta inside its own run")
+
+    promotion = ROOT / ".github/workflows/desktop_promote_beta.yml"
+    promotion_text = promotion.read_text(encoding="utf-8") if promotion.exists() else ""
+    for required_fragment in (
+        'workflows: ["Qualify Desktop Beta Candidate"]',
+        "types: [completed]",
+        "github.event.workflow_run.conclusion == 'success'",
+        "github.event.workflow_run.event == 'workflow_dispatch'",
+        "github.event.workflow_run.head_branch",
+        "github.event.workflow_run.head_sha",
+        "/v2/desktop/beta/promote-qualified",
+        "environment: beta",
+    ):
+        if required_fragment not in promotion_text:
+            errors.append(f"desktop beta promotion workflow is missing post-qualification guard: {required_fragment}")
 
     candidate_gate = ROOT / ".github/scripts/check-desktop-auto-beta-candidate.py"
     candidate_gate_text = candidate_gate.read_text(encoding="utf-8") if candidate_gate.exists() else ""
