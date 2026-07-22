@@ -406,7 +406,9 @@ final class SBOnboardingModel: ObservableObject {
   /// keep this hermetic in tests (no real login-item registration side effects).
   func applyLaunchAtLoginSelection(
     setEnabled: (Bool) -> Bool = { LaunchAtLoginManager.shared.setEnabled($0) },
-    report: (Bool) -> Void = { AnalyticsManager.shared.launchAtLoginChanged(enabled: $0, source: "sb_onboarding_complete") }
+    report: (Bool) -> Void = {
+      AnalyticsManager.shared.launchAtLoginChanged(enabled: $0, source: "sb_onboarding_complete")
+    }
   ) {
     let enabled = launchAtLogin
     if setEnabled(enabled) {
