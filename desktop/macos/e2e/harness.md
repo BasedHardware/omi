@@ -79,6 +79,10 @@ traces, logs, timing, and AX text. The harness does not score screenshot quality
 the agent should open the PNGs listed in `summary.md` and judge layout, polish,
 clipping, empty states, and visual regressions directly.
 
+For a state predicate that must remain true before the next step dispatches, set
+`stability_window_seconds` on the step. The stability window is included in the
+existing `timeout_seconds` bound and resets whenever the predicate stops matching.
+
 Before adding an AX step, inspect `./scripts/omi-ctl actions`. Action descriptors
 include `surfaces`, `safety`, `sideEffects`, and `examples`; use a matching semantic
 `bridge.action` first when `preferSemantic` is true, especially for read-only probes,
