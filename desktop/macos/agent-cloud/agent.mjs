@@ -8,6 +8,7 @@ const { query, tool, createSdkMcpServer } = await import(
 import { ALLOWED_TOOLS, buildAgentDefinitions } from "./query-config.mjs";
 import { USER_MESSAGES, classifyError, isExpectedAbort, logEvent, markOwnedAbort, withRetry } from "./errors.mjs";
 import { createSubagentRouter } from "./stream-routing.mjs";
+import { buildCondensedSeed, planCondensation } from "./conversation-condenser.mjs";
 import {
   activityCounts,
   runSqlBatch,
@@ -850,11 +851,19 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
 
 // --- Persistent Session (streaming input mode) ---
 
-function startPersistentSession(initialSink, log) {
+function startPersistentSession(initialSink, log, seedTurns = []) {
   if (!isDatabaseReady()) {
     log("Cannot start persistent session: database not ready");
     return null;
   }
+
+  // Turn history for non-destructive restart. When the SDK session dies (prompt
+  // too long / maxTurns), the recreated session was previously total amnesia;
+  // now the caller passes the prior turns and we seed the first prompt with a
+  // condensed view (recent turns verbatim) so context survives the restart.
+  const turns = [];
+  let currentUser = null; // raw user prompt of the in-flight turn
+  let seedPending = seedTurns.length ? seedTurns : null;
 
   // The session outlives any single WebSocket connection (single-user VM):
   // the client sink is swappable so a reconnect reattaches to the live
@@ -938,10 +947,23 @@ function startPersistentSession(initialSink, log) {
     turnActive = true;
     turnStartedAt = Date.now();
     firstEventSent = false;
+    currentUser = prompt;
+    let content = prompt;
+    // First turn of a reseeded session: prepend the condensed prior context so
+    // the restart is not amnesia. The user's raw prompt is still what we track.
+    if (seedPending) {
+      const summary = seedPending
+        .slice(0, Math.max(0, seedPending.length - 3))
+        .map((t) => `- ${t.user.slice(0, 100)} → ${(t.assistant || "").slice(0, 100)}`)
+        .join("\n") || "(no older turns)";
+      content = `${buildCondensedSeed(summary, seedPending.slice(-3))}\n\n---\nUser: ${prompt}`;
+      log(`Reseeded session with ${seedPending.length} prior turns (condensed)`);
+      seedPending = null;
+    }
     send({ type: "status", message: "Processing..." });
     messageQueue.push({
       type: "user",
-      message: { role: "user", content: prompt },
+      message: { role: "user", content },
       parent_tool_use_id: null,
       session_id: sid,
     });
@@ -1069,6 +1091,11 @@ function startPersistentSession(initialSink, log) {
               send({ type: "error", code: category, message: USER_MESSAGES[category] ?? USER_MESSAGES.internal });
             }
             }
+            // Record the completed exchange for non-destructive restart.
+            if (currentUser) {
+              turns.push({ user: currentUser, assistant: fullText });
+              currentUser = null;
+            }
             // Reset per-turn state
             fullText = "";
             pendingTools = [];
@@ -1114,6 +1141,7 @@ function startPersistentSession(initialSink, log) {
     startTurnTimer: () => { turnStartedAt = Date.now(); firstEventSent = false; },
     markInterrupted: () => { interruptRequested = true; },
     isDead: () => dead,
+    getTurns: () => turns,
     beginTurn,
     setPending: (prompt, sid) => {
       const replaced = pendingPrompt !== null;
@@ -1646,14 +1674,20 @@ function startServer() {
           const prompt = msg.prompt;
           log(`Query: ${prompt?.slice(0, 100)}`);
 
+          let recoverySeed = [];
           if (sharedSession?.isDead?.()) {
-            logEvent("warn", "session_recreated_after_death", {});
+            // Non-destructive restart: carry the prior turns forward (condensed)
+            // instead of losing all context when the session died.
+            const prior = sharedSession.getTurns?.() || [];
+            const plan = planCondensation(prior, { maxChars: 40000, keepRecent: 3 });
+            recoverySeed = plan.condense ? [...plan.summarize, ...plan.keep] : prior;
+            logEvent("warn", "session_recreated_after_death", { priorTurns: prior.length });
             sharedSession = null;
           }
           // Start sharedSession if not started yet
           if (!sharedSession) {
             log("No active sharedSession, starting on first query...");
-            sharedSession = startPersistentSession(send, log);
+            sharedSession = startPersistentSession(send, log, recoverySeed);
             if (!sharedSession) {
               send({ type: "error", message: "Database not available" });
               break;

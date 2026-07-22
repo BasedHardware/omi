@@ -27,6 +27,17 @@ export function query({ prompt }) {
       yield resultMsg("ok");
       return;
     }
+    // Death-recovery test hooks (additive):
+    //  - "CRASH" throws inside the loop → session marked dead
+    //  - a reseeded session's first prompt carries the condenser's seed header;
+    //    echo it back so the test can prove context survived the restart
+    if (text.includes("Conversation so far (condensed)")) {
+      yield resultMsg(`RESEEDED:${text.match(/User: (.+)$/)?.[1] ?? ""}`);
+      return;
+    }
+    if (text.includes("CRASH")) {
+      throw new Error("simulated session crash");
+    }
     turnCount += 1;
     if (text.includes("COUNT")) {
       yield { type: "stream_event", event: { type: "content_block_start", content_block: { type: "text" } } };

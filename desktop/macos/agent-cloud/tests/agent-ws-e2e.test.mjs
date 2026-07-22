@@ -225,4 +225,34 @@ describe("agent-cloud WS contract (e2e)", () => {
     expect(result.interrupted).toBe(true);
     expect(result.text).toBe("Part one. ");
   }, 20000);
+
+  it("recovers non-destructively after the session dies — reseeds prior context", async () => {
+    // Turn 1: establish a turn in history.
+    let ws = await connect();
+    let done = collectUntilResult(ws);
+    ws.send(JSON.stringify({ type: "query", prompt: "remember my project is omi" }));
+    await done;
+    ws.close();
+    await new Promise((r) => setTimeout(r, 100));
+
+    // Turn 2: crash the session (the SDK loop throws → session marked dead).
+    ws = await connect();
+    done = collectUntilResult(ws);
+    ws.send(JSON.stringify({ type: "query", prompt: "CRASH now" }));
+    await done; // resolves on the error the dead loop emits
+    ws.close();
+    await new Promise((r) => setTimeout(r, 100));
+
+    // Turn 3: a fresh session is created — it must be RESEEDED with the prior
+    // turn's context, not start amnesiac. The fixture echoes the reseed.
+    ws = await connect();
+    done = collectUntilResult(ws);
+    ws.send(JSON.stringify({ type: "query", prompt: "what is my project" }));
+    const messages = await done;
+    ws.close();
+    const result = messages.at(-1);
+    expect(result.type).toBe("result");
+    expect(result.text).toMatch(/^RESEEDED:/); // the new session carried a condensed seed
+    expect(result.text).toContain("what is my project"); // the raw prompt rides after the seed
+  }, 30000);
 });
