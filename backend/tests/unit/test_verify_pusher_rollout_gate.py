@@ -157,3 +157,51 @@ def test_rollback_emits_contract_json(gate: SimpleNamespace, rollout_fixture: Pa
     # Must be valid JSON-serializable.
     serialized = json.dumps(payload, indent=2)
     assert json.loads(serialized) == payload
+
+
+# ---------------------------------------------------------------------------
+# preflight — build-once digest promotion contract (image identity)
+# ---------------------------------------------------------------------------
+
+DIGEST = "sha256:a541cd642b2f7a92519ad648da64c806734ce336d7cebbfd0cd0246db7a2f20f"
+
+
+def _image_values(fixture: Path) -> Path:
+    return fixture / "backend/charts/pusher/dev_omi_pusher_values.yaml"
+
+
+def test_preflight_accepts_digest_pinned_release(gate: SimpleNamespace, rollout_fixture: Path) -> None:
+    values = _image_values(rollout_fixture)
+    replace_in_section(values, "image:", "pullPolicy: Always", "pullPolicy: IfNotPresent")
+    replace_in_section(values, "image:", 'tag: ""', f"digest: {DIGEST}")
+
+    assert gate.validate_preflight(rollout_fixture) == []
+
+
+def test_preflight_rejects_malformed_digest(gate: SimpleNamespace, rollout_fixture: Path) -> None:
+    values = _image_values(rollout_fixture)
+    replace_in_section(values, "image:", "pullPolicy: Always", "pullPolicy: IfNotPresent")
+    replace_in_section(values, "image:", 'tag: ""', "digest: not-a-digest")
+
+    errors = gate.validate_preflight(rollout_fixture)
+
+    assert any("image/digest must be sha256" in error for error in errors)
+
+
+def test_preflight_rejects_digest_with_a_mutable_tag(gate: SimpleNamespace, rollout_fixture: Path) -> None:
+    values = _image_values(rollout_fixture)
+    replace_in_section(values, "image:", "pullPolicy: Always", "pullPolicy: IfNotPresent")
+    replace_in_section(values, "image:", 'tag: ""', f'tag: "v1.2.3"\n  digest: {DIGEST}')
+
+    errors = gate.validate_preflight(rollout_fixture)
+
+    assert any("image/tag must be empty when image/digest" in error for error in errors)
+
+
+def test_preflight_rejects_digest_with_always_pull(gate: SimpleNamespace, rollout_fixture: Path) -> None:
+    values = _image_values(rollout_fixture)
+    replace_in_section(values, "image:", 'tag: ""', f"digest: {DIGEST}")
+
+    errors = gate.validate_preflight(rollout_fixture)
+
+    assert any("pullPolicy must be IfNotPresent for a digest-pinned" in error for error in errors)

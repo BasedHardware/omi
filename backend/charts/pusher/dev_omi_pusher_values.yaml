@@ -18,6 +18,10 @@ image:
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
+  # Build-once promotion: set `digest: sha256:<64 lowercase hex>` (and clear
+  # `tag`, set `pullPolicy: IfNotPresent`) to deploy an exact content-addressed
+  # image qualified once in dev. Malformed/ambiguous identity is rejected at
+  # render time. See backend/scripts/verify_pusher_rollout_gate.py.
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
