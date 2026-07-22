@@ -3,12 +3,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 from pathlib import Path
+import re
+import sys
 import tempfile
 import unittest
 
+from fastapi import HTTPException
+
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "backend"))
+from routers.updates import QualifiedBetaPromotionRequest, reserve_beta_candidate_endpoint
+
 MODULE_PATH = ROOT / ".github/scripts/check-gcp-backend-production-boundary.py"
 SPEC = importlib.util.spec_from_file_location("check_gcp_backend_production_boundary", MODULE_PATH)
 assert SPEC and SPEC.loader
@@ -19,6 +27,16 @@ SPEC.loader.exec_module(CHECKER)
 class GcpBackendProductionBoundaryTests(unittest.TestCase):
     def test_current_workflow_preserves_the_rollback_first_cloud_run_only_boundary(self) -> None:
         self.assertEqual(CHECKER.validate(ROOT), [])
+
+    def test_production_reservation_smoke_uses_a_schema_valid_inert_tag(self) -> None:
+        workflow = (ROOT / ".github/workflows/gcp_backend.yml").read_text(encoding="utf-8")
+        smoke = workflow[workflow.index(CHECKER.PROD_SMOKE) :]
+        match = re.search(r'''--data '\{"tag":"(?P<tag>[^"]+)"\}'\)''', smoke)
+        self.assertIsNotNone(match, "production reservation smoke must send an exact tag body")
+        request = QualifiedBetaPromotionRequest(tag=match.group("tag"))
+        with self.assertRaises(HTTPException) as denied:
+            asyncio.run(reserve_beta_candidate_endpoint(request, authorization=None))
+        self.assertEqual(denied.exception.status_code, 401)
 
     def test_rejects_production_boundary_regressions(self) -> None:
         original = (ROOT / ".github/workflows/gcp_backend.yml").read_text(encoding="utf-8")
@@ -32,7 +50,7 @@ class GcpBackendProductionBoundaryTests(unittest.TestCase):
                 "unexpected response",
             ),
             "uses_invalid_empty_reservation_body": (
-                '--data \'{"tag":"macos-unauthenticated-smoke"}\'',
+                '--data \'{"tag":"v0.0.0+1-macos"}\'',
                 "--data '{}')",
             ),
             "omits_smoke_rollback": (CHECKER.ROLLBACK_CONDITION, "false"),

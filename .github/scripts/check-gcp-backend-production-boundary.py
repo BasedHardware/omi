@@ -43,7 +43,7 @@ def validate(root: Path) -> list[str]:
             errors.append("production serving smoke must follow exact serving release-vector verification")
     for required in (
         "https://api.omi.me/v2/desktop/beta/candidates/reserve",
-        '--data \'{"tag":"macos-unauthenticated-smoke"}\'',
+        '--data \'{"tag":"v0.0.0+1-macos"}\'',
         "schema-valid inert tag reaches the authorization wall",
         "--candidate-api-url https://api.omi.me",
         "umask 077",
