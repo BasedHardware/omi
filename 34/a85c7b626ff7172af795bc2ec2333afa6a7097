@@ -1,0 +1,19 @@
+desktop/macos/Desktop/Sources/Resources/Fonts/OFL.txt
+  s_424d550d86fd05::t_30812aeb66bb4b 21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "34a85c7b626ff7172af795bc2ec2333afa6a7097",
+  "prompts": {},
+  "sessions": {
+    "s_424d550d86fd05": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7d83f64d-8ce5-47f1-b308-b8839508880a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
