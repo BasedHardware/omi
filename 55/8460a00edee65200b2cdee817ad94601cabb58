@@ -1,0 +1,25 @@
+desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeKnowsComposer.swift
+  s_77f2b8dfbc2e90::t_830541abfde492 46-51,57-58,60,64,69,73-83
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_77f2b8dfbc2e90::t_8380ed34aa6080 861-872
+  s_77f2b8dfbc2e90::t_42e2596771f168 945,949-955
+  s_77f2b8dfbc2e90::t_2182d8c899caaf 254-258
+desktop/macos/changelog/unreleased/20260721-sb-home-rotate.json
+  s_77f2b8dfbc2e90::t_e1d332a948d82b 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "558460a00edee65200b2cdee817ad94601cabb58",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
