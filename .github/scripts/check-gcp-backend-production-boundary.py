@@ -43,7 +43,8 @@ def validate(root: Path) -> list[str]:
             errors.append("production serving smoke must follow exact serving release-vector verification")
     for required in (
         "https://api.omi.me/v2/desktop/beta/candidates/reserve",
-        "expected validation response",
+        '--data \'{"tag":"macos-unauthenticated-smoke"}\'',
+        "schema-valid inert tag reaches the authorization wall",
         "--candidate-api-url https://api.omi.me",
         "umask 077",
         "firebase-production-serving-token",
@@ -52,6 +53,8 @@ def validate(root: Path) -> list[str]:
     ):
         if required not in text:
             errors.append(f"gcp_backend.yml is missing production serving-smoke guard {required!r}")
+    if "--data '{}')" in text:
+        errors.append("gcp_backend.yml must not use an invalid empty reservation body for the 401 smoke")
     smoke_text = text[text.find(PROD_SMOKE) :] if PROD_SMOKE in text else ""
     if "$GITHUB_OUTPUT" in smoke_text and "firebase-production-serving-token" in smoke_text:
         errors.append("production smoke token must not be written to GITHUB_OUTPUT")

@@ -74,3 +74,21 @@ def test_serving_release_vector_must_follow_traffic_promotion(tmp_path: Path, mo
     monkeypatch.setattr(checker, "ROOT", tmp_path)
 
     assert any("serving release-vector verification must follow traffic promotion" in error for error in checker.check())
+
+
+def test_staged_workflow_control_verifier_remains_required(tmp_path: Path, monkeypatch) -> None:
+    for relative in checker.BACKEND_RELEASE_SOURCES:
+        destination = tmp_path / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(checker.ROOT / relative, destination)
+    deploy_path = tmp_path / ".github/workflows/gcp_backend.yml"
+    deploy_path.write_text(
+        deploy_path.read_text(encoding="utf-8").replace(
+            "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py",
+            "$DEPLOY_CONTROL_SCRIPTS/not-the-release-vector-verifier.py",
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(checker, "ROOT", tmp_path)
+
+    assert any("canonical release-vector verifier" in error for error in checker.check())
