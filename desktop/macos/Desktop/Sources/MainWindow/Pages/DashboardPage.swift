@@ -1476,6 +1476,14 @@ struct DashboardPage: View {
           isToggling: isTogglingCapture,
           action: toggleCapture
         )
+        // Rewind isn't a top-level tab; it opens from a right-click on Capture.
+        .contextMenu {
+          Button {
+            navigate(to: .rewind)
+          } label: {
+            Label("Open Rewind", systemImage: "clock.arrow.circlepath")
+          }
+        }
 
         HomeListeningStatusButton(
           title: transcriptionUnavailable ? "Transcription unavailable" : "Listening",

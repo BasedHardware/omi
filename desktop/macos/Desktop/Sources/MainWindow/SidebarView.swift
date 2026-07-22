@@ -1585,19 +1585,34 @@ struct AppNavRail: View {
   static let restWidth: CGFloat = 60
   static let expandedWidth: CGFloat = 216
 
-  private var items: [SidebarNavItem] {
-    [.dashboard, .conversations, .memories, .tasks, .focus, .insight, .rewind, .apps]
+  private struct RailItem: Hashable {
+    let index: Int
+    let title: String
+    let icon: String
+  }
+
+  /// Simplified, merged navigation: "Memory" folds in Conversations + Memories,
+  /// "Focus" folds in Focus + Insights, and Rewind moved off the rail (it opens
+  /// from a right-click on Capture). Each entry drives the shared selectedIndex.
+  private var items: [RailItem] {
+    [
+      RailItem(index: SidebarNavItem.dashboard.rawValue, title: "Home", icon: "house.fill"),
+      RailItem(index: SidebarNavItem.conversations.rawValue, title: "Memory", icon: "brain"),
+      RailItem(index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist"),
+      RailItem(index: SidebarNavItem.focus.rawValue, title: "Focus", icon: "eye.fill"),
+      RailItem(index: SidebarNavItem.apps.rawValue, title: "Apps", icon: "puzzlepiece.fill"),
+    ]
   }
 
   var body: some View {
     VStack(spacing: 4) {
-      ForEach(items, id: \.rawValue) { item in
+      ForEach(items, id: \.self) { item in
         AppNavRailButton(
           icon: item.icon,
           title: item.title,
-          isSelected: selectedIndex == item.rawValue,
+          isSelected: selectedIndex == item.index,
           isExpanded: isExpanded,
-          action: { select(item) }
+          action: { select(item.index, title: item.title) }
         )
       }
 
@@ -1608,7 +1623,7 @@ struct AppNavRail: View {
         title: SidebarNavItem.settings.title,
         isSelected: selectedIndex == SidebarNavItem.settings.rawValue,
         isExpanded: isExpanded,
-        action: { select(.settings) }
+        action: { select(SidebarNavItem.settings.rawValue, title: "Settings") }
       )
     }
     .padding(.vertical, 16)
@@ -1628,10 +1643,10 @@ struct AppNavRail: View {
     }
   }
 
-  private func select(_ item: SidebarNavItem) {
-    guard selectedIndex != item.rawValue else { return }
-    selectedIndex = item.rawValue
-    AnalyticsManager.shared.tabChanged(tabName: item.title)
+  private func select(_ index: Int, title: String) {
+    guard selectedIndex != index else { return }
+    selectedIndex = index
+    AnalyticsManager.shared.tabChanged(tabName: title)
   }
 }
 

@@ -1106,6 +1106,84 @@ struct DesktopHomeView: View {
 /// Isolated page content switch — does NOT observe AppState or ViewModelContainer
 /// as @ObservedObject, so pages like TasksPage won't re-render when unrelated
 /// AppState properties (conversations, permissions, etc.) change.
+/// A minimal SB-styled segmented toggle used to fold two related surfaces into
+/// one tab (Conversations/Memories, Focus/Insights).
+private struct HubSegmentedControl: View {
+  @Environment(\.sbTheme) private var sb
+  let segments: [String]
+  @Binding var selection: Int
+
+  var body: some View {
+    HStack(spacing: 4) {
+      ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
+        Button {
+          withAnimation(.easeOut(duration: 0.15)) { selection = index }
+        } label: {
+          Text(segment)
+            .geist(size: 13, weight: selection == index ? .semibold : .medium)
+            .foregroundStyle(selection == index ? sb.ink : sb.ink(.w45))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(
+              RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(selection == index ? sb.ink(.w1) : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
+      }
+    }
+    .padding(4)
+    .background(
+      RoundedRectangle(cornerRadius: 10, style: .continuous).fill(sb.ink(.w04))
+    )
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+/// "Memory" tab — Conversations + Memories folded into one surface.
+private struct MemoryHubPage: View {
+  let appState: AppState
+  let viewModelContainer: ViewModelContainer
+  @State private var segment = 0
+
+  var body: some View {
+    VStack(spacing: 0) {
+      HubSegmentedControl(segments: ["Conversations", "Memories"], selection: $segment)
+        .padding(.top, 22)
+        .padding(.horizontal, 28)
+        .padding(.bottom, 4)
+
+      if segment == 0 {
+        ConversationsPageHost(appState: appState)
+      } else {
+        MemoriesPage(
+          viewModel: viewModelContainer.memoriesViewModel,
+          graphViewModel: viewModelContainer.memoryGraphViewModel)
+      }
+    }
+  }
+}
+
+/// "Focus" tab — Focus + Insights folded into one surface.
+private struct FocusHubPage: View {
+  @State private var segment = 0
+
+  var body: some View {
+    VStack(spacing: 0) {
+      HubSegmentedControl(segments: ["Focus", "Insights"], selection: $segment)
+        .padding(.top, 22)
+        .padding(.horizontal, 28)
+        .padding(.bottom, 4)
+
+      if segment == 0 {
+        FocusPage()
+      } else {
+        InsightPage()
+      }
+    }
+  }
+}
+
 private struct PageContentView: View {
   let selectedIndex: Int
   let appState: AppState
@@ -1128,7 +1206,7 @@ private struct PageContentView: View {
           taskChatCoordinator: viewModelContainer.taskChatCoordinator,
           selectedIndex: $selectedTabIndex)
       case 1:
-        ConversationsPageHost(appState: appState)
+        MemoryHubPage(appState: appState, viewModelContainer: viewModelContainer)
       case 2:
         ChatPage(
           appProvider: viewModelContainer.appProvider,
@@ -1145,7 +1223,7 @@ private struct PageContentView: View {
           chatCoordinator: viewModelContainer.taskChatCoordinator,
           chatProvider: viewModelContainer.chatProvider)
       case 5:
-        FocusPage()
+        FocusHubPage()
       case 6:
         InsightPage()
       case 7:
