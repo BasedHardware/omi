@@ -790,20 +790,7 @@ def test_full_backend_deploys_verify_the_serving_release_vector_after_promotion(
     assert "github.event.inputs.deploy_targets" in manual_verification
     assert "--cloud-run-only" in manual_verification
 
-    release_ring = (root / '.github' / 'workflows' / 'deploy-release-ring.yml').read_text(encoding='utf-8')
-    promotion = release_ring.index('Shift validated Cloud Run revisions to serving traffic')
-    verification = release_ring.index('Verify serving release vector')
-    assert promotion < verification
-    release_vector_step = release_ring[verification : release_ring.index('\n      - name:', verification + 1)]
-    assert 'backend/scripts/verify_backend_release_vector.py' in release_vector_step
-    assert '--commit-sha "${{ steps.record.outputs.git_sha }}"' in release_vector_step
-    assert '--short-sha "$(git -C artifacts/release-ring/source rev-parse --short=7 HEAD)"' in release_vector_step
-    assert '--deploy-run-id "$GITHUB_RUN_ID"' in release_vector_step
-    assert '--deploy-run-attempt "$GITHUB_RUN_ATTEMPT"' in release_vector_step
-    assert '--project "$RELEASE_RUNTIME_PROJECT"' in release_vector_step
-    assert '--environment "$RELEASE_RING"' in release_vector_step
-    assert '--expected-image "${{ steps.record.outputs.backend_image }}"' in release_vector_step
-    assert '--revision-suffix "${release_short_sha}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"' in release_ring
+    assert '--revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}' in manual
 
 
 def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_snapshot() -> None:
@@ -850,13 +837,13 @@ def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_sna
         assert 'cloud-run-traffic-restore.json' in evidence_upload
 
 
-def test_production_cloud_run_only_boundary_is_early_and_uses_a_cleaned_up_dual_auth_vpc_probe():
-    """Static workflow contract: prod/all cannot reach a mutating deploy step."""
+def test_production_full_stack_boundary_is_early_and_uses_a_cleaned_up_dual_auth_vpc_probe():
+    """Static workflow contract: prod/all reaches the candidate gate before mutation."""
     root = BACKEND_DIR.parent
     workflow = (root / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8')
     boundary = workflow.split('\n  validate-production-boundary:\n', 1)[1].split('\n  repair-traffic:\n', 1)[0]
 
-    assert 'transactional GKE/config rollback parity does not exist' in boundary
+    assert 'transactional GKE/config rollback parity does not exist' not in boundary
     assert workflow.index('validate-production-boundary') < workflow.index('  firestore_readiness:')
     assert 'needs: validate-production-boundary' in workflow
     assert 'needs: [validate-production-boundary, firestore_readiness]' in workflow

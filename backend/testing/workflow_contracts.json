@@ -195,7 +195,6 @@
         ".github/actions/release-eligibility/action.yml",
         ".github/workflows/gcp_backend.yml",
         ".github/workflows/gcp_backend_auto_dev.yml",
-        ".github/workflows/deploy-release-ring.yml",
         ".github/workflows/gcp_firestore_indexes.yml",
         ".github/workflows/release-eligibility.yml",
         ".github/scripts/verify_release_eligibility.py",
