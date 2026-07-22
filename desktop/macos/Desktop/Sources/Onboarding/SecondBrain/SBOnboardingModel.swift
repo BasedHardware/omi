@@ -313,6 +313,8 @@ final class SBOnboardingModel: ObservableObject {
     chatProvider.stopAgent(owner: .mainChat)
     UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
     chatProvider.isOnboarding = false
+    // Greet the user in the Home chat with the personalized opener + starters.
+    chatProvider.presentOnboardingOpener()
     ChatToolExecutor.onboardingAppState = nil
     OnboardingChatPersistence.clear()
     ChatDraftStore.shared.clear(.onboardingMain)
@@ -338,6 +340,8 @@ final class SBOnboardingModel: ObservableObject {
       UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
     }
     chatProvider.isOnboarding = false
+    // Greet the user in the Home chat with the personalized opener + starters.
+    chatProvider.presentOnboardingOpener()
     ChatToolExecutor.onboardingAppState = nil
     OnboardingChatPersistence.clear()
     ChatDraftStore.shared.clear(.onboardingMain)

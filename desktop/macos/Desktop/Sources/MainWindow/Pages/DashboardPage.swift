@@ -1763,7 +1763,18 @@ struct DashboardPage: View {
 
   /// Welcome message shown when there are no chat messages yet.
   /// Transparent — no card chrome — so it morphs into the dashboard background.
-  private var dashboardChatWelcome: some View {
+  /// Empty-state of the Home chat: the personalized post-onboarding opener when
+  /// one is pending (this is where onboarding lands the user), else the default
+  /// "Ask omi anything" welcome.
+  @ViewBuilder private var dashboardChatWelcome: some View {
+    if let opener = chatProvider.onboardingOpener {
+      OnboardingOpenerView(opener: opener, chatProvider: chatProvider)
+    } else {
+      defaultChatWelcome
+    }
+  }
+
+  private var defaultChatWelcome: some View {
     VStack(spacing: OmiSpacing.md) {
       if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
         let logoImage = NSImage(contentsOf: logoURL)
