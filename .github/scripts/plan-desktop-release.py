@@ -11,6 +11,11 @@ from pathlib import Path
 
 CODEMAGIC_CHECK_NAME = "Release OMI Desktop (Swift)"
 RELEASE_ELIGIBILITY_CHECK_NAME = "Release Eligibility"
+REQUIRED_SOURCE_CHECK_NAMES = (
+    RELEASE_ELIGIBILITY_CHECK_NAME,
+    "Desktop Swift Build & Tests",
+    "Desktop Swift Release Compile",
+)
 RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60
 AUTO_RELEASE_QUIET_SECONDS = 10 * 60
 
@@ -78,9 +83,19 @@ def latest_change_age_seconds(paths: list[str]) -> int | None:
         return None
 
     try:
-        raw = git(["log", "-1", "--format=%ct", "HEAD", "--", *paths])
+        raw = git(["log", "--first-parent", "-1", "--format=%ct", "HEAD", "--", *paths])
         return int(time.time()) - int(raw)
     except (subprocess.CalledProcessError, ValueError):
+        return None
+
+
+def latest_releasable_desktop_sha(paths: list[str]) -> str | None:
+    if not paths:
+        return None
+
+    try:
+        return git(["log", "--first-parent", "-1", "--format=%H", "HEAD", "--", *paths]) or None
+    except subprocess.CalledProcessError:
         return None
 
 
@@ -115,19 +130,20 @@ def codemagic_check_status(repository: str, sha: str) -> tuple[str | None, str |
     return github_check_status(repository, sha, CODEMAGIC_CHECK_NAME)
 
 
-def required_release_eligibility_reason(repository: str, sha: str) -> str | None:
-    status, conclusion, error = github_check_status(repository, sha, RELEASE_ELIGIBILITY_CHECK_NAME)
-    if error:
-        return f"could not read required check for source SHA {sha}: {error}"
-    if status is None:
-        return f"required check {RELEASE_ELIGIBILITY_CHECK_NAME} is missing for exact main SHA {sha}"
-    if status != "completed":
-        return f"required check {RELEASE_ELIGIBILITY_CHECK_NAME} for exact main SHA {sha} is {status}"
-    if conclusion != "success":
-        return (
-            f"required check {RELEASE_ELIGIBILITY_CHECK_NAME} for exact main SHA {sha} "
-            f"completed with {conclusion or 'no conclusion'}"
-        )
+def required_source_checks_reason(repository: str, sha: str) -> str | None:
+    for check_name in REQUIRED_SOURCE_CHECK_NAMES:
+        status, conclusion, error = github_check_status(repository, sha, check_name)
+        if error:
+            return f"could not read required check {check_name} for source SHA {sha}: {error}"
+        if status is None:
+            return f"required check {check_name} is missing for exact source SHA {sha}"
+        if status != "completed":
+            return f"required check {check_name} for exact source SHA {sha} is {status}"
+        if conclusion != "success":
+            return (
+                f"required check {check_name} for exact source SHA {sha} "
+                f"completed with {conclusion or 'no conclusion'}"
+            )
     return None
 
 
@@ -171,17 +187,23 @@ def main() -> int:
 
     latest_tag = latest_desktop_tag()
     changes = releasable_desktop_changes_since(latest_tag)
-    # The tag is created from this checkout (plus its deterministic changelog
-    # commit), so exact current main is the release source authority. Gating an
-    # older path-touching commit strands the queue when a later metadata-only
-    # repair makes current main eligible without rerunning component CI.
-    source_sha = git(["rev-parse", "HEAD"])
     set_output("latest_tag", latest_tag or "")
-    set_output("source_sha", source_sha)
 
     if not changes:
+        set_output("source_sha", "")
         set_output("should_release", "false")
         set_output("reason", "No releasable desktop app changes since the latest desktop tag.")
+        return 0
+
+    # Component CI is produced on the immutable commit that last changed the
+    # queued desktop paths. Later backend/docs-only main commits intentionally
+    # do not become desktop candidates because the producer skips its expensive
+    # release compile on those SHAs.
+    source_sha = latest_releasable_desktop_sha(changes)
+    set_output("source_sha", source_sha or "")
+    if source_sha is None:
+        set_output("should_release", "false")
+        set_output("reason", "Could not resolve the newest releasable desktop source SHA.")
         return 0
 
     if changes:
@@ -204,7 +226,7 @@ def main() -> int:
         )
         return 0
 
-    source_check_reason = required_release_eligibility_reason(args.repository, source_sha)
+    source_check_reason = required_source_checks_reason(args.repository, source_sha)
     if source_check_reason:
         set_output("should_release", "false")
         set_output("reason", f"Desktop candidate source gate blocked: {source_check_reason}.")
