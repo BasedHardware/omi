@@ -13,6 +13,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
+GITLINK_RELATIVE = Path("omiGlass/firmware/.pio/libdeps/seeed_xiao_esp32s3/libopus")
+PRECLEAN_NAME = "Remove stale uninitialized PlatformIO gitlink"
+POSTCLEAN_NAME = "Remove regenerated uninitialized PlatformIO gitlink before checkout post-action"
 
 
 def workflow(name: str) -> str:
@@ -34,18 +37,22 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertIsNotNone(checkout)
         return target.group(1), checkout.group(1)
 
-    def _precheckout_gitlink_cleanup_script(self) -> str:
+    def _qualification_step(self, name: str) -> str:
         qualification = workflow("desktop_qualify_beta.yml")
-        cleanup_name = "      - name: Remove stale uninitialized PlatformIO gitlink"
-        checkout_name = "      - name: Checkout qualification controls"
-        self.assertLess(qualification.index(cleanup_name), qualification.index(checkout_name))
-        cleanup_step = qualification.split(cleanup_name, 1)[1].split("\n      - name:", 1)[0]
-        script = cleanup_step.split("        run: |\n", 1)[1]
+        marker = f"      - name: {name}"
+        self.assertEqual(qualification.count(marker), 1)
+        return qualification.split(marker, 1)[1].split("\n      - name:", 1)[0]
+
+    def _gitlink_cleanup_script(self, name: str) -> str:
+        script = self._qualification_step(name).split("        run: |\n", 1)[1]
         return "\n".join(line[10:] if line.startswith("          ") else line for line in script.splitlines())
 
-    def _run_precheckout_gitlink_cleanup(self, workspace: Path) -> subprocess.CompletedProcess[str]:
+    def _gitlink_cleanup_scripts(self) -> tuple[tuple[str, str], ...]:
+        return tuple((name, self._gitlink_cleanup_script(name)) for name in (PRECLEAN_NAME, POSTCLEAN_NAME))
+
+    def _run_gitlink_cleanup(self, workspace: Path, script: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["bash", "-c", self._precheckout_gitlink_cleanup_script()],
+            ["bash", "-c", script],
             cwd=workspace,
             env={**os.environ, "GITHUB_WORKSPACE": str(workspace)},
             check=False,
@@ -161,38 +168,94 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
     def test_beta_qualification_accepts_lightweight_tag_at_exact_checkout_commit(self) -> None:
         self._assert_qualification_tag_identity(annotated=False)
 
-    def test_beta_qualification_removes_only_empty_uninitialized_gitlink_before_checkout(self) -> None:
-        relative = Path("omiGlass/firmware/.pio/libdeps/seeed_xiao_esp32s3/libopus")
-        with tempfile.TemporaryDirectory() as directory:
-            workspace = Path(directory)
-            stale = workspace / relative
-            stale.mkdir(parents=True)
-            result = self._run_precheckout_gitlink_cleanup(workspace)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertFalse(stale.exists())
+    def test_beta_qualification_bounds_checkout_with_identical_exact_cleanup(self) -> None:
+        qualification = workflow("desktop_qualify_beta.yml")
+        checkout_name = "Checkout qualification controls"
+        attach_name = "Attach immutable qualification evidence to the candidate release"
+        self.assertLess(qualification.index(PRECLEAN_NAME), qualification.index(checkout_name))
+        self.assertLess(qualification.index(checkout_name), qualification.index(POSTCLEAN_NAME))
+        self.assertLess(qualification.index(attach_name), qualification.index(POSTCLEAN_NAME))
+        self.assertEqual(re.findall(r"^      - name: (.+)$", qualification, re.MULTILINE)[-1], POSTCLEAN_NAME)
 
-    def test_beta_qualification_preserves_initialized_or_nonempty_gitlinks(self) -> None:
-        relative = Path("omiGlass/firmware/.pio/libdeps/seeed_xiao_esp32s3/libopus")
-        with self.subTest("initialized"):
-            with tempfile.TemporaryDirectory() as directory:
+        preclean_step = self._qualification_step(PRECLEAN_NAME)
+        postclean_step = self._qualification_step(POSTCLEAN_NAME)
+        self.assertNotIn("        if: always()", preclean_step)
+        self.assertIn("        if: always()", postclean_step)
+        self.assertNotIn("continue-on-error:", preclean_step + postclean_step)
+
+        preclean_script = self._gitlink_cleanup_script(PRECLEAN_NAME)
+        postclean_script = self._gitlink_cleanup_script(POSTCLEAN_NAME)
+        self.assertEqual(preclean_script, postclean_script)
+        self.assertEqual(preclean_script.count(str(GITLINK_RELATIVE)), 1)
+        self.assertEqual(preclean_script.count('rmdir "$stale_gitlink"'), 1)
+        self.assertNotIn("rm -rf", preclean_script)
+        self.assertNotIn(".gitmodules", preclean_script)
+
+    def test_beta_qualification_cleanup_accepts_missing_gitlink(self) -> None:
+        for name, script in self._gitlink_cleanup_scripts():
+            with self.subTest(step=name), tempfile.TemporaryDirectory() as directory:
                 workspace = Path(directory)
-                initialized = workspace / relative
-                (initialized / ".git").mkdir(parents=True)
-                result = self._run_precheckout_gitlink_cleanup(workspace)
+                result = self._run_gitlink_cleanup(workspace, script)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertTrue(initialized.exists())
+                self.assertFalse((workspace / GITLINK_RELATIVE).exists())
 
-        with self.subTest("nonempty-uninitialized"):
-            with tempfile.TemporaryDirectory() as directory:
+    def test_beta_qualification_cleanup_removes_empty_gitlink(self) -> None:
+        for name, script in self._gitlink_cleanup_scripts():
+            with self.subTest(step=name), tempfile.TemporaryDirectory() as directory:
                 workspace = Path(directory)
-                nonempty = workspace / relative
+                stale = workspace / GITLINK_RELATIVE
+                stale.mkdir(parents=True)
+                result = self._run_gitlink_cleanup(workspace, script)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse(stale.exists())
+
+    def test_beta_qualification_cleanup_preserves_git_file(self) -> None:
+        for name, script in self._gitlink_cleanup_scripts():
+            with self.subTest(step=name), tempfile.TemporaryDirectory() as directory:
+                workspace = Path(directory)
+                initialized = workspace / GITLINK_RELATIVE
+                initialized.mkdir(parents=True)
+                git_file = initialized / ".git"
+                git_file.write_text("gitdir: elsewhere\n", encoding="utf-8")
+                result = self._run_gitlink_cleanup(workspace, script)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(git_file.read_text(encoding="utf-8"), "gitdir: elsewhere\n")
+
+    def test_beta_qualification_cleanup_preserves_git_directory(self) -> None:
+        for name, script in self._gitlink_cleanup_scripts():
+            with self.subTest(step=name), tempfile.TemporaryDirectory() as directory:
+                workspace = Path(directory)
+                initialized = workspace / GITLINK_RELATIVE
+                (initialized / ".git").mkdir(parents=True)
+                result = self._run_gitlink_cleanup(workspace, script)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue((initialized / ".git").is_dir())
+
+    def test_beta_qualification_cleanup_fails_closed_on_nonempty_gitlink(self) -> None:
+        for name, script in self._gitlink_cleanup_scripts():
+            with self.subTest(step=name), tempfile.TemporaryDirectory() as directory:
+                workspace = Path(directory)
+                nonempty = workspace / GITLINK_RELATIVE
                 nonempty.mkdir(parents=True)
                 marker = nonempty / "preserve.txt"
                 marker.write_text("do not delete\n", encoding="utf-8")
-                result = self._run_precheckout_gitlink_cleanup(workspace)
+                result = self._run_gitlink_cleanup(workspace, script)
                 self.assertNotEqual(result.returncode, 0)
-                self.assertTrue(marker.exists())
+                self.assertEqual(marker.read_text(encoding="utf-8"), "do not delete\n")
                 self.assertIn("Refusing to remove nonempty uninitialized gitlink", result.stderr)
+
+    def test_beta_qualification_cleanup_ignores_sibling_decoy(self) -> None:
+        for name, script in self._gitlink_cleanup_scripts():
+            with self.subTest(step=name), tempfile.TemporaryDirectory() as directory:
+                workspace = Path(directory)
+                stale = workspace / GITLINK_RELATIVE
+                decoy = stale.with_name(f"{stale.name}-decoy")
+                stale.mkdir(parents=True)
+                decoy.mkdir()
+                result = self._run_gitlink_cleanup(workspace, script)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse(stale.exists())
+                self.assertTrue(decoy.is_dir())
 
     def test_stable_is_manual_and_uses_one_explicit_confirmation(self) -> None:
         stable = workflow("desktop_promote_prod.yml")
