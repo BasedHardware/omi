@@ -1037,6 +1037,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     openMainAppWindow()
   }
 
+  /// "Continue in Omi": bring the main window forward *and* land on the chat
+  /// timeline, wherever the window was last resting. The pending request
+  /// survives window creation, so a freshly created window also lands on chat.
+  @MainActor func openMainAppChat() {
+    MainChatNavigationRequestStore.shared.request()
+    openMainAppWindow()
+  }
+
   /// Bring the main Omi window to the front, creating it if needed. Shared by
   /// the menu-bar "Open Omi" item, the global Open Omi (formerly Ask Omi)
   /// shortcut, and the floating bar's "Continue in Omi" affordance.

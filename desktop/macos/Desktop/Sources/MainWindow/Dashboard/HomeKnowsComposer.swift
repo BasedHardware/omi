@@ -54,10 +54,13 @@ enum HomeKnowsListComposer {
       rows.append(HomeKnowsRow(kind: .task(id: task.id), text: task.text))
     }
 
+    // Question rows are identified by their text, so a repeated suggestion
+    // would collide as a ForEach ID — keep only the first occurrence.
+    var seenQuestions = Set<String>()
     let cleanQuestions =
       questions
       .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-      .filter { !$0.isEmpty }
+      .filter { !$0.isEmpty && seenQuestions.insert($0).inserted }
 
     // Insights fill the middle; one slot stays reserved for a question so the
     // list always ends with something the user can ask.

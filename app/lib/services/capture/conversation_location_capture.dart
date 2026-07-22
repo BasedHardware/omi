@@ -23,11 +23,11 @@ class ConversationLocationCapture {
     GeolocationUploader? upload,
     this.currentPositionTimeout = const Duration(seconds: 1),
     this.totalTimeout = const Duration(seconds: 3),
-  })  : _isLocationServiceEnabled = isLocationServiceEnabled ?? Geolocator.isLocationServiceEnabled,
-        _checkPermission = checkPermission ?? Geolocator.checkPermission,
-        _getCurrentPosition = getCurrentPosition ?? Geolocator.getCurrentPosition,
-        _getLastKnownPosition = getLastKnownPosition ?? Geolocator.getLastKnownPosition,
-        _upload = upload ?? ((geolocation) => updateUserGeolocation(geolocation: geolocation));
+  }) : _isLocationServiceEnabled = isLocationServiceEnabled ?? Geolocator.isLocationServiceEnabled,
+       _checkPermission = checkPermission ?? Geolocator.checkPermission,
+       _getCurrentPosition = getCurrentPosition ?? Geolocator.getCurrentPosition,
+       _getLastKnownPosition = getLastKnownPosition ?? Geolocator.getLastKnownPosition,
+       _upload = upload ?? ((geolocation) => updateUserGeolocation(geolocation: geolocation));
 
   final LocationServiceEnabled _isLocationServiceEnabled;
   final LocationPermissionReader _checkPermission;
