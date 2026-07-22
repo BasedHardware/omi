@@ -118,6 +118,7 @@ enum RealtimeHubBargeInStrategy: Equatable {
   struct RealtimeHubInputLifecycleSnapshot: Equatable {
     let isOpen: Bool
     let activityOpen: Bool
+    let pendingTextInputCount: Int
     let pendingAudioChunkCount: Int
     let pendingVideoFrameCount: Int
     let pendingCommit: Bool
@@ -404,6 +405,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
             returning: RealtimeHubInputLifecycleSnapshot(
               isOpen: self.isOpen,
               activityOpen: self.activityOpen,
+              pendingTextInputCount: self.pendingTextInputs.count,
               pendingAudioChunkCount: self.pendingAudio.count,
               pendingVideoFrameCount: self.pendingVideo.count,
               pendingCommit: self.pendingCommit,
@@ -500,11 +502,28 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     await sendTextInput(text, logLabel: "test text input")
   }
 
-  /// Silently appends completed background-agent context to the conversation.
-  /// No response is requested — the model uses it on its next turn. Buffered
-  /// like other text input while the socket or Gemini activity window is closed.
+  /// Silently appends completed background-agent context to the conversation
+  /// without requesting a response — the model uses it on its next turn.
+  ///
+  /// Unlike `sendTextInput`, this deliberately does NOT buffer: it returns
+  /// `true` only when the text is written to the live provider this call, and
+  /// `false` when the session cannot accept it right now (socket closed, or
+  /// Gemini has no open activity window). Buffering would let the completion be
+  /// dropped by `stop()`/`close()` (which clears `pendingTextInputs`) after the
+  /// caller already advanced its exactly-once checkpoint. Returning `false`
+  /// keeps the checkpoint unadvanced so the caller retries on the next terminal
+  /// transition or session connect.
   func sendBackgroundAgentContext(_ text: String) async -> Bool {
-    await sendTextInput(text, logLabel: "background agent completion context")
+    await withCheckedContinuation { continuation in
+      q.async { [weak self] in
+        guard let self, self.isOpen, self.provider == .openai || self.activityOpen else {
+          continuation.resume(returning: false)
+          return
+        }
+        self.sendTextInputNow(text, logLabel: "background agent completion context")
+        continuation.resume(returning: true)
+      }
+    }
   }
 
   /// A provider can complete a tool-only response after accepting the final tool
