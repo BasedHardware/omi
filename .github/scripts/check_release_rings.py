@@ -38,6 +38,12 @@ def require(text: str, path: Path, fragments: tuple[str, ...]) -> list[str]:
     ]
 
 
+def require_one(text: str, path: Path, description: str, alternatives: tuple[str, ...]) -> list[str]:
+    if any(fragment in text for fragment in alternatives):
+        return []
+    return [f"{path}: missing required release-vector guard {description!r}"]
+
+
 def check() -> list[str]:
     paths = {relative: ROOT / relative for relative in BACKEND_RELEASE_SOURCES}
     errors = [f"{path}: canonical production deploy source is missing" for path in paths.values() if not path.exists()]
@@ -58,15 +64,44 @@ def check() -> list[str]:
                 "needs.firestore_readiness.outputs.admitted_sha",
                 "--check-only",
                 "no_traffic: true",
-                "backend/scripts/deploy-backend-secrets.sh",
-                "cloud_run_traffic_snapshot.py capture",
-                "cloud_run_traffic_snapshot.py restore",
                 "Verify serving backend release vector",
-                "backend/scripts/verify_backend_release_vector.py",
                 "github.event.inputs.environment == 'prod'",
                 "environment=prod, deploy_targets=all is unsupported",
                 "Smoke promoted production serving API",
             ),
+        )
+    )
+    workflow_path = paths[Path(".github/workflows/gcp_backend.yml")]
+    errors.extend(
+        require_one(
+            workflow,
+            workflow_path,
+            "canonical deploy-backend-secrets helper",
+            ("backend/scripts/deploy-backend-secrets.sh", "$DEPLOY_CONTROL_SCRIPTS/deploy-backend-secrets.sh"),
+        )
+    )
+    errors.extend(
+        require_one(
+            workflow,
+            workflow_path,
+            "canonical Cloud Run snapshot helper capture",
+            ("cloud_run_traffic_snapshot.py capture", 'cloud_run_traffic_snapshot.py" capture'),
+        )
+    )
+    errors.extend(
+        require_one(
+            workflow,
+            workflow_path,
+            "canonical Cloud Run snapshot helper restore",
+            ("cloud_run_traffic_snapshot.py restore", 'cloud_run_traffic_snapshot.py" restore'),
+        )
+    )
+    errors.extend(
+        require_one(
+            workflow,
+            workflow_path,
+            "canonical release-vector verifier",
+            ("backend/scripts/verify_backend_release_vector.py", "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py"),
         )
     )
     promotion = workflow.find("Shift Cloud Run traffic to validated revisions")

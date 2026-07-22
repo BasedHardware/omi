@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 CODEMAGIC_CHECK_NAME = "Release OMI Desktop (Swift)"
-DESKTOP_SWIFT_CHECK_NAME = "Desktop Swift Build & Tests"
+RELEASE_ELIGIBILITY_CHECK_NAME = "Release Eligibility"
 RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60
 AUTO_RELEASE_QUIET_SECONDS = 10 * 60
 
@@ -84,19 +84,6 @@ def latest_change_age_seconds(paths: list[str]) -> int | None:
         return None
 
 
-def latest_releasable_source_sha(ref: str | None, paths: list[str]) -> str | None:
-    """Return the newest queued desktop-content commit, not an unrelated HEAD commit."""
-    if not paths:
-        return None
-
-    revision = f"{ref}..HEAD" if ref else "HEAD"
-    try:
-        source_sha = git(["log", "-1", "--format=%H", revision, "--", *paths])
-    except subprocess.CalledProcessError:
-        return None
-    return source_sha or None
-
-
 def github_check_status(repository: str, sha: str, check_name: str) -> tuple[str | None, str | None, str | None]:
     result = subprocess.run(
         [
@@ -128,17 +115,17 @@ def codemagic_check_status(repository: str, sha: str) -> tuple[str | None, str |
     return github_check_status(repository, sha, CODEMAGIC_CHECK_NAME)
 
 
-def required_desktop_swift_check_reason(repository: str, sha: str) -> str | None:
-    status, conclusion, error = github_check_status(repository, sha, DESKTOP_SWIFT_CHECK_NAME)
+def required_release_eligibility_reason(repository: str, sha: str) -> str | None:
+    status, conclusion, error = github_check_status(repository, sha, RELEASE_ELIGIBILITY_CHECK_NAME)
     if error:
         return f"could not read required check for source SHA {sha}: {error}"
     if status is None:
-        return f"required check {DESKTOP_SWIFT_CHECK_NAME} is missing for source SHA {sha}"
+        return f"required check {RELEASE_ELIGIBILITY_CHECK_NAME} is missing for exact main SHA {sha}"
     if status != "completed":
-        return f"required check {DESKTOP_SWIFT_CHECK_NAME} for source SHA {sha} is {status}"
+        return f"required check {RELEASE_ELIGIBILITY_CHECK_NAME} for exact main SHA {sha} is {status}"
     if conclusion != "success":
         return (
-            f"required check {DESKTOP_SWIFT_CHECK_NAME} for source SHA {sha} "
+            f"required check {RELEASE_ELIGIBILITY_CHECK_NAME} for exact main SHA {sha} "
             f"completed with {conclusion or 'no conclusion'}"
         )
     return None
@@ -184,7 +171,11 @@ def main() -> int:
 
     latest_tag = latest_desktop_tag()
     changes = releasable_desktop_changes_since(latest_tag)
-    source_sha = latest_releasable_source_sha(latest_tag, changes) or git(["rev-parse", "HEAD"])
+    # The tag is created from this checkout (plus its deterministic changelog
+    # commit), so exact current main is the release source authority. Gating an
+    # older path-touching commit strands the queue when a later metadata-only
+    # repair makes current main eligible without rerunning component CI.
+    source_sha = git(["rev-parse", "HEAD"])
     set_output("latest_tag", latest_tag or "")
     set_output("source_sha", source_sha)
 
@@ -213,7 +204,7 @@ def main() -> int:
         )
         return 0
 
-    source_check_reason = required_desktop_swift_check_reason(args.repository, source_sha)
+    source_check_reason = required_release_eligibility_reason(args.repository, source_sha)
     if source_check_reason:
         set_output("should_release", "false")
         set_output("reason", f"Desktop candidate source gate blocked: {source_check_reason}.")
