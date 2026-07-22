@@ -82,8 +82,10 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertNotIn("qualification_run_id", stable)
         self.assertNotIn("expected_current_release_id:", stable)
 
-    def test_beta_recovery_is_the_only_manual_beta_entry_point(self) -> None:
+    def test_manual_beta_hatches_reuse_prod_authority_and_cannot_reach_stable(self) -> None:
         recovery = workflow("desktop_recover_beta.yml")
+        rollback = workflow("desktop_rollback_beta.yml")
+        rollout = workflow("desktop_breakglass_rollout_beta.yml")
         beta = workflow("desktop_promote_beta.yml")
         qualification_script = (ROOT / "desktop/macos/scripts/qualify-desktop-beta.sh").read_text(encoding="utf-8")
         self.assertIn("workflow_dispatch:", recovery)
@@ -93,6 +95,28 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertNotIn("/v2/desktop/beta/promote-qualified", recovery)
         self.assertNotIn("gh workflow run desktop_promote_beta.yml", qualification_script)
         self.assertNotIn("workflow_dispatch:", beta)
+        for hatch, operation in (
+            (rollback, "--arg operation rollback"),
+            (rollout, "--arg operation rollout"),
+        ):
+            self.assertIn("workflow_dispatch:", hatch)
+            self.assertNotIn("push:", hatch)
+            self.assertNotIn("schedule:", hatch)
+            self.assertIn("environment: prod", hatch)
+            self.assertIn("group: desktop-beta-promotion", hatch)
+            self.assertIn("cancel-in-progress: false", hatch)
+            self.assertIn("secrets.GCP_CREDENTIALS", hatch)
+            self.assertIn("gcloud secrets versions access latest --secret=ADMIN_KEY", hatch)
+            self.assertNotIn("BETA_BREAKGLASS", hatch)
+            self.assertNotIn("beta-breakglass", hatch)
+            self.assertIn("/v2/desktop/beta/breakglass", hatch)
+            self.assertIn(operation, hatch)
+            for required in ("incident_url", "reason", "current_release_id", "target_release_id", "expected_generation", "github.run_id", "github.actor"):
+                self.assertIn(required, hatch)
+            self.assertNotIn("stable", hatch.lower().replace("macos-beta", ""))
+        self.assertIn("normal_path_unavailable", rollout)
+        self.assertNotIn("source_sha", rollout)
+        self.assertNotIn("build_number", rollout)
 
     def test_backend_release_vector_verifies_after_prod_traffic_shift(self) -> None:
         backend = workflow("gcp_backend.yml")
