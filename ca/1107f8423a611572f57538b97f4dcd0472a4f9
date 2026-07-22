@@ -1,0 +1,26 @@
+desktop/macos/changelog/unreleased/20260721-sb-page-density-and-shortcut-front.json
+  s_77f2b8dfbc2e90::t_8b75c07a8fdf6d 1-3
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_77f2b8dfbc2e90::t_d08f3f01854d6f 1044-1047,1054
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_77f2b8dfbc2e90::t_cb10eb38c15713 752-754
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_77f2b8dfbc2e90::t_6571706133f6f5 1263-1276,1291,1299-1302,1304-1308,1316-1321
+  s_77f2b8dfbc2e90::t_4a2eccd4b2f87b 503-514
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "ca1107f8423a611572f57538b97f4dcd0472a4f9",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
