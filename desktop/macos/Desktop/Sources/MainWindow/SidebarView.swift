@@ -1599,7 +1599,7 @@ struct AppNavRail: View {
       RailItem(index: SidebarNavItem.dashboard.rawValue, title: "Home", icon: "house.fill"),
       RailItem(index: SidebarNavItem.conversations.rawValue, title: "Memory", icon: "brain"),
       RailItem(index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist"),
-      RailItem(index: SidebarNavItem.focus.rawValue, title: "Focus", icon: "eye.fill"),
+      RailItem(index: SidebarNavItem.focus.rawValue, title: "Insights", icon: "lightbulb.fill"),
       RailItem(index: SidebarNavItem.apps.rawValue, title: "Apps", icon: "puzzlepiece.fill"),
     ]
   }

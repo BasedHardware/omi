@@ -1170,15 +1170,15 @@ private struct FocusHubPage: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      HubSegmentedControl(segments: ["Focus", "Insights"], selection: $segment)
+      HubSegmentedControl(segments: ["Insights", "Focus"], selection: $segment)
         .padding(.top, 22)
         .padding(.horizontal, 28)
         .padding(.bottom, 4)
 
       if segment == 0 {
-        FocusPage()
-      } else {
         InsightPage()
+      } else {
+        FocusPage()
       }
     }
   }
