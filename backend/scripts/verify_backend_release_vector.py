@@ -93,6 +93,7 @@ def build_read_only_commands(
     expectation: DeploymentExpectation,
     *,
     include_listener: bool = True,
+    include_candidate_revisions: bool = False,
 ) -> dict[str, list[str]]:
     commands = {
         f'cloud_run/{service}': [
@@ -107,6 +108,22 @@ def build_read_only_commands(
         ]
         for service in CLOUD_RUN_SERVICES
     }
+    if include_candidate_revisions:
+        commands.update(
+            {
+                f'cloud_run_revision/{service}': [
+                    'gcloud',
+                    'run',
+                    'revisions',
+                    'describe',
+                    expectation.revisions[service],
+                    f'--project={expectation.project}',
+                    f'--region={expectation.region}',
+                    '--format=json',
+                ]
+                for service in CLOUD_RUN_SERVICES
+            }
+        )
     if include_listener:
         commands.update(
             {
@@ -149,8 +166,12 @@ def build_read_only_commands(
 def assert_commands_are_read_only(commands: Mapping[str, Sequence[str]]) -> None:
     for name, command in commands.items():
         rendered = ' '.join(command)
-        allowed = rendered.startswith('gcloud run services describe ') or rendered.startswith('kubectl -n ')
-        is_query = rendered.startswith('gcloud run services describe ') or ' get ' in f' {rendered} '
+        allowed = (
+            rendered.startswith('gcloud run services describe ')
+            or rendered.startswith('gcloud run revisions describe ')
+            or rendered.startswith('kubectl -n ')
+        )
+        is_query = rendered.startswith('gcloud run ') or ' get ' in f' {rendered} '
         if not allowed or not is_query:
             raise ValueError(f'{name} is not a read-only acceptance command: {rendered}')
         if any(term in f' {rendered} ' for term in (' apply ', ' delete ', ' patch ', ' create ', ' update ')):
@@ -195,6 +216,7 @@ def evaluate(
                     document,
                     expected_environment=expectation.environment,
                     require_serving_traffic=require_serving_traffic,
+                    expected_revision_document=documents.get(f'cloud_run_revision/{service}'),
                 )
             )
     if include_listener:
@@ -219,6 +241,7 @@ def evaluate_cloud_run_service(
     *,
     expected_environment: str,
     require_serving_traffic: bool = True,
+    expected_revision_document: Mapping[str, Any] | None = None,
 ) -> list[str]:
     status = _mapping(document.get('status'))
     template_spec = _mapping(_mapping(_mapping(document.get('spec')).get('template')).get('spec'))
@@ -229,12 +252,27 @@ def evaluate_cloud_run_service(
     errors: list[str] = []
     if status.get('latestCreatedRevisionName') != expected_revision:
         errors.append(f'cloud_run/{service}: latest created revision is not {expected_revision}')
-    if status.get('latestReadyRevisionName') != expected_revision:
-        errors.append(f'cloud_run/{service}: latest ready revision is not {expected_revision}')
+    if require_serving_traffic:
+        if status.get('latestReadyRevisionName') != expected_revision:
+            errors.append(f'cloud_run/{service}: latest ready revision is not {expected_revision}')
+    else:
+        revision_status = _mapping(_mapping(expected_revision_document).get('status'))
+        ready_condition = next(
+            (
+                condition
+                for condition in _list(revision_status.get('conditions'))
+                if _mapping(condition).get('type') == 'Ready'
+            ),
+            None,
+        )
+        if _mapping(ready_condition).get('status') != 'True':
+            errors.append(f'cloud_run/{service}: expected revision is not Ready')
     if image != expected_image:
         errors.append(f'cloud_run/{service}: template image is not {expected_image}')
     if require_serving_traffic and (not expected_traffic or _mapping(expected_traffic[0]).get('percent') != 100):
         errors.append(f'cloud_run/{service}: expected revision does not receive 100% traffic')
+    if not require_serving_traffic and any(_mapping(entry).get('percent') != 0 for entry in expected_traffic):
+        errors.append(f'cloud_run/{service}: expected revision carries traffic before promotion')
     timeout = template_spec.get('timeoutSeconds')
     if not isinstance(timeout, int) or timeout < MIN_CLOUD_RUN_TIMEOUT_SECONDS:
         errors.append(f'cloud_run/{service}: timeoutSeconds must be at least {MIN_CLOUD_RUN_TIMEOUT_SECONDS}')
@@ -323,6 +361,20 @@ def evidence(
                 for entry in _list(status.get('traffic'))
             ],
         }
+        if not require_serving_traffic:
+            revision_status = _mapping(_mapping(documents.get(f'cloud_run_revision/{service}', {})).get('status'))
+            ready_condition = next(
+                (
+                    condition
+                    for condition in _list(revision_status.get('conditions'))
+                    if _mapping(condition).get('type') == 'Ready'
+                ),
+                {},
+            )
+            cloud_run[service]['expected_revision_ready'] = {
+                'status': _mapping(ready_condition).get('status'),
+                'reason': _mapping(ready_condition).get('reason'),
+            }
     report = {
         'scope': 'backend deploy (read-only)',
         'release_vector': {
@@ -425,7 +477,11 @@ def main() -> int:
         )
         if args.cloud_run_only and not args.candidate:
             raise ValueError('--cloud-run-only is valid only for a no-traffic candidate')
-        commands = build_read_only_commands(expectation, include_listener=not args.cloud_run_only)
+        commands = build_read_only_commands(
+            expectation,
+            include_listener=not args.cloud_run_only,
+            include_candidate_revisions=args.candidate,
+        )
         assert_commands_are_read_only(commands)
         documents = collect_documents(commands)
         errors = evaluate(

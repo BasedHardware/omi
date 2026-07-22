@@ -694,6 +694,7 @@ jobs:
 
       # This Cloud Run-only acceptance boundary runs before any traffic shift.
       - name: Accept no-traffic Cloud Run candidate
+        id: verify-cloud-run-candidate
         run: |
           python3 backend/scripts/verify_backend_release_vector.py \
             --candidate \
@@ -907,6 +908,20 @@ jobs:
         if: always()
         run: |
           set -o pipefail
+          if [[ "${{ steps.verify-cloud-run-candidate.outcome }}" != "success" ]]; then
+            echo "Cloud Run candidate verification failed before traffic promotion; candidate evidence follows."
+            cat artifacts/backend-cloud-run-candidate-release-vector.json || true
+            exit 0
+          fi
+          expected_traffic=()
+          if [[ "${{ steps.shift-cloud-run-traffic.outcome }}" == "success" ]]; then
+            expected_traffic=(
+              --expect-cloud-run-traffic backend=${{ steps.capture-backend-revision.outputs.revision }}
+              --expect-cloud-run-traffic backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }}
+              --expect-cloud-run-traffic backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }}
+              --expect-cloud-run-traffic backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
+            )
+          fi
           python3 backend/scripts/deploy_status_report.py \
             --env ${{ vars.ENV }} \
             --project ${{ vars.GCP_PROJECT_ID }} \
@@ -916,10 +931,7 @@ jobs:
             --cloud-run-service backend-sync \
             --cloud-run-service backend-sync-backfill \
             --cloud-run-service backend-integration \
-            --expect-cloud-run-traffic backend=${{ steps.capture-backend-revision.outputs.revision }} \
-            --expect-cloud-run-traffic backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
-            --expect-cloud-run-traffic backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }} \
-            --expect-cloud-run-traffic backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }} \
+            "${expected_traffic[@]}" \
             | tee /tmp/cloud-run-deploy-status.txt
           if [[ "${{ github.event.inputs.environment }}" == "prod" ]]; then
             {
