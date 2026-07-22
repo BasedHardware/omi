@@ -336,6 +336,7 @@ final class DashboardCaptureStateTests: XCTestCase {
       testsURL
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/MainWindow/CaptureListeningLogic.swift")
+    // omi-test-quality: source-inspection -- static contract: DashboardPage must delegate capture status and toggle to the shared CaptureListeningLogic source
     return try String(contentsOf: logicURL, encoding: .utf8)
   }
 
