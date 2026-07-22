@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression tests for the desktop candidate source-check gate."""
+"""Regression tests for the automatic desktop candidate gate."""
 
 from __future__ import annotations
 
@@ -18,178 +18,89 @@ assert SPEC and SPEC.loader
 planner = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(planner)
 
-
 REPOSITORY = "BasedHardware/omi"
 SOURCE_SHA = "a" * 40
-OTHER_SHA = "b" * 40
+LATER_NON_DESKTOP_SHA = "b" * 40
 LATEST_TAG = "v0.0.1+1-macos"
 RELEASABLE_PATH = "desktop/macos/Desktop/Sources/AppDelegate.swift"
 
 
 class DesktopCandidateSourceCheckTests(unittest.TestCase):
-    def source_gate_reason(
-        self,
-        check_results: dict[str, tuple[str | None, str | None, str | None]],
-    ) -> str | None:
-        queried_shas: list[str] = []
+    def test_exact_source_sha_success_for_every_required_check_passes_the_gate(self) -> None:
+        checked: list[tuple[str, str]] = []
 
-        def check_status(repository: str, sha: str, check_name: str) -> tuple[str | None, str | None, str | None]:
-            self.assertEqual(repository, REPOSITORY)
-            self.assertEqual(check_name, planner.DESKTOP_SWIFT_CHECK_NAME)
-            queried_shas.append(sha)
-            return check_results.get(sha, (None, None, None))
+        def successful_check(_repository: str, sha: str, check_name: str):
+            checked.append((sha, check_name))
+            return "completed", "success", None
 
-        with patch.object(planner, "github_check_status", side_effect=check_status):
-            reason = planner.required_desktop_swift_check_reason(REPOSITORY, SOURCE_SHA)
+        with patch.object(planner, "github_check_status", side_effect=successful_check):
+            self.assertIsNone(planner.required_source_checks_reason(REPOSITORY, SOURCE_SHA))
 
-        self.assertEqual(queried_shas, [SOURCE_SHA])
-        return reason
+        self.assertEqual(
+            checked,
+            [(SOURCE_SHA, check_name) for check_name in planner.REQUIRED_SOURCE_CHECK_NAMES],
+        )
 
-    def test_exact_source_sha_success_passes_the_gate(self) -> None:
-        reason = self.source_gate_reason({SOURCE_SHA: ("completed", "success", None)})
+    def test_each_missing_skipped_or_failed_exact_source_check_blocks_the_gate(self) -> None:
+        for blocked_name in (
+            "Release Eligibility",
+            "Desktop Swift Build & Tests",
+            "Desktop Swift Release Compile",
+        ):
+            for blocked_status, blocked_conclusion, expected in (
+                (None, None, "missing"),
+                ("completed", "skipped", "skipped"),
+                ("completed", "failure", "failure"),
+            ):
+                with self.subTest(check=blocked_name, conclusion=blocked_conclusion):
+                    def check_status(_repository: str, _sha: str, check_name: str):
+                        if check_name == blocked_name:
+                            return blocked_status, blocked_conclusion, None
+                        return "completed", "success", None
 
-        self.assertIsNone(reason)
+                    with patch.object(planner, "github_check_status", side_effect=check_status):
+                        reason = planner.required_source_checks_reason(REPOSITORY, SOURCE_SHA) or ""
+                    self.assertIn(blocked_name, reason)
+                    self.assertIn(expected, reason)
 
-    def test_pending_source_check_blocks_the_gate(self) -> None:
-        reason = self.source_gate_reason({SOURCE_SHA: ("in_progress", None, None)})
-
-        self.assertIn("in_progress", reason or "")
-
-    def test_missing_source_check_blocks_the_gate(self) -> None:
-        reason = self.source_gate_reason({})
-
-        self.assertIn("missing", reason or "")
-
-    def test_failed_source_check_blocks_the_gate(self) -> None:
-        reason = self.source_gate_reason({SOURCE_SHA: ("completed", "failure", None)})
-
-        self.assertIn("failure", reason or "")
-
-    def test_success_for_a_different_sha_does_not_satisfy_the_gate(self) -> None:
-        reason = self.source_gate_reason({OTHER_SHA: ("completed", "success", None)})
-
-        self.assertIn("missing", reason or "")
-
-    def test_queued_release_checks_the_latest_releasable_source_not_an_unrelated_head(self) -> None:
+    def test_backend_or_docs_commit_after_desktop_commit_keeps_exact_releasable_source(self) -> None:
         checked_shas: list[str] = []
 
         def fake_git(args: list[str], *, check: bool = True) -> str:
             if args == ["rev-parse", "HEAD"]:
-                return OTHER_SHA
-            if args == ["log", "-1", "--format=%H", f"{LATEST_TAG}..HEAD", "--", RELEASABLE_PATH]:
+                return LATER_NON_DESKTOP_SHA
+            if args == ["log", "--first-parent", "-1", "--format=%H", "HEAD", "--", RELEASABLE_PATH]:
                 return SOURCE_SHA
             self.fail(f"unexpected git invocation: {args}")
-
-        def source_check(repository: str, sha: str) -> str | None:
-            self.assertEqual(repository, REPOSITORY)
-            checked_shas.append(sha)
-            return None
 
         with tempfile.TemporaryDirectory() as directory:
             output_path = Path(directory) / "github-output"
             with (
                 patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
                 patch.object(planner, "releasable_desktop_changes_since", return_value=[RELEASABLE_PATH]),
+                patch.object(planner, "latest_change_age_seconds", return_value=601),
                 patch.object(planner, "git", side_effect=fake_git),
-                patch.object(planner, "required_desktop_swift_check_reason", side_effect=source_check),
+                patch.object(planner, "required_source_checks_reason", side_effect=lambda _, sha: checked_shas.append(sha)),
                 patch.object(planner, "active_release_reason", return_value=None),
-                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY, "--mode", "release_now"]),
+                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY]),
                 patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
             ):
                 self.assertEqual(planner.main(), 0)
-
             outputs = output_path.read_text(encoding="utf-8")
 
         self.assertEqual(checked_shas, [SOURCE_SHA])
         self.assertIn(f"source_sha={SOURCE_SHA}", outputs)
+        self.assertNotIn(f"source_sha={LATER_NON_DESKTOP_SHA}", outputs)
         self.assertIn("should_release=true", outputs)
 
-    def test_force_release_still_blocks_when_the_source_check_is_missing(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            output_path = Path(directory) / "github-output"
-            with (
-                patch.object(planner, "latest_desktop_tag", return_value=None),
-                patch.object(planner, "releasable_desktop_changes_since", return_value=[]),
-                patch.object(planner, "git", return_value=SOURCE_SHA),
-                patch.object(planner, "required_desktop_swift_check_reason", return_value="required check is missing"),
-                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY, "--mode", "force_release"]),
-                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
-            ):
-                self.assertEqual(planner.main(), 0)
-
-            outputs = output_path.read_text(encoding="utf-8")
-
-        self.assertIn(f"source_sha={SOURCE_SHA}", outputs)
-        self.assertIn("should_release=false", outputs)
-        self.assertIn("required check is missing", outputs)
-
-    def test_break_glass_releases_over_a_blocked_source_check(self) -> None:
-        """The hatch for a broken source gate: force_release deliberately is not one."""
-        with tempfile.TemporaryDirectory() as directory:
-            output_path = Path(directory) / "github-output"
-            with (
-                patch.object(planner, "latest_desktop_tag", return_value=None),
-                patch.object(planner, "releasable_desktop_changes_since", return_value=[]),
-                patch.object(planner, "git", return_value=SOURCE_SHA),
-                patch.object(planner, "required_desktop_swift_check_reason", return_value="required check is missing"),
-                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY, "--mode", "break_glass"]),
-                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
-            ):
-                self.assertEqual(planner.main(), 0)
-
-            outputs = output_path.read_text(encoding="utf-8")
-
-        self.assertIn("should_release=true", outputs)
-        self.assertIn("source_gate_bypassed=true", outputs)
-
-    def test_break_glass_does_not_bypass_the_source_check_when_it_passes(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            output_path = Path(directory) / "github-output"
-            with (
-                patch.object(planner, "latest_desktop_tag", return_value=None),
-                patch.object(planner, "releasable_desktop_changes_since", return_value=[]),
-                patch.object(planner, "git", return_value=SOURCE_SHA),
-                patch.object(planner, "required_desktop_swift_check_reason", return_value=None),
-                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY, "--mode", "break_glass"]),
-                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
-            ):
-                self.assertEqual(planner.main(), 0)
-
-            outputs = output_path.read_text(encoding="utf-8")
-
-        self.assertIn("should_release=true", outputs)
-        self.assertNotIn("source_gate_bypassed=true", outputs)
-
-    def test_force_release_keeps_its_normal_path_after_source_check_success(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            output_path = Path(directory) / "github-output"
-            with (
-                patch.object(planner, "latest_desktop_tag", return_value=None),
-                patch.object(planner, "releasable_desktop_changes_since", return_value=[]),
-                patch.object(planner, "git", return_value=SOURCE_SHA),
-                patch.object(planner, "required_desktop_swift_check_reason", return_value=None),
-                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY, "--mode", "force_release"]),
-                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
-            ):
-                self.assertEqual(planner.main(), 0)
-
-            outputs = output_path.read_text(encoding="utf-8")
-
-        self.assertIn("should_release=true", outputs)
-        self.assertIn("Ready to release 0 changed desktop app file(s).", outputs)
-
-    def test_workflow_tags_the_post_consolidation_changelog_commit(self) -> None:
-        # Static wiring contract: GitHub Actions cannot be exercised without a
-        # candidate release, so ensure Codemagic's tag contains the release notes.
+    def test_workflow_is_schedule_only_and_tags_the_changelog_commit(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-
-        self.assertIn('git commit -m "chore: consolidate changelog for v${VERSION}"', workflow)
-        self.assertIn('git tag "$RELEASE_TAG"', workflow)
-        self.assertNotIn('git tag "$RELEASE_TAG" "$SOURCE_SHA"', workflow)
-        self.assertLess(
-            workflow.index('git commit -m "chore: consolidate changelog for v${VERSION}"'),
-            workflow.index('git tag "$RELEASE_TAG"'),
-        )
+        self.assertIn("- cron: '17 * * * *'", workflow)
+        self.assertNotIn("workflow_dispatch:", workflow)
+        self.assertNotIn("break_glass", workflow)
+        self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
+        self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
+        self.assertLess(workflow.index('git commit -m "chore: consolidate changelog for v${VERSION}"'), workflow.index('git tag "$RELEASE_TAG"'))
 
 
 if __name__ == "__main__":

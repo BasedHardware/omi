@@ -9,11 +9,26 @@ checks:
     triggers: ["scripts/pre-push", "scripts/pre-push-diff-base", "scripts/test-pre-push-diff-base.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "pre-push check selection must use the final PR diff rather than a stale remote feature tip"
+  - id: setup-pre-push-prerequisites
+    command: ["bash", "scripts/test-make-setup.sh"]
+    triggers: ["Makefile", "backend/scripts/sync-python-deps.sh", "scripts/pre-push", "scripts/test-make-setup.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "make setup must provision the minimal, rerunnable backend environment required by selected pre-push checks"
   - id: check-manifest-contract
     command: ["python3", ".github/scripts/test_run_checks.py"]
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "manifest validity and workflow drift guard"
+  - id: backend-production-release-vector-guards
+    command: ["python3", ".github/scripts/check_release_rings.py"]
+    triggers: [".github/workflows/gcp_backend.yml", ".github/scripts/check_release_rings.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the canonical production backend deploy remains the only release authority"
+  - id: backend-production-release-vector-guard-tests
+    command: ["python3", ".github/scripts/test_check_release_rings.py"]
+    triggers: [".github/scripts/check_release_rings.py", ".github/scripts/test_check_release_rings.py", ".github/workflows/gcp_backend.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the one-action production backend release contract must reject legacy release planes"
   - id: product-file-line-count-ratchet
     command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{base}"]
     triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", ".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/product_file_line_count_ratchet_baseline/**/*.json"]
@@ -42,9 +57,9 @@ checks:
     reason: "real Firestore transaction serialization must fence stale qualified Beta admissions after reservation, pause, and generation transitions"
   - id: desktop-changelog-io-tests
     command: ["python3", ".github/scripts/test_desktop_changelog.py"]
-    triggers: [".github/scripts/desktop-changelog.py", ".github/scripts/test_desktop_changelog.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/scripts/check-desktop-changelog.py", ".github/scripts/desktop-changelog.py", ".github/scripts/test_desktop_changelog.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "#9717: changelog JSON I/O must decode/encode as UTF-8 regardless of contributor host locale"
+    reason: "#9717: changelog tooling must preserve UTF-8 I/O and exempt only internal desktop release controls"
   - id: agents-md-lean
     command: ["python3", ".github/scripts/check_agents_md_lean.py"]
     triggers: ["AGENTS.md", ".github/scripts/check_agents_md_lean.py"]
@@ -242,7 +257,7 @@ checks:
     command: ["python3", ".github/scripts/test_plan_desktop_release.py"]
     triggers: [".github/scripts/plan-desktop-release.py", ".github/scripts/test_plan_desktop_release.py", ".github/workflows/desktop_auto_release.yml"]
     lanes: ["local", "ci"]
-    reason: "candidate tags require a successful Desktop Swift Build & Tests check for their exact source SHA"
+    reason: "candidate tags require successful Release Eligibility and both Desktop Swift checks for the exact newest queued releasable desktop SHA"
   - id: desktop-manifest-routes
     command: ["python3", ".github/scripts/test_desktop_manifest_routes.py"]
     triggers: [".github/workflows/desktop-swift-ci.yml", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", ".github/scripts/test_desktop_manifest_routes.py"]
@@ -348,14 +363,14 @@ checks:
     reason: "#9991 mutation-tests workflow-run event, result, branch, SHA, repository, and manual proof drift"
   - id: gcp-backend-production-boundary
     command: ["python3", ".github/scripts/check-gcp-backend-production-boundary.py"]
-    triggers: [".github/workflows/gcp_backend.yml", "backend/scripts/probe-transcription-candidate-from-cloud-run.sh", "backend/tests/unit/test_probe_transcription_candidate_from_cloud_run.py", ".github/scripts/check-gcp-backend-production-boundary.py", ".github/scripts/test_check_gcp_backend_production_boundary.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_backend.yml", "backend/scripts/firebase_release_probe_token.py", "backend/scripts/transcription_capability_probe.py", ".github/scripts/check-gcp-backend-production-boundary.py", ".github/scripts/test_check_gcp_backend_production_boundary.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "#10163 locks the supported production Cloud Run-only boundary and canonical tagged-candidate IAM audience without introducing another deployment control plane"
+    reason: "the canonical production deploy is rollback-first and Cloud Run-only"
   - id: gcp-backend-production-boundary-fixtures
     command: ["python3", ".github/scripts/test_check_gcp_backend_production_boundary.py"]
     triggers: [".github/workflows/gcp_backend.yml", ".github/scripts/check-gcp-backend-production-boundary.py", ".github/scripts/test_check_gcp_backend_production_boundary.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "#10163 mutation-tests prod/all rejection, canonical IAM audience, and tagged request-target drift"
+    reason: "mutation-tests prod/all admission, serving smoke order, token handling, and rollback coverage"
   - id: direct-backend-production-admission
     command: ["python3", ".github/scripts/check-direct-backend-production-admission.py"]
     triggers: [".github/workflows/gcp_backend_agent_proxy.yml", ".github/workflows/gcp_backend_listen_helm.yml", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_llm_gateway.yml", ".github/scripts/check-direct-backend-production-admission.py", ".github/scripts/test_check_direct_backend_production_admission.py", ".github/checks-manifest.yaml"]
@@ -381,6 +396,23 @@ checks:
     triggers: [".github/workflows/desktop_promote_prod.yml", ".github/scripts/check_stable_pointer_precondition.py", ".github/scripts/verify_stable_appcast.py", ".github/scripts/test_stable_promotion_verifiers.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#10163 mutation-sensitive Stable retry and default-channel feed fixtures"
+  - id: desktop-release-one-path-contract
+    command: ["python3", ".github/scripts/test_desktop_release_flow_contract.py"]
+    triggers: ["codemagic.yaml", ".github/workflows/desktop_auto_release.yml", ".github/workflows/desktop_qualify_beta.yml", ".github/workflows/desktop_promote_beta.yml", ".github/workflows/desktop_recover_beta.yml", ".github/workflows/desktop_rollback_beta.yml", ".github/workflows/desktop_breakglass_rollout_beta.yml", ".github/workflows/desktop_promote_prod.yml", ".github/workflows/gcp_backend.yml", "desktop/macos/scripts/qualify-desktop-beta.sh", ".github/scripts/test_desktop_release_flow_contract.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-17 prevents duplicate desktop promotion authorities and requires post-traffic production release-vector verification"
+  - id: desktop-qualification-bootstrap-contract
+    command: ["bash", "desktop/macos/tests/test-qualify-desktop-beta-contract.sh"]
+    triggers: ["desktop/macos/scripts/qualify-desktop-beta.sh", "desktop/macos/scripts/prepare-qualification-profile.sh", "desktop/macos/scripts/qualification-swift-cache.sh", "desktop/macos/tests/test-qualify-desktop-beta-contract.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "Trusted qualification requires an exact-SHA persistent source, isolated named-bundle, unchanged gates, and phase-bound bootstrap contracts"
+  - id: desktop-qualification-swift-cache
+    command: ["bash", "desktop/macos/tests/test-qualification-swift-cache.sh"]
+    triggers: ["desktop/macos/scripts/qualification-swift-cache.sh", "desktop/macos/scripts/qualify-desktop-beta.sh", "desktop/macos/tests/test-qualification-swift-cache.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "Exact-source retries must keep stable absolute SwiftPM paths while rejecting stale provenance, symlinks, collisions, and incomplete entries"
 
 exempt:
   - path: ".github/scripts/check-desktop-auto-beta-candidate.py"
