@@ -1,0 +1,19 @@
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-root.json
+  s_424d550d86fd05::t_d3bd663b7267f9 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "c78e26f7b8c2a9c0f6132d5893d0586dc0e12cba",
+  "prompts": {},
+  "sessions": {
+    "s_424d550d86fd05": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7d83f64d-8ce5-47f1-b308-b8839508880a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
