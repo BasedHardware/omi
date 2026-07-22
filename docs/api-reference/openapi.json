@@ -902,6 +902,87 @@
         "title": "DeveloperActionItem",
         "type": "object"
       },
+      "DeveloperAskRequest": {
+        "properties": {
+          "limit": {
+            "default": 5,
+            "description": "How many of the most relevant conversations to ground the answer on",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "question": {
+            "description": "A natural-language question about the user's life/conversations",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "timezone": {
+            "default": "UTC",
+            "description": "IANA timezone used to resolve relative dates in the answer",
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "DeveloperAskRequest",
+        "type": "object"
+      },
+      "DeveloperAskResponse": {
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/DeveloperAskSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "answer",
+          "sources"
+        ],
+        "title": "DeveloperAskResponse",
+        "type": "object"
+      },
+      "DeveloperAskSource": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "DeveloperAskSource",
+        "type": "object"
+      },
       "DeveloperConversation": {
         "properties": {
           "created_at": {
@@ -2676,6 +2757,59 @@
         "summary": "Update Action Item",
         "tags": [
           "Action Items"
+        ]
+      }
+    },
+    "/v1/dev/user/ask": {
+      "post": {
+        "description": "Answer a natural-language question grounded in the user's own conversations.\n\nSemantically searches the user's conversations for the question, then synthesizes a\ncited answer from the most relevant ones — the same retrieval + RAG the chat surface\nuses, exposed for headless / Developer-API callers (CLI, CI, scripts). Read-only:\nit never writes, and locked conversations are excluded by the search layer.",
+        "operationId": "ask",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeveloperAskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "developerApiKey": []
+          }
+        ],
+        "summary": "Ask Conversations",
+        "tags": [
+          "Conversations"
         ]
       }
     },

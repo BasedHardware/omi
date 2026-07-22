@@ -109,6 +109,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "dev:conversation_transcript_read": (25, 3600),
     "dev:goals_read": (120, 3600),
     "dev:conversations": (25, 3600),
+    # Ask (/v1/dev/user/ask): one qa_rag LLM call per request over the caller's
+    # conversations — billable like a conversation create, so it carries its own
+    # low per-key cap instead of riding the cheap dev:conversations_read list limit.
+    "dev:ask": (25, 3600),
     "dev:memories": (120, 3600),
     "dev:memories_batch": (15, 3600),
     "dev:action_items_write": (120, 3600),

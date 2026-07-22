@@ -8,6 +8,31 @@ service: backend-main
 routes:
   - route_type: http
     method: POST
+    path: /v1/dev/user/ask
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - developer_api_key
+          - firebase_id_token
+        placement: dependency
+        scopes:
+          - conversations:read
+      byok: not_applicable
+      rate_limit:
+        policy_name: dev:ask
+        key_subject: api_key
+        enforcement: fail_closed
+        placement: dependency
+      timeout_class: default_method
+      surface: developer_api
+      visibility: public_documented
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
     path: /v1/conversations/shared/chat
     policy:
       review_status: reviewed

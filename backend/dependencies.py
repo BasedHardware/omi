@@ -314,6 +314,21 @@ async def get_uid_with_conversations_read(auth: ApiKeyAuth = Depends(get_api_key
     return auth.uid
 
 
+async def get_uid_with_conversations_read_ask(
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
+    request: Request = None,
+) -> str:
+    """conversations:read plus the tighter dev:ask budget for the billable RAG endpoint.
+
+    POST /v1/dev/user/ask invokes an LLM (qa_rag) per call, so it carries its own low
+    per-key hourly cap rather than riding the cheap dev:conversations_read list limit —
+    a leaked or overused key can't turn it into an unbounded billable endpoint.
+    """
+    _require_conversations_read_scope(auth)
+    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:ask")
+    return auth.uid
+
+
 def check_conversation_transcript_read_limit(
     auth: ApiKeyAuth,
     request: Optional[Request] = None,

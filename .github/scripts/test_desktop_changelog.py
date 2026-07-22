@@ -81,6 +81,8 @@ class ChangelogRequirementTests(unittest.TestCase):
             "desktop/macos/tests/some-other-desktop-test.sh",
             # Rust backend prefix.
             "desktop/macos/Backend-Rust/src/main.rs",
+            # Generated OpenAPI types are mechanical regenerations, not a user-facing change.
+            "desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift",
         ):
             with self.subTest(path=path):
                 self.assertFalse(checker.is_desktop_change_requiring_changelog(path))
