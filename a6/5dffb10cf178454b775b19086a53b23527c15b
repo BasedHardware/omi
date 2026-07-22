@@ -1,0 +1,39 @@
+.github/scripts/product_file_line_count_ratchet_baseline/backend-routers.json
+  s_77f2b8dfbc2e90::t_4c0353f6dd9a32 4,7
+  s_77f2b8dfbc2e90::t_bc38e751d144f4 12-13,15
+.github/scripts/product_file_line_count_ratchet_baseline/backend-utils.json
+  s_77f2b8dfbc2e90::t_fc80c9659cbbb3 8
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-root.json
+  s_77f2b8dfbc2e90::t_72362683f10066 5
+desktop/macos/Desktop/Tests/HomeKnowsComposerTests.swift
+  s_62099ccfd5cc12::t_7926942d8a2e8b 16,19-20,24-26
+  s_62099ccfd5cc12::t_f3a943f9db9c32 36,40-41,43
+  s_62099ccfd5cc12::t_52a52ad1d90756 46,50-53
+  s_62099ccfd5cc12::t_5f7cfe7e9d259c 56,59,61,63
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-proactiveassistants.json
+  s_77f2b8dfbc2e90::t_36f4d9e2c37488 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "a65dffb10cf178454b775b19086a53b23527c15b",
+  "prompts": {},
+  "sessions": {
+    "s_62099ccfd5cc12": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bce3b3b3-c244-4ae8-bb2a-1ff7eccbcdbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
