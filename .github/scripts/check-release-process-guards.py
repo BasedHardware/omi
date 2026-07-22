@@ -624,6 +624,8 @@ def check_desktop_codemagic_release() -> list[str]:
         errors.append("Codemagic must not write release-body dispatch state outside the trusted workflow serialiser")
     if "candidate remains non-live" not in desktop_workflow_body:
         errors.append("desktop qualification handoff must state that a failed dispatch cannot publish beta")
+    if "ERROR: qualification dispatch was not confirmed after bounded retry" not in dispatch_body or "exit 1" not in dispatch_body:
+        errors.append("desktop qualification handoff must fail closed after bounded dispatch retries")
     if "gh release delete \"$CM_TAG\"" in desktop_workflow_body:
         errors.append("desktop candidate retries must not delete immutable qualification evidence")
     if "docker info" in desktop_workflow_body:
@@ -805,8 +807,6 @@ def check_desktop_qualification_runner() -> list[str]:
         "docker info",
         "check-desktop-auto-beta-candidate.py",
         "--automatic",
-        "--no-promote",
-        "desktop_promote_beta.yml",
         "actions/create-github-app-token@v3",
         "desktop-beta-qualification-${{ inputs.release_tag }}",
         "cancel-in-progress: false",
@@ -814,6 +814,23 @@ def check_desktop_qualification_runner() -> list[str]:
     ):
         if required_fragment not in text:
             errors.append(f"desktop qualification runner is missing required guard fragment: {required_fragment}")
+    if "desktop_promote_beta.yml" in text:
+        errors.append("desktop qualification runner must not promote beta inside its own run")
+
+    promotion = ROOT / ".github/workflows/desktop_promote_beta.yml"
+    promotion_text = promotion.read_text(encoding="utf-8") if promotion.exists() else ""
+    for required_fragment in (
+        'workflows: ["Qualify Desktop Beta Candidate"]',
+        "types: [completed]",
+        "github.event.workflow_run.conclusion == 'success'",
+        "github.event.workflow_run.event == 'workflow_dispatch'",
+        "github.event.workflow_run.head_branch",
+        "github.event.workflow_run.head_sha",
+        "/v2/desktop/beta/promote-qualified",
+        "environment: beta",
+    ):
+        if required_fragment not in promotion_text:
+            errors.append(f"desktop beta promotion workflow is missing post-qualification guard: {required_fragment}")
 
     candidate_gate = ROOT / ".github/scripts/check-desktop-auto-beta-candidate.py"
     candidate_gate_text = candidate_gate.read_text(encoding="utf-8") if candidate_gate.exists() else ""
@@ -896,35 +913,26 @@ def check_mobile_codemagic_release_triggers() -> list[str]:
             errors.append(f"codemagic.yaml is missing {workflow_id}")
             continue
         body = match.group("body")
-        if re.search(
-            r"\n    triggering:\n(?:(?!\n    [A-Za-z_]).)*\n      events:\n(?:(?!\n    [A-Za-z_]).)*\n        - push\b",
-            body,
-            flags=re.DOTALL,
-        ):
-            errors.append(f"{workflow_id} must not directly trigger on push; GitHub paths filtering dispatches it")
+        required = (
+            "    triggering:\n"
+            "      events:\n"
+            "        - push\n"
+            "      branch_patterns:\n"
+            "        - pattern: main\n"
+            "          include: true\n"
+            "      cancel_previous_builds: true\n"
+            "    when:\n"
+            "      changeset:\n"
+            "        includes:\n"
+            "          - 'app/**'"
+        )
+        if required not in body:
+            errors.append(
+                f"{workflow_id} must natively trigger on main app/** pushes and cancel stale builds"
+            )
 
-    workflow = ROOT / ".github/workflows/mobile_internal_auto.yml"
-    if not workflow.exists():
-        errors.append("mobile internal auto deploys must be dispatched by .github/workflows/mobile_internal_auto.yml")
-        return errors
-
-    workflow_text = workflow.read_text(encoding="utf-8")
-    if not re.search(r"(?m)^\s*-\s*['\"]?app/\*\*['\"]?\s*$", workflow_text):
-        errors.append("mobile_internal_auto.yml must gate pushes to app/** paths")
-    if "group: mobile-internal-auto-${{ matrix.workflow_id }}-${{ github.ref }}" not in workflow_text:
-        errors.append("mobile_internal_auto.yml must give each matrix workflow its own concurrency group")
-    token_check_index = workflow_text.find("Validate Codemagic API token")
-    debounce_index = workflow_text.find("Debounce mobile internal deploys")
-    if token_check_index == -1 or debounce_index == -1 or token_check_index > debounce_index:
-        errors.append("mobile_internal_auto.yml must validate CODEMAGIC_API_TOKEN before the push debounce")
-    for required in (
-        "paths:",
-        "https://api.codemagic.io/builds",
-        "ios-internal-auto",
-        "android-internal-auto",
-    ):
-        if required not in workflow_text:
-            errors.append(f"mobile_internal_auto.yml is missing required release guard fragment: {required}")
+    if (ROOT / ".github/workflows/mobile_internal_auto.yml").exists():
+        errors.append("mobile internal releases must not be dispatched through GitHub Actions")
 
     return errors
 

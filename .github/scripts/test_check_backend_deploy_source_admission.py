@@ -212,9 +212,15 @@ class WorkflowContractTests(unittest.TestCase):
             ),
             (
                 "triggering SHA checkout",
-                "ref: ${{ github.event.workflow_run.head_sha }}\n          fetch-depth: 2",
-                "ref: main\n          fetch-depth: 2",
+                "ref: ${{ github.event.workflow_run.head_sha }}\n          # The parent diff is the only local scope proof required here. Current\n          # main/supersession proof below is bounded to read-only GitHub API calls.\n          fetch-depth: 2",
+                "ref: main\n          # The parent diff is the only local scope proof required here. Current\n          # main/supersession proof below is bounded to read-only GitHub API calls.\n          fetch-depth: 2",
                 "auto backend scope decision must inspect the triggering SHA",
+            ),
+            (
+                "full-history checkout",
+                "fetch-depth: 2",
+                "fetch-depth: 0",
+                "auto backend scope decision must shallow-fetch only the triggering parent diff",
             ),
             (
                 "parent diff",
@@ -227,6 +233,58 @@ class WorkflowContractTests(unittest.TestCase):
                 "    runs-on: ubuntu-latest-m\n    outputs:",
                 "    runs-on: ubuntu-latest-m\n    steps:\n      - uses: google-github-actions/auth@v3\n    outputs:",
                 "auto backend scope decision must not authenticate to cloud services",
+            ),
+        )
+        for name, old, new, expected in cases:
+            with self.subTest(name=name):
+                root = self.fixture_root()
+                self.mutate(root, CHECKER.AUTO_WORKFLOW_PATH, old, new)
+                self.assertIn(expected, CHECKER.validate(root))
+
+    def test_auto_workflow_rejects_api_supersession_proof_bypasses(self) -> None:
+        """Static tripwires for the bounded read-only green no-op proof."""
+        cases = (
+            (
+                "wrong ref endpoint",
+                '"$api_base/repos/$GITHUB_REPOSITORY/git/ref/heads/main"',
+                '"$api_base/repos/$GITHUB_REPOSITORY/git/ref/heads/release"',
+                "auto backend scope decision must resolve current main through the bounded GitHub ref API",
+            ),
+            (
+                "wrong compare endpoint",
+                '"$api_base/repos/$GITHUB_REPOSITORY/compare/$RELEASE_SHA...$main_sha"',
+                '"$api_base/repos/$GITHUB_REPOSITORY/compare/$main_sha...$RELEASE_SHA"',
+                "auto backend scope decision must compare the immutable triggering SHA to the resolved main SHA through GitHub",
+            ),
+            (
+                "unbound compare identity",
+                '.base_commit.sha == $release_sha and .head_commit.sha == $main_sha',
+                '.base_commit.sha == $main_sha and .head_commit.sha == $release_sha',
+                "auto backend scope decision must bind compare base and head identities",
+            ),
+            (
+                "unconfirmed supersession",
+                'if [[ "$comparison" == "behind" ]]; then',
+                'if [[ "$comparison" == "identical" ]]; then',
+                "auto backend scope decision must only no-op after confirmed supersession",
+            ),
+            (
+                "ambiguous API becomes no-op",
+                "supersession API proof was unavailable or ambiguous; preserving fail-closed source admission",
+                "GitHub compare confirmed triggering SHA $RELEASE_SHA is behind current main $main_sha",
+                "auto backend scope decision must treat API or identity ambiguity as guarded admission",
+            ),
+            (
+                "local merge-base proof",
+                "git diff --name-only \"$parent_sha\" \"$RELEASE_SHA\"",
+                "git merge-base --is-ancestor \"$RELEASE_SHA\" \"$main_sha\"\n          git diff --name-only \"$parent_sha\" \"$RELEASE_SHA\"",
+                "auto backend scope decision must not use local merge-base supersession proof",
+            ),
+            (
+                "local main history fetch",
+                "git diff --name-only \"$parent_sha\" \"$RELEASE_SHA\"",
+                "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main\n          git diff --name-only \"$parent_sha\" \"$RELEASE_SHA\"",
+                "auto backend scope decision must not fetch local main history for supersession",
             ),
         )
         for name, old, new, expected in cases:
@@ -251,8 +309,8 @@ class WorkflowContractTests(unittest.TestCase):
             ),
             (
                 "stale main fetch",
-                "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main",
-                "git fetch --no-tags origin +refs/heads/release:refs/remotes/origin/main",
+                "RELEASE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}\n        run: |\n          set -euo pipefail\n          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main",
+                "RELEASE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}\n        run: |\n          set -euo pipefail\n          git fetch --no-tags origin +refs/heads/release:refs/remotes/origin/main",
                 "automatic source admission must refresh current main",
             ),
             (
@@ -513,6 +571,18 @@ class WorkflowContractTests(unittest.TestCase):
             '--commit-sha "${{ github.event.inputs.release_sha }}"',
         )
         self.assertIn("manual deployment must bind every release vector to the admitted SHA", CHECKER.validate(root))
+
+        root = self.fixture_root()
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            "ref: ${{ github.sha }}",
+            "ref: ${{ github.event.inputs.release_sha }}",
+        )
+        self.assertIn(
+            "manual backend deploy must stage workflow-owned control scripts from github.sha",
+            CHECKER.validate(root),
+        )
 
     def test_traffic_only_repair_remains_separate_from_source_admission(self) -> None:
         root = self.fixture_root()

@@ -87,7 +87,7 @@ require_backend_python() {
     return 0
   fi
   echo "FAIL: a selected backend check requires backend/.venv/bin/python, but it was not found." >&2
-  echo "      Create it with: cd backend && bash scripts/sync-python-deps.sh" >&2
+  echo "      Create it with: make setup" >&2
   return 1
 }
 

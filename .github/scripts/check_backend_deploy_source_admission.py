@@ -178,9 +178,11 @@ def validate_auto_workflow(text: str) -> list[str]:
         )
         for fragment, message in (
             (f"ref: {AUTO_PROOF_SHA}", "auto backend scope decision must inspect the triggering SHA"),
-            ("fetch-depth: 2", "auto backend scope decision must fetch the triggering commit parent"),
+            ("fetch-depth: 2", "auto backend scope decision must shallow-fetch only the triggering parent diff"),
         ):
             require_fragment(errors, scope_checkout, fragment, message)
+        if "fetch-depth: 0" in scope_checkout:
+            errors.append("auto backend scope decision must not fetch full history")
         scope_decision = require_step(
             errors,
             scope_steps,
@@ -188,16 +190,64 @@ def validate_auto_workflow(text: str) -> list[str]:
             "backend deployment scope decision",
         )
         for fragment, message in (
+            (f"GH_TOKEN: ${{{{ github.token }}}}", "auto backend scope decision must use its read-only GitHub token"),
             (f"RELEASE_SHA: {AUTO_PROOF_SHA}", "auto backend scope decision must bind the triggering SHA"),
+            (
+                '"$api_base/repos/$GITHUB_REPOSITORY/git/ref/heads/main"',
+                "auto backend scope decision must resolve current main through the bounded GitHub ref API",
+            ),
+            (
+                '"$api_base/repos/$GITHUB_REPOSITORY/compare/$RELEASE_SHA...$main_sha"',
+                "auto backend scope decision must compare the immutable triggering SHA to the resolved main SHA through GitHub",
+            ),
+            (
+                'if .ref == "refs/heads/main" and .object.type == "commit"',
+                "auto backend scope decision must bind the current-main ref response identity",
+            ),
+            (
+                '.base_commit.sha == $release_sha and .head_commit.sha == $main_sha',
+                "auto backend scope decision must bind compare base and head identities",
+            ),
+            (
+                '.status == "behind"',
+                "auto backend scope decision must require GitHub's behind status for a superseded no-op",
+            ),
+            (
+                'if [[ "$comparison" == "behind" ]]; then',
+                "auto backend scope decision must only no-op after confirmed supersession",
+            ),
+            (
+                "supersession API proof was unavailable or ambiguous; preserving fail-closed source admission",
+                "auto backend scope decision must treat API or identity ambiguity as guarded admission",
+            ),
+            ("echo \"applies=true\" >> \"$GITHUB_OUTPUT\"", "auto backend scope decision must continue to guarded admission when supersession is uncertain"),
+            ("echo \"applies=false\" >> \"$GITHUB_OUTPUT\"", "auto backend scope decision must publish a no-op result"),
+            (
+                "Backend development deploy superseded no-op",
+                "auto backend scope decision must summarize superseded candidates as green no-ops",
+            ),
+            (
+                "GitHub compare confirmed triggering SHA $RELEASE_SHA is behind current main $main_sha",
+                "auto backend scope decision must name both bound SHAs in a superseded summary",
+            ),
             ("git rev-parse \"${RELEASE_SHA}^\"", "auto backend scope decision must inspect the triggering parent"),
             (
                 "git diff --name-only \"$parent_sha\" \"$RELEASE_SHA\"",
                 "auto backend scope decision must diff the triggering SHA against its parent",
             ),
-            ("echo \"applies=false\" >> \"$GITHUB_OUTPUT\"", "auto backend scope decision must publish a no-op result"),
             ("Green no-op", "auto backend scope decision must summarize green no-ops"),
         ):
             require_fragment(errors, scope_decision, fragment, message)
+        fallback_summary = "supersession API proof was unavailable or ambiguous; preserving fail-closed source admission"
+        if scope_decision.count(fallback_summary) != 2:
+            errors.append("auto backend scope decision must treat API or identity ambiguity as guarded admission")
+        for forbidden, message in (
+            ("git fetch --no-tags", "auto backend scope decision must not fetch local main history for supersession"),
+            ("git merge-base", "auto backend scope decision must not use local merge-base supersession proof"),
+            ("origin/main", "auto backend scope decision must not resolve local origin/main for supersession"),
+        ):
+            if forbidden in scope_decision:
+                errors.append(message)
     if firestore_job is None:
         errors.append("auto backend deploy is missing its source-admission job")
     else:
@@ -356,8 +406,9 @@ def validate_manual_workflow(text: str) -> list[str]:
     )
     if "github.event.inputs.branch" in text or re.search(r"(?m)^      branch:\n", text):
         errors.append("manual backend deploy must not accept an arbitrary branch or ref")
-    if "github.sha" in text:
-        errors.append("manual backend deploy must not substitute the dispatch default SHA for admitted source")
+    control_source_ref = "ref: ${{ github.sha }}"
+    if text.count(control_source_ref) != 1 or "Checkout workflow-owned deploy-control source" not in text:
+        errors.append("manual backend deploy must stage workflow-owned control scripts from github.sha")
 
     repair_job = mapping_block(text, "repair-traffic", 2)
     if repair_job is None:
