@@ -98,7 +98,38 @@ def _service_record(cfg: config.HarnessConfig, service: str) -> dict[str, object
     return None
 
 
+def _native_typesense_binary() -> str | None:
+    override = os.environ.get("OMI_TYPESENSE_SERVER_BIN", "").strip()
+    if override:
+        if not Path(override).is_file():
+            raise SystemExit(f"OMI_TYPESENSE_SERVER_BIN points to a missing binary: {override}")
+        return override
+    return shutil.which("typesense-server")
+
+
+def typesense_runtime() -> str:
+    """How the harness runs Typesense: "docker" (historical default) or "native".
+
+    OMI_TYPESENSE_RUNTIME pins the choice; unset, Docker wins when the CLI is
+    present and a native typesense-server binary is the fallback so Docker-less
+    machines (ephemeral CI Macs, minimal runners) can still run the hermetic
+    stack. Resolution is announced at `up` so evidence logs record the mode.
+    """
+    explicit = os.environ.get("OMI_TYPESENSE_RUNTIME", "").strip().lower()
+    if explicit:
+        if explicit not in ("docker", "native"):
+            raise SystemExit(f"OMI_TYPESENSE_RUNTIME must be 'docker' or 'native', got {explicit!r}")
+        return explicit
+    if shutil.which("docker"):
+        return "docker"
+    if _native_typesense_binary():
+        return "native"
+    return "docker"
+
+
 def _typesense_container_running(cfg: config.HarnessConfig) -> bool:
+    if typesense_runtime() != "docker":
+        return False
     result = subprocess.run(
         [
             "docker",
@@ -132,7 +163,7 @@ def _service_health(cfg: config.HarnessConfig, service: str) -> tuple[bool, str]
         ok, detail = _http_ok(url, headers=headers)
         if ok:
             return True, detail
-        if not _typesense_container_running(cfg):
+        if typesense_runtime() == "docker" and not _typesense_container_running(cfg):
             return False, "container-not-running"
         return False, detail
     if service == "backend":
@@ -221,8 +252,18 @@ def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]
         missing.append("java runtime (required by Firestore emulator)")
     if not _which("redis-server"):
         missing.append("redis-server (required for local Redis on loopback)")
-    if not _which("docker"):
-        missing.append("docker (required for local Typesense on loopback)")
+    runtime = typesense_runtime()
+    if runtime == "docker":
+        if not _which("docker"):
+            missing.append(
+                "docker (required for local Typesense on loopback; "
+                "or install typesense-server and set OMI_TYPESENSE_RUNTIME=native)"
+            )
+    elif not _native_typesense_binary():
+        missing.append(
+            f"typesense-server {config.TYPESENSE_PINNED_VERSION} "
+            "(required for OMI_TYPESENSE_RUNTIME=native; set OMI_TYPESENSE_SERVER_BIN or add to PATH)"
+        )
     if not (cfg.repo_root / "firebase.json").is_file():
         missing.append("firebase.json at repo root")
     if not (cfg.repo_root / "firestore.rules").is_file():
@@ -532,6 +573,8 @@ def _typesense_container_name(cfg: config.HarnessConfig) -> str:
 
 
 def _remove_stale_typesense_container(cfg: config.HarnessConfig) -> None:
+    if typesense_runtime() != "docker":
+        return
     container = _typesense_container_name(cfg)
     subprocess.run(
         ["docker", "rm", "-f", container],
@@ -544,6 +587,25 @@ def _remove_stale_typesense_container(cfg: config.HarnessConfig) -> None:
 def _typesense_command(cfg: config.HarnessConfig) -> list[str]:
     typesense_dir = cfg.layout.services_dir / "typesense"
     typesense_dir.mkdir(parents=True, exist_ok=True)
+    if typesense_runtime() == "native":
+        binary = _native_typesense_binary()
+        if not binary:
+            raise SystemExit(
+                "OMI_TYPESENSE_RUNTIME=native requires typesense-server on PATH "
+                f"(expected {config.TYPESENSE_PINNED_VERSION}) or OMI_TYPESENSE_SERVER_BIN"
+            )
+        return [
+            binary,
+            "--data-dir",
+            str(typesense_dir),
+            "--api-address",
+            "127.0.0.1",
+            "--api-port",
+            str(config.TYPESENSE_PORT),
+            "--api-key",
+            config.LOCAL_TYPESENSE_API_KEY,
+            "--enable-cors",
+        ]
     return [
         "docker",
         "run",
@@ -554,7 +616,7 @@ def _typesense_command(cfg: config.HarnessConfig) -> list[str]:
         f"127.0.0.1:{config.TYPESENSE_PORT}:{config.TYPESENSE_PORT}",
         "-v",
         f"{typesense_dir}:/data",
-        "typesense/typesense:27.1",
+        f"typesense/typesense:{config.TYPESENSE_PINNED_VERSION}",
         "--data-dir",
         "/data",
         "--api-key",
@@ -595,6 +657,7 @@ def _start_services(cfg: config.HarnessConfig) -> None:
         log_name="redis.log",
         port=cfg.redis_port,
     )
+    print(f"typesense runtime: {typesense_runtime()}")
     _remove_stale_typesense_container(cfg)
     _start_process(
         cfg,
