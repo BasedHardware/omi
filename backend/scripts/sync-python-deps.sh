@@ -34,7 +34,7 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 uv python install "$PYTHON_VERSION"
-uv venv --python "$PYTHON_VERSION" "$VENV_PATH"
+uv venv --allow-existing --python "$PYTHON_VERSION" "$VENV_PATH"
 uv pip sync "$LOCK_FILE" --python "$PYTHON_BIN"
 
 echo "Backend dependencies synced from $LOCK_FILE into $ROOT_DIR/$VENV_PATH"
