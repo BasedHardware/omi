@@ -1,0 +1,19 @@
+desktop/macos/Desktop/Sources/FloatingControlBar/GlobalShortcutManager.swift
+  s_ba6911a59cf527::t_6f744f8b07be3c 152,154-157,165,170,172
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "6cda6c52721fb8044d71725b0b30542b29b70557",
+  "prompts": {},
+  "sessions": {
+    "s_ba6911a59cf527": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "437ec1d8-1792-4aa9-a5ce-2846124cd673",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
