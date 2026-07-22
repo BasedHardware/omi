@@ -1,0 +1,30 @@
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_77f2b8dfbc2e90::t_bbb2403900fa22 687-688
+desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  s_77f2b8dfbc2e90::t_ee602ba5af308b 1-117
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_77f2b8dfbc2e90::t_3208188936606c 1053-1064,1066-1067
+  s_77f2b8dfbc2e90::t_54369ec17e2b2c 498-499,503-505
+  s_77f2b8dfbc2e90::t_142215fbb15e08 641-646,649-651
+  s_77f2b8dfbc2e90::t_9bb91deea7987c 41-43
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_77f2b8dfbc2e90::t_d0b1cd539626f3 5
+desktop/macos/changelog/unreleased/20260722-sb-topbar.json
+  s_77f2b8dfbc2e90::t_f746ebd1ffb559 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "f0748cae3e05b1c8cdadc014faacfa73332f4ce4",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
