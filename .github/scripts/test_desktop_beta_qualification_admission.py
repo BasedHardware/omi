@@ -33,8 +33,15 @@ def _response(runs: list[dict]) -> dict:
     return {"total_count": len(runs), "workflow_runs": runs}
 
 
-def _decide(runs: list[dict], **kwargs: object) -> dict:
-    return admission.decide(_ref(), _response(runs), release_tag=TAG, **kwargs)
+def _admit_jobs(*, succeeded: bool = True) -> dict:
+    conclusion = "success" if succeeded else "failure"
+    return {"total_count": 1, "jobs": [{"id": 1, "name": "admit", "status": "completed", "conclusion": conclusion}]}
+
+
+def _decide(runs: list[dict], *, jobs_by_run: dict[int, dict] | None = None, **kwargs: object) -> dict:
+    if jobs_by_run is None:
+        jobs_by_run = {run["id"]: _admit_jobs() for run in runs}
+    return admission.decide(_ref(), _response(runs), release_tag=TAG, jobs_by_run=jobs_by_run, **kwargs)
 
 
 class AdmissionTests(unittest.TestCase):
@@ -63,18 +70,18 @@ class AdmissionTests(unittest.TestCase):
     def test_annotated_tag_peels_to_exact_commit(self) -> None:
         ref = {"ref": f"refs/tags/{TAG}", "object": {"type": "tag", "sha": "b" * 40}}
         tag = {"sha": "b" * 40, "object": {"type": "commit", "sha": SHA}}
-        decision = admission.decide(ref, _response([]), release_tag=TAG, annotated_tag=tag)
+        decision = admission.decide(ref, _response([]), release_tag=TAG, jobs_by_run={}, annotated_tag=tag)
         self.assertEqual(decision["source_sha"], SHA)
 
     def test_malformed_api_response_fails_closed(self) -> None:
         with self.assertRaisesRegex(ValueError, "malformed"):
-            admission.decide(_ref(), {"total_count": 0, "workflow_runs": {}}, release_tag=TAG)
+            admission.decide(_ref(), {"total_count": 0, "workflow_runs": {}}, release_tag=TAG, jobs_by_run={})
         with self.assertRaisesRegex(ValueError, "non-object"):
-            admission.decide(_ref(), {"total_count": 1, "workflow_runs": [None]}, release_tag=TAG)
+            admission.decide(_ref(), {"total_count": 1, "workflow_runs": [None]}, release_tag=TAG, jobs_by_run={})
 
     def test_malformed_exact_tag_ref_fails_closed(self) -> None:
         with self.assertRaisesRegex(ValueError, "does not bind"):
-            admission.decide({}, _response([]), release_tag=TAG)
+            admission.decide({}, _response([]), release_tag=TAG, jobs_by_run={})
 
     def test_success_on_second_page_beyond_first_hundred_denies(self) -> None:
         first_page = [_run(run_id=index, tag=OTHER_TAG) for index in range(1, 101)]
@@ -83,14 +90,14 @@ class AdmissionTests(unittest.TestCase):
             {"total_count": 101, "workflow_runs": first_page},
             {"total_count": 101, "workflow_runs": second_page},
         ]
-        decision = admission.decide(_ref(), pages, release_tag=TAG)
+        decision = admission.decide(_ref(), pages, release_tag=TAG, jobs_by_run={101: _admit_jobs()})
         self.assertFalse(decision["admitted"])
         self.assertIn("succeeded", decision["reason"])
 
     def test_incomplete_paginated_response_fails_closed(self) -> None:
         partial = {"total_count": 101, "workflow_runs": [_run(run_id=index) for index in range(1, 101)]}
         with self.assertRaisesRegex(ValueError, "pagination is incomplete"):
-            admission.decide(_ref(), partial, release_tag=TAG)
+            admission.decide(_ref(), partial, release_tag=TAG, jobs_by_run={})
 
     def test_three_failed_attempts_reach_the_bound(self) -> None:
         decision = _decide([_run(run_id=index, conclusion="failure") for index in range(1, 4)])
@@ -125,6 +132,29 @@ class AdmissionTests(unittest.TestCase):
     def test_malformed_current_run_is_validated_before_exclusion(self) -> None:
         with self.assertRaisesRegex(ValueError, "completed status has invalid conclusion"):
             _decide([_run(run_id=42, status="completed", conclusion=None)], current_run_id=42)
+
+    def test_cancelled_pre_admission_placeholders_do_not_consume_attempt_bound(self) -> None:
+        runs = [
+            _run(run_id=1, conclusion="cancelled"),
+            _run(run_id=2, conclusion="cancelled"),
+            _run(run_id=3, conclusion="cancelled"),
+            _run(run_id=4, conclusion="failure"),
+        ]
+        no_jobs = {"total_count": 0, "jobs": []}
+        decision = _decide(
+            runs,
+            jobs_by_run={1: no_jobs, 2: no_jobs, 3: no_jobs, 4: _admit_jobs()},
+        )
+        self.assertTrue(decision["admitted"])
+
+    def test_three_admitted_failures_reach_the_bound(self) -> None:
+        runs = [_run(run_id=index, conclusion="failure") for index in range(1, 4)]
+        decision = _decide(runs, jobs_by_run={run["id"]: _admit_jobs() for run in runs})
+        self.assertFalse(decision["admitted"])
+
+    def test_missing_job_authority_fails_closed(self) -> None:
+        with self.assertRaisesRegex(ValueError, "missing GitHub job authority"):
+            _decide([_run(run_id=1, conclusion="failure")], jobs_by_run={})
 
 
 if __name__ == "__main__":

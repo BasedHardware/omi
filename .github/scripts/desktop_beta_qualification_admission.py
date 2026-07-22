@@ -144,11 +144,67 @@ def _exact_runs(runs_response: Any, release_tag: str, source_sha: str) -> list[d
     return selected
 
 
+def _admitted_attempts(prior_runs: list[dict[str, Any]], jobs_by_run: dict[int, Any]) -> int:
+    """Count only runs whose real GitHub `admit` job completed successfully."""
+    attempts = 0
+    for run in prior_runs:
+        run_id = run["id"]
+        if run_id not in jobs_by_run:
+            raise ValueError(f"workflow run {run_id} is missing GitHub job authority")
+        if _admit_job_succeeded(jobs_by_run[run_id], run_id):
+            attempts += 1
+    return attempts
+
+
+def _admit_job_succeeded(jobs_response: Any, run_id: int) -> bool:
+    pages = [jobs_response] if isinstance(jobs_response, dict) else jobs_response
+    if not isinstance(pages, list) or not pages:
+        raise ValueError(f"workflow run {run_id} jobs response is malformed")
+    total_count: int | None = None
+    jobs: list[dict[str, Any]] = []
+    seen_ids: set[int] = set()
+    for page_index, page in enumerate(pages):
+        if not isinstance(page, dict) or not isinstance(page.get("jobs"), list):
+            raise ValueError(f"workflow run {run_id} jobs page {page_index} is malformed")
+        page_total = page.get("total_count")
+        if not isinstance(page_total, int) or isinstance(page_total, bool) or page_total < 0:
+            raise ValueError(f"workflow run {run_id} jobs page {page_index} total_count is malformed")
+        if total_count is None:
+            total_count = page_total
+        elif page_total != total_count:
+            raise ValueError(f"workflow run {run_id} jobs pagination total_count changed during retrieval")
+        for job in page["jobs"]:
+            if not isinstance(job, dict):
+                raise ValueError(f"workflow run {run_id} jobs response contains a non-object entry")
+            job_id = _positive_id(job.get("id"), f"workflow run {run_id} job id")
+            if job_id in seen_ids:
+                raise ValueError(f"workflow run {run_id} jobs response contains duplicate job id {job_id}")
+            seen_ids.add(job_id)
+            jobs.append(job)
+    if total_count != len(jobs):
+        raise ValueError(f"workflow run {run_id} jobs pagination is incomplete")
+    admit_jobs = [job for job in jobs if job.get("name") == "admit"]
+    if len(admit_jobs) > 1:
+        raise ValueError(f"workflow run {run_id} has multiple admit jobs")
+    if not admit_jobs:
+        # A cancelled workflow can be discarded by global concurrency before
+        # its admission job exists. It is not a qualification attempt.
+        return False
+    admit = admit_jobs[0]
+    if admit.get("status") != "completed":
+        raise ValueError(f"workflow run {run_id} admit job did not complete")
+    conclusion = admit.get("conclusion")
+    if not isinstance(conclusion, str) or conclusion not in TERMINAL_CONCLUSIONS:
+        raise ValueError(f"workflow run {run_id} admit job has invalid conclusion")
+    return conclusion == "success"
+
+
 def decide(
     ref: Any,
     runs_response: Any,
     *,
     release_tag: str,
+    jobs_by_run: dict[int, Any],
     current_run_id: int | None = None,
     annotated_tag: Any | None = None,
 ) -> dict[str, Any]:
@@ -173,7 +229,8 @@ def decide(
             "source_sha": source_sha,
             "reason": f"exact candidate already succeeded in qualification run {successful['id']}",
         }
-    if len(prior_runs) >= MAX_EXACT_CANDIDATE_ATTEMPTS:
+    attempts = _admitted_attempts(prior_runs, jobs_by_run)
+    if attempts >= MAX_EXACT_CANDIDATE_ATTEMPTS:
         return {
             "admitted": False,
             "release_tag": release_tag,
@@ -195,16 +252,25 @@ def main() -> int:
     parser.add_argument("--ref-json", type=Path, required=True)
     parser.add_argument("--annotated-tag-json", type=Path)
     parser.add_argument("--runs-json", type=Path, required=True)
+    parser.add_argument("--jobs-dir", type=Path, required=True)
     parser.add_argument("--release-tag", required=True)
     parser.add_argument("--current-run-id", type=int)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--require-admitted", action="store_true")
     args = parser.parse_args()
 
+    jobs_by_run: dict[int, Any] = {}
+    for path in args.jobs_dir.glob("*.json"):
+        try:
+            run_id = _positive_id(int(path.stem), "workflow run id from jobs filename")
+        except ValueError as exc:
+            raise ValueError(f"jobs directory has invalid filename {path.name!r}") from exc
+        jobs_by_run[run_id] = _load(path)
     decision = decide(
         _load(args.ref_json),
         _load(args.runs_json),
         release_tag=args.release_tag,
+        jobs_by_run=jobs_by_run,
         current_run_id=args.current_run_id,
         annotated_tag=_load(args.annotated_tag_json) if args.annotated_tag_json else None,
     )

@@ -815,6 +815,8 @@ def check_desktop_qualification_runner() -> list[str]:
         "Fail-closed exact-candidate admission",
         "desktop_beta_qualification_admission.py",
         "gh api --paginate --slurp",
+        "head_sha=\"$CANDIDATE_SHA\"",
+        "--jobs-dir \"$admission_dir/jobs\"",
         "needs: admit",
     ):
         if required_fragment not in text:

@@ -2900,20 +2900,33 @@ workflows:
             gh api "repos/$GITHUB_REPO/git/ref/tags/$CM_TAG" > "$dispatch_dir/ref.json"
           tag_type=$(jq -r '.object.type // empty' "$dispatch_dir/ref.json")
           case "$tag_type" in
-            commit) ;;
+            commit)
+              CANDIDATE_SHA=$(jq -r '.object.sha // empty' "$dispatch_dir/ref.json")
+              ;;
             tag)
               tag_object_sha=$(jq -r '.object.sha // empty' "$dispatch_dir/ref.json")
               [[ "$tag_object_sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'ERROR: malformed annotated candidate tag ref.' >&2; exit 1; }
               GH_TOKEN="$GITHUB_TOKEN" gh api "repos/$GITHUB_REPO/git/tags/$tag_object_sha" > "$dispatch_dir/annotated-tag.json"
+              CANDIDATE_SHA=$(jq -r '.object.sha // empty' "$dispatch_dir/annotated-tag.json")
               ;;
             *) echo 'ERROR: malformed candidate tag ref.' >&2; exit 1 ;;
           esac
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'ERROR: malformed candidate commit SHA.' >&2; exit 1; }
           GH_TOKEN="$GITHUB_TOKEN" \
-            gh api --paginate --slurp "repos/$GITHUB_REPO/actions/workflows/desktop_qualify_beta.yml/runs?event=workflow_dispatch&per_page=100" \
+            gh api --paginate --slurp --method GET "repos/$GITHUB_REPO/actions/workflows/desktop_qualify_beta.yml/runs" \
+              -f event=workflow_dispatch -f branch="$CM_TAG" -f head_sha="$CANDIDATE_SHA" -F per_page=100 \
             > "$dispatch_dir/runs.json"
+          mkdir -p "$dispatch_dir/jobs"
+          while IFS= read -r run_id; do
+            [[ "$run_id" =~ ^[1-9][0-9]*$ ]] || { echo 'ERROR: malformed workflow run ID.' >&2; exit 1; }
+            GH_TOKEN="$GITHUB_TOKEN" \
+              gh api --paginate --slurp --method GET "repos/$GITHUB_REPO/actions/runs/$run_id/jobs" -F per_page=100 \
+              > "$dispatch_dir/jobs/$run_id.json"
+          done < <(jq -r '.[].workflow_runs[] | .id' "$dispatch_dir/runs.json")
           admission_args=(
             --ref-json "$dispatch_dir/ref.json"
             --runs-json "$dispatch_dir/runs.json"
+            --jobs-dir "$dispatch_dir/jobs"
             --release-tag "$CM_TAG"
             --output "$dispatch_dir/decision.json"
           )

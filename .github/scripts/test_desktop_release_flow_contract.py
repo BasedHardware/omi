@@ -239,6 +239,10 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertIn("desktop_beta_qualification_admission.py", admission)
         self.assertIn("--current-run-id \"$CURRENT_RUN_ID\"", admission)
         self.assertIn("--require-admitted", admission)
+        self.assertIn('--method GET "repos/$REPO/actions/workflows/desktop_qualify_beta.yml/runs"', admission)
+        self.assertIn('-f event=workflow_dispatch -f branch="$RELEASE_TAG" -f head_sha="$CANDIDATE_SHA"', admission)
+        self.assertIn('actions/runs/$run_id/jobs', admission)
+        self.assertIn('--jobs-dir "$admission_dir/jobs"', admission)
         self.assertLess(qualification.index("Fail-closed exact-candidate admission"), qualification.index("Checkout qualification controls"))
         self.assertIn("needs: admit", qualification)
 
@@ -260,6 +264,10 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertIn("Skipping duplicate trusted qualification dispatch", dispatch)
         self.assertIn("gh api --paginate --slurp", dispatch)
         self.assertIn("actions/workflows/desktop_qualify_beta.yml/runs", dispatch)
+        self.assertIn('--method GET "repos/$GITHUB_REPO/actions/workflows/desktop_qualify_beta.yml/runs"', dispatch)
+        self.assertIn('-f event=workflow_dispatch -f branch="$CM_TAG" -f head_sha="$CANDIDATE_SHA"', dispatch)
+        self.assertIn('actions/runs/$run_id/jobs', dispatch)
+        self.assertIn('--jobs-dir "$dispatch_dir/jobs"', dispatch)
 
     def test_beta_qualification_cleanup_accepts_missing_gitlink(self) -> None:
         for name, script in self._gitlink_cleanup_scripts():
