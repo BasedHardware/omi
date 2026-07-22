@@ -6,10 +6,13 @@ const { query, tool, createSdkMcpServer } = await import(
   process.env.OMI_AGENT_SDK_MODULE || "@anthropic-ai/claude-agent-sdk"
 );
 import { ALLOWED_TOOLS, buildAgentDefinitions } from "./query-config.mjs";
+import { USER_MESSAGES, classifyError, isExpectedAbort, logEvent, markOwnedAbort, withRetry } from "./errors.mjs";
 import { createSubagentRouter } from "./stream-routing.mjs";
 import {
   activityCounts,
   runSqlBatch,
+  executeReadOnlyQuery,
+  truncateToolResult,
   appUsageMatrix,
   emptyRangeStatement,
   formatAppUsage,
@@ -30,26 +33,33 @@ import { createInflateRaw, createGunzip } from "zlib";
 import { homedir } from "os";
 
 // --- Global error handlers: prevent SDK abort errors from crashing the process ---
+// Owned-abort policy: only aborts within the grace window after OUR OWN
+// interrupt()/abort() calls are expected; any other abort-shaped error is an
+// unknown error and must surface at full detail (previously every message
+// containing "aborted" was silently swallowed forever).
 process.on('unhandledRejection', (err) => {
-  // Claude Agent SDK throws "Operation aborted" when we abort a query (e.g. client disconnect).
-  // This surfaces as an unhandled rejection from internal async paths. Safe to ignore.
-  const msg = err?.message || String(err);
-  if (msg.includes('Operation aborted') || msg.includes('aborted')) {
-    console.log(`[server] Suppressed abort error: ${msg}`);
+  if (isExpectedAbort(err)) {
+    logEvent('debug', 'abort_suppressed', { error: err });
     return;
   }
-  console.error(`[server] Unhandled rejection:`, err);
+  logEvent('error', 'unhandled_rejection', { category: classifyError(err).category, error: err });
 });
 
 process.on('uncaughtException', (err) => {
-  const msg = err?.message || String(err);
-  if (msg.includes('Operation aborted') || msg.includes('aborted')) {
-    console.log(`[server] Suppressed uncaught abort error: ${msg}`);
+  if (isExpectedAbort(err)) {
+    logEvent('debug', 'abort_suppressed', { error: err });
     return;
   }
-  console.error(`[server] Uncaught exception:`, err);
-  // For non-abort errors, exit so systemd can restart us
-  process.exit(1);
+  // Maximum-detail post-mortem, synchronously flushed — console.log can lose
+  // the line across process.exit.
+  const record = {
+    ts: new Date().toISOString(), level: 'error', event: 'uncaught_exception',
+    category: classifyError(err).category,
+    error: { name: err?.name, message: err?.message, stack: err?.stack },
+    memory: process.memoryUsage(), uptime_s: Math.round(process.uptime()),
+  };
+  try { writeFileSync(1, JSON.stringify(record) + "\n"); } catch { console.error(record); }
+  process.exit(1); // systemd restarts us; its restart backoff is the loop guard
 });
 
 // --- Async message queue for persistent session streaming input ---
@@ -167,6 +177,7 @@ GUIDELINES:
 - For personal facts/preferences, query the memories table first
 - For calendar, email, health data — use the backend tools (get_calendar_events_tool, get_gmail_messages_tool, etc.)
 - For ROW-HEAVY work — searching through many screenshots/tasks/transcripts (content recall, task triage, multi-day pattern analysis) — delegate to the researcher subagent via the Task tool; it reads the rows in its own context and returns distilled findings. Answer directly when one or two aggregate queries (or a single get_daily_recap call) suffice.
+- CONNECTING INTEGRATIONS: if a connector/tool reports it is "not connected", or the user asks how to connect calendar/gmail/etc., call get_connect_link with the integration key (e.g. "google_calendar") and give the user the exact link it returns, verbatim, telling them to click it and sign in. NEVER invent setup steps, mention external MCP servers/skills, or describe manual settings flows — only use get_connect_link.
 - Be concise and helpful. Format results clearly.`;
 
   agentDefinitions = buildAgentDefinitions(schema);
@@ -204,33 +215,9 @@ const BLOCKED_KEYWORDS = ["DROP", "ALTER", "CREATE", "PRAGMA", "ATTACH", "DETACH
 
 function executeSqlQuery(sqlQuery) {
   if (!db) return JSON.stringify({ error: "Database not loaded. Upload omi.db first." });
-  const upper = sqlQuery.toUpperCase();
-  for (const kw of BLOCKED_KEYWORDS) {
-    if (new RegExp(`\\b${kw}\\b`).test(upper)) {
-      return JSON.stringify({ error: `Blocked: ${kw} statements not allowed` });
-    }
-  }
-  if (/;\s*\S/.test(sqlQuery)) {
-    return JSON.stringify({ error: "Multi-statement queries not allowed" });
-  }
-  const trimmed = upper.trim();
-  if ((trimmed.startsWith("UPDATE") || trimmed.startsWith("DELETE")) && !upper.includes("WHERE")) {
-    return JSON.stringify({ error: "UPDATE/DELETE require a WHERE clause" });
-  }
-  try {
-    if (trimmed.startsWith("SELECT")) {
-      let execQuery = sqlQuery;
-      if (!/\bLIMIT\b/i.test(sqlQuery)) {
-        execQuery = sqlQuery.replace(/;?\s*$/, " LIMIT 200");
-      }
-      const rows = db.prepare(execQuery).all();
-      return JSON.stringify({ rows, count: rows.length });
-    } else {
-      return JSON.stringify({ error: "Database is in read-only mode (cloud copy)" });
-    }
-  } catch (err) {
-    return JSON.stringify({ error: err.message });
-  }
+  // stmt.readonly-based guard (data-tools): allows CTE reads the old prefix
+  // guard rejected, caps rows by iteration, no keyword false-positives.
+  return executeReadOnlyQuery(db, sqlQuery);
 }
 
 // --- Semantic Search Logic ---
@@ -673,7 +660,14 @@ async function fetchAndRegisterBackendTools() {
 }
 
 function rebuildMcpServer() {
-  const allTools = [executeSqlTool, semanticSearchTool, getDailyRecapTool, getAppUsageTool, ...backendTools];
+  const allTools = [
+    executeSqlTool,
+    semanticSearchTool,
+    getDailyRecapTool,
+    getAppUsageTool,
+    getConnectLinkTool,
+    ...backendTools,
+  ];
   omiServer = createSdkMcpServer({
     name: "omi-tools",
     tools: allTools,
@@ -703,7 +697,7 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
     includePartialMessages: true,
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
-    maxTurns: undefined,
+    maxTurns: 10,
     cwd: cwd || process.env.HOME || "/",
     mcpServers: {
       "omi-tools": omiServer,
@@ -800,7 +794,11 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
           }
         } else {
           const errors = message.errors || [];
-          send({ type: "error", message: `Agent error (${message.subtype}): ${errors.join(", ")}` });
+          {
+            const category = classifyError(new Error((message.errors || []).join(", ") || message.subtype));
+            logEvent("error", "agent_turn_error", { category, subtype: message.subtype, errors: message.errors });
+            send({ type: "error", code: category, message: USER_MESSAGES[category] ?? USER_MESSAGES.internal });
+          }
         }
         break;
       }
@@ -855,7 +853,7 @@ function startPersistentSession(initialSink, log) {
     includePartialMessages: true,
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
-    maxTurns: undefined,
+    maxTurns: 10,
     cwd: process.env.HOME || "/",
     mcpServers: {
       "omi-tools": omiServer,
@@ -893,6 +891,7 @@ function startPersistentSession(initialSink, log) {
   let turnStartedAt = null; // timestamp when query was pushed
   let firstEventSent = false; // tracks if we've sent the first stream event for this turn
   let interruptRequested = false; // set when a stop/preemption cuts the current turn short
+  let dead = false; // set when the session loop dies — callers must start a fresh session
 
   // Background message processing loop — runs for entire WS lifetime
   const routeSubagent = createSubagentRouter();
@@ -1010,7 +1009,11 @@ function startPersistentSession(initialSink, log) {
               // stop path previously surfaced an error to the client).
               send({ type: "result", text: fullText, sessionId, costUsd: message.total_cost_usd || 0, interrupted: true });
             } else {
-              send({ type: "error", message: `Agent error (${message.subtype}): ${(message.errors || []).join(", ")}` });
+              {
+              const category = classifyError(new Error((message.errors || []).join(", ") || message.subtype));
+              logEvent("error", "agent_turn_error", { category, subtype: message.subtype, errors: message.errors });
+              send({ type: "error", code: category, message: USER_MESSAGES[category] ?? USER_MESSAGES.internal });
+            }
             }
             // Reset per-turn state
             fullText = "";
@@ -1024,7 +1027,16 @@ function startPersistentSession(initialSink, log) {
         }
       }
     } catch (err) {
-      log(`Persistent session loop error: ${err.message}`);
+      // The session loop is the only consumer of the SDK stream — if it dies,
+      // the shared session is unusable. Tell the client honestly, log at full
+      // detail, and mark the session dead so the next query starts fresh
+      // instead of hanging on a promise that will never resolve.
+      const category = classifyError(err).category;
+      logEvent("error", "session_loop_died", { category, error: err });
+      dead = true;
+      try {
+        send({ type: "error", code: category, message: USER_MESSAGES[category] ?? USER_MESSAGES.internal });
+      } catch {}
     }
     log("Persistent session ended");
   })();
@@ -1040,6 +1052,7 @@ function startPersistentSession(initialSink, log) {
     setTurnActive: (v) => { turnActive = v; },
     startTurnTimer: () => { turnStartedAt = Date.now(); firstEventSent = false; },
     markInterrupted: () => { interruptRequested = true; },
+    isDead: () => dead,
     setSink: (sink) => { currentSink = sink; },
     // A stale socket's close event can fire after a newer socket attached —
     // only clear the sink if it is still ours.
@@ -1566,6 +1579,10 @@ function startServer() {
           const prompt = msg.prompt;
           log(`Query: ${prompt?.slice(0, 100)}`);
 
+          if (sharedSession?.isDead?.()) {
+            logEvent("warn", "session_recreated_after_death", {});
+            sharedSession = null;
+          }
           // Start sharedSession if not started yet
           if (!sharedSession) {
             log("No active sharedSession, starting on first query...");
@@ -1589,6 +1606,7 @@ function startServer() {
           if (sharedSession.isTurnActive()) {
             log("Interrupting active turn for new query");
             sharedSession.markInterrupted();
+            markOwnedAbort();
             try { await sharedSession.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
           }
 
@@ -1610,6 +1628,7 @@ function startServer() {
           log("Stop requested");
           if (sharedSession?.isTurnActive()) {
             sharedSession.markInterrupted();
+            markOwnedAbort();
             try { await sharedSession.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
           }
           break;
