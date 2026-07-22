@@ -54,7 +54,10 @@ export function query({ prompt }) {
       console.error("[fake-sdk] holding for interrupt");
       await interruptRequested; // deterministic hold — released only by interrupt()
       console.error("[fake-sdk] resumed after interrupt");
-      yield resultMsg("Part one. ");
+      // The real SDK terminalizes an interrupted turn with a non-success
+      // subtype (observed live) — the server must map it to an interrupted
+      // partial result, not an error.
+      yield { type: "result", subtype: "error_during_execution", errors: [], total_cost_usd: 0.001 };
       return;
     }
     yield streamText("Part two.");

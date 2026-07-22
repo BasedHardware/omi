@@ -79,6 +79,7 @@ beforeAll(async () => {
       AUTH_TOKEN: TOKEN,
       OMI_AGENT_SDK_MODULE: join(here, "fixtures/fake-agent-sdk.mjs"),
       OMI_AGENT_DISABLE_UPDATES: "1",
+      OMI_TURN_HEARTBEAT_MS: "100", // fast heartbeats so the held turn emits them without long waits
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -149,13 +150,17 @@ describe("agent-cloud WS contract (e2e)", () => {
     expect(messages.at(-1).text).toBe(`turn:${firstTurn + 1}`);
   }, 20000);
 
-  it("marks stopped turns as interrupted partial results", async () => {
+  it("emits heartbeats during silent turns and marks stopped turns as interrupted partials", async () => {
     const ws = await connect();
     const done = collectUntilResult(ws);
-    const firstDelta = new Promise((resolve) => {
+    // The SLOW turn holds silently after its first delta — wait for a
+    // heartbeat (the silent-gap ceiling) before stopping like a user would.
+    const sawHeartbeat = new Promise((resolve) => {
+      let gotDelta = false;
       const onMsg = (data) => {
         const msg = JSON.parse(data.toString());
-        if (msg.type === "text_delta") {
+        if (msg.type === "text_delta") gotDelta = true;
+        if (gotDelta && msg.type === "status" && /Still working/.test(msg.message ?? "")) {
           ws.off("message", onMsg);
           resolve();
         }
@@ -163,11 +168,13 @@ describe("agent-cloud WS contract (e2e)", () => {
       ws.on("message", onMsg);
     });
     ws.send(JSON.stringify({ type: "query", prompt: "SLOW deep analysis please" }));
-    await firstDelta;
+    await sawHeartbeat;
     ws.send(JSON.stringify({ type: "stop" }));
     const messages = await done;
     ws.close();
 
+    // The real SDK terminalizes interrupts with a non-success subtype — the
+    // client must still receive a result marked interrupted, never an error.
     const result = messages.at(-1);
     expect(result.type).toBe("result");
     expect(result.interrupted).toBe(true);

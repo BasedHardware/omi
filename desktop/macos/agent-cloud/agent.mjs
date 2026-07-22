@@ -7,6 +7,17 @@ const { query, tool, createSdkMcpServer } = await import(
 );
 import { ALLOWED_TOOLS, buildAgentDefinitions } from "./query-config.mjs";
 import { subagentClientEvents } from "./stream-routing.mjs";
+import {
+  activityCounts,
+  appUsageMatrix,
+  emptyRangeStatement,
+  formatAppUsage,
+  formatHourlyTimeline,
+  formatTopWindows,
+  hourlyTimeline,
+  resolveRange,
+  topWindows,
+} from "./data-tools.mjs";
 import Database from "better-sqlite3";
 import { z } from "zod";
 import { dirname, join } from "path";
@@ -139,7 +150,8 @@ ${schema}
 TOOLS:
 - **execute_sql**: Run SQL queries on the database. SELECT auto-limits to 200 rows. Supports FTS5 MATCH for keyword search. Use for structured queries (app usage, time ranges, task management, aggregations).
 - **semantic_search**: Vector similarity search on screenshot OCR text. Use for fuzzy/conceptual queries where exact keywords won't work.
-- **get_daily_recap**: Pre-formatted activity recap (apps, conversations, tasks) for a given time range. Use for "what did I do today/yesterday/this week" — single tool call, much faster than multiple SQL queries.
+- **get_daily_recap**: Pre-formatted activity recap (apps, conversations, tasks, hourly timeline) for any date or range (start_date/end_date or days_ago). Use for "what did I do <day/range>" — single tool call, much faster than multiple SQL queries. If it reports no activity, that is authoritative — do not re-verify with SQL.
+- **get_app_usage**: Day-by-app screen activity matrix for any range in one call. Use for "what did I spend time on", day comparisons, and usage patterns instead of per-day GROUP BY queries.
 - **Playwright browser tools**: You can navigate websites, click elements, fill forms, take screenshots, etc. Use when the user asks you to do something on the web.
 - **Backend tools** (calendar, gmail, health, conversations, memories, action items, web search, etc.): Use these when the user asks about their calendar events, emails, health data, past conversations, or wants to search the web. These tools connect to the user's real accounts.
 
@@ -150,6 +162,7 @@ GUIDELINES:
 - Key tables: screenshots (timestamp, appName, windowTitle, ocrText — 600K+ rows, always filter by timestamp), action_items (description, completed, priority, category, dueAt), memories (content, category, source), transcription_sessions (title, overview, startedAt, finishedAt), transcription_segments (sessionId, speaker, text), focus_sessions (status, appOrSite, durationSeconds), observations (appName, contextSummary, currentActivity), goals (title, goalType, targetValue, currentValue), staged_tasks (description, priority), indexed_files (path, filename, fileType, folder), live_notes (sessionId, text), ai_user_profiles (profileText, generatedAt)
 - FTS tables for keyword search: screenshots_fts(ocrText, windowTitle, appName), action_items_fts(description), staged_tasks_fts(description), task_chat_messages_fts(messageText)
 - For task queries, use action_items table (or FTS: action_items_fts MATCH 'keyword')
+- Task extraction creates near-duplicate entries: for "how many tasks" report COUNT(DISTINCT description), and GROUP BY description when listing so duplicates collapse
 - For conversation queries, use transcription_sessions + transcription_segments
 - For personal facts/preferences, query the memories table first
 - For calendar, email, health data — use the backend tools (get_calendar_events_tool, get_gmail_messages_tool, etc.)
@@ -371,55 +384,59 @@ Don't use when:
 - User wants structured data or counts (use execute_sql)
 
 This tool runs three queries in one call (apps, conversations, tasks) — much faster than multiple execute_sql calls.
+ONE call covers any date range. If the range has no data, the response says so authoritatively — do not re-verify with SQL.
 
 Parameter guidance:
-- days_ago=0: today's activity so far
-- days_ago=1: yesterday (default, most common)
-- days_ago=7: past week overview`,
+- start_date/end_date (YYYY-MM-DD): a specific day or range, e.g. "what did I do on July 15" → start_date=2026-07-15
+- days_ago=0: today so far; days_ago=1: yesterday (default); days_ago=7: past week`,
   {
-    days_ago: z.number().optional().default(1).describe("0=today, 1=yesterday, 7=past week. Default 1"),
+    days_ago: z.number().optional().default(1).describe("0=today, 1=yesterday, 7=past week. Ignored when start_date is set"),
+    start_date: z.string().optional().describe("Range start, YYYY-MM-DD. Use for specific dates"),
+    end_date: z.string().optional().describe("Range end (inclusive), YYYY-MM-DD. Defaults to start_date"),
   },
-  async ({ days_ago }) => {
+  async ({ days_ago, start_date, end_date }) => {
     if (!db) return { content: [{ type: "text", text: "Database not loaded." }] };
 
-    const n = Math.max(0, Math.floor(days_ago));
-    const dateLabel = n === 0 ? "Today" : n === 1 ? "Yesterday" : `Past ${n} days`;
-    // For today (n=0), upper bound is now; for past days, upper bound is start of today
-    const upperBound = n === 0
-      ? "datetime('now', 'localtime')"
-      : "datetime('now', 'start of day', 'localtime')";
+    let range;
+    try {
+      range = resolveRange({ days_ago, start_date, end_date });
+    } catch (e) {
+      return { content: [{ type: "text", text: `Error: ${e.message}` }] };
+    }
+
+    const counts = activityCounts(db, range);
+    const empty = emptyRangeStatement(range, counts);
+    if (empty) return { content: [{ type: "text", text: empty }] };
 
     // App usage
     const apps = db.prepare(`
       SELECT appName, COUNT(*) as screenshots, ROUND(COUNT(*) * 10.0 / 60, 1) as minutes,
-        MIN(time(timestamp, 'localtime')) as first_seen, MAX(time(timestamp, 'localtime')) as last_seen
+        MIN(time(timestamp)) as first_seen, MAX(time(timestamp)) as last_seen
       FROM screenshots
-      WHERE timestamp >= datetime('now', 'start of day', '-${n} day', 'localtime')
-        AND timestamp < ${upperBound}
+      WHERE timestamp >= ? AND timestamp < ?
         AND appName IS NOT NULL AND appName != ''
       GROUP BY appName ORDER BY screenshots DESC
-    `).all();
+    `).all(range.start, range.endExclusive);
 
     // Conversations
     const convos = db.prepare(`
       SELECT title, overview, emoji, category, startedAt, finishedAt,
         ROUND((julianday(finishedAt) - julianday(startedAt)) * 1440, 1) as duration_min
       FROM transcription_sessions
-      WHERE startedAt >= datetime('now', 'start of day', '-${n} day', 'localtime')
-        AND startedAt < ${upperBound}
+      WHERE startedAt >= ? AND startedAt < ?
         AND deleted = 0 AND discarded = 0
       ORDER BY startedAt DESC
-    `).all();
+    `).all(range.start, range.endExclusive);
 
     // Action items
     const tasks = db.prepare(`
       SELECT description, completed, priority, createdAt FROM action_items
-      WHERE createdAt >= datetime('now', 'start of day', '-${n} day', 'localtime')
-        AND createdAt < ${upperBound}
+      WHERE createdAt >= ? AND createdAt < ?
         AND deleted = 0
       ORDER BY createdAt DESC
-    `).all();
+    `).all(range.start, range.endExclusive);
 
+    const dateLabel = range.label;
     // Format compact markdown
     let out = `# ${dateLabel} Recap\n\n`;
 
@@ -455,7 +472,36 @@ Parameter guidance:
       }
     }
 
+    // Short ranges get an hourly timeline + top window titles so one call
+    // answers "what was I doing" without follow-up SQL.
+    if (range.spanDays <= 2) {
+      out += formatHourlyTimeline(hourlyTimeline(db, range));
+      out += formatTopWindows(topWindows(db, range));
+    }
+
     return { content: [{ type: "text", text: out }] };
+  }
+);
+
+const getAppUsageTool = tool(
+  "get_app_usage",
+  `Day-by-app screen activity matrix for any date range in ONE call.
+Returns per-app totals plus a per-day breakdown (top apps per day).
+Use for "what did I spend time on", day-vs-day comparisons, and usage patterns —
+instead of hand-writing GROUP BY queries per day. Captures are ~10s apart.`,
+  {
+    start_date: z.string().describe("Range start, YYYY-MM-DD"),
+    end_date: z.string().optional().describe("Range end (inclusive), YYYY-MM-DD. Defaults to start_date"),
+  },
+  async ({ start_date, end_date }) => {
+    if (!db) return { content: [{ type: "text", text: "Database not loaded." }] };
+    let range;
+    try {
+      range = resolveRange({ start_date, end_date });
+    } catch (e) {
+      return { content: [{ type: "text", text: `Error: ${e.message}` }] };
+    }
+    return { content: [{ type: "text", text: formatAppUsage(range, appUsageMatrix(db, range)) }] };
   }
 );
 
@@ -559,7 +605,7 @@ async function fetchAndRegisterBackendTools() {
 }
 
 function rebuildMcpServer() {
-  const allTools = [executeSqlTool, semanticSearchTool, getDailyRecapTool, ...backendTools];
+  const allTools = [executeSqlTool, semanticSearchTool, getDailyRecapTool, getAppUsageTool, ...backendTools];
   omiServer = createSdkMcpServer({
     name: "omi-tools",
     tools: allTools,
@@ -708,9 +754,25 @@ function startPersistentSession(initialSink, log) {
   // while detached are dropped; the turn keeps running and its full text
   // still arrives in the result after reattach.
   let currentSink = initialSink;
+  let lastSentAt = Date.now();
   const send = (msg) => {
+    lastSentAt = Date.now();
     if (currentSink) currentSink(msg);
   };
+
+  // Heartbeat: bound the client-visible silent gap during active turns.
+  // Measured (2026-07-22): with streaming on, light turns gap <3s but heavy
+  // delegated turns still go 40-64s silent while the subagent generates text
+  // we deliberately swallow. A periodic status caps the gap regardless of
+  // where the silence comes from.
+  const heartbeatMs = parseInt(process.env.OMI_TURN_HEARTBEAT_MS || "10000", 10);
+  const heartbeatTimer = setInterval(() => {
+    if (!turnActive || isPrewarmTurn) return;
+    if (Date.now() - lastSentAt < heartbeatMs) return;
+    const elapsedS = turnStartedAt ? Math.round((Date.now() - turnStartedAt) / 1000) : 0;
+    send({ type: "status", message: `Still working… (${elapsedS}s)` });
+  }, Math.max(50, Math.floor(heartbeatMs / 2)));
+  heartbeatTimer.unref?.();
 
   const sessionAbort = new AbortController();
 
@@ -870,6 +932,11 @@ function startPersistentSession(initialSink, log) {
               // interrupted: the turn was cut short by a stop/preemption — the
               // text is a partial answer, and clients must be able to say so.
               send({ type: "result", text: fullText, sessionId, costUsd, interrupted: interruptRequested });
+            } else if (interruptRequested) {
+              // A user stop terminalizes with a non-success subtype in the real
+              // SDK — that is a partial answer, not an error (measured: the
+              // stop path previously surfaced an error to the client).
+              send({ type: "result", text: fullText, sessionId, costUsd: message.total_cost_usd || 0, interrupted: true });
             } else {
               send({ type: "error", message: `Agent error (${message.subtype}): ${(message.errors || []).join(", ")}` });
             }
