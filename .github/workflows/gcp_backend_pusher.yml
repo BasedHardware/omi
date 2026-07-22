@@ -307,13 +307,53 @@ jobs:
             --live-pods .pusher-recovery-snapshot/pods.json \
             --rendered .pusher-recovery-snapshot/rendered.yaml \
             --evidence pusher-recovery-evidence.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          snapshot = Path(".pusher-recovery-snapshot")
+
+          def load_json(name):
+              return json.loads((snapshot / name).read_text(encoding="utf-8"))
+
+          def object_identity(obj):
+              metadata = obj.get("metadata", {})
+              return {
+                  "kind": obj.get("kind"),
+                  "name": metadata.get("name"),
+                  "namespace": metadata.get("namespace"),
+                  "resourceVersion": metadata.get("resourceVersion"),
+                  "uid": metadata.get("uid"),
+                  "generation": metadata.get("generation"),
+              }
+
+          pods = load_json("pods.json")
+          replicasets = load_json("replicasets.json")
+          helm_history = load_json("helm-history.json")
+          rollback = {
+              "helm_history": [
+                  {key: item.get(key) for key in ("revision", "updated", "status", "chart", "app_version", "description")}
+                  for item in helm_history
+              ],
+              "deployment": object_identity(load_json("deployment.json")),
+              "replicasets": [object_identity(item) for item in replicasets.get("items", [])],
+              "ready_pods": [
+                  object_identity(item)
+                  for item in pods.get("items", [])
+                  if any(status.get("name") == "pusher" and status.get("ready") for status in item.get("status", {}).get("containerStatuses", []))
+              ],
+          }
+          Path("pusher-recovery-rollback-identity.json").write_text(json.dumps(rollback, indent=2) + "\n", encoding="utf-8")
+          PY
 
       - name: Upload redacted chart-only recovery evidence
         if: always() && env.SERVICE == 'pusher' && env.CHART_ONLY == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: pusher-chart-only-recovery-evidence-${{ github.run_id }}
-          path: pusher-recovery-evidence.json
+          path: |
+            pusher-recovery-evidence.json
+            pusher-recovery-rollback-identity.json
           if-no-files-found: ignore
 
       - name: Deploy Pusher to GKE cluster using Helm

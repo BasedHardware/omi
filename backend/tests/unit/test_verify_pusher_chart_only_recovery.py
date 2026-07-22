@@ -7,6 +7,7 @@ from pathlib import Path
 import runpy
 import subprocess
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -306,6 +307,23 @@ def test_service_recovery_profile_ignores_api_defaults_but_not_real_drift(recove
 
     assert recovery.validate_chart_owned_resource_drift(live, rendered, "Service") == []
 
+    helm_owned = copy.deepcopy(live)
+    helm_metadata = cast(dict[str, Any], helm_owned["metadata"])
+    helm_annotations = cast(dict[str, Any], helm_metadata["annotations"])
+    helm_annotations.update(
+        {"meta.helm.sh/release-name": "prod-omi-pusher", "meta.helm.sh/release-namespace": "prod-omi-backend"}
+    )
+    assert (
+        recovery.validate_chart_owned_resource_drift(
+            helm_owned,
+            rendered,
+            "Service",
+            helm_release="prod-omi-pusher",
+            helm_namespace="prod-omi-backend",
+        )
+        == []
+    )
+
     annotation_drift = copy.deepcopy(live)
     annotation_drift["metadata"]["annotations"]["cloud.google.com/neg"] = '{"ingress": false}'
     assert recovery.validate_chart_owned_resource_drift(annotation_drift, rendered, "Service") == [
@@ -374,6 +392,8 @@ def test_chart_only_workflow_skips_build_push_and_normal_paths_stay_available():
     assert "--expected-evidence pusher-recovery-evidence.json" in workflow
     assert "verify_pusher_config_references.py" in workflow
     assert "--rendered .pusher-recovery-snapshot/rendered.yaml" in workflow
+    assert "pusher-recovery-rollback-identity.json" in workflow
+    assert "helm_history" in workflow
 
 
 def test_chart_only_preapply_gate_recaptures_all_chart_owned_resources():

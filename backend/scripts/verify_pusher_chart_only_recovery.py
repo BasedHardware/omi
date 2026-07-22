@@ -186,7 +186,9 @@ def ready_replicas(deployment: dict[str, Any]) -> int:
     return value if isinstance(value, int) else 0
 
 
-def normalize(obj: dict[str, Any]) -> dict[str, Any]:
+def normalize(
+    obj: dict[str, Any], *, helm_release: str | None = None, helm_namespace: str | None = None
+) -> dict[str, Any]:
     result = copy.deepcopy(obj)
     result.pop("status", None)
     metadata = result.get("metadata")
@@ -201,6 +203,7 @@ def normalize(obj: dict[str, Any]) -> dict[str, Any]:
                     annotations.pop(key, None)
             for key in GKE_CONTROLLER_STATUS_ANNOTATIONS.get(result.get("kind"), set()):
                 annotations.pop(key, None)
+            _strip_expected_helm_annotations(annotations, helm_release=helm_release, helm_namespace=helm_namespace)
             if not annotations:
                 metadata.pop("annotations", None)
         if result.get("kind") == "Ingress":
@@ -225,6 +228,19 @@ def normalize(obj: dict[str, Any]) -> dict[str, Any]:
     if result.get("kind") == "Deployment":
         _strip_deployment_defaults(result)
     return remove_nulls(result)
+
+
+def _strip_expected_helm_annotations(
+    annotations: dict[str, Any], *, helm_release: str | None = None, helm_namespace: str | None = None
+) -> None:
+    """Strip Helm ownership annotations only when they match the selected release."""
+    expected = {
+        "meta.helm.sh/release-name": helm_release,
+        "meta.helm.sh/release-namespace": helm_namespace,
+    }
+    for key, value in expected.items():
+        if value is not None and annotations.get(key) == value:
+            annotations.pop(key, None)
 
 
 def _strip_deployment_defaults(deployment: dict[str, Any]) -> None:
@@ -303,7 +319,12 @@ def strategic_merge(live: Any, desired: Any) -> Any:
 
 
 def allowed_recovery_drift(
-    live: dict[str, Any], rendered: dict[str, Any], *, autoscaling_enabled: bool = False
+    live: dict[str, Any],
+    rendered: dict[str, Any],
+    *,
+    autoscaling_enabled: bool = False,
+    helm_release: str | None = None,
+    helm_namespace: str | None = None,
 ) -> list[str]:
     """Compare chart-owned objects after replacing only image and REDIS source."""
     adapted = copy.deepcopy(live)
@@ -321,7 +342,8 @@ def allowed_recovery_drift(
         adapted.get("spec", {}).pop("replicas", None)
     return (
         []
-        if normalize(adapted) == normalize(rendered)
+        if normalize(adapted, helm_release=helm_release, helm_namespace=helm_namespace)
+        == normalize(rendered, helm_release=helm_release, helm_namespace=helm_namespace)
         else ["recovery profile would change Deployment fields outside the exact image and REDIS_DB_HOST transition"]
     )
 
@@ -332,11 +354,19 @@ def hpa_controls_deployment(hpa: dict[str, Any], deployment_name: str) -> bool:
     return target == {"apiVersion": "apps/v1", "kind": "Deployment", "name": deployment_name}
 
 
-def validate_chart_owned_resource_drift(live: dict[str, Any], rendered: dict[str, Any], kind: str) -> list[str]:
+def validate_chart_owned_resource_drift(
+    live: dict[str, Any],
+    rendered: dict[str, Any],
+    kind: str,
+    *,
+    helm_release: str | None = None,
+    helm_namespace: str | None = None,
+) -> list[str]:
     """Require Service/HPA/PDB identity and spec to remain unchanged."""
     return (
         []
-        if normalize(live) == normalize(rendered)
+        if normalize(live, helm_release=helm_release, helm_namespace=helm_namespace)
+        == normalize(rendered, helm_release=helm_release, helm_namespace=helm_namespace)
         else [f"recovery profile would change {kind} outside the allowlist"]
     )
 
@@ -433,7 +463,9 @@ def preflight(args: argparse.Namespace) -> list[str]:
             # The normal chart-owned resource validation below reports the
             # malformed or missing HPA.  Keep Deployment replicas fail-closed.
             pass
-    failures += allowed_recovery_drift(live, rendered, autoscaling_enabled=autoscaling_enabled)
+    failures += allowed_recovery_drift(
+        live, rendered, autoscaling_enabled=autoscaling_enabled, helm_release=release, helm_namespace=namespace
+    )
     if not args.live_pods:
         failures.append("recovery preflight is missing live Pusher pod image-status evidence")
     else:
@@ -458,7 +490,11 @@ def preflight(args: argparse.Namespace) -> list[str]:
         failures += validate_target(live_resource, kind, name, namespace)
         try:
             failures += validate_chart_owned_resource_drift(
-                live_resource, rendered_resource(args.rendered, kind, name), kind
+                live_resource,
+                rendered_resource(args.rendered, kind, name),
+                kind,
+                helm_release=release,
+                helm_namespace=namespace,
             )
         except ValueError as exc:
             failures.append(str(exc))
