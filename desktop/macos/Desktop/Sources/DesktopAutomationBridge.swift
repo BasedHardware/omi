@@ -1647,6 +1647,24 @@ final class DesktopAutomationActionRegistry {
       return ["reset": "true"]
     }
 
+    register(
+      name: "present_onboarding_opener",
+      summary: "Compose and show the post-onboarding opener in the empty-chat slot (QA rendering seam)",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "present_onboarding_opener is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      provider.presentOnboardingOpener()
+      return [
+        "presented": "true",
+        "starter_count": "\(provider.onboardingOpener?.starters.count ?? 0)",
+      ]
+    }
+
     // Send a message through the real main-window chat pipeline (ChatPage),
     // in-process via ViewModelContainer's ChatProvider — no synthetic mouse
     // or keyboard input, so it never touches the user's actual cursor.
