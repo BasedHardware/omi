@@ -175,7 +175,10 @@ extension SBOnboardingModel {
   /// Open-Omi options (tap to open the window).
   var openShortcutOptions: [(id: String, shortcut: ShortcutSettings.KeyboardShortcut, sub: String)] {
     [
-      ("cmdO", ShortcutSettings.askOmiCommandOShortcut, "tap to open"),
+      // ⌘O collides with the universal "Open" shortcut — Carbon refuses to register
+      // it globally (ShortcutSettings migrates ⌘O → ⌃⌥O at launch), so offer the
+      // registerable ⌃⌥O here instead of a pick that silently never fires.
+      ("ctrlOptO", ShortcutSettings.askOmiControlOptionOShortcut, "tap to open"),
       ("cmdReturn", ShortcutSettings.askOmiCommandReturnShortcut, "tap to open"),
       ("cmdJ", ShortcutSettings.askOmiCommandJShortcut, "tap to open"),
     ]
