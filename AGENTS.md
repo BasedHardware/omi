@@ -67,7 +67,7 @@ The unit of work is the violated contract, not only the line where the symptom a
 
 ## Git
 
-- **Setup (required before first commit):** `make setup` — fetches `origin/main`, fast-forwards when safe, installs repo Git hooks (including the auto-formatting pre-commit hook) with linked-worktree-safe paths.
+- **Setup (required before first commit):** `make setup` — fetches `origin/main`, fast-forwards when safe, installs linked-worktree-safe Git hooks (including auto-formatting pre-commit), and syncs the pinned `backend/.venv` required by selected backend pre-push checks. It does not install app or desktop runtime environments.
 - Before starting work: `git fetch origin && git pull --ff-only` on `main` — don't branch off stale state.
 - Always work in a git worktree for code changes (`git worktree add`); commit to the current branch and never switch branches mid-task.
 - Make individual commits per feature or testable surface, not per file or unrelated bulk changes.
