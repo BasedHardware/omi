@@ -175,10 +175,10 @@ extension SBOnboardingModel {
   /// Open-Omi options (tap to open the window).
   var openShortcutOptions: [(id: String, shortcut: ShortcutSettings.KeyboardShortcut, sub: String)] {
     [
-      // ⌘O collides with the universal "Open" shortcut — Carbon refuses to register
-      // it globally (ShortcutSettings migrates ⌘O → ⌃⌥O at launch), so offer the
-      // registerable ⌃⌥O here instead of a pick that silently never fires.
-      ("ctrlOptO", ShortcutSettings.askOmiControlOptionOShortcut, "tap to open"),
+      // ⌘O is registered as its own always-on Carbon hotkey (GlobalShortcutManager
+      // .registerCommandO), so it reliably summons Omi globally — the natural,
+      // expected "open" chord. Offer it first.
+      ("cmdO", ShortcutSettings.askOmiCommandOShortcut, "tap to open"),
       ("cmdReturn", ShortcutSettings.askOmiCommandReturnShortcut, "tap to open"),
       ("cmdJ", ShortcutSettings.askOmiCommandJShortcut, "tap to open"),
     ]
@@ -239,18 +239,40 @@ extension SBOnboardingModel {
     }
   }
 
+  /// The shortcuts offered on the current step — used so the user can just PRESS
+  /// any offered combo to auto-select it (no need to click the row first).
+  private var currentShortcutCandidates: [ShortcutSettings.KeyboardShortcut] {
+    switch step {
+    case .shortcutOpen: return openShortcutOptions.map { $0.shortcut }
+    case .shortcutTalk: return talkShortcutOptions.map { $0.shortcut }
+    default: return []
+    }
+  }
+
   private func handleShortcutEvent(_ event: NSEvent) -> Bool {
-    guard !shortcutPressed, let sc = chosenShortcut else { return false }
-    let matched: Bool
-    switch event.type {
-    case .flagsChanged: matched = sc.matchesFlagsChanged(event)  // modifier-only chords (fn, ⌥…)
-    case .keyDown: matched = !event.isARepeat && sc.matchesKeyDown(event)  // ⌘O / ⌘↩ / ⌘J
-    default: matched = false
+    guard !shortcutPressed else { return false }
+    // If the user already tapped a row, honor that exact pick; otherwise let ANY
+    // offered combo select itself on press, so "just press the key" works and the
+    // Continue button appears without a separate pick-then-test step.
+    let candidates = chosenShortcut.map { [$0] } ?? currentShortcutCandidates
+    let isTalk = step == .shortcutTalk
+    for sc in candidates {
+      let matched: Bool
+      switch event.type {
+      case .flagsChanged: matched = sc.matchesFlagsChanged(event)  // modifier-only chords (fn, ⌥…)
+      case .keyDown: matched = !event.isARepeat && sc.matchesKeyDown(event)  // ⌘O / ⌘↩ / ⌘J
+      default: matched = false
+      }
+      if matched {
+        DispatchQueue.main.async { [weak self] in
+          guard let self else { return }
+          if self.chosenShortcut != sc { self.pickShortcut(sc, isTalk: isTalk) }
+          self.shortcutPressed = true
+        }
+        return true
+      }
     }
-    if matched {
-      DispatchQueue.main.async { [weak self] in self?.shortcutPressed = true }
-    }
-    return matched
+    return false
   }
 
   /// Pick + persist a shortcut. `isTalk` → push-to-talk chord (held, drives the
@@ -350,6 +372,12 @@ extension SBOnboardingModel {
   }
 
   func refreshAgentStates() {
+    // Show a "checking" placeholder up front so a not-installed agent never briefly
+    // offers a "Connect" button that only flips to "not installed" after a click
+    // (the async install probe below resolves each row to its real state).
+    for row in agentRows where agentStates[row.id] == nil {
+      agentStates[row.id] = "checking"
+    }
     Task { [weak self] in
       guard let self else { return }
       for row in self.agentRows {
@@ -383,7 +411,7 @@ extension SBOnboardingModel {
   }
 
   func connectAgent(_ id: String) {
-    guard agentStates[id] != "connecting", agentStates[id] != "on" else { return }
+    guard agentStates[id] != "connecting", agentStates[id] != "checking", agentStates[id] != "on" else { return }
     agentStates[id] = "connecting"
     let dest = agentDestination(id)
     Task { [weak self] in
@@ -429,6 +457,20 @@ extension SBOnboardingModel {
     }
   }
 
+  /// Resolve a cookie-based Google connector (Calendar, Gmail). These don't OAuth —
+  /// they read your existing browser Google session — so a "not signed in" result
+  /// isn't an error to shrug at: OPEN the Google page so the user can actually sign
+  /// in, then Retry picks up the new session. (An `.error`, e.g. a not-yet-loaded
+  /// API key, just leaves a Retry button — opening Google wouldn't help.)
+  private func resolveGoogleConnect(_ id: String, connected: Bool, needsSignIn: Bool, signInURL: String) {
+    if connected {
+      contextStates[id] = "on"
+      return
+    }
+    contextStates[id] = "needsSignIn"
+    if needsSignIn, let url = URL(string: signInURL) { NSWorkspace.shared.open(url) }
+  }
+
   func connectContext(_ id: String) {
     guard contextStates[id] != "connecting", contextStates[id] != "on" else { return }
     contextStates[id] = "connecting"
@@ -436,12 +478,14 @@ extension SBOnboardingModel {
     case "calendar":
       Task { [weak self] in
         let s = await CalendarReaderService.shared.verifyConnection()
-        self?.contextStates["calendar"] = s.isConnected ? "on" : "needsSignIn"
+        let needsSignIn = { if case .needsSignIn = s { return true } else { return false } }()
+        self?.resolveGoogleConnect("calendar", connected: s.isConnected, needsSignIn: needsSignIn, signInURL: "https://calendar.google.com")
       }
     case "gmail":
       Task { [weak self] in
         let s = await GmailReaderService.shared.verifyConnection()
-        self?.contextStates["gmail"] = s.isConnected ? "on" : "needsSignIn"
+        let needsSignIn = { if case .needsSignIn = s { return true } else { return false } }()
+        self?.resolveGoogleConnect("gmail", connected: s.isConnected, needsSignIn: needsSignIn, signInURL: "https://mail.google.com")
       }
     case "applenotes":
       Task { [weak self] in

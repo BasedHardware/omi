@@ -128,9 +128,9 @@ final class SBOnboardingModel: ObservableObject {
     case .automation:
       return "Turn on Automation, so I can control your other apps and get things done."
     case .shortcutOpen:
-      return "How do you want to open me? Pick a key, then give it a tap to try it."
+      return "How do you want to open me? Just press one of these to set it."
     case .shortcutTalk:
-      return "And to talk to me, hands-free? Pick a key to hold, then hold it and say something."
+      return "And to talk to me, hands-free? Just hold one of these and say something."
     case .screenDemo:
       return "Here's the fun part."
     case .agents:
@@ -159,8 +159,22 @@ final class SBOnboardingModel: ObservableObject {
 
   // MARK: lifecycle
 
+  /// Persisted so quitting mid-onboarding (e.g. stepping away to grant a permission
+  /// in System Settings) resumes where you left off instead of restarting.
+  static let resumeStepKey = "sbOnboardingResumeStep"
+
   func begin() {
     guard thread.isEmpty && streamingText == nil else { return }
+    // Resume where the user left off. Their earlier answers (name, language, role)
+    // were already saved to the backend/settings, so we just re-enter at the saved
+    // step; each permission step re-checks its grant on appear, so a permission
+    // granted before the quit shows ✓ rather than prompting again.
+    let savedRaw = UserDefaults.standard.integer(forKey: Self.resumeStepKey)
+    if savedRaw > Step.promise.rawValue, let resumed = Step(rawValue: savedRaw) {
+      step = resumed
+      streamMessage(for: resumed)
+      return
+    }
     streamMessage(for: .promise)
   }
 
@@ -220,6 +234,7 @@ final class SBOnboardingModel: ObservableObject {
     }
     teardownStep(step)
     step = next
+    UserDefaults.standard.set(next.rawValue, forKey: Self.resumeStepKey)
     streamMessage(for: next)
   }
 
@@ -312,6 +327,7 @@ final class SBOnboardingModel: ObservableObject {
     AnalyticsManager.shared.onboardingCompleted()
     chatProvider.stopAgent(owner: .mainChat)
     UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
+    UserDefaults.standard.removeObject(forKey: Self.resumeStepKey)
     chatProvider.isOnboarding = false
     // Greet the user in the Home chat with the personalized opener + starters.
     chatProvider.presentOnboardingOpener()
@@ -336,6 +352,7 @@ final class SBOnboardingModel: ObservableObject {
     AnalyticsManager.shared.onboardingCompleted()
     chatProvider.stopAgent(owner: .mainChat)
     UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
+    UserDefaults.standard.removeObject(forKey: Self.resumeStepKey)
     if !AppBuild.usesLazyDevPermissions {
       UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
     }

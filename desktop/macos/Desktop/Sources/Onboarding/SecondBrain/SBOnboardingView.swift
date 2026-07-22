@@ -506,6 +506,7 @@ struct SBOnboardingView: View {
     switch state {
     case "on": Text("✓ on").geistMono(size: 12).foregroundStyle(sb.ink(.w6))
     case "connecting": Text("…").geistMono(size: 13).foregroundStyle(sb.ink(.w4))
+    case "checking": Text("checking…").geist(size: 12).foregroundStyle(sb.ink(.w35))
     case "unavailable": Text("not installed").geist(size: 12).foregroundStyle(sb.ink(.w35))
     default:
       Button(action: action) {
