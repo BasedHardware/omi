@@ -2493,6 +2493,9 @@ struct TasksPage: View {
   /// The window width before the chat panel was opened, so we can restore it exactly.
   /// Persisted so we can restore on app relaunch if the user quit with chat open.
   @AppStorage("tasksPreChatWindowWidth") private var preChatWindowWidth: Double = 0
+  /// Board (Notion-style status columns) vs the classic grouped list. Board is
+  /// the default hero view; the list stays for fast keyboard-driven triage.
+  @AppStorage("tasksViewIsBoard") private var tasksViewIsBoard = true
 
   // Keyboard navigation state
   @State private var inlineCreateText = ""
@@ -2741,6 +2744,9 @@ struct TasksPage: View {
         && suggestedStore.candidates.isEmpty && !suggestedStore.isLoading
       {
         emptyView
+      } else if tasksViewIsBoard && !viewModel.isInlineCreating {
+        // Notion-style status board: one column per time bucket, tasks as cards.
+        tasksBoardView
       } else {
         // Render the list view (which hosts the InlineTaskCreationRow) whenever
         // the user is inline-creating, even if the underlying task list is empty.
@@ -2882,6 +2888,7 @@ struct TasksPage: View {
       .cornerRadius(OmiChrome.elementRadius)
 
       if !viewModel.isMultiSelectMode {
+        viewModeToggle
         completedToggleButton
       } else {
         multiSelectControls
@@ -2903,6 +2910,91 @@ struct TasksPage: View {
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.top, OmiSpacing.lg)
     .padding(.bottom, OmiSpacing.md)
+  }
+
+  // MARK: - Board / List view toggle
+
+  private var viewModeToggle: some View {
+    HStack(spacing: 2) {
+      viewModeSegment(title: "Board", isSelected: tasksViewIsBoard) { tasksViewIsBoard = true }
+      viewModeSegment(title: "List", isSelected: !tasksViewIsBoard) { tasksViewIsBoard = false }
+    }
+    .padding(3)
+    .background(RoundedRectangle(cornerRadius: OmiChrome.elementRadius).fill(OmiColors.backgroundSecondary))
+  }
+
+  private func viewModeSegment(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      Text(title)
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.vertical, 5)
+        .background(
+          RoundedRectangle(cornerRadius: max(2, OmiChrome.elementRadius - 3))
+            .fill(isSelected ? OmiColors.backgroundTertiary : Color.clear)
+        )
+    }
+    .buttonStyle(.plain)
+    .help("\(title) view")
+  }
+
+  // MARK: - Notion-style status board
+
+  private var tasksBoardView: some View {
+    ScrollView(.vertical, showsIndicators: false) {
+      HStack(alignment: .top, spacing: OmiSpacing.md) {
+        ForEach(TaskCategory.allCases, id: \.self) { category in
+          boardColumn(category)
+        }
+      }
+      .padding(.horizontal, OmiSpacing.lg)
+      .padding(.top, OmiSpacing.xs)
+      .padding(.bottom, OmiSpacing.xxl)
+    }
+  }
+
+  private func boardColumn(_ category: TaskCategory) -> some View {
+    let tasks = viewModel.categorizedTasks[category] ?? []
+    return VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      HStack(spacing: OmiSpacing.xs) {
+        Image(systemName: category.icon)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(category.color)
+        Text(category.rawValue)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundColor(OmiColors.textSecondary)
+        Text("\(tasks.count)")
+          .scaledFont(size: OmiType.micro, weight: .semibold)
+          .foregroundColor(OmiColors.textTertiary)
+          .padding(.horizontal, 6)
+          .padding(.vertical, 1)
+          .background(Capsule().fill(OmiColors.backgroundTertiary))
+        Spacer(minLength: 0)
+      }
+      .padding(.horizontal, OmiSpacing.xs)
+      .padding(.bottom, OmiSpacing.xxs)
+
+      if tasks.isEmpty {
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+          .stroke(OmiColors.backgroundTertiary.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+          .frame(height: 44)
+          .overlay(
+            Text("Nothing here")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(OmiColors.textTertiary.opacity(0.7))
+          )
+      } else {
+        ForEach(tasks, id: \.id) { task in
+          TaskBoardCard(
+            task: task,
+            onToggle: { await viewModel.toggleTask(task) },
+            onOpen: { selectTask(task) }
+          )
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .top)
   }
 
   private var addTaskButton: some View {
@@ -3919,6 +4011,107 @@ struct ChatSessionStatusIndicator: View {
 }
 
 // MARK: - Task Row
+
+/// A single task rendered as a Notion-style board card: checkbox, title, and
+/// property chips (priority, due date). Tapping the body opens the task; the
+/// checkbox toggles completion.
+private struct TaskBoardCard: View {
+  let task: TaskActionItem
+  let onToggle: () async -> Void
+  let onOpen: () -> Void
+
+  @State private var isHovering = false
+
+  private var hasChips: Bool {
+    (task.priority?.isEmpty == false) || task.dueAt != nil
+  }
+
+  var body: some View {
+    Button(action: onOpen) {
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+        HStack(alignment: .top, spacing: OmiSpacing.sm) {
+          Button {
+            Task { await onToggle() }
+          } label: {
+            Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(task.completed ? OmiColors.textSecondary : OmiColors.textTertiary)
+          }
+          .buttonStyle(.plain)
+          .help(task.completed ? "Mark not done" : "Mark done")
+
+          Text(task.description)
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
+            .strikethrough(task.completed, color: OmiColors.textTertiary)
+            .lineLimit(4)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
+        if hasChips {
+          HStack(spacing: OmiSpacing.xs) {
+            if let priority = task.priority, !priority.isEmpty {
+              priorityChip(priority)
+            }
+            if let due = task.dueAt {
+              dueChip(due)
+            }
+            Spacer(minLength: 0)
+          }
+        }
+      }
+      .padding(OmiSpacing.md)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+          .fill(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+          .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
+      )
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .onHover { isHovering = $0 }
+  }
+
+  private func priorityChip(_ priority: String) -> some View {
+    let color: Color
+    switch priority.lowercased() {
+    case "high": color = Color(red: 1.0, green: 0.42, blue: 0.42)
+    case "medium": color = OmiColors.textSecondary
+    default: color = OmiColors.textTertiary
+    }
+    return Text(priority.capitalized)
+      .scaledFont(size: OmiType.micro, weight: .semibold)
+      .foregroundColor(color)
+      .padding(.horizontal, 7)
+      .padding(.vertical, 2)
+      .background(Capsule().fill(color.opacity(0.14)))
+  }
+
+  private func dueChip(_ due: Date) -> some View {
+    let overdue = due < Date() && !task.completed
+    return HStack(spacing: 3) {
+      Image(systemName: "calendar")
+        .scaledFont(size: OmiType.micro, weight: .medium)
+      Text(Self.dueFormatter.string(from: due))
+        .scaledFont(size: OmiType.micro, weight: .medium)
+    }
+    .foregroundColor(overdue ? Color(red: 1.0, green: 0.42, blue: 0.42) : OmiColors.textTertiary)
+    .padding(.horizontal, 7)
+    .padding(.vertical, 2)
+    .background(Capsule().fill(OmiColors.backgroundTertiary))
+  }
+
+  private static let dueFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "MMM d"
+    return f
+  }()
+}
 
 struct TaskRow: View {
   let task: TaskActionItem
