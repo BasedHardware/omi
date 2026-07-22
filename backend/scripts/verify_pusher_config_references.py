@@ -78,8 +78,13 @@ def render(environment: str, image_tag: str = "contract-test") -> list[dict[str,
     return [doc for doc in yaml.safe_load_all(result.stdout) if isinstance(doc, dict)]
 
 
-def rendered_pusher_deployment(environment: str) -> dict[str, Any]:
-    rendered = render(environment)
+def rendered_pusher_deployment(environment: str, rendered_path: str | None = None) -> dict[str, Any]:
+    if rendered_path:
+        rendered = [
+            doc for doc in yaml.safe_load_all(Path(rendered_path).read_text(encoding="utf-8")) if isinstance(doc, dict)
+        ]
+    else:
+        rendered = render(environment)
     deployments = [doc for doc in rendered if doc.get("kind") == "Deployment"]
     if len(deployments) != 1:
         raise RuntimeError("pusher render did not contain exactly one Deployment")
@@ -292,8 +297,11 @@ def main() -> int:
     parser.add_argument("--environment", required=True, choices=sorted(ENVIRONMENTS))
     parser.add_argument("--namespace", required=True)
     parser.add_argument("--render-only", action="store_true")
+    parser.add_argument(
+        "--rendered", help="exact chart-only Helm render to validate without exposing referenced values"
+    )
     args = parser.parse_args()
-    deployment = rendered_pusher_deployment(args.environment)
+    deployment = rendered_pusher_deployment(args.environment, args.rendered)
     refs = pusher_references(args.environment, deployment)
     failures = validate_dev_pusher_binding_contract(deployment) if args.environment == "dev" else []
     if not args.render_only and not failures:

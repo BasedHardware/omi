@@ -288,6 +288,10 @@ jobs:
             --set-string 'image.tag=' \
             --set-string "image.digest=${{ github.event.inputs.image_digest }}" \
             > .pusher-recovery-snapshot/rendered.yaml
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/verify_pusher_config_references.py \
+            --environment "${{ vars.ENV }}" --namespace "$NAMESPACE" \
+            --rendered .pusher-recovery-snapshot/rendered.yaml
           python3 backend/scripts/verify_pusher_chart_only_recovery.py preflight \
             --environment "${{ vars.ENV }}" --namespace "$NAMESPACE" --release "$RELEASE" --deployment "$DEPLOYMENT" \
             --repository "${{ github.event.inputs.image_repository }}" --expected-repository "gcr.io/${{ vars.GCP_PROJECT_ID }}/pusher" \

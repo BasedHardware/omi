@@ -57,6 +57,29 @@ VOLATILE_SERVICE_SPEC = {
     "ipFamilies",
     "ipFamilyPolicy",
 }
+GKE_CONTROLLER_STATUS_ANNOTATIONS = {
+    "Service": {"cloud.google.com/neg-status"},
+    "Ingress": {
+        "ingress.kubernetes.io/backends",
+        "ingress.kubernetes.io/forwarding-rule",
+        "ingress.kubernetes.io/target-proxy",
+        "ingress.kubernetes.io/url-map",
+    },
+}
+GKE_INGRESS_FINALIZERS = {
+    "networking.gke.io/ingress-finalizer",
+    "networking.gke.io/ingress-finalizer-V2",
+}
+POD_SECURITY_DEFAULTS = {
+    "fsGroupChangePolicy": "Always",
+    "supplementalGroupsPolicy": "Merge",
+}
+CONTAINER_SECURITY_DEFAULTS = {
+    "allowPrivilegeEscalation": True,
+    "privileged": False,
+    "readOnlyRootFilesystem": False,
+    "runAsNonRoot": False,
+}
 
 
 def load_object(path: str) -> dict[str, Any]:
@@ -179,8 +202,16 @@ def normalize(obj: dict[str, Any]) -> dict[str, Any]:
         if isinstance(annotations, dict):
             for key in VOLATILE_DEPLOYMENT_ANNOTATIONS:
                 annotations.pop(key, None)
+            for key in GKE_CONTROLLER_STATUS_ANNOTATIONS.get(result.get("kind"), set()):
+                annotations.pop(key, None)
             if not annotations:
                 metadata.pop("annotations", None)
+        if result.get("kind") == "Ingress":
+            finalizers = metadata.get("finalizers")
+            if isinstance(finalizers, list):
+                metadata["finalizers"] = [item for item in finalizers if item not in GKE_INGRESS_FINALIZERS]
+                if not metadata["finalizers"]:
+                    metadata.pop("finalizers", None)
     if result.get("kind") == "Service":
         spec = result.get("spec", {})
         for key in VOLATILE_SERVICE_SPEC:
@@ -204,15 +235,41 @@ def _strip_deployment_defaults(deployment: dict[str, Any]) -> None:
     spec = deployment.get("spec", {})
     for key in VOLATILE_DEPLOYMENT_SPEC:
         spec.pop(key, None)
+    if spec.get("minReadySeconds") == 0:
+        spec.pop("minReadySeconds", None)
 
     template = spec.get("template", {})
     template_spec = template.get("spec", {})
     for key in VOLATILE_POD_TEMPLATE_SPEC:
         template_spec.pop(key, None)
+    if template_spec.get("serviceAccount") == template_spec.get("serviceAccountName"):
+        template_spec.pop("serviceAccount", None)
+    _strip_default_security_context(template_spec, "securityContext", POD_SECURITY_DEFAULTS)
 
     for container in template_spec.get("containers", []):
         for key in VOLATILE_CONTAINER_FIELDS:
             container.pop(key, None)
+        _strip_default_security_context(container, "securityContext", CONTAINER_SECURITY_DEFAULTS)
+        for probe_name in ("livenessProbe", "readinessProbe", "startupProbe"):
+            probe = container.get(probe_name)
+            if not isinstance(probe, dict):
+                continue
+            http_get = probe.get("httpGet")
+            if isinstance(http_get, dict) and http_get.get("scheme") == "HTTP":
+                http_get.pop("scheme", None)
+            if probe.get("successThreshold") == 1:
+                probe.pop("successThreshold", None)
+
+
+def _strip_default_security_context(parent: dict[str, Any], field: str, defaults: dict[str, Any]) -> None:
+    context = parent.get(field)
+    if not isinstance(context, dict):
+        return
+    for key, value in defaults.items():
+        if context.get(key) == value:
+            context.pop(key, None)
+    if not context:
+        parent.pop(field, None)
 
 
 def remove_nulls(value: Any) -> Any:

@@ -32,6 +32,46 @@ def test_extracts_object_and_key_names_without_values(preflight: SimpleNamespace
     assert refs == {("secret", "safe-name", "KEY")}
 
 
+def test_exact_chart_only_render_extracts_every_configmap_key(tmp_path: Path, preflight: SimpleNamespace):
+    rendered = tmp_path / "rendered.yaml"
+    rendered.write_text(
+        """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dev-omi-pusher
+spec:
+  template:
+    spec:
+      containers:
+        - name: pusher
+          env:
+            - name: REDIS_DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: dev-omi-backend-config
+                  key: REDIS_DB_HOST
+            - name: TYPESENSE_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: dev-omi-backend-config
+                  key: TYPESENSE_HOST
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dev-omi-backend-secrets
+                  key: API_KEY
+""",
+        encoding="utf-8",
+    )
+
+    deployment = preflight.rendered_pusher_deployment("dev", str(rendered))
+    assert {
+        ("configmap", "dev-omi-backend-config", "REDIS_DB_HOST"),
+        ("configmap", "dev-omi-backend-config", "TYPESENSE_HOST"),
+    }.issubset(preflight.pusher_references("dev", deployment))
+
+
 def test_rejects_missing_required_configmap_fixture(monkeypatch, preflight: SimpleNamespace):
     monkeypatch.setitem(
         preflight.pusher_references.__globals__,

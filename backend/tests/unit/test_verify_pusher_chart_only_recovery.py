@@ -137,6 +137,45 @@ def test_recovery_profile_ignores_api_server_deployment_defaults(recovery: Simpl
     assert recovery.allowed_recovery_drift(live, rendered) == []
 
 
+def test_recovery_profile_ignores_only_deployment_api_defaults(recovery: SimpleNamespace):
+    live = deployment(
+        "gcr.io/project/pusher:2ae7f78", {"secretKeyRef": {"name": "prod-omi-backend-secrets", "key": "REDIS_DB_HOST"}}
+    )
+    rendered = deployment(f"gcr.io/project/pusher@{DIGEST}")
+    rendered["spec"]["template"]["spec"]["serviceAccountName"] = "prod-omi-pusher"
+    live["spec"]["minReadySeconds"] = 0
+    live["spec"]["template"]["spec"].update(
+        {
+            "serviceAccountName": "prod-omi-pusher",
+            "serviceAccount": "prod-omi-pusher",
+            "securityContext": {"fsGroupChangePolicy": "Always", "supplementalGroupsPolicy": "Merge"},
+        }
+    )
+    container = live["spec"]["template"]["spec"]["containers"][0]
+    container["securityContext"] = {
+        "allowPrivilegeEscalation": True,
+        "privileged": False,
+        "readOnlyRootFilesystem": False,
+        "runAsNonRoot": False,
+    }
+    container["readinessProbe"]["httpGet"]["scheme"] = "HTTP"
+    container["readinessProbe"]["successThreshold"] = 1
+
+    assert recovery.allowed_recovery_drift(live, rendered) == []
+
+    resource_drift = copy.deepcopy(live)
+    resource_drift["spec"]["template"]["spec"]["containers"][0]["resources"]["requests"]["cpu"] = "2"
+    assert recovery.allowed_recovery_drift(resource_drift, rendered) == [
+        "recovery profile would change Deployment fields outside the exact image and REDIS_DB_HOST transition"
+    ]
+
+    probe_drift = copy.deepcopy(live)
+    probe_drift["spec"]["template"]["spec"]["containers"][0]["readinessProbe"]["httpGet"]["path"] = "/other"
+    assert recovery.allowed_recovery_drift(probe_drift, rendered) == [
+        "recovery profile would change Deployment fields outside the exact image and REDIS_DB_HOST transition"
+    ]
+
+
 def test_recovery_profile_ignores_helm_annotations_and_service_defaults(recovery: SimpleNamespace):
     """Helm-managed annotations and cluster-added Service fields are absent from helm template."""
     live = deployment(
@@ -166,6 +205,55 @@ def test_recovery_profile_ignores_helm_annotations_and_service_defaults(recovery
     }
     rendered_svc = {"kind": "Service", "metadata": {"name": "prod-omi-pusher"}, "spec": {}}
     assert recovery.validate_chart_owned_resource_drift(live_svc, rendered_svc, "Service") == []
+
+
+def test_chart_owned_resources_ignore_only_gke_status_metadata(recovery: SimpleNamespace):
+    rendered_service = {
+        "kind": "Service",
+        "metadata": {
+            "name": "dev-omi-pusher",
+            "annotations": {
+                "cloud.google.com/backend-config": '{"default":"dev-pusher-backend-config"}',
+                "cloud.google.com/neg": '{"ingress":true}',
+            },
+        },
+        "spec": {"selector": {"app": "pusher"}},
+    }
+    live_service = copy.deepcopy(rendered_service)
+    live_service["metadata"]["annotations"]["cloud.google.com/neg-status"] = '{"network_endpoint_groups":{}}'
+    assert recovery.validate_chart_owned_resource_drift(live_service, rendered_service, "Service") == []
+
+    service_policy_drift = copy.deepcopy(live_service)
+    service_policy_drift["metadata"]["annotations"]["cloud.google.com/neg"] = '{"ingress":false}'
+    assert recovery.validate_chart_owned_resource_drift(service_policy_drift, rendered_service, "Service") == [
+        "recovery profile would change Service outside the allowlist"
+    ]
+
+    rendered_ingress = {
+        "kind": "Ingress",
+        "metadata": {
+            "name": "dev-omi-pusher",
+            "annotations": {"kubernetes.io/ingress.class": "gce-internal"},
+        },
+        "spec": {"rules": []},
+    }
+    live_ingress = copy.deepcopy(rendered_ingress)
+    live_ingress["metadata"].update({"finalizers": ["networking.gke.io/ingress-finalizer-V2"]})
+    live_ingress["metadata"]["annotations"].update(
+        {
+            "ingress.kubernetes.io/backends": "{}",
+            "ingress.kubernetes.io/forwarding-rule": "k8s2-fr",
+            "ingress.kubernetes.io/target-proxy": "k8s2-tp",
+            "ingress.kubernetes.io/url-map": "k8s2-um",
+        }
+    )
+    assert recovery.validate_chart_owned_resource_drift(live_ingress, rendered_ingress, "Ingress") == []
+
+    ingress_policy_drift = copy.deepcopy(live_ingress)
+    ingress_policy_drift["metadata"]["annotations"]["kubernetes.io/ingress.class"] = "gce"
+    assert recovery.validate_chart_owned_resource_drift(ingress_policy_drift, rendered_ingress, "Ingress") == [
+        "recovery profile would change Ingress outside the allowlist"
+    ]
 
 
 def test_redis_validation_rejects_secret_and_configmap_errors(recovery: SimpleNamespace):
@@ -276,6 +364,8 @@ def test_chart_only_workflow_skips_build_push_and_normal_paths_stay_available():
     assert "if: env.SERVICE == 'pusher' && env.CHART_ONLY != 'true'" in workflow
     assert "if: env.SERVICE == 'pusher' && env.CHART_ONLY == 'true'" in workflow
     assert "--expected-evidence pusher-recovery-evidence.json" in workflow
+    assert "verify_pusher_config_references.py" in workflow
+    assert "--rendered .pusher-recovery-snapshot/rendered.yaml" in workflow
 
 
 def test_chart_only_preapply_gate_recaptures_all_chart_owned_resources():
