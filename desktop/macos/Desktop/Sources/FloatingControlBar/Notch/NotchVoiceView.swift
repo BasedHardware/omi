@@ -84,15 +84,12 @@ struct NotchVoiceView: View {
       // Listening: caption + the live transcript beneath it, faded so it reads
       // as a tentative "here's what we're hearing", distinct from the reply.
       // No shimmer here — it must stay calm and clearly faded.
-      VStack(alignment: .leading, spacing: 4) {
+      VStack(spacing: 4) {
         Text(placeholder)
           .font(.system(size: 11, weight: .medium))
           .foregroundStyle(.white.opacity(0.5))
-          .frame(maxWidth: .infinity, alignment: .leading)
         if !text.isEmpty {
-          // Left-aligned so it flows as you speak instead of re-centering on
-          // every word.
-          JustifiedText(text: text, size: 12, weight: .regular, opacity: 0.5, alignment: .left)
+          JustifiedText(text: text, size: 12, weight: .regular, opacity: 0.5, alignment: .center)
         }
       }
     }
