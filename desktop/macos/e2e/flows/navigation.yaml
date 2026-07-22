@@ -8,7 +8,6 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/CrispManager.swift
   - desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
-  - desktop/macos/Desktop/Sources/MainWindow/FloatingPageAskBar.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/HomeStatusStore.swift
   - desktop/macos/Desktop/Sources/Theme/OmiButtonStyle.swift
   - desktop/macos/Desktop/Sources/Theme/OmiChrome.swift

@@ -1258,21 +1258,8 @@ private struct PageContentView: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
-  /// Tabs that float the persistent "Ask omi anything" bar over their content:
-  /// Memory hub, Memories, and Tasks. Home (Dashboard) already owns its bar.
-  private static let floatingAskBarTabs: Set<Int> = [1, 3, 4]
-
   var body: some View {
     pages
-    // Floating ask-bar experiment shelved for launch (Nik, Jul 22 2026) — the
-    // omi-askbar test bundle showed it working; re-enable by restoring:
-    // .overlay(alignment: .bottom) {
-    //   if Self.floatingAskBarTabs.contains(selectedIndex) {
-    //     FloatingPageAskBar(
-    //       chatProvider: viewModelContainer.chatProvider,
-    //       selectedTabIndex: $selectedTabIndex)
-    //   }
-    // }
   }
 
   @ViewBuilder
