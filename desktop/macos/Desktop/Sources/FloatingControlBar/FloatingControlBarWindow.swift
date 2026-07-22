@@ -2472,7 +2472,6 @@ class FloatingControlBarManager {
 
   private static let kAskOmiEnabled = "askOmiBarEnabled"
   private static let kSnoozedUntil = "floatingBar_snoozedUntil"
-  private static let recentNotificationReuseInterval: TimeInterval = 60
   static let snoozeTwoHoursDuration: TimeInterval = 2 * 60 * 60
 
   struct NotificationProjectionSnapshot: Equatable {
@@ -2539,12 +2538,11 @@ class FloatingControlBarManager {
     let context: FloatingBarNotificationContext?
   }
 
-  private var window: FloatingControlBarWindow?
-  /// The new per-display notch stack. While it runs, the legacy window above
-  /// stays nil and its call sites no-op.
+  /// The per-display notch stack. This is the only floating surface; the manager
+  /// no longer owns a single legacy window.
   private(set) var notchScreenManager: NotchScreenManager?
-  /// Bar state owned by the manager for the notch stack (the legacy window
-  /// owned its own copy; PTT/notification writers reach it via `barState`).
+  /// Bar state owned by the manager for the notch stack. PTT/notification writers
+  /// reach it via `barState`.
   let notchState = FloatingControlBarState()
   /// Tracks whether the deferred notch reveal has happened this session for
   /// explicit opt-in contexts such as onboarding/demo/minimal mode.
@@ -2628,7 +2626,6 @@ class FloatingControlBarManager {
   private var notificationWasTemporarilyShown = false
   private var storedNotificationMessages: [OwnerNotificationKey: StoredNotificationMessage] = [:]
   private var pendingNotificationJournalWrites: Set<OwnerNotificationKey> = []
-  private var mostRecentNotificationKey: OwnerNotificationKey?
   private var ownerChangeCancellable: AnyCancellable?
   private var pendingNotificationContext: PendingNotificationContext?
   private var activeQueryGeneration: Int = 0
@@ -2729,7 +2726,6 @@ class FloatingControlBarManager {
     pendingNotifications.removeAll()
     pendingNotificationJournalWrites.removeAll()
     storedNotificationMessages.removeAll()
-    mostRecentNotificationKey = nil
     pendingNotificationContext = nil
     notchState.currentNotification = nil
     notchState.clearVisibleConversation()
@@ -2909,29 +2905,30 @@ class FloatingControlBarManager {
   }
 
   func closeAskOmiForAutomation(wait: Bool = true) async -> [String: String] {
-    guard let window else {
+    guard let notchScreenManager else {
       return ["error": "floating_bar_window_unavailable"]
     }
     let start = ContinuousClock.now
-    if window.state.showingAIConversation {
-      window.closeAIConversation()
+    let frameString = { notchScreenManager.primaryPanelFrame.map(NSStringFromRect) ?? "" }
+    if notchScreenManager.hasOpenPanel {
+      notchScreenManager.closeAll()
     }
     guard wait else {
       return [
         "triggered": "true",
-        "visible": window.isVisible ? "true" : "false",
-        "askOmiOpen": window.state.showingAIConversation ? "true" : "false",
-        "frame": NSStringFromRect(window.frame),
+        "visible": isVisible ? "true" : "false",
+        "askOmiOpen": notchScreenManager.hasOpenPanel ? "true" : "false",
+        "frame": frameString(),
       ]
     }
-    let closeMs = await waitForAskOmiClosed(in: window)
+    let closeMs = await waitForAutomationCondition { !notchScreenManager.hasOpenPanel }
     let elapsedMs = start.duration(to: .now).millisecondsString
     return [
       "closeMs": closeMs ?? "timeout",
       "elapsedMs": elapsedMs,
-      "visible": window.isVisible ? "true" : "false",
-      "askOmiOpen": window.state.showingAIConversation ? "true" : "false",
-      "frame": NSStringFromRect(window.frame),
+      "visible": isVisible ? "true" : "false",
+      "askOmiOpen": notchScreenManager.hasOpenPanel ? "true" : "false",
+      "frame": frameString(),
     ]
   }
 
@@ -3021,12 +3018,6 @@ class FloatingControlBarManager {
       try? await Task.sleep(for: .milliseconds(5))
     }
     return nil
-  }
-
-  private func waitForAskOmiClosed(in window: FloatingControlBarWindow) async -> String? {
-    await waitForAutomationCondition {
-      window.hasSettledClosedForAutomation
-    }
   }
 
   /// Apply the product-level launch presentation policy.
@@ -3765,7 +3756,6 @@ class FloatingControlBarManager {
         messageClientTurnId: continuityKey,
         createdAt: Date()
       )
-      self.mostRecentNotificationKey = key
     }
   }
 
@@ -3880,10 +3870,9 @@ class FloatingControlBarManager {
     else { return false }
     observeAgentCompletionContext(pillID: pillID, runId: runId)
     if !resources.isEmpty {
-      // Project the canonical journal revision synchronously so main and notch agree before the floating
-      // viewport update.
+      // Project the canonical journal revision synchronously so main and notch
+      // render the completed artifact from the shared provider timeline.
       provider.projectJournalTurn(updated)
-      deliverAgentArtifactCompletionToFloatingSurface(updated.chatMessage())
     }
     return true
   }
@@ -3922,130 +3911,13 @@ class FloatingControlBarManager {
     Task { await TaskContextualResurfacingService.shared.observe(matched) }
   }
 
-  private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow) -> Bool {
-    guard let key = mostRecentNotificationKey,
-      key.ownerID == RuntimeOwnerIdentity.currentOwnerId()
-    else { return false }
-    return openNotificationConversation(notificationID: key.notificationID, in: window)
-  }
-
-  @discardableResult
-  private func openNotificationConversation(notificationID: UUID, in window: FloatingControlBarWindow) -> Bool {
-    purgeExpiredNotificationMessages()
-
-    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return false }
-    let key = OwnerNotificationKey(ownerID: ownerID, notificationID: notificationID)
-    guard let stored = storedNotificationMessages[key],
-      stored.ownerID == ownerID,
-      Date().timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval,
-      let provider = historyChatProvider,
-      let notificationMessage = provider.messages.last(where: {
-        $0.clientTurnId == stored.messageClientTurnId
-      })
-    else {
-      return false
-    }
-    notificationDismissWorkItem?.cancel()
-    notificationDismissWorkItem = nil
-    pendingNotifications.removeAll { $0.id == notificationID }
-    if window.state.currentNotification != nil {
-      window.dismissNotification()
-    }
-
-    window.cancelPendingDismiss()
-    window.savePreChatCenterIfNeeded()
-    window.cancelInputHeightObserver()
-    let shouldRestoreVisibleConversation = window.state.canRestoreVisibleConversation
-    if shouldRestoreVisibleConversation {
-      archiveVisibleConversationIfNeeded(in: window)
-    } else if window.state.hasVisibleConversation {
-      window.state.clearVisibleConversation()
-    }
-
-    window.state.present(.mainResponse)
-    window.state.isAILoading = false
-    if !shouldRestoreVisibleConversation {
-      window.state.clearViewport()
-    }
-    window.state.bindAnswerMessage(notificationMessage)
-    window.state.markConversationActivity()
-    window.resizeToResponseHeightPublic(animated: true)
-    window.orderFrontRegardless()
-    window.focusInputField()
-
-    pendingNotificationContext = PendingNotificationContext(
-      message: notificationMessage,
-      context: stored.context
-    )
-    Task {
-      if let provider = activeFloatingProvider() {
-        await provider.invalidateAgentSurface(surface: provider.mainChatSurfaceReference())
-      }
-    }
-    storedNotificationMessages.removeValue(forKey: key)
-    if mostRecentNotificationKey == key {
-      mostRecentNotificationKey = nil
-    }
-    return true
-  }
-
-  private func archiveVisibleConversationIfNeeded(in window: FloatingControlBarWindow) {
-    window.state.archiveCurrentExchange(using: self.historyChatProvider)
-    window.state.displayedQuery = ""
-    window.state.bindQuestionMessageId(nil)
-  }
-
-  private func purgeExpiredNotificationMessages() {
-    let now = Date()
-    storedNotificationMessages = storedNotificationMessages.filter { _, stored in
-      now.timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval
-    }
-
-    if let mostRecentNotificationKey,
-      storedNotificationMessages[mostRecentNotificationKey] == nil
-    {
-      self.mostRecentNotificationKey = nil
-    }
-  }
-
   private func activeFloatingProvider() -> ChatProvider? {
     historyChatProvider
   }
 
-  private func deliverAgentArtifactCompletionToFloatingSurface(_ message: ChatMessage) {
-    guard let window else { return }
-    chatCancellable?.cancel()
-    chatCancellable = nil
-
-    var completedMessage = message
-    completedMessage.isStreaming = false
-
-    window.state.archiveCurrentExchange(using: self.historyChatProvider)
-
-    if self.historyChatProvider?.messages.contains(where: { $0.id == completedMessage.id }) == true {
-      window.state.bindAnswerMessage(completedMessage)
-    } else {
-      window.state.setLocalAnswerOverride(completedMessage)
-    }
-    window.state.displayedQuery = ""
-    window.state.bindQuestionMessageId(nil)
-    window.state.isAILoading = false
-    if window.state.conversationSurface == .mainInput || window.state.conversationSurface == .mainResponse {
-      window.state.present(.mainResponse)
-      window.resizeToResponseHeightPublic(animated: true)
-    } else {
-      window.state.markConversationActivity()
-    }
-  }
-
   /// Access the bar state for PTT updates.
   var barState: FloatingControlBarState? {
-    return window?.state ?? notchState
-  }
-
-  /// Resize the floating bar for PTT state changes.
-  func resizeForPTT(expanded: Bool) {
-    window?.resizeForPTTState(expanded: expanded)
+    return notchState
   }
 
   // MARK: - AI Query

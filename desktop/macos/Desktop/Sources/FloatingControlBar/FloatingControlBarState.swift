@@ -265,20 +265,12 @@ class FloatingControlBarState: NSObject, ObservableObject {
 
     func apply(_ projection: VoiceTurnUIProjection) {
       guard let barState else { return }
-      let wasExpandedForVoice = barState.isVoiceListening
       barState.applyVoiceProjection(projection)
-      let shouldExpandForVoice = barState.isVoiceListening
 
-      // Clear idle hover before the PTT resize so its animated surface cannot
-      // compete with the reducer-owned voice presentation.
+      // Clear idle hover so its animated surface cannot compete with the
+      // reducer-owned voice presentation. Notch PTT sizing is owned by the
+      // presentation ladder off applyVoiceProjection above.
       barState.dismissNotchHoverForVoicePresentation()
-
-      if shouldExpandForVoice != wasExpandedForVoice,
-        !barState.showingAIConversation,
-        UserDefaults.standard.bool(forKey: .hasCompletedOnboarding)
-      {
-        FloatingControlBarManager.shared.resizeForPTT(expanded: shouldExpandForVoice)
-      }
     }
   }
 

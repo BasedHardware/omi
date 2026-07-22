@@ -293,21 +293,17 @@ import XCTest
     XCTAssertTrue(windowSource.contains("kernelTurnProjection.appendAgentCompletion("))
     XCTAssertFalse(windowSource.contains("func recordAgentArtifactCompletion("))
     XCTAssertFalse(windowSource.contains("pill_completion"))
-    XCTAssertTrue(windowSource.contains("deliverAgentArtifactCompletionToFloatingSurface"))
+    // Completion surfaces by projecting the canonical journal turn into the
+    // shared provider timeline the notch renders — the legacy window-bound
+    // delivery is removed, not resurrected (INV-6: no second message store).
+    XCTAssertTrue(windowSource.contains("provider.projectJournalTurn(updated)"))
+    XCTAssertFalse(windowSource.contains("deliverAgentArtifactCompletionToFloatingSurface"))
+    XCTAssertFalse(windowSource.contains(".chatHistory.append"))
   }
 
-  func testArtifactDeliveryClearsFloatingTypingState() throws {
-    let windowSource = try floatingControlBarWindowSource()
+  func testFinishedArtifactResponseViewHidesLoadingWhenResourcesEmpty() throws {
     let responseSource = try aiResponseViewSource()
 
-    XCTAssertTrue(windowSource.contains("chatCancellable?.cancel()"))
-    XCTAssertTrue(windowSource.contains("completedMessage.isStreaming = false"))
-    XCTAssertTrue(windowSource.contains("window.state.archiveCurrentExchange(using: self.historyChatProvider)"))
-    XCTAssertTrue(
-      windowSource.contains("window.state.bindAnswerMessage(completedMessage)")
-        || windowSource.contains("window.state.setLocalAnswerOverride(completedMessage)")
-    )
-    XCTAssertFalse(windowSource.contains("window.state.chatHistory.append"))
     XCTAssertTrue(responseSource.contains("} else if isLoading {"))
     XCTAssertTrue(responseSource.contains("&& message.displayResources.isEmpty\n            {"))
   }
@@ -926,10 +922,10 @@ import XCTest
     let inputSource = String(viewSource[inputRange.lowerBound..<inputEnd.lowerBound])
 
     XCTAssertTrue(inputSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
-    // Archiving the previous exchange moved into the window alongside sizing;
+    // Archiving the previous exchange moved into the manager alongside sizing;
     // the view must not archive on its own.
     XCTAssertFalse(viewSource.contains("archiveCurrentExchange"))
-    XCTAssertTrue(windowSource.contains("state.archiveCurrentExchange(using: self.historyChatProvider)"))
+    XCTAssertTrue(windowSource.contains("notchState.archiveCurrentExchange(using: provider)"))
     XCTAssertTrue(viewSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
     XCTAssertFalse(inputSource.contains("state.showingAIResponse = true"))
     XCTAssertFalse(viewSource.contains("state.conversationSurface == .mainResponse || state.showingAIResponse"))
