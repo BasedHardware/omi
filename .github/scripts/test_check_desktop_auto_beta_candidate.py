@@ -95,6 +95,7 @@ def beta_fixtures(root: Path) -> argparse.Namespace:
     beta_smoke = {
         "ok": True,
         "release_tag": TAG,
+        "source_sha": SHA,
         "expected_channel": "beta",
         "bundle_id": "com.omi.computer-macos.beta",
         "version": "0.12.99",
@@ -208,6 +209,11 @@ def main() -> int:
         del beta_smoke["notification_callback_canary"]
         beta_smoke_path.write_text(json.dumps(beta_smoke))
         expect_failure(args, "beta smoke result is missing UserNotifications callback canary")
+
+        beta_smoke = json.loads(original)
+        beta_smoke["source_sha"] = "d" * 40
+        beta_smoke_path.write_text(json.dumps(beta_smoke))
+        expect_failure(args, "beta smoke source SHA does not match the candidate tag")
 
         beta_smoke = json.loads(original)
         beta_smoke["notification_callback_canary"]["bundle_id"] = "com.omi.computer-macos"
