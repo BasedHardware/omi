@@ -10,7 +10,12 @@ import time
 from pathlib import Path
 
 CODEMAGIC_CHECK_NAME = "Release OMI Desktop (Swift)"
-DESKTOP_SWIFT_CHECK_NAME = "Desktop Swift Build & Tests"
+RELEASE_ELIGIBILITY_CHECK_NAME = "Release Eligibility"
+REQUIRED_SOURCE_CHECK_NAMES = (
+    RELEASE_ELIGIBILITY_CHECK_NAME,
+    "Desktop Swift Build & Tests",
+    "Desktop Swift Release Compile",
+)
 RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60
 AUTO_RELEASE_QUIET_SECONDS = 10 * 60
 
@@ -78,23 +83,20 @@ def latest_change_age_seconds(paths: list[str]) -> int | None:
         return None
 
     try:
-        raw = git(["log", "-1", "--format=%ct", "HEAD", "--", *paths])
+        raw = git(["log", "--first-parent", "-1", "--format=%ct", "HEAD", "--", *paths])
         return int(time.time()) - int(raw)
     except (subprocess.CalledProcessError, ValueError):
         return None
 
 
-def latest_releasable_source_sha(ref: str | None, paths: list[str]) -> str | None:
-    """Return the newest queued desktop-content commit, not an unrelated HEAD commit."""
+def latest_releasable_desktop_sha(paths: list[str]) -> str | None:
     if not paths:
         return None
 
-    revision = f"{ref}..HEAD" if ref else "HEAD"
     try:
-        source_sha = git(["log", "-1", "--format=%H", revision, "--", *paths])
+        return git(["log", "--first-parent", "-1", "--format=%H", "HEAD", "--", *paths]) or None
     except subprocess.CalledProcessError:
         return None
-    return source_sha or None
 
 
 def github_check_status(repository: str, sha: str, check_name: str) -> tuple[str | None, str | None, str | None]:
@@ -128,19 +130,20 @@ def codemagic_check_status(repository: str, sha: str) -> tuple[str | None, str |
     return github_check_status(repository, sha, CODEMAGIC_CHECK_NAME)
 
 
-def required_desktop_swift_check_reason(repository: str, sha: str) -> str | None:
-    status, conclusion, error = github_check_status(repository, sha, DESKTOP_SWIFT_CHECK_NAME)
-    if error:
-        return f"could not read required check for source SHA {sha}: {error}"
-    if status is None:
-        return f"required check {DESKTOP_SWIFT_CHECK_NAME} is missing for source SHA {sha}"
-    if status != "completed":
-        return f"required check {DESKTOP_SWIFT_CHECK_NAME} for source SHA {sha} is {status}"
-    if conclusion != "success":
-        return (
-            f"required check {DESKTOP_SWIFT_CHECK_NAME} for source SHA {sha} "
-            f"completed with {conclusion or 'no conclusion'}"
-        )
+def required_source_checks_reason(repository: str, sha: str) -> str | None:
+    for check_name in REQUIRED_SOURCE_CHECK_NAMES:
+        status, conclusion, error = github_check_status(repository, sha, check_name)
+        if error:
+            return f"could not read required check {check_name} for source SHA {sha}: {error}"
+        if status is None:
+            return f"required check {check_name} is missing for exact source SHA {sha}"
+        if status != "completed":
+            return f"required check {check_name} for exact source SHA {sha} is {status}"
+        if conclusion != "success":
+            return (
+                f"required check {check_name} for exact source SHA {sha} "
+                f"completed with {conclusion or 'no conclusion'}"
+            )
     return None
 
 
@@ -180,26 +183,27 @@ def set_output(name: str, value: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repository", required=True)
-    parser.add_argument(
-        "--mode",
-        choices=["auto", "release_now", "force_release", "break_glass"],
-        default="auto",
-    )
     args = parser.parse_args()
 
     latest_tag = latest_desktop_tag()
     changes = releasable_desktop_changes_since(latest_tag)
-    source_sha = latest_releasable_source_sha(latest_tag, changes) or git(["rev-parse", "HEAD"])
     set_output("latest_tag", latest_tag or "")
-    set_output("source_sha", source_sha)
 
-    forced = args.mode in {"force_release", "break_glass"}
-
-    if not changes and forced:
-        print("No releasable desktop app changes since the latest desktop tag, but force_release was requested.")
-    elif not changes:
+    if not changes:
+        set_output("source_sha", "")
         set_output("should_release", "false")
         set_output("reason", "No releasable desktop app changes since the latest desktop tag.")
+        return 0
+
+    # Component CI is produced on the immutable commit that last changed the
+    # queued desktop paths. Later backend/docs-only main commits intentionally
+    # do not become desktop candidates because the producer skips its expensive
+    # release compile on those SHAs.
+    source_sha = latest_releasable_desktop_sha(changes)
+    set_output("source_sha", source_sha or "")
+    if source_sha is None:
+        set_output("should_release", "false")
+        set_output("reason", "Could not resolve the newest releasable desktop source SHA.")
         return 0
 
     if changes:
@@ -207,45 +211,32 @@ def main() -> int:
         for path in changes:
             print(f"  - {path}")
 
-    if args.mode == "auto":
-        latest_change_age = latest_change_age_seconds(changes)
-        if latest_change_age is None:
-            set_output("should_release", "false")
-            set_output(
-                "reason",
-                "Waiting for desktop release quiet window: could not determine latest releasable change age.",
-            )
-            return 0
-        if latest_change_age < AUTO_RELEASE_QUIET_SECONDS:
-            wait_seconds = AUTO_RELEASE_QUIET_SECONDS - latest_change_age
-            set_output("should_release", "false")
-            set_output(
-                "reason",
-                f"Waiting for desktop release quiet window: latest releasable change is "
-                f"{latest_change_age}s old; need {AUTO_RELEASE_QUIET_SECONDS}s "
-                f"({wait_seconds}s remaining).",
-            )
-            return 0
+    latest_change_age = latest_change_age_seconds(changes)
+    if latest_change_age is None:
+        set_output("should_release", "false")
+        set_output("reason", "Waiting for desktop release quiet window: could not determine latest releasable change age.")
+        return 0
+    if latest_change_age < AUTO_RELEASE_QUIET_SECONDS:
+        wait_seconds = AUTO_RELEASE_QUIET_SECONDS - latest_change_age
+        set_output("should_release", "false")
+        set_output(
+            "reason",
+            f"Waiting for desktop release quiet window: latest releasable change is "
+            f"{latest_change_age}s old; need {AUTO_RELEASE_QUIET_SECONDS}s ({wait_seconds}s remaining).",
+        )
+        return 0
 
-    source_check_reason = required_desktop_swift_check_reason(args.repository, source_sha)
+    source_check_reason = required_source_checks_reason(args.repository, source_sha)
     if source_check_reason:
-        # break_glass is the only mode that may cut a candidate over a red or
-        # missing source check. Without it a flaky `Desktop Swift Build & Tests`
-        # blocks candidate creation outright, and every downstream stage with it,
-        # with no recovery short of landing another commit and waiting.
-        if args.mode != "break_glass":
-            set_output("should_release", "false")
-            set_output("reason", f"Desktop candidate source gate blocked: {source_check_reason}.")
-            return 0
-        set_output("source_gate_bypassed", "true")
-        print(f"::warning::Desktop candidate source gate bypassed: {source_check_reason}")
+        set_output("should_release", "false")
+        set_output("reason", f"Desktop candidate source gate blocked: {source_check_reason}.")
+        return 0
 
-    if not forced:
-        active_reason = active_release_reason(args.repository, latest_tag)
-        if active_reason:
-            set_output("should_release", "false")
-            set_output("reason", f"Release already active: {active_reason}.")
-            return 0
+    active_reason = active_release_reason(args.repository, latest_tag)
+    if active_reason:
+        set_output("should_release", "false")
+        set_output("reason", f"Release already active: {active_reason}.")
+        return 0
 
     set_output("should_release", "true")
     set_output("reason", f"Ready to release {len(changes)} changed desktop app file(s).")

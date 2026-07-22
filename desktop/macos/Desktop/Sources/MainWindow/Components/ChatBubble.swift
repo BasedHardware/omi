@@ -25,6 +25,10 @@ struct ChatBubble: View {
   @State private var showRatingFeedback = false
   @State private var showInfoPopover = false
   @State private var lastSubmittedRating: Int?
+  // Shared across every metadata control: true while any of them holds
+  // keyboard focus, so Tab / Full Keyboard Access never lands on an
+  // invisible button.
+  @FocusState private var isMetadataControlFocused: Bool
 
   init(
     message: ChatMessage, app: OmiApp?, onRate: @escaping (Int?) -> Void,
@@ -329,10 +333,18 @@ struct ChatBubble: View {
       }
     }
     // Quiet timeline: actions and timestamps only surface while the reader
-    // is on the message (or mid-interaction with them).
-    .opacity(isRowHovering || showRatingFeedback || showCopied || showInfoPopover ? 1 : 0)
+    // is on the message — by pointer hover or keyboard focus — or
+    // mid-interaction with them.
+    .opacity(
+      ChatBubbleMetadataReveal.isVisible(
+        hovering: isRowHovering,
+        controlFocused: isMetadataControlFocused,
+        transientFeedback: showRatingFeedback || showCopied || showInfoPopover
+      ) ? 1 : 0
+    )
     .omiAnimation(.easeInOut(duration: 0.12), value: isTimestampHovering)
     .omiAnimation(.easeInOut(duration: 0.15), value: isRowHovering)
+    .omiAnimation(.easeInOut(duration: 0.15), value: isMetadataControlFocused)
   }
 
   @ViewBuilder
@@ -351,6 +363,7 @@ struct ChatBubble: View {
           .foregroundColor(message.rating == 1 ? OmiColors.accent : OmiColors.textTertiary)
       }
       .buttonStyle(.plain)
+      .focused($isMetadataControlFocused)
       .help("Helpful response")
 
       // Thumbs down
@@ -366,6 +379,7 @@ struct ChatBubble: View {
           .foregroundColor(message.rating == -1 ? .red : OmiColors.textTertiary)
       }
       .buttonStyle(.plain)
+      .focused($isMetadataControlFocused)
       .help("Not helpful")
 
       if showRatingFeedback {
@@ -408,6 +422,7 @@ struct ChatBubble: View {
         .foregroundColor(showCopied ? .green : OmiColors.textTertiary)
     }
     .buttonStyle(.plain)
+    .focused($isMetadataControlFocused)
     .help("Copy message")
   }
 
@@ -422,12 +437,23 @@ struct ChatBubble: View {
         .foregroundColor(showInfoPopover ? OmiColors.textPrimary : OmiColors.textTertiary)
     }
     .buttonStyle(.plain)
+    .focused($isMetadataControlFocused)
     .help("View response context")
     .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
       if let metadata = message.metadata {
         MessageMetadataPopover(metadata: metadata)
       }
     }
+  }
+}
+
+/// Visibility rule for the quiet timeline's per-message metadata row
+/// (rating / copy / info / timestamp). Keyboard parity is part of the
+/// contract: focus on any metadata control must reveal the row, otherwise
+/// Tab / Full Keyboard Access ends up on an invisible button.
+enum ChatBubbleMetadataReveal {
+  static func isVisible(hovering: Bool, controlFocused: Bool, transientFeedback: Bool) -> Bool {
+    hovering || controlFocused || transientFeedback
   }
 }
 

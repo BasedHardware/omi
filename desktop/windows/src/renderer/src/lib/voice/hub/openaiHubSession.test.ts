@@ -1,0 +1,363 @@
+import { describe, it, expect, vi } from 'vitest'
+import type { VoiceSessionID, VoiceTurnID, VoiceResponseID } from '../turn/voiceTurnMachine'
+import type { HubSessionEvents, HubSocket, HubSocketFactory, HubClock } from './hubSession'
+
+// pcmPlayer transitively imports the AudioWorklet `?worker&url` asset, which does
+// not resolve in the node test env. Stub it: base64ToBytes stays a real passthrough
+// so we can assert the enqueued payload; the player is injected per-session anyway.
+vi.mock('../pcmPlayer', () => ({
+  createVoicePlayer: vi.fn(),
+  base64ToBytes: (s: string) => new TextEncoder().encode(s)
+}))
+
+import { OpenAiHubSession } from './openaiHubSession'
+
+type Json = Record<string, unknown>
+
+class FakeSocket implements HubSocket {
+  sent: string[] = []
+  closed = false
+  constructor(public spec: Parameters<HubSocketFactory>[0]) {}
+  send(d: string): void {
+    this.sent.push(d)
+  }
+  close(): void {
+    this.closed = true
+  }
+  frames(): Json[] {
+    return this.sent.map((s) => JSON.parse(s) as Json)
+  }
+  types(): string[] {
+    return this.frames().map((f) => f.type as string)
+  }
+}
+
+function makePlayer(): Record<string, ReturnType<typeof vi.fn>> {
+  return {
+    enqueuePcm16: vi.fn(),
+    flush: vi.fn(),
+    clear: vi.fn(),
+    setSinkId: vi.fn(),
+    close: vi.fn()
+  }
+}
+
+function makeEvents(): Record<keyof HubSessionEvents, ReturnType<typeof vi.fn>> {
+  return {
+    onConnected: vi.fn(),
+    onInputTranscript: vi.fn(),
+    onAssistantText: vi.fn(),
+    onSpeakingStart: vi.fn(),
+    onSpeakingEnd: vi.fn(),
+    onToolRequest: vi.fn(),
+    onTurnDone: vi.fn(),
+    onError: vi.fn()
+  }
+}
+
+const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
+const tid = 't1' as VoiceTurnID
+const rid = 'r1' as VoiceResponseID
+
+function harness(
+  opts: {
+    tools?: { name: string; description: string; parameters: Record<string, unknown> }[]
+  } = {}
+): {
+  session: OpenAiHubSession
+  events: ReturnType<typeof makeEvents>
+  player: ReturnType<typeof makePlayer>
+  getSocket: () => FakeSocket
+  fireIdle: () => void
+} {
+  const events = makeEvents()
+  const player = makePlayer()
+  let socket: FakeSocket | undefined
+  const socketFactory: HubSocketFactory = (spec) => {
+    socket = new FakeSocket(spec)
+    return socket
+  }
+  let idleFire: (() => void) | null = null
+  const clock: HubClock = {
+    setTimer: (_ms, fire) => {
+      idleFire = fire
+      return {}
+    },
+    clearTimer: () => {
+      idleFire = null
+    }
+  }
+  const session = new OpenAiHubSession({
+    token: 'ek_secret',
+    instructions: 'INSTR',
+    events,
+    socketFactory,
+    playerFactory: async () => player as never,
+    clock,
+    mintSessionID: () => 'sess-1' as VoiceSessionID,
+    idleReleaseMs: 180_000,
+    tools: opts.tools
+  })
+  return {
+    session,
+    events,
+    player,
+    getSocket: () => {
+      if (!socket) throw new Error('socket not created')
+      return socket
+    },
+    fireIdle: () => idleFire?.()
+  }
+}
+
+/** Drive ensureWarm through socket-open + provider ready, then clear setup frames. */
+async function connect(h: ReturnType<typeof harness>): Promise<void> {
+  const warm = h.session.ensureWarm()
+  await tick() // playerFactory await → socket created
+  h.getSocket().spec.onOpen()
+  h.getSocket().spec.onMessage(JSON.stringify({ type: 'session.created' }))
+  await warm
+  h.getSocket().sent = [] // drop the session.update so per-turn frames are isolated
+}
+
+describe('OpenAiHubSession — warm config', () => {
+  it('warms with turn_detection: null and NO server VAD (PTT owns turns)', async () => {
+    const h = harness()
+    const warm = h.session.ensureWarm()
+    await tick()
+    h.getSocket().spec.onOpen()
+    const setup = h.getSocket().frames()[0]
+    expect(setup.type).toBe('session.update')
+    const session = setup.session as Json
+    const audio = session.audio as Json
+    const input = audio.input as Json
+    // turn_detection is explicitly null — the single most important warm assertion.
+    expect(input.turn_detection).toBeNull()
+    expect('turn_detection' in input).toBe(true)
+    // No auto-VAD anywhere in the input config.
+    expect(JSON.stringify(input)).not.toMatch(/server_vad|semantic_vad|"create_response"/)
+    expect(input.format).toEqual({ type: 'audio/pcm', rate: 24000 })
+    h.getSocket().spec.onMessage(JSON.stringify({ type: 'session.created' }))
+    await warm
+    expect(h.session.isWarm()).toBe(true)
+    expect(h.events.onConnected).toHaveBeenCalledWith('sess-1')
+  })
+
+  it('projects the provider-neutral catalog into GA function tools (PR-C)', async () => {
+    const h = harness({
+      tools: [
+        {
+          name: 'list_agent_sessions',
+          description: 'list them',
+          parameters: { type: 'object', properties: {} }
+        }
+      ]
+    })
+    const warm = h.session.ensureWarm()
+    await tick()
+    h.getSocket().spec.onOpen()
+    const setup = h.getSocket().frames()[0]
+    const session = setup.session as Json
+    // Each neutral declaration is wrapped as a GA realtime function tool.
+    expect(session.tools).toEqual([
+      {
+        type: 'function',
+        name: 'list_agent_sessions',
+        description: 'list them',
+        parameters: { type: 'object', properties: {} }
+      }
+    ])
+    expect(session.tool_choice).toBe('auto')
+    h.getSocket().spec.onMessage(JSON.stringify({ type: 'session.created' }))
+    await warm
+  })
+})
+
+describe('OpenAiHubSession — one turn', () => {
+  it('append (while held) → commit → response.create, in that exact order', async () => {
+    const h = harness()
+    await connect(h)
+    h.session.beginTurn({ turnID: tid, responseID: rid })
+    h.session.appendAudio(new Uint8Array([1, 2, 3, 4]))
+    h.session.appendAudio(new Uint8Array([5, 6]))
+    h.session.commitTurn()
+    expect(h.getSocket().types()).toEqual([
+      'input_audio_buffer.append',
+      'input_audio_buffer.append',
+      'input_audio_buffer.commit',
+      'response.create'
+    ])
+    const create = h.getSocket().frames()[3]
+    expect((create.response as Json).output_modalities).toEqual(['audio'])
+  })
+
+  it('response.done with no tool calls finishes the turn once', async () => {
+    const h = harness()
+    await connect(h)
+    h.session.beginTurn({ turnID: tid, responseID: rid })
+    h.session.commitTurn()
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.created', response: { id: 'resp_1' } })
+    )
+    // Audio delta for the current response is played through pcmPlayer.
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.output_audio.delta', response_id: 'resp_1', delta: 'AAAA' })
+    )
+    expect(h.player.enqueuePcm16).toHaveBeenCalledTimes(1)
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.done', response: { id: 'resp_1', output: [] } })
+    )
+    expect(h.events.onTurnDone).toHaveBeenCalledTimes(1)
+    // A stale response.done (wrong id) does not finish again.
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.done', response: { id: 'other', output: [] } })
+    )
+    expect(h.events.onTurnDone).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('OpenAiHubSession — barge-in (Swift-faithful)', () => {
+  it('cancels the in-flight reply with response.cancel + input_audio_buffer.clear, NOT truncate', async () => {
+    const h = harness()
+    await connect(h)
+    // Establish an active response.
+    h.session.beginTurn({ turnID: tid, responseID: rid })
+    h.session.commitTurn()
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.created', response: { id: 'resp_1' } })
+    )
+    h.getSocket().sent = []
+    // Barge-in: a new turn interrupts the live reply.
+    h.session.beginTurn({
+      turnID: 't2' as VoiceTurnID,
+      responseID: 'r2' as VoiceResponseID,
+      interrupting: true
+    })
+    const types = h.getSocket().types()
+    expect(types).toContain('response.cancel')
+    expect(types).toContain('input_audio_buffer.clear')
+    // §C.5 / the plan summary claim `conversation.item.truncate`; the actual macOS
+    // session never sends it. The Swift wins — assert it is absent.
+    expect(types).not.toContain('conversation.item.truncate')
+    // Stale playback for the cancelled reply is dropped.
+    expect(h.player.clear).toHaveBeenCalled()
+  })
+})
+
+describe('OpenAiHubSession — barge-in before response.created (stale-created hijack guard)', () => {
+  it('does not adopt a canceled response.created, so stale audio cannot leak into the next turn', async () => {
+    const h = harness()
+    await connect(h)
+    // Turn 1: commit, but response.created has NOT arrived yet (createPending).
+    h.session.beginTurn({ turnID: tid, responseID: rid })
+    h.session.commitTurn()
+    // Barge-in turn 2 BEFORE turn 1's response.created comes back. The canceled
+    // create's response.created is still in flight and must be consumed, not adopted.
+    h.session.beginTurn({
+      turnID: 't2' as VoiceTurnID,
+      responseID: 'r2' as VoiceResponseID,
+      interrupting: true
+    })
+    h.session.commitTurn() // turn 2 response.create
+    h.player.enqueuePcm16.mockClear()
+    // The STALE (canceled) response.created for turn 1 arrives.
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.created', response: { id: 'stale_resp' } })
+    )
+    // Turn 1's trailing audio must NOT play into turn 2.
+    h.getSocket().spec.onMessage(
+      JSON.stringify({
+        type: 'response.output_audio.delta',
+        response_id: 'stale_resp',
+        delta: 'STALE'
+      })
+    )
+    expect(h.player.enqueuePcm16).not.toHaveBeenCalled()
+    // A stale response.done must NOT finish turn 2.
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.done', response: { id: 'stale_resp', output: [] } })
+    )
+    expect(h.events.onTurnDone).not.toHaveBeenCalled()
+    // The REAL turn-2 response.created is adopted; its audio plays and it finishes once.
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.created', response: { id: 'real_resp' } })
+    )
+    h.getSocket().spec.onMessage(
+      JSON.stringify({
+        type: 'response.output_audio.delta',
+        response_id: 'real_resp',
+        delta: 'REAL'
+      })
+    )
+    expect(h.player.enqueuePcm16).toHaveBeenCalledTimes(1)
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.done', response: { id: 'real_resp', output: [] } })
+    )
+    expect(h.events.onTurnDone).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops a stale response audio delta whose id is not the active response', async () => {
+    const h = harness()
+    await connect(h)
+    h.session.beginTurn({ turnID: tid, responseID: rid })
+    h.session.commitTurn()
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.created', response: { id: 'resp_1' } })
+    )
+    // A delta tagged with a DIFFERENT response id must be ignored by the current gate.
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.output_audio.delta', response_id: 'other_resp', delta: 'X' })
+    )
+    expect(h.player.enqueuePcm16).not.toHaveBeenCalled()
+    // The current response's delta plays.
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.output_audio.delta', response_id: 'resp_1', delta: 'Y' })
+    )
+    expect(h.player.enqueuePcm16).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('OpenAiHubSession — idle release (D4) + re-warm', () => {
+  it('tears the socket down after the idle timer, then ensureWarm re-establishes', async () => {
+    const h = harness()
+    await connect(h)
+    const first = h.getSocket()
+    expect(h.session.isWarm()).toBe(true)
+    h.fireIdle()
+    expect(first.closed).toBe(true)
+    expect(h.session.isWarm()).toBe(false)
+    // Re-warm mints a fresh socket and reaches ready again.
+    const warm = h.session.ensureWarm()
+    await tick()
+    const second = h.getSocket()
+    expect(second).not.toBe(first)
+    second.spec.onOpen()
+    second.spec.onMessage(JSON.stringify({ type: 'session.updated' }))
+    await warm
+    expect(h.session.isWarm()).toBe(true)
+  })
+})
+
+describe('OpenAiHubSession — cold press (warm-wait buffer)', () => {
+  it('buffers PCM + commit sent before the socket is ready, flushes on connect', async () => {
+    const h = harness()
+    const warm = h.session.ensureWarm()
+    await tick()
+    // Press arrives before the provider is ready.
+    h.session.beginTurn({ turnID: tid, responseID: rid })
+    h.session.appendAudio(new Uint8Array([9, 9]))
+    h.session.commitTurn()
+    // Nothing turn-related on the wire yet (only the pre-open setup, if open fired).
+    h.getSocket().spec.onOpen()
+    h.getSocket().sent = h.getSocket().sent.filter((s) => !s.includes('session.update'))
+    expect(h.getSocket().types()).toEqual([])
+    // Provider becomes ready → buffered audio + commit flush in order.
+    h.getSocket().spec.onMessage(JSON.stringify({ type: 'session.created' }))
+    await warm
+    expect(h.getSocket().types()).toEqual([
+      'input_audio_buffer.append',
+      'input_audio_buffer.commit',
+      'response.create'
+    ])
+  })
+})

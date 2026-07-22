@@ -84,7 +84,11 @@ def decode_opus_file_to_wav(
                     corrupt_stream = True
                     break
 
-        if frame_count > 0 and not corrupt_stream:
+        if frame_count > 0:
+            if corrupt_stream:
+                logger.warning(
+                    'Opus decode: keeping %d frames decoded before the stream became unreadable', frame_count
+                )
             logger.info(f"Decoded audio saved to {sanitize(wav_file_path)}")
             return True
 
@@ -183,12 +187,14 @@ def decode_pcm_file_to_wav(
                     break
                 pcm_data.extend(frame_data)
 
-        if not pcm_data or corrupt_stream:
+        if not pcm_data:
             logger.info('PCM decode: stream is empty or malformed')
-            pcm_data.clear()
             if os.path.exists(wav_file_path):
                 os.remove(wav_file_path)
             return False
+
+        if corrupt_stream:
+            logger.warning('PCM decode: keeping %d bytes decoded before the stream became unreadable', len(pcm_data))
 
         wav_data = sync_playback.pcm_to_wav(
             bytes(pcm_data), sample_rate=sample_rate, channels=channels, sample_width=sample_width
@@ -229,7 +235,15 @@ def detect_source_from_filenames(filenames: List[Optional[str]]) -> Conversation
 
 
 def decode_files_to_wav(files_path: List[str]) -> List[str]:
+    """Decode each uploaded sync file, isolating unreadable files from their batch.
+
+    A batch shares one sync job, so failing the whole batch on a single bad file
+    discards every sibling recording and leaves the client retrying the same
+    doomed set forever. Unreadable files are dropped individually; the request
+    only fails when nothing in the batch decoded.
+    """
     wav_files: List[str] = []
+    unreadable: List[str] = []
     for path in files_path:
         wav_path = path.replace('.bin', '.wav')
         filename = os.path.basename(path)
@@ -252,27 +266,26 @@ def decode_files_to_wav(files_path: List[str]) -> List[str]:
         else:
             success = decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
 
-        if not success:
-            for decoded_wav in wav_files:
-                if os.path.exists(decoded_wav):
-                    os.remove(decoded_wav)
-            if os.path.exists(path):
-                os.remove(path)
-            raise HTTPException(status_code=400, detail='Audio decode failed')
-
         if os.path.exists(path):
             os.remove(path)
 
-        duration = get_wav_duration(wav_path)
-        if duration == 0:
+        if success and get_wav_duration(wav_path) == 0:
+            success = False
+
+        if not success:
+            unreadable.append(filename)
             if os.path.exists(wav_path):
                 os.remove(wav_path)
-            for decoded_wav in wav_files:
-                if os.path.exists(decoded_wav):
-                    os.remove(decoded_wav)
-            raise HTTPException(status_code=400, detail='Invalid audio input')
+            continue
 
         # Short, successfully decoded audio is not proof of silence. Preserve it
         # for the authoritative VAD stage instead of silently acknowledging it.
         wav_files.append(wav_path)
+
+    if unreadable:
+        logger.warning('Sync decode dropped %d of %d unreadable files', len(unreadable), len(files_path))
+
+    if not wav_files:
+        raise HTTPException(status_code=400, detail='Audio decode failed')
+
     return wav_files

@@ -21,7 +21,7 @@ concurrency:
 
 # This workflow deliberately runs only on the dedicated, trusted macOS runner.
 # Do not add pull_request or push triggers: the runner has Docker and a GitHub
-# App token that can request beta promotion after exact qualification passes.
+# App token that can publish immutable evidence after exact qualification passes.
 jobs:
   qualify:
     runs-on: [self-hosted, macos, omi-desktop-qualification]
@@ -69,8 +69,8 @@ jobs:
           git fetch --force origin "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
           LATEST_TAG=$(git for-each-ref --count=1 --sort=-v:refname --format='%(refname:strip=2)' 'refs/tags/v*-macos')
           test -n "$LATEST_TAG"
-          TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
-          CHECKOUT_SHA=$(git rev-parse "$RELEASE_TAG")
+          TARGET_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
+          CHECKOUT_SHA=$(git rev-parse "HEAD^{commit}")
           rm -rf /tmp/desktop-beta-qualification
           mkdir -p /tmp/desktop-beta-qualification
           gh release view "$RELEASE_TAG" --repo "$REPO" \
@@ -101,7 +101,6 @@ jobs:
           set -euo pipefail
           desktop/macos/scripts/qualify-desktop-beta.sh \
             --automatic \
-            --no-promote \
             --github-actions-artifact \
             --signed-smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result.json \
             --candidate-gate-result /tmp/desktop-beta-qualification/candidate-gate.json \
@@ -114,7 +113,7 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
+          TARGET_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
           STABLE_DMG=/tmp/desktop-beta-qualification/assets/omi.dmg
           test -n "$STABLE_DMG"
           python3 .github/scripts/desktop_qualification_evidence.py build \
@@ -144,15 +143,3 @@ jobs:
           set -euo pipefail
           gh release upload "$RELEASE_TAG" --repo "$REPO" \
             /tmp/desktop-beta-qualification/qualification-evidence.json#"qualification-evidence-${RELEASE_TAG}.json"
-
-      - name: Request protected beta promotion
-        if: steps.candidate.outcome == 'success' && steps.qualify.outcome == 'success'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          gh workflow run desktop_promote_beta.yml --repo "$REPO" \
-            --ref "$RELEASE_TAG" \
-            -f release_tag="$RELEASE_TAG"

@@ -134,6 +134,8 @@ env:
       configMapKeyRef:
         name: prod-omi-backend-config
         key: REDIS_DB_HOST
+      # Clear the historical Secret source during the named-env strategic merge.
+      secretKeyRef: null
   - name: REDIS_DB_PASSWORD
     valueFrom:
       secretKeyRef:

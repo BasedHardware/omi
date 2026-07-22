@@ -23,12 +23,14 @@ from database.desktop_update_channels import (
     reserve_beta_candidate,
     set_beta_admission_enabled,
 )
+from database.desktop_beta_breakglass import emergency_rollout_beta, rollback_beta
 from database.desktop_update_policy import default_desktop_update_policy, get_desktop_update_policy
 from database.redis_db import delete_generic_cache
 from utils.desktop_update_resolver import live_cache_key, resolve_pointer_release
 from utils.executors import db_executor, run_blocking
 from utils.github_releases import get_omi_github_releases, extract_key_value_pairs
 from utils.qualified_beta_promotion import QualifiedBetaAdmissionError, build_qualified_beta_manifest
+from utils.beta_breakglass_evidence import build_emergency_beta_manifest
 from utils.metrics import (
     DESKTOP_UPDATE_FEED_VALID,
     DESKTOP_UPDATE_POINTER_MISMATCH_TOTAL,
@@ -90,6 +92,26 @@ class BetaAdmissionControlRequest(BaseModel):
     promotion_enabled: StrictBool
 
 
+class BetaBreakglassRequest(BaseModel):
+    """Bound incident evidence and CAS inputs for one macOS Beta emergency."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    operation: Literal["rollback", "rollout"]
+    current_release_id: str = Field(pattern=r"^v[0-9]+\.[0-9]+(?:\.[0-9]+)?\+[1-9][0-9]*-macos$")
+    target_release_id: str = Field(pattern=r"^v[0-9]+\.[0-9]+(?:\.[0-9]+)?\+[1-9][0-9]*-macos$")
+    expected_generation: int = Field(ge=0)
+    actor: str = Field(min_length=1, max_length=128)
+    reason: str = Field(min_length=1, max_length=1000)
+    incident_url: str = Field(
+        pattern=r"^https://github\.com/BasedHardware/omi/(?:issues|discussions)/[1-9][0-9]*(?:[/?#].*)?$"
+    )
+    request_id: str = Field(
+        pattern=r"^https://github\.com/BasedHardware/omi/actions/runs/[1-9][0-9]*/attempts/[1-9][0-9]*$"
+    )
+    normal_path_unavailable: Optional[str] = Field(default=None, min_length=1, max_length=1000)
+
+
 class DesktopPreviewPublishRequest(BaseModel):
     """Immutable metadata for a signed desktop preview artifact."""
 
@@ -115,8 +137,11 @@ class DesktopPreviewDelistRequest(BaseModel):
 
 
 VALID_CHANNELS = {"beta", "stable"}
+# The +build component is optional: Windows releases (desktop_windows_release.yml)
+# tag v{major}.{minor}.{patch}-windows with no build number; macOS/Codemagic tags
+# always carry one.
 DESKTOP_RELEASE_TAG_PATTERN = re.compile(
-    r'^v?\d+\.\d+(?:\.\d+)?\+\d+-(?:desktop|macos|windows|linux)(?:-(?:cm|auto))?$',
+    r'^v?\d+\.\d+(?:\.\d+)?(?:\+\d+)?-(?:desktop|macos|windows|linux)(?:-(?:cm|auto))?$',
     re.IGNORECASE,
 )
 
@@ -133,25 +158,31 @@ def _parse_desktop_version(tag_name: str) -> Optional[Dict[str, str]]:
     Parse desktop version from tag name.
     Expected format: v1.0.77+464-desktop-cm or v1.0.77+464-macos-cm or v1.0.77+464-desktop-auto or v0.6.4+6004-macos
     The patch component is optional (newer tags use 2-component versions, e.g. v11.0+11000-macos);
-    it defaults to "0" when absent.
+    it defaults to "0" when absent. The +build component is optional for
+    Windows only (desktop_windows_release.yml tags v1.2.0-windows with no
+    build); every other platform's grammar still requires it.
     Returns dict with version info or None if invalid.
     """
-    # Match pattern: v{major}.{minor}[.{patch}]+{build}-{platform}[-{cm|auto}]
-    pattern = r'^v?(\d+)\.(\d+)(?:\.(\d+))?\+(\d+)-(?:desktop|macos|windows|linux)(?:-(?:cm|auto))?$'
+    # Match pattern: v{major}.{minor}[.{patch}][+{build}]-{platform}[-{cm|auto}]
+    pattern = r'^v?(\d+)\.(\d+)(?:\.(\d+))?(?:\+(\d+))?-(desktop|macos|windows|linux)(?:-(?:cm|auto))?$'
     match = re.match(pattern, tag_name, re.IGNORECASE)
 
     if not match:
         return None
 
-    major, minor, patch, build = match.groups()
+    major, minor, patch, build, tag_platform = match.groups()
+    if build is None and tag_platform.lower() != 'windows':
+        return None
     patch = patch if patch is not None else '0'
+    version = f"{major}.{minor}.{patch}" if build is None else f"{major}.{minor}.{patch}+{build}"
+    build = build if build is not None else '0'
 
     return {
         'major': major,
         'minor': minor,
         'patch': patch,
         'build': build,
-        'version': f"{major}.{minor}.{patch}+{build}",
+        'version': version,
         'tag_name': tag_name,
     }
 
@@ -247,6 +278,27 @@ def _get_dmg_download_url(release: Dict) -> Optional[str]:
     return None
 
 
+def _get_windows_installer_download_url(release: Dict) -> Optional[str]:
+    """Get only the canonical lowercase ``omi-setup.exe`` installer URL.
+
+    Mirrors the case-sensitive macOS ``omi.dmg`` contract: versioned or
+    otherwise-named ``*.exe`` assets are deliberately ignored.
+    desktop_windows_release.yml uploads this canonical copy next to the
+    versioned installer.
+    """
+    for asset in release.get("assets", []):
+        if asset.get("name") == "omi-setup.exe":
+            return asset.get("browser_download_url")
+    return None
+
+
+def _get_installer_download_url(release: Dict, platform: str) -> Optional[str]:
+    """Resolve the manual-download installer asset for one platform."""
+    if platform == "windows":
+        return _get_windows_installer_download_url(release)
+    return _get_dmg_download_url(release)
+
+
 async def _get_legacy_live_desktop_releases(platform: str) -> List[Dict]:
     """
     Fetch and filter live desktop releases for a given platform.
@@ -282,11 +334,20 @@ async def _get_legacy_live_desktop_releases(platform: str) -> List[Dict]:
             continue
 
         kv = extract_key_value_pairs(release.get("body", ""))
-        is_live = kv.get("isLive", "false").lower() == "true"
+        if platform == "windows" and "isLive" not in kv:
+            # Windows releases (desktop_windows_release.yml) carry no KEY_VALUE
+            # block; GitHub's own release state is the contract there: every
+            # published release is live, and the prerelease flag IS the channel
+            # (auto-cut = prerelease/beta; a human promotes to stable by
+            # clearing the flag). An explicit KEY_VALUE block still wins.
+            is_live = True
+            channel = "beta" if release.get("prerelease") else "stable"
+        else:
+            is_live = kv.get("isLive", "false").lower() == "true"
+            channel = kv.get("channel", "beta").lower()
         if not is_live:
             continue
 
-        channel = kv.get("channel", "beta").lower()
         if channel not in VALID_CHANNELS:
             channel = "beta"
 
@@ -440,16 +501,29 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
     return resolved
 
 
-def _download_landing_html(dmg_url: str, channel: str = "stable", version: str = "") -> str:
-    """Generate an HTML landing page that auto-triggers DMG download."""
+def _download_landing_html(dmg_url: str, channel: str = "stable", version: str = "", platform: str = "macos") -> str:
+    """Generate an HTML landing page that auto-triggers the installer download."""
     channel_label = "Beta " if channel == "beta" else ""
     version_display = f"v{version}" if version else ""
+    os_name = "Windows" if platform == "windows" else "macOS"
+    if platform == "windows":
+        install_steps = (
+            "1. Open the downloaded installer (omi-setup.exe)<br>"
+            "2. If Windows SmartScreen appears, click <b>More info</b> &rarr; <b>Run anyway</b><br>"
+            "3. Follow the setup wizard and launch Omi"
+        )
+    else:
+        install_steps = (
+            "1. Open the downloaded .dmg file<br>"
+            "2. Drag Omi to your Applications folder<br>"
+            "3. Launch Omi from Applications"
+        )
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Download Omi {channel_label}for macOS</title>
+    <title>Download Omi {channel_label}for {os_name}</title>
     <meta http-equiv="refresh" content="2;url={dmg_url}">
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -484,7 +558,7 @@ def _download_landing_html(dmg_url: str, channel: str = "stable", version: str =
 </head>
 <body>
     <div class="container">
-        <h1>Downloading Omi {channel_label}for macOS</h1>
+        <h1>Downloading Omi {channel_label}for {os_name}</h1>
         <p class="version">{version_display}</p>
         <p class="subtitle" id="status-text">Your download should start automatically&hellip;</p>
         <div class="status" id="status-icon">
@@ -500,9 +574,7 @@ def _download_landing_html(dmg_url: str, channel: str = "stable", version: str =
         </div>
         <div class="steps">
             <b>Installation steps:</b><br>
-            1. Open the downloaded .dmg file<br>
-            2. Drag Omi to your Applications folder<br>
-            3. Launch Omi from Applications
+            {install_steps}
         </div>
         <p class="discord">Need help? Join our <a href="https://discord.com/invite/8MP3b9ymvx">Discord community</a></p>
     </div>
@@ -731,12 +803,14 @@ async def download_latest_desktop_release(
     for entry in desktop_releases:
         if entry["channel"] != channel:
             continue
-        dmg_url = _get_dmg_download_url(entry["release"])
-        if dmg_url:
+        installer_url = _get_installer_download_url(entry["release"], platform)
+        if installer_url:
             version = entry["version_info"]["version"]
-            return HTMLResponse(content=_download_landing_html(dmg_url, channel=channel, version=version))
+            return HTMLResponse(
+                content=_download_landing_html(installer_url, channel=channel, version=version, platform=platform)
+            )
 
-    raise HTTPException(status_code=404, detail=f"No DMG installer found for channel: {channel}")
+    raise HTTPException(status_code=404, detail=f"No installer found for platform {platform}, channel: {channel}")
 
 
 @router.get("/v2/desktop/download/beta")
@@ -748,6 +822,17 @@ async def download_beta_desktop_release(
     Convenience endpoint for macos.omi.me/beta (URL map can't add query params).
     """
     return await download_latest_desktop_release(platform=platform, channel="beta")
+
+
+@router.get("/v2/desktop/download/windows")
+async def download_windows_desktop_release(
+    channel: str = Query(default="stable", pattern="^(beta|stable)$"),
+):
+    """
+    Redirect to the latest Windows desktop release installer.
+    Convenience endpoint for windows.omi.me (URL map can't add query params).
+    """
+    return await download_latest_desktop_release(platform="windows", channel=channel)
 
 
 def _preview_landing_response(result: Dict[str, Any]) -> HTMLResponse:
@@ -924,6 +1009,41 @@ async def promote_qualified_beta(
         "release_id": receipt["manifest"]["release_id"],
         "generation": receipt["pointer"]["generation"],
         "idempotent": receipt["idempotent"],
+    }
+
+
+@router.post("/v2/desktop/beta/breakglass")
+async def mutate_broken_beta(
+    request: BetaBreakglassRequest,
+    secret_key: str = Header(...),
+):
+    """Rollback or emergency-roll-forward only the hard-coded macOS Beta pointer."""
+    if not secret_key or secret_key != os.getenv("ADMIN_KEY"):
+        raise HTTPException(status_code=403, detail="You are not authorized to perform this action")
+    try:
+        if request.operation == "rollback":
+            receipt = await run_blocking(db_executor, rollback_beta, request.model_dump())
+        else:
+            if not request.normal_path_unavailable:
+                raise HTTPException(
+                    status_code=422, detail="Why normal qualification cannot recover in time is required"
+                )
+            manifest = await build_emergency_beta_manifest(request.target_release_id)
+            receipt = await run_blocking(db_executor, emergency_rollout_beta, request.model_dump(), manifest)
+    except QualifiedBetaAdmissionError:
+        logger.info("beta_breakglass operation=rollout result=evidence_rejected")
+        raise HTTPException(status_code=422, detail="Emergency Beta candidate rejected") from None
+    except ValueError as exc:
+        logger.info("beta_breakglass operation=%s result=conflict", request.operation)
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
+    logger.warning(
+        "beta_breakglass operation=%s request_id=%s actor=%s", request.operation, request.request_id, request.actor
+    )
+    return {
+        "operation": request.operation,
+        "release_id": receipt["pointer"]["release_id"],
+        "generation": receipt["pointer"]["generation"],
     }
 
 

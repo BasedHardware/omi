@@ -43,6 +43,32 @@ Everything below is blank in `.env.example` and safe to leave unset:
 - `MAIN_VITE_GOOGLE_CLIENT_ID` / `MAIN_VITE_GOOGLE_CLIENT_SECRET` /
   `VITE_ENABLE_GOOGLE_INTEGRATION` — the Google integration above.
 
+## Coding agents (Claude Code, OpenClaw, Hermes, Codex)
+
+Omi can delegate tasks to external coding agents over ACP (Agent Client
+Protocol). Name an agent in chat or push-to-talk — *"ask Codex to fix the
+failing test in my omi repo"*, *"use Claude Code to add a readme"* — and Omi
+hands the task over, streaming the agent's progress into the conversation. If
+the agent you named fails to start, Omi falls back to the next connected one;
+if it isn't connected at all, the reply tells you how to set it up.
+
+- **Claude Code** ships built in (the `@agentclientprotocol/claude-agent-acp`
+  bridge, spawned as a Node child process) — no separate install. It uses your
+  Claude sign-in (`claude` CLI credentials or `ANTHROPIC_API_KEY`).
+- **OpenClaw / Hermes / Codex** are external CLIs you install yourself, then
+  connect in **Settings → Agents** by saving a launch command
+  (e.g. `openclaw acp`, `hermes acp`, `npx @agentclientprotocol/codex-acp`).
+  The **Test** button runs a real ACP handshake against the command.
+  Power users can instead set `OMI_OPENCLAW_ADAPTER_COMMAND` /
+  `OMI_HERMES_ADAPTER_COMMAND` / `OMI_CODEX_ADAPTER_COMMAND` in the
+  environment; a Settings command takes precedence when both exist.
+
+External agents run with a minimal allowlisted environment (host secrets are
+never forwarded) and never receive automatic permanent permission grants.
+The working directory for a task is an explicit path in your message, else the
+indexed folder matching a "in my X repo" hint, else your most recently active
+indexed folder. Adapter code lives in `src/main/codingAgent/`.
+
 ## Build
 
 ```bash
@@ -58,3 +84,19 @@ npm run build:linux
 
 Vite inlines the `.env` values at build time, so a packaged installer needs no `.env` —
 the config is compiled into the binary.
+
+## Floating bar
+
+The always-on-top bar window has several non-obvious Windows pathologies (OS
+show-fade, clip-reveal requirement, orb WebGL blink, eaten hardware clicks). Read
+[docs/bar-gotchas.md](docs/bar-gotchas.md) **before** changing bar window logic or
+animations — it also documents the fast verification loop (harness scripts,
+`[bar-diag]` logging).
+
+## Conversation sync
+
+Screen-session (mic + system audio) recordings sync to the Omi cloud via
+`POST /v1/conversations/from-segments` with a client-owned outbox (offline
+retry, duplicate-safe). Design, outbox semantics, and the live E2E harness
+(`pnpm test:e2e:conv-sync`) are documented in
+[docs/conversation-sync.md](docs/conversation-sync.md).

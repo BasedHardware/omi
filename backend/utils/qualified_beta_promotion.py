@@ -10,6 +10,7 @@ import os
 import re
 from collections.abc import Awaitable
 from typing import Any, NoReturn, TypeGuard
+from urllib.parse import urlsplit
 import zipfile
 import zlib
 
@@ -195,7 +196,8 @@ def _qualification_artifacts(value: object) -> list[dict[str, Any]]:
 def _asset_url(asset: dict[str, Any], tag: str, name: str) -> str:
     url = asset.get("browser_download_url")
     expected = f"https://github.com/{REPOSITORY}/releases/download/{tag}/{name}"
-    if not isinstance(url, str) or url != expected:
+    encoded = f"https://github.com/{REPOSITORY}/releases/download/{tag.replace('+', '%2B')}/{name}"
+    if not isinstance(url, str) or url not in {expected, encoded}:
         _fail("candidate asset identity does not match its immutable release")
     return url
 
@@ -362,7 +364,10 @@ class GitHubQualifiedBetaReader:
 
     async def is_merged_source(self, source_sha: str) -> bool:
         comparison = await self._api(f"compare/{source_sha}...main")
-        return comparison.get("status") in {"behind", "identical"}
+        # GitHub reports the HEAD (`main`) relative to the base (`source_sha`).
+        # A candidate already merged into main therefore yields `ahead` (or
+        # `identical`), while `behind` means the candidate is ahead of main.
+        return comparison.get("status") in {"ahead", "identical"}
 
     async def runs(self) -> list[dict[str, Any]]:
         response = await self._api(
@@ -377,7 +382,23 @@ class GitHubQualifiedBetaReader:
         return _github_objects(artifacts, "candidate qualification artifacts are invalid")
 
     async def download(self, url: str) -> bytes:
-        response = await get_web_fetch_client().get(url, headers=self._headers())
+        client = get_web_fetch_client()
+        response = await client.get(url, headers=self._headers())
+        if response.status_code in {301, 302, 303, 307, 308}:
+            location = response.headers.get("location")
+            if not isinstance(location, str):
+                _fail("candidate GitHub asset is unavailable")
+            redirect = urlsplit(location)
+            if (
+                redirect.scheme != "https"
+                or redirect.hostname != "release-assets.githubusercontent.com"
+                or redirect.port is not None
+                or redirect.username is not None
+                or redirect.password is not None
+            ):
+                _fail("candidate GitHub asset is unavailable")
+            # Never forward the GitHub API credential to the signed asset URL.
+            response = await client.get(location)
         if response.status_code != 200:
             _fail("candidate GitHub asset is unavailable")
         return response.content
@@ -516,3 +537,18 @@ async def build_qualified_beta_manifest(
         return validate_manifest(manifest)
     except ValueError as exc:
         raise QualifiedBetaAdmissionError("candidate manifest does not satisfy the canonical contract") from exc
+
+
+# Public read-only evidence helpers shared by the emergency Beta evidence
+# builder. These aliases keep all GitHub parsing, digest, freshness, and
+# fail-closed behavior owned by this module instead of duplicating it.
+candidate_asset = _asset
+candidate_asset_digest = _asset_digest
+candidate_asset_url = _asset_url
+candidate_current_time = _current_time
+candidate_fail = _fail
+candidate_github_object = _github_object
+candidate_is_fresh = _is_fresh
+candidate_read_github = _read_github
+candidate_release_assets = _release_assets
+candidate_timestamp = _timestamp

@@ -37,3 +37,11 @@ export function resolveScanRoots(env: ScanEnv, exists: (p: string) => boolean): 
   }
   return roots
 }
+
+// The full candidate root list WITHOUT the existence filter. Callers diff this
+// against the filesystem to protect the subtree of a candidate root that is
+// currently absent (e.g. an unmounted network/removable drive) from the
+// retention diff — a vanished root must never purge its previously-indexed rows.
+export function candidateScanRoots(env: ScanEnv): ScanRoot[] {
+  return resolveScanRoots(env, () => true)
+}

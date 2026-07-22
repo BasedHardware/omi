@@ -25,8 +25,8 @@ export function Toggle(props: {
     >
       <span
         className={cn(
-          'absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all duration-200',
-          on ? 'left-[1.125rem]' : 'left-0.5'
+          'absolute top-0.5 h-4 w-4 rounded-full transition-all duration-200',
+          on ? 'left-[1.125rem] bg-[color:var(--accent-contrast)]' : 'left-0.5 bg-white'
         )}
       />
     </button>

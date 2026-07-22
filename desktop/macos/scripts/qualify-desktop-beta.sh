@@ -12,7 +12,6 @@ REPO_ROOT="$(cd "$DESKTOP_DIR/../.." && pwd)"
 KEYVALUE_PY="$SCRIPT_DIR/release-keyvalue.py"
 
 KEEP_STACK=0
-PROMOTE=1
 AUTOMATIC=0
 SIGNED_SMOKE_RESULT=""
 CANDIDATE_GATE_RESULT=""
@@ -21,15 +20,14 @@ RELEASE_TAG=""
 
 usage() {
   cat <<'USAGE'
-Qualify a macOS desktop candidate (rebuild tag + T2 core E2E + promote beta).
+Qualify a macOS desktop candidate (rebuild tag + T2 core E2E).
 
 Usage:
-  qualify-desktop-beta.sh [--keep-stack] [--no-promote] [--automatic] [--github-actions-artifact] \
+  qualify-desktop-beta.sh [--keep-stack] [--automatic] [--github-actions-artifact] \
     [--signed-smoke-result PATH --candidate-gate-result PATH] <vX.Y.Z+BUILD-macos>
 
 Options:
   --keep-stack   Leave dev-harness stack running on exit (default: make dev-down)
-  --no-promote   Write qualification evidence without dispatching beta promotion
   --automatic    Run richer automatic gates and require this to remain the newest candidate
   --signed-smoke-result PATH  Codemagic signed-artifact smoke evidence (required with --automatic)
   --candidate-gate-result PATH  Digest-bound candidate gate evidence (required with --automatic)
@@ -41,10 +39,6 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --keep-stack)
       KEEP_STACK=1
-      shift
-      ;;
-    --no-promote)
-      PROMOTE=0
       shift
       ;;
     --automatic)
@@ -120,10 +114,12 @@ fi
 VERSION="${RELEASE_TAG#v}"
 VERSION="${VERSION%-macos}"
 BUNDLE="omi-qualification-${VERSION}"
-WORKTREE="$REPO_ROOT/.qualification-worktrees/$RELEASE_TAG"
+WORKTREE=""
 LAUNCH_LOG=""
+LAUNCH_SIGNAL_FILE=""
 DESKTOP_LAUNCH_PID=""
 QUALIFICATION_SUCCESS=0
+DESKTOP_PREPARE_WAIT_SECS=3600
 BRIDGE_WAIT_SECS=900
 
 gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,isPrerelease,publishedAt,assets,body \
@@ -132,19 +128,7 @@ gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,i
 python3 "$KEYVALUE_PY" preflight-release /tmp/desktop-qualification-release.json "$RELEASE_TAG"
 
 SHA=$(git -C "$REPO_ROOT" rev-list -n1 "$RELEASE_TAG")
-
-remove_registered_qualification_worktree() {
-  if git -C "$REPO_ROOT" worktree list --porcelain | grep -Fxq "worktree $WORKTREE"; then
-    git -C "$REPO_ROOT" worktree remove --force "$WORKTREE"
-    git -C "$REPO_ROOT" worktree prune
-  elif [[ -e "$WORKTREE" ]]; then
-    echo "qualification failed: unregistered worktree path exists: $WORKTREE" >&2
-    return 1
-  fi
-}
-
-remove_registered_qualification_worktree
-git -C "$REPO_ROOT" worktree add --detach "$WORKTREE" "$RELEASE_TAG"
+WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"
 
 LAUNCH_LOG="$WORKTREE/.qualification-desktop-launch.log"
 
@@ -216,6 +200,24 @@ terminate_qualification_desktop() {
   fi
 }
 
+wait_for_desktop_launch() {
+  local signal_file="$1"
+  local deadline=$((SECONDS + DESKTOP_PREPARE_WAIT_SECS))
+  while (( SECONDS < deadline )); do
+    if [[ -f "$signal_file" ]]; then
+      echo "desktop launch dispatched after bounded preparation"
+      return 0
+    fi
+    if [[ -n "$DESKTOP_LAUNCH_PID" ]] && ! kill -0 "$DESKTOP_LAUNCH_PID" 2>/dev/null; then
+      echo "qualification failed: desktop launch process exited during preparation" >&2
+      return 1
+    fi
+    sleep 5
+  done
+  echo "qualification failed: desktop launch not dispatched within ${DESKTOP_PREPARE_WAIT_SECS}s" >&2
+  return 1
+}
+
 wait_for_bridge() {
   local port="$1"
   local deadline=$((SECONDS + BRIDGE_WAIT_SECS))
@@ -261,24 +263,32 @@ cleanup() {
   if [[ "$KEEP_STACK" -eq 0 && -d "$WORKTREE" ]]; then
     (cd "$WORKTREE" && PROVIDER_MODE=offline make dev-down) >/dev/null 2>&1 || true
   fi
-  if [[ "$QUALIFICATION_SUCCESS" -eq 1 ]]; then
-    remove_registered_qualification_worktree || \
-      echo "qualification cleanup: retained unregistered worktree path: $WORKTREE" >&2
-  fi
   exit "$exit_code"
 }
 trap cleanup EXIT
 
 terminate_qualification_desktop "$BUNDLE"
 "$SCRIPT_DIR/prepare-qualification-profile.sh" "$BUNDLE"
+LAUNCH_SIGNAL_FILE="$WORKTREE/.qualification-desktop-launched"
+rm -f "$LAUNCH_SIGNAL_FILE"
 
 (
   cd "$WORKTREE"
   PROVIDER_MODE=offline make dev-up
-  OMI_SKIP_SETTINGS_SEED=1 make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice
+  OMI_DESKTOP_LAUNCH_SIGNAL_FILE="$LAUNCH_SIGNAL_FILE" OMI_SKIP_SETTINGS_SEED=1 \
+    make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice
 ) >"$LAUNCH_LOG" 2>&1 &
 DESKTOP_LAUNCH_PID=$!
-# Build time must not consume the desktop-launch readiness allowance.
+
+if ! wait_for_desktop_launch "$LAUNCH_SIGNAL_FILE"; then
+  echo "--- last 80 lines of $LAUNCH_LOG ---" >&2
+  tail -n 80 "$LAUNCH_LOG" >&2 || true
+  exit 1
+fi
+
+# The bridge gets its complete post-launch readiness allowance; cold Rust,
+# agent-runtime, SwiftPM, packaging, and signing work consumed only the separate
+# bounded preparation phase above.
 SECONDS=0
 
 if ! wait_for_bridge "$AUTOMATION_PORT"; then
@@ -375,16 +385,5 @@ python3 "$KEYVALUE_PY" update-qualified-beta "$BODY_FILE" "$STAMP" "$SHA" "$ASSE
 gh release upload "$RELEASE_TAG" "/tmp/$ASSET" --repo BasedHardware/omi
 gh release edit "$RELEASE_TAG" --repo BasedHardware/omi --notes-file "$BODY_FILE"
 
-if [[ "$PROMOTE" -eq 1 ]]; then
-  PROMOTION_ARGS=(--repo BasedHardware/omi -f release_tag="$RELEASE_TAG")
-  if [[ "$AUTOMATIC" -eq 1 ]]; then
-    PROMOTION_ARGS+=(-f automatic=true)
-  fi
-  gh workflow run desktop_promote_beta.yml "${PROMOTION_ARGS[@]}"
-fi
-
 QUALIFICATION_SUCCESS=1
 echo "Qualified $RELEASE_TAG for beta at $SHA (evidence asset: $ASSET, automation port: $AUTOMATION_PORT)"
-if [[ "$PROMOTE" -eq 1 ]]; then
-  echo "Dispatched qualified beta promotion for $RELEASE_TAG"
-fi

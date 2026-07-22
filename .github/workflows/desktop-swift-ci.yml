@@ -7,8 +7,10 @@ on:
     branches: main
 
 concurrency:
-  group: desktop-swift-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Supersede stale revisions of the same PR, but never let a later main push
+  # cancel the exact-SHA evidence consumed by desktop release planning.
+  group: desktop-swift-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
@@ -41,14 +43,30 @@ jobs:
           echo "$FILES"
           echo "diff_base=$DIFF_BASE" >> "$GITHUB_OUTPUT"
 
+          # Keep the producer aligned with plan-desktop-release.py: every path
+          # eligible for a desktop candidate must produce both exact-SHA Swift
+          # checks. Changelog/control docs and the separately released Rust
+          # backend remain outside the candidate path set.
+          RELEASABLE_DESKTOP=false
+          while IFS= read -r path; do
+            case "$path" in
+              desktop/macos/Backend-Rust/*|desktop/macos/changelog/*|desktop/macos/CHANGELOG[.]json|desktop/macos/AGENTS[.]md)
+                ;;
+              desktop/macos/*)
+                RELEASABLE_DESKTOP=true
+                break
+                ;;
+            esac
+          done <<< "$FILES"
+
           SHOULD_RUN=false
-          if echo "$FILES" | grep -qE '^desktop/macos/Desktop/|^desktop/macos/test\.sh$|^desktop/macos/scripts/|^desktop/macos/tests/|^desktop/macos/e2e/flows/|^\.github/workflows/desktop-swift-ci\.yml$|^\.github/checks-manifest\.yaml$|^\.github/scripts/run_checks\.py$|^\.github/scripts/test_desktop_manifest_routes\.py$|^\.github/scripts/test_desktop_swift_ci_contract\.py$'; then
+          if [ "$RELEASABLE_DESKTOP" = "true" ] || echo "$FILES" | grep -qE '^desktop/macos/Desktop/|^desktop/macos/test\.sh$|^desktop/macos/scripts/|^desktop/macos/tests/|^desktop/macos/e2e/flows/|^\.github/workflows/desktop-swift-ci\.yml$|^\.github/checks-manifest\.yaml$|^\.github/scripts/run_checks\.py$|^\.github/scripts/test_desktop_manifest_routes\.py$|^\.github/scripts/test_desktop_swift_ci_contract\.py$'; then
             SHOULD_RUN=true
           fi
           echo "should_run=$SHOULD_RUN" >> "$GITHUB_OUTPUT"
 
-          DESKTOP_SWIFT=false
-          if echo "$FILES" | grep -qE '^desktop/macos/Desktop/|^desktop/macos/test\.sh$|^desktop/macos/scripts/|^desktop/macos/tests/|^desktop/macos/e2e/flows/|^\.github/workflows/desktop-swift-ci\.yml$'; then
+          DESKTOP_SWIFT=$RELEASABLE_DESKTOP
+          if echo "$FILES" | grep -qE '^\.github/workflows/desktop-swift-ci\.yml$'; then
             DESKTOP_SWIFT=true
           fi
           PACKAGE_SWIFT=false

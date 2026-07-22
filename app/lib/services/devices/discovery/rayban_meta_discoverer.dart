@@ -24,6 +24,12 @@ class RayBanMetaDiscoverer extends DeviceDiscoverer {
   /// start registration from the device list; never connectable directly.
   static const String setupPlaceholderId = 'rayban-meta-setup';
 
+  /// Synthetic id persisted by the audio-only fallback before selections were
+  /// keyed by the stable HFP UID. It never matches a real input, so a stored
+  /// selection carrying it is treated as no selection at all rather than as a
+  /// UID that failed to match.
+  static const String legacyAudioOnlyId = 'rayban-meta-audio';
+
   @override
   String get name => 'Ray-Ban Meta';
 
@@ -68,7 +74,8 @@ class RayBanMetaDiscoverer extends DeviceDiscoverer {
         final storedDevice = SharedPreferencesUtil().btDevice;
         final hasStoredAudioSelection = storedDevice.type == DeviceType.raybanMeta &&
             storedDevice.locator?.extras[audioOnlyExtraKey] == true &&
-            storedDevice.id.isNotEmpty;
+            storedDevice.id.isNotEmpty &&
+            storedDevice.id != legacyAudioOnlyId;
 
         if (hasStoredAudioSelection) {
           final selected = inputs.where((input) => input.uid == storedDevice.id).firstOrNull;

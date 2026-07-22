@@ -126,6 +126,25 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn('test "$STATIC_RESULT" = success', gate)
         self.assertIn('test "$TEST_RESULT" = success', gate)
 
+    def test_later_main_push_cannot_cancel_exact_sha_release_evidence(self):
+        """A backend/docs push must not strand an earlier selected desktop SHA."""
+        workflow = _workflow_text()
+        concurrency = workflow.split("jobs:", 1)[0]
+
+        # PR updates remain safely supersedable by PR number, while every main
+        # push gets an immutable group and therefore runs its own exact-SHA
+        # Build & Tests and Release Compile checks to a terminal conclusion.
+        self.assertIn(
+            "group: desktop-swift-${{ github.event.pull_request.number || github.sha }}",
+            concurrency,
+        )
+        self.assertIn(
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+            concurrency,
+        )
+        self.assertNotIn("github.ref", concurrency)
+        self.assertNotIn("cancel-in-progress: true", concurrency)
+
     def test_launcher_contract_prerequisites_are_installed(self):
         """Discovered shell tests may use the repository's pinned workflow linter."""
         job = self.jobs["desktop-swift-tests"]
@@ -219,6 +238,17 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             re.search(r'"\$PACKAGE_RESOLVED"\s*=\s*"true"', combined),
             "release-compile job must gate SHOULD_RUN on PACKAGE_RESOLVED=true",
         )
+
+    def test_every_releasable_desktop_path_produces_exact_sha_checks(self):
+        """Planner-eligible packaging/assets must not silently skip Swift evidence."""
+        changes = self.jobs["changes"]
+        self.assertIn("RELEASABLE_DESKTOP=false", changes)
+        self.assertIn("RELEASABLE_DESKTOP=true", changes)
+        self.assertIn("desktop/macos/*", changes)
+        for excluded in ("Backend-Rust/", "changelog/", "CHANGELOG[.]json", "AGENTS[.]md"):
+            self.assertIn(excluded, changes)
+        self.assertIn('"$RELEASABLE_DESKTOP" = "true"', changes)
+        self.assertIn("DESKTOP_SWIFT=$RELEASABLE_DESKTOP", changes)
 
     def test_manifest_checks_use_the_changed_diff_base_on_pushes(self):
         """Pushes must lint the just-pushed diff, not checkout's origin/main HEAD."""

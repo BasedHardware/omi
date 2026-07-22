@@ -40,8 +40,12 @@ export PYTHONPATH="$TMPDIR${PYTHONPATH:+:$PYTHONPATH}"
 python3 - "$HARNESS" <<'PY'
 import importlib.machinery
 import importlib.util
+import argparse
 import json
 import os
+import tempfile
+from pathlib import Path
+import re
 import sys
 
 path = sys.argv[1]
@@ -88,6 +92,122 @@ except RuntimeError:
     pass
 else:
     raise AssertionError("relative health log path must fail loudly")
+
+flow_path = Path(path).parent.parent / "e2e/flows/rewind-settings.yaml"
+flow_text = flow_path.read_text(encoding="utf-8")
+s1_block = flow_text.split("  - id: S1", 1)[1].split("  - id: S2", 1)[0]
+wait_expectations = {"state.selectedSettingsSection": "Rewind"}
+freshness_match = re.search(r"state\.snapshotStale:\s*(true|false)", s1_block)
+if freshness_match:
+    wait_expectations["state.snapshotStale"] = freshness_match.group(1) == "true"
+
+state_sequence = [
+    {"selectedSettingsSection": "Rewind", "snapshotStale": True},
+    {"selectedSettingsSection": "Rewind", "snapshotStale": False},
+]
+state_calls = []
+original_state_snapshot = module.state_snapshot
+wait_context = module.HarnessContext(
+    base_url="http://127.0.0.1:59999",
+    flow_path=flow_path,
+    run_dir=Path("runs"),
+    steps_dir=Path("runs/steps"),
+    lane="bridge",
+    log_path=Path("/private/tmp/omi/harness-test.log"),
+    log_start=0,
+    bundle_id=None,
+    process_match=None,
+)
+module.state_snapshot = lambda _ctx: state_calls.append(len(state_calls)) or state_sequence[min(len(state_calls) - 1, 1)]
+wait_ok, wait_state = module.wait_for_state(wait_context, wait_expectations, timeout=1.0)
+module.state_snapshot = original_state_snapshot
+assert wait_ok and wait_state["snapshotStale"] is False, (wait_ok, wait_state, wait_expectations, state_calls)
+assert len(state_calls) == 2, "rewind flow must not start its MainActor action from a stale cached state"
+assert "timeout_seconds: 30" in s1_block, "rewind freshness wait must remain bounded"
+assert "halt_on_failure: true" in s1_block, "failed rewind readiness must halt before the action"
+
+module.state_snapshot = lambda _ctx: {"selectedSettingsSection": "Rewind", "snapshotStale": True}
+stale_ok, stale_state = module.wait_for_state(wait_context, wait_expectations, timeout=0.001)
+module.state_snapshot = original_state_snapshot
+assert not stale_ok and stale_state["snapshotStale"] is True, "persistent MainActor contention must still fail closed"
+
+
+def run_flow_case(s1_ok, s2_ok):
+    flow = {
+        "version": 2,
+        "name": "rewind-settings-gating-contract",
+        "steps": [
+            {"id": "S1", "name": "readiness", "halt_on_failure": True},
+            {"id": "S2", "name": "snapshot action"},
+            {"id": "S3", "name": "logs clean"},
+        ],
+    }
+    originals = {
+        name: getattr(module, name)
+        for name in (
+            "read_yaml",
+            "validate_flow_schema",
+            "create_context",
+            "request_json",
+            "execute_step",
+            "collect_logs",
+            "recent_traces",
+        )
+    }
+    executed = []
+
+    def fake_request_json(_base_url, method, route, payload=None, timeout=20.0):
+        del payload, timeout
+        if method == "POST" and route == "/traces/clear":
+            return {"ok": True}
+        if method == "GET" and route == "/capabilities":
+            return {"ok": True, "result": {}}
+        if method == "GET" and route == "/state":
+            return {"ok": True, "result": {}}
+        raise AssertionError((method, route))
+
+    def fake_execute_step(_ctx, _index, step):
+        step_id = step["id"]
+        executed.append(step_id)
+        ok = s1_ok if step_id == "S1" else s2_ok if step_id == "S2" else True
+        return {"id": step_id, "name": step["name"], "ok": ok, "duration_ms": 0.0}
+
+    try:
+        module.read_yaml = lambda _path: flow
+        module.validate_flow_schema = lambda _flow, _args: 2
+        module.create_context = lambda *_args: wait_context
+        module.request_json = fake_request_json
+        module.execute_step = fake_execute_step
+        module.collect_logs = lambda _ctx: {"error_count": 0}
+        module.recent_traces = lambda _ctx: []
+        with tempfile.TemporaryDirectory() as out:
+            args = argparse.Namespace(
+                flow=str(flow_path),
+                out=out,
+                lane="bridge",
+                port=59999,
+                bundle_id=None,
+                process_match=None,
+            )
+            code, _run_dir, metrics = module.run_flow_once(args)
+    finally:
+        for name, value in originals.items():
+            setattr(module, name, value)
+    return code, executed, metrics
+
+
+failed_readiness_code, failed_readiness_steps, _ = run_flow_case(False, True)
+assert failed_readiness_code == 1
+assert failed_readiness_steps == ["S1"], "failed readiness must execute zero subsequent actions"
+
+fresh_code, fresh_steps, _ = run_flow_case(True, True)
+assert fresh_code == 0
+assert fresh_steps.count("S2") == 1, "fresh readiness must execute the action exactly once"
+
+action_failure_code, action_failure_steps, _ = run_flow_case(True, False)
+assert action_failure_code == 1
+assert action_failure_steps == ["S1", "S2", "S3"]
+assert action_failure_steps.count("S2") == 1, "action failure must be terminal and never retried"
 
 
 class FakeResponse:

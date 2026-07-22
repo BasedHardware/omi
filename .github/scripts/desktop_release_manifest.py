@@ -237,11 +237,17 @@ def validate_manifest(value: object) -> dict[str, Any]:
     _require_string(manifest, "ed_signature")
 
     evidence_asset = _require_string(manifest, "qualification_evidence_asset")
-    if not EVIDENCE_ASSET_RE.fullmatch(evidence_asset):
-        _fail("qualification_evidence_asset must be a qualification-evidence-*.json asset name")
+    if not EVIDENCE_ASSET_RE.fullmatch(evidence_asset) and evidence_asset != "desktop-smoke-result.json":
+        _fail("qualification_evidence_asset must be a qualification evidence or signed-smoke asset name")
     _require_sha256(manifest, "qualification_evidence_sha256")
-    if manifest.get("qualification_tier") != "T2" or manifest.get("qualification_passed") is not True:
-        _fail("qualification must be passed at tier T2")
+    qualification_tier = manifest.get("qualification_tier")
+    qualification_passed = manifest.get("qualification_passed")
+    if (qualification_tier, qualification_passed) not in {("T2", True), ("emergency", False)}:
+        _fail("qualification must be passed at tier T2 or retain emergency false truth")
+    if qualification_tier == "T2" and not EVIDENCE_ASSET_RE.fullmatch(evidence_asset):
+        _fail("T2 qualification requires a qualification-evidence-*.json asset")
+    if qualification_tier == "emergency" and evidence_asset != "desktop-smoke-result.json":
+        _fail("emergency qualification requires exact signed-smoke evidence")
 
     mode = manifest.get("backend_mode")
     if mode not in BACKEND_MODES:

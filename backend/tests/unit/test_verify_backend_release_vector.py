@@ -53,6 +53,13 @@ def _cloud_run_document(*, revision: str, image: str, environment: str = 'dev') 
     }
 
 
+def _cloud_run_revision_document(*, image: str, ready: str = 'True', reason: str = 'Ready') -> dict:
+    return {
+        'spec': {'containers': [{'image': image}]},
+        'status': {'conditions': [{'type': 'Ready', 'status': ready, 'reason': reason}]},
+    }
+
+
 def _documents(expectation: verifier.DeploymentExpectation) -> dict:
     documents = {
         f'cloud_run/{service}': _cloud_run_document(
@@ -62,6 +69,12 @@ def _documents(expectation: verifier.DeploymentExpectation) -> dict:
         )
         for service, revision in expectation.revisions.items()
     }
+    documents.update(
+        {
+            f'cloud_run_revision/{service}': _cloud_run_revision_document(image=expectation.image)
+            for service in expectation.revisions
+        }
+    )
     documents.update(
         {
             'gke/deployment': {
@@ -347,7 +360,7 @@ def test_prod_deploy_invokes_legacy_binding_migration_before_deploy() -> None:
     workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml'
     text = workflow.read_text(encoding='utf-8')
 
-    assert 'backend/scripts/preflight-cloud-run-deploy.py' in text
+    assert 'preflight-cloud-run-deploy.py' in text
     assert text.count('--migrate-legacy-public-binding') == 4
     for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         assert f'--migrate-legacy-public-binding {service}' in text
@@ -491,7 +504,7 @@ def test_static_release_vector_verify_binds_the_workflow_short_sha() -> None:
         text = workflow.read_text(encoding='utf-8')
         assert 'verify_backend_release_vector.py' in text, f'{workflow.name} must invoke the release-vector verifier'
         # Count verify invocations and the --short-sha wiring; require a 1:1 match.
-        invocations = text.count('verify_backend_release_vector.py \\\n')
+        invocations = text.count('verify_backend_release_vector.py')
         wired = text.count('--short-sha "${{ steps.image-tag.outputs.short_sha }}"')
         assert invocations == wired, (
             f'{workflow.name}: {invocations} release-vector verify call(s) but '
@@ -521,6 +534,22 @@ def test_expectation_derives_a_prod_vector_with_the_matching_environment() -> No
     assert expectation.revisions['backend'] == 'backend-abcdef1-54321-2'
     assert expectation.listener_deployment == 'prod-omi-backend-listen'
     assert verifier.evaluate(expectation, _documents(expectation)) == []
+
+
+def test_expectation_uses_the_immutable_release_record_image_when_provided() -> None:
+    recorded_image = 'gcr.io/based-hardware/backend@sha256:' + 'a' * 64
+
+    expectation = verifier.build_expectation(
+        commit_sha='abcdef1234567890',
+        deploy_run_id='54321',
+        deploy_run_attempt='2',
+        project='based-hardware',
+        region='us-central1',
+        environment='prod',
+        expected_image=recorded_image,
+    )
+
+    assert expectation.image == recorded_image
 
 
 def test_expectation_uses_the_workflow_short_sha_when_ambiguous() -> None:
@@ -577,6 +606,20 @@ def test_read_only_commands_are_limited_to_queries() -> None:
     assert commands['cloud_run/backend'][:4] == ['gcloud', 'run', 'services', 'describe']
 
 
+def test_candidate_read_only_commands_describe_each_expected_revision() -> None:
+    expectation = _expectation()
+    commands = verifier.build_read_only_commands(expectation, include_candidate_revisions=True)
+
+    verifier.assert_commands_are_read_only(commands)
+    assert commands['cloud_run_revision/backend'][:5] == [
+        'gcloud',
+        'run',
+        'revisions',
+        'describe',
+        expectation.revisions['backend'],
+    ]
+
+
 def test_evaluate_accepts_matching_deployed_composition() -> None:
     expectation = _expectation()
 
@@ -612,11 +655,130 @@ def test_evaluate_rejects_a_partial_cloud_run_traffic_apply() -> None:
 def test_candidate_evaluation_accepts_ready_revision_before_traffic_promotion() -> None:
     expectation = _expectation()
     documents = _documents(expectation)
-    documents['cloud_run/backend']['status']['traffic'] = [{'revisionName': 'backend-old', 'percent': 100}]
+    for service, revision in expectation.revisions.items():
+        documents[f'cloud_run/{service}']['status'].update(
+            {
+                'latestCreatedRevisionName': revision,
+                'latestReadyRevisionName': f'{service}-old',
+                'traffic': [{'revisionName': f'{service}-old', 'percent': 100}],
+            }
+        )
+        documents[f'cloud_run_revision/{service}'] = _cloud_run_revision_document(
+            image=expectation.image,
+            ready='True',
+            reason='Retired',
+        )
 
     errors = verifier.evaluate(expectation, documents, require_serving_traffic=False)
 
     assert errors == []
+
+    serving_errors = verifier.evaluate(expectation, documents)
+    assert 'cloud_run/backend: latest ready revision is not backend-abcdef1-12345-1' in serving_errors
+    assert 'cloud_run/backend: expected revision does not receive 100% traffic' in serving_errors
+
+
+def test_candidate_evaluation_accepts_a_tagged_candidate_with_omitted_percent() -> None:
+    """Regression for run 29891331283: Cloud Run serializes a tagged, no-allocation
+    candidate revision with ``percent: null`` (effective 0%). The verifier must read
+    an omitted/null percent as zero, not as pre-promotion traffic. Mirrors the exact
+    failed-development shape: prior serving revision at 100% plus the Ready candidate
+    with an omitted percent.
+    """
+    expectation = _expectation()
+    documents = _documents(expectation)
+    for service, revision in expectation.revisions.items():
+        documents[f'cloud_run/{service}']['status'].update(
+            {
+                'latestCreatedRevisionName': revision,
+                'latestReadyRevisionName': f'{service}-old',
+                'traffic': [
+                    {'revisionName': f'{service}-old', 'percent': 100},
+                    {'revisionName': revision, 'tag': 'candidate', 'percent': None},
+                ],
+            }
+        )
+        documents[f'cloud_run_revision/{service}'] = _cloud_run_revision_document(
+            image=expectation.image,
+            ready='True',
+            reason='Retired',
+        )
+
+    errors = verifier.evaluate(expectation, documents, require_serving_traffic=False)
+
+    assert errors == []
+
+    # Strict serving verification still rejects the no-traffic candidate until it is promoted to 100%.
+    serving_errors = verifier.evaluate(expectation, documents)
+    assert 'cloud_run/backend: expected revision does not receive 100% traffic' in serving_errors
+
+
+@pytest.mark.parametrize(
+    ('percent', 'expected_error'),
+    (
+        (5, 'cloud_run/backend: expected revision carries traffic before promotion'),
+        (100, 'cloud_run/backend: expected revision carries traffic before promotion'),
+        ('0', 'cloud_run/backend: candidate traffic allocation is ambiguous'),
+        (True, 'cloud_run/backend: candidate traffic allocation is ambiguous'),
+        (-1, 'cloud_run/backend: candidate traffic allocation is ambiguous'),
+    ),
+)
+def test_candidate_evaluation_rejects_positive_or_ambiguous_candidate_traffic(percent, expected_error: str) -> None:
+    expectation = _expectation()
+    documents = _documents(expectation)
+    for service in expectation.revisions:
+        documents[f'cloud_run/{service}']['status']['traffic'] = [
+            {'revisionName': f'{service}-old', 'percent': 100},
+            {'revisionName': expectation.revisions[service], 'percent': percent},
+        ]
+
+    errors = verifier.evaluate(expectation, documents, require_serving_traffic=False)
+
+    assert expected_error in errors
+
+
+@pytest.mark.parametrize(
+    ('mutate', 'expected_error'),
+    (
+        (
+            lambda expectation, documents: documents['cloud_run_revision/backend']['status'].update(
+                {'conditions': [{'type': 'Ready', 'status': 'False'}]}
+            ),
+            'cloud_run/backend: expected revision is not Ready',
+        ),
+        (
+            lambda expectation, documents: documents.pop('cloud_run_revision/backend'),
+            'cloud_run/backend: expected revision is not Ready',
+        ),
+        (
+            lambda expectation, documents: documents['cloud_run/backend']['spec']['template']['spec']['containers'][
+                0
+            ].update({'image': 'gcr.io/based-hardware-dev/backend:wrong'}),
+            'cloud_run/backend: template image is not gcr.io/based-hardware-dev/backend:abcdef1',
+        ),
+        (
+            lambda expectation, documents: documents['cloud_run/backend']['status'].update(
+                {'traffic': [{'revisionName': expectation.revisions['backend'], 'percent': 100}]}
+            ),
+            'cloud_run/backend: expected revision carries traffic before promotion',
+        ),
+        (
+            lambda expectation, documents: documents['cloud_run/backend']['status'].update(
+                {'latestCreatedRevisionName': 'backend-wrong'}
+            ),
+            'cloud_run/backend: latest created revision is not backend-abcdef1-12345-1',
+        ),
+    ),
+)
+def test_candidate_evaluation_rejects_invalid_revision_state(mutate, expected_error: str) -> None:
+    expectation = _expectation()
+    documents = _documents(expectation)
+    for service in expectation.revisions:
+        documents[f'cloud_run/{service}']['status']['traffic'] = [{'revisionName': f'{service}-old', 'percent': 100}]
+
+    mutate(expectation, documents)
+
+    assert expected_error in verifier.evaluate(expectation, documents, require_serving_traffic=False)
 
 
 def test_evaluate_rejects_a_listener_rollout_timeout_when_updated_replicas_lag() -> None:
@@ -729,9 +891,11 @@ def test_evidence_records_the_derived_release_vector() -> None:
 def test_candidate_cloud_run_only_verification_does_not_require_listener_mutations() -> None:
     expectation = _expectation()
     documents = _documents(expectation)
-    cloud_run_only = {key: value for key, value in documents.items() if key.startswith('cloud_run/')}
+    for service in expectation.revisions:
+        documents[f'cloud_run/{service}']['status']['traffic'] = [{'revisionName': f'{service}-old', 'percent': 100}]
+    cloud_run_only = {key: value for key, value in documents.items() if key.startswith('cloud_run')}
 
-    commands = verifier.build_read_only_commands(expectation, include_listener=False)
+    commands = verifier.build_read_only_commands(expectation, include_listener=False, include_candidate_revisions=True)
     errors = verifier.evaluate(
         expectation,
         cloud_run_only,
@@ -752,6 +916,157 @@ def test_candidate_cloud_run_only_verification_does_not_require_listener_mutatio
     assert 'gke_listener' not in report
 
 
+def test_candidate_verification_accepts_a_ready_retired_zero_traffic_revision() -> None:
+    expectation = _expectation()
+    documents = _documents(expectation)
+    for service in expectation.revisions:
+        documents[f'cloud_run/{service}']['status']['traffic'] = [
+            {'revisionName': f'{service}-serving', 'percent': 100},
+            {'revisionName': expectation.revisions[service], 'percent': 0},
+        ]
+        documents[f'cloud_run_revision/{service}']['status']['conditions'][0]['reason'] = 'Retired'
+
+    cloud_run_only = {key: value for key, value in documents.items() if key.startswith('cloud_run')}
+
+    assert (
+        verifier.evaluate(
+            expectation,
+            cloud_run_only,
+            require_serving_traffic=False,
+            include_listener=False,
+        )
+        == []
+    )
+
+
+def test_serving_cloud_run_only_verification_is_allowed_and_requires_exact_traffic(monkeypatch) -> None:
+    expectation = _expectation()
+    documents = _documents(expectation)
+    monkeypatch.setattr(verifier, 'collect_documents', lambda _commands: documents)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            'verify_backend_release_vector.py',
+            '--commit-sha',
+            expectation.commit_sha,
+            '--deploy-run-id',
+            expectation.deploy_run_id,
+            '--deploy-run-attempt',
+            expectation.deploy_run_attempt,
+            '--project',
+            expectation.project,
+            '--environment',
+            expectation.environment,
+            '--cloud-run-only',
+        ],
+    )
+
+    assert verifier.main() == 0
+
+    documents['cloud_run/backend']['status']['traffic'] = [{'revisionName': 'backend-old', 'percent': 100}]
+    assert verifier.evaluate(expectation, documents, include_listener=False) == [
+        'cloud_run/backend: expected revision does not receive 100% traffic'
+    ]
+
+
+def test_deploy_stages_workflow_owned_control_and_validation_sources_inside_admitted_workspace(tmp_path: Path) -> None:
+    workflow = (BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8')
+    deploy = workflow.split('\n  deploy:\n', 1)[1]
+
+    control_checkout = 'Checkout workflow-owned deploy-control source'
+    staging = 'Stage immutable workflow validation source and deploy-control scripts'
+    release_checkout = 'Checkout admitted runtime source'
+    install = 'Install immutable workflow validation source and deploy-control scripts'
+    assert control_checkout in deploy
+    assert staging in deploy
+    assert release_checkout in deploy
+    assert install in deploy
+    assert (
+        deploy.index(control_checkout) < deploy.index(staging) < deploy.index(release_checkout) < deploy.index(install)
+    )
+    checkout_step = deploy[
+        deploy.index(control_checkout) : deploy.index('\n      - name:', deploy.index(control_checkout) + 1)
+    ]
+    stage_step = deploy[deploy.index(staging) : deploy.index('\n      - name:', deploy.index(staging) + 1)]
+    install_step = deploy[deploy.index(install) : deploy.index('\n      - name:', deploy.index(install) + 1)]
+    assert 'ref: ${{ github.sha }}' in checkout_step
+    assert 'workflow_source="$RUNNER_TEMP/backend-deploy-workflow-source"' in stage_step
+    assert 'cp -a .workflow-source/.github "$workflow_source/.github"' in stage_step
+    assert 'control_scripts="$RUNNER_TEMP/backend-deploy-control-scripts"' in stage_step
+    assert 'cp -a .workflow-source/backend/scripts "$control_scripts"' in stage_step
+    assert 'workflow_root="$GITHUB_WORKSPACE/.deploy-workflow-source"' in install_step
+    assert 'cp -a "$RUNNER_TEMP/backend-deploy-workflow-source/.github" "$workflow_root/.github"' in install_step
+    assert 'control_scripts="$GITHUB_WORKSPACE/.deploy-control/scripts"' in install_step
+    assert 'cp -a "$RUNNER_TEMP/backend-deploy-control-scripts" "$control_scripts"' in install_step
+    assert 'DEPLOY_CONTROL_SCRIPTS=%s' in install_step
+    assert 'DEPLOY_WORKFLOW_ROOT=%s' in install_step
+    assert '>> "$GITHUB_ENV"' in install_step
+
+    workspace = tmp_path / 'workspace'
+    manifest = workspace / 'backend' / 'deploy' / 'runtime_env.yaml'
+    manifest.parent.mkdir(parents=True)
+    manifest.touch()
+    legacy_script = tmp_path / 'runner-temp' / 'backend-deploy-control-scripts' / 'preflight-cloud-run-deploy.py'
+    legacy_script.parent.mkdir(parents=True)
+    legacy_script.touch()
+    assert legacy_script.resolve().parents[2] != workspace
+    assert not (legacy_script.resolve().parents[2] / 'backend' / 'deploy' / 'runtime_env.yaml').exists()
+
+    control_script = workspace / '.deploy-control' / 'scripts' / 'preflight-cloud-run-deploy.py'
+    control_script.parent.mkdir(parents=True)
+    control_script.touch()
+    assert control_script.resolve().parents[2] == workspace
+    assert (control_script.resolve().parents[2] / 'backend' / 'deploy' / 'runtime_env.yaml') == manifest
+
+    workflow_file = workspace / '.deploy-workflow-source' / '.github' / 'workflows' / 'gcp_backend.yml'
+    workflow_file.parent.mkdir(parents=True)
+    workflow_file.touch()
+    assert workflow_file.resolve().parents[3] == workspace
+    assert workflow_file.resolve().parents[3] / 'backend' / 'deploy' / 'runtime_env.yaml' == manifest
+
+    dockerfile = (BACKEND_DIR / 'Dockerfile').read_text(encoding='utf-8')
+    assert 'COPY backend/ .' in dockerfile
+    assert '.deploy-control' not in dockerfile
+    assert '.deploy-workflow-source' not in dockerfile
+    validation_steps = [
+        deploy[deploy.index('Validate backend runtime env before deploy') : deploy.index('Build runtime image')],
+        deploy[
+            deploy.index('Validate backend runtime env after deploy') : deploy.index(
+                'Resolve transcription candidate URL'
+            )
+        ],
+    ]
+    assert all('--workflow-root "$DEPLOY_WORKFLOW_ROOT"' in step for step in validation_steps)
+    assert 'python3 backend/scripts/' not in deploy
+    assert 'bash backend/scripts/' not in deploy
+    assert 'run: backend/scripts/' not in deploy
+
+    for action in (
+        BACKEND_DIR.parent / '.github/actions/sync-backfill-lifecycle/action.yml',
+        BACKEND_DIR.parent / '.github/actions/transcription-release-candidate-probe/action.yml',
+    ):
+        action_text = action.read_text(encoding='utf-8')
+        assert 'DEPLOY_CONTROL_SCRIPTS' in action_text
+        assert 'python3 backend/scripts/' not in action_text
+
+
+def test_candidate_failure_status_report_uses_candidate_evidence_before_promotion() -> None:
+    workflow = (BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8')
+    candidate = workflow[
+        workflow.index('Accept no-traffic Cloud Run candidate') : workflow.index('Remove passed transcription')
+    ]
+    status = workflow[
+        workflow.rindex('Cloud Run deploy status report') : workflow.index('Upload backend release-vector evidence')
+    ]
+
+    assert 'id: verify-cloud-run-candidate' in candidate
+    assert 'steps.verify-cloud-run-candidate.outcome' in status
+    assert 'artifacts/backend-cloud-run-candidate-release-vector.json' in status
+    assert 'steps.shift-cloud-run-traffic.outcome' in status
+    assert '"${expected_traffic[@]}"' in status
+
+
 def test_full_backend_deploys_verify_the_serving_release_vector_after_promotion() -> None:
     root = BACKEND_DIR.parent
     workflows = {
@@ -765,7 +1080,7 @@ def test_full_backend_deploys_verify_the_serving_release_vector_after_promotion(
         verification = text.index('Verify serving backend release vector')
         assert promotion < verification
         release_vector_step = text[verification : text.index('\n      - name:', verification + 1)]
-        assert 'backend/scripts/verify_backend_release_vector.py' in release_vector_step
+        assert 'verify_backend_release_vector.py' in release_vector_step
         assert commit_marker in release_vector_step
         assert '--environment' in release_vector_step
 
@@ -773,6 +1088,8 @@ def test_full_backend_deploys_verify_the_serving_release_vector_after_promotion(
     manual_verification = manual[manual.index('Verify serving backend release vector') :]
     assert "github.event.inputs.deploy_targets" in manual_verification
     assert "--cloud-run-only" in manual_verification
+
+    assert '--revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}' in manual
 
 
 def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_snapshot() -> None:
@@ -801,7 +1118,8 @@ def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_sna
         assert candidate_acceptance < snapshot < promotion < serving_vector < restore, relative
 
         snapshot_step = text[snapshot : text.index('\n      - name:', snapshot + 1)]
-        assert 'backend/scripts/cloud_run_traffic_snapshot.py capture' in snapshot_step
+        assert 'cloud_run_traffic_snapshot.py' in snapshot_step
+        assert ' capture' in snapshot_step
         for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
             assert f'--service {service}' in snapshot_step
 
@@ -811,64 +1129,54 @@ def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_sna
             "&& (steps.shift-cloud-run-traffic.outcome == 'failure' "
             "|| steps.verify-serving-release-vector.outcome == 'failure') }}"
         )
+        if relative == '.github/workflows/gcp_backend.yml':
+            serving_smoke = text.index('Smoke promoted production serving API')
+            assert serving_vector < serving_smoke < restore
+            expected_restore_condition = (
+                "if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' "
+                "&& (steps.shift-cloud-run-traffic.outcome == 'failure' "
+                "|| steps.verify-serving-release-vector.outcome == 'failure' "
+                "|| steps.smoke-promoted-production-serving-api.outcome == 'failure') }}"
+            )
         assert expected_restore_condition in restore_step
-        assert 'backend/scripts/cloud_run_traffic_snapshot.py restore' in restore_step
+        assert 'cloud_run_traffic_snapshot.py' in restore_step
+        assert ' restore' in restore_step
 
         evidence_upload = text[text.index('Upload ') :]
         assert 'cloud-run-pre-promotion-traffic-snapshot.json' in evidence_upload
         assert 'cloud-run-traffic-restore.json' in evidence_upload
 
 
-def test_production_cloud_run_only_boundary_is_early_and_uses_a_cleaned_up_dual_auth_vpc_probe():
-    """Static workflow contract: prod/all cannot reach a mutating deploy step."""
+def test_production_cloud_run_only_boundary_smokes_serving_after_promotion():
+    """Static workflow contract: prod/all fails before mutation; smoke is post-promotion."""
     root = BACKEND_DIR.parent
     workflow = (root / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8')
     boundary = workflow.split('\n  validate-production-boundary:\n', 1)[1].split('\n  repair-traffic:\n', 1)[0]
 
-    assert 'transactional GKE/config rollback parity does not exist' in boundary
+    assert 'transactional GKE/config rollback parity does not exist' not in boundary
     assert workflow.index('validate-production-boundary') < workflow.index('  firestore_readiness:')
     assert 'needs: validate-production-boundary' in workflow
     assert 'needs: [validate-production-boundary, firestore_readiness]' in workflow
     for forbidden in ('actions/checkout', 'google-github-actions/auth', 'docker build', 'docker push', 'gcloud run'):
         assert forbidden not in boundary
 
-    resolve = workflow.index('Resolve transcription candidate URL')
-    probe = workflow.index('Gate internal production candidate on known audio from Cloud Run VPC')
     snapshot = workflow.index('Capture Cloud Run pre-promotion traffic snapshot')
     traffic = workflow.index('Shift Cloud Run traffic to validated revisions')
     verify = workflow.index('Verify serving backend release vector')
+    smoke = workflow.index('Smoke promoted production serving API')
     restore = workflow.index('Restore Cloud Run traffic snapshot after failed promotion')
-    assert resolve < probe < snapshot < traffic < verify < restore
+    assert snapshot < traffic < verify < smoke < restore
     assert '--tag={0}' in workflow
-    assert '--candidate-url "${{ steps.transcription-candidate.outputs.url }}"' in workflow
-    assert '--firebase-token-file "$RUNNER_TEMP/firebase-production-candidate-token"' in workflow
+    assert "default: 'cloud-run-only'" in workflow
+    assert 'environment=prod, deploy_targets=all is unsupported' in workflow
+    assert 'https://api.omi.me/v2/desktop/beta/candidates/reserve' in workflow
+    assert '--candidate-api-url https://api.omi.me' in workflow
+    assert 'firebase-production-serving-token' in workflow
+    assert '--data \'{"tag":"v0.0.0+1-macos"}\'' in workflow
+    assert "--data '{}')" not in workflow
+    assert "steps.smoke-promoted-production-serving-api.outcome == 'failure'" in workflow
     assert 'CLOUD_RUN_ONLY="--cloud-run-only"' in workflow
-
-    probe_script = (root / 'backend/scripts/probe-transcription-candidate-from-cloud-run.sh').read_text(
-        encoding='utf-8'
-    )
-    for required in (
-        '--service-account="$SERVICE_ACCOUNT"',
-        '--network="$NETWORK"',
-        '--subnet="$SUBNET"',
-        '--vpc-egress=all-traffic',
-        'compute networks subnets describe "$SUBNET"',
-        'privateIpGoogleAccess',
-        '--role=roles/run.invoker',
-        'trap cleanup EXIT',
-        'gcloud run jobs delete',
-        'remove-iam-policy-binding backend',
-        'service-accounts delete',
-    ):
-        assert required in probe_script
-
-    vpc_runner = (root / 'backend/scripts/run_vpc_transcription_candidate_probe.py').read_text(encoding='utf-8')
-    probe_source = (root / 'backend/scripts/transcription_capability_probe.py').read_text(encoding='utf-8')
-    assert 'X-Serverless-Authorization' in probe_source
-    assert 'FIREBASE_PROBE_TOKEN' in vpc_runner
-    assert 'identity_token = _identity_token(identity_audience)' in vpc_runner
-    assert 'api_url=candidate_url' in vpc_runner
-    assert 'cloud_run_identity_token=identity_token' in vpc_runner
+    assert 'probe-transcription-candidate-from-cloud-run.sh' not in workflow
 
 
 def test_backend_listen_rollout_wait_can_cover_a_real_rollout():

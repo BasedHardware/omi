@@ -15,6 +15,7 @@ from database.redis_db import (
     has_silent_user_notification_been_sent,
 )
 from database.auth import get_user_from_uid
+from utils.notification_text import to_plain_text
 from .llm.notifications import (
     generate_notification_message,
     generate_credit_limit_notification,
@@ -240,6 +241,7 @@ def send_notification(
 ) -> None:
     """Send notification to all user's devices. Optionally pass pre-fetched tokens to avoid DB lookup."""
     logger.info(f'send_notification to user {user_id}')
+    body = to_plain_text(body)
     tag = _generate_notification_tag(user_id, title, body, data)
     notification = messaging.Notification(title=title, body=body)
     _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens)
@@ -250,6 +252,7 @@ async def send_notification_async(
 ) -> None:
     """Async counterpart used by event-loop callers while preserving the sync public API."""
     logger.info(f'send_notification to user {user_id}')
+    body = to_plain_text(body)
     tag = _generate_notification_tag(user_id, title, body, data)
     notification = messaging.Notification(title=title, body=body)
     await _send_to_user_async(user_id, tag, notification=notification, data=data, tokens=tokens)
@@ -367,6 +370,7 @@ async def send_bulk_notification(user_tokens: List[str], title: str, body: str) 
     try:
         batch_size = 500
         num_batches = math.ceil(len(user_tokens) / batch_size)
+        body = to_plain_text(body)
         tag = _generate_tag(f"bulk:{title}:{body}")
         notification = messaging.Notification(title=title, body=body)
 

@@ -226,6 +226,7 @@ def test_gateway_vpc_probe_workflows_execute_the_production_parser(tmp_path):
             'GITHUB_RUN_ATTEMPT': '1',
             'GITHUB_RUN_ID': '42',
             'GITHUB_SHA': 'abcdef0123456789',
+            'DEPLOY_CONTROL_SCRIPTS': str(BACKEND_ROOT / 'scripts'),
             'PATH': f'{tmp_path}{os.pathsep}{os.environ["PATH"]}',
         }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for desktop-changelog.py I/O encoding (stdlib unittest).
+"""Unit tests for desktop changelog tooling (stdlib unittest).
 
 Regression coverage for #9717: read_json/write_json must always use UTF-8 so a
 contributor on a non-UTF-8 host locale (e.g. GBK on native Windows Python) does
@@ -21,6 +21,12 @@ _SPEC = importlib.util.spec_from_file_location(
 )
 changelog = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(changelog)
+
+_CHECK_SPEC = importlib.util.spec_from_file_location(
+    "check_desktop_changelog", Path(__file__).with_name("check-desktop-changelog.py")
+)
+checker = importlib.util.module_from_spec(_CHECK_SPEC)
+_CHECK_SPEC.loader.exec_module(checker)
 
 
 class EncodingTests(unittest.TestCase):
@@ -59,6 +65,22 @@ class EncodingTests(unittest.TestCase):
             payload = {"note": "“curly” — café"}
             changelog.write_json(path, payload)
             self.assertEqual(changelog.read_json(path), payload)
+
+
+class ChangelogRequirementTests(unittest.TestCase):
+    def test_internal_release_controls_are_exempt_but_product_source_is_not(self) -> None:
+        for path in (
+            "desktop/macos/docs/release.md",
+            "desktop/macos/scripts/qualify-desktop-beta.sh",
+        ):
+            with self.subTest(path=path):
+                self.assertFalse(checker.is_desktop_change_requiring_changelog(path))
+
+        self.assertTrue(
+            checker.is_desktop_change_requiring_changelog(
+                "desktop/macos/Desktop/Sources/AppDelegate.swift"
+            )
+        )
 
 
 if __name__ == "__main__":

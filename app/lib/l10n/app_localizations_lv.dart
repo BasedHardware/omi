@@ -9628,10 +9628,10 @@ class AppLocalizationsLv extends AppLocalizations {
       'Jūsu dati pēc noklusējuma ir aizsargāti ar spēcīgu šifrēšanu, un jūs kontrolējat, kā tie tiek glabāti un izmantoti.';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => 'Precizitāte';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => 'Pamata';
 
   @override
   String get cloudTranscription => 'Mākoņa transkripcija';
@@ -9640,52 +9640,52 @@ class AppLocalizationsLv extends AppLocalizations {
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => 'Dzēst modeli';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'Vai tiešām vēlaties dzēst šo modeli?';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => 'Lejupielādēts';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => 'Ātrāks';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => 'Automātiski';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => 'Augstāka';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => 'Liels';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => 'Zemāka';
 
   @override
-  String get whisperModelSizeMedium => 'Medium';
+  String get whisperModelSizeMedium => 'Vidējs';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => 'Modelis dzēsts';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => 'Modeļa lejupielāde neizdevās';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc => 'Neizdevās lejupielādēt Whisper modeli. Lūdzu, mēģiniet vēlreiz.';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => 'Modelis lejupielādēts';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper modelis veiksmīgi lejupielādēts';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => 'Modeļa izmērs';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => 'Nav';
 
   @override
   String get onDeviceTranscription => 'Ierīces transkripcija';
@@ -9694,10 +9694,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onDeviceTranscriptionDesc => 'Transkripcija tiek apstrādāta lokāli jūsu ierīcē';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => 'Lēnāks';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => 'Mazs';
 
   @override
   String get sttProviderSoniox => 'Soniox';
@@ -9712,10 +9712,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => 'Ātrums';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => 'Sīks';
 
   @override
   String get transcriptionLanguage => 'Transkripcijas valoda';
@@ -9730,51 +9730,52 @@ class AppLocalizationsLv extends AppLocalizations {
   String get whisperModelDesc => 'Izvēlieties modeli ierīces transkripcijai';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => 'Pāriet uz bezmaksas plānu?';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => 'Jūs saskarsieties ar šiem ierobežojumiem:';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => '7x lielāks akumulatora patēriņš';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => 'Par 30% zemāka transkripcijas kvalitāte';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => '5–7 sekunžu aizkave';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => 'Nevar atpazīt runātājus';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => 'Tomēr pazemināt';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => 'Google kalendārs nav savienots';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt =>
+      'Savienojiet savu Google kalendāru, lai saistītu sarunas ar kalendāra notikumiem.';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return 'Saistīts ar „$title“';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => 'Neizdevās saistīt kalendāra notikumu';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => 'Paldies par atsauksmi!';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => 'Kopēt ziņojumu';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => 'Meklēt iestatījumos…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => 'Kļūda, ielādējot audio';
 
   @override
   String get rayBanMetaMicPickerTitle => 'Izvēlieties Ray-Ban Meta mikrofonu';

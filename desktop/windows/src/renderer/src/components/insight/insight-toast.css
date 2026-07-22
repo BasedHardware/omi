@@ -21,3 +21,45 @@ body.insight-toast-body { background: transparent !important; overflow: hidden; 
 .insight-headline { font-weight: 600; font-size: 14px; }
 .insight-advice { font-size: 13px; color: #e2e2e2; overflow: hidden; }
 .insight-foot { margin-top: auto; font-size: 11px; color: #9a9a9a; }
+
+/* Meeting toast (shares the card shell). Neutral/white accents only. */
+.meeting-actions { margin-top: auto; display: flex; gap: 8px; }
+.meeting-btn {
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  color: #e2e2e2;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  -webkit-app-region: no-drag;
+}
+.meeting-btn:hover { background: rgba(255, 255, 255, 0.16); }
+.meeting-btn-primary { color: #111; background: #f5f5f5; border-color: #f5f5f5; }
+.meeting-btn-primary:hover { background: #ffffff; }
+
+/* What's-new card (shares the card shell). Compact changelog list that fits the
+   fixed toast height; each line clamps to two rows and the full notes are one
+   click away. Neutral/white only. */
+.whatsnew-list { margin: 3px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+/* Natural top-down stacking (NOT flex:1 growth) so the card height is the sum of
+   its content — the window is sized to fit, and the button never gets pushed past
+   the bottom edge. */
+.whatsnew-actions { margin-top: 10px; display: flex; gap: 8px; }
+.whatsnew-list li {
+  position: relative;
+  padding-left: 13px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #d8d8d8;
+  /* Wrap to at most two lines and clamp cleanly with an ellipsis — never a hard
+     mid-sentence cut. min-width:0 is load-bearing: as flex items the lines
+     defaulted to min-width:auto, so a nowrap line grew past the card and
+     text-overflow never triggered (it clipped at the window edge with no "…"). */
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.whatsnew-list li::before { content: ''; position: absolute; left: 3px; top: 7px; width: 3px; height: 3px; border-radius: 50%; background: #9a9a9a; }

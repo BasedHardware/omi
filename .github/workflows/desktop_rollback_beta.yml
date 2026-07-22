@@ -1,0 +1,46 @@
+name: Roll Back Broken Desktop Beta
+
+on:
+  workflow_dispatch:
+    inputs:
+      current_release_id: {description: 'Exact broken macOS Beta tag currently served', required: true, type: string}
+      target_release_id: {description: 'Exact retained T2-qualified known-good macOS tag', required: true, type: string}
+      expected_generation: {description: 'Exact current macos-beta pointer generation', required: true, type: string}
+      incident_url: {description: 'Omi GitHub issue or discussion documenting the incident', required: true, type: string}
+      reason: {description: 'Observed failure and containment reason', required: true, type: string}
+
+permissions: {}
+concurrency:
+  group: desktop-beta-promotion
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    environment: prod
+    runs-on: ubuntu-latest
+    steps:
+      - name: Use the existing production Google identity
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Atomically audit, pause, and roll back only macOS Beta
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          CURRENT: ${{ inputs.current_release_id }}
+          TARGET: ${{ inputs.target_release_id }}
+          GENERATION: ${{ inputs.expected_generation }}
+          INCIDENT: ${{ inputs.incident_url }}
+          REASON: ${{ inputs.reason }}
+          ACTOR: ${{ github.actor }}
+          REQUEST_ID: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          ADMIN_KEY="$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")"
+          trap 'unset ADMIN_KEY' EXIT
+          jq -cn --arg operation rollback --arg current_release_id "$CURRENT" --arg target_release_id "$TARGET" \
+            --argjson expected_generation "$GENERATION" --arg incident_url "$INCIDENT" \
+            --arg reason "$REASON" --arg actor "$ACTOR" --arg request_id "$REQUEST_ID" '$ARGS.named' \
+            | curl --fail-with-body --silent --show-error --request POST \
+                --header 'Content-Type: application/json' --header "secret-key: $ADMIN_KEY" \
+                --data-binary @- https://api.omi.me/v2/desktop/beta/breakglass

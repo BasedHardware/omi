@@ -487,8 +487,10 @@ assert_sparkle_and_artifacts() {
     hdiutil attach "$DMG_PATH" -nobrowse -readonly -mountpoint "$DMG_MOUNTPOINT" -quiet \
       || fail "DMG attach failed"
     local dmg_app
-    dmg_app="$(find "$DMG_MOUNTPOINT" -maxdepth 2 -type d -name "*.app" | head -1)"
-    [[ -n "$dmg_app" ]] || fail "DMG does not contain an app bundle"
+    dmg_app="$DMG_MOUNTPOINT/Omi.app"
+    [[ -d "$dmg_app/Contents" ]] || fail "DMG must contain canonical Omi.app"
+    codesign --verify --deep --strict --verbose=2 "$dmg_app" >/dev/null 2>&1 \
+      || fail "DMG-contained Omi.app failed deep strict codesign verification"
     assert_bundle_matches_current "$dmg_app" "DMG"
     record_artifact "dmg" "$DMG_PATH"
   fi
@@ -511,6 +513,19 @@ assert_helper_runtime_integrity() {
   [[ -f "$resources/agent/src/runtime/omi-tool-manifest.ts" ]] || fail "agent tool manifest missing"
   [[ -d "$resources/pi-mono-extension" ]] || fail "pi-mono-extension missing"
   [[ -x "$resources/Omi Computer_Omi Computer.bundle/node" ]] || fail "bundled node missing"
+  local sharp_arch expected_arch sharp_native libvips_native
+  for sharp_arch in arm64 x64; do
+    expected_arch="$sharp_arch"
+    [[ "$sharp_arch" == "x64" ]] && expected_arch="x86_64"
+    sharp_native="$resources/agent/node_modules/@img/sharp-darwin-$sharp_arch/lib/sharp-darwin-$sharp_arch.node"
+    libvips_native="$resources/agent/node_modules/@img/sharp-libvips-darwin-$sharp_arch/lib/libvips-cpp.42.dylib"
+    [[ -f "$sharp_native" && -f "$libvips_native" ]] \
+      || fail "agent runtime missing Sharp/libvips darwin-$sharp_arch pair"
+    file "$sharp_native" | grep -q "$expected_arch" \
+      || fail "Sharp darwin-$sharp_arch binary has the wrong architecture"
+    file "$libvips_native" | grep -q "$expected_arch" \
+      || fail "libvips darwin-$sharp_arch binary has the wrong architecture"
+  done
   strings "$APP_BUNDLE/Contents/MacOS/$(plist_read CFBundleExecutable)" 2>/dev/null | grep -q "LocalAgentAPIServer" \
     || warn "could not find LocalAgentAPIServer marker in executable; release builds may strip Swift symbols"
 

@@ -1,19 +1,19 @@
 # Backend Deploy Rollout Safety
 
+## Production backend deployment
+
+Dispatch `gcp_backend.yml` once with `environment=prod`, `mode=deploy`,
+`deploy_targets=all`, and the exact admitted `release_sha`. The selected prod
+environment provides the single production approval. The workflow checks
+Firestore readiness before mutation, creates and validates no-traffic Cloud Run
+candidates, reconciles backend secrets using the script-derived service-account
+default, updates the GKE backend surfaces, snapshots Cloud Run traffic before
+promotion, restores it after a failed promotion or serving-vector check, and
+hard-gates the final serving release vector. There is no release-record bucket,
+separate deployer identity, or backend beta ring. This does not change desktop
+Beta or Stable update-channel pointers.
+
 Use this runbook when a backend deploy may have produced stale runtime, partial traffic shifts, or GKE pods serving an old ReplicaSet. All commands below are read-only unless explicitly marked as a template for a future deploy workflow.
-
-## Read GKE rollout state
-
-```bash
-python3 backend/scripts/deploy_status_report.py \
-  --env prod \
-  --include-gke \
-  --gke-service backend-listen \
-  --gke-service pusher \
-  --gke-service llm-gateway \
-  --gke-service parakeet \
-  --gke-service diarizer \
-  --gke-service vad
 ```
 
 Interpretation:
