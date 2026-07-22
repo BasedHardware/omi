@@ -131,6 +131,37 @@ def get_primary_phone_number(uid: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def set_primary_phone_number(uid: str, phone_number_id: str) -> bool:
+    """Make one verified number the user's primary outbound caller ID.
+
+    Sets is_primary=True on the chosen number and False on all others in a single batch. Returns
+    False if the id does not belong to the user. Keys off the Firestore document id (always
+    present) rather than a stored field, and touches only the unencrypted is_primary flag.
+    """
+    col = db.collection('users').document(uid).collection(phone_numbers_collection)
+    doc_ids = [doc.id for doc in col.select([]).stream()]
+    if phone_number_id not in doc_ids:
+        return False
+    batch = db.batch()
+    for doc_id in doc_ids:
+        batch.update(col.document(doc_id), {'is_primary': doc_id == phone_number_id})
+    batch.commit()
+    return True
+
+
+def rename_phone_number(uid: str, phone_number_id: str, friendly_name: str) -> bool:
+    """Rename a verified number's friendly_name label.
+
+    Returns False if the number does not exist. friendly_name is unencrypted, so this is a targeted
+    field update that leaves the encrypted phone_number untouched.
+    """
+    phone_ref = db.collection('users').document(uid).collection(phone_numbers_collection).document(phone_number_id)
+    if not phone_ref.get().exists:
+        return False
+    phone_ref.update({'friendly_name': friendly_name})
+    return True
+
+
 # ************************************************
 # ********** PENDING VERIFICATIONS ***************
 # ************************************************

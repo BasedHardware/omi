@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from routers.phone_calls import router, _redact_phone, E164_PATTERN
 from utils.other import endpoints as auth
+import database.phone_calls as phone_db
 
 TEST_UID = 'test-uid-123'
 TEST_UID_OTHER = 'test-uid-other'
@@ -306,3 +307,113 @@ def test_twiml_free_tier_rejects_when_atomic_quota_reservation_fails(
     reserve.assert_called_once_with(TEST_UID)
     assert 'Monthly phone call limit reached' in resp.text
     assert '<Dial' not in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Set primary caller ID (POST /{id}/primary) + rename (PATCH /{id})
+# ---------------------------------------------------------------------------
+
+_NUMBER = {
+    'id': 'n2',
+    'phone_number': '+15551230002',
+    'friendly_name': 'Work',
+    'verified_at': '2026-01-01T00:00:00+00:00',
+    'is_primary': True,
+}
+
+
+@patch('routers.phone_calls.phone_calls_db')
+def test_make_primary_success(mock_db, client):
+    mock_db.set_primary_phone_number.return_value = True
+    mock_db.get_phone_number.return_value = _NUMBER
+    resp = client.post('/v1/phone/numbers/n2/primary')
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['id'] == 'n2' and body['is_primary'] is True
+    mock_db.set_primary_phone_number.assert_called_once_with(TEST_UID, 'n2')
+
+
+@patch('routers.phone_calls.phone_calls_db')
+def test_make_primary_not_found(mock_db, client):
+    mock_db.set_primary_phone_number.return_value = False
+    resp = client.post('/v1/phone/numbers/ghost/primary')
+    assert resp.status_code == 404
+    mock_db.get_phone_number.assert_not_called()
+
+
+@patch('routers.phone_calls.phone_calls_db')
+def test_rename_success_strips_whitespace(mock_db, client):
+    mock_db.rename_phone_number.return_value = True
+    mock_db.get_phone_number.return_value = {**_NUMBER, 'id': 'n1', 'friendly_name': 'Home', 'is_primary': False}
+    resp = client.patch('/v1/phone/numbers/n1', json={'friendly_name': '  Home  '})
+    assert resp.status_code == 200
+    assert resp.json()['friendly_name'] == 'Home'
+    mock_db.rename_phone_number.assert_called_once_with(TEST_UID, 'n1', 'Home')
+
+
+@patch('routers.phone_calls.phone_calls_db')
+def test_rename_not_found(mock_db, client):
+    mock_db.rename_phone_number.return_value = False
+    resp = client.patch('/v1/phone/numbers/ghost', json={'friendly_name': 'X'})
+    assert resp.status_code == 404
+
+
+@patch('routers.phone_calls.phone_calls_db')
+def test_rename_rejects_empty(mock_db, client):
+    resp = client.patch('/v1/phone/numbers/n1', json={'friendly_name': ''})
+    assert resp.status_code == 422  # min_length=1 on the request model
+    mock_db.rename_phone_number.assert_not_called()
+
+
+@patch('routers.phone_calls.phone_calls_db')
+def test_rename_rejects_whitespace_only(mock_db, client):
+    resp = client.patch('/v1/phone/numbers/n1', json={'friendly_name': '   '})
+    assert resp.status_code == 422  # blank after strip
+    mock_db.rename_phone_number.assert_not_called()
+
+
+def _id_doc(doc_id):
+    d = MagicMock()
+    d.id = doc_id
+    return d
+
+
+def test_set_primary_reassigns_flags(monkeypatch):
+    fake_db = MagicMock()
+    col = fake_db.collection.return_value.document.return_value.collection.return_value
+    col.select.return_value.stream.return_value = iter([_id_doc('a'), _id_doc('b'), _id_doc('c')])
+    batch = fake_db.batch.return_value
+    monkeypatch.setattr(phone_db, 'db', fake_db)
+
+    assert phone_db.set_primary_phone_number('uid', 'b') is True
+    payloads = [c.args[1] for c in batch.update.call_args_list]
+    assert payloads.count({'is_primary': True}) == 1  # only b
+    assert payloads.count({'is_primary': False}) == 2  # a and c
+    batch.commit.assert_called_once()
+
+
+def test_set_primary_missing_returns_false(monkeypatch):
+    fake_db = MagicMock()
+    col = fake_db.collection.return_value.document.return_value.collection.return_value
+    col.select.return_value.stream.return_value = iter([_id_doc('a')])
+    monkeypatch.setattr(phone_db, 'db', fake_db)
+    assert phone_db.set_primary_phone_number('uid', 'nope') is False
+    fake_db.batch.return_value.commit.assert_not_called()
+
+
+def test_rename_updates_only_friendly_name(monkeypatch):
+    fake_db = MagicMock()
+    ref = fake_db.collection.return_value.document.return_value.collection.return_value.document.return_value
+    ref.get.return_value.exists = True
+    monkeypatch.setattr(phone_db, 'db', fake_db)
+    assert phone_db.rename_phone_number('uid', 'n1', 'Work') is True
+    ref.update.assert_called_once_with({'friendly_name': 'Work'})
+
+
+def test_rename_missing_returns_false(monkeypatch):
+    fake_db = MagicMock()
+    ref = fake_db.collection.return_value.document.return_value.collection.return_value.document.return_value
+    ref.get.return_value.exists = False
+    monkeypatch.setattr(phone_db, 'db', fake_db)
+    assert phone_db.rename_phone_number('uid', 'n1', 'Work') is False
+    ref.update.assert_not_called()
