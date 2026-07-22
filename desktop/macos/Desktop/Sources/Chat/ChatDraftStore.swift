@@ -175,9 +175,9 @@ final class ChatDraftStore {
     // `@Sendable` closure — an inferred `@MainActor` block dispatched off the main
     // queue would trap (`dispatch_assert_queue_fail`). `persist` is a static call;
     // the in-memory bookkeeping hops back to the main actor via a `Task`.
-    let block: @Sendable () -> Void = {
+    let block: @Sendable () -> Void = { [weak self] in
       Self.persist(text: text, id: id, rootURL: rootURL)
-      Task { @MainActor [weak self] in
+      Task { @MainActor in
         guard let self, self.writeGenerations[id] == generation else { return }
         self.pendingWrites[id] = nil
       }
