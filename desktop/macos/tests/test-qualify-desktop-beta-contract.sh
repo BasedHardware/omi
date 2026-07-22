@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 QUALIFIER="$SCRIPT_DIR/../scripts/qualify-desktop-beta.sh"
 CORE_HARNESS="$SCRIPT_DIR/../scripts/desktop-core-harness.sh"
 PROFILE_PREP="$SCRIPT_DIR/../scripts/prepare-qualification-profile.sh"
+SWIFT_CACHE="$SCRIPT_DIR/../scripts/qualification-swift-cache.sh"
 APP_CONFIG="$SCRIPT_DIR/../scripts/app-config.sh"
 RUN_SH="$SCRIPT_DIR/../run.sh"
 
@@ -48,16 +49,25 @@ require_text 'OMI_SKIP_SETTINGS_SEED=1'
 require_text 'make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice'
 require_text 'terminate_qualification_desktop "$BUNDLE"'
 require_text '--json tagName,isDraft,isPrerelease,publishedAt,assets,body'
-require_text 'worktree list --porcelain | grep -Fxq "worktree $WORKTREE"'
-require_text 'worktree remove --force "$WORKTREE"'
-require_text 'worktree prune'
-require_text 'unregistered worktree path exists: $WORKTREE'
-require_text "for-each-ref --count=1 --sort=-v:refname"
-require_text "--format='%(refname:strip=2)' 'refs/tags/v*-macos'"
-if grep -Fq 'rm -rf "$WORKTREE"' "$QUALIFIER"; then
-  echo "FAIL: qualification worktree cleanup must use registered worktree removal" >&2
+require_text 'WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"'
+if grep -Fq 'worktree add' "$QUALIFIER" || grep -Fq 'rm -rf "$WORKTREE"' "$QUALIFIER"; then
+  echo "FAIL: qualification must use the persistent exact-SHA source directly" >&2
   exit 1
 fi
+require_text "for-each-ref --count=1 --sort=-v:refname"
+require_text "--format='%(refname:strip=2)' 'refs/tags/v*-macos'"
+
+# Acceleration changes bootstrap only. The signed-artifact, static self-check,
+# Tier-2, fault-suite, evidence, and newest-candidate gates remain mandatory.
+require_text 'python3 "$KEYVALUE_PY" preflight-release'
+require_text './scripts/desktop-core-harness.sh --self-check --skip-backend-contracts'
+require_text './scripts/desktop-core-harness.sh --tier 2 --bundle "$BUNDLE" --port "$AUTOMATION_PORT" --keep-stack'
+require_text 'python3 "$KEYVALUE_PY" check-manifest "$EVIDENCE/manifest.json"'
+require_text './scripts/desktop-core-harness.sh --fault-suite --port "$((AUTOMATION_PORT + 1))"'
+require_text 'manifest.get("passed") is not True or manifest.get("tier") != "fault"'
+require_text 'evidence["automatic_gates"] = ["signed-artifact", "static-self-check", "tier-2", "fault-suite"]'
+require_text 'if [[ "$LATEST_TAG" != "$RELEASE_TAG" ]]'
+require_text 'python3 "$KEYVALUE_PY" update-qualified-beta'
 require_text 'derive_omi_app_config "$BUNDLE"' "$CORE_HARNESS"
 require_text 'wrong bundle on port' "$CORE_HARNESS"
 
@@ -91,6 +101,10 @@ require_order "$RUN_SH" \
 
 if [[ ! -x "$PROFILE_PREP" ]]; then
   echo "FAIL: missing executable qualification profile preparation helper" >&2
+  exit 1
+fi
+if [[ ! -x "$SWIFT_CACHE" ]]; then
+  echo "FAIL: missing executable exact-source qualification Swift cache helper" >&2
   exit 1
 fi
 
