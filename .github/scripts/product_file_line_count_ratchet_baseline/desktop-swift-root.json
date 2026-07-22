@@ -1,16 +1,16 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/AuthService.swift": 3294,
+    "desktop/macos/Desktop/Sources/AuthService.swift": 3198,
     "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": 1678,
     "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4256,
     "desktop/macos/Desktop/Sources/MemoryExportService.swift": 1578,
-    "desktop/macos/Desktop/Sources/OmiApp.swift": 1645
+    "desktop/macos/Desktop/Sources/OmiApp.swift": 1693
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/AuthService.swift": "Apple first-auth name capture signals observers (authNameDidUpdate) and persists the name to Firebase so it survives reinstalls.",
     "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": "present_onboarding_opener QA action renders the real post-onboarding opener in-process for verification.",
     "desktop/macos/Desktop/Sources/MemoryExportService.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
-    "desktop/macos/Desktop/Sources/OmiApp.swift": "shared openMainAppWindow helper for menu bar + Open Omi shortcut"
+    "desktop/macos/Desktop/Sources/OmiApp.swift": "Current main already contains 1693 lines after the menu-bar summon and chat-landing additions; this PR changes the Firebase-missing launch branch without increasing that count."
   },
   "threshold": 1500
 }
