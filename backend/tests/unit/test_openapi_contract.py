@@ -162,6 +162,28 @@ def test_check_spec_detects_stale_file(tmp_path):
         export_openapi.check_spec(spec_path, json.dumps({'fresh': True}) + '\n')
 
 
+def test_check_spec_hint_includes_surface_flag(tmp_path):
+    # Regression for #10217: following the stale/missing hint verbatim must regenerate the same
+    # surface, not silently overwrite a non-public spec with the default public contract.
+    spec_path = tmp_path / 'openapi.json'
+    spec_path.write_text(json.dumps({'stale': True}) + '\n')
+    fresh = json.dumps({'fresh': True}) + '\n'
+
+    with pytest.raises(export_openapi.OpenAPIContractError, match=r'--app-client --write'):
+        export_openapi.check_spec(spec_path, fresh, 'app-client')
+
+    with pytest.raises(export_openapi.OpenAPIContractError, match=r'--surface integration-public --write'):
+        export_openapi.check_spec(spec_path, fresh, 'integration-public')
+
+    missing = tmp_path / 'absent.json'
+    with pytest.raises(export_openapi.OpenAPIContractError, match=r'--app-client --write'):
+        export_openapi.check_spec(missing, fresh, 'app-client')
+
+    # Public surface needs no flag — the default command stays correct.
+    with pytest.raises(export_openapi.OpenAPIContractError, match=r'export_openapi\.py --write'):
+        export_openapi.check_spec(spec_path, fresh)
+
+
 def test_network_recorder_fails_even_when_blocked_attempt_is_swallowed():
     with export_openapi.record_and_block_outbound_network() as attempts:
         try:
