@@ -1,0 +1,49 @@
+desktop/macos/agent/src/index.ts
+  s_d1c8f9524de8ea::t_f9ad56984d6008 2462
+desktop/macos/Desktop/Sources/Chat/KernelTurnProjection.swift
+  s_d1c8f9524de8ea::t_dd830e9d862c76 196-197
+  s_d1c8f9524de8ea::t_468bb325c0aaff 731-732
+  s_d1c8f9524de8ea::t_a83f96d29fa559 787-788,794-795,801-802
+desktop/macos/Desktop/Sources/Chat/AgentClient.swift
+  s_d1c8f9524de8ea::t_0d60587477773f 301-302,307-308,315-316,321-322
+desktop/macos/Desktop/Sources/Chat/AgentBridge.swift
+  s_d1c8f9524de8ea::t_2b49bdb6633c70 1502,1514,1523,1538
+desktop/macos/agent/src/protocol.ts
+  s_d1c8f9524de8ea::t_6db6b097762fae 366-368
+desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  s_d1c8f9524de8ea::t_afd01adb55dfd6 5869-5872
+desktop/macos/Desktop/Tests/KernelTurnRecordedProjectionTests.swift
+  s_d1c8f9524de8ea::t_ed5c29cd1f31f1 413-443
+  s_1ebd17512856c6::t_fc16e3fb5dad73 393,463,515,564,611,662,699
+desktop/macos/agent/tests/conversation-journal.test.ts
+  s_d1c8f9524de8ea::t_32e16f6970d0a0 2580-2600
+desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
+  s_d1c8f9524de8ea::t_dfadf3af88836f 1951,1956-1958
+desktop/macos/agent/src/runtime/conversation-journal.ts
+  s_d1c8f9524de8ea::t_400e656d75fb18 1094-1105
+  s_d1c8f9524de8ea::t_a01463ad3c377f 1162-1170
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "3ac98206190e460c9ff117949559ec1247bc89d9",
+  "prompts": {},
+  "sessions": {
+    "s_1ebd17512856c6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6124bc4c-28b1-44bb-81ae-ee838f8c8a60",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_d1c8f9524de8ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3de85890-77ef-4a30-be1e-c38b001d53f9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
