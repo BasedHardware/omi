@@ -1,0 +1,27 @@
+desktop/macos/e2e/flows/onboarding-flow.yaml
+  s_424d550d86fd05::t_27c6795174f13d 28-33
+desktop/macos/e2e/flows/capture-lifecycle.yaml
+  s_424d550d86fd05::t_05253203177979 67-68
+desktop/macos/e2e/flows/harness-smoke.yaml
+  s_424d550d86fd05::t_08cbe81548a619 37
+desktop/macos/e2e/flows/navigation.yaml
+  s_424d550d86fd05::t_6e6560fc329dc2 23-26
+desktop/macos/e2e/flows/floating-bar-functional.yaml
+  s_424d550d86fd05::t_d2a44482dd9b35 42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "743a64b2f22fa185101a6264e332fac6d01418a8",
+  "prompts": {},
+  "sessions": {
+    "s_424d550d86fd05": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7d83f64d-8ce5-47f1-b308-b8839508880a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
