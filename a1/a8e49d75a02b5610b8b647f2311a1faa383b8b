@@ -1,0 +1,25 @@
+desktop/macos/Desktop/Tests/ChatTimelineContinuityTests.swift
+  s_62099ccfd5cc12::t_a3ca333f171881 256-260,262-265,268,273-275
+  s_62099ccfd5cc12::t_42c30e9946e368 278,280-288,290-294,297-299
+  s_62099ccfd5cc12::t_5a7476e63b2ded 42,44-61,63-68,72-86
+  s_62099ccfd5cc12::t_89dff8e730fb88 302-306,308-312,315-317
+desktop/macos/Desktop/Tests/ScreenRecordingPermissionPolicyTests.swift
+  s_62099ccfd5cc12::t_698738f4aed738 50-52
+  s_62099ccfd5cc12::t_572d7141d1650e 67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "a1a8e49d75a02b5610b8b647f2311a1faa383b8b",
+  "prompts": {},
+  "sessions": {
+    "s_62099ccfd5cc12": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bce3b3b3-c244-4ae8-bb2a-1ff7eccbcdbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
