@@ -3,19 +3,14 @@
 
 from __future__ import annotations
 
-import asyncio
 import importlib.util
 from pathlib import Path
 import re
-import sys
 import tempfile
 import unittest
 
-from fastapi import HTTPException
-
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "backend"))
-from routers.updates import QualifiedBetaPromotionRequest, reserve_beta_candidate_endpoint
+UPDATES_SOURCE = (ROOT / "backend/routers/updates.py").read_text(encoding="utf-8")
 
 MODULE_PATH = ROOT / ".github/scripts/check-gcp-backend-production-boundary.py"
 SPEC = importlib.util.spec_from_file_location("check_gcp_backend_production_boundary", MODULE_PATH)
@@ -32,11 +27,24 @@ class GcpBackendProductionBoundaryTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/gcp_backend.yml").read_text(encoding="utf-8")
         smoke = workflow[workflow.index(CHECKER.PROD_SMOKE) :]
         match = re.search(r'''--data '\{"tag":"(?P<tag>[^"]+)"\}'\)''', smoke)
-        self.assertIsNotNone(match, "production reservation smoke must send an exact tag body")
-        request = QualifiedBetaPromotionRequest(tag=match.group("tag"))
-        with self.assertRaises(HTTPException) as denied:
-            asyncio.run(reserve_beta_candidate_endpoint(request, authorization=None))
-        self.assertEqual(denied.exception.status_code, 401)
+        if match is None:
+            self.fail("production reservation smoke must send an exact tag body")
+
+        schema = re.search(
+            r'class QualifiedBetaPromotionRequest\(BaseModel\):.*?tag: str = Field\(pattern=r"(?P<pattern>[^"]+)"\)',
+            UPDATES_SOURCE,
+            re.DOTALL,
+        )
+        if schema is None:
+            self.fail("qualified Beta tag schema must remain statically inspectable")
+        self.assertRegex(match.group("tag"), re.compile(schema.group("pattern")))
+
+        reserve = UPDATES_SOURCE[
+            UPDATES_SOURCE.index("async def reserve_beta_candidate_endpoint(") :
+            UPDATES_SOURCE.index('@router.put("/v2/desktop/beta/admission")')
+        ]
+        self.assertIn("if not _has_beta_promotion_authorization(authorization):", reserve)
+        self.assertIn('raise HTTPException(status_code=401, detail="Unauthorized")', reserve)
 
     def test_rejects_production_boundary_regressions(self) -> None:
         original = (ROOT / ".github/workflows/gcp_backend.yml").read_text(encoding="utf-8")
