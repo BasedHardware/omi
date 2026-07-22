@@ -39,6 +39,11 @@ extension SBOnboardingModel {
     fdaState = .waiting
     if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
       NSWorkspace.shared.open(url)
+      // Show the drag-to-grant helper card (drag the Omi icon into the FDA list),
+      // matching Screen Recording's flow. Full Disk Access has no in-place toggle,
+      // so the drag card is the fastest grant path (#9742). Both FDA entry points
+      // (the permission step and the Files connector) route through here.
+      Task { await PermissionDragGuidance.presentDragToGrantHelper() }
     }
     pollPermission("full_disk_access")
   }
@@ -167,6 +172,35 @@ extension SBOnboardingModel {
   func answerFiles() { advance(userAnswer: fdaState == .on ? "Allowed" : "Skip", to: .accessibility) }
   func answerAccessibility() { advance(userAnswer: accState == .on ? "Allowed" : "Skip", to: .automation) }
   func answerAutomation() { advance(userAnswer: autoState == .on ? "Allowed" : "Skip", to: .shortcutOpen) }
+
+  /// The permission key a step gates on, or nil for non-permission steps.
+  func permissionKey(for step: Step) -> String? {
+    switch step {
+    case .mic: return "microphone"
+    case .systemAudio: return "system_audio"
+    case .screen: return "screen_recording"
+    case .files: return "full_disk_access"
+    case .accessibility: return "accessibility"
+    case .automation: return "automation"
+    default: return nil
+    }
+  }
+
+  /// Starting at `target`, skip past any permission step whose permission is
+  /// already granted — so the user is never asked for something they've already
+  /// given (matches the legacy onboarding's live permission detection). Refreshes
+  /// each permission's TCC state before deciding, and reflects the grant so the
+  /// row is already ✓ if we ever land on it. Returns the first step to actually ask.
+  func firstUnaskedStep(from target: Step) -> Step {
+    var step = target
+    while let key = permissionKey(for: step) {
+      refreshPermCheck(key)
+      guard isGranted(key), let next = Step(rawValue: step.rawValue + 1) else { break }
+      setPermOn(key)
+      step = next
+    }
+    return step
+  }
 }
 
 // MARK: - Summon shortcut (pick → press → notch)
@@ -377,6 +411,25 @@ extension SBOnboardingModel {
     }
   }
 
+  /// Brand mark for a connector row (agents + context), so every row shows its
+  /// real logo even when the app isn't installed (#10210). Brands without a
+  /// bundled logo (openclaw/hermes/files) fall back to the icon's default glyph.
+  func connectorBrand(_ id: String) -> ConnectorBrand {
+    switch id {
+    case "openclaw": return .openclaw
+    case "hermes": return .hermes
+    case "claudeCode": return .claudeCode
+    case "codex": return .codex
+    case "calendar": return .calendar
+    case "gmail": return .gmail
+    case "applenotes": return .appleNotes
+    case "files": return .localFiles
+    case "chatgpt": return .chatgpt
+    case "claude": return .claude
+    default: return .agents
+    }
+  }
+
   func refreshAgentStates() {
     // Show a "checking" placeholder up front so a not-installed agent never briefly
     // offers a "Connect" button that only flips to "not installed" after a click
@@ -460,6 +513,8 @@ extension SBOnboardingModel {
       }
       let cal = await CalendarReaderService.shared.verifyConnection()
       if cal.isConnected { self.contextStates["calendar"] = "on" }
+      let gmail = await GmailReaderService.shared.verifyConnection()
+      if gmail.isConnected { self.contextStates["gmail"] = "on" }
     }
   }
 

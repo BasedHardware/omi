@@ -371,7 +371,7 @@ class ResourceMonitor {
       // reset counters in component diagnostics so hang/memory Sentry events can
       // be correlated.
       do {
-        _ = try await VideoChunkEncoder.shared.flushCurrentChunk()
+        _ = try await RewindStorage.shared.flushCurrentVideoChunk()
       } catch {
         logError("ResourceMonitor: Failed to flush video chunk during memory remediation", error: error)
       }

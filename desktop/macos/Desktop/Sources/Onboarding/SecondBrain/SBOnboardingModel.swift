@@ -89,6 +89,13 @@ final class SBOnboardingModel: ObservableObject {
   /// second permission (the meetings "both" mic+system-audio step) never cancels
   /// a still-running poll for the first and strands it on "macOS…".
   var pollTasks: [String: Task<Void, Never>] = [:]
+  /// Observes late-arriving names (Apple sends the name only on first auth;
+  /// otherwise it's fetched from the backend after sign-in). `givenName` is plain
+  /// UserDefaults, not observable, so without this a name landing after the name
+  /// step already streamed would never fill in.
+  /// `nonisolated(unsafe)` so the nonisolated `deinit` can remove it — the token is
+  /// only ever written on the main actor and `removeObserver` is thread-safe.
+  nonisolated(unsafe) private var nameObserver: NSObjectProtocol?
 
   init(appState: AppState, chatProvider: ChatProvider, onComplete: (() -> Void)?) {
     self.appState = appState
@@ -98,6 +105,30 @@ final class SBOnboardingModel: ObservableObject {
     // journal surface so they never pollute the real Chat tab. Cleared on
     // complete()/skip(), after which the Chat tab reloads the clean default surface.
     chatProvider.isOnboarding = true
+    // Detect the user's real name automatically (mirrors the legacy paged intro):
+    // seed the editable field from what we already know, kick a backend fetch if we
+    // don't have it yet, and adopt an async arrival — so onboarding greets by name
+    // instead of "friend"/blank (regression from the SB redesign; see #9919).
+    let known = AuthService.shared.givenName.trimmingCharacters(in: .whitespaces)
+    if !known.isEmpty { nameDraft = known }
+    AuthService.shared.loadNameFromBackendIfNeeded()
+    nameObserver = NotificationCenter.default.addObserver(
+      forName: .authNameDidUpdate, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.adoptAsyncName() }
+    }
+  }
+
+  deinit {
+    if let nameObserver { NotificationCenter.default.removeObserver(nameObserver) }
+  }
+
+  /// Adopt a name that landed after init — but only fill an empty field, never
+  /// overwrite what the user has typed.
+  private func adoptAsyncName() {
+    let resolved = AuthService.shared.givenName.trimmingCharacters(in: .whitespaces)
+    guard !resolved.isEmpty, nameDraft.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+    nameDraft = resolved
   }
 
   // MARK: copy
@@ -165,14 +196,20 @@ final class SBOnboardingModel: ObservableObject {
 
   func begin() {
     guard thread.isEmpty && streamingText == nil else { return }
+    // Re-hydrate the editable drafts from what was already saved, so stepping
+    // back to (or resuming at) name/language/role shows the prior answer instead
+    // of an empty field.
+    rehydrateDrafts()
     // Resume where the user left off. Their earlier answers (name, language, role)
     // were already saved to the backend/settings, so we just re-enter at the saved
     // step; each permission step re-checks its grant on appear, so a permission
     // granted before the quit shows ✓ rather than prompting again.
     let savedRaw = UserDefaults.standard.integer(forKey: Self.resumeStepKey)
     if savedRaw > Step.promise.rawValue, let resumed = Step(rawValue: savedRaw) {
-      step = resumed
-      streamMessage(for: resumed)
+      // Skip a resumed permission step the user granted while away.
+      let target = firstUnaskedStep(from: resumed)
+      step = target
+      streamMessage(for: target)
       return
     }
     streamMessage(for: .promise)
@@ -233,9 +270,12 @@ final class SBOnboardingModel: ObservableObject {
       thread.append(Msg(isOmi: false, text: userAnswer))
     }
     teardownStep(step)
-    step = next
-    UserDefaults.standard.set(next.rawValue, forKey: Self.resumeStepKey)
-    streamMessage(for: next)
+    // Don't ask for a permission the user has already granted — skip straight to
+    // the first step that still needs an answer.
+    let target = firstUnaskedStep(from: next)
+    step = target
+    UserDefaults.standard.set(target.rawValue, forKey: Self.resumeStepKey)
+    streamMessage(for: target)
   }
 
   /// Tear down any live monitors/tasks a step installed before leaving it.
@@ -244,6 +284,25 @@ final class SBOnboardingModel: ObservableObject {
     case .shortcutOpen, .shortcutTalk: disarmShortcutSummon()
     case .screenDemo: teardownVoiceDemo()
     default: break
+    }
+  }
+
+  /// Re-fill the editable drafts from already-saved answers so revisiting (via
+  /// Back) or resuming a name/language/role step shows the prior value, not an
+  /// empty field. Only fills empties — never clobbers in-progress typing.
+  private func rehydrateDrafts() {
+    if nameDraft.isEmpty {
+      let n = AuthService.shared.givenName.trimmingCharacters(in: .whitespaces)
+      if !n.isEmpty { nameDraft = n }
+    }
+    if roleDraft.isEmpty, role == nil {
+      let saved = UserDefaults.standard.string(forKey: .onboardingRole) ?? ""
+      if !saved.isEmpty { roleDraft = saved }
+    }
+    if languageDraft.isEmpty, languageName == nil, let code = AssistantSettings.shared.voiceLanguages.first,
+      let match = AssistantSettings.supportedLanguages.first(where: { $0.code == code })
+    {
+      languageDraft = match.name
     }
   }
 

@@ -11,7 +11,10 @@ struct OnboardingMeetingBrief: Equatable {
 /// finishes: a greeting addressed to the user by name + tappable starter
 /// questions that fire real Omi queries.
 struct OnboardingOpenerContent: Equatable {
+  /// Short headline: time of day + name ("Afternoon, Nik").
   let greeting: String
+  /// Muted detail line under the headline: today's meetings + listening state.
+  let subline: String
   let starters: [String]
 }
 
@@ -41,21 +44,21 @@ enum OnboardingOpenerComposer {
     calendar: Calendar = .current
   ) -> OnboardingOpenerContent {
     OnboardingOpenerContent(
-      greeting: greeting(name: name, mode: mode, meetings: meetings, now: now, calendar: calendar),
+      greeting: greeting(name: name, now: now, calendar: calendar),
+      subline: subline(mode: mode, meetings: meetings),
       starters: starters(meetings: meetings, baseStarters: baseStarters)
     )
   }
 
-  static func greeting(
-    name: String,
-    mode: ListeningMode,
-    meetings: [OnboardingMeetingBrief],
-    now: Date,
-    calendar: Calendar = .current
-  ) -> String {
+  /// Short headline only — the detail moved to `subline` so the headline can
+  /// render large without wrapping into a paragraph.
+  static func greeting(name: String, now: Date, calendar: Calendar = .current) -> String {
     let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
     let tod = timeOfDay(now, calendar: calendar)
-    let lead = trimmedName.isEmpty ? tod : "\(tod), \(trimmedName)"
+    return trimmedName.isEmpty ? tod : "\(tod), \(trimmedName)"
+  }
+
+  static func subline(mode: ListeningMode, meetings: [OnboardingMeetingBrief]) -> String {
     let listen = mode == .always ? "I'll be listening." : "I'll listen during your meetings."
 
     if let first = meetings.first {
@@ -63,13 +66,13 @@ enum OnboardingOpenerComposer {
       if meetings.count == 1 {
         meetingPart = "'\(first.title)' at \(first.time) today"
       } else {
-        meetingPart = "\(meetings.count) meetings today, first is '\(first.title)' at \(first.time)"
+        meetingPart = "\(meetings.count) meetings today — first is '\(first.title)' at \(first.time)"
       }
-      return "\(lead) — \(meetingPart). \(listen) Ask me anything to start:"
+      return "\(meetingPart). \(listen)"
     }
 
     let setup = mode == .always ? "I'm set up and listening." : "I'm set up and I'll listen during your meetings."
-    return "\(lead). \(setup) Ask me anything to start:"
+    return "\(setup) Ask me anything to start."
   }
 
   /// A calendar-aware "prep" starter (when a meeting exists) followed by the
