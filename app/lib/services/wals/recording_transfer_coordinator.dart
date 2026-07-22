@@ -220,12 +220,17 @@ class RecordingTransferCoordinator {
     try {
       // Uploaded jobs are resolved before a whole-WAL drain can offer any
       // retryable bytes. `syncAll` only uploads `miss`, preserving job ids.
-      await _reconcile();
+      // Reconciling only resolves work already on the server, so a failure here
+      // must not stop new recordings from uploading — it is retried instead.
+      var reconcileFailed = !await _tryReconcile();
       await _discover();
       await _refreshPending();
 
       final mayUpload = trigger == WakeTrigger.userRetry || _autoUploadEnabled();
-      if (!mayUpload) return;
+      if (!mayUpload) {
+        if (reconcileFailed) _scheduleRetry('reconcile pass failed');
+        return;
+      }
 
       final result = await _drain();
       await _refreshPending();
@@ -233,7 +238,7 @@ class RecordingTransferCoordinator {
       // Partial upload success still leaves `uploaded` WALs that need the
       // reconciler before any failure/contention retry path runs.
       if (result.needsReconciliation) {
-        await _reconcile();
+        reconcileFailed = !await _tryReconcile() || reconcileFailed;
         await _refreshPending();
       }
 
@@ -245,10 +250,25 @@ class RecordingTransferCoordinator {
         _scheduleRetry('eligible WAL drain was contended');
         return;
       }
+      if (reconcileFailed) {
+        _scheduleRetry('reconcile pass failed');
+        return;
+      }
       _failureStreak = 0;
     } catch (error, stackTrace) {
       Logger.debug('RecordingTransferCoordinator: $trigger pass failed: $error\n$stackTrace');
       _scheduleRetry('pass threw while recovering recording transfers');
+    }
+  }
+
+  /// Runs a reconcile pass, reporting failure instead of propagating it.
+  Future<bool> _tryReconcile() async {
+    try {
+      await _reconcile();
+      return true;
+    } catch (error, stackTrace) {
+      Logger.debug('RecordingTransferCoordinator: reconcile failed, continuing to drain: $error\n$stackTrace');
+      return false;
     }
   }
 
