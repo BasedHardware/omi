@@ -39,6 +39,14 @@ class _Response:
     def json(self):
         return {"status": "RUNNING"}
 
+    def raise_for_status(self):
+        return None
+
+
+class _ErrorResponse(_Response):
+    def raise_for_status(self):
+        raise RuntimeError("HTTP 500")
+
 
 class _AsyncClient:
     def __init__(self):
@@ -98,6 +106,8 @@ class _VMProtocol:
 
 
 class _ProxyHTTPClient:
+    post_calls = 0
+
     def __init__(self, *_args, **_kwargs):
         pass
 
@@ -111,6 +121,9 @@ class _ProxyHTTPClient:
         return _Response()
 
     async def post(self, _url, **_kwargs):
+        type(self).post_calls += 1
+        if type(self).post_calls == 1:
+            return _ErrorResponse()
         return _Response()
 
 
@@ -159,12 +172,19 @@ async def test_gce_credential_refresh_failure_still_propagates(agent_proxy, monk
 async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy, monkeypatch):
     phone_ws = _AgentWebSocket()
     vm_ws = _VMProtocol()
+    _ProxyHTTPClient.post_calls = 0
+    real_sleep = asyncio.sleep
 
     async def direct_run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
 
     async def connect(*_args, **_kwargs):
         return vm_ws
+
+    async def no_retry_sleep(seconds):
+        if seconds == 2:
+            return None
+        await real_sleep(seconds)
 
     monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
     monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "user-1"})
@@ -178,12 +198,14 @@ async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy
     monkeypatch.setattr(agent_proxy, "_save_message", lambda *_args: None)
     monkeypatch.setattr(agent_proxy.httpx, "AsyncClient", _ProxyHTTPClient)
     monkeypatch.setattr(agent_proxy.websockets, "connect", connect)
+    monkeypatch.setattr(agent_proxy.asyncio, "sleep", no_retry_sleep)
 
     await agent_proxy.agent_ws(phone_ws)
 
     assert phone_ws.accepted is True
     assert vm_ws.sent == ['{"type": "query", "prompt": "hello"}']
     assert vm_ws.closed is True
+    assert _ProxyHTTPClient.post_calls == 2
     assert phone_ws.closed == [(1000, "Session ended")]
 
 

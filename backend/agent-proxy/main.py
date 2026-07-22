@@ -598,10 +598,11 @@ async def agent_ws(websocket: WebSocket):
             for auth_attempt in (1, 2):
                 try:
                     async with httpx.AsyncClient(timeout=10) as client:
-                        await client.post(
+                        response = await client.post(
                             f"http://{vm_ip}:8080/auth?token={vm_token}",
                             json={"firebaseToken": token},
                         )
+                        response.raise_for_status()
                         logger.info(f"[agent-proxy] uid={uid} sent Firebase token to VM")
                     break
                 except Exception:
@@ -717,7 +718,8 @@ async def agent_ws(websocket: WebSocket):
                     while True:
                         await asyncio.sleep(VM_KEEPALIVE_INTERVAL)
                         try:
-                            await client.post(f"http://{vm_ip}:8080/ping?token={vm_token}")
+                            response = await client.post(f"http://{vm_ip}:8080/ping?token={vm_token}")
+                            response.raise_for_status()
                             ping_failures = 0
                         except Exception:
                             ping_failures += 1
