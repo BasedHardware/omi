@@ -2,8 +2,9 @@ name: Build Desktop Release Candidate
 
 on:
   schedule:
-    # One daily candidate at most. Developers use scripts/omi-main for head.
-    - cron: '17 10 * * *'
+    # Retry hourly; planner quiet-window, exact-SHA checks, and active-release
+    # fences still admit at most one eligible candidate at a time.
+    - cron: '17 * * * *'
 
 permissions:
   contents: write

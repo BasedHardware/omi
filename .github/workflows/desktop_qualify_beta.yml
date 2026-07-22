@@ -21,7 +21,7 @@ concurrency:
 
 # This workflow deliberately runs only on the dedicated, trusted macOS runner.
 # Do not add pull_request or push triggers: the runner has Docker and a GitHub
-# App token that can request beta promotion after exact qualification passes.
+# App token that can publish immutable evidence after exact qualification passes.
 jobs:
   qualify:
     runs-on: [self-hosted, macos, omi-desktop-qualification]
@@ -143,10 +143,3 @@ jobs:
           set -euo pipefail
           gh release upload "$RELEASE_TAG" --repo "$REPO" \
             /tmp/desktop-beta-qualification/qualification-evidence.json#"qualification-evidence-${RELEASE_TAG}.json"
-
-  promote-qualified-beta:
-    needs: qualify
-    if: needs.qualify.result == 'success'
-    uses: ./.github/workflows/desktop_promote_beta.yml
-    with:
-      release_tag: ${{ inputs.release_tag }}

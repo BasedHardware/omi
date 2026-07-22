@@ -11,6 +11,11 @@ from pathlib import Path
 
 CODEMAGIC_CHECK_NAME = "Release OMI Desktop (Swift)"
 RELEASE_ELIGIBILITY_CHECK_NAME = "Release Eligibility"
+REQUIRED_SOURCE_CHECK_NAMES = (
+    RELEASE_ELIGIBILITY_CHECK_NAME,
+    "Desktop Swift Build & Tests",
+    "Desktop Swift Release Compile",
+)
 RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60
 AUTO_RELEASE_QUIET_SECONDS = 10 * 60
 
@@ -115,19 +120,20 @@ def codemagic_check_status(repository: str, sha: str) -> tuple[str | None, str |
     return github_check_status(repository, sha, CODEMAGIC_CHECK_NAME)
 
 
-def required_release_eligibility_reason(repository: str, sha: str) -> str | None:
-    status, conclusion, error = github_check_status(repository, sha, RELEASE_ELIGIBILITY_CHECK_NAME)
-    if error:
-        return f"could not read required check for source SHA {sha}: {error}"
-    if status is None:
-        return f"required check {RELEASE_ELIGIBILITY_CHECK_NAME} is missing for exact main SHA {sha}"
-    if status != "completed":
-        return f"required check {RELEASE_ELIGIBILITY_CHECK_NAME} for exact main SHA {sha} is {status}"
-    if conclusion != "success":
-        return (
-            f"required check {RELEASE_ELIGIBILITY_CHECK_NAME} for exact main SHA {sha} "
-            f"completed with {conclusion or 'no conclusion'}"
-        )
+def required_source_checks_reason(repository: str, sha: str) -> str | None:
+    for check_name in REQUIRED_SOURCE_CHECK_NAMES:
+        status, conclusion, error = github_check_status(repository, sha, check_name)
+        if error:
+            return f"could not read required check {check_name} for source SHA {sha}: {error}"
+        if status is None:
+            return f"required check {check_name} is missing for exact main SHA {sha}"
+        if status != "completed":
+            return f"required check {check_name} for exact main SHA {sha} is {status}"
+        if conclusion != "success":
+            return (
+                f"required check {check_name} for exact main SHA {sha} "
+                f"completed with {conclusion or 'no conclusion'}"
+            )
     return None
 
 
@@ -204,7 +210,7 @@ def main() -> int:
         )
         return 0
 
-    source_check_reason = required_release_eligibility_reason(args.repository, source_sha)
+    source_check_reason = required_source_checks_reason(args.repository, source_sha)
     if source_check_reason:
         set_output("should_release", "false")
         set_output("reason", f"Desktop candidate source gate blocked: {source_check_reason}.")

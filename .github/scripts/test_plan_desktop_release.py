@@ -25,15 +25,37 @@ RELEASABLE_PATH = "desktop/macos/Desktop/Sources/AppDelegate.swift"
 
 
 class DesktopCandidateSourceCheckTests(unittest.TestCase):
-    def test_exact_source_sha_success_passes_the_gate(self) -> None:
-        with patch.object(planner, "github_check_status", return_value=("completed", "success", None)):
-            self.assertIsNone(planner.required_release_eligibility_reason(REPOSITORY, SOURCE_SHA))
+    def test_exact_source_sha_success_for_every_required_check_passes_the_gate(self) -> None:
+        checked: list[tuple[str, str]] = []
 
-    def test_missing_or_failed_source_check_blocks_the_gate(self) -> None:
-        with patch.object(planner, "github_check_status", return_value=(None, None, None)):
-            self.assertIn("missing", planner.required_release_eligibility_reason(REPOSITORY, SOURCE_SHA) or "")
-        with patch.object(planner, "github_check_status", return_value=("completed", "failure", None)):
-            self.assertIn("failure", planner.required_release_eligibility_reason(REPOSITORY, SOURCE_SHA) or "")
+        def successful_check(_repository: str, sha: str, check_name: str):
+            checked.append((sha, check_name))
+            return "completed", "success", None
+
+        with patch.object(planner, "github_check_status", side_effect=successful_check):
+            self.assertIsNone(planner.required_source_checks_reason(REPOSITORY, SOURCE_SHA))
+
+        self.assertEqual(
+            checked,
+            [(SOURCE_SHA, check_name) for check_name in planner.REQUIRED_SOURCE_CHECK_NAMES],
+        )
+
+    def test_each_missing_or_failed_exact_source_check_blocks_the_gate(self) -> None:
+        for blocked_name in (
+            "Release Eligibility",
+            "Desktop Swift Build & Tests",
+            "Desktop Swift Release Compile",
+        ):
+            with self.subTest(check=blocked_name):
+                def check_status(_repository: str, _sha: str, check_name: str):
+                    if check_name == blocked_name:
+                        return None, None, None
+                    return "completed", "success", None
+
+                with patch.object(planner, "github_check_status", side_effect=check_status):
+                    reason = planner.required_source_checks_reason(REPOSITORY, SOURCE_SHA) or ""
+                self.assertIn(blocked_name, reason)
+                self.assertIn("missing", reason)
 
     def test_automatic_planner_gates_exact_head_release_eligibility(self) -> None:
         checked_shas: list[str] = []
@@ -50,7 +72,7 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
                 patch.object(planner, "releasable_desktop_changes_since", return_value=[RELEASABLE_PATH]),
                 patch.object(planner, "latest_change_age_seconds", return_value=601),
                 patch.object(planner, "git", side_effect=fake_git),
-                patch.object(planner, "required_release_eligibility_reason", side_effect=lambda _, sha: checked_shas.append(sha)),
+                patch.object(planner, "required_source_checks_reason", side_effect=lambda _, sha: checked_shas.append(sha)),
                 patch.object(planner, "active_release_reason", return_value=None),
                 patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY]),
                 patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
@@ -64,7 +86,7 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
 
     def test_workflow_is_schedule_only_and_tags_the_changelog_commit(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("schedule:", workflow)
+        self.assertIn("- cron: '17 * * * *'", workflow)
         self.assertNotIn("workflow_dispatch:", workflow)
         self.assertNotIn("break_glass", workflow)
         self.assertLess(workflow.index('git commit -m "chore: consolidate changelog for v${VERSION}"'), workflow.index('git tag "$RELEASE_TAG"'))
