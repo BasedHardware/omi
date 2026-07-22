@@ -28,37 +28,15 @@ struct OnboardingOpenerView: View {
         Spacer(minLength: 0)
       }
 
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      VStack(alignment: .leading, spacing: OmiSpacing.md) {
         ForEach(opener.starters, id: \.self) { question in
-          Button {
+          OpenerStarterCard(question: question) {
             startFromOpener(question)
-          } label: {
-            HStack(spacing: OmiSpacing.sm) {
-              Text(question)
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textPrimary)
-                .multilineTextAlignment(.leading)
-              Spacer(minLength: OmiSpacing.sm)
-              Image(systemName: "arrow.up.right")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
-            }
-            .padding(.horizontal, OmiSpacing.md)
-            .padding(.vertical, OmiSpacing.sm + 2)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-              RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(OmiColors.border.opacity(0.5), lineWidth: 1)
-            )
-            // The stroke leaves a transparent interior, so without an explicit
-            // hit shape only the text/icon were clickable — make the whole row tap.
-            .contentShape(.rect(cornerRadius: 12))
           }
-          .buttonStyle(.plain)
         }
       }
     }
-    .frame(maxWidth: 560, alignment: .leading)
+    .frame(maxWidth: 640, alignment: .leading)
     .padding(.horizontal, OmiSpacing.xxl)
     .padding(.vertical, 64)
   }
@@ -68,5 +46,45 @@ struct OnboardingOpenerView: View {
       messageLength: question.count, hasSelectedAppContext: false, source: "onboarding_opener")
     chatProvider.dismissOnboardingOpener()
     Task { await chatProvider.sendMainDraft(question) }
+  }
+}
+
+/// One tappable starter. Filled surface + hover highlight so the three cards
+/// read as the obvious next click, not passive text rows.
+private struct OpenerStarterCard: View {
+  let question: String
+  let action: () -> Void
+
+  @State private var isHovering = false
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: OmiSpacing.md) {
+        Text(question)
+          .scaledFont(size: OmiType.subheading, weight: .medium)
+          .foregroundColor(OmiColors.textPrimary)
+          .multilineTextAlignment(.leading)
+        Spacer(minLength: OmiSpacing.sm)
+        Image(systemName: "arrow.up.right")
+          .scaledFont(size: OmiType.body, weight: .medium)
+          .foregroundColor(isHovering ? OmiColors.textPrimary : OmiColors.textTertiary)
+      }
+      .padding(.horizontal, OmiSpacing.lg)
+      .padding(.vertical, OmiSpacing.md + 2)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+          .fill(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+          .stroke(OmiColors.border.opacity(isHovering ? 0.9 : 0.5), lineWidth: 1)
+      )
+      // The stroke leaves a transparent interior, so without an explicit
+      // hit shape only the text/icon were clickable — make the whole row tap.
+      .contentShape(.rect(cornerRadius: 14))
+    }
+    .buttonStyle(.plain)
+    .onHover { isHovering = $0 }
   }
 }
