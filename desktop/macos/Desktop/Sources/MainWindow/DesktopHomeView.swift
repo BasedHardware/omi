@@ -640,11 +640,13 @@ struct DesktopHomeView: View {
   }
 
   /// The constant floating top bar (nav + new-item counts + Capture/Listening)
-  /// replaces the old left nav rail. It shows on every main content page;
-  /// settings/permissions/help are utility pages with their own chrome.
+  /// replaces the old left nav rail. It shows on every main content page —
+  /// including Settings, whose page has no back button, so the bar's nav pills
+  /// are the way out. Permissions/help are full-screen utility flows with their
+  /// own chrome and stay bar-less.
   private var showsTopBar: Bool {
     guard !useLegacyHomeDesign, let item = SidebarNavItem(rawValue: selectedIndex) else { return false }
-    return ![.settings, .permissions, .help].contains(item)
+    return ![.permissions, .help].contains(item)
   }
 
   /// Reference instant for the top bar's "new since you were last here" counts.

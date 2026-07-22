@@ -49,10 +49,31 @@ struct DesktopTopBar: View {
         .anchorPreference(key: SidebarCoachAnchorKey.self, value: .bounds) {
           [SidebarCoachAnchorKey.captureAnchorID: $0]
         }
+      settingsButton
     }
     .frame(height: 44)
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.sm)
+  }
+
+  /// Gear that opens Settings. The old left rail held the settings/profile entry;
+  /// with the rail gone this is the only visible way in (⌘, still works too).
+  private var settingsButton: some View {
+    let isActive = selectedIndex == SidebarNavItem.settings.rawValue
+    return Button {
+      OmiMotion.withGated(.easeOut(duration: 0.08)) {
+        selectedIndex = SidebarNavItem.settings.rawValue
+      }
+    } label: {
+      Image(systemName: "gearshape")
+        .scaledFont(size: OmiType.body, weight: .semibold)
+        .foregroundColor(isActive ? OmiColors.textPrimary : OmiColors.textTertiary)
+        .frame(width: 32, height: 32)
+        .background(Circle().fill(isActive ? OmiColors.textPrimary.opacity(0.08) : Color.clear))
+        .contentShape(Circle())
+    }
+    .buttonStyle(.plain)
+    .help("Settings")
   }
 
   private var navPills: some View {
