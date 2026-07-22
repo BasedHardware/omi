@@ -15,7 +15,24 @@ def workflow(name: str) -> str:
     return (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
 
 
+def codemagic() -> str:
+    return (ROOT / "codemagic.yaml").read_text(encoding="utf-8")
+
+
 class DesktopReleaseFlowContractTests(unittest.TestCase):
+    def test_canonical_release_and_qualification_use_lowercase_dmg_asset(self) -> None:
+        build_identity = codemagic().split("- name: Resolve trusted source and build identity", 1)[1]
+        build_identity = build_identity.split("- name: ", 1)[0]
+        preview_branch, canonical_branch = build_identity.split("          else\n", 1)
+        qualification = workflow("desktop_qualify_beta.yml")
+
+        self.assertIn('DMG_PATH="$BUILD_DIR/Omi-Preview.dmg"', preview_branch)
+        self.assertIn('DMG_PATH="$BUILD_DIR/omi.dmg"', canonical_branch)
+        self.assertNotIn('DMG_PATH="$BUILD_DIR/$APP_NAME.dmg"', canonical_branch)
+        self.assertIn("--pattern 'Omi.zip' --pattern 'omi.dmg'", qualification)
+        self.assertIn("STABLE_DMG=/tmp/desktop-beta-qualification/assets/omi.dmg", qualification)
+        self.assertIn('--asset "omi.dmg=$STABLE_DMG"', qualification)
+
     def test_has_one_automatic_candidate_to_beta_authority(self) -> None:
         candidate = workflow("desktop_auto_release.yml")
         qualification = workflow("desktop_qualify_beta.yml")
