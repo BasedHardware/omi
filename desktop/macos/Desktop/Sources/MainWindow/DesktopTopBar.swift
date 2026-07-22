@@ -44,7 +44,6 @@ struct DesktopTopBar: View {
   var body: some View {
     HStack(spacing: OmiSpacing.md) {
       navPills
-      countsPill
       Spacer(minLength: OmiSpacing.md)
       CaptureListeningControls(appState: appState, onRewind: onRewind)
         .anchorPreference(key: SidebarCoachAnchorKey.self, value: .bounds) {
@@ -69,6 +68,16 @@ struct DesktopTopBar: View {
               .scaledFont(size: OmiType.caption, weight: .semibold)
             Text(item.title)
               .scaledFont(size: OmiType.caption, weight: .semibold)
+            // New-item badge lives on the button it belongs to (Memory =
+            // memories + conversations, Tasks = tasks) since Omi was last front.
+            if newCount(for: item) > 0 {
+              Text("+\(newCount(for: item))")
+                .scaledFont(size: OmiType.micro, weight: .bold)
+                .foregroundColor(OmiColors.textPrimary)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(Capsule(style: .continuous).fill(OmiColors.textPrimary.opacity(0.16)))
+            }
           }
           .foregroundColor(selectedIndex == item.index ? OmiColors.textPrimary : OmiColors.textTertiary)
           .padding(.horizontal, OmiSpacing.md)
@@ -88,33 +97,14 @@ struct DesktopTopBar: View {
     }
   }
 
-  @ViewBuilder private var countsPill: some View {
-    let parts: [(count: Int, label: String)] = [
-      (newConversations, newConversations == 1 ? "conversation" : "conversations"),
-      (newMemories, newMemories == 1 ? "memory" : "memories"),
-      (newTasks, newTasks == 1 ? "task" : "tasks"),
-    ].filter { $0.count > 0 }
-
-    if !parts.isEmpty {
-      HStack(spacing: OmiSpacing.sm) {
-        ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
-          if index > 0 {
-            Text("·")
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary.opacity(0.6))
-          }
-          HStack(spacing: 4) {
-            Text("+\(part.count)")
-              .scaledFont(size: OmiType.caption, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
-            Text(part.label)
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
-          }
-        }
-      }
-      .help("New since Omi was last in front")
-      .transition(.opacity)
+  /// New-item count to badge on a nav button (since Omi was last in front).
+  /// The Memory hub holds both memories and conversations, so its badge sums
+  /// them; Tasks badges new tasks. Home/Apps have no counter.
+  private func newCount(for item: NavItem) -> Int {
+    switch item.index {
+    case SidebarNavItem.conversations.rawValue: return newMemories + newConversations
+    case SidebarNavItem.tasks.rawValue: return newTasks
+    default: return 0
     }
   }
 }
