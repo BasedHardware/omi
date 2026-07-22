@@ -372,6 +372,8 @@ jobs:
           if [ -f /tmp/desktop-beta-qualification/assets/Omi.Beta.zip ]; then
             BETA_EVIDENCE_ASSETS="--asset Omi.Beta.zip=/tmp/desktop-beta-qualification/assets/Omi.Beta.zip --asset omi-beta.dmg=/tmp/desktop-beta-qualification/assets/omi-beta.dmg"
           fi
+          # Optional assets intentionally expand into separate CLI flags.
+          # shellcheck disable=SC2086
           python3 .github/scripts/desktop_qualification_evidence.py build \
             --release-json /tmp/desktop-beta-qualification/release.json \
             --release-tag "$RELEASE_TAG" --source-sha "$TARGET_SHA" \

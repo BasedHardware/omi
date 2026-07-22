@@ -97,6 +97,35 @@ class AdmissionTests(unittest.TestCase):
         self.assertFalse(decision["admitted"])
         self.assertIn("3-attempt", decision["reason"])
 
+    def test_workflow_run_state_machine_accepts_representative_valid_states(self) -> None:
+        cases = (
+            ("queued", None, False),
+            ("in_progress", None, False),
+            ("completed", "success", False),
+            ("completed", "failure", True),
+            ("completed", "cancelled", True),
+        )
+        for status, conclusion, admitted in cases:
+            with self.subTest(status=status, conclusion=conclusion):
+                decision = _decide([_run(run_id=1, status=status, conclusion=conclusion)])
+                self.assertEqual(decision["admitted"], admitted)
+
+    def test_workflow_run_state_machine_rejects_mutated_invalid_states(self) -> None:
+        mutations = (
+            ("completed", None, "completed status has invalid conclusion"),
+            ("completed", "unknown", "completed status has invalid conclusion"),
+            ("queued", "failure", "nonterminal status must have null conclusion"),
+            ("unknown", None, "unknown status"),
+        )
+        for status, conclusion, message in mutations:
+            with self.subTest(status=status, conclusion=conclusion):
+                with self.assertRaisesRegex(ValueError, message):
+                    _decide([_run(run_id=1, status=status, conclusion=conclusion)])
+
+    def test_malformed_current_run_is_validated_before_exclusion(self) -> None:
+        with self.assertRaisesRegex(ValueError, "completed status has invalid conclusion"):
+            _decide([_run(run_id=42, status="completed", conclusion=None)], current_run_id=42)
+
 
 if __name__ == "__main__":
     unittest.main()

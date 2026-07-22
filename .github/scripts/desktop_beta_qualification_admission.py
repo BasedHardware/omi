@@ -21,6 +21,12 @@ QUALIFICATION_WORKFLOW = ".github/workflows/desktop_qualify_beta.yml"
 TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+-macos$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 MAX_EXACT_CANDIDATE_ATTEMPTS = 3
+# GitHub's REST workflow-run state machine. Nonterminal runs have no
+# conclusion; completed runs must carry one of these exact REST conclusions.
+NONTERMINAL_STATUSES = frozenset({"queued", "in_progress"})
+TERMINAL_CONCLUSIONS = frozenset(
+    {"action_required", "cancelled", "failure", "neutral", "skipped", "stale", "success", "timed_out"}
+)
 
 
 def _load(path: Path) -> Any:
@@ -93,10 +99,28 @@ def _workflow_runs(runs_response: Any) -> list[dict[str, Any]]:
             if run_id in seen_ids:
                 raise ValueError(f"GitHub workflow-runs response contains duplicate run id {run_id}")
             seen_ids.add(run_id)
+            _validate_workflow_run_state(run, absolute_index)
             all_runs.append(run)
     if total_count != len(all_runs):
         raise ValueError("GitHub workflow-runs pagination is incomplete")
     return all_runs
+
+
+def _validate_workflow_run_state(run: dict[str, Any], index: int) -> None:
+    """Reject incomplete or impossible GitHub workflow-run states before use."""
+    status = run.get("status")
+    conclusion = run.get("conclusion")
+    if not isinstance(status, str):
+        raise ValueError(f"workflow run {index} has unknown status")
+    if status in NONTERMINAL_STATUSES:
+        if conclusion is not None:
+            raise ValueError(f"workflow run {index} nonterminal status must have null conclusion")
+        return
+    if status == "completed":
+        if not isinstance(conclusion, str) or conclusion not in TERMINAL_CONCLUSIONS:
+            raise ValueError(f"workflow run {index} completed status has invalid conclusion")
+        return
+    raise ValueError(f"workflow run {index} has unknown status")
 
 
 def _exact_runs(runs_response: Any, release_tag: str, source_sha: str) -> list[dict[str, Any]]:
@@ -110,9 +134,6 @@ def _exact_runs(runs_response: Any, release_tag: str, source_sha: str) -> list[d
         for field in ("path", "event", "head_branch", "head_sha", "status"):
             if not isinstance(run.get(field), str):
                 raise ValueError(f"workflow run {index} {field} is malformed")
-        conclusion = run.get("conclusion")
-        if conclusion is not None and not isinstance(conclusion, str):
-            raise ValueError(f"workflow run {index} conclusion is malformed")
         if (
             run["path"] == QUALIFICATION_WORKFLOW
             and run["event"] == "workflow_dispatch"
