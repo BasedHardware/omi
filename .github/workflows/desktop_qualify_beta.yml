@@ -14,9 +14,9 @@ permissions:
   contents: read
 
 concurrency:
-  # Per-tag serialization plus immutable qualification evidence make retries
-  # safe without a second release-body claim state machine.
-  group: desktop-beta-qualification-${{ inputs.release_tag }}
+  # Firebase-bearing qualification is globally serialized. Exact-candidate
+  # admission below decides whether a queued duplicate may proceed.
+  group: desktop-beta-qualification
   cancel-in-progress: false
 
 # Qualification runs as two serialized lanes with an at-least-one-passes
@@ -33,7 +33,65 @@ concurrency:
 # Do not add pull_request or push triggers: both lanes can mint a GitHub App
 # token that publishes immutable evidence after exact qualification passes.
 jobs:
+  admit:
+    # Keep GitHub API failures and duplicates off both qualification lanes.
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout admission controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_tag }}
+          persist-credentials: false
+
+      - name: Fail-closed exact-candidate admission
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REPO: ${{ github.repository }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/desktop-beta-qualification-admission
+          admission_dir=/tmp/desktop-beta-qualification-admission
+          gh api "repos/$REPO/git/ref/tags/$RELEASE_TAG" > "$admission_dir/ref.json"
+          tag_type=$(jq -r '.object.type // empty' "$admission_dir/ref.json")
+          case "$tag_type" in
+            commit) CANDIDATE_SHA=$(jq -r '.object.sha // empty' "$admission_dir/ref.json") ;;
+            tag)
+              tag_object_sha=$(jq -r '.object.sha // empty' "$admission_dir/ref.json")
+              [[ "$tag_object_sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'Malformed annotated tag ref.' >&2; exit 1; }
+              gh api "repos/$REPO/git/tags/$tag_object_sha" > "$admission_dir/annotated-tag.json"
+              CANDIDATE_SHA=$(jq -r '.object.sha // empty' "$admission_dir/annotated-tag.json")
+              ;;
+            *) echo 'Malformed candidate tag ref.' >&2; exit 1 ;;
+          esac
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Malformed candidate commit SHA.' >&2; exit 1; }
+          gh api --paginate --slurp --method GET "repos/$REPO/actions/workflows/desktop_qualify_beta.yml/runs" \
+            -f event=workflow_dispatch -f branch="$RELEASE_TAG" -F per_page=100 > "$admission_dir/runs.json"
+          mkdir -p "$admission_dir/jobs"
+          [[ "$CURRENT_RUN_ID" =~ ^[1-9][0-9]*$ ]] || { echo 'Malformed current workflow run ID.' >&2; exit 1; }
+          attempt_authorities=0
+          while IFS=$'\t' read -r run_id run_attempt; do
+            [[ "$run_id" =~ ^[1-9][0-9]*$ ]] || { echo 'Malformed workflow run ID.' >&2; exit 1; }
+            if ! [[ "$run_attempt" =~ ^[1-9][0-9]*$ ]] || (( run_attempt > 10 )); then echo 'Malformed or excessive workflow run attempt.' >&2; exit 1; fi
+            attempt_authorities=$((attempt_authorities + run_attempt))
+            (( attempt_authorities <= 30 )) || { echo 'Excessive workflow attempt authority.' >&2; exit 1; }
+            mkdir -p "$admission_dir/jobs/$run_id"
+            for ((attempt = 1; attempt <= run_attempt; attempt++)); do
+              gh api --paginate --slurp --method GET "repos/$REPO/actions/runs/$run_id/attempts/$attempt/jobs" -F per_page=100 > "$admission_dir/jobs/$run_id/$attempt.json"
+            done
+          done < <(jq -r --arg tag "$RELEASE_TAG" --arg sha "$CANDIDATE_SHA" --argjson current "$CURRENT_RUN_ID" '
+            [].workflow_runs[] | select(.id != $current and .path == ".github/workflows/desktop_qualify_beta.yml" and .event == "workflow_dispatch" and .head_branch == $tag and .head_sha == $sha) | [.id, .run_attempt] | @tsv
+          ' "$admission_dir/runs.json")
+          admission_args=(--ref-json "$admission_dir/ref.json" --runs-json "$admission_dir/runs.json" --jobs-dir "$admission_dir/jobs" --release-tag "$RELEASE_TAG" --current-run-id "$CURRENT_RUN_ID" --require-admitted)
+          if [[ "$tag_type" == tag ]]; then admission_args+=(--annotated-tag-json "$admission_dir/annotated-tag.json"); fi
+          python3 .github/scripts/desktop_beta_qualification_admission.py "${admission_args[@]}"
+
   codemagic-lane:
+    needs: admit
     runs-on: ubuntu-latest
     timeout-minutes: 165
     continue-on-error: true

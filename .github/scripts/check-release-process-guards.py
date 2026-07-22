@@ -810,9 +810,11 @@ def check_desktop_qualification_runner() -> list[str]:
         "check-desktop-auto-beta-candidate.py",
         "--automatic",
         "actions/create-github-app-token@v3",
-        "desktop-beta-qualification-${{ inputs.release_tag }}",
+        "group: desktop-beta-qualification",
         "cancel-in-progress: false",
-        "safe without a second release-body claim state machine",
+        "Fail-closed exact-candidate admission",
+        "desktop_beta_qualification_admission.py",
+        "needs: admit",
     ):
         if required_fragment not in text:
             errors.append(f"desktop qualification runner is missing required guard fragment: {required_fragment}")

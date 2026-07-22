@@ -230,6 +230,24 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertNotIn("rm -rf", preclean_script)
         self.assertNotIn(".gitmodules", preclean_script)
 
+    def test_beta_qualification_globally_serializes_before_trusted_runner_work(self) -> None:
+        qualification = workflow("desktop_qualify_beta.yml")
+        self.assertIn("group: desktop-beta-qualification\n", qualification)
+        self.assertNotIn("group: desktop-beta-qualification-${{ inputs.release_tag }}", qualification)
+        self.assertIn("cancel-in-progress: false", qualification)
+        admission = self._qualification_step("Fail-closed exact-candidate admission")
+        self.assertIn("desktop_beta_qualification_admission.py", admission)
+        self.assertIn("--current-run-id \"$CURRENT_RUN_ID\"", admission)
+        self.assertIn("--require-admitted", admission)
+        self.assertLess(qualification.index("Fail-closed exact-candidate admission"), qualification.index("Checkout qualification controls"))
+        self.assertIn("needs: admit", qualification)
+
+    def test_codemagic_avoids_known_duplicate_qualification_dispatches(self) -> None:
+        dispatch = codemagic().split("Dispatch trusted macOS beta qualification", 1)[1]
+        self.assertIn("desktop_beta_qualification_admission.py", dispatch)
+        self.assertIn("Skipping duplicate trusted qualification dispatch", dispatch)
+        self.assertIn("actions/workflows/desktop_qualify_beta.yml/runs", dispatch)
+
     def test_beta_qualification_cleanup_accepts_missing_gitlink(self) -> None:
         for name, script in self._gitlink_cleanup_scripts():
             with self.subTest(step=name), tempfile.TemporaryDirectory() as directory:
