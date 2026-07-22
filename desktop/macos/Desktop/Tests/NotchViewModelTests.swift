@@ -106,6 +106,43 @@ final class NotchViewModelTests: XCTestCase {
     XCTAssertEqual(model.state, .closed)
   }
 
+  // MARK: - Response linger
+
+  func testResponseLingerDismissesAfterHold() async {
+    let sleeper = ManualSleeper()
+    let model = makeModel(sleep: { await sleeper.sleep($0) })
+    model.beginResponseLinger("You have three meetings today")
+    XCTAssertEqual(model.responseLinger, "You have three meetings today")
+    await waitUntil { sleeper.pendingCount == 1 }
+    sleeper.resumeAll()
+    await waitUntil { model.responseLinger == nil }
+    XCTAssertNil(model.responseLinger)
+  }
+
+  func testHoverKeepsLingerUntilResumed() async {
+    let sleeper = ManualSleeper()
+    let model = makeModel(sleep: { await sleeper.sleep($0) })
+    model.beginResponseLinger("reply")
+    await waitUntil { sleeper.pendingCount == 1 }
+    // Hovering cancels the pending dismiss; the reply stays.
+    model.keepLinger()
+    sleeper.resumeAll()
+    for _ in 0..<50 { await Task.yield() }
+    XCTAssertEqual(model.responseLinger, "reply")
+    // Leaving reschedules the dismiss.
+    model.resumeLinger()
+    await waitUntil { sleeper.pendingCount == 1 }
+    sleeper.resumeAll()
+    await waitUntil { model.responseLinger == nil }
+    XCTAssertNil(model.responseLinger)
+  }
+
+  func testEmptyReplyNeverLingers() {
+    let model = makeModel()
+    model.beginResponseLinger("")
+    XCTAssertNil(model.responseLinger)
+  }
+
   // MARK: - Auto-close grace
 
   func testCanAutoCloseHonorsGracePeriodAndHold() {
