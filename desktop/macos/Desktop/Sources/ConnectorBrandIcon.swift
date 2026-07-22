@@ -40,7 +40,31 @@ enum ConnectorBrand: String, Sendable {
     }
   }
 
+  fileprivate var appBundleIdentifier: String? {
+    switch self {
+    case .appleNotes:
+      return "com.apple.Notes"
+    case .notion:
+      return "notion.id"
+    case .obsidian:
+      return "md.obsidian"
+    case .chatgpt, .codex:
+      return "com.openai.chat"
+    case .claude, .claudeCode:
+      return "com.anthropic.claudefordesktop"
+    case .calendar, .gmail, .localFiles, .gemini, .agents, .openclaw, .hermes, .x:
+      return nil
+    }
+  }
+
   var installedApplicationURL: URL? {
+    // LaunchServices finds the app wherever it lives (~/Applications, Setapp, renamed);
+    // the fixed /Applications path stays as a fallback for unregistered copies.
+    if let appBundleIdentifier,
+      let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: appBundleIdentifier)
+    {
+      return url
+    }
     guard let appPath, FileManager.default.fileExists(atPath: appPath) else {
       return nil
     }
@@ -53,8 +77,14 @@ enum ConnectorBrand: String, Sendable {
       return "google_calendar_logo"
     case .gmail:
       return "gmail_logo"
+    case .notion:
+      return "notion_logo"
     case .obsidian:
       return "obsidian_logo"
+    case .chatgpt, .codex:
+      return "chatgpt_logo"
+    case .claude, .claudeCode:
+      return "claude_logo"
     case .gemini:
       return "gemini_logo"
     case .hermes:
@@ -103,7 +133,7 @@ enum ConnectorBrand: String, Sendable {
   }
 }
 
-private enum ConnectorBrandImageLoader {
+enum ConnectorBrandImageLoader {
   private nonisolated(unsafe) static var cache: [ConnectorBrand: NSImage] = [:]
   private nonisolated(unsafe) static var resourceBundle: Bundle? = {
     let candidates = Bundle.allBundles + Bundle.allFrameworks + [Bundle.main]
@@ -114,23 +144,41 @@ private enum ConnectorBrandImageLoader {
       }
     }
 
-    if let resourcesURL = Bundle.main.resourceURL,
-      let bundleURLs = try? FileManager.default.contentsOfDirectory(
-        at: resourcesURL,
-        includingPropertiesForKeys: nil
-      )
-    {
-      for url in bundleURLs where url.pathExtension == "bundle" {
-        if let bundle = Bundle(url: url),
-          bundle.url(forResource: "gmail_logo", withExtension: "png") != nil
-        {
-          return bundle
+    // SwiftPM copies the target's resources into "<pkg>_<target>.bundle", placed
+    // inside the enclosing bundle's Resources (app in production) or next to the
+    // build products (.xctest in `swift test`), so scan one level of nested
+    // bundles under both locations for every candidate.
+    for parent in candidates {
+      var scanRoots = [parent.bundleURL.deletingLastPathComponent()]
+      if let resourcesURL = parent.resourceURL {
+        scanRoots.insert(resourcesURL, at: 0)
+      }
+      for root in scanRoots {
+        guard
+          let bundleURLs = try? FileManager.default.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: nil
+          )
+        else { continue }
+        for url in bundleURLs where url.pathExtension == "bundle" {
+          if let bundle = Bundle(url: url),
+            bundle.url(forResource: "gmail_logo", withExtension: "png") != nil
+          {
+            return bundle
+          }
         }
       }
     }
 
     return nil
   }()
+
+  static func bundledImageURL(for brand: ConnectorBrand) -> URL? {
+    guard let resourceName = brand.bundledResourceName, let bundle = resourceBundle else {
+      return nil
+    }
+    return bundle.url(forResource: resourceName, withExtension: "png")
+  }
 
   static func image(for brand: ConnectorBrand) -> NSImage? {
     if let cached = cache[brand] {
@@ -151,17 +199,14 @@ private enum ConnectorBrandImageLoader {
   }
 
   private static func appImage(for brand: ConnectorBrand) -> NSImage? {
-    guard let appPath = brand.appPath, FileManager.default.fileExists(atPath: appPath) else {
+    guard let appURL = brand.installedApplicationURL else {
       return nil
     }
-    return NSWorkspace.shared.icon(forFile: appPath)
+    return NSWorkspace.shared.icon(forFile: appURL.path)
   }
 
   private static func bundledImage(for brand: ConnectorBrand) -> NSImage? {
-    guard let resourceName = brand.bundledResourceName,
-      let bundle = resourceBundle,
-      let url = bundle.url(forResource: resourceName, withExtension: "png")
-    else {
+    guard let url = bundledImageURL(for: brand) else {
       return nil
     }
     return NSImage(contentsOf: url)
