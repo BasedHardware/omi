@@ -113,7 +113,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         qualification = workflow("desktop_qualify_beta.yml")
         beta = workflow("desktop_promote_beta.yml")
         self.assertIn("schedule:", candidate)
-        self.assertNotIn("workflow_dispatch:", candidate)
+        self.assertIn("workflow_dispatch:\n  schedule:", candidate)
         self.assertNotIn("uses: ./.github/workflows/desktop_promote_beta.yml", qualification)
         self.assertNotIn("promote-qualified-beta:", qualification)
         self.assertIn('workflows: ["Qualify Desktop Beta Candidate"]', beta)
