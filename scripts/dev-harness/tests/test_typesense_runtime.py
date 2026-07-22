@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -31,11 +32,35 @@ def test_invalid_runtime_env_fails_loud(monkeypatch: pytest.MonkeyPatch) -> None
         cli.typesense_runtime()
 
 
-def test_auto_prefers_docker_when_present(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.fixture(autouse=True)
+def _fresh_docker_probe():
+    cli._docker_daemon_healthy.cache_clear()
+    yield
+    cli._docker_daemon_healthy.cache_clear()
+
+
+def test_auto_prefers_docker_when_daemon_healthy(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OMI_TYPESENSE_RUNTIME", raising=False)
     monkeypatch.delenv("OMI_TYPESENSE_SERVER_BIN", raising=False)
     monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/local/bin/docker" if name == "docker" else None)
+    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0))
     assert cli.typesense_runtime() == "docker"
+
+
+def test_auto_broken_docker_daemon_uses_native_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A docker CLI with a dead daemon must not sink a machine that has the native binary."""
+    monkeypatch.delenv("OMI_TYPESENSE_RUNTIME", raising=False)
+    monkeypatch.delenv("OMI_TYPESENSE_SERVER_BIN", raising=False)
+    monkeypatch.setattr(
+        cli.shutil,
+        "which",
+        lambda name: {
+            "docker": "/usr/local/bin/docker",
+            "typesense-server": "/opt/homebrew/bin/typesense-server",
+        }.get(name),
+    )
+    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 1))
+    assert cli.typesense_runtime() == "native"
 
 
 def test_auto_falls_back_to_native_binary(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -52,6 +77,18 @@ def test_auto_without_either_keeps_docker_for_preflight_ownership(monkeypatch: p
     monkeypatch.delenv("OMI_TYPESENSE_SERVER_BIN", raising=False)
     monkeypatch.setattr(cli.shutil, "which", lambda name: None)
     assert cli.typesense_runtime() == "docker"
+
+
+def test_preflight_docker_runtime_reports_dead_daemon(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("PROVIDER_MODE", "offline")
+    monkeypatch.setenv("OMI_TYPESENSE_RUNTIME", "docker")
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/local/bin/docker" if name == "docker" else None)
+    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 1))
+    cfg = _cfg(tmp_path, monkeypatch)
+
+    missing, _warnings = cli.prerequisite_report(cfg)
+
+    assert any("docker daemon" in item for item in missing)
 
 
 def test_native_command_uses_binary_and_pinned_loopback_port(
