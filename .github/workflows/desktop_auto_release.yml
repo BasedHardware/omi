@@ -2,8 +2,9 @@ name: Build Desktop Release Candidate
 
 on:
   schedule:
-    # One daily candidate at most. Developers use scripts/omi-main for head.
-    - cron: '17 10 * * *'
+    # Retry hourly; planner quiet-window, exact-SHA checks, and active-release
+    # fences still admit at most one eligible candidate at a time.
+    - cron: '17 * * * *'
 
 permissions:
   contents: write
@@ -18,6 +19,7 @@ jobs:
     outputs:
       should_release: ${{ steps.plan.outputs.should_release }}
       reason: ${{ steps.plan.outputs.reason }}
+      source_sha: ${{ steps.plan.outputs.source_sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -75,6 +77,13 @@ jobs:
           python3 .github/scripts/plan-desktop-release.py \
             --repository "${{ github.repository }}"
 
+      - name: Checkout exact releasable desktop source
+        if: steps.recheck.outputs.should_release == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.recheck.outputs.source_sha }}
+          fetch-depth: 0
+
       - name: Compute next version and consolidate changelog
         if: steps.recheck.outputs.should_release == 'true'
         id: version
@@ -123,7 +132,8 @@ jobs:
           git add desktop/macos/CHANGELOG.json desktop/macos/changelog
           git commit -m "chore: consolidate changelog for v${VERSION}" || echo "No changelog changes to commit"
 
-          # The planner checked the newest queued releasable desktop source SHA.
+          # The planner checked and this job checked out the newest queued
+          # releasable desktop source SHA.
           # Tag this commit so Codemagic receives the consolidated release notes too.
           # NOTE: commit message must NOT contain [skip ci].
           git tag "$RELEASE_TAG"
