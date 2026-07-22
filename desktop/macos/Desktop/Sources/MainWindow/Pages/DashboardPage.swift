@@ -251,7 +251,7 @@ struct DashboardPage: View {
   @AppStorage("systemAudioCaptureMode") private var systemAudioCaptureModeRaw =
     AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
-  @State private var homeMode: HomeStageMode = .hub
+  @State private var homeMode: HomeStageMode = .chat
   @FocusState private var homeAskFieldFocused: Bool
 
   /// Rotation index for the home knows-list; a timer advances it so the hub
@@ -796,6 +796,13 @@ struct DashboardPage: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
 
+      // Rolling suggestions sit just above the ask bar while the chat is empty.
+      if chatProvider.messages.isEmpty {
+        homeRollingSuggestions
+          .frame(width: askBarWidth)
+          .padding(.bottom, OmiSpacing.sm)
+      }
+
       homeAskBar
         .frame(width: askBarWidth)
         .padding(.top, OmiSpacing.xl)
@@ -803,6 +810,54 @@ struct DashboardPage: View {
       dashboardChatErrorCard
         .frame(width: askBarWidth)
         .padding(.top, OmiSpacing.sm)
+    }
+  }
+
+  /// A small, auto-rotating set of prompt suggestions shown above the ask bar on
+  /// an empty home chat — replaces the old greeting hero + knows-list cards.
+  private var homeRollingSuggestions: some View {
+    VStack(spacing: OmiSpacing.xs) {
+      ForEach(Array(homeKnowsRows.prefix(3))) { row in
+        Button {
+          openKnowsRow(row)
+        } label: {
+          HStack(spacing: OmiSpacing.sm) {
+            Image(systemName: rollingSuggestionIcon(row.kind))
+              .scaledFont(size: OmiType.caption)
+              .foregroundStyle(HomePalette.muted)
+            Text(row.text)
+              .scaledFont(size: OmiType.caption, weight: .medium)
+              .foregroundStyle(HomePalette.secondary)
+              .lineLimit(1)
+            Spacer(minLength: 8)
+          }
+          .padding(.horizontal, OmiSpacing.md)
+          .frame(height: 34)
+          .frame(maxWidth: .infinity)
+          .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(HomePalette.tile.opacity(0.5)))
+          .overlay(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+              .stroke(HomePalette.hairline.opacity(0.55), lineWidth: 1))
+          .contentShape(.rect(cornerRadius: 11))
+        }
+        .buttonStyle(.plain)
+        .transition(.opacity)
+      }
+    }
+    .omiAnimation(.easeInOut(duration: 0.45), value: knowsRotation)
+    .onReceive(knowsRotationTimer) { _ in
+      guard homeMode == .chat, chatProvider.messages.isEmpty, !chatProvider.isSending, homeKnowsCanRotate
+      else { return }
+      knowsRotation += 1
+    }
+  }
+
+  private func rollingSuggestionIcon(_ kind: HomeKnowsRowKind) -> String {
+    switch kind {
+    case .task: return "circle"
+    case .insight: return "lightbulb"
+    case .focus: return "eye"
+    case .question: return "bubble.left"
     }
   }
 
@@ -1237,11 +1292,10 @@ struct DashboardPage: View {
 
   /// The surface Home rests on when no panel is explicitly open: the chat
   /// timeline once any history exists, otherwise the greeting hub.
-  /// Home always rests on the greeting hero — never the last conversation.
-  /// Chats are entered explicitly (typing in the ask bar, a suggestion, or
-  /// resuming one from History), and collapse back to the hero.
+  /// Home opens directly in the continuous chat (no greeting hero). Rolling
+  /// suggestions sit above the ask bar while the chat is empty.
   private var homeRestingMode: HomeStageMode {
-    .hub
+    .chat
   }
 
   /// User-facing collapse (click outside, Esc, connect ×): returns to the
