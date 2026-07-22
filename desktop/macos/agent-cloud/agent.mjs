@@ -836,7 +836,7 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
         } else {
           const errors = message.errors || [];
           {
-            const category = classifyError(new Error((message.errors || []).join(", ") || message.subtype));
+            const { category } = classifyError(new Error((message.errors || []).join(", ") || message.subtype));
             logEvent("error", "agent_turn_error", { category, subtype: message.subtype, errors: message.errors });
             send({ type: "error", code: category, message: USER_MESSAGES[category] ?? USER_MESSAGES.internal });
           }
@@ -1086,7 +1086,7 @@ function startPersistentSession(initialSink, log, seedTurns = []) {
               send({ type: "result", text: fullText, sessionId, costUsd: message.total_cost_usd || 0, interrupted: true });
             } else {
               {
-              const category = classifyError(new Error((message.errors || []).join(", ") || message.subtype));
+              const { category } = classifyError(new Error((message.errors || []).join(", ") || message.subtype));
               logEvent("error", "agent_turn_error", { category, subtype: message.subtype, errors: message.errors });
               send({ type: "error", code: category, message: USER_MESSAGES[category] ?? USER_MESSAGES.internal });
             }

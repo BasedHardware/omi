@@ -38,6 +38,10 @@ export function query({ prompt }) {
     if (text.includes("CRASH")) {
       throw new Error("simulated session crash");
     }
+    if (text.includes("AUTH_FAIL")) {
+      yield { type: "result", subtype: "error_during_execution", errors: ["401 unauthorized"] };
+      return;
+    }
     turnCount += 1;
     if (text.includes("COUNT")) {
       yield { type: "stream_event", event: { type: "content_block_start", content_block: { type: "text" } } };

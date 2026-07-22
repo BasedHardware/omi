@@ -255,4 +255,18 @@ describe("agent-cloud WS contract (e2e)", () => {
     expect(result.text).toMatch(/^RESEEDED:/); // the new session carried a condensed seed
     expect(result.text).toContain("what is my project"); // the raw prompt rides after the seed
   }, 30000);
+
+  it("emits a bounded string category for SDK failures", async () => {
+    const ws = await connect();
+    const done = collectUntilResult(ws);
+    ws.send(JSON.stringify({ type: "query", prompt: "AUTH_FAIL" }));
+    const messages = await done;
+    ws.close();
+
+    expect(messages.at(-1)).toMatchObject({
+      type: "error",
+      code: "auth",
+      message: "Please reconnect your account in Settings, then try again.",
+    });
+  });
 });
