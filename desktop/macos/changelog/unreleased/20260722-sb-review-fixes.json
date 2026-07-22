@@ -1,0 +1,3 @@
+{
+  "change": "Second Brain polish: the home hub now surfaces learned insights (not just tasks and asks); the chat drops the redundant typing-dots since Omi's spinning mark already signals thinking; ⌘O now summons Omi (fronts the app and opens chat) from anywhere via an NSEvent watcher; and the Brain Map moved into its own Memory tab beside Memories and Conversations"
+}

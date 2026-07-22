@@ -79,6 +79,15 @@ class GlobalShortcutManager: @unchecked Sendable {
 
   private var shortcutObserver: NSObjectProtocol?
 
+  // ⌘O can't be registered as a global Carbon hotkey (it collides with the
+  // system-wide "Open" command, which is why the configurable Ask-Omi shortcut
+  // defaults to ⌃⌥O). Users still expect ⌘O to summon Omi, so we always watch
+  // for it with NSEvent monitors: the global monitor fires when another app is
+  // frontmost (observe-only — that app still gets its own ⌘O), and the local
+  // monitor fires when Omi itself is focused.
+  private var commandOGlobalMonitor: Any?
+  private var commandOLocalMonitor: Any?
+
   private init() {
     registrar = Self.registerWithCarbon
     #if DEBUG
@@ -145,6 +154,35 @@ class GlobalShortcutManager: @unchecked Sendable {
     guard !isRegistrationSuspended else { return }
     // Register Ask Omi shortcut from user settings
     registerAskOmi()
+    installCommandOMonitor()
+  }
+
+  /// Always-on ⌘O watcher that summons Omi (fronts the app and opens chat),
+  /// independent of the configurable Carbon hotkey.
+  private func installCommandOMonitor() {
+    guard commandOGlobalMonitor == nil, commandOLocalMonitor == nil else { return }
+    let matches: (NSEvent) -> Bool = { event in
+      event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
+        && event.charactersIgnoringModifiers?.lowercased() == "o"
+    }
+    commandOGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+      if matches(event) { self?.openOmiFromShortcut() }
+    }
+    commandOLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+      if matches(event) { self?.openOmiFromShortcut() }
+      return event
+    }
+  }
+
+  private func removeCommandOMonitor() {
+    if let monitor = commandOGlobalMonitor {
+      NSEvent.removeMonitor(monitor)
+      commandOGlobalMonitor = nil
+    }
+    if let monitor = commandOLocalMonitor {
+      NSEvent.removeMonitor(monitor)
+      commandOLocalMonitor = nil
+    }
   }
 
   func setRegistrationSuspended(_ suspended: Bool) {
@@ -316,5 +354,6 @@ class GlobalShortcutManager: @unchecked Sendable {
       _ = unregisterHotKey(ref)
     }
     hotKeyRefs.removeAll()
+    removeCommandOMonitor()
   }
 }

@@ -1247,8 +1247,9 @@ private struct MemoryHubPage: View {
   var body: some View {
     VStack(spacing: 0) {
       // The "Memory" rail item lands here, so Memories is the default segment;
-      // Conversations (with its live transcript) is the second sub-tab.
-      HubSegmentedControl(segments: ["Memories", "Conversations"], selection: $segment)
+      // Conversations (with its live transcript) is second, and the Brain Map
+      // graph is its own tab (no longer embedded in the Memories list).
+      HubSegmentedControl(segments: ["Memories", "Conversations", "Brain Map"], selection: $segment)
         .padding(.top, 22)
         .padding(.horizontal, 28)
         .padding(.bottom, 4)
@@ -1257,8 +1258,10 @@ private struct MemoryHubPage: View {
         MemoriesPage(
           viewModel: viewModelContainer.memoriesViewModel,
           graphViewModel: viewModelContainer.memoryGraphViewModel)
-      } else {
+      } else if segment == 1 {
         ConversationsPageHost(appState: appState)
+      } else {
+        MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
       }
     }
   }

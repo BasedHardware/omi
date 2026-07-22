@@ -131,12 +131,16 @@ struct ChatBubble: View {
   @ViewBuilder
   private func messageContentView(_ groupedBlocks: [ContentBlockGroup]) -> some View {
     if message.isStreaming && message.text.isEmpty && message.contentBlocks.isEmpty {
-      TypingIndicator()
+      // Omi's own reply shows the spinning Omi-mark avatar while thinking, so no
+      // extra typing dots are needed; only app personas (no spinning mark) do.
+      if app != nil {
+        TypingIndicator()
+      }
     } else if message.sender == .ai && !message.contentBlocks.isEmpty {
       ForEach(groupedBlocks) { group in
         groupView(group)
       }
-      if message.isStreaming {
+      if message.isStreaming, app != nil {
         if case .toolCalls(_, let calls) = groupedBlocks.last,
           calls.contains(where: { block in
             if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }

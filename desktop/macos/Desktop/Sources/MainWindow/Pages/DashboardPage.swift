@@ -224,6 +224,9 @@ struct DashboardPage: View {
   @ObservedObject private var homeSuggestionsStore = HomeSuggestionsStore.shared
   @ObservedObject private var focusStorage = FocusStorage.shared
   @StateObject private var intelligenceStore = DashboardIntelligenceStore()
+  /// Learned insights ("things about you") — surfaced in the home hub's rotating
+  /// knows-list alongside tasks and asks, not just on the Insights page.
+  @ObservedObject private var insightStorage = InsightStorage.shared
   @State private var dismissedKnowsTaskIDs: Set<String> = []
   @State private var didAutoOpenChatForHistory = false
   @Binding var selectedIndex: Int
@@ -850,12 +853,24 @@ struct DashboardPage: View {
 
   // MARK: Knows list
 
+  /// Insight rows for the hub: the task-intelligence recommendations plus the
+  /// learned insights ("things about you") from the Insights store, so the hub
+  /// surfaces insights, not only tasks and asks.
+  private var homeKnowsInsightCandidates: [HomeKnowsInsightCandidate] {
+    let recommendations = intelligenceStore.recommendations.map {
+      HomeKnowsInsightCandidate(id: $0.id, text: $0.headline)
+    }
+    let learned = insightStorage.insightHistory
+      .filter { !$0.isDismissed }
+      .prefix(12)
+      .map { HomeKnowsInsightCandidate(id: $0.id, text: $0.insight.insight) }
+    return recommendations + Array(learned)
+  }
+
   private var homeKnowsRows: [HomeKnowsRow] {
     HomeKnowsListComposer.compose(
       tasks: homeKnowsTaskCandidates,
-      insights: intelligenceStore.recommendations.map {
-        HomeKnowsInsightCandidate(id: $0.id, text: $0.headline)
-      },
+      insights: homeKnowsInsightCandidates,
       tip: homeActionTip,
       questions: homeSuggestedQuestions,
       dismissedTaskIDs: dismissedKnowsTaskIDs,
@@ -868,7 +883,7 @@ struct DashboardPage: View {
   private var homeKnowsCanRotate: Bool {
     HomeKnowsListComposer.canRotate(
       taskCount: homeKnowsTaskCandidates.filter { !dismissedKnowsTaskIDs.contains($0.id) }.count,
-      insightCount: intelligenceStore.recommendations.count,
+      insightCount: homeKnowsInsightCandidates.count,
       questionCount: homeSuggestedQuestions.count
     )
   }
