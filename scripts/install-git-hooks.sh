@@ -2,7 +2,11 @@
 
 set -euo pipefail
 
-ROOT="$(git rev-parse --show-toplevel)"
+# Resolve the repo root from this script's own location. `git rev-parse
+# --show-toplevel` fails ("this operation must be run in a work tree") in some
+# linked-worktree layouts (e.g. a Conductor workspace whose gitdir lives under
+# the main clone), which left ROOT empty and broke hook install. #10352
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 HOOKS_DIR="$(git rev-parse --git-path hooks)"
 
 mkdir -p "$HOOKS_DIR"
@@ -18,7 +22,11 @@ install_dispatch_hook() {
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(git rev-parse --show-toplevel)"
+# Git runs hooks from the working-tree root, so PWD is the invoking worktree.
+# Prefer --show-toplevel, but fall back to PWD: it fails in some linked-worktree
+# layouts (Conductor workspaces), and an empty ROOT bypassed the gate. #10352
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+[ -n "$ROOT" ] || ROOT="$PWD"
 HOOK_NAME="$(basename "$0")"
 if [ "$HOOK_NAME" = "pre-push" ]; then
   if [ -x "$ROOT/scripts/pre-push-singleflight" ]; then
