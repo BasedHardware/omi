@@ -28,6 +28,27 @@ export const RESEARCHER_TOOLS = [
   "mcp__omi-tools__get_app_usage",
 ];
 
+// Gmail has no standalone backend OAuth provider — it rides on the single Google
+// grant registered under 'google_calendar' (get_gmail_messages_tool reads that
+// integration's token). So a connect request for gmail/email must resolve to the
+// google_calendar oauth-url, or the backend returns 400 "Unsupported integration"
+// and the model falls back to hallucinating manual setup steps.
+const INTEGRATION_KEY_ALIASES = {
+  gmail: "google_calendar",
+  google_mail: "google_calendar",
+  email: "google_calendar",
+  google_contacts: "google_calendar",
+  contacts: "google_calendar",
+  calendar: "google_calendar",
+};
+
+export function normalizeIntegrationKey(key) {
+  const k = String(key ?? "")
+    .trim()
+    .toLowerCase();
+  return INTEGRATION_KEY_ALIASES[k] ?? k;
+}
+
 export function buildAgentDefinitions(schemaText) {
   return {
     researcher: {

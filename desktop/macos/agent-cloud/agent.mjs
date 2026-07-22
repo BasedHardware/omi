@@ -5,7 +5,7 @@
 const { query, tool, createSdkMcpServer } = await import(
   process.env.OMI_AGENT_SDK_MODULE || "@anthropic-ai/claude-agent-sdk"
 );
-import { ALLOWED_TOOLS, buildAgentDefinitions } from "./query-config.mjs";
+import { ALLOWED_TOOLS, buildAgentDefinitions, normalizeIntegrationKey } from "./query-config.mjs";
 import { USER_MESSAGES, classifyError, isExpectedAbort, logEvent, markOwnedAbort, withRetry } from "./errors.mjs";
 import { createSubagentRouter } from "./stream-routing.mjs";
 import { buildCondensedSeed, planCondensation } from "./conversation-condenser.mjs";
@@ -527,8 +527,11 @@ other methods. integration is the app key, e.g. "google_calendar".`,
     if (!userFirebaseToken) {
       return { content: [{ type: "text", text: "The user must be signed in to Omi before connecting integrations." }] };
     }
+    // Gmail/contacts/calendar all resolve to the one Google grant (google_calendar);
+    // without this the backend 400s on "gmail" and the model invents setup steps.
+    const appKey = normalizeIntegrationKey(integration);
     try {
-      const resp = await fetch(`${BACKEND_URL}/v1/integrations/${encodeURIComponent(integration)}/oauth-url`, {
+      const resp = await fetch(`${BACKEND_URL}/v1/integrations/${encodeURIComponent(appKey)}/oauth-url`, {
         headers: { Authorization: `Bearer ${userFirebaseToken}` },
       });
       if (!resp.ok) {
