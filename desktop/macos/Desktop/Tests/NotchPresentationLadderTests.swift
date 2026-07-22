@@ -12,6 +12,7 @@ final class NotchPresentationLadderTests: XCTestCase {
     tab: NotchTab = .chat,
     listening: Bool = false,
     thinking: Bool = false,
+    responding: Bool = false,
     hint: String = "",
     notification: UUID? = nil
   ) -> NotchPresentation {
@@ -20,6 +21,7 @@ final class NotchPresentationLadderTests: XCTestCase {
       tab: tab,
       isVoiceListening: listening,
       isThinking: thinking,
+      isResponding: responding,
       hintText: hint,
       notificationID: notification
     )
@@ -31,17 +33,26 @@ final class NotchPresentationLadderTests: XCTestCase {
 
   func testOpenBeatsEverything() {
     XCTAssertEqual(
-      derive(isOpen: true, tab: .agents, listening: true, thinking: true, hint: "x", notification: noteID),
+      derive(
+        isOpen: true, tab: .agents, listening: true, thinking: true, responding: true, hint: "x",
+        notification: noteID),
       .open(.agents))
   }
 
-  func testListeningBeatsThinkingHintAndNotification() {
+  func testListeningBeatsThinkingRespondingHintAndNotification() {
     XCTAssertEqual(
-      derive(listening: true, thinking: true, hint: "x", notification: noteID), .listening)
+      derive(listening: true, thinking: true, responding: true, hint: "x", notification: noteID),
+      .listening)
   }
 
-  func testThinkingBeatsHintAndNotification() {
-    XCTAssertEqual(derive(thinking: true, hint: "x", notification: noteID), .thinking)
+  func testThinkingBeatsResponding() {
+    // While awaiting the answer the reducer reports both thinking and response
+    // glow; the compact thinking pill must win until the reply actually starts.
+    XCTAssertEqual(derive(thinking: true, responding: true, hint: "x", notification: noteID), .thinking)
+  }
+
+  func testRespondingBeatsHintAndNotification() {
+    XCTAssertEqual(derive(responding: true, hint: "x", notification: noteID), .responding)
   }
 
   func testHintBeatsNotification() {
@@ -55,7 +66,10 @@ final class NotchPresentationLadderTests: XCTestCase {
   func testExpandedSurfaceFlags() {
     XCTAssertTrue(NotchPresentation.open(.chat).isExpandedSurface)
     XCTAssertTrue(NotchPresentation.notification(noteID).isExpandedSurface)
-    XCTAssertFalse(NotchPresentation.listening.isExpandedSurface)
+    // The expanded voice states grow out of the notch like an opened panel.
+    XCTAssertTrue(NotchPresentation.listening.isExpandedSurface)
+    XCTAssertTrue(NotchPresentation.responding.isExpandedSurface)
+    // Thinking is the compact pill between them.
     XCTAssertFalse(NotchPresentation.thinking.isExpandedSurface)
     XCTAssertFalse(NotchPresentation.hint("x").isExpandedSurface)
     XCTAssertFalse(NotchPresentation.idle.isExpandedSurface)

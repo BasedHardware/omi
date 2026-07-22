@@ -94,36 +94,16 @@ final class NotchViewModelTests: XCTestCase {
     XCTAssertEqual(changes, 2)
   }
 
-  // MARK: - Hover dwell
+  // MARK: - Hover (voice-first: hover never opens)
 
-  func testHoverDwellOpensAfterDelayElapses() async {
+  func testHoverNeverSchedulesAnOpen() async {
     let sleeper = ManualSleeper()
     let model = makeModel(sleep: { await sleeper.sleep($0) })
     model.hoverEntered()
-    await waitUntil { sleeper.pendingCount == 1 }
-    XCTAssertEqual(model.state, .closed)
-    sleeper.resumeAll()
-    await waitUntil { model.state == .open }
-    XCTAssertEqual(model.state, .open)
-  }
-
-  func testHoverExitCancelsPendingOpen() async {
-    let sleeper = ManualSleeper()
-    let model = makeModel(sleep: { await sleeper.sleep($0) })
-    model.hoverEntered()
-    await waitUntil { sleeper.pendingCount == 1 }
-    model.hoverExited()
-    sleeper.resumeAll()
+    // No dwell task is scheduled and the closed notch never expands on hover.
     for _ in 0..<50 { await Task.yield() }
-    XCTAssertEqual(model.state, .closed)
-  }
-
-  func testHoverWhileOpenIsIgnored() {
-    let sleeper = ManualSleeper()
-    let model = makeModel(sleep: { await sleeper.sleep($0) })
-    model.open()
-    model.hoverEntered()
     XCTAssertEqual(sleeper.pendingCount, 0)
+    XCTAssertEqual(model.state, .closed)
   }
 
   // MARK: - Auto-close grace
@@ -162,6 +142,25 @@ final class NotchViewModelTests: XCTestCase {
     XCTAssertEqual(reborn.chatBodyHeight, 333)
   }
 
+  func testVoiceHeightClampsBetweenMinAndHalfScreen() {
+    let model = makeModel()
+    // No measurement yet -> the compact voice minimum.
+    XCTAssertEqual(model.voiceExpandedSize.height, model.voiceMinHeight)
+    model.voiceBodyHeight = 10
+    XCTAssertEqual(model.voiceExpandedSize.height, model.voiceMinHeight)
+    model.voiceBodyHeight = 10_000
+    XCTAssertEqual(model.voiceExpandedSize.height, model.chatMaxHeight)
+    XCTAssertEqual(model.chatMaxHeight, 982 * 0.5)
+  }
+
+  func testVoiceHeightIsTransientAndNotPersisted() {
+    let model = makeModel()
+    model.voiceBodyHeight = 333
+    model.close()
+    let reborn = makeModel()
+    XCTAssertNil(reborn.voiceBodyHeight)
+  }
+
   // MARK: - Sizing authority
 
   func testSizeForPresentationMapping() {
@@ -169,7 +168,8 @@ final class NotchViewModelTests: XCTestCase {
     XCTAssertEqual(model.size(for: .idle), model.closedNotchSize)
     XCTAssertEqual(model.size(for: .open(.chat)), model.openContentSize(for: .chat))
     XCTAssertEqual(model.size(for: .open(.agents)), model.openContentSize(for: .agents))
-    XCTAssertEqual(model.size(for: .listening), model.listeningSize)
+    XCTAssertEqual(model.size(for: .listening), model.voiceExpandedSize)
+    XCTAssertEqual(model.size(for: .responding), model.voiceExpandedSize)
     XCTAssertEqual(model.size(for: .thinking), model.thinkingSize)
     XCTAssertEqual(model.size(for: .hint("too short")), model.hintSize)
     XCTAssertEqual(model.size(for: .notification(UUID())), model.notificationSize)
@@ -178,9 +178,11 @@ final class NotchViewModelTests: XCTestCase {
   func testWindowSizeCoversEveryPresentationPlusTray() {
     let model = makeModel()
     model.chatBodyHeight = 10_000
+    model.voiceBodyHeight = 10_000
     let window = model.windowSize
     let presentations: [NotchPresentation] = [
-      .idle, .open(.chat), .open(.agents), .listening, .thinking, .hint("x"), .notification(UUID()),
+      .idle, .open(.chat), .open(.agents), .listening, .thinking, .responding, .hint("x"),
+      .notification(UUID()),
     ]
     for presentation in presentations {
       let size = model.size(for: presentation)
