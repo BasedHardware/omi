@@ -2060,6 +2060,23 @@ export interface McpCreateActionItem {
   due_at?: string | null;
 }
 
+export interface McpMeeting {
+  calendar_source?: string | null;
+  duration_minutes?: number | null;
+  id?: string | null;
+  meeting_link?: string | null;
+  notes?: string | null;
+  participants?: Array<McpMeetingParticipant>;
+  platform?: string | null;
+  start_time?: string | null;
+  title?: string | null;
+}
+
+export interface McpMeetingParticipant {
+  email?: string | null;
+  name?: string | null;
+}
+
 export interface McpOauthGrantsResponse {
   grants?: Array<Record<string, unknown>>;
 }
@@ -3973,6 +3990,8 @@ export interface OmiApiSchemas {
   "McpApiKeyCreate": McpApiKeyCreate;
   "McpApiKeyCreated": McpApiKeyCreated;
   "McpCreateActionItem": McpCreateActionItem;
+  "McpMeeting": McpMeeting;
+  "McpMeetingParticipant": McpMeetingParticipant;
   "McpOauthGrantsResponse": McpOauthGrantsResponse;
   "McpRefreshToolsResponse": McpRefreshToolsResponse;
   "McpScreenActivityAppSummary": McpScreenActivityAppSummary;
@@ -6205,6 +6224,27 @@ export interface OmiApiPaths {
       responses: {
         "200": SimpleActionItem;
         "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/calendar-meetings": {
+    get: {
+      operationId: "get_calendar_meetings_v1_mcp_calendar_meetings_get";
+      responses: {
+        "200": Array<McpMeeting>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/calendar-meetings/{meeting_id}": {
+    get: {
+      operationId: "get_calendar_meeting_by_id_v1_mcp_calendar_meetings__meeting_id__get";
+      responses: {
+        "200": McpMeeting;
+        "401": void;
+        "404": void;
         "422": HTTPValidationError;
       };
     };
@@ -11957,6 +11997,39 @@ export async function complete_action_item_v1_mcp_action_items__action_item_id__
   const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_calendar_meetings_v1_mcp_calendar_meetings_get(query: { start_date?: string | null, end_date?: string | null, limit?: number }, init?: OmiApiClientInit): Promise<Array<McpMeeting>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/calendar-meetings`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_calendar_meeting_by_id_v1_mcp_calendar_meetings__meeting_id__get(path: { meeting_id: string }, init?: OmiApiClientInit): Promise<McpMeeting> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/calendar-meetings/${path.meeting_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,

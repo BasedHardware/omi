@@ -31,6 +31,7 @@ SUPPORTED_SCOPES = [
     "chat.read",
     "screen_activity.read",
     "people.read",
+    "calendar.read",
 ]
 ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS", "3600"))
 AUTH_CODE_TTL_SECONDS = int(os.getenv("MCP_OAUTH_AUTH_CODE_TTL_SECONDS", "600"))
