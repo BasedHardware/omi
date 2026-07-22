@@ -11,6 +11,8 @@ struct NotchView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   @State private var isHovering = false
+  /// The latest streamed reply, captured so it can linger after the turn ends.
+  @State private var lastReply = ""
 
   // MARK: - Presentation ladder
 
@@ -18,7 +20,7 @@ struct NotchView: View {
   /// from. Priority:
   /// open > listening > thinking > responding > hint > notification > idle.
   private var presentation: NotchPresentation {
-    NotchPresentation.derive(
+    let base = NotchPresentation.derive(
       isOpen: vm.state == .open,
       tab: vm.selectedTab,
       isVoiceListening: barState.isVoiceListening,
@@ -27,6 +29,14 @@ struct NotchView: View {
       hintText: barState.pttHintText.isEmpty ? barState.transientHintText : barState.pttHintText,
       notificationID: barState.currentNotification?.id
     )
+    // A finished reply lingers on screen for a few seconds after the turn ends.
+    if vm.responseLinger != nil {
+      switch base {
+      case .idle, .notification: return .responding
+      default: return base
+      }
+    }
+    return base
   }
 
   // MARK: - Animations (two isolated timelines)
@@ -76,11 +86,29 @@ struct NotchView: View {
     .animation(morphAnimation, value: presentation)
     .animation(heightAnimation, value: vm.chatBodyHeight)
     .animation(heightAnimation, value: vm.voiceBodyHeight)
-    // Drop the measured height when the voice turn ends so the next turn's
-    // first frame starts from the compact minimum instead of the old reply's
-    // height.
+    // Keep the latest streamed reply so it can linger after the turn ends.
+    .onChange(of: barState.liveVoiceAssistantText) { _, reply in
+      if !reply.isEmpty { lastReply = reply }
+    }
+    // A new turn starts fresh: reset the measured height and drop any lingering
+    // reply from the previous turn.
+    .onChange(of: barState.isVoiceListening) { _, listening in
+      if listening {
+        vm.voiceBodyHeight = nil
+        vm.clearLinger()
+        lastReply = ""
+      }
+    }
+    // Turn ended: hold the reply on screen for a few seconds (hovering pauses
+    // the dismiss). No captured reply -> just settle back to idle.
     .onChange(of: barState.isVoicePresentationActive) { _, active in
-      if !active { vm.voiceBodyHeight = nil }
+      guard !active else { return }
+      if lastReply.isEmpty {
+        vm.voiceBodyHeight = nil
+      } else {
+        vm.beginResponseLinger(lastReply)
+      }
+      lastReply = ""
     }
   }
 
@@ -117,7 +145,8 @@ struct NotchView: View {
             .padding(.horizontal, topCornerRadius)
         }
         .shadow(
-          color: (vm.state == .open || isHovering) ? .black.opacity(0.7) : .clear,
+          color: (vm.state == .open || isHovering || presentation.isExpandedSurface)
+            ? .black.opacity(0.7) : .clear,
           radius: 8
         )
       bodyContent
@@ -157,10 +186,12 @@ struct NotchView: View {
       .transition(contentTransition)
     case .listening:
       NotchVoiceView(
-        phase: .listening,
+        text: barState.liveVoiceUserText,
+        placeholder: "Listening…",
+        emphasized: true,
+        onOpenApp: nil,
         topReserve: voiceTopReserve,
-        onHeightChange: updateVoiceBodyHeight,
-        onOpenApp: {}
+        onHeightChange: updateVoiceBodyHeight
       )
       .transition(contentTransition)
     case .thinking:
@@ -171,10 +202,12 @@ struct NotchView: View {
         .transition(contentTransition)
     case .responding:
       NotchVoiceView(
-        phase: .responding,
+        text: respondingText,
+        placeholder: "",
+        emphasized: false,
+        onOpenApp: { MainWindowReveal.activate() },
         topReserve: voiceTopReserve,
-        onHeightChange: updateVoiceBodyHeight,
-        onOpenApp: { MainWindowReveal.activate() }
+        onHeightChange: updateVoiceBodyHeight
       )
       .transition(contentTransition)
     case .hint(let text):
@@ -215,15 +248,23 @@ struct NotchView: View {
     vm.closedNotchSize.height + voiceOrbTopGap + voiceOrbHeight + 8
   }
 
+  /// The reply text while responding: the live stream, or the captured reply
+  /// while it lingers after the turn.
+  private var respondingText: String {
+    barState.liveVoiceAssistantText.isEmpty
+      ? (vm.responseLinger ?? "") : barState.liveVoiceAssistantText
+  }
+
   private var voiceOrbMode: NotchVoiceOrb.Mode {
     if barState.isVoiceListening { return .listening }
     if barState.isThinking { return .thinking }
-    return .speaking
+    if barState.isVoiceResponseActive { return .speaking }
+    return .logo  // a finished reply lingering: the Omi mark at rest
   }
 
   @ViewBuilder
   private var voiceOrbLayer: some View {
-    if barState.isVoicePresentationActive {
+    if barState.isVoicePresentationActive || vm.responseLinger != nil {
       NotchVoiceOrb(mode: voiceOrbMode)
         .frame(width: 72, height: voiceOrbHeight)
         .padding(.top, vm.closedNotchSize.height + voiceOrbTopGap)
@@ -241,27 +282,30 @@ struct NotchView: View {
   }
 
   /// Logo and gear hug the camera module: [logo][camera][gear] centered as a
-  /// cluster, outer space breathes. Voice-first: the mark is an inert identity
-  /// element (no tap) — only the settings gear is interactive on the closed
-  /// notch.
+  /// cluster, outer space breathes. The mark opens the main Omi window; the
+  /// gear opens settings — the only two interactions on the closed notch.
   private var closedChrome: some View {
     HStack(spacing: 0) {
       Spacer(minLength: 0)
-      NotchOmiMark()
-        .frame(width: 24, height: 24)
-        // Recording dot: transcription is running (legacy bar indicator).
-        .overlay(alignment: .topTrailing) {
-          if barState.isRecording {
-            Circle()
-              .fill(Color.red.opacity(0.9))
-              .frame(width: 5, height: 5)
+      Button(action: { MainWindowReveal.activate() }) {
+        NotchOmiMark()
+          .frame(width: 24, height: 24)
+          // Recording dot: transcription is running (legacy bar indicator).
+          .overlay(alignment: .topTrailing) {
+            if barState.isRecording {
+              Circle()
+                .fill(Color.red.opacity(0.9))
+                .frame(width: 5, height: 5)
+            }
           }
-        }
-        .frame(
-          width: NotchMetrics.closedSideWidth, height: vm.closedNotchSize.height,
-          alignment: .trailing
-        )
-        .accessibilityLabel("Omi")
+          .frame(
+            width: NotchMetrics.closedSideWidth, height: vm.closedNotchSize.height,
+            alignment: .trailing
+          )
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Open Omi")
       Color.clear
         .frame(width: cameraGap)
       settingsButton
@@ -359,8 +403,11 @@ struct NotchView: View {
     isHovering = hovering
     if hovering {
       vm.hoverEntered()
+      // Hovering a lingering reply pauses its dismissal so the user can read it.
+      vm.keepLinger()
     } else {
       vm.hoverExited()
+      vm.resumeLinger()
     }
   }
 

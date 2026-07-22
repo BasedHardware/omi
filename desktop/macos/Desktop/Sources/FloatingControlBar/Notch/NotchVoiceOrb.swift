@@ -5,12 +5,13 @@ import SwiftUI
 /// - listening / speaking: a horizontal audio waveform (the 8 marks become
 ///   bars that bounce to the mic level while you talk, and to the TTS output
 ///   level while Omi speaks);
-/// - thinking: the 8 marks reform into the Omi dot-ring and rotate.
+/// - thinking: the 8 marks are the Omi dot-ring, rotating;
+/// - logo: the same dot-ring at rest (shown while a finished reply lingers).
 ///
 /// Rendered once (a persistent overlay in `NotchView`) so switching phase
 /// animates the morph in place rather than swapping views.
 struct NotchVoiceOrb: View {
-  enum Mode: Equatable { case listening, thinking, speaking }
+  enum Mode: Equatable { case listening, thinking, speaking, logo }
   let mode: Mode
 
   @State private var model = OrbModel()
@@ -23,7 +24,7 @@ struct NotchVoiceOrb: View {
         switch mode {
         case .listening: level = CGFloat(AudioLevelMonitor.shared.microphoneLevel)
         case .speaking: level = CGFloat(AudioLevelMonitor.shared.playbackLevel)
-        case .thinking: level = 0
+        case .thinking, .logo: level = 0
         }
         model.advance(to: timeline.date, level: level, mode: mode, reduceMotion: reduceMotion)
         model.draw(into: &context, size: size)
@@ -35,7 +36,7 @@ struct NotchVoiceOrb: View {
 
 /// Per-frame state for `NotchVoiceOrb`: 8 marks that spring toward an audio
 /// target (waveform), a `morph` scalar (0 = ring, 1 = bars) that eases on mode
-/// change, and a rotation accumulator used only while it is a ring.
+/// change, and a rotation accumulator used only while it is a spinning ring.
 @MainActor
 final class OrbModel {
   private static let count = 8
@@ -44,6 +45,7 @@ final class OrbModel {
   private var velocities = [Double](repeating: 0, count: count)
   private var morph: CGFloat = 0
   private var rotation: Double = 0
+  private var spinning = false
   private var lastTime: CFTimeInterval?
   private var envelope: Double = 0
 
@@ -59,12 +61,13 @@ final class OrbModel {
     let dt = lastTime.map { min(0.032, max(0.0, now - $0)) } ?? (1.0 / 60.0)
     lastTime = now
 
-    let bars = mode != .thinking
+    let bars = mode == .listening || mode == .speaking
     let morphTarget: CGFloat = bars ? 1 : 0
     // Ease the layout morph so the logo ring visibly stretches into the
     // waveform (and back); snap when reduced motion is on.
     morph += (morphTarget - morph) * CGFloat(reduceMotion ? 1 : min(1, dt * 5))
-    rotation += (mode == .thinking && !reduceMotion) ? dt * 2.4 : 0
+    spinning = mode == .thinking
+    rotation += (spinning && !reduceMotion) ? dt * 2.2 : 0
 
     let lvl = Double(max(0, level))
     envelope = max(lvl, envelope - 0.7 * dt)
@@ -74,9 +77,11 @@ final class OrbModel {
     for i in 0..<Self.count {
       let target: Double
       if bars {
-        let idle = 0.14 + 0.12 * (0.5 + 0.5 * sin(now * speeds[i] + phases[i]))
-        let wobble = 0.55 + 0.45 * sin(now * speeds[i] + phases[i])
-        target = max(idle, min(1.0, gained * wobble))
+        // Toned down: gentler idle and a smaller audio contribution so the
+        // bars read as a calm voice waveform, not a party visualizer.
+        let idle = 0.10 + 0.07 * (0.5 + 0.5 * sin(now * speeds[i] + phases[i]))
+        let wobble = 0.6 + 0.4 * sin(now * speeds[i] + phases[i])
+        target = max(idle, min(0.85, gained * wobble))
       } else {
         target = 0
       }
@@ -89,22 +94,23 @@ final class OrbModel {
 
   func draw(into context: inout GraphicsContext, size: CGSize) {
     let n = Self.count
-    let side = min(size.width, size.height)
     let center = CGPoint(x: size.width / 2, y: size.height / 2)
-    // Match NotchOmiMark exactly so the ring reads as the Omi logo: the same 8
-    // dots that then stretch into the waveform bars.
-    let ringRadius = side * 0.33
-    let dotDiameter = side * 0.18
+    // Ring sized off height so it reads as the Omi logo regardless of the wide
+    // canvas the waveform needs. Ratios match NotchOmiMark (0.33 radius,
+    // 0.18 dot) so the ring IS the logo.
+    let ringRadius = size.height * 0.33
+    let dotDiameter = size.height * 0.18
 
-    let span = size.width * 0.86
+    let span = size.width * 0.84
     let step = span / CGFloat(n)
-    let barWidth = min(step * 0.5, 5)
+    let barWidth = min(step * 0.5, 4.5)
     let minBarH = barWidth
-    let maxBarH = size.height * 0.92
+    let maxBarH = size.height * 0.66
     let barStartX = (size.width - span) / 2 + step / 2
 
     for i in 0..<n {
-      let angle = 2 * Double.pi * Double(i) / Double(n) - Double.pi / 2 + rotation
+      // Match NotchOmiMark's start angle (-pi) so the ring at rest is the logo.
+      let angle = 2 * Double.pi * Double(i) / Double(n) - Double.pi + rotation
       let ringPoint = CGPoint(
         x: center.x + ringRadius * CGFloat(cos(angle)),
         y: center.y + ringRadius * CGFloat(sin(angle))
@@ -116,9 +122,10 @@ final class OrbModel {
       let markW = lerp(dotDiameter, barWidth, morph)
       let markH = lerp(dotDiameter, barH, morph)
 
-      // Trailing fade while it's a ring (the thinking spinner); solid as bars.
-      let trail = 1.0 - Double(i) * 0.09
-      let opacity = lerp(CGFloat(trail), 1, morph)
+      // At rest the ring is the Omi logo: 8 equal white dots. Only the spinning
+      // "thinking" ring gets a leading trail so the rotation reads.
+      let ringOpacity = spinning ? 0.62 + 0.38 * (1.0 - Double(i) / Double(n)) : 0.95
+      let opacity = lerp(CGFloat(ringOpacity), 1, morph)
 
       let rect = CGRect(
         x: point.x - markW / 2, y: point.y - markH / 2, width: markW, height: markH)

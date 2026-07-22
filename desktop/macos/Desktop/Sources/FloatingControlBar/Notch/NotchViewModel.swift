@@ -31,6 +31,11 @@ final class NotchViewModel: ObservableObject {
   /// `chatBodyHeight` it is not persisted. Rides the same isolated height
   /// timeline as chat.
   @Published var voiceBodyHeight: CGFloat?
+  /// The finished voice reply, held on screen for a few seconds after the turn
+  /// ends so it doesn't vanish the instant Omi stops speaking. Nil = not
+  /// lingering. Hovering the notch pauses the dismiss (see keepLinger).
+  @Published var responseLinger: String?
+  private var lingerTask: Task<Void, Never>?
   /// Agent drill-in within the agents tab (nil = the list).
   @Published var openAgentPillID: UUID?
   /// True while something must stay on screen regardless of the pointer.
@@ -125,9 +130,11 @@ final class NotchViewModel: ObservableObject {
   /// Fixed width for the expanded voice states (listening / responding); only
   /// the HEIGHT grows with the measured content, so the island grows downward
   /// out of the notch as the user speaks or the answer streams — the Dynamic
-  /// Island grow, not a wide pop. Thinking narrows to a compact pill and the
-  /// width morphs between them.
-  var voiceWidth: CGFloat { clampValue(screenFrame.width * 0.27, 340, 430) }
+  /// Island grow, not a wide pop. Restrained, but never narrower than the
+  /// camera module; thinking narrows to that floor and the width morphs.
+  var voiceWidth: CGFloat {
+    max(closedNotchSize.width, clampValue(screenFrame.width * 0.2, 280, 340))
+  }
   var voiceMinHeight: CGFloat { clampValue(closedNotchSize.height + 82, 120, 168) }
 
   var voiceExpandedSize: CGSize {
@@ -270,6 +277,42 @@ final class NotchViewModel: ObservableObject {
     onStateChange?()
   }
 
+  // MARK: - Response linger (hold the reply briefly after the turn ends)
+
+  /// Show `text` and schedule its dismissal after `hold` seconds.
+  func beginResponseLinger(_ text: String, hold: TimeInterval = 5) {
+    guard !text.isEmpty else { return }
+    responseLinger = text
+    scheduleLingerDismiss(after: hold)
+  }
+
+  /// Pause the dismiss while the pointer is on the notch.
+  func keepLinger() {
+    lingerTask?.cancel()
+  }
+
+  /// Resume the dismiss after the pointer leaves (a shorter grace than the
+  /// initial hold).
+  func resumeLinger(hold: TimeInterval = 2.5) {
+    guard responseLinger != nil else { return }
+    scheduleLingerDismiss(after: hold)
+  }
+
+  func clearLinger() {
+    lingerTask?.cancel()
+    lingerTask = nil
+    responseLinger = nil
+  }
+
+  private func scheduleLingerDismiss(after hold: TimeInterval) {
+    lingerTask?.cancel()
+    lingerTask = Task { [weak self, sleep] in
+      await sleep(hold)
+      guard !Task.isCancelled else { return }
+      self?.responseLinger = nil
+    }
+  }
+
   /// Grace period so the panel can't slam shut right after opening.
   var canAutoClose: Bool {
     guard state == .open, !holdOpen else { return false }
@@ -297,6 +340,7 @@ final class NotchViewModel: ObservableObject {
 
   deinit {
     hoverOpenTask?.cancel()
+    lingerTask?.cancel()
   }
 }
 
