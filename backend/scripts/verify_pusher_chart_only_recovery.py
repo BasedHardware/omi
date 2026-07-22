@@ -32,17 +32,15 @@ VOLATILE_METADATA = {
 # from ``helm template`` output.  ``normalize()`` strips them so the drift
 # comparison does not spuriously fail on a healthy live Deployment.
 VOLATILE_DEPLOYMENT_ANNOTATIONS = {"deployment.kubernetes.io/revision"}
-VOLATILE_DEPLOYMENT_SPEC = {
-    "revisionHistoryLimit",
+DEPLOYMENT_API_DEFAULTS = {"revisionHistoryLimit": 10}
+POD_TEMPLATE_API_DEFAULTS = {
+    "restartPolicy": "Always",
+    "dnsPolicy": "ClusterFirst",
+    "schedulerName": "default-scheduler",
 }
-VOLATILE_POD_TEMPLATE_SPEC = {
-    "restartPolicy",
-    "dnsPolicy",
-    "schedulerName",
-}
-VOLATILE_CONTAINER_FIELDS = {
-    "terminationMessagePath",
-    "terminationMessagePolicy",
+CONTAINER_API_DEFAULTS = {
+    "terminationMessagePath": "/dev/termination-log",
+    "terminationMessagePolicy": "File",
 }
 
 # Cluster-added Service fields absent from ``helm template`` output.
@@ -246,22 +244,25 @@ def _strip_expected_helm_annotations(
 def _strip_deployment_defaults(deployment: dict[str, Any]) -> None:
     """Remove Deployment-specific API-server/controller defaults absent from helm template."""
     spec = deployment.get("spec", {})
-    for key in VOLATILE_DEPLOYMENT_SPEC:
-        spec.pop(key, None)
+    for key, value in DEPLOYMENT_API_DEFAULTS.items():
+        if spec.get(key) == value:
+            spec.pop(key, None)
     if spec.get("minReadySeconds") == 0:
         spec.pop("minReadySeconds", None)
 
     template = spec.get("template", {})
     template_spec = template.get("spec", {})
-    for key in VOLATILE_POD_TEMPLATE_SPEC:
-        template_spec.pop(key, None)
+    for key, value in POD_TEMPLATE_API_DEFAULTS.items():
+        if template_spec.get(key) == value:
+            template_spec.pop(key, None)
     if template_spec.get("serviceAccount") == template_spec.get("serviceAccountName"):
         template_spec.pop("serviceAccount", None)
     _strip_default_security_context(template_spec, "securityContext", POD_SECURITY_DEFAULTS)
 
     for container in template_spec.get("containers", []):
-        for key in VOLATILE_CONTAINER_FIELDS:
-            container.pop(key, None)
+        for key, value in CONTAINER_API_DEFAULTS.items():
+            if container.get(key) == value:
+                container.pop(key, None)
         _strip_default_security_context(container, "securityContext", CONTAINER_SECURITY_DEFAULTS)
         for probe_name in ("livenessProbe", "readinessProbe", "startupProbe"):
             probe = container.get(probe_name)

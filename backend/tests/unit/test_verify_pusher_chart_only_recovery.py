@@ -176,6 +176,24 @@ def test_recovery_profile_ignores_only_deployment_api_defaults(recovery: SimpleN
         "recovery profile would change Deployment fields outside the exact image and REDIS_DB_HOST transition"
     ]
 
+    for mutate in (
+        lambda value: value["spec"].__setitem__("revisionHistoryLimit", 1),
+        lambda value: value["spec"]["template"]["spec"].__setitem__("restartPolicy", "Never"),
+        lambda value: value["spec"]["template"]["spec"].__setitem__("dnsPolicy", "Default"),
+        lambda value: value["spec"]["template"]["spec"].__setitem__("schedulerName", "custom-scheduler"),
+        lambda value: value["spec"]["template"]["spec"]["containers"][0].__setitem__(
+            "terminationMessagePath", "/custom/termination-log"
+        ),
+        lambda value: value["spec"]["template"]["spec"]["containers"][0].__setitem__(
+            "terminationMessagePolicy", "FallbackToLogsOnError"
+        ),
+    ):
+        policy_drift = copy.deepcopy(live)
+        mutate(policy_drift)
+        assert recovery.allowed_recovery_drift(policy_drift, rendered) == [
+            "recovery profile would change Deployment fields outside the exact image and REDIS_DB_HOST transition"
+        ]
+
 
 def test_recovery_profile_ignores_deployment_and_service_defaults(recovery: SimpleNamespace):
     """Only API/controller defaults absent from helm template are ignored."""
