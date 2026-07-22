@@ -5,9 +5,14 @@ metadata:
 spec:
   # Long timeout required for persistent WebSocket connections between backend-listen and pusher
   timeoutSec: 3600
+  # Invariant: drainingTimeoutSec must be <= Deployment terminationGracePeriodSeconds (120) so the
+  # LB drains in-flight connections inside the pod grace window instead of racing SIGTERM.
+  connectionDraining:
+    drainingTimeoutSec: {{ .Values.backendConfig.connectionDraining.drainingTimeoutSec | default 60 }}
   healthCheck:
     checkIntervalSec: 10
     timeoutSec: 5
     port: {{ .Values.service.port }}
     type: HTTP
-    requestPath: /health  # Ensure this path returns 200 OK
+    # Liveness semantics: keep /health here so the LB health check never flips unhealthy during a readiness drain (that would defeat connectionDraining).
+    requestPath: /health

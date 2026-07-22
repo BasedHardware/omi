@@ -247,5 +247,22 @@ AUTH_FLOW_DURATION_SECONDS = Histogram(
 )
 
 
+# Pusher readiness / drain gauges. Label-free (low cardinality) so they scrape
+# cheaply. Initialized to serving below so an idle healthy pod reads
+# pusher_ready=1 / pusher_drain_in_progress=0 and is distinguishable from a
+# missing scrape target (a labelless Gauge defaults to 0, which would wrongly
+# read as "draining"). utils.readiness.ReadinessGate flips these on drain.
+PUSHER_READY = Gauge(
+    'pusher_ready',
+    '1 = serving new traffic, 0 = draining',
+)
+PUSHER_DRAIN_IN_PROGRESS = Gauge(
+    'pusher_drain_in_progress',
+    '1 = drain initiated, readiness closed',
+)
+PUSHER_READY.set(1)
+PUSHER_DRAIN_IN_PROGRESS.set(0)
+
+
 def metrics_response() -> Response:
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)

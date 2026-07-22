@@ -40,6 +40,7 @@ from utils.webhooks import (
 from utils.cloud_tasks import get_listen_finalization_tasks_max_attempts, is_audio_merge_dispatch_enabled
 from utils.other.storage import maybe_invalidate_conversation_playback, upload_audio_chunks_batch
 from utils.metrics import PUSHER_ACTIVE_WS_CONNECTIONS
+from utils.readiness import ReadinessGate
 from utils.observability.journeys import JourneyAttempt, JourneyOutcome, record_capture_finalization_terminal
 from utils.speaker_identification import extract_speaker_samples
 import logging
@@ -315,6 +316,15 @@ async def _websocket_util_trigger(
 ) -> None:
     logger.info(f'_websocket_util_trigger {uid}')
 
+    # Defense-in-depth: during drain the LB should already have removed us from
+    # the NEG, but reject straggler NEW connections without accepting so we do
+    # not start a session we are about to terminate. Existing in-flight sessions
+    # keep draining via their own background-drain logic (BG_DRAIN_TIMEOUT).
+    # Code 1001 (Going Away) signals the client to reconnect elsewhere.
+    if not ReadinessGate.is_serving():
+        logger.info(f'Rejecting new WS for {uid}: pusher is draining')
+        await websocket.close(code=1001)
+        return
     try:
         await websocket.accept()
     except RuntimeError as e:
