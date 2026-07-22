@@ -484,6 +484,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Start resource monitoring (memory, CPU, disk)
     ResourceMonitor.shared.start()
 
+    // Route completed background-agent results into live voice sessions.
+    AgentCompletionVoiceDelivery.shared.start()
+
     scheduleAppLifecycleMaintenance()
 
     // Identify user if already signed in

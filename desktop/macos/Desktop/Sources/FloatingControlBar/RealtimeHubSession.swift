@@ -500,6 +500,13 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     await sendTextInput(text, logLabel: "test text input")
   }
 
+  /// Silently appends completed background-agent context to the conversation.
+  /// No response is requested — the model uses it on its next turn. Buffered
+  /// like other text input while the socket or Gemini activity window is closed.
+  func sendBackgroundAgentContext(_ text: String) async -> Bool {
+    await sendTextInput(text, logLabel: "background agent completion context")
+  }
+
   /// A provider can complete a tool-only response after accepting the final tool
   /// result without emitting a user-facing reply. Continue the same physical turn
   /// once, never as a synthetic user request. The continuation is bounded here so
