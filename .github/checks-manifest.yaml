@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: dev-harness-unit-tests
+    command: ["bash", "scripts/dev-harness/run-tests.sh"]
+    triggers: ["scripts/dev-harness/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the hermetic dev-harness stack backs release qualification; the Jul 22 2026 beta qualification outage added a docker/native typesense runtime that must stay behaviorally covered"
   - id: pre-push-final-pr-diff
     command: ["bash", "scripts/test-pre-push-diff-base.sh"]
     triggers: ["scripts/pre-push", "scripts/pre-push-diff-base", "scripts/test-pre-push-diff-base.sh", ".github/checks-manifest.yaml"]
