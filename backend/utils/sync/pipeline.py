@@ -1288,7 +1288,7 @@ def _reprocess_merged_conversations(uid: str, response: dict):
         try:
             _reprocess_conversation_after_update(uid, conversation_id, language)
         except SyncConversationPersistenceFenced:
-            raise
+            logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
         except Exception as e:
             logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
 
