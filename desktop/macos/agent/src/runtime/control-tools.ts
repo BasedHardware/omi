@@ -2133,6 +2133,26 @@ function stringifyToolResult(
 ): string {
   const scope = controlToolOutputScope.getStore();
   const toolName = scope?.toolName ?? "unscoped_control_tool";
+  // Realtime spawn results have a second, stricter compaction boundary in the
+  // protocol relay (`compactRealtimeSpawnToolResult`).  Do not run the generic
+  // provider projection first: accepted spawn payloads contain the durable
+  // child run/session/attempt lifecycle under `agents[0]`, and that projection
+  // can legitimately be hundreds of KB when the admitted context is large.
+  // The relay compacts the full accepted result into the bounded canonical
+  // child receipt before it reaches Swift or a provider. Typed/main-chat
+  // callers keep the normal projection path below.
+  if (
+    toolName === "spawn_agent"
+      && scope?.context.authorizedToolInvocation?.toolName === "spawn_agent"
+      && scope?.context.authorizedProducerJournal
+      && ["realtime", "realtime_voice"].includes(scope.context.authorizedProducerJournal.surface.surfaceKind)
+      && Array.isArray(payload.agents)
+      && payload.agents.length > 0
+      && !Object.hasOwn(payload, "error")
+      && payload.toolResultEnvelope === undefined
+  ) {
+    return stringifyRealtimeSpawnPrecompactResult(payload, requestedStatus, scope.context);
+  }
   const existingEnvelope = payload.toolResultEnvelope;
   if (existingEnvelope) {
     // Dedicated detail tools have already persisted the complete source before
@@ -2202,6 +2222,46 @@ function stringifyToolResult(
   }
 
   return stringifyProviderBudgetFailure(toolName, undefined, null, scope?.context);
+}
+
+/**
+ * Preserve the complete accepted spawn shape until the realtime relay can
+ * derive its compact semantic child receipt. This is intentionally scoped to
+ * a kernel-authorized realtime producer; every other control-tool caller still
+ * uses `stringifyToolResult`'s bounded projection/artifact behavior.
+ */
+function stringifyRealtimeSpawnPrecompactResult(
+  payload: Record<string, unknown>,
+  requestedStatus: "succeeded" | "failed" | "cancelled" | undefined,
+  context: AgentControlToolContext,
+): string {
+  const fullJson = JSON.stringify(payload) ?? "{}";
+  const bytes = Buffer.byteLength(fullJson, "utf8");
+  const status = requestedStatus ?? (Object.hasOwn(payload, "error") ? "failed" : "succeeded");
+  const ownerId = safeControlToolOwnerId(context);
+  const fullOutputRef = ownerId && context.callerSessionId
+    ? persistToolOutputArtifact(context, ownerId, context.callerSessionId, "spawn_agent", fullJson)
+    : null;
+  // The second compaction boundary removes the large run/context fields. Keep
+  // the source envelope explicitly artifact-backed so the relay's finalizer
+  // can preserve the complete control result while replacing its projection.
+  // A missing artifact is not silently relabeled as an untruncated success.
+  if (!fullOutputRef) {
+    return stringifyProviderBudgetFailure("spawn_agent", bytes, null, context);
+  }
+  const envelope = makeToolResultEnvelope({
+    status,
+    truncated: true,
+    originalBytes: bytes,
+    projectedBytes: Math.min(Math.max(0, bytes - 1), MAX_REALTIME_TOOL_RESULT_BYTES),
+    fullOutputRef,
+    provenance: controlToolResultProvenance(context, "spawn_agent"),
+  });
+  return JSON.stringify({
+    ok: status === "succeeded",
+    ...payload,
+    toolResultEnvelope: envelope,
+  });
 }
 
 function stringifyProviderBudgetFailure(

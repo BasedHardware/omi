@@ -1079,7 +1079,7 @@ struct VoiceTurnReducer {
     var providerResponse: TimeInterval = 20
     var pendingTools: TimeInterval = 30
     var deferredCommit: TimeInterval = 8
-    var bargeInReplacement: TimeInterval = 8
+    var bargeInReplacement: TimeInterval = 3
     var playbackDrain: TimeInterval = 30
     /// One controller-owned physical rebind is permitted for captured input.
     /// If it cannot reconnect promptly, the same turn moves to the existing
@@ -1484,7 +1484,14 @@ struct VoiceTurnReducer {
         stale(&model, event: event, effects: &effects)
         return VoiceTurnReduction(model: model, effects: effects)
       }
-      terminate(&model, reason: .providerFailed, effects: &effects)
+      guard turn.phase.isRecording || turn.phase == .finalizing || turn.hubCommitPending else {
+        terminate(&model, reason: .providerFailed, effects: &effects)
+        return VoiceTurnReduction(model: model, effects: effects)
+      }
+      fallbackFromProviderReplacement(
+        reason: .providerFailed,
+        in: &model,
+        effects: &effects)
 
     case .contextResolved(_, let outcome):
       if let existing = turn.contextOutcome, existing != outcome {
@@ -1904,9 +1911,25 @@ struct VoiceTurnReducer {
       case .captureStart:
         terminate(&model, reason: .captureFailed, effects: &effects)
       case .hubWarm:
+        // A replacement may still be connecting when the bounded warm window
+        // expires. Once batch STT owns the turn, a late provider-ready callback
+        // must not restore the hub route or replay the same capture there.
+        cancel(.bargeInReplacement, in: &model, effects: &effects)
+        cancel(.deferredCommit, in: &model, effects: &effects)
+        cancel(.providerResponse, in: &model, effects: &effects)
+        model.turn?.providerConnection = .ready
+        model.turn?.sessionID = nil
+        model.turn?.providerEffectIdentity = nil
+        model.turn?.responseID = nil
+        if turn.phase == .awaitingResponse, turn.hubCommitPending {
+          model.turn?.phase = .finalizing
+          model.turn?.hubCommitPending = false
+          model.turn?.projection.isResponseWaiting = false
+          model.turn?.projection.isThinking = true
+        }
         effects.append(.fallbackToTranscription(turnID: turn.id, reason: .hubWarmTimeout))
         model.turn?.route = .deepgramBatch
-        if turn.phase == .finalizing {
+        if model.turn?.phase == .finalizing {
           schedule(.transcription, after: deadlines.transcription, in: &model, effects: &effects)
         }
       case .transcription:
@@ -1924,7 +1947,14 @@ struct VoiceTurnReducer {
       case .deferredCommit:
         terminate(&model, reason: .deferredCommitTimeout, effects: &effects)
       case .bargeInReplacement:
-        terminate(&model, reason: .bargeInReplacementTimeout, effects: &effects)
+        // Replacement owns the physical hub only until its bounded rebind
+        // window expires. Releasing that ownership to batch STT keeps the
+        // captured audio recoverable and fences a late ready callback from
+        // reclaiming the turn for a duplicate hub commit.
+        fallbackFromProviderReplacement(
+          reason: .bargeInReplacementTimeout,
+          in: &model,
+          effects: &effects)
       case .playbackDrain:
         terminate(&model, reason: .playbackFailed, effects: &effects)
       case .providerReconnect:
@@ -2117,6 +2147,28 @@ struct VoiceTurnReducer {
   ) {
     guard let turnID = model.turn?.id, model.turn?.deadlines.remove(deadline) != nil else { return }
     effects.append(.cancelDeadline(turnID: turnID, deadline: deadline))
+  }
+
+  private func fallbackFromProviderReplacement(
+    reason: VoiceTurnTerminalReason,
+    in model: inout VoiceTurnModel,
+    effects: inout [VoiceTurnEffect]
+  ) {
+    guard let turnID = model.turn?.id else { return }
+    cancel(.bargeInReplacement, in: &model, effects: &effects)
+    cancel(.providerResponse, in: &model, effects: &effects)
+    cancel(.deferredCommit, in: &model, effects: &effects)
+    model.turn?.providerConnection = .ready
+    model.turn?.sessionID = nil
+    model.turn?.providerEffectIdentity = nil
+    model.turn?.responseID = nil
+    model.turn?.phase = .finalizing
+    model.turn?.hubCommitPending = false
+    model.turn?.projection.isResponseWaiting = false
+    model.turn?.projection.isThinking = true
+    model.turn?.route = .deepgramBatch
+    effects.append(.fallbackToTranscription(turnID: turnID, reason: reason))
+    schedule(.transcription, after: deadlines.transcription, in: &model, effects: &effects)
   }
 
   private func terminate(

@@ -333,6 +333,12 @@ extension RealtimeHubController {
           self.authorizedRealtimeInvocations.removeValue(forKey: invocationID)
           self.authorizedRealtimeScreenshotImages.removeValue(forKey: invocationID)
         }
+        // Read provider intent before `arguments` crosses the runtime actor
+        // boundary. Accessing the mutable dictionary again after the send
+        // would create two concurrent owners under Swift's strict isolation.
+        let requestedProvider = (arguments["provider"] as? String)?
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+          .lowercased()
         let output = try await AgentRuntimeProcess.shared.invokeExternalSurfaceTool(
           clientId: Self.externalRunClientID,
           harnessMode: Self.externalRunHarnessMode,
@@ -380,6 +386,16 @@ extension RealtimeHubController {
             // pre-tool speculation keeps it out of the visible reply without
             // interrupting native provider audio or changing voices.
             self.assistantText = ""
+            if let failedProvider = self.spawnFailureContinuationPolicy.takeFailedProvider(
+              turnID: turnID.rawValue)
+            {
+              DesktopDiagnosticsManager.shared.recordFallback(
+                area: "realtime_hub",
+                from: failedProvider,
+                to: receipt.pillProjection?.provider ?? requestedProvider ?? "default",
+                reason: "spawn_failed",
+                outcome: .recovered)
+            }
             log(
               "RealtimeHub[\(self.providerTag)]: accepted spawn receipt; preserving native provider continuation"
             )
@@ -396,6 +412,9 @@ extension RealtimeHubController {
             }
           case .setupNeeded(let provider):
             self.lastExternalToolErrorCode = "provider_setup_needed"
+            let continueTurn = self.spawnFailureContinuationPolicy.beginContinuationIfAllowed(
+              turnID: turnID.rawValue,
+              failedProvider: provider.rawValue)
             self.sendToolResultIfCurrent(
               source: source,
               callId: callId,
@@ -405,20 +424,33 @@ extension RealtimeHubController {
                 message: provider.setupNeededStatus,
                 preservingCanonicalEnvelopeFrom: output),
               expectedTurnEpoch: expectedTurnEpoch)
-            VoiceTurnCoordinator.shared.publish(.finish(turnID: turnID, reason: .providerFailed))
+            if !continueTurn {
+              VoiceTurnCoordinator.shared.publish(.finish(turnID: turnID, reason: .providerFailed))
+            }
             return
           case .accepted, .rejected:
             log("RealtimeHub[\(self.providerTag)]: spawn_agent rejected without a canonical child receipt")
+            let continueTurn = self.spawnFailureContinuationPolicy.beginContinuationIfAllowed(
+              turnID: turnID.rawValue,
+              failedProvider: requestedProvider)
+            let continuationMessage =
+              requestedProvider.map {
+                "The \($0) agent could not start. You may retry once with a different installed agent, or without a provider for Omi's default agent — or tell the user it failed."
+              } ?? "The default background agent could not start. You may retry once or tell the user it failed."
             self.sendToolResultIfCurrent(
               source: source,
               callId: callId,
               name: name,
               output: RealtimeProviderToolResultPolicy.rejectedOutput(
                 code: "realtime_spawn_rejected",
-                message: "The background agent could not start. Please try again.",
+                message: continueTurn
+                  ? continuationMessage
+                  : "The background agent could not start. Please try again.",
                 preservingCanonicalEnvelopeFrom: output),
               expectedTurnEpoch: expectedTurnEpoch)
-            VoiceTurnCoordinator.shared.publish(.finish(turnID: turnID, reason: .providerFailed))
+            if !continueTurn {
+              VoiceTurnCoordinator.shared.publish(.finish(turnID: turnID, reason: .providerFailed))
+            }
             return
           }
         }
