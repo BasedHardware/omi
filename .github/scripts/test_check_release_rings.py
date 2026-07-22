@@ -33,10 +33,12 @@ def test_beta_backend_dispatch_is_rejected(tmp_path: Path, monkeypatch) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(checker.ROOT / relative, destination)
     deploy_path = tmp_path / ".github/workflows/gcp_backend.yml"
-    deploy_path.write_text(deploy_path.read_text(encoding="utf-8") + "\n# beta\n", encoding="utf-8")
+    deploy_path.write_text(
+        deploy_path.read_text(encoding="utf-8") + "\n# release-ring deployment control plane\n", encoding="utf-8"
+    )
     monkeypatch.setattr(checker, "ROOT", tmp_path)
 
-    assert any("backend beta-ring logic is forbidden" in error for error in checker.check())
+    assert any("backend release-ring deployment control plane is forbidden" in error for error in checker.check())
 
 
 def test_dispatch_release_id_cannot_be_interpolated_into_shell(tmp_path: Path, monkeypatch) -> None:

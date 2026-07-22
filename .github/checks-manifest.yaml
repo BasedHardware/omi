@@ -358,14 +358,14 @@ checks:
     reason: "#9991 mutation-tests workflow-run event, result, branch, SHA, repository, and manual proof drift"
   - id: gcp-backend-production-boundary
     command: ["python3", ".github/scripts/check-gcp-backend-production-boundary.py"]
-    triggers: [".github/workflows/gcp_backend.yml", "backend/scripts/probe-transcription-candidate-from-cloud-run.sh", "backend/tests/unit/test_probe_transcription_candidate_from_cloud_run.py", ".github/scripts/check-gcp-backend-production-boundary.py", ".github/scripts/test_check_gcp_backend_production_boundary.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_backend.yml", "backend/scripts/firebase_release_probe_token.py", "backend/scripts/transcription_capability_probe.py", ".github/scripts/check-gcp-backend-production-boundary.py", ".github/scripts/test_check_gcp_backend_production_boundary.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "the canonical production deploy permits one full-stack action while retaining tagged-candidate IAM validation"
+    reason: "the canonical production deploy is rollback-first and Cloud Run-only"
   - id: gcp-backend-production-boundary-fixtures
     command: ["python3", ".github/scripts/test_check_gcp_backend_production_boundary.py"]
     triggers: [".github/workflows/gcp_backend.yml", ".github/scripts/check-gcp-backend-production-boundary.py", ".github/scripts/test_check_gcp_backend_production_boundary.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "mutation-tests canonical prod/all admission, candidate validation, IAM audience, and tagged request-target drift"
+    reason: "mutation-tests prod/all admission, serving smoke order, token handling, and rollback coverage"
   - id: direct-backend-production-admission
     command: ["python3", ".github/scripts/check-direct-backend-production-admission.py"]
     triggers: [".github/workflows/gcp_backend_agent_proxy.yml", ".github/workflows/gcp_backend_listen_helm.yml", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_llm_gateway.yml", ".github/scripts/check-direct-backend-production-admission.py", ".github/scripts/test_check_direct_backend_production_admission.py", ".github/checks-manifest.yaml"]
