@@ -68,12 +68,56 @@ def fixtures(root: Path) -> argparse.Namespace:
     return argparse.Namespace(
         release_json=str(release_path),
         smoke_result=str(smoke_path),
+        beta_smoke_result="",
         release_tag=TAG,
         latest_tag=TAG,
         tag_sha=SHA,
         checkout_sha=SHA,
         output=str(root / "result.json"),
     )
+
+
+BETA_ZIP_SHA = "e" * 64
+BETA_DMG_SHA = "f" * 64
+
+
+def beta_fixtures(root: Path) -> argparse.Namespace:
+    """Fixtures for a release that ships the side-by-side Omi Beta assets."""
+    args = fixtures(root)
+    release_path = Path(args.release_json)
+    release = json.loads(release_path.read_text())
+    release["assets"] += [
+        {"name": "Omi.Beta.zip", "digest": f"sha256:{BETA_ZIP_SHA}"},
+        {"name": "omi-beta.dmg", "digest": f"sha256:{BETA_DMG_SHA}"},
+    ]
+    release_path.write_text(json.dumps(release), encoding="utf-8")
+
+    beta_smoke = {
+        "ok": True,
+        "release_tag": TAG,
+        "expected_channel": "beta",
+        "bundle_id": "com.omi.computer-macos.beta",
+        "version": "0.12.99",
+        "build": "12099",
+        "team_id": "9536L8KLMP",
+        "checks": sorted(REQUIRED_SMOKE_CHECKS),
+        "notification_callback_canary": {
+            "schema": 1,
+            "event": "user-notifications-settings-callback-completed",
+            "bundle_id": "com.omi.computer-macos.beta",
+            "main_actor": True,
+            "authorization_status": 2,
+            "validated": True,
+        },
+        "artifacts": [
+            {"label": "sparkle_zip", "sha256": BETA_ZIP_SHA},
+            {"label": "dmg", "sha256": BETA_DMG_SHA},
+        ],
+    }
+    beta_smoke_path = root / "smoke-beta.json"
+    beta_smoke_path.write_text(json.dumps(beta_smoke), encoding="utf-8")
+    args.beta_smoke_result = str(beta_smoke_path)
+    return args
 
 
 def expect_failure(args: argparse.Namespace, fragment: str) -> None:
@@ -123,15 +167,52 @@ def main() -> int:
         smoke_path.write_text(json.dumps(smoke))
         expect_failure(args, "source SHA does not match the candidate tag")
 
-    # Beta is a channel designation for the single production Omi identity.
-    # A candidate that reintroduces a second app/package identity must fail closed.
+    # Releases shipping the side-by-side Omi Beta assets: the beta artifact must
+    # satisfy the same smoke contract as stable, under its own bundle id.
     with tempfile.TemporaryDirectory() as temp_dir:
-        args = fixtures(Path(temp_dir))
-        release_path = Path(args.release_json)
-        release = json.loads(release_path.read_text())
-        release["assets"].append({"name": "Omi.Beta.zip", "digest": f"sha256:{ZIP_SHA}"})
-        release_path.write_text(json.dumps(release), encoding="utf-8")
-        expect_failure(args, "unexpected dual-identity desktop assets")
+        args = beta_fixtures(Path(temp_dir))
+        result = validate(args)
+        assert result["passed"] is True
+        assert result["artifact_digests"]["Omi.Beta.zip"] == BETA_ZIP_SHA
+        assert result["artifact_digests"]["omi-beta.dmg"] == BETA_DMG_SHA
+
+        missing = argparse.Namespace(**{**vars(args), "beta_smoke_result": ""})
+        expect_failure(missing, "no beta smoke result was provided")
+
+        beta_smoke_path = Path(args.beta_smoke_result)
+        original = beta_smoke_path.read_text()
+
+        beta_smoke = json.loads(original)
+        beta_smoke["bundle_id"] = "com.omi.computer-macos"
+        beta_smoke_path.write_text(json.dumps(beta_smoke))
+        expect_failure(args, "beta smoke result bundle_id mismatch")
+
+        beta_smoke = json.loads(original)
+        beta_smoke["ok"] = False
+        beta_smoke_path.write_text(json.dumps(beta_smoke))
+        expect_failure(args, "beta smoke result ok mismatch")
+
+        beta_smoke = json.loads(original)
+        beta_smoke["checks"] = beta_smoke["checks"][1:]
+        beta_smoke_path.write_text(json.dumps(beta_smoke))
+        expect_failure(args, "beta smoke result is missing required checks")
+
+        beta_smoke = json.loads(original)
+        beta_smoke["artifacts"][0]["sha256"] = "d" * 64
+        beta_smoke_path.write_text(json.dumps(beta_smoke))
+        expect_failure(args, "Omi.Beta.zip digest")
+
+        # The canary must have run inside the beta artifact itself — evidence
+        # missing entirely, or recorded under the stable bundle id, both fail.
+        beta_smoke = json.loads(original)
+        del beta_smoke["notification_callback_canary"]
+        beta_smoke_path.write_text(json.dumps(beta_smoke))
+        expect_failure(args, "beta smoke result is missing UserNotifications callback canary")
+
+        beta_smoke = json.loads(original)
+        beta_smoke["notification_callback_canary"]["bundle_id"] = "com.omi.computer-macos"
+        beta_smoke_path.write_text(json.dumps(beta_smoke))
+        expect_failure(args, "beta smoke UserNotifications callback canary bundle_id mismatch")
 
     test_codemagic_beta_smoke_produces_gate_required_canaries()
 
@@ -139,18 +220,26 @@ def main() -> int:
 
 
 def test_codemagic_beta_smoke_produces_gate_required_canaries() -> None:
-    """Codemagic must smoke exactly the single Omi artifact promoted through both channels."""
+    """The beta smoke invocation in codemagic.yaml must produce every piece of
+    evidence this gate requires of the beta smoke result. A stable-only flag
+    addition (e.g. the notification callback canary) that skips the beta
+    invocation would otherwise fail-close the first dual-identity release."""
     codemagic = (Path(__file__).resolve().parents[2] / "codemagic.yaml").read_text(encoding="utf-8")
     smoke_step = codemagic.split("- name: Smoke signed desktop artifact", 1)[1]
     smoke_step = smoke_step.split("- name: ", 1)[0]
     production_branch = smoke_step.split("else", 1)[1]
     invocations = production_branch.split("scripts/smoke-signed-desktop-artifact.sh")
-    assert len(invocations) == 2, "expected exactly one production signed-artifact smoke invocation"
-    stable_invocation = invocations[1]
+    assert len(invocations) >= 3, "expected stable and beta smoke invocations in the production branch"
+    stable_invocation, beta_invocation = invocations[1], invocations[2]
 
     evidence_flags = ["--launch", "--auth-storage-canary", "--notification-callback-canary", "--source-sha", "--tag"]
     for flag in evidence_flags:
         assert flag in stable_invocation, f"stable smoke invocation lost {flag}; update this contract test"
+        assert flag in beta_invocation, (
+            f"beta smoke invocation is missing {flag}, but the candidate gate validates the "
+            "evidence it produces — the first dual-identity release would fail qualification"
+        )
+    assert "--expected-bundle-id" in beta_invocation, "beta smoke must assert the beta bundle id"
     return 0
 
 

@@ -144,7 +144,7 @@ class ManifestIntegrityTests(unittest.TestCase):
         )
         self.assertEqual(
             manifest_contract.manifest_digest(manifest),
-            "sha256:bec1b723483d46f415ff57d86b7fc59c3fc8e9faf484043834665453aafc10e7",
+            "sha256:9d2e2de26473a24adf498b3a814a532c7ee56d6ae18746d2444d9d9ca9c20beb",
         )
 
     def test_valid_identity_and_digest_mutations_fail_detached_verification(self) -> None:
@@ -160,6 +160,8 @@ class ManifestIntegrityTests(unittest.TestCase):
                 "build_number": 12073,
                 "zip_url": "https://github.com/BasedHardware/omi/releases/download/v0.12.73%2B12073-macos/Omi.zip",
                 "dmg_url": "https://github.com/BasedHardware/omi/releases/download/v0.12.73%2B12073-macos/omi.dmg",
+                "beta_zip_url": "https://github.com/BasedHardware/omi/releases/download/v0.12.73%2B12073-macos/Omi.Beta.zip",
+                "beta_dmg_url": "https://github.com/BasedHardware/omi/releases/download/v0.12.73%2B12073-macos/omi-beta.dmg",
             }
         )
         release_identity["compatibility_contract"].update(

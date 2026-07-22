@@ -271,7 +271,10 @@ final class APIClientRoutingTests: XCTestCase {
         updateChannel: "staging"
       ))
     XCTAssertEqual(
-      DesktopBackendEnvironment.pythonBaseURL(useDevelopmentBackends: false, environmentValue: nil),
+      DesktopBackendEnvironment.pythonBaseURL(
+        useDevelopmentBackends: false,
+        environmentValue: nil
+      ),
       "https://api.omi.me/"
     )
     XCTAssertEqual(
@@ -290,6 +293,20 @@ final class APIClientRoutingTests: XCTestCase {
         bundleIdentifier: "com.omi.computer-macos",
         updateChannel: "stable"
       ))
+  }
+
+  func testBetaIdentityBundleUsesTheProductionBackend() {
+    // The Omi Beta app is production-family: its isolated app identity does not
+    // create a second backend environment.
+    XCTAssertFalse(
+      DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        updateChannel: "beta"
+      ))
+    XCTAssertEqual(
+      DesktopBackendEnvironment.pythonBaseURL(useDevelopmentBackends: false, environmentValue: nil),
+      "https://api.omi.me/"
+    )
   }
 
   func testNonProductionBundlesDefaultToDevelopmentBackends() {
