@@ -1,0 +1,28 @@
+desktop/macos/Desktop/Sources/MainWindow/CaptureListeningControls.swift
+  s_62099ccfd5cc12::t_30f02eb9c4878d 107,111,115,119,122,125-126,130,134-136,140-141
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_62099ccfd5cc12::t_9735a1f986ac01 268,272,276,280
+  s_62099ccfd5cc12::t_e76c217f43d546 1689-1690,1694,1698-1700,1704-1705
+desktop/macos/Desktop/Sources/MainWindow/CaptureListeningLogic.swift
+  s_62099ccfd5cc12::t_c7513d4e29fa91 64
+  s_62099ccfd5cc12::t_e420c5d4db244a 1-23,25-27,29-63,65-124
+  s_62099ccfd5cc12::t_e7d58c7e86d832 24,28
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_62099ccfd5cc12::t_51bb8f42a3a5fa 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "c2abbf7f8c0dce12e8fba2722fe50742f4f1abc9",
+  "prompts": {},
+  "sessions": {
+    "s_62099ccfd5cc12": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bce3b3b3-c244-4ae8-bb2a-1ff7eccbcdbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
