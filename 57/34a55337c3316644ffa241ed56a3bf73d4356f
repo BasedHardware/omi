@@ -8,6 +8,9 @@ desktop/macos/Desktop/Sources/OmiApp.swift
   s_424d550d86fd05::t_dd0cbfb98a709c 269-271
 desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
   s_424d550d86fd05::t_dde3ebf54bce0a 2786,3398,3404
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  s_424d550d86fd05::t_acb0cc88bbf563 1743
+  s_424d550d86fd05::t_fa5dde3ce1bf08 2347
 ---
 {
   "schema_version": "authorship/3.0.0",
