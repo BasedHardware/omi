@@ -192,8 +192,14 @@ refuse_prod_bundle() {
   fi
 }
 
+DEV_STACK_TEARDOWN_DONE=0
+
 maybe_teardown_dev_stack() {
+  if [[ "$DEV_STACK_TEARDOWN_DONE" -eq 1 ]]; then
+    return 0
+  fi
   if [[ "$KEEP_STACK" -eq 0 && ( "${TIER:-0}" -ge 2 || "${READINESS:-0}" -eq 1 ) ]]; then
+    DEV_STACK_TEARDOWN_DONE=1
     make -C "$REPO_ROOT" dev-down >/dev/null 2>&1 || true
   fi
 }
@@ -691,9 +697,11 @@ if [[ "$READINESS" -eq 1 ]]; then
   STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   START_SEC=$(date +%s)
   FLOW_RESULTS="[]"
+  trap maybe_teardown_dev_stack EXIT
   run_self_check
   ensure_dev_stack
   maybe_teardown_dev_stack
+  trap - EXIT
   DURATION=$(( $(date +%s) - START_SEC ))
   finalize_run "$RUN_DIR" true "readiness" "$STARTED_AT" "$DURATION" "$FLOW_RESULTS"
   echo "desktop-core-harness readiness passed (evidence: $RUN_DIR)"

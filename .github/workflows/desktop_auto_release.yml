@@ -88,7 +88,7 @@ jobs:
         with:
           name: desktop-pre-tag-readiness-evidence
           path: /tmp/pre-tag-readiness-evidence.json
-          if-no-files-found: warn
+          if-no-files-found: error
 
   tag-release:
     needs: [plan-release, pre-tag-readiness]

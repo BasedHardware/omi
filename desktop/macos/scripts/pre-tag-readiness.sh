@@ -172,7 +172,7 @@ trap on_abort EXIT
 
 # 1. Independently resolve the requested SHA from origin and confirm it is on
 #    main. Never trust the caller's claim that this is the planned source.
-git -C "$SOURCE_REPOSITORY" fetch --quiet --force origin main
+git -C "$SOURCE_REPOSITORY" fetch --quiet --no-tags origin +refs/heads/main:refs/remotes/origin/main
 git -C "$SOURCE_REPOSITORY" rev-parse --verify --quiet "${SOURCE_SHA}^{commit}" >/dev/null || {
   echo "pre-tag-readiness: source SHA $SOURCE_SHA does not resolve to a commit in $SOURCE_REPOSITORY" >&2
   exit 1
