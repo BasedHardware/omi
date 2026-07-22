@@ -472,12 +472,16 @@ import XCTest
     }
     let rowSource = String(source[rowRange.lowerBound..<heightRange.lowerBound])
 
-    XCTAssertTrue(rowSource.contains("Text(\"Omi Chat\")"))
+    // The notch is a voice-first surface now (typed chat moved to the main-window
+    // ask bar), but the hover row must still reach Omi: tapping opens chat, it's
+    // labeled "Omi Chat" for accessibility, and it shows the push-to-talk hint.
+    XCTAssertTrue(rowSource.contains("Text(\"Talk to Omi\")"))
     XCTAssertTrue(rowSource.contains("openOmiChatFromNotchRow()"))
     XCTAssertTrue(rowSource.contains("private var notchOmiChatOverlayHitTarget: some View"))
     XCTAssertTrue(rowSource.contains(".accessibilityLabel(\"Omi Chat\")"))
-    XCTAssertTrue(rowSource.contains("notchShortcutHint(\"Ask\""))
     XCTAssertTrue(rowSource.contains("notchShortcutHint(systemImage: \"mic.fill\""))
+    // Typed chat was removed from the notch — no text-entry "Ask" hint remains.
+    XCTAssertFalse(rowSource.contains("notchShortcutHint(\"Ask\""))
     XCTAssertFalse(rowSource.contains("notchShortcutHint(\"PTT\""))
   }
 
@@ -492,18 +496,17 @@ import XCTest
       source.contains(
         "notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight + notchHoverMenuHeight)"
       ))
-    XCTAssertTrue(source.contains("@State private var notchSettingsHovering = false"))
-    XCTAssertTrue(source.contains("if !state.isVoicePresentationActive && notchSettingsHovering"))
-    XCTAssertTrue(source.contains("private var notchSettingsButton: some View"))
-    XCTAssertTrue(source.contains(".frame(width: 44, height: 44)"))
-    XCTAssertTrue(source.contains(".accessibilityIdentifier(\"notch_floating_bar_settings\")"))
+    // Settings is a hover-only gear in the bar chrome (not a notch chat row),
+    // gated so it never shows during voice, and it opens the floating-bar
+    // settings. The notch logo opens the agent chats.
+    XCTAssertTrue(source.contains("if isHovering && !state.isVoiceListening"))
+    XCTAssertTrue(source.contains("Image(systemName: \"gearshape.fill\")"))
+    XCTAssertTrue(source.contains("openFloatingBarSettings()"))
+    XCTAssertTrue(source.contains("openAgentChatsFromNotchLogo()"))
     XCTAssertFalse(
       source.contains(
         ".background(Color.white.opacity(0.12))\n                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))"
       ))
-    XCTAssertTrue(source.contains("notchSettingsHovering = showsHoverChrome"))
-    XCTAssertTrue(source.contains("openFloatingBarSettings()"))
-    XCTAssertTrue(source.contains("openAgentChatsFromNotchLogo()"))
     XCTAssertFalse(
       source.contains(
         ".onHover { hovering in\n            withAnimation(.easeInOut(duration: 0.12)) {\n                notchSettingsHovering = hovering"
