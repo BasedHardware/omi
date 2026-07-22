@@ -5,7 +5,7 @@
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4496,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3298,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5706,
-    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1692
+    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1690
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "SB redesign: Omi-mark avatar on replies that spins while thinking (typing-dots suppressed for Omi's own replies) and tool-call chips gated to the streaming turn, merged with main's metadata-row reveal honoring keyboard focus (shared FocusState + testable ChatBubbleMetadataReveal); a component split is tracked follow-up.",
