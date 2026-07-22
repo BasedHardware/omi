@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -87,6 +88,69 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
+
+    def _assert_exact_branch_query_execution(
+        self, script: str, *, repository_variable: str, tag_variable: str, directory_variable: str
+    ) -> None:
+        """Execute the declared gh command with a fake CLI to preserve `+` safely.
+
+        This contracts the command the CI providers actually execute.  It
+        proves the tag is transported as a `-f branch=...` argument instead of
+        being interpolated into a URI, where a candidate's `+` is ambiguous.
+        """
+        command = re.search(
+            rf'(gh api --paginate --slurp --method GET "repos/\${repository_variable}/actions/workflows/'
+            rf'desktop_qualify_beta\.yml/runs" \\\n'
+            rf'\s+-f event=workflow_dispatch -f branch="\${tag_variable}" -F per_page=100 \\\n'
+            rf'\s+> "\${directory_variable}/runs\.json")',
+            textwrap.dedent(script),
+        )
+        self.assertIsNotNone(command)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            fake_bin = work / "bin"
+            fake_bin.mkdir()
+            fake_gh = fake_bin / "gh"
+            fake_gh.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$GH_ARGS_FILE"\n', encoding="utf-8")
+            fake_gh.chmod(0o755)
+            output_directory = work / "query"
+            output_directory.mkdir()
+            args_path = work / "gh-args.txt"
+            result = subprocess.run(
+                ["bash", "-c", command.group(1)],
+                cwd=work,
+                env={
+                    **os.environ,
+                    "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+                    repository_variable: "BasedHardware/omi",
+                    tag_variable: "v1.2.3+1234-macos",
+                    directory_variable: str(output_directory),
+                    "GH_ARGS_FILE": str(args_path),
+                },
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            args = args_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(
+                args,
+                [
+                    "api",
+                    "--paginate",
+                    "--slurp",
+                    "--method",
+                    "GET",
+                    "repos/BasedHardware/omi/actions/workflows/desktop_qualify_beta.yml/runs",
+                    "-f",
+                    "event=workflow_dispatch",
+                    "-f",
+                    "branch=v1.2.3+1234-macos",
+                    "-F",
+                    "per_page=100",
+                ],
+            )
+            self.assertTrue((output_directory / "runs.json").exists())
 
     def _assert_qualification_tag_identity(self, *, annotated: bool) -> None:
         target_expression, checkout_expression = self._qualification_identity_expressions()
@@ -240,7 +304,12 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertIn("--current-run-id \"$CURRENT_RUN_ID\"", admission)
         self.assertIn("--require-admitted", admission)
         self.assertIn('--method GET "repos/$REPO/actions/workflows/desktop_qualify_beta.yml/runs"', admission)
-        self.assertIn('-f event=workflow_dispatch -f branch="$RELEASE_TAG" -f head_sha="$CANDIDATE_SHA"', admission)
+        self._assert_exact_branch_query_execution(
+            admission,
+            repository_variable="REPO",
+            tag_variable="RELEASE_TAG",
+            directory_variable="admission_dir",
+        )
         self.assertIn('actions/runs/$run_id/jobs', admission)
         self.assertIn('--jobs-dir "$admission_dir/jobs"', admission)
         self.assertLess(qualification.index("Fail-closed exact-candidate admission"), qualification.index("Checkout qualification controls"))
@@ -265,9 +334,16 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertIn("gh api --paginate --slurp", dispatch)
         self.assertIn("actions/workflows/desktop_qualify_beta.yml/runs", dispatch)
         self.assertIn('--method GET "repos/$GITHUB_REPO/actions/workflows/desktop_qualify_beta.yml/runs"', dispatch)
-        self.assertIn('-f event=workflow_dispatch -f branch="$CM_TAG" -f head_sha="$CANDIDATE_SHA"', dispatch)
+        self._assert_exact_branch_query_execution(
+            dispatch,
+            repository_variable="GITHUB_REPO",
+            tag_variable="CM_TAG",
+            directory_variable="dispatch_dir",
+        )
         self.assertIn('actions/runs/$run_id/jobs', dispatch)
         self.assertIn('--jobs-dir "$dispatch_dir/jobs"', dispatch)
+        self.assertIn('gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO"', dispatch)
+        self.assertIn('-f release_tag="$CM_TAG" --ref "$CM_TAG"', dispatch)
 
     def test_beta_qualification_cleanup_accepts_missing_gitlink(self) -> None:
         for name, script in self._gitlink_cleanup_scripts():

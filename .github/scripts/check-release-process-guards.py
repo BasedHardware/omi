@@ -815,7 +815,8 @@ def check_desktop_qualification_runner() -> list[str]:
         "Fail-closed exact-candidate admission",
         "desktop_beta_qualification_admission.py",
         "gh api --paginate --slurp",
-        "head_sha=\"$CANDIDATE_SHA\"",
+        "branch=\"$RELEASE_TAG\"",
+        "--current-run-id \"$CURRENT_RUN_ID\"",
         "--jobs-dir \"$admission_dir/jobs\"",
         "needs: admit",
     ):

@@ -123,9 +123,9 @@ def _validate_workflow_run_state(run: dict[str, Any], index: int) -> None:
     raise ValueError(f"workflow run {index} has unknown status")
 
 
-def _exact_runs(runs_response: Any, release_tag: str, source_sha: str) -> list[dict[str, Any]]:
+def _exact_runs(runs: list[dict[str, Any]], release_tag: str, source_sha: str) -> list[dict[str, Any]]:
     selected: list[dict[str, Any]] = []
-    for index, run in enumerate(_workflow_runs(runs_response)):
+    for index, run in enumerate(runs):
         if not isinstance(run, dict):
             raise ValueError(f"GitHub workflow-runs response contains non-object entry {index}")
         # These are core fields on every actions workflow-run response. Reject
@@ -144,19 +144,19 @@ def _exact_runs(runs_response: Any, release_tag: str, source_sha: str) -> list[d
     return selected
 
 
-def _admitted_attempts(prior_runs: list[dict[str, Any]], jobs_by_run: dict[int, Any]) -> int:
-    """Count only runs whose real GitHub `admit` job completed successfully."""
+def _qualification_attempts(prior_runs: list[dict[str, Any]], jobs_by_run: dict[int, Any]) -> int:
+    """Count only runs whose trusted `qualify` job actually started."""
     attempts = 0
     for run in prior_runs:
         run_id = run["id"]
         if run_id not in jobs_by_run:
             raise ValueError(f"workflow run {run_id} is missing GitHub job authority")
-        if _admit_job_succeeded(jobs_by_run[run_id], run_id):
+        if _qualify_job_started(jobs_by_run[run_id], run_id):
             attempts += 1
     return attempts
 
 
-def _admit_job_succeeded(jobs_response: Any, run_id: int) -> bool:
+def _qualify_job_started(jobs_response: Any, run_id: int) -> bool:
     pages = [jobs_response] if isinstance(jobs_response, dict) else jobs_response
     if not isinstance(pages, list) or not pages:
         raise ValueError(f"workflow run {run_id} jobs response is malformed")
@@ -183,20 +183,27 @@ def _admit_job_succeeded(jobs_response: Any, run_id: int) -> bool:
             jobs.append(job)
     if total_count != len(jobs):
         raise ValueError(f"workflow run {run_id} jobs pagination is incomplete")
-    admit_jobs = [job for job in jobs if job.get("name") == "admit"]
-    if len(admit_jobs) > 1:
-        raise ValueError(f"workflow run {run_id} has multiple admit jobs")
-    if not admit_jobs:
+    qualify_jobs = [job for job in jobs if job.get("name") == "qualify"]
+    if len(qualify_jobs) > 1:
+        raise ValueError(f"workflow run {run_id} has multiple qualify jobs")
+    if not qualify_jobs:
         # A cancelled workflow can be discarded by global concurrency before
-        # its admission job exists. It is not a qualification attempt.
+        # it creates the trusted qualification job. It is not an attempt.
         return False
-    admit = admit_jobs[0]
-    if admit.get("status") != "completed":
-        raise ValueError(f"workflow run {run_id} admit job did not complete")
-    conclusion = admit.get("conclusion")
+    qualify = qualify_jobs[0]
+    if qualify.get("status") != "completed":
+        raise ValueError(f"workflow run {run_id} qualify job did not complete")
+    conclusion = qualify.get("conclusion")
     if not isinstance(conclusion, str) or conclusion not in TERMINAL_CONCLUSIONS:
-        raise ValueError(f"workflow run {run_id} admit job has invalid conclusion")
-    return conclusion == "success"
+        raise ValueError(f"workflow run {run_id} qualify job has invalid conclusion")
+    if conclusion == "skipped":
+        return False
+    started_at = qualify.get("started_at")
+    if started_at is None and conclusion == "cancelled":
+        return False
+    if not isinstance(started_at, str) or not started_at:
+        raise ValueError(f"workflow run {run_id} qualify job did not prove it started")
+    return True
 
 
 def decide(
@@ -210,9 +217,21 @@ def decide(
 ) -> dict[str, Any]:
     """Return an admission decision or raise for malformed GitHub API data."""
     source_sha = candidate_sha(ref, release_tag, annotated_tag)
+    runs = _workflow_runs(runs_response)
     if current_run_id is not None:
         current_run_id = _positive_id(current_run_id, "current workflow run id")
-    prior_runs = [run for run in _exact_runs(runs_response, release_tag, source_sha) if run["id"] != current_run_id]
+        current_runs = [run for run in runs if run["id"] == current_run_id]
+        if len(current_runs) != 1:
+            raise ValueError("current workflow run must appear exactly once in the GitHub run response")
+        current = current_runs[0]
+        if not (
+            current.get("path") == QUALIFICATION_WORKFLOW
+            and current.get("event") == "workflow_dispatch"
+            and current.get("head_branch") == release_tag
+            and current.get("head_sha") == source_sha
+        ):
+            raise ValueError("current workflow run does not bind the requested immutable candidate")
+    prior_runs = [run for run in _exact_runs(runs, release_tag, source_sha) if run["id"] != current_run_id]
     active = next((run for run in prior_runs if run["status"] != "completed"), None)
     if active is not None:
         return {
@@ -229,7 +248,7 @@ def decide(
             "source_sha": source_sha,
             "reason": f"exact candidate already succeeded in qualification run {successful['id']}",
         }
-    attempts = _admitted_attempts(prior_runs, jobs_by_run)
+    attempts = _qualification_attempts(prior_runs, jobs_by_run)
     if attempts >= MAX_EXACT_CANDIDATE_ATTEMPTS:
         return {
             "admitted": False,

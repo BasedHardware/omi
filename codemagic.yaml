@@ -2914,7 +2914,7 @@ workflows:
           [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'ERROR: malformed candidate commit SHA.' >&2; exit 1; }
           GH_TOKEN="$GITHUB_TOKEN" \
             gh api --paginate --slurp --method GET "repos/$GITHUB_REPO/actions/workflows/desktop_qualify_beta.yml/runs" \
-              -f event=workflow_dispatch -f branch="$CM_TAG" -f head_sha="$CANDIDATE_SHA" -F per_page=100 \
+              -f event=workflow_dispatch -f branch="$CM_TAG" -F per_page=100 \
             > "$dispatch_dir/runs.json"
           mkdir -p "$dispatch_dir/jobs"
           while IFS= read -r run_id; do

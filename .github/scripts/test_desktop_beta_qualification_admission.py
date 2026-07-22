@@ -33,14 +33,22 @@ def _response(runs: list[dict]) -> dict:
     return {"total_count": len(runs), "workflow_runs": runs}
 
 
-def _admit_jobs(*, succeeded: bool = True) -> dict:
-    conclusion = "success" if succeeded else "failure"
-    return {"total_count": 1, "jobs": [{"id": 1, "name": "admit", "status": "completed", "conclusion": conclusion}]}
+def _qualification_jobs(*, conclusion: str = "failure", started: bool = True) -> dict:
+    qualify = {"id": 2, "name": "qualify", "status": "completed", "conclusion": conclusion}
+    if started:
+        qualify["started_at"] = "2026-07-22T00:00:00Z"
+    return {
+        "total_count": 2,
+        "jobs": [
+            {"id": 1, "name": "admit", "status": "completed", "conclusion": "success"},
+            qualify,
+        ],
+    }
 
 
 def _decide(runs: list[dict], *, jobs_by_run: dict[int, dict] | None = None, **kwargs: object) -> dict:
     if jobs_by_run is None:
-        jobs_by_run = {run["id"]: _admit_jobs() for run in runs}
+        jobs_by_run = {run["id"]: _qualification_jobs() for run in runs}
     return admission.decide(_ref(), _response(runs), release_tag=TAG, jobs_by_run=jobs_by_run, **kwargs)
 
 
@@ -60,8 +68,24 @@ class AdmissionTests(unittest.TestCase):
         self.assertTrue(decision["admitted"])
 
     def test_current_run_is_excluded_by_id(self) -> None:
-        decision = _decide([_run(run_id=42, conclusion="success")], current_run_id=42)
+        # The exact current record is structurally bound before it is excluded,
+        # so it needs no prior-run job authority and cannot self-block.
+        decision = _decide([_run(run_id=42, conclusion="success")], jobs_by_run={}, current_run_id=42)
         self.assertTrue(decision["admitted"])
+
+    def test_current_run_on_main_is_denied_before_exclusion(self) -> None:
+        main_run = _run(run_id=42, tag="main", sha="b" * 40, conclusion="success")
+        with self.assertRaisesRegex(ValueError, "does not bind"):
+            _decide([main_run], current_run_id=42)
+
+    def test_current_run_missing_or_duplicated_is_denied(self) -> None:
+        with self.subTest("missing"):
+            with self.assertRaisesRegex(ValueError, "appear exactly once"):
+                _decide([], current_run_id=42)
+        with self.subTest("duplicated"):
+            duplicate = _run(run_id=42, conclusion="failure")
+            with self.assertRaisesRegex(ValueError, "duplicate run id"):
+                _decide([duplicate, dict(duplicate)], current_run_id=42)
 
     def test_other_tag_does_not_block_exact_candidate(self) -> None:
         decision = _decide([_run(run_id=1, status="queued", conclusion=None, tag=OTHER_TAG)])
@@ -90,7 +114,7 @@ class AdmissionTests(unittest.TestCase):
             {"total_count": 101, "workflow_runs": first_page},
             {"total_count": 101, "workflow_runs": second_page},
         ]
-        decision = admission.decide(_ref(), pages, release_tag=TAG, jobs_by_run={101: _admit_jobs()})
+        decision = admission.decide(_ref(), pages, release_tag=TAG, jobs_by_run={101: _qualification_jobs()})
         self.assertFalse(decision["admitted"])
         self.assertIn("succeeded", decision["reason"])
 
@@ -133,23 +157,39 @@ class AdmissionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "completed status has invalid conclusion"):
             _decide([_run(run_id=42, status="completed", conclusion=None)], current_run_id=42)
 
-    def test_cancelled_pre_admission_placeholders_do_not_consume_attempt_bound(self) -> None:
+    def test_two_pre_admission_placeholders_do_not_consume_one_real_attempt(self) -> None:
         runs = [
             _run(run_id=1, conclusion="cancelled"),
             _run(run_id=2, conclusion="cancelled"),
-            _run(run_id=3, conclusion="cancelled"),
-            _run(run_id=4, conclusion="failure"),
+            _run(run_id=3, conclusion="failure"),
         ]
-        no_jobs = {"total_count": 0, "jobs": []}
+        # A globally-concurrent duplicate can get as far as the lightweight
+        # admission job, then be cancelled before `qualify` starts.  Its
+        # explicit skipped qualify record is not an attempted qualification.
+        admission_only = {
+            "total_count": 2,
+            "jobs": [
+                {"id": 1, "name": "admit", "status": "completed", "conclusion": "success"},
+                {"id": 2, "name": "qualify", "status": "completed", "conclusion": "skipped"},
+            ],
+        }
         decision = _decide(
             runs,
-            jobs_by_run={1: no_jobs, 2: no_jobs, 3: no_jobs, 4: _admit_jobs()},
+            jobs_by_run={1: admission_only, 2: admission_only, 3: _qualification_jobs()},
         )
         self.assertTrue(decision["admitted"])
 
-    def test_three_admitted_failures_reach_the_bound(self) -> None:
+    def test_admission_without_started_qualification_is_not_an_attempt(self) -> None:
+        run = _run(run_id=1, conclusion="failure")
+        admission_only = {
+            "total_count": 1,
+            "jobs": [{"id": 1, "name": "admit", "status": "completed", "conclusion": "success"}],
+        }
+        self.assertTrue(_decide([run], jobs_by_run={1: admission_only})["admitted"])
+
+    def test_three_started_qualification_attempts_reach_the_bound(self) -> None:
         runs = [_run(run_id=index, conclusion="failure") for index in range(1, 4)]
-        decision = _decide(runs, jobs_by_run={run["id"]: _admit_jobs() for run in runs})
+        decision = _decide(runs, jobs_by_run={run["id"]: _qualification_jobs() for run in runs})
         self.assertFalse(decision["admitted"])
 
     def test_missing_job_authority_fails_closed(self) -> None:
