@@ -80,7 +80,10 @@ final class SBOnboardingModel: ObservableObject {
   let chatProvider: ChatProvider
   private let onComplete: (() -> Void)?
   var streamTask: Task<Void, Never>?
-  var pollTask: Task<Void, Never>?
+  /// Permission-grant pollers, one per permission key. Keyed so requesting a
+  /// second permission (the meetings "both" mic+system-audio step) never cancels
+  /// a still-running poll for the first and strands it on "macOS…".
+  var pollTasks: [String: Task<Void, Never>] = [:]
 
   init(appState: AppState, chatProvider: ChatProvider, onComplete: (() -> Void)?) {
     self.appState = appState
@@ -349,7 +352,8 @@ final class SBOnboardingModel: ObservableObject {
   /// Cancel every live task/monitor this model owns. Safe to call repeatedly.
   private func teardownAll() {
     streamTask?.cancel()
-    pollTask?.cancel()
+    pollTasks.values.forEach { $0.cancel() }
+    pollTasks.removeAll()
     disarmShortcutSummon()
     teardownVoiceDemo()
     FloatingControlBarManager.shared.hide()

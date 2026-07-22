@@ -65,8 +65,10 @@ extension SBOnboardingModel {
   }
 
   func pollPermission(_ key: String) {
-    pollTask?.cancel()
-    pollTask = Task { [weak self] in
+    // Cancel only this key's prior poll — never a sibling permission's, so the
+    // "both" mic+system-audio step can poll two grants at once.
+    pollTasks[key]?.cancel()
+    pollTasks[key] = Task { [weak self] in
       for _ in 0..<40 {  // ~20s
         try? await Task.sleep(nanoseconds: 500_000_000)
         guard let self, !Task.isCancelled else { return }
@@ -76,6 +78,11 @@ extension SBOnboardingModel {
           return
         }
       }
+      // Timed out without a grant. FDA/Accessibility routinely exceed 20s (open
+      // System Settings → authenticate → toggle), so re-arm the Allow button
+      // instead of stranding the row on "macOS…" forever.
+      guard let self, !Task.isCancelled else { return }
+      self.resetPermToAsk(key)
     }
   }
 
@@ -119,6 +126,20 @@ extension SBOnboardingModel {
     case "full_disk_access": fdaState = .on
     case "accessibility": accState = .on
     case "automation": autoState = .on
+    default: break
+    }
+  }
+
+  /// Return a still-`.waiting` row to `.ask` so its Allow button reappears after
+  /// the poll times out without a grant (a later grant re-triggers the poll).
+  func resetPermToAsk(_ key: String) {
+    switch key {
+    case "microphone": micState = .ask
+    case "system_audio": sysState = .ask
+    case "screen_recording": scrState = .ask
+    case "full_disk_access": fdaState = .ask
+    case "accessibility": accState = .ask
+    case "automation": autoState = .ask
     default: break
     }
   }
