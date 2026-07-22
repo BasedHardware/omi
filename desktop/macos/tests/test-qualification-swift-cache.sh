@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Git hooks export their caller repository environment. This fixture creates
+# several temporary repositories and must never mutate the linked worktree's
+# shared Git directory.
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE_HELPER="$SCRIPT_DIR/../scripts/qualification-swift-cache.sh"
 TMP_ROOT_RAW="$(mktemp -d "${TMPDIR:-/tmp}/omi-qualification-swift-cache-test.XXXXXX")"
