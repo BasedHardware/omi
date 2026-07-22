@@ -192,6 +192,14 @@ build_from_tag() {
   printf '%s\n' "${BASH_REMATCH[2]}"
 }
 
+expected_app_bundle_name() {
+  case "$EXPECTED_BUNDLE_ID" in
+    com.omi.computer-macos) printf '%s\n' "Omi.app" ;;
+    com.omi.computer-macos.beta) printf '%s\n' "Omi Beta.app" ;;
+    *) basename "$APP_BUNDLE" ;;
+  esac
+}
+
 extract_zip_if_needed() {
   [[ -n "$SPARKLE_ZIP" ]] || return 0
   [[ -f "$SPARKLE_ZIP" ]] || fail "Sparkle ZIP not found: $SPARKLE_ZIP"
@@ -360,6 +368,7 @@ assert_bundle_identity() {
   [[ -d "$APP_BUNDLE/Contents" ]] || fail "app bundle not found: $APP_BUNDLE"
 
   local bundle_id version build executable url_scheme feed_url external_preview_marker automatic_checks
+  local app_bundle_name required_app_bundle_name
   bundle_id="$(plist_read CFBundleIdentifier)"
   version="$(plist_read CFBundleShortVersionString)"
   build="$(plist_read CFBundleVersion)"
@@ -370,6 +379,10 @@ assert_bundle_identity() {
   automatic_checks="$(plist_read SUEnableAutomaticChecks)"
 
   [[ "$bundle_id" == "$EXPECTED_BUNDLE_ID" ]] || fail "bundle id must be $EXPECTED_BUNDLE_ID, got ${bundle_id:-missing}"
+  app_bundle_name="$(basename "$APP_BUNDLE")"
+  required_app_bundle_name="$(expected_app_bundle_name)"
+  [[ "$app_bundle_name" == "$required_app_bundle_name" ]] \
+    || fail "app bundle name for $EXPECTED_BUNDLE_ID must be $required_app_bundle_name, got $app_bundle_name"
   [[ "$url_scheme" == "$EXPECTED_URL_SCHEME" ]] || fail "URL scheme must be $EXPECTED_URL_SCHEME, got ${url_scheme:-missing}"
   if [[ "$IS_EXTERNAL_PREVIEW" == true ]]; then
     [[ "$bundle_id" =~ ^com[.]omi[.]preview[.][a-z0-9-]+$ ]] \
@@ -493,7 +506,7 @@ assert_sparkle_and_artifacts() {
     hdiutil attach "$DMG_PATH" -nobrowse -readonly -mountpoint "$DMG_MOUNTPOINT" -quiet \
       || fail "DMG attach failed"
     local dmg_app_name dmg_app
-    dmg_app_name="$(basename "$APP_BUNDLE")"
+    dmg_app_name="$(expected_app_bundle_name)"
     [[ "$dmg_app_name" == *.app && "$dmg_app_name" != ".app" ]] \
       || fail "validated app bundle name must end in .app: $dmg_app_name"
     dmg_app="$DMG_MOUNTPOINT/$dmg_app_name"
