@@ -231,6 +231,20 @@ struct OMIApp: App {
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked Sendable {
+  /// The live AppDelegate instance. SwiftUI's `@NSApplicationDelegateAdaptor` does
+  /// NOT make `NSApp.delegate` our `AppDelegate` — on macOS 14+ it installs an
+  /// internal forwarding delegate, so `NSApp.delegate as? AppDelegate` is `nil`.
+  /// Callers that need to reach the delegate (e.g. the global summon shortcut, the
+  /// floating bar) must go through this reference instead of casting `NSApp.delegate`.
+  nonisolated(unsafe) static weak var shared: AppDelegate?
+
+  /// The delegate that the summon call sites (global Open-Omi shortcut, floating bar
+  /// "Continue in Omi") route through to bring the main window forward. This exists as
+  /// a single chokepoint precisely because `NSApp.delegate as? AppDelegate` returns
+  /// `nil` under SwiftUI's `@NSApplicationDelegateAdaptor` — that cast silently
+  /// no-oped every summon, so the app's window never came to the foreground.
+  static func summonWindowTarget() -> AppDelegate? { shared }
+
   nonisolated(unsafe) static var openMainWindow: (() -> Void)?
   private nonisolated(unsafe) static var appIsActive = false
   private nonisolated(unsafe) static var mainWindowIsKey = false
@@ -252,6 +266,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   private var initialSettingsSyncTask: Task<Void, Never>?
 
   func applicationWillFinishLaunching(_ notification: Notification) {
+    // Publish the live delegate instance for callers that can't rely on
+    // `NSApp.delegate as? AppDelegate` (nil under SwiftUI's delegate adaptor).
+    AppDelegate.shared = self
     if AuthStorageCanary.isRequested { return }
     // Single-instance guard: a second live copy of the same bundle id + launch mode
     // would race the first against the shared Rewind SQLite DB
@@ -1081,44 +1098,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       let isRealAppWindow = window.frame.width > 300 && window.frame.height > 200
       let isMenuBarPopover = window.title.hasPrefix("Item-")
       if isRealAppWindow && !isMenuBarPopover {
-        // A summon can come from any Space/desktop. `.moveToActiveSpace` only pulls
-        // the window over WHEN THE APP ACTIVATES — but macOS blocks a background app
-        // from self-activating on a hotkey, so that leaves the window stranded and
-        // nothing appears. `.canJoinAllSpaces` instead makes the window show on
-        // whatever desktop is current with no activation required (reverted shortly
-        // after in dropSummonWindowLevelSoon). Also un-minimize and nudge it
-        // on-screen if it drifted off a disconnected display.
-        window.collectionBehavior.insert(.canJoinAllSpaces)
+        // A summon can come from any Space/desktop, so pull the window to whichever
+        // desktop is active as the app activates (openMainAppWindow triggers a real
+        // LaunchServices activation). Also un-minimize and nudge it on-screen if it
+        // drifted off a disconnected display.
+        window.collectionBehavior.insert(.moveToActiveSpace)
         if window.isMiniaturized { window.deminiaturize(nil) }
         if let screen = NSScreen.main, !screen.visibleFrame.intersects(window.frame) {
           window.center()
         }
         window.makeKeyAndOrderFront(nil)
-        window.orderFrontRegardless()
         window.appearance = NSAppearance(named: .darkAqua)
-        // macOS 14+/26 frequently refuses to let a background app activate itself
-        // from a global hotkey, so the window is only ordered front within our own
-        // layer and stays behind the active app. Briefly raise its window level so
-        // it shows ABOVE the frontmost app; clicking it activates us, and we drop
-        // back to a normal level shortly after so it isn't permanently on top.
-        window.level = .floating
-        Self.dropSummonWindowLevelSoon(window)
         return true
       }
     }
     return false
-  }
-
-  @MainActor private static func dropSummonWindowLevelSoon(_ window: NSWindow) {
-    // Keep the window floating long enough to be seen and clicked, then drop it
-    // back to a normal level so it isn't permanently pinned above everything. If
-    // the user clicked it in the meantime we're the active app and it stays on top
-    // anyway; if not, it settles back into the normal window order.
-    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-      window.level = .normal
-      // Stop the window from showing on every Space once the summon has landed.
-      window.collectionBehavior.remove(.canJoinAllSpaces)
-    }
   }
 
   @MainActor @objc private func checkForUpdates() {

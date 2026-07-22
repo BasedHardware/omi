@@ -2783,7 +2783,7 @@ class FloatingControlBarManager {
     // opening straight into the chat surface (which shares the notch transcript)
     // rather than the resting hero.
     barWindow.onAskAI = {
-      (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
+      AppDelegate.summonWindowTarget()?.openMainAppWindow()
       NotificationCenter.default.post(name: .navigateToChat, object: nil)
     }
 
@@ -3395,13 +3395,13 @@ class FloatingControlBarManager {
   /// the floating bar no longer offers typing.
   func toggleAIInput() {
     guard let window = window else {
-      (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
+      AppDelegate.summonWindowTarget()?.openMainAppWindow()
       return
     }
     if window.isVisible && window.state.showingAIConversation {
       window.closeAIConversation()
     } else {
-      (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
+      AppDelegate.summonWindowTarget()?.openMainAppWindow()
     }
   }
 
