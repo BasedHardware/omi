@@ -13,6 +13,7 @@ from desktop_release_metadata import fail, parse_metadata
 
 TAG_RE = re.compile(r"^v(?P<version>\d+\.\d+\.\d+)\+(?P<build>\d+)-macos$")
 EXPECTED_BUNDLE_ID = "com.omi.computer-macos"
+EXPECTED_BETA_BUNDLE_ID = "com.omi.computer-macos.beta"
 EXPECTED_TEAM_ID = "9536L8KLMP"
 REQUIRED_SMOKE_CHECKS = {
     "Launch + identity metadata is aligned",
@@ -161,10 +162,32 @@ def validate(args: argparse.Namespace) -> dict:
     if dmg_smoke.get("sha256") != artifact_digests[dmg_release["name"]]:
         fail("published DMG digest does not match the signed artifact smoke")
 
-    asset_names = {a.get("name") for a in release.get("assets", [])}
-    unexpected = sorted(asset_names & {"Omi.Beta.zip", "omi-beta.dmg"})
-    if unexpected:
-        fail(f"unexpected dual-identity desktop assets: {', '.join(unexpected)}")
+    # Releases that ship the side-by-side Omi Beta identity carry a second smoke
+    # result; when those assets exist the beta artifact must satisfy the same
+    # contract as stable (older releases without beta assets stay valid).
+    beta_assets = {a.get("name") for a in release.get("assets", [])}
+    if "Omi.Beta.zip" in beta_assets:
+        if not getattr(args, "beta_smoke_result", "") or not Path(args.beta_smoke_result).exists():
+            fail("release ships Omi Beta assets but no beta smoke result was provided")
+        beta_smoke = load_json(args.beta_smoke_result)
+        _validate_smoke_contract(
+            beta_smoke,
+            bundle_id=EXPECTED_BETA_BUNDLE_ID,
+            release_tag=args.release_tag,
+            expected_version=expected_version,
+            expected_build=expected_build,
+            label="beta",
+        )
+        beta_zip_release = asset_by_name(release, {"Omi.Beta.zip"})
+        beta_dmg_release = asset_by_name(release, {"omi-beta.dmg"})
+        beta_zip_smoke = smoke_artifact(beta_smoke, "sparkle_zip")
+        beta_dmg_smoke = smoke_artifact(beta_smoke, "dmg")
+        artifact_digests["Omi.Beta.zip"] = normalized_digest(beta_zip_release)
+        artifact_digests["omi-beta.dmg"] = normalized_digest(beta_dmg_release)
+        if beta_zip_smoke.get("sha256") != artifact_digests["Omi.Beta.zip"]:
+            fail("published Omi.Beta.zip digest does not match the beta artifact smoke")
+        if beta_dmg_smoke.get("sha256") != artifact_digests["omi-beta.dmg"]:
+            fail("published omi-beta.dmg digest does not match the beta artifact smoke")
 
     return {
         "passed": True,
@@ -182,7 +205,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--release-json", required=True)
     parser.add_argument("--smoke-result", required=True)
-
+    parser.add_argument("--beta-smoke-result", default="")
     parser.add_argument("--release-tag", required=True)
     parser.add_argument("--latest-tag", required=True)
     parser.add_argument("--tag-sha", required=True)
