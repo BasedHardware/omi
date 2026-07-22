@@ -1,0 +1,20 @@
+desktop/macos/Desktop/Tests/OpenOmiShortcutSummonRoutingTests.swift
+  s_424d550d86fd05::t_ed065aa68bad75 1-16,19-29,32-39,59-60
+  s_424d550d86fd05::t_6c4651e0065012 17-18,30-31,40-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "cd4238b031311f3b8995dcf326acf5ead97c8c12",
+  "prompts": {},
+  "sessions": {
+    "s_424d550d86fd05": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7d83f64d-8ce5-47f1-b308-b8839508880a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
