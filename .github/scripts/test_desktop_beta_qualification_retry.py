@@ -13,14 +13,22 @@ from __future__ import annotations
 import copy
 import json
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import desktop_beta_qualification_retry as retry
 
 TAG = "v1.2.3+1234-macos"
 SHA = "a" * 40
-NOW_ISO = "2026-07-22T12:00:00Z"
-RECENT_ISO = "2026-07-22T11:30:00Z"
+
+
+def _utc_iso(dt: datetime) -> str:
+    return dt.replace(microsecond=0).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+_NOW = datetime.now(timezone.utc)
+NOW_ISO = _utc_iso(_NOW)
+RECENT_ISO = _utc_iso(_NOW - timedelta(hours=1))
 
 
 def _release(*, tag: str = TAG, channel: str = "candidate", is_live: str = "false",
@@ -103,7 +111,7 @@ class RetryDecisionTests(unittest.TestCase):
     # --- age bound ---
 
     def test_candidate_too_old_denies(self):
-        old = "2026-07-01T00:00:00Z"
+        old = _utc_iso(_NOW - timedelta(hours=48))
         d = _decide(_release(published=old), [_run(conclusion="failure")], max_age_hours=24)
         self.assertFalse(d["should_retry"])
         self.assertIn("exceeds", d["reason"])
@@ -147,7 +155,10 @@ class RetryDecisionTests(unittest.TestCase):
         self.assertTrue(d["should_retry"])
 
     def test_second_failure_still_retries(self):
-        runs = [_run(conclusion="failure", run_id=1), _run(conclusion="failure", run_id=2, updated="2026-07-22T12:05:00Z")]
+        runs = [
+            _run(conclusion="failure", run_id=1),
+            _run(conclusion="failure", run_id=2, updated=_utc_iso(_NOW + timedelta(minutes=5))),
+        ]
         d = _decide(_release(), runs)
         self.assertTrue(d["should_retry"])
         self.assertEqual(d["attempts_so_far"], 2)
@@ -157,7 +168,7 @@ class RetryDecisionTests(unittest.TestCase):
 
     def test_at_max_attempts_denies(self):
         runs = [
-            _run(conclusion="failure", run_id=i, updated=f"2026-07-22T12:0{i}:00Z")
+            _run(conclusion="failure", run_id=i, updated=_utc_iso(_NOW + timedelta(minutes=i)))
             for i in (1, 2, 3)
         ]
         d = _decide(_release(), runs)
@@ -186,7 +197,7 @@ class RetryDecisionTests(unittest.TestCase):
     def test_newest_run_governs_in_progress_check(self):
         # Older failure present, but newest run is in_progress -> do not retry.
         runs = [
-            _run(conclusion="failure", run_id=1, updated="2026-07-22T11:00:00Z"),
+            _run(conclusion="failure", run_id=1, updated=_utc_iso(_NOW - timedelta(hours=1))),
             _run(status="in_progress", conclusion=None, run_id=2, updated=NOW_ISO),
         ]
         d = _decide(_release(), runs)
@@ -196,7 +207,7 @@ class RetryDecisionTests(unittest.TestCase):
     def test_success_after_failure_denies(self):
         # A later successful run supersedes an earlier failure.
         runs = [
-            _run(conclusion="failure", run_id=1, updated="2026-07-22T11:00:00Z"),
+            _run(conclusion="failure", run_id=1, updated=_utc_iso(_NOW - timedelta(hours=1))),
             _run(conclusion="success", run_id=2, updated=NOW_ISO),
         ]
         d = _decide(_release(), runs)
