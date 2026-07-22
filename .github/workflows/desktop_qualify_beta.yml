@@ -19,22 +19,12 @@ concurrency:
   group: desktop-beta-qualification
   cancel-in-progress: false
 
-# Qualification runs as two serialized lanes with an at-least-one-passes
-# verdict (the Jul 22 2026 outage showed a single self-hosted machine is a
-# release-blocking single point of failure):
-#   1. codemagic-lane — dispatches the omi-desktop-qualification Codemagic
-#      workflow (ephemeral Mac, native-typesense hermetic stack) and publishes
-#      the immutable evidence only after the build, its tag binding, and its
-#      result artifact all verify. Codemagic already builds and signs the
-#      candidate itself, so executing qualification there does not extend trust
-#      beyond what the pipeline already grants it.
-#   2. qualify — the trusted self-hosted macOS lane, unchanged, entered only
-#      when the Codemagic lane did not qualify the candidate.
-# Do not add pull_request or push triggers: both lanes can mint a GitHub App
-# token that publishes immutable evidence after exact qualification passes.
+# The only qualification authority is the trusted M1 self-hosted runner after
+# exact-candidate admission. Codemagic builds and publishes candidates, and
+# may advisory-dispatch this workflow, but it never qualifies a candidate.
 jobs:
   admit:
-    # Keep GitHub API failures and duplicates off both qualification lanes.
+    # Keep GitHub API failures and duplicates off trusted qualification.
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -95,169 +85,11 @@ jobs:
           if [[ "$tag_type" == tag ]]; then admission_args+=(--annotated-tag-json "$admission_dir/annotated-tag.json"); fi
           python3 .github/scripts/desktop_beta_qualification_admission.py "${admission_args[@]}"
 
-  codemagic-lane:
-    needs: admit
-    runs-on: ubuntu-latest
-    timeout-minutes: 165
-    continue-on-error: true
-    permissions:
-      contents: write
-    outputs:
-      qualified: ${{ steps.publish.outputs.qualified }}
-    env:
-      CODEMAGIC_APP_ID: 66c95e6ec76853c447b8bcbb
-    steps:
-      - name: Checkout qualification controls
-        uses: actions/checkout@v7
-        with:
-          # Codemagic dispatches the immutable candidate tag. Qualification
-          # controls and source must resolve to that same reviewed tag.
-          ref: ${{ inputs.release_tag }}
-          fetch-depth: 0
-
-      - name: Generate Omi Bot token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ secrets.OMI_BOT_APP_ID }}
-          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
-
-      - name: Download and validate newest candidate evidence
-        id: candidate
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          if ! printf '%s\n' "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+-macos$'; then
-            echo "Invalid macOS release tag: $RELEASE_TAG" >&2
-            exit 1
-          fi
-          for tool in gh python3 curl; do
-            command -v "$tool" >/dev/null 2>&1 || {
-              echo "Codemagic qualification lane requires $tool." >&2
-              exit 1
-            }
-          done
-
-          git fetch --force origin "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
-          LATEST_TAG=$(git for-each-ref --count=1 --sort=-v:refname --format='%(refname:strip=2)' 'refs/tags/v*-macos')
-          test -n "$LATEST_TAG"
-          TARGET_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
-          CHECKOUT_SHA=$(git rev-parse "HEAD^{commit}")
-          rm -rf /tmp/desktop-beta-qualification
-          mkdir -p /tmp/desktop-beta-qualification
-          gh release view "$RELEASE_TAG" --repo "$REPO" \
-            --json tagName,body,isDraft,isPrerelease,publishedAt,assets \
-            > /tmp/desktop-beta-qualification/release.json
-          gh release download "$RELEASE_TAG" --repo "$REPO" \
-            --pattern 'desktop-smoke-result.json' \
-            --dir /tmp/desktop-beta-qualification
-          # Present only on releases that ship the side-by-side Omi Beta identity.
-          gh release download "$RELEASE_TAG" --repo "$REPO" \
-            --pattern 'desktop-smoke-result-beta.json' \
-            --dir /tmp/desktop-beta-qualification 2>/dev/null || true
-          gh release download "$RELEASE_TAG" --repo "$REPO" \
-            --pattern 'Omi.zip' --pattern 'omi.dmg' \
-            --dir /tmp/desktop-beta-qualification/assets
-          gh release download "$RELEASE_TAG" --repo "$REPO" \
-            --pattern 'Omi.Beta.zip' --pattern 'omi-beta.dmg' \
-            --dir /tmp/desktop-beta-qualification/assets 2>/dev/null || true
-
-          python3 .github/scripts/check-desktop-auto-beta-candidate.py \
-            --release-json /tmp/desktop-beta-qualification/release.json \
-            --smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result.json \
-            --beta-smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result-beta.json \
-            --release-tag "$RELEASE_TAG" \
-            --latest-tag "$LATEST_TAG" \
-            --tag-sha "$TARGET_SHA" \
-            --checkout-sha "$CHECKOUT_SHA" \
-            --output /tmp/desktop-beta-qualification/candidate-gate.json
-          echo "target_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
-
-      - name: Run hermetic qualification on Codemagic
-        id: codemagic
-        env:
-          CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
-          # Short-lived app token for the build's read-only gh calls; the
-          # Codemagic qualification workflow imports no standing credentials.
-          QUALIFY_GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          TARGET_SHA: ${{ steps.candidate.outputs.target_sha }}
-        run: |
-          set -euo pipefail
-          test -n "$CODEMAGIC_API_TOKEN" || {
-            echo "CODEMAGIC_API_TOKEN repo secret is required for the Codemagic lane." >&2
-            exit 1
-          }
-          python3 .github/scripts/desktop_codemagic_qualification.py \
-            --app-id "$CODEMAGIC_APP_ID" \
-            --workflow-id omi-desktop-qualification \
-            --branch main \
-            --release-tag "$RELEASE_TAG" \
-            --target-sha "$TARGET_SHA" \
-            --poll-seconds 60 \
-            --timeout-minutes 150
-
-      - name: Create immutable qualification evidence
-        id: evidence
-        env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
-        run: |
-          set -euo pipefail
-          TARGET_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
-          STABLE_DMG=/tmp/desktop-beta-qualification/assets/omi.dmg
-          test -n "$STABLE_DMG"
-          # Side-by-side Omi Beta assets are optional until every release ships them.
-          beta_evidence_assets=()
-          if [ -f /tmp/desktop-beta-qualification/assets/Omi.Beta.zip ]; then
-            beta_evidence_assets+=(--asset Omi.Beta.zip=/tmp/desktop-beta-qualification/assets/Omi.Beta.zip)
-            beta_evidence_assets+=(--asset omi-beta.dmg=/tmp/desktop-beta-qualification/assets/omi-beta.dmg)
-          fi
-          python3 .github/scripts/desktop_qualification_evidence.py build \
-            --release-json /tmp/desktop-beta-qualification/release.json \
-            --release-tag "$RELEASE_TAG" --source-sha "$TARGET_SHA" \
-            --candidate-gate /tmp/desktop-beta-qualification/candidate-gate.json \
-            --qualification-run-id "$GITHUB_RUN_ID" \
-            --asset Omi.zip=/tmp/desktop-beta-qualification/assets/Omi.zip \
-            --asset "omi.dmg=$STABLE_DMG" \
-            "${beta_evidence_assets[@]}" \
-            --evidence /tmp/desktop-beta-qualification/qualification-evidence.json
-
-      - name: Upload immutable qualification evidence
-        if: steps.evidence.outcome == 'success'
-        uses: actions/upload-artifact@v7
-        with:
-          name: desktop-qualification-evidence-${{ inputs.release_tag }}
-          path: /tmp/desktop-beta-qualification/qualification-evidence.json
-          if-no-files-found: error
-
-      - name: Attach immutable qualification evidence to the candidate release
-        id: publish
-        if: steps.evidence.outcome == 'success'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          gh release upload "$RELEASE_TAG" --repo "$REPO" \
-            /tmp/desktop-beta-qualification/qualification-evidence.json#"qualification-evidence-${RELEASE_TAG}.json"
-          echo "qualified=true" >> "$GITHUB_OUTPUT"
-
-  # Fallback lane: the trusted self-hosted macOS qualification runners
-  # (self-hosted, macos, omi-desktop-qualification labels), entered only when
-  # the Codemagic lane did not qualify the candidate.
   qualify:
-    needs: codemagic-lane
-    if: ${{ always() && needs.codemagic-lane.outputs.qualified != 'true' }}
-    runs-on: [self-hosted, macos, omi-desktop-qualification]
-    continue-on-error: true
+    needs: admit
+    runs-on: [self-hosted, macos, ARM64, omi-desktop-qualification, omi-qual-m1-studio]
     permissions:
       contents: write
-    outputs:
-      qualified: ${{ steps.publish.outputs.qualified }}
     steps:
       - name: Remove stale uninitialized PlatformIO gitlink
         shell: bash
@@ -423,31 +255,3 @@ jobs:
               exit 1
             }
           fi
-
-  verdict:
-    # The workflow_run promotion trigger reads this run's conclusion, so
-    # exactly one job may fail the run: qualification succeeds iff at least
-    # one lane published immutable evidence.
-    needs: [codemagic-lane, qualify]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Require at least one qualified lane
-        env:
-          CM_QUALIFIED: ${{ needs.codemagic-lane.outputs.qualified }}
-          SELFHOSTED_QUALIFIED: ${{ needs.qualify.outputs.qualified }}
-          SELFHOSTED_RESULT: ${{ needs.qualify.result }}
-        run: |
-          set -euo pipefail
-          {
-            echo "### Desktop beta qualification lanes"
-            echo
-            echo "- codemagic-lane qualified: ${CM_QUALIFIED:-false}"
-            echo "- self-hosted lane qualified: ${SELFHOSTED_QUALIFIED:-false} (result: $SELFHOSTED_RESULT)"
-          } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$CM_QUALIFIED" = "true" ] || [ "$SELFHOSTED_QUALIFIED" = "true" ]; then
-            echo "Candidate qualified by at least one lane."
-            exit 0
-          fi
-          echo "No qualification lane qualified the candidate." >&2
-          exit 1

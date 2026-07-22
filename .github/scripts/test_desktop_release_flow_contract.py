@@ -31,9 +31,8 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
     def _qualification_jobs(self) -> dict[str, str]:
         """Slice the qualification workflow into per-job text regions.
 
-        The workflow runs the same qualification contract in two lanes
-        (codemagic-lane orchestration plus the self-hosted qualify fallback),
-        so single-occurrence full-document searches are ambiguous.
+        The workflow has an admission job and one trusted qualification job,
+        so job-scoped assertions cannot accidentally bind admission commands.
         """
         qualification = workflow("desktop_qualify_beta.yml")
         jobs_document = qualification.split("\njobs:\n", 1)[1]
@@ -45,35 +44,30 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             jobs[match.group(1)] = jobs_document[match.start() : end]
         return jobs
 
-    def _qualification_lane_jobs(self) -> tuple[str, str]:
+    def _qualification_job(self) -> str:
         jobs = self._qualification_jobs()
-        self.assertIn("codemagic-lane", jobs)
+        self.assertEqual(set(jobs), {"admit", "qualify"})
         self.assertIn("qualify", jobs)
-        return jobs["codemagic-lane"], jobs["qualify"]
+        return jobs["qualify"]
 
     def _qualification_identity_expressions(self) -> tuple[str, str]:
-        expressions: list[tuple[str, str]] = []
-        for lane in self._qualification_lane_jobs():
-            candidate_step = lane.split("      - name: Download and validate newest candidate evidence", 1)[1]
-            candidate_step = candidate_step.split("\n      - name:", 1)[0]
-            target = re.search(r"^\s*TARGET_SHA=\$\((.+)\)$", candidate_step, re.MULTILINE)
-            checkout = re.search(r"^\s*CHECKOUT_SHA=\$\((.+)\)$", candidate_step, re.MULTILINE)
-            self.assertIsNotNone(target)
-            self.assertIsNotNone(checkout)
-            expressions.append((target.group(1), checkout.group(1)))
-        # Both lanes must bind candidate identity with the exact same expressions.
-        self.assertEqual(expressions[0], expressions[1])
-        return expressions[0]
+        candidate_step = self._qualification_job().split("      - name: Download and validate newest candidate evidence", 1)[1]
+        candidate_step = candidate_step.split("\n      - name:", 1)[0]
+        target = re.search(r"^\s*TARGET_SHA=\$\((.+)\)$", candidate_step, re.MULTILINE)
+        checkout = re.search(r"^\s*CHECKOUT_SHA=\$\((.+)\)$", candidate_step, re.MULTILINE)
+        self.assertIsNotNone(target)
+        self.assertIsNotNone(checkout)
+        return target.group(1), checkout.group(1)
 
     def _qualification_step(self, name: str) -> str:
-        _, qualify_job = self._qualification_lane_jobs()
+        qualify_job = self._qualification_job()
         marker = f"      - name: {name}"
         self.assertEqual(qualify_job.count(marker), 1)
         return qualify_job.split(marker, 1)[1].split("\n      - name:", 1)[0]
 
     def _admission_step(self) -> str:
         qualification = workflow("desktop_qualify_beta.yml")
-        admission = qualification.split("  admit:\n", 1)[1].split("\n  codemagic-lane:", 1)[0]
+        admission = qualification.split("  admit:\n", 1)[1].split("\n  qualify:", 1)[0]
         marker = "      - name: Fail-closed exact-candidate admission"
         self.assertEqual(admission.count(marker), 1)
         return admission.split(marker, 1)[1]
@@ -317,10 +311,10 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         target_expression, checkout_expression = self._qualification_identity_expressions()
         self.assertEqual(target_expression, 'git rev-parse "$RELEASE_TAG^{commit}"')
         self.assertEqual(checkout_expression, 'git rev-parse "HEAD^{commit}"')
-        # Candidate validation plus evidence creation in each of the two lanes.
+        # Candidate validation plus evidence creation both bind the one trusted lane.
         self.assertEqual(
             workflow("desktop_qualify_beta.yml").count('TARGET_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")'),
-            4,
+            2,
         )
 
     def test_beta_qualification_accepts_annotated_tag_at_exact_checkout_commit(self) -> None:
@@ -330,7 +324,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self._assert_qualification_tag_identity(annotated=False)
 
     def test_beta_qualification_bounds_checkout_with_identical_exact_cleanup(self) -> None:
-        _, qualify_job = self._qualification_lane_jobs()
+        qualify_job = self._qualification_job()
         checkout_name = "Checkout qualification controls"
         attach_name = "Attach immutable qualification evidence to the candidate release"
         self.assertLess(qualify_job.index(PRECLEAN_NAME), qualify_job.index(checkout_name))
@@ -377,7 +371,12 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertIn('attempt_authorities <= 30', admission)
         self.assertIn('--jobs-dir "$admission_dir/jobs"', admission)
         self.assertLess(qualification.index("Fail-closed exact-candidate admission"), qualification.index("Checkout qualification controls"))
-        self.assertIn("needs: admit", qualification)
+        qualify = self._qualification_job()
+        self.assertIn("needs: admit", qualify)
+        self.assertIn("runs-on: [self-hosted, macos, ARM64, omi-desktop-qualification, omi-qual-m1-studio]", qualify)
+        self.assertNotIn("continue-on-error:", qualify)
+        self.assertNotIn("codemagic-lane", qualification)
+        self.assertNotIn("verdict:", qualification)
 
     def test_codemagic_avoids_known_duplicate_qualification_dispatches(self) -> None:
         dispatch = codemagic().split("Dispatch trusted macOS beta qualification", 1)[1]
