@@ -9,7 +9,7 @@ struct DesktopTopBar: View {
   @Binding var selectedIndex: Int
   @ObservedObject var appState: AppState
   @ObservedObject var memoriesViewModel: MemoriesViewModel
-  @ObservedObject var tasksViewModel: TasksViewModel
+  @ObservedObject var tasksStore: TasksStore
   /// Items created after this instant count as "new" — updated whenever Omi
   /// last resigned front (see DesktopHomeView).
   let sinceDate: Date
@@ -38,7 +38,7 @@ struct DesktopTopBar: View {
     memoriesViewModel.memories.filter { $0.createdAt > sinceDate }.count
   }
   private var newTasks: Int {
-    tasksViewModel.tasks.filter { $0.createdAt > sinceDate && $0.deleted != true }.count
+    tasksStore.tasks.filter { $0.createdAt > sinceDate && $0.deleted != true }.count
   }
 
   var body: some View {

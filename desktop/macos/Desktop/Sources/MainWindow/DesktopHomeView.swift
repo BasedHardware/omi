@@ -838,7 +838,11 @@ struct DesktopHomeView: View {
     ) {
       async let conversations: Void = loadConversationsIfNeeded()
       async let folders: Void = loadFoldersIfNeeded()
-      _ = await (conversations, folders)
+      // Warm memories + tasks too so the top bar's new-item counter has data
+      // even before those tabs are visited.
+      async let memories: Void = viewModelContainer.memoriesViewModel.loadMemoriesIfNeeded()
+      async let tasks: Void = viewModelContainer.tasksStore.loadTasksIfNeeded()
+      _ = await (conversations, folders, memories, tasks)
     }
     if !scheduled { didScheduleConversationWarmup = false }
   }
@@ -1057,7 +1061,7 @@ struct DesktopHomeView: View {
               selectedIndex: $selectedIndex,
               appState: appState,
               memoriesViewModel: viewModelContainer.memoriesViewModel,
-              tasksViewModel: viewModelContainer.tasksViewModel,
+              tasksStore: viewModelContainer.tasksStore,
               sinceDate: topBarSinceDate,
               onRewind: {
                 OmiMotion.withGated(Self.pageNavigationAnimation) {

@@ -7,7 +7,6 @@ import SwiftUI
 
 struct MemoryGraphPage: View {
   @ObservedObject var viewModel: MemoryGraphViewModel
-  @Environment(\.dismiss) private var dismiss
 
   var body: some View {
     ZStack {
@@ -19,19 +18,10 @@ struct MemoryGraphPage: View {
           .ignoresSafeArea()
       }
 
-      // Minimal floating controls — no boxes, no backgrounds
+      // Minimal floating controls — no boxes, no backgrounds. (The Brain Map is
+      // a Memory tab now, not a modal, so there's no close button.)
       VStack {
         HStack {
-          Button {
-            dismiss()
-          } label: {
-            Image(systemName: "xmark")
-              .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(.white.opacity(0.5))
-              .frame(width: 28, height: 28)
-          }
-          .buttonStyle(.plain)
-
           Spacer()
 
           if viewModel.isRebuilding {
