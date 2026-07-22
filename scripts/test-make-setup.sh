@@ -52,7 +52,13 @@ echo "make setup baseline prerequisites test passed."
 mkdir -p "$TMPDIR/sync/backend/scripts" "$TMPDIR/sync/bin"
 cp "$ROOT/backend/scripts/sync-python-deps.sh" "$TMPDIR/sync/backend/scripts/sync-python-deps.sh"
 printf '3.11\n' >"$TMPDIR/sync/backend/.python-version"
-touch "$TMPDIR/sync/backend/pylock.macos.toml"
+# The sync script selects a different checked-in lock by host platform.
+# Keep this fixture runnable in macOS, Linux, Windows, and Intel-macOS CI.
+touch \
+  "$TMPDIR/sync/backend/pylock.toml" \
+  "$TMPDIR/sync/backend/pylock.macos.toml" \
+  "$TMPDIR/sync/backend/pylock.macos-x86_64.toml" \
+  "$TMPDIR/sync/backend/pylock.windows.toml"
 cat >"$TMPDIR/sync/bin/uv" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
