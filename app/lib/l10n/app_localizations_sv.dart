@@ -9612,10 +9612,10 @@ class AppLocalizationsSv extends AppLocalizations {
       'Dina data skyddas som standard med stark kryptering, och du bestämmer hur de lagras och används.';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => 'Noggrannhet';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => 'Bas';
 
   @override
   String get cloudTranscription => 'Molntranskription';
@@ -9624,52 +9624,52 @@ class AppLocalizationsSv extends AppLocalizations {
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => 'Radera modell';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'Är du säker på att du vill radera den här modellen?';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => 'Nedladdad';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => 'Snabbare';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => 'Automatisk';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => 'Högre';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => 'Stor';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => 'Lägre';
 
   @override
-  String get whisperModelSizeMedium => 'Medium';
+  String get whisperModelSizeMedium => 'Mellan';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => 'Modellen har raderats';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => 'Nedladdningen av modellen misslyckades';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc => 'Det gick inte att ladda ner Whisper-modellen. Försök igen.';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => 'Modellen har laddats ner';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper-modellen laddades ner';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => 'Modellstorlek';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => 'Ingen';
 
   @override
   String get onDeviceTranscription => 'Transkription på enheten';
@@ -9678,10 +9678,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get onDeviceTranscriptionDesc => 'Transkription bearbetas lokalt på din enhet';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => 'Långsammare';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => 'Liten';
 
   @override
   String get sttProviderSoniox => 'Soniox';
@@ -9696,10 +9696,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => 'Hastighet';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => 'Mycket liten';
 
   @override
   String get transcriptionLanguage => 'Transkriptionsspråk';
@@ -9714,51 +9714,51 @@ class AppLocalizationsSv extends AppLocalizations {
   String get whisperModelDesc => 'Välj modell för transkription på enheten';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => 'Nedgradera till gratisversionen?';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => 'Du kommer att märka dessa begränsningar:';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => '7 gånger högre batteriförbrukning';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => '30 % sämre transkriptionskvalitet';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => '5–7 sekunders fördröjning';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => 'Talare kan inte identifieras';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => 'Nedgradera ändå';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => 'Google Kalender är inte ansluten';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt => 'Anslut din Google Kalender för att länka samtal till kalenderhändelser.';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return 'Länkad till ”$title”';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => 'Det gick inte att länka kalenderhändelsen';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => 'Tack för din feedback!';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => 'Kopiera meddelande';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => 'Sök inställningar…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => 'Det gick inte att läsa in ljudet';
 
   @override
   String get rayBanMetaMicPickerTitle => 'Välj din Ray-Ban Meta-mikrofon';

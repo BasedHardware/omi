@@ -9429,10 +9429,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dataEncryptedBanner => '您的数据默认通过强加密保护，并且由您掌控其存储和使用方式。';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => '准确度';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => '基础';
 
   @override
   String get cloudTranscription => '云端转录';
@@ -9441,52 +9441,52 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => '删除模型';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => '确定要删除此模型吗？';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => '已下载';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => '更快';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => '自动';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => '更高';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => '大型';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => '更低';
 
   @override
-  String get whisperModelSizeMedium => 'Medium';
+  String get whisperModelSizeMedium => '中型';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => '模型已删除';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => '模型下载失败';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc => 'Whisper 模型下载失败，请重试。';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => '模型已下载';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper 模型下载成功';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => '模型大小';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => '无';
 
   @override
   String get onDeviceTranscription => '设备端转录';
@@ -9495,10 +9495,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onDeviceTranscriptionDesc => '转录在您的设备上本地处理';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => '更慢';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => '小型';
 
   @override
   String get sttProviderSoniox => 'Soniox';
@@ -9513,10 +9513,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => '速度';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => '微型';
 
   @override
   String get transcriptionLanguage => '转录语言';
@@ -9531,51 +9531,51 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whisperModelDesc => '选择设备端转录的模型';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => '降级到免费计划？';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => '您将遇到以下限制：';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => '电池消耗增加 7 倍';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => '转录质量降低 30%';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => '5-7 秒延迟';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => '无法识别说话人';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => '仍要降级';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => '未连接 Google 日历';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt => '连接您的 Google 日历，即可将对话关联到日历活动。';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return '已关联到“$title”';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => '关联日历活动失败';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => '感谢您的反馈！';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => '复制消息';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => '搜索设置…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => '音频加载失败';
 
   @override
   String get rayBanMetaMicPickerTitle => '选择您的 Ray-Ban Meta 麦克风';

@@ -114,7 +114,7 @@ fi
 VERSION="${RELEASE_TAG#v}"
 VERSION="${VERSION%-macos}"
 BUNDLE="omi-qualification-${VERSION}"
-WORKTREE="$REPO_ROOT/.qualification-worktrees/$RELEASE_TAG"
+WORKTREE=""
 LAUNCH_LOG=""
 LAUNCH_SIGNAL_FILE=""
 DESKTOP_LAUNCH_PID=""
@@ -128,19 +128,7 @@ gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,i
 python3 "$KEYVALUE_PY" preflight-release /tmp/desktop-qualification-release.json "$RELEASE_TAG"
 
 SHA=$(git -C "$REPO_ROOT" rev-list -n1 "$RELEASE_TAG")
-
-remove_registered_qualification_worktree() {
-  if git -C "$REPO_ROOT" worktree list --porcelain | grep -Fxq "worktree $WORKTREE"; then
-    git -C "$REPO_ROOT" worktree remove --force "$WORKTREE"
-    git -C "$REPO_ROOT" worktree prune
-  elif [[ -e "$WORKTREE" ]]; then
-    echo "qualification failed: unregistered worktree path exists: $WORKTREE" >&2
-    return 1
-  fi
-}
-
-remove_registered_qualification_worktree
-git -C "$REPO_ROOT" worktree add --detach "$WORKTREE" "$RELEASE_TAG"
+WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"
 
 LAUNCH_LOG="$WORKTREE/.qualification-desktop-launch.log"
 
@@ -274,10 +262,6 @@ cleanup() {
   fi
   if [[ "$KEEP_STACK" -eq 0 && -d "$WORKTREE" ]]; then
     (cd "$WORKTREE" && PROVIDER_MODE=offline make dev-down) >/dev/null 2>&1 || true
-  fi
-  if [[ "$QUALIFICATION_SUCCESS" -eq 1 ]]; then
-    remove_registered_qualification_worktree || \
-      echo "qualification cleanup: retained unregistered worktree path: $WORKTREE" >&2
   fi
   exit "$exit_code"
 }

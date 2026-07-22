@@ -127,6 +127,19 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertNotIn("source_sha", rollout)
         self.assertNotIn("build_number", rollout)
 
+    def test_breakglass_credential_preflight_is_read_only_and_beta_scoped(self) -> None:
+        preflight = workflow("desktop_breakglass_credential_preflight.yml")
+        self.assertIn("workflow_dispatch:", preflight)
+        self.assertIn("environment: prod", preflight)
+        self.assertIn("permissions: {}", preflight)
+        self.assertIn("secrets.GCP_CREDENTIALS", preflight)
+        self.assertIn("gcloud secrets versions access latest --secret=ADMIN_KEY", preflight)
+        self.assertIn("/v2/desktop/releases/$RELEASE_TAG", preflight)
+        self.assertNotIn("--request POST", preflight)
+        self.assertNotIn("/v2/desktop/beta/breakglass", preflight)
+        self.assertNotIn("/v2/desktop/channels/promote", preflight)
+        self.assertNotIn("stable", preflight.lower())
+
     def test_backend_release_vector_verifies_after_prod_traffic_shift(self) -> None:
         backend = workflow("gcp_backend.yml")
         shift = backend.index("      - name: Shift Cloud Run traffic to validated revisions")

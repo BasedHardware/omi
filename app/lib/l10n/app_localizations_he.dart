@@ -9533,153 +9533,153 @@ class AppLocalizationsHe extends AppLocalizations {
       'הנתונים שלך מאובטחים כברירת מחדל בהצפנה חזקה, ואתה שולט באופן שבו הם נשמרים ומשמשים.';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => 'דיוק';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => 'בסיסי';
 
   @override
-  String get cloudTranscription => 'Cloud Transcription';
+  String get cloudTranscription => 'תמלול בענן';
 
   @override
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => 'מחיקת מודל';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'האם אתה בטוח שברצונך למחוק מודל זה?';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => 'הורד';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => 'מהיר יותר';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => 'אוטומטי';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => 'גבוה יותר';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => 'גדול';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => 'נמוך יותר';
 
   @override
-  String get whisperModelSizeMedium => 'Medium';
+  String get whisperModelSizeMedium => 'בינוני';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => 'המודל נמחק';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => 'הורדת המודל נכשלה';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc => 'הורדת מודל Whisper נכשלה. נסה שנית.';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => 'המודל הורד';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'מודל Whisper הורד בהצלחה';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => 'גודל המודל';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => 'ללא';
 
   @override
-  String get onDeviceTranscription => 'On-Device Transcription';
+  String get onDeviceTranscription => 'תמלול על המכשיר';
 
   @override
-  String get onDeviceTranscriptionDesc => 'Transcription is processed locally on your device';
+  String get onDeviceTranscriptionDesc => 'התמלול מעובד מקומית על המכשיר שלך';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => 'איטי יותר';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => 'קטן';
 
   @override
   String get sttProviderSoniox => 'Soniox';
 
   @override
-  String get speechToTextProvider => 'Speech-to-Text Provider';
+  String get speechToTextProvider => 'ספק המרת דיבור לטקסט';
 
   @override
-  String get speechToTextProviderDesc => 'Choose the service used for transcription';
+  String get speechToTextProviderDesc => 'בחר את השירות שישמש לתמלול';
 
   @override
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => 'מהירות';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => 'זעיר';
 
   @override
-  String get transcriptionLanguage => 'Transcription Language';
+  String get transcriptionLanguage => 'שפת התמלול';
 
   @override
-  String get transcriptionLanguageDesc => 'Choose the language for speech transcription';
+  String get transcriptionLanguageDesc => 'בחר את השפה לתמלול הדיבור';
 
   @override
-  String get whisperModel => 'Whisper Model';
+  String get whisperModel => 'מודל Whisper';
 
   @override
-  String get whisperModelDesc => 'Choose the model for on-device transcription';
+  String get whisperModelDesc => 'בחר את המודל לתמלול על המכשיר';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => 'לשנמך לתוכנית החינם?';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => 'אלה המגבלות שתיתקל בהן:';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => 'צריכת סוללה גבוהה פי 7';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => 'איכות תמלול נמוכה ב-30%';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => 'עיכוב של 5-7 שניות';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => 'לא ניתן לזהות דוברים';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => 'שנמך בכל זאת';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => 'Google Calendar אינו מחובר';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt => 'חבר את Google Calendar כדי לקשר שיחות לאירועי יומן.';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return 'מקושר ל\"$title\"';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => 'קישור אירוע היומן נכשל';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => 'תודה על המשוב שלך!';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => 'העתקת הודעה';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => 'חיפוש בהגדרות…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => 'שגיאה בטעינת האודיו';
 
   @override
   String get rayBanMetaMicPickerTitle => 'בחירת המיקרופון של Ray-Ban Meta';
