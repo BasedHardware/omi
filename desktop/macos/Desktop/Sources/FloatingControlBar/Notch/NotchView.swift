@@ -135,7 +135,7 @@ struct NotchView: View {
   }
 
   private func removeLingerEscMonitors() {
-    lingerEscMonitors.forEach { NSEvent.removeMonitor($0) }
+    for monitor in lingerEscMonitors { NSEvent.removeMonitor(monitor) }
     lingerEscMonitors = []
   }
 
