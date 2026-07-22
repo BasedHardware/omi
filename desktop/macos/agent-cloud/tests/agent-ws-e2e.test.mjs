@@ -155,6 +155,46 @@ describe("agent-cloud WS contract (e2e)", () => {
     expect(messages.at(-1).text).toBe(`turn:${firstTurn + 1}`);
   }, 20000);
 
+  it("supersedes an in-flight turn with a queued second query at the turn boundary", async () => {
+    const ws = await connect();
+    const results = [];
+    const collected = new Promise((resolve) => {
+      const onMsg = (data) => {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === "result") {
+          results.push(msg);
+          if (results.length === 2) {
+            ws.off("message", onMsg);
+            resolve();
+          }
+        }
+      };
+      ws.on("message", onMsg);
+    });
+    // First query holds (SLOW); the second supersedes it mid-turn.
+    const firstDelta = new Promise((resolve) => {
+      const onMsg = (data) => {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === "text_delta") {
+          ws.off("message", onMsg);
+          resolve();
+        }
+      };
+      ws.on("message", onMsg);
+    });
+    ws.send(JSON.stringify({ type: "query", prompt: "SLOW analysis one" }));
+    await firstDelta;
+    ws.send(JSON.stringify({ type: "query", prompt: "quick question two" }));
+    await collected;
+    ws.close();
+
+    // First turn terminalizes as an interrupted partial; the superseding turn
+    // runs to completion afterwards — never interleaved into the first.
+    expect(results[0].interrupted).toBe(true);
+    expect(results[1].interrupted).toBe(false);
+    expect(results[1].text).toBe("Part one. Part two.");
+  }, 20000);
+
   it("emits heartbeats during silent turns and marks stopped turns as interrupted partials", async () => {
     const ws = await connect();
     const done = collectUntilResult(ws);

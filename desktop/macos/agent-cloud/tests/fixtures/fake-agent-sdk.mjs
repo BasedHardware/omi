@@ -9,8 +9,9 @@
 export { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 
 export function query({ prompt }) {
-  let interruptResolve;
-  const interruptRequested = new Promise((resolve) => { interruptResolve = resolve; });
+  // Per-turn hold: each SLOW turn gets a fresh deferred, so multiple
+  // interruptible turns work within one session (supersede + stop tests).
+  let currentHold = null;
   let turnCount = 0; // survives across turns — a "COUNT" prompt reveals it, proving session continuity
 
   function streamText(text) {
@@ -52,7 +53,11 @@ export function query({ prompt }) {
     };
     if (text.includes("SLOW")) {
       console.error("[fake-sdk] holding for interrupt");
-      await interruptRequested; // deterministic hold — released only by interrupt()
+      let release;
+      currentHold = new Promise((resolve) => { release = resolve; });
+      currentHold._release = release;
+      await currentHold; // deterministic hold — released only by interrupt()
+      currentHold = null;
       console.error("[fake-sdk] resumed after interrupt");
       // The real SDK terminalizes an interrupted turn with a non-success
       // subtype (observed live) — the server must map it to an interrupted
@@ -77,7 +82,10 @@ export function query({ prompt }) {
     }
   })();
 
-  iterator.interrupt = async () => { console.error("[fake-sdk] interrupt() called"); interruptResolve(); };
-  iterator.close = async () => { interruptResolve(); };
+  iterator.interrupt = async () => {
+    console.error("[fake-sdk] interrupt() called");
+    currentHold?._release?.();
+  };
+  iterator.close = async () => { currentHold?._release?.(); };
   return iterator;
 }

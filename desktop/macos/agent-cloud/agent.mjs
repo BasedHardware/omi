@@ -932,6 +932,20 @@ function startPersistentSession(initialSink, log) {
   let firstEventSent = false; // tracks if we've sent the first stream event for this turn
   let interruptRequested = false; // set when a stop/preemption cuts the current turn short
   let dead = false; // set when the session loop dies — callers must start a fresh session
+  let pendingPrompt = null; // queue-of-1: a query arriving mid-turn supersedes any earlier pending one
+
+  function beginTurn(prompt, sid) {
+    turnActive = true;
+    turnStartedAt = Date.now();
+    firstEventSent = false;
+    send({ type: "status", message: "Processing..." });
+    messageQueue.push({
+      type: "user",
+      message: { role: "user", content: prompt },
+      parent_tool_use_id: null,
+      session_id: sid,
+    });
+  }
 
   // Background message processing loop — runs for entire WS lifetime
   const routeSubagent = createSubagentRouter();
@@ -1062,6 +1076,13 @@ function startPersistentSession(initialSink, log) {
             turnStartedAt = null;
             firstEventSent = false;
             interruptRequested = false;
+            if (pendingPrompt) {
+              // Superseding query queued mid-turn: start it only now, at the
+              // turn boundary, so two turns' events never interleave.
+              const next = pendingPrompt;
+              pendingPrompt = null;
+              beginTurn(next.prompt, next.sid);
+            }
             break;
           }
         }
@@ -1093,6 +1114,12 @@ function startPersistentSession(initialSink, log) {
     startTurnTimer: () => { turnStartedAt = Date.now(); firstEventSent = false; },
     markInterrupted: () => { interruptRequested = true; },
     isDead: () => dead,
+    beginTurn,
+    setPending: (prompt, sid) => {
+      const replaced = pendingPrompt !== null;
+      pendingPrompt = { prompt, sid };
+      return replaced;
+    },
     setSink: (sink) => { currentSink = sink; },
     // A stale socket's close event can fire after a newer socket attached —
     // only clear the sink if it is still ours.
@@ -1642,25 +1669,20 @@ function startServer() {
             break;
           }
 
-          // If a turn is still active, interrupt first
           if (sharedSession.isTurnActive()) {
-            log("Interrupting active turn for new query");
+            // Supersede: park the new prompt in the queue-of-1 and interrupt.
+            // It starts at the turn boundary (result reset), never mid-stream —
+            // a rapid double-tap can no longer interleave two turns' events.
+            const replaced = sharedSession.setPending(prompt, sid);
+            if (replaced) send({ type: "status", message: "Answering your latest question instead." });
+            log("Interrupting active turn for superseding query");
             sharedSession.markInterrupted();
             markOwnedAbort();
             try { await sharedSession.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
+            break;
           }
 
-          sharedSession.setTurnActive(true);
-          sharedSession.startTurnTimer();
-          send({ type: "status", message: "Processing..." });
-
-          // Push user message into the persistent sharedSession via streamInput
-          sharedSession.messageQueue.push({
-            type: "user",
-            message: { role: "user", content: prompt },
-            parent_tool_use_id: null,
-            session_id: sid,
-          });
+          sharedSession.beginTurn(prompt, sid);
           break;
         }
 
