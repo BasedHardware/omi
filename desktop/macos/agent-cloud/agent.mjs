@@ -147,7 +147,7 @@ GUIDELINES:
 - For conversation queries, use transcription_sessions + transcription_segments
 - For personal facts/preferences, query the memories table first
 - For calendar, email, health data — use the backend tools (get_calendar_events_tool, get_gmail_messages_tool, etc.)
-- For broad or exploratory data questions (patterns, trends, cross-table analysis), delegate to the researcher subagent via the Task tool — it explores the database in its own context and returns distilled findings. Call execute_sql/get_daily_recap directly only for single quick lookups.
+- For ROW-HEAVY work — searching through many screenshots/tasks/transcripts (content recall, task triage, multi-day pattern analysis) — delegate to the researcher subagent via the Task tool; it reads the rows in its own context and returns distilled findings. Answer directly when one or two aggregate queries (or a single get_daily_recap call) suffice.
 - Be concise and helpful. Format results clearly.`;
 
   agentDefinitions = buildAgentDefinitions(schema);
@@ -351,6 +351,8 @@ Parameter guidance:
 const getDailyRecapTool = tool(
   "get_daily_recap",
   `Get a pre-formatted daily activity recap combining app usage, conversations, and tasks.
+
+ONE call covers any date range — pass the full range instead of calling once per day.
 
 Use when:
 - User asks "what did I do today/yesterday/this week?"

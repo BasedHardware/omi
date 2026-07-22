@@ -21,7 +21,12 @@ describe("query-config", () => {
     const schema = "screenshots:\n  timestamp TEXT\n  (600000 rows)";
     const { researcher } = buildAgentDefinitions(schema);
     expect(researcher.prompt).toContain(schema);
-    expect(researcher.model).toBe("inherit");
+    // Measured (2026-07-21): haiku researcher is fastest and ~3x cheaper than
+    // inherited Opus with equal-or-better accuracy on real data.
+    expect(researcher.model).toBe("haiku");
+    // One recap call covers a range — pins the fix for the observed
+    // call-once-per-day pathology (12-turn runs).
+    expect(researcher.prompt).toContain("ONE call covers any date range");
   });
 
   it("includes Task in the main allowed tools so subagents are invocable", () => {
