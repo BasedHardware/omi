@@ -284,10 +284,13 @@ struct InsightPage: View {
 
   private var insightList: some View {
     ScrollView {
-      LazyVStack(spacing: 12) {
-        ForEach(viewModel.filteredInsights) { item in
-          InsightCard(
+      LazyVStack(spacing: 0) {
+        let items = viewModel.filteredInsights
+        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+          InsightTimelineRow(
             insight: item,
+            isFirst: index == 0,
+            isLast: index == items.count - 1,
             onTap: {
               viewModel.markAsRead(item.id)
               selectedInsight = item
@@ -304,7 +307,7 @@ struct InsightPage: View {
       .frame(maxWidth: contentMaxWidth)
       .frame(maxWidth: .infinity)
       .padding(.horizontal, 28)
-      .padding(.top, 4)
+      .padding(.top, 8)
       .padding(.bottom, 32)
     }
   }
@@ -485,6 +488,141 @@ struct InsightPage: View {
 }
 
 // MARK: - Insight Card
+
+/// One realization on the Insights stream: a connector dot on a vertical rail,
+/// a category tag + timestamp, and the insight itself as a pull-quote — so the
+/// page reads like a running log of what Omi has learned about you.
+struct InsightTimelineRow: View {
+  let insight: StoredInsight
+  let isFirst: Bool
+  let isLast: Bool
+  let onTap: () -> Void
+  let onDismiss: () -> Void
+  let onDelete: () -> Void
+
+  @State private var isHovering = false
+  @State private var showDeleteConfirmation = false
+  @Environment(\.sbTheme) private var sb
+
+  var body: some View {
+    Button(action: onTap) {
+      HStack(alignment: .top, spacing: 14) {
+        rail
+
+        VStack(alignment: .leading, spacing: 7) {
+          // Category tag · relative time, with hover actions on the right.
+          HStack(spacing: 8) {
+            HStack(spacing: 5) {
+              Image(systemName: insight.insight.category.icon)
+                .font(.system(size: 10, weight: .semibold))
+              Text(insight.insight.category.displayName.uppercased())
+                .geistMono(size: 11, tracking: 0.6)
+            }
+            .foregroundStyle(sb.ink(.w45))
+
+            Text("·").geistMono(size: 11).foregroundStyle(sb.ink(.w18))
+
+            Text(formatDate(insight.createdAt))
+              .geistMono(size: 11, tracking: 0)
+              .foregroundStyle(sb.ink(.w35))
+
+            Spacer(minLength: 8)
+
+            if isHovering {
+              HStack(spacing: 6) {
+                hoverAction("eye.slash", help: "Dismiss") { onDismiss() }
+                hoverAction("trash", help: "Delete") { showDeleteConfirmation = true }
+              }
+              .transition(.opacity)
+            }
+          }
+
+          // The realization itself, quoted.
+          Text(insight.insight.insight)
+            .geist(size: 16, weight: insight.isRead ? .regular : .medium)
+            .foregroundStyle(insight.isRead ? sb.ink(.w8) : sb.ink)
+            .lineSpacing(3)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+
+          // Quiet confidence + source footnote.
+          HStack(spacing: 6) {
+            Text("\(Int(insight.insight.confidence * 100))% sure")
+              .geistMono(size: 11)
+              .foregroundStyle(sb.ink(.w3))
+            if !insight.insight.sourceApp.isEmpty {
+              Text("·").geistMono(size: 11).foregroundStyle(sb.ink(.w18))
+              Text(insight.insight.sourceApp)
+                .geistMono(size: 11)
+                .foregroundStyle(sb.ink(.w3))
+            }
+          }
+        }
+        .padding(.bottom, 22)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
+      .opacity(insight.isDismissed ? 0.5 : 1.0)
+    }
+    .buttonStyle(.plain)
+    .animation(SBMotion.standard, value: isHovering)
+    .onHover { hovering in
+      isHovering = hovering
+      if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+    }
+    .confirmationDialog(
+      "Delete Insight",
+      isPresented: $showDeleteConfirmation,
+      titleVisibility: .visible
+    ) {
+      Button("Delete", role: .destructive) { onDelete() }
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text("Are you sure you want to delete this insight?")
+    }
+  }
+
+  /// The vertical connector: a short segment above the dot (hidden on the first
+  /// row), the dot, then a segment that fills to the next row's dot.
+  private var rail: some View {
+    VStack(spacing: 0) {
+      Rectangle()
+        .fill(isFirst ? Color.clear : sb.ink(.w12))
+        .frame(width: 1.5, height: 9)
+      Circle()
+        .fill(insight.isRead ? sb.ink(.w25) : sb.ink)
+        .frame(width: 9, height: 9)
+        .overlay(
+          Circle()
+            .stroke(sb.ink(.w25), lineWidth: insight.isRead ? 0 : 4)
+            .opacity(insight.isRead ? 0 : 0.35)
+        )
+      Rectangle()
+        .fill(isLast ? Color.clear : sb.ink(.w12))
+        .frame(width: 1.5)
+        .frame(maxHeight: .infinity)
+    }
+    .frame(width: 10)
+  }
+
+  private func hoverAction(_ icon: String, help: String, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      Image(systemName: icon)
+        .font(.system(size: 12))
+        .foregroundStyle(sb.ink(.w45))
+        .frame(width: 24, height: 24)
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(sb.ink(.w06)))
+    }
+    .buttonStyle(.plain)
+    .help(help)
+  }
+
+  private func formatDate(_ date: Date) -> String {
+    let formatter = RelativeDateTimeFormatter()
+    formatter.unitsStyle = .abbreviated
+    return formatter.localizedString(for: date, relativeTo: Date())
+  }
+}
 
 struct InsightCard: View {
   let insight: StoredInsight
