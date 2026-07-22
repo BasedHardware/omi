@@ -13,6 +13,12 @@ abstract class StreamingTranscriber {
   Future<void> stop();
 }
 
+String deepgramWsUrl(String apiKey, {int sampleRate = 16000}) {
+  return 'wss://api.deepgram.com/v1/listen?punctuate=true&model=nova&language=en-US'
+      '&encoding=linear16&sample_rate=$sampleRate&channels=1'
+      '&token=${Uri.encodeComponent(apiKey)}';
+}
+
 String parakeetWsUrl(String apiUrl, {int sampleRate = 16000}) {
   var base = apiUrl.trim();
   while (base.endsWith('/')) {
@@ -25,13 +31,7 @@ String parakeetWsUrl(String apiUrl, {int sampleRate = 16000}) {
 
 class DeepgramTranscriber implements StreamingTranscriber {
   DeepgramTranscriber({required this.apiKey, required this.onTranscript, this.sampleRate = 16000}) {
-    final uri = Uri.parse(
-      'wss://api.deepgram.com/v1/listen?punctuate=true&model=nova&language=en-US'
-      '&encoding=linear16&sample_rate=$sampleRate&channels=1',
-    );
-    // web_socket_channel does not send arbitrary headers on all platforms;
-    // callers needing auth headers should use a platform channel. We still
-    // construct the standard Deepgram URL for parity.
+    final uri = Uri.parse(deepgramWsUrl(apiKey, sampleRate: sampleRate));
     _channel = WebSocketChannel.connect(uri);
     _sub = _channel.stream.listen((event) {
       if (event is! String) return;
