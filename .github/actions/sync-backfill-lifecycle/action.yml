@@ -96,11 +96,12 @@ runs:
         SECRET_OVERLAY: ${{ inputs.backfill_secrets }}
         REMOVE_ENV_VARS: HOSTED_PUSHER_API_URL
       run: |
+        DEPLOY_CONTROL_SCRIPT_DIR="${DEPLOY_CONTROL_SCRIPTS:-backend/scripts}"
         gcloud run services describe backend-sync \
           --region=${{ inputs.region }} \
           --project=${{ inputs.project_id }} \
           --format=json > /tmp/backend-sync-live.json
-        python3 backend/scripts/render_cloud_run_clone_env.py \
+        python3 "$DEPLOY_CONTROL_SCRIPT_DIR/render_cloud_run_clone_env.py" \
           --source-json /tmp/backend-sync-live.json >> "$GITHUB_OUTPUT"
 
     - name: Render optional candidate tag

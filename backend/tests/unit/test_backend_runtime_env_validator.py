@@ -472,6 +472,29 @@ def test_automatic_firestore_readiness_contract_requires_readiness_admitted_sha_
     )
 
 
+def test_manual_firestore_readiness_contract_allows_one_staged_workflow_control_checkout():
+    validator = load_validator()
+    workflow_path = ROOT.parent / '.github/workflows/gcp_backend.yml'
+    workflow = validator._load_yaml(workflow_path)
+
+    assert validator._validate_firestore_readiness_workflow_contract(str(workflow_path), workflow) == []
+
+    workflow['jobs']['deploy']['steps'] = [
+        step
+        for step in workflow['jobs']['deploy']['steps']
+        if step.get('name') != 'Checkout workflow-owned deploy-control source'
+    ]
+    errors = validator._validate_firestore_readiness_workflow_contract(str(workflow_path), workflow)
+
+    assert (
+        validator.ValidationError(
+            f'cloud_run_workflow/{workflow_path}',
+            'backend deploy checkout must remain bound to the readiness-approved commit',
+        )
+        in errors
+    )
+
+
 @pytest.mark.parametrize('workflow_name', ['gcp_backend.yml', 'gcp_backend_auto_dev.yml'])
 def test_firestore_readiness_contract_requires_validation_before_artifact_upload(workflow_name):
     validator = load_validator()

@@ -342,7 +342,25 @@ jobs:
       - name: Delete huge unnecessary tools folder
         run: rm -rf /opt/hostedtoolcache
 
-      - name: Checkout
+      - name: Checkout workflow-owned deploy-control source
+        uses: actions/checkout@v7
+        with:
+          # The workflow owns deployment-control behavior. Pin this source to
+          # the immutable workflow revision before the admitted runtime source
+          # replaces the normal workspace.
+          ref: ${{ github.sha }}
+          path: .workflow-source
+
+      - name: Stage workflow-owned deployment-control scripts
+        run: |
+          set -euo pipefail
+          control_scripts="$RUNNER_TEMP/backend-deploy-control-scripts"
+          rm -rf "$control_scripts"
+          cp -a .workflow-source/backend/scripts "$control_scripts"
+          rm -rf .workflow-source
+          printf 'DEPLOY_CONTROL_SCRIPTS=%s\n' "$control_scripts" >> "$GITHUB_ENV"
+
+      - name: Checkout admitted runtime source
         uses: actions/checkout@v7
         with:
           ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}
@@ -360,7 +378,7 @@ jobs:
         env:
           SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
-          python3 backend/scripts/verify_sync_ledger_fence_transition.py \
+          python3 "$DEPLOY_CONTROL_SCRIPTS/verify_sync_ledger_fence_transition.py" \
             --project=${{ vars.GCP_PROJECT_ID }} \
             --region=${{ env.REGION }} \
             --desired-mode="$SYNC_LEDGER_FENCE_MODE"
@@ -413,7 +431,7 @@ jobs:
         id: gateway-intent
         if: ${{ github.event.inputs.deploy_targets == 'all' }}
         run: |
-          python3 backend/scripts/verify-llm-gateway-serving.py \
+          python3 "$DEPLOY_CONTROL_SCRIPTS/verify-llm-gateway-serving.py" \
             --environment="${{ vars.ENV }}" \
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --region="${{ env.REGION }}" \
@@ -432,7 +450,7 @@ jobs:
         id: gateway-serving
         if: ${{ github.event.inputs.deploy_targets == 'all' && steps.gateway-intent.outputs.enabled == 'true' }}
         run: |
-          python3 backend/scripts/verify-llm-gateway-serving.py \
+          python3 "$DEPLOY_CONTROL_SCRIPTS/verify-llm-gateway-serving.py" \
             --environment="${{ vars.ENV }}" \
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --region="${{ env.REGION }}" \
@@ -450,13 +468,13 @@ jobs:
           if [[ "${{ github.event.inputs.environment }}" == "prod" || "${{ github.event.inputs.environment }}" == "development" ]]; then
             PREFLIGHT_ARGS+=(--repair-traffic)
           fi
-          python3 backend/scripts/preflight-cloud-run-deploy.py "${PREFLIGHT_ARGS[@]}"
+          python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" "${PREFLIGHT_ARGS[@]}"
 
       - name: Validate backend runtime env before deploy
         env:
           SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
-          python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-rendered-cloud-run
+          python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" --env ${{ vars.ENV }} --check-workflows --check-rendered-cloud-run
 
       - name: Build runtime image
         uses: docker/build-push-action@v7
@@ -474,7 +492,7 @@ jobs:
       - name: Verify built runtime image before publish
         run: |
           image=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
-          python3 backend/scripts/runtime_image_contracts.py smoke --dockerfile backend/Dockerfile --image "$image"
+          python3 "$DEPLOY_CONTROL_SCRIPTS/runtime_image_contracts.py" smoke --dockerfile backend/Dockerfile --image "$image"
 
       - name: Push verified runtime image
         run: |
@@ -484,7 +502,7 @@ jobs:
       - name: Probe LLM gateway from the Cloud Run VPC before promotion
         if: ${{ github.event.inputs.deploy_targets == 'all' && steps.gateway-intent.outputs.enabled == 'true' }}
         run: |
-          bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
+          bash "$DEPLOY_CONTROL_SCRIPTS/probe-llm-gateway-from-cloud-run.sh" \
             --project "${{ vars.GCP_PROJECT_ID }}" \
             --region "${{ env.REGION }}" \
             --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
@@ -517,14 +535,14 @@ jobs:
           SYNC_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.sync_tasks_handler_url }}
           SYNC_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.sync_tasks_invoker_sa }}
         run: |
-          python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} >> "$GITHUB_OUTPUT"
+          python3 "$DEPLOY_CONTROL_SCRIPTS/render_backend_runtime_env.py" --env ${{ vars.ENV }} >> "$GITHUB_OUTPUT"
 
       # Strips Secret Manager bindings left on services for settings the manifest
       # now declares as public literals; gcloud cannot flip a binding's type in
       # place. No-ops once a service carries no legacy binding.
       - name: Migrate legacy public Cloud Run bindings
         run: >-
-          python3 backend/scripts/preflight-cloud-run-deploy.py
+          python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py"
           --env ${{ vars.ENV }}
           --project="${{ vars.GCP_PROJECT_ID }}"
           --region="${{ env.REGION }}"
@@ -655,7 +673,7 @@ jobs:
 
       - name: Wait for Cloud Run revisions to become ready
         run: |
-          python3 backend/scripts/preflight-cloud-run-deploy.py \
+          python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" \
             --env ${{ vars.ENV }} \
             --project ${{ vars.GCP_PROJECT_ID }} \
             --region ${{ env.REGION }} \
@@ -668,7 +686,7 @@ jobs:
         env:
           SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
-          python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-live-cloud-run
+          python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" --env ${{ vars.ENV }} --check-workflows --check-live-cloud-run
 
       # Development probes the no-traffic tagged revision directly from the
       # runner. Production has no tagged candidate URL or private probe job.
@@ -676,7 +694,7 @@ jobs:
         id: transcription-candidate
         if: ${{ github.event.inputs.environment == 'development' }}
         run: |
-          candidate_url="$(python3 backend/scripts/resolve_cloud_run_tagged_url.py \
+          candidate_url="$(python3 "$DEPLOY_CONTROL_SCRIPTS/resolve_cloud_run_tagged_url.py" \
             --project=${{ vars.GCP_PROJECT_ID }} \
             --region=${{ env.REGION }} \
             --service=${{ env.SERVICE }} \
@@ -696,7 +714,7 @@ jobs:
       - name: Accept no-traffic Cloud Run candidate
         id: verify-cloud-run-candidate
         run: |
-          python3 backend/scripts/verify_backend_release_vector.py \
+          python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" \
             --candidate \
             --cloud-run-only \
             --commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}" \
@@ -768,7 +786,7 @@ jobs:
           TWILIO_TWIML_APP_SID: ${{ vars.TWILIO_TWIML_APP_SID }}
           X_OAUTH_CLIENT_ID: ${{ vars.X_OAUTH_CLIENT_ID }}
           X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
-        run: backend/scripts/deploy-backend-config.sh
+        run: bash "$DEPLOY_CONTROL_SCRIPTS/deploy-backend-config.sh"
 
       - name: Deploy backend-secrets to GKE using Helm
         if: ${{ github.event.inputs.deploy_targets == 'all' }}
@@ -777,7 +795,7 @@ jobs:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
           REGION: ${{ env.REGION }}
-        run: backend/scripts/deploy-backend-secrets.sh
+        run: bash "$DEPLOY_CONTROL_SCRIPTS/deploy-backend-secrets.sh"
 
       - name: Deploy ${{ env.SERVICE }}-listen to GKE using Helm
         if: ${{ github.event.inputs.deploy_targets == 'all' }}
@@ -795,15 +813,15 @@ jobs:
           # still fails fast on the deployment's 600s progressDeadlineSeconds, which
           # kubectl reports as ProgressDeadlineExceeded regardless of this value.
           if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=1800s; then
-            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
+            python3 "$DEPLOY_CONTROL_SCRIPTS/deploy_status_report.py" --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
             exit 1
           fi
-          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
+          python3 "$DEPLOY_CONTROL_SCRIPTS/deploy_status_report.py" --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
 
       - name: Verify exact candidate composition
         if: ${{ github.event.inputs.deploy_targets == 'all' }}
         run: |
-          python3 backend/scripts/verify_backend_release_vector.py \
+          python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" \
             --candidate \
             --commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}" \
             --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
@@ -817,7 +835,7 @@ jobs:
       - name: Capture Cloud Run pre-promotion traffic snapshot
         id: cloud-run-traffic-snapshot
         run: |
-          python3 backend/scripts/cloud_run_traffic_snapshot.py capture \
+          python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" capture \
             --project "${{ vars.GCP_PROJECT_ID }}" \
             --region "${{ env.REGION }}" \
             --service backend \
@@ -851,7 +869,7 @@ jobs:
           if [[ "${{ github.event.inputs.deploy_targets }}" == "cloud-run-only" ]]; then
             CLOUD_RUN_ONLY="--cloud-run-only"
           fi
-          python3 backend/scripts/verify_backend_release_vector.py \
+          python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" \
             --commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}" \
             --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
             --deploy-run-id "${{ github.run_id }}" \
@@ -873,23 +891,23 @@ jobs:
           umask 077
           token_file="$RUNNER_TEMP/firebase-production-serving-token"
           trap 'rm -f "$token_file"' EXIT
-          python3 backend/scripts/firebase_release_probe_token.py \
+          python3 "$DEPLOY_CONTROL_SCRIPTS/firebase_release_probe_token.py" \
             --secret-project "$PROBE_SECRET_PROJECT" \
             --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
             --token-output "$token_file"
           reservation_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
             --request POST https://api.omi.me/v2/desktop/beta/candidates/reserve \
-            --header 'Content-Type: application/json' --data '{}')"
-          # An expected validation response proves the route is present without a reservation mutation.
+            --header 'Content-Type: application/json' --data '{"tag":"macos-unauthenticated-smoke"}')"
+          # A schema-valid inert tag reaches the authorization wall without reserving a real candidate.
           test "$reservation_status" = 401
-          python3 backend/scripts/transcription_capability_probe.py \
+          python3 "$DEPLOY_CONTROL_SCRIPTS/transcription_capability_probe.py" \
             --candidate-api-url https://api.omi.me \
             --bearer-token-file "$token_file" --json-only
 
       - name: Restore Cloud Run traffic snapshot after failed promotion
         if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'failure' || steps.smoke-promoted-production-serving-api.outcome == 'failure') }}
         run: |
-          python3 backend/scripts/cloud_run_traffic_snapshot.py restore \
+          python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" restore \
             --snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json \
             --evidence-path artifacts/backend-cloud-run-traffic-restore.json
 
@@ -902,7 +920,7 @@ jobs:
           ADMIN_KEY="$(gcloud secrets versions access latest --secret=ADMIN_KEY --project="$PROJECT_ID")"
           export ADMIN_KEY
           trap 'unset ADMIN_KEY' EXIT
-          python3 backend/scripts/smoke_what_matters_now.py --base-url https://api.omi.dev
+          python3 "$DEPLOY_CONTROL_SCRIPTS/smoke_what_matters_now.py" --base-url https://api.omi.dev
 
       - name: Cloud Run deploy status report
         if: always()
@@ -922,7 +940,7 @@ jobs:
               --expect-cloud-run-traffic backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
             )
           fi
-          python3 backend/scripts/deploy_status_report.py \
+          python3 "$DEPLOY_CONTROL_SCRIPTS/deploy_status_report.py" \
             --env ${{ vars.ENV }} \
             --project ${{ vars.GCP_PROJECT_ID }} \
             --region ${{ env.REGION }} \

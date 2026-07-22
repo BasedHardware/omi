@@ -572,6 +572,18 @@ class WorkflowContractTests(unittest.TestCase):
         )
         self.assertIn("manual deployment must bind every release vector to the admitted SHA", CHECKER.validate(root))
 
+        root = self.fixture_root()
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            "ref: ${{ github.sha }}",
+            "ref: ${{ github.event.inputs.release_sha }}",
+        )
+        self.assertIn(
+            "manual backend deploy must stage workflow-owned control scripts from github.sha",
+            CHECKER.validate(root),
+        )
+
     def test_traffic_only_repair_remains_separate_from_source_admission(self) -> None:
         root = self.fixture_root()
         self.mutate(

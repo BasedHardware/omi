@@ -991,10 +991,28 @@ def _validate_firestore_readiness_workflow_contract(workflow_file: str, workflow
         errors.append(ValidationError(scope, admission_error))
     deploy_steps = [_as_config_dict(step) or {} for step in (_as_config_list(deploy_job.get('steps')) or [])]
     deploy_checkout = [step for step in deploy_steps if step.get('uses') == 'actions/checkout@v7']
+    runtime_checkout = [
+        step
+        for step in deploy_checkout
+        if (_as_config_dict(step.get('with')) or {}).get('ref')
+        == '${{ needs.firestore_readiness.outputs.admitted_sha }}'
+    ]
+    workflow_control_checkout = next(
+        (step for step in deploy_checkout if step.get('name') == 'Checkout workflow-owned deploy-control source'),
+        None,
+    )
+    workflow_control_with = _as_config_dict((workflow_control_checkout or {}).get('with')) or {}
+    expected_checkout_count = 2 if is_manual_deploy else 1
     if (
-        len(deploy_checkout) != 1
-        or (_as_config_dict(deploy_checkout[0].get('with')) or {}).get('ref')
-        != '${{ needs.firestore_readiness.outputs.admitted_sha }}'
+        len(deploy_checkout) != expected_checkout_count
+        or len(runtime_checkout) != 1
+        or (
+            is_manual_deploy
+            and (
+                workflow_control_with.get('ref') != '${{ github.sha }}'
+                or workflow_control_with.get('path') != '.workflow-source'
+            )
+        )
     ):
         errors.append(
             ValidationError(scope, 'backend deploy checkout must remain bound to the readiness-approved commit')
