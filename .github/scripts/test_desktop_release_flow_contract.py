@@ -34,6 +34,25 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertIsNotNone(checkout)
         return target.group(1), checkout.group(1)
 
+    def _precheckout_gitlink_cleanup_script(self) -> str:
+        qualification = workflow("desktop_qualify_beta.yml")
+        cleanup_name = "      - name: Remove stale uninitialized PlatformIO gitlink"
+        checkout_name = "      - name: Checkout qualification controls"
+        self.assertLess(qualification.index(cleanup_name), qualification.index(checkout_name))
+        cleanup_step = qualification.split(cleanup_name, 1)[1].split("\n      - name:", 1)[0]
+        script = cleanup_step.split("        run: |\n", 1)[1]
+        return "\n".join(line[10:] if line.startswith("          ") else line for line in script.splitlines())
+
+    def _run_precheckout_gitlink_cleanup(self, workspace: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["bash", "-c", self._precheckout_gitlink_cleanup_script()],
+            cwd=workspace,
+            env={**os.environ, "GITHUB_WORKSPACE": str(workspace)},
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
     def _assert_qualification_tag_identity(self, *, annotated: bool) -> None:
         target_expression, checkout_expression = self._qualification_identity_expressions()
         with tempfile.TemporaryDirectory() as directory:
@@ -141,6 +160,39 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
 
     def test_beta_qualification_accepts_lightweight_tag_at_exact_checkout_commit(self) -> None:
         self._assert_qualification_tag_identity(annotated=False)
+
+    def test_beta_qualification_removes_only_empty_uninitialized_gitlink_before_checkout(self) -> None:
+        relative = Path("omiGlass/firmware/.pio/libdeps/seeed_xiao_esp32s3/libopus")
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            stale = workspace / relative
+            stale.mkdir(parents=True)
+            result = self._run_precheckout_gitlink_cleanup(workspace)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(stale.exists())
+
+    def test_beta_qualification_preserves_initialized_or_nonempty_gitlinks(self) -> None:
+        relative = Path("omiGlass/firmware/.pio/libdeps/seeed_xiao_esp32s3/libopus")
+        with self.subTest("initialized"):
+            with tempfile.TemporaryDirectory() as directory:
+                workspace = Path(directory)
+                initialized = workspace / relative
+                (initialized / ".git").mkdir(parents=True)
+                result = self._run_precheckout_gitlink_cleanup(workspace)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(initialized.exists())
+
+        with self.subTest("nonempty-uninitialized"):
+            with tempfile.TemporaryDirectory() as directory:
+                workspace = Path(directory)
+                nonempty = workspace / relative
+                nonempty.mkdir(parents=True)
+                marker = nonempty / "preserve.txt"
+                marker.write_text("do not delete\n", encoding="utf-8")
+                result = self._run_precheckout_gitlink_cleanup(workspace)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertTrue(marker.exists())
+                self.assertIn("Refusing to remove nonempty uninitialized gitlink", result.stderr)
 
     def test_stable_is_manual_and_uses_one_explicit_confirmation(self) -> None:
         stable = workflow("desktop_promote_prod.yml")
