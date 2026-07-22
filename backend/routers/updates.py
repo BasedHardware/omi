@@ -6,7 +6,7 @@ import logging
 import os
 import random
 import re
-from typing import Any, Optional, List, Dict, Literal
+from typing import Any, Optional, List, Dict, Literal, Tuple
 from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, HTTPException, Header, Query
@@ -501,10 +501,24 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
     return resolved
 
 
-def _download_landing_html(dmg_url: str, channel: str = "stable", version: str = "", platform: str = "macos") -> str:
+def _pick_installer_entry(desktop_releases: List[Dict], platform: str, channel: str) -> Optional[Tuple[Dict, str]]:
+    """Newest entry in one channel that carries a resolvable installer asset."""
+    for entry in desktop_releases:
+        if entry["channel"] != channel:
+            continue
+        installer_url = _get_installer_download_url(entry["release"], platform)
+        if installer_url:
+            return entry, installer_url
+    return None
+
+
+def _download_landing_html(
+    dmg_url: str, channel: str = "stable", version: str = "", platform: str = "macos", notice: str = ""
+) -> str:
     """Generate an HTML landing page that auto-triggers the installer download."""
     channel_label = "Beta " if channel == "beta" else ""
     version_display = f"v{version}" if version else ""
+    notice_html = f'<p class="notice">{notice}</p>' if notice else ""
     os_name = "Windows" if platform == "windows" else "macOS"
     if platform == "windows":
         install_steps = (
@@ -542,6 +556,7 @@ def _download_landing_html(dmg_url: str, channel: str = "stable", version: str =
         .done .checkmark {{ display: block; }}
         .done .subtitle {{ color: #4ade80; }}
         @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
+        .notice {{ color: #fbbf24; font-size: 14px; margin-bottom: 24px; }}
         .download-link {{ color: #6C8FFF; text-decoration: none; font-size: 15px; }}
         .download-link:hover {{ text-decoration: underline; }}
         .video-container {{ margin-top: 32px; border-radius: 12px; overflow: hidden;
@@ -560,6 +575,7 @@ def _download_landing_html(dmg_url: str, channel: str = "stable", version: str =
     <div class="container">
         <h1>Downloading Omi {channel_label}for {os_name}</h1>
         <p class="version">{version_display}</p>
+        {notice_html}
         <p class="subtitle" id="status-text">Your download should start automatically&hellip;</p>
         <div class="status" id="status-icon">
             <div class="spinner"></div>
@@ -790,27 +806,24 @@ async def download_latest_desktop_release(
     channel: str = Query(default="stable", pattern="^(beta|stable)$"),
 ):
     """
-    Redirect to the latest desktop release DMG installer.
+    Serve the latest desktop release installer as an auto-download landing page.
     Both channels resolve only from their explicit channel pointer or the same
-    channel in the legacy release metadata.
+    channel in the legacy release metadata; the requested channel is strict
+    (404 when empty — QA/tooling contract).
     Defaults to stable channel (for macos.omi.me). Use channel=beta for QA.
     """
     desktop_releases = await _get_live_desktop_releases(platform)
     if not desktop_releases:
         raise HTTPException(status_code=404, detail=f"No live desktop releases found for platform: {platform}")
 
-    # Find latest release matching the requested channel
-    for entry in desktop_releases:
-        if entry["channel"] != channel:
-            continue
-        installer_url = _get_installer_download_url(entry["release"], platform)
-        if installer_url:
-            version = entry["version_info"]["version"]
-            return HTMLResponse(
-                content=_download_landing_html(installer_url, channel=channel, version=version, platform=platform)
-            )
-
-    raise HTTPException(status_code=404, detail=f"No installer found for platform {platform}, channel: {channel}")
+    picked = _pick_installer_entry(desktop_releases, platform, channel)
+    if picked is None:
+        raise HTTPException(status_code=404, detail=f"No installer found for platform {platform}, channel: {channel}")
+    entry, installer_url = picked
+    version = entry["version_info"]["version"]
+    return HTMLResponse(
+        content=_download_landing_html(installer_url, channel=channel, version=version, platform=platform)
+    )
 
 
 @router.get("/v2/desktop/download/beta")
@@ -818,8 +831,10 @@ async def download_beta_desktop_release(
     platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
 ):
     """
-    Redirect to the latest beta desktop release DMG installer.
-    Convenience endpoint for macos.omi.me/beta (URL map can't add query params).
+    Serve the latest beta release as an auto-download landing page.
+    Legacy convenience route: macos.omi.me/beta now redirects straight to
+    /v2/desktop/download/latest?channel=beta (URL-map urlRedirect.pathRedirect
+    does carry query params); kept for old shared links.
     """
     return await download_latest_desktop_release(platform=platform, channel="beta")
 
@@ -829,10 +844,53 @@ async def download_windows_desktop_release(
     channel: str = Query(default="stable", pattern="^(beta|stable)$"),
 ):
     """
-    Redirect to the latest Windows desktop release installer.
-    Convenience endpoint for windows.omi.me (URL map can't add query params).
+    Serve the latest Windows release as an auto-download landing page.
+
+    Public-link endpoint behind windows.omi.me (stable) and windows.omi.me/beta
+    (channel=beta). Unlike /v2/desktop/download/latest, an empty requested
+    channel falls back to the other one: the Windows beta slot empties every
+    time a prerelease is promoted to stable (channel = GitHub release state),
+    and a shared public link must keep serving an installer through that
+    window. The landing page always shows the channel actually served.
     """
-    return await download_latest_desktop_release(platform="windows", channel=channel)
+    desktop_releases = await _get_live_desktop_releases("windows")
+    if not desktop_releases:
+        raise HTTPException(status_code=404, detail="No live desktop releases found for platform: windows")
+
+    served_channel = channel
+    picked = _pick_installer_entry(desktop_releases, "windows", channel)
+    if picked is None:
+        fallback_channel = "beta" if channel == "stable" else "stable"
+        picked = _pick_installer_entry(desktop_releases, "windows", fallback_channel)
+        if picked is not None:
+            served_channel = fallback_channel
+            record_fallback(
+                component='other',
+                from_mode=f'desktop_download_{channel}',
+                to_mode=f'desktop_download_{fallback_channel}',
+                reason='other',
+                # beta->stable hands out the same-or-newer qualified build;
+                # stable->beta puts the public stable audience on a prerelease.
+                outcome='recovered' if fallback_channel == 'stable' else 'degraded',
+                log=logger,
+            )
+    if picked is None:
+        raise HTTPException(status_code=404, detail=f"No installer found for platform windows, channel: {channel}")
+    entry, installer_url = picked
+    notice = ""
+    if served_channel != channel:
+        notice = (
+            f"No {channel} build is published right now &mdash; serving the latest {served_channel} release instead."
+        )
+    return HTMLResponse(
+        content=_download_landing_html(
+            installer_url,
+            channel=served_channel,
+            version=entry["version_info"]["version"],
+            platform="windows",
+            notice=notice,
+        )
+    )
 
 
 def _preview_landing_response(result: Dict[str, Any]) -> HTMLResponse:

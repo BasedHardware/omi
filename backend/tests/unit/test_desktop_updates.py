@@ -922,6 +922,97 @@ class TestDownloadEndpoint:
         assert resp.status_code == 200
         assert "https://example.com/omi-setup.exe" in resp.text
 
+    @pytest.mark.asyncio
+    async def test_windows_beta_falls_back_to_stable_when_beta_empty(self):
+        # After a prerelease is promoted, the beta slot is empty until the next
+        # cut; the public windows.omi.me/beta link must keep serving stable.
+        mock_releases = [
+            {
+                "channel": "stable",
+                "version_info": {"version": "1.0.1", "build": "0"},
+                "release": {"assets": [_exe_asset("https://example.com/omi-setup.exe")]},
+            },
+        ]
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases),
+            patch("routers.updates.record_fallback") as mock_fallback,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/windows?channel=beta")
+        assert resp.status_code == 200
+        assert "https://example.com/omi-setup.exe" in resp.text
+        # Landing page reflects the channel actually served, not the requested
+        # one, and says why out loud (the download auto-starts, so the title
+        # alone is easy to miss).
+        assert "Omi Beta" not in resp.text
+        assert "serving the latest stable release instead" in resp.text
+        mock_fallback.assert_called_once()
+        assert mock_fallback.call_args.kwargs["outcome"] == "recovered"
+
+    @pytest.mark.asyncio
+    async def test_windows_stable_falls_back_to_beta_when_no_stable(self):
+        # Launch-day shape: only prereleases exist, windows.omi.me must still serve.
+        mock_releases = [
+            {
+                "channel": "beta",
+                "version_info": {"version": "1.0.2", "build": "0"},
+                "release": {"assets": [_exe_asset("https://example.com/beta-setup.exe")]},
+            },
+        ]
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases),
+            patch("routers.updates.record_fallback") as mock_fallback,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/windows")
+        assert resp.status_code == 200
+        assert "https://example.com/beta-setup.exe" in resp.text
+        assert "Omi Beta for Windows" in resp.text
+        mock_fallback.assert_called_once()
+        # Serving a prerelease to the public stable link is a hit, not a heal.
+        assert mock_fallback.call_args.kwargs["outcome"] == "degraded"
+
+    @pytest.mark.asyncio
+    async def test_windows_beta_prefers_beta_when_present(self):
+        mock_releases = [
+            {
+                "channel": "stable",
+                "version_info": {"version": "1.0.1", "build": "0"},
+                "release": {"assets": [_exe_asset("https://example.com/omi-setup.exe")]},
+            },
+            {
+                "channel": "beta",
+                "version_info": {"version": "1.0.2", "build": "0"},
+                "release": {"assets": [_exe_asset("https://example.com/beta-setup.exe")]},
+            },
+        ]
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases),
+            patch("routers.updates.record_fallback") as mock_fallback,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/windows?channel=beta")
+        assert resp.status_code == 200
+        assert "https://example.com/beta-setup.exe" in resp.text
+        mock_fallback.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_windows_404_when_both_channels_empty(self):
+        # Releases exist but neither channel has a resolvable installer asset;
+        # the 404 must name the channel the caller asked for, not the fallback.
+        mock_releases = [
+            {
+                "channel": "stable",
+                "version_info": {"version": "1.0.1", "build": "0"},
+                "release": {"assets": [_dmg_asset()]},
+            },
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/windows?channel=beta")
+        assert resp.status_code == 404
+        assert "channel: beta" in resp.json()["detail"]
+
 
 # --- Clear cache endpoint ---
 
