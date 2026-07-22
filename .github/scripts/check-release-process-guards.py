@@ -805,7 +805,6 @@ def check_desktop_qualification_runner() -> list[str]:
         "docker info",
         "check-desktop-auto-beta-candidate.py",
         "--automatic",
-        "--no-promote",
         "desktop_promote_beta.yml",
         "actions/create-github-app-token@v3",
         "desktop-beta-qualification-${{ inputs.release_tag }}",
