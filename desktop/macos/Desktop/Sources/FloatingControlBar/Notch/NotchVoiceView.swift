@@ -3,9 +3,10 @@ import SwiftUI
 /// The expanded voice content below the morphing Omi orb: the live transcript
 /// while listening, or the streaming / lingering reply while responding,
 /// centered under the orb. Reports its measured height so the panel grows in
-/// height as words wrap to new lines (the width is fixed). Long replies scroll
-/// within the half-screen cap. The reply is a tap target that opens the main
-/// app window (full text chat lives in the app now).
+/// height as words wrap to new lines (fixed width, capped at 30% of the
+/// screen). While the text is actively growing it auto-scrolls so the newest
+/// line is always visible; once the reply settles it scrolls back to the top
+/// and reveals an "Open in Omi" hint. Tapping opens the full conversation.
 struct NotchVoiceView: View {
   /// The text to show (transcript or reply). Empty shows the placeholder while
   /// listening, or just the orb while responding.
@@ -15,26 +16,64 @@ struct NotchVoiceView: View {
   let emphasized: Bool
   /// Non-nil for the reply: tapping opens the main window.
   let onOpenApp: (() -> Void)?
+  /// True while the text is actively growing (listening, or the reply
+  /// streaming): keep the newest line pinned to the bottom.
+  let followsTail: Bool
   /// Vertical space reserved at the top for the camera housing + the orb.
   let topReserve: CGFloat
   let onHeightChange: (CGFloat) -> Void
 
+  /// The tap hint only appears once a reply has settled (not while streaming).
+  private var showsOpenHint: Bool { onOpenApp != nil && !followsTail && !text.isEmpty }
+  private var hintHeight: CGFloat { showsOpenHint ? 26 : 0 }
+
   var body: some View {
     VStack(spacing: 0) {
       Color.clear.frame(height: topReserve)
-      // The text scrolls below the fixed orb area once the panel hits its
-      // half-screen cap; short content just sizes to fit (no scroll).
-      ScrollView(.vertical, showsIndicators: true) {
-        transcript
-          .padding(.horizontal, 24)
-          .padding(.bottom, 14)
+      ScrollViewReader { proxy in
+        ScrollView(.vertical, showsIndicators: true) {
+          VStack(spacing: 0) {
+            transcript
+              .padding(.horizontal, 24)
+              .padding(.bottom, showsOpenHint ? 4 : 14)
+              .id("voiceTop")
+            Color.clear.frame(height: 1).id("voiceBottom")
+          }
           .onGeometryChange(for: CGFloat.self) {
             $0.size.height
           } action: { height in
-            onHeightChange(topReserve + height)
+            onHeightChange(topReserve + height + hintHeight)
           }
+        }
+        .onChange(of: text) { _, _ in
+          guard followsTail else { return }
+          withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo("voiceBottom", anchor: .bottom) }
+        }
+        .onChange(of: followsTail) { _, follows in
+          if !follows { withAnimation { proxy.scrollTo("voiceTop", anchor: .top) } }
+        }
+      }
+      if showsOpenHint {
+        openHint.transition(.opacity)
       }
     }
+    .animation(.easeInOut(duration: 0.2), value: showsOpenHint)
+  }
+
+  private var openHint: some View {
+    Button(action: { onOpenApp?() }) {
+      HStack(spacing: 3) {
+        Text("Open in Omi")
+        Image(systemName: "arrow.up.forward")
+          .font(.system(size: 9, weight: .semibold))
+      }
+      .font(.system(size: 10, weight: .medium))
+      .foregroundStyle(.white.opacity(0.45))
+      .padding(.vertical, 6)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("Open the full conversation in Omi")
   }
 
   @ViewBuilder

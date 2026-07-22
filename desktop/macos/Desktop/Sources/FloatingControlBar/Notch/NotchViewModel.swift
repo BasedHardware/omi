@@ -136,9 +136,12 @@ final class NotchViewModel: ObservableObject {
     max(closedNotchSize.width, clampValue(screenFrame.width * 0.2, 280, 340))
   }
   var voiceMinHeight: CGFloat { clampValue(closedNotchSize.height + 82, 120, 168) }
+  /// Voice is verbal — the panel shouldn't dominate the screen. Cap at 30% of
+  /// the display height (vs 50% for the typed chat); longer replies scroll.
+  var voiceMaxHeight: CGFloat { screenFrame.height * 0.3 }
 
   var voiceExpandedSize: CGSize {
-    let height = voiceBodyHeight.map { clampValue($0, voiceMinHeight, chatMaxHeight) } ?? voiceMinHeight
+    let height = voiceBodyHeight.map { clampValue($0, voiceMinHeight, voiceMaxHeight) } ?? voiceMinHeight
     return CGSize(width: voiceWidth, height: height)
   }
 

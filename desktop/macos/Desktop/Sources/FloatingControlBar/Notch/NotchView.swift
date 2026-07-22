@@ -218,6 +218,7 @@ struct NotchView: View {
         placeholder: "Listening…",
         emphasized: true,
         onOpenApp: nil,
+        followsTail: true,
         topReserve: voiceTopReserve,
         onHeightChange: updateVoiceBodyHeight
       )
@@ -234,6 +235,7 @@ struct NotchView: View {
         placeholder: "",
         emphasized: false,
         onOpenApp: { MainWindowReveal.activate() },
+        followsTail: barState.isVoiceResponseActive,
         topReserve: voiceTopReserve,
         onHeightChange: updateVoiceBodyHeight
       )
