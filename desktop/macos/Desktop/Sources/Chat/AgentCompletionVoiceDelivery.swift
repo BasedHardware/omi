@@ -41,14 +41,22 @@ final class AgentCompletionVoiceDelivery {
   private var lastStatusBySurface: [String: AgentRunProjectionStatus] = [:]
   private var deliveryInFlight = false
   private var deliveryQueued = false
+  /// The shared instance stays completely inert — no status subscription, no
+  /// delivery, no reach into the agent runtime — until `start()` runs at app
+  /// launch. This keeps `voiceSessionDidConnect()`, which the realtime hub calls
+  /// from `hubDidConnect` (exercised by RealtimeHub unit tests), a no-op in any
+  /// context that never started the service.
+  private var hasStarted: Bool
 
   init(
     isVoiceSessionLive: (@MainActor () -> Bool)? = nil,
     peekDelta: (@MainActor () async -> Delta?)? = nil,
     injectContext: (@MainActor (String) async -> Bool)? = nil,
     acknowledge: (@MainActor (Delta) -> Void)? = nil,
-    scheduleWork: (@MainActor (@escaping @MainActor () async -> Void) -> Void)? = nil
+    scheduleWork: (@MainActor (@escaping @MainActor () async -> Void) -> Void)? = nil,
+    hasStarted: Bool = false
   ) {
+    self.hasStarted = hasStarted
     self.isVoiceSessionLive =
       isVoiceSessionLive ?? { RealtimeHubController.shared.hasLiveVoiceSession }
     self.peekDelta =
@@ -82,6 +90,7 @@ final class AgentCompletionVoiceDelivery {
   /// Idempotent; called once from app launch.
   func start() {
     guard cancellable == nil else { return }
+    hasStarted = true
     cancellable = AgentRuntimeStatusStore.shared.$projectionsBySurface
       .sink { [weak self] projections in
         self?.observe(projections)
@@ -89,8 +98,11 @@ final class AgentCompletionVoiceDelivery {
   }
 
   /// A newly connected voice session drains completions that finished while no
-  /// session was live (their checkpoint was deliberately left unadvanced).
+  /// session was live (their checkpoint was deliberately left unadvanced). Inert
+  /// until `start()` so the realtime hub's `hubDidConnect` hook never drives the
+  /// unstarted shared instance into the agent runtime during tests.
   func voiceSessionDidConnect() {
+    guard hasStarted else { return }
     scheduleDelivery()
   }
 

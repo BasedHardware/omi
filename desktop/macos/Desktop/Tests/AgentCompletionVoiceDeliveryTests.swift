@@ -14,11 +14,16 @@ final class AgentCompletionVoiceDeliveryTests: XCTestCase {
     var delta: AgentCompletionVoiceDelivery.Delta? = AgentCompletionVoiceDelivery.Delta(
       ids: ["run-1"], prompt: "agent finished", completedAtHighWaterMs: 42)
     var injectResult = true
+    let hasStarted: Bool
 
     private(set) var peekCount = 0
     private(set) var injectedPrompts: [String] = []
     private(set) var acknowledged: [[String]] = []
     private(set) var scheduled: [@MainActor () async -> Void] = []
+
+    init(hasStarted: Bool = true) {
+      self.hasStarted = hasStarted
+    }
 
     lazy var sut = AgentCompletionVoiceDelivery(
       isVoiceSessionLive: { [unowned self] in self.voiceLive },
@@ -35,7 +40,8 @@ final class AgentCompletionVoiceDeliveryTests: XCTestCase {
       },
       scheduleWork: { [unowned self] work in
         self.scheduled.append(work)
-      }
+      },
+      hasStarted: hasStarted
     )
 
     /// Runs every scheduled delivery, including trailing re-runs queued while
@@ -156,6 +162,21 @@ final class AgentCompletionVoiceDeliveryTests: XCTestCase {
 
     XCTAssertEqual(harness.peekCount, 1)
     XCTAssertEqual(harness.acknowledged, [["run-1"]])
+  }
+
+  func testVoiceSessionConnectIsInertBeforeStart() async {
+    // The realtime hub calls voiceSessionDidConnect() from hubDidConnect, which
+    // RealtimeHub unit tests exercise. Before start() (the app-launch-only wiring)
+    // it must not schedule work or reach any seam — otherwise the shared instance
+    // would drive the live agent runtime during those tests.
+    let harness = Harness(hasStarted: false)
+
+    harness.sut.voiceSessionDidConnect()
+    await harness.drainScheduledWork()
+
+    XCTAssertEqual(harness.peekCount, 0)
+    XCTAssertTrue(harness.scheduled.isEmpty)
+    XCTAssertTrue(harness.acknowledged.isEmpty)
   }
 
   func testTransitionsWhileDeliveryInFlightCoalesceIntoOneTrailingRun() async {
