@@ -5,13 +5,17 @@ import XCTest
 final class OnboardingOpenerComposerTests: XCTestCase {
   private var utcCalendar: Calendar {
     var cal = Calendar(identifier: .gregorian)
-    cal.timeZone = TimeZone(identifier: "UTC")!
+    cal.timeZone = .gmt
     return cal
   }
 
   private func date(hour: Int) -> Date {
     // 2026-01-15 at the given UTC hour.
-    utcCalendar.date(from: DateComponents(year: 2026, month: 1, day: 15, hour: hour))!
+    let components = DateComponents(year: 2026, month: 1, day: 15, hour: hour)
+    guard let date = utcCalendar.date(from: components) else {
+      fatalError("Failed to build fixed test date for hour \(hour)")
+    }
+    return date
   }
 
   private func meeting(_ title: String, _ time: String) -> OnboardingMeetingBrief {

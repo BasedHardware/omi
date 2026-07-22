@@ -261,7 +261,7 @@ final class SBOnboardingModel: ObservableObject {
   /// Record the acquisition source (analytics + backend, like the legacy step),
   /// then move on.
   func pickHowHeard(_ source: String) {
-    UserDefaults.standard.set(source, forKey: "onboardingHowDidYouHearSource")
+    UserDefaults.standard.set(source, forKey: DefaultsKey.onboardingHowDidYouHearSource)
     AnalyticsManager.shared.onboardingHowDidYouHear(source: source)
     Task { try? await APIClient.shared.updateOnboardingAcquisitionSource(source) }
     advance(userAnswer: source, to: .language)
@@ -297,7 +297,7 @@ final class SBOnboardingModel: ObservableObject {
 
   func pickRole(_ r: String) {
     role = r
-    UserDefaults.standard.set(r, forKey: "onboardingRole")
+    UserDefaults.standard.set(r, forKey: DefaultsKey.onboardingRole)
     advance(userAnswer: r, to: .mic)
   }
 
@@ -326,7 +326,7 @@ final class SBOnboardingModel: ObservableObject {
     teardownAll()
     AnalyticsManager.shared.onboardingCompleted()
     chatProvider.stopAgent(owner: .mainChat)
-    UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
+    UserDefaults.standard.set(true, forKey: DefaultsKey.onboardingJustCompleted)
     UserDefaults.standard.removeObject(forKey: Self.resumeStepKey)
     chatProvider.isOnboarding = false
     // Greet the user in the Home chat with the personalized opener + starters.
@@ -351,10 +351,10 @@ final class SBOnboardingModel: ObservableObject {
     teardownAll()
     AnalyticsManager.shared.onboardingCompleted()
     chatProvider.stopAgent(owner: .mainChat)
-    UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
+    UserDefaults.standard.set(true, forKey: DefaultsKey.onboardingJustCompleted)
     UserDefaults.standard.removeObject(forKey: Self.resumeStepKey)
     if !AppBuild.usesLazyDevPermissions {
-      UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
+      UserDefaults.standard.set(true, forKey: DefaultsKey.hasCompletedFileIndexing)
     }
     chatProvider.isOnboarding = false
     // Greet the user in the Home chat with the personalized opener + starters.
