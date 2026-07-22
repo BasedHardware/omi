@@ -194,6 +194,15 @@ def perform_merge_async(
             _handle_merge_failure(uid, conversation_ids)
             return
 
+        # A source can be soft-deleted between admission (validate_merge_compatibility
+        # at the endpoint) and this background re-fetch — the delete-vs-merge race. Re-check
+        # here, before reading any content: merging a tombstone would resurrect its deleted
+        # transcript/photos/audio into a new visible conversation. Abort rather than merge.
+        if any(conv.get('deleted') for conv in conversations):
+            logger.error(f"Merge aborted: a source was deleted after admission uid={uid}")
+            _handle_merge_failure(uid, conversation_ids)
+            return
+
         # Normalise timestamp fields once so the sort key, max() reducer,
         # .isoformat() metadata, and _merge_transcript_segments arithmetic
         # below can all assume tz-aware datetimes regardless of how each
