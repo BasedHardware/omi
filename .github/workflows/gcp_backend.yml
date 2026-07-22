@@ -31,6 +31,11 @@ on:
         options:
           - all
           - cloud-run-only
+      deploy_gateway:
+        description: 'Development only: deploy the LLM gateway binary with the backend stack (requires deploy_targets=all)'
+        required: true
+        default: false
+        type: boolean
       # Break-glass: the eligibility proof requires a *successful* Release
       # Eligibility push-run on this exact SHA. A flaky or red check therefore
       # poisons that SHA permanently -- rerunning does not retroactively make
@@ -89,6 +94,14 @@ jobs:
           fi
           if [[ "$DEPLOY_ENVIRONMENT" == "prod" && "$DEPLOY_TARGETS" == "all" ]]; then
             echo "environment=prod, deploy_targets=all is unsupported; use cloud-run-only." >&2
+            exit 1
+          fi
+          if [[ "${{ github.event.inputs.deploy_gateway }}" == "true" && "$DEPLOY_ENVIRONMENT" == "prod" ]]; then
+            echo "environment=prod, deploy_gateway=true is unsupported; use the standalone manual LLM gateway workflow." >&2
+            exit 1
+          fi
+          if [[ "${{ github.event.inputs.deploy_gateway }}" == "true" && "$DEPLOY_TARGETS" != "all" ]]; then
+            echo "deploy_gateway=true requires deploy_targets=all." >&2
             exit 1
           fi
 
@@ -337,6 +350,14 @@ jobs:
             echo "Invalid deploy_targets: ${{ github.event.inputs.deploy_targets }}. Must be 'all' or 'cloud-run-only'."
             exit 1
           fi
+          if [[ "${{ github.event.inputs.deploy_gateway }}" == "true" && "${{ github.event.inputs.environment }}" == "prod" ]]; then
+            echo "environment=prod, deploy_gateway=true is unsupported; use the standalone manual LLM gateway workflow." >&2
+            exit 1
+          fi
+          if [[ "${{ github.event.inputs.deploy_gateway }}" == "true" && "${{ github.event.inputs.deploy_targets }}" != "all" ]]; then
+            echo "deploy_gateway=true requires deploy_targets=all." >&2
+            exit 1
+          fi
 
       # To workaround "no space left on device" issue of GitHub-hosted runner
       - name: Delete huge unnecessary tools folder
@@ -448,7 +469,6 @@ jobs:
 
       - name: Determine whether this deploy requests gateway-first serving
         id: gateway-intent
-        if: ${{ github.event.inputs.deploy_targets == 'all' }}
         run: |
           python3 "$DEPLOY_CONTROL_SCRIPTS/verify-llm-gateway-serving.py" \
             --environment="${{ vars.ENV }}" \
@@ -458,7 +478,7 @@ jobs:
             --intent-only >> "$GITHUB_OUTPUT"
 
       - name: Get GKE credentials for gateway serving gate
-        if: ${{ github.event.inputs.deploy_targets == 'all' && steps.gateway-intent.outputs.enabled == 'true' }}
+        if: ${{ github.event.inputs.deploy_targets == 'all' || steps.gateway-intent.outputs.enabled == 'true' }}
         uses: google-github-actions/get-gke-credentials@v3
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
@@ -467,7 +487,7 @@ jobs:
 
       - name: Verify LLM gateway control plane before promotion
         id: gateway-serving
-        if: ${{ github.event.inputs.deploy_targets == 'all' && steps.gateway-intent.outputs.enabled == 'true' }}
+        if: ${{ github.event.inputs.deploy_gateway != 'true' && steps.gateway-intent.outputs.enabled == 'true' }}
         run: |
           python3 "$DEPLOY_CONTROL_SCRIPTS/verify-llm-gateway-serving.py" \
             --environment="${{ vars.ENV }}" \
@@ -518,19 +538,74 @@ jobs:
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
 
+      # Development can compose the gateway binary with a full backend deploy.
+      # Production remains Cloud Run-only; use gcp_llm_gateway.yml for its
+      # separate manual gateway deployment. This helm release changes no caller
+      # traffic flags, and the source-controlled caller mode still has to pass
+      # the serving and VPC gates below before a Cloud Run revision is created.
+      - name: Install Helm for combined LLM Gateway deployment
+        if: ${{ github.event.inputs.deploy_gateway == 'true' }}
+        uses: azure/setup-helm@v5
+
+      - name: Build, smoke, and push combined LLM Gateway image
+        if: ${{ github.event.inputs.deploy_gateway == 'true' }}
+        run: |
+          gateway_image="gcr.io/${{ vars.GCP_PROJECT_ID }}/llm-gateway:${{ steps.image-tag.outputs.short_sha }}"
+          docker build -t "$gateway_image" -f backend/Dockerfile .
+          python3 "$DEPLOY_CONTROL_SCRIPTS/runtime_image_contracts.py" smoke \
+            --dockerfile backend/Dockerfile \
+            --image "$gateway_image"
+          docker push "$gateway_image"
+
+      - name: Deploy LLM Gateway with backend stack
+        if: ${{ github.event.inputs.deploy_gateway == 'true' }}
+        env:
+          LLM_GATEWAY_GSA: ${{ vars.LLM_GATEWAY_GSA }}
+          ENVIRONMENT: ${{ vars.ENV }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+          REGION: ${{ env.REGION }}
+        run: |
+          test -n "$LLM_GATEWAY_GSA"
+          python3 "$DEPLOY_CONTROL_SCRIPTS/validate-llm-gateway-env.py" \
+            backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+            backend/charts/llm-gateway/${{ vars.ENV }}_omi_llm_gateway_values.yaml
+          IMAGE_TAG="${{ steps.image-tag.outputs.short_sha }}" "$DEPLOY_CONTROL_SCRIPTS/deploy-llm-gateway.sh"
+
+      - name: Verify combined LLM gateway serving data plane
+        id: combined-gateway-serving
+        if: ${{ github.event.inputs.deploy_gateway == 'true' && steps.gateway-intent.outputs.enabled == 'true' }}
+        run: |
+          python3 "$DEPLOY_CONTROL_SCRIPTS/verify-llm-gateway-serving.py" \
+            --environment="${{ vars.ENV }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --github-output "$GITHUB_OUTPUT"
+
       - name: Probe LLM gateway from the Cloud Run VPC before promotion
-        if: ${{ github.event.inputs.deploy_targets == 'all' && steps.gateway-intent.outputs.enabled == 'true' }}
+        if: ${{ steps.gateway-intent.outputs.enabled == 'true' }}
         run: |
           bash "$DEPLOY_CONTROL_SCRIPTS/probe-llm-gateway-from-cloud-run.sh" \
             --project "${{ vars.GCP_PROJECT_ID }}" \
             --region "${{ env.REGION }}" \
             --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
-            --gateway-url "${{ steps.gateway-serving.outputs.gateway_url }}" \
+            --gateway-url "${{ steps.combined-gateway-serving.outputs.gateway_url || steps.gateway-serving.outputs.gateway_url }}" \
             --network "${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
             --subnet "${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
             --vpc-egress private-ranges-only \
             --lane omi:auto:public-shared-conversation-chat \
             --name-suffix "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+      - name: Reject an inert gateway endpoint when source-controlled gateway mode is requested
+        if: ${{ steps.gateway-intent.outputs.enabled == 'true' }}
+        env:
+          GATEWAY_URL: ${{ steps.combined-gateway-serving.outputs.gateway_url || steps.gateway-serving.outputs.gateway_url }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$GATEWAY_URL" || "$GATEWAY_URL" == "http://127.0.0.1:9" ]]; then
+            echo "Gateway mode requires a verified non-sentinel endpoint." >&2
+            exit 1
+          fi
 
       # The endpoint is rendered only after the deployment gate derived it
       # from the provisioned ingress address. Direct mode gets the inert
@@ -547,7 +622,7 @@ jobs:
           MCP_OAUTH_CLAUDE_CLIENT_ID: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_ID }}
           MCP_OAUTH_CLAUDE_CLIENT_NAME: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_NAME }}
           MCP_OAUTH_CLAUDE_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CLAUDE_REDIRECT_URIS }}
-          OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url || 'http://127.0.0.1:9' }}
+          OMI_LLM_GATEWAY_URL: ${{ steps.combined-gateway-serving.outputs.gateway_url || steps.gateway-serving.outputs.gateway_url || 'http://127.0.0.1:9' }}
           PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE }}
           PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA }}
           SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
@@ -764,14 +839,6 @@ jobs:
             --region=${{ env.REGION }} \
             --remove-tags="$TRANSCRIPTION_CANDIDATE_TAG" \
             --quiet
-
-      - name: Get GKE credentials
-        if: ${{ github.event.inputs.deploy_targets == 'all' }}
-        uses: google-github-actions/get-gke-credentials@v3
-        with:
-          cluster_name: ${{ vars.GKE_CLUSTER }}
-          location: ${{ env.REGION }}
-          project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Install Helm
         if: ${{ github.event.inputs.deploy_targets == 'all' }}

@@ -41,6 +41,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Bind gateway image identity to the triggering main SHA
+        id: image-tag
+        run: |
+          CHECKED_OUT_SHA="$(git rev-parse HEAD)"
+          if [[ "$CHECKED_OUT_SHA" != "${GITHUB_SHA}" ]]; then
+            echo "Checked-out gateway source must equal the triggering main SHA." >&2
+            exit 1
+          fi
+          echo "short_sha=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")" >> "$GITHUB_OUTPUT"
+
       - name: Google Auth
         id: auth
         uses: 'google-github-actions/auth@v3'
@@ -72,11 +82,11 @@ jobs:
 
       - name: Build and Push Docker image
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/Dockerfile .
+          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }} -f backend/Dockerfile .
           python3 backend/scripts/runtime_image_contracts.py smoke \
             --dockerfile backend/Dockerfile \
-            --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
+            --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v3
@@ -93,7 +103,7 @@ jobs:
           GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
           REGION: ${{ env.REGION }}
         run: |
-          IMAGE_TAG="${GITHUB_SHA::7}" backend/scripts/deploy-llm-gateway.sh
+          IMAGE_TAG="${{ steps.image-tag.outputs.short_sha }}" backend/scripts/deploy-llm-gateway.sh
 
       - name: Verify LLM Gateway serving data plane
         id: gateway-serving
@@ -109,7 +119,7 @@ jobs:
           bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
             --project "${{ vars.GCP_PROJECT_ID }}" \
             --region "${{ env.REGION }}" \
-            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}" \
+            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
             --gateway-url "${{ steps.gateway-serving.outputs.gateway_url }}" \
             --network "${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
             --subnet "${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
@@ -123,7 +133,7 @@ jobs:
           METRICS_TOKEN="$(kubectl -n "$NAMESPACE" get secret ${{ vars.ENV }}-omi-backend-secrets -o jsonpath='{.data.METRICS_SECRET}' | base64 -d)"
           kubectl -n "$NAMESPACE" run "llm-gateway-smoke-${GITHUB_RUN_ID}" \
             --rm -i --restart=Never \
-            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}" \
+            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
             --env "SMOKE_URL=http://${{ vars.ENV }}-omi-llm-gateway.${{ vars.ENV }}-omi-backend.svc.cluster.local:8080" \
             --env "SMOKE_TOKEN=$TOKEN" \
             --env "METRICS_SECRET=$METRICS_TOKEN" \
