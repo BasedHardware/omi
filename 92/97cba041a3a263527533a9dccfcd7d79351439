@@ -1,0 +1,19 @@
+desktop/macos/changelog/unreleased/20260722-onboarding-reset-preserves-chat-history.json
+  s_d1c8f9524de8ea::t_78749a37ee1f0b 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "9297cba041a3a263527533a9dccfcd7d79351439",
+  "prompts": {},
+  "sessions": {
+    "s_d1c8f9524de8ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3de85890-77ef-4a30-be1e-c38b001d53f9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
