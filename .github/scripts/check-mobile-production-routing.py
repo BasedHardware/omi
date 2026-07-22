@@ -42,6 +42,13 @@ REQUIRED_PRODUCTION_FRAGMENTS = {
     ),
 }
 CANONICAL_MACOS_PRODUCTION_BUNDLE_IDENTIFIER = "com.omi.computer-macos"
+# INV-BETA-1: the side-by-side Omi Beta app is the single sanctioned second
+# production identity (founder decision, 2026-07-22). Any other divergent
+# identity remains rejected.
+SANCTIONED_MACOS_PRODUCTION_BUNDLE_IDENTIFIERS = {
+    CANONICAL_MACOS_PRODUCTION_BUNDLE_IDENTIFIER,
+    "com.omi.computer-macos.beta",
+}
 MACOS_PRODUCTION_BUNDLE_IDENTIFIER_PATTERN = re.compile(r'"(com\.omi\.computer-macos(?:\.[^"]+)?)"')
 
 
@@ -102,7 +109,7 @@ def validate(root: Path) -> list[str]:
                 errors.append(f"{relative_path} must retain protected production identity fragment {fragment!r}")
         if relative_path == "desktop/macos/Desktop/Sources/AppBuild.swift":
             for bundle_identifier in MACOS_PRODUCTION_BUNDLE_IDENTIFIER_PATTERN.findall(source):
-                if bundle_identifier != CANONICAL_MACOS_PRODUCTION_BUNDLE_IDENTIFIER:
+                if bundle_identifier not in SANCTIONED_MACOS_PRODUCTION_BUNDLE_IDENTIFIERS:
                     errors.append(
                         f"{relative_path} must not define divergent production-family bundle identity "
                         f"{bundle_identifier!r}"
