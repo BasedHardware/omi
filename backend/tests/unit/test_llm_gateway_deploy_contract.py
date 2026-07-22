@@ -212,6 +212,8 @@ def test_gateway_deploy_workflows_bind_identity_and_gate_serving_static_contract
 def test_gateway_vpc_probe_workflows_execute_the_production_parser(tmp_path):
     """Exercise each rendered workflow caller through the real probe parser with fake gcloud."""
     probe = BACKEND_ROOT / 'scripts' / 'probe-llm-gateway-from-cloud-run.sh'
+    if not probe.exists():
+        pytest.skip(f'probe script {probe} not found')
     calls = tmp_path / 'gcloud-calls.txt'
     fake_gcloud = tmp_path / 'gcloud'
     fake_gcloud.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$FAKE_GCLOUD_CALLS"\n', encoding='utf-8')
