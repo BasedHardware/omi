@@ -1,0 +1,25 @@
+desktop/macos/changelog/unreleased/20260721-sb-tasks-notion-board.json
+  s_77f2b8dfbc2e90::t_5c7a273aee989b 1-3
+desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
+  s_77f2b8dfbc2e90::t_b475e2848e2080 2891
+  s_77f2b8dfbc2e90::t_487f9db480e31d 2915-2999
+  s_77f2b8dfbc2e90::t_cd259b6386b587 4015-4115
+  s_77f2b8dfbc2e90::t_5ac22ab8e8eb57 2747-2749
+  s_77f2b8dfbc2e90::t_2b31c849807435 2496-2498
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "691ef5f98fe67a80f2cff759d3a155a473ff34a7",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
