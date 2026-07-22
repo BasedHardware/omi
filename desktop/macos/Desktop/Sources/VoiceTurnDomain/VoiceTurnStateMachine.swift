@@ -2154,7 +2154,9 @@ struct VoiceTurnReducer {
     in model: inout VoiceTurnModel,
     effects: inout [VoiceTurnEffect]
   ) {
-    guard let turnID = model.turn?.id else { return }
+    guard let turn = model.turn else { return }
+    let turnID = turn.id
+    let wasRecording = turn.phase.isRecording
     cancel(.bargeInReplacement, in: &model, effects: &effects)
     cancel(.providerResponse, in: &model, effects: &effects)
     cancel(.deferredCommit, in: &model, effects: &effects)
@@ -2162,13 +2164,17 @@ struct VoiceTurnReducer {
     model.turn?.sessionID = nil
     model.turn?.providerEffectIdentity = nil
     model.turn?.responseID = nil
-    model.turn?.phase = .finalizing
+    if !wasRecording {
+      model.turn?.phase = .finalizing
+    }
     model.turn?.hubCommitPending = false
     model.turn?.projection.isResponseWaiting = false
-    model.turn?.projection.isThinking = true
+    model.turn?.projection.isThinking = !wasRecording
     model.turn?.route = .deepgramBatch
     effects.append(.fallbackToTranscription(turnID: turnID, reason: reason))
-    schedule(.transcription, after: deadlines.transcription, in: &model, effects: &effects)
+    if model.turn?.phase == .finalizing {
+      schedule(.transcription, after: deadlines.transcription, in: &model, effects: &effects)
+    }
   }
 
   private func terminate(

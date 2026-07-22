@@ -632,6 +632,50 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(lateFailure.model.staleEventCount, lateReady.model.staleEventCount + 1)
   }
 
+  func testProviderReplacementFailureWhileHoldingPreservesCaptureUntilRelease() {
+    let turnID = VoiceTurnID()
+    let captureID = VoiceCaptureID(7)
+    let replacementResponseID = VoiceResponseID("replacement-response")
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hub(sessionID: VoiceSessionID()))).model
+    model = reduce(model, .captureStarted(turnID: turnID, captureID: captureID)).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    model =
+      reduce(
+        reservation.model,
+        .providerReplacementStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousResponseID: nil,
+          nextResponseID: replacementResponseID)
+      ).model
+
+    let failed = reduce(
+      model,
+      .providerReplacementFailed(
+        turnID: turnID,
+        identity: reservation.identity,
+        message: "1007 provider transient"))
+
+    XCTAssertEqual(failed.model.turn?.phase, .recording)
+    XCTAssertEqual(failed.model.turn?.route, .deepgramBatch)
+    XCTAssertTrue(failed.model.turn?.projection.isListening == true)
+    XCTAssertFalse(failed.model.turn?.projection.isThinking == true)
+    XCTAssertFalse(failed.model.turn?.deadlines.contains(.transcription) == true)
+    XCTAssertFalse(failed.effects.contains(.stopCapture(turnID: turnID, captureID: captureID)))
+    XCTAssertFalse(failed.effects.contains(.finalizeCapturedInput(turnID: turnID)))
+    XCTAssertTrue(
+      failed.effects.contains(
+        .fallbackToTranscription(turnID: turnID, reason: .providerFailed)))
+
+    let released = reduce(failed.model, .finalize(turnID: turnID))
+    XCTAssertEqual(released.model.turn?.phase, .finalizing)
+    XCTAssertTrue(
+      released.effects.contains(
+        .stopCapture(turnID: turnID, captureID: captureID)))
+    XCTAssertTrue(released.effects.contains(.finalizeCapturedInput(turnID: turnID)))
+  }
+
   func testStaleBargeInReplacementDeadlineCannotTerminalizeAdvancedTurn() {
     let turnID = VoiceTurnID()
     var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
