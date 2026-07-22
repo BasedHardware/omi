@@ -4,6 +4,7 @@
 # omi-test-quality: source-inspection -- static contract: GitHub workflow authority is YAML-only.
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
@@ -43,6 +44,31 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertIn("workflow_call:", beta)
         self.assertNotIn("workflow_dispatch:", beta)
         self.assertEqual(beta.count("/v2/desktop/beta/promote-qualified"), 1)
+
+    def test_beta_qualification_workflow_uses_supported_exact_cli(self) -> None:
+        qualification = workflow("desktop_qualify_beta.yml")
+        qualification_script = (ROOT / "desktop/macos/scripts/qualify-desktop-beta.sh").read_text(
+            encoding="utf-8"
+        )
+        qualify_step_name = "      - name: Qualify exact candidate on hermetic stack"
+        qualify_step = qualification.split(qualify_step_name, 1)[1]
+        qualify_step = qualify_step.split("\n      - name:", 1)[0]
+        invoked_options = tuple(
+            re.findall(r"^\s+(--[a-z0-9-]+)(?:\s+[^\\]+)? \\$", qualify_step, re.MULTILINE)
+        )
+        supported_options = set(re.findall(r"^    (--[a-z0-9-]+)\)$", qualification_script, re.MULTILINE))
+
+        self.assertEqual(
+            invoked_options,
+            (
+                "--automatic",
+                "--github-actions-artifact",
+                "--signed-smoke-result",
+                "--candidate-gate-result",
+            ),
+        )
+        self.assertTrue(set(invoked_options).issubset(supported_options))
+        self.assertNotIn("--no-promote", qualify_step)
 
     def test_stable_is_manual_and_uses_one_explicit_confirmation(self) -> None:
         stable = workflow("desktop_promote_prod.yml")
