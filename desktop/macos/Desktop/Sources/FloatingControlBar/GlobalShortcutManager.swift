@@ -149,11 +149,12 @@ class GlobalShortcutManager: @unchecked Sendable {
     registerSummonHotkey()
   }
 
-  /// Registers ⌥O as a dedicated global Carbon hotkey that summons Omi (fronts the
+  /// Registers ⌃⌘O as a dedicated global Carbon hotkey that summons Omi (fronts the
   /// app + opens chat), independent of the user-configurable Ask-Omi shortcut. A
-  /// Carbon hotkey fires system-wide without any extra permission. ⌥O (not the bare
-  /// ⌘O) is deliberate: ⌘O is File ▸ Open in every app, so the frontmost app's menu
-  /// swallows it before a global hotkey can fire; ⌥O has no such collision.
+  /// Carbon hotkey fires system-wide without any extra permission. ⌃⌘O is chosen to
+  /// dodge two collisions: bare ⌘O is File ▸ Open in every app (the frontmost app's
+  /// menu swallows it), and any Option-based combo clashes with push-to-talk (Option
+  /// held = talk). ⌃⌘O uses neither, so it fires cleanly.
   private func registerSummonHotkey() {
     if let ref = hotKeyRefs.removeValue(forKey: .summonOmi) {
       _ = unregisterHotKey(ref)
@@ -161,14 +162,14 @@ class GlobalShortcutManager: @unchecked Sendable {
     var hotKeyRef: EventHotKeyRef?
     let hotKeyID = EventHotKeyID(signature: FourCharCode(0x4F4D_4921), id: HotKeyID.summonOmi.rawValue)  // "OMI!"
     let status = RegisterEventHotKey(
-      UInt32(kVK_ANSI_O), UInt32(optionKey), hotKeyID,
+      UInt32(kVK_ANSI_O), UInt32(controlKey | cmdKey), hotKeyID,
       GetApplicationEventTarget(), 0, &hotKeyRef
     )
     if status == noErr, let hotKeyRef {
       hotKeyRefs[.summonOmi] = .carbon(hotKeyRef)
-      logger("GlobalShortcutManager: Registered ⌥O Omi summon hotkey")
+      logger("GlobalShortcutManager: Registered ⌃⌘O Omi summon hotkey")
     } else {
-      logger("GlobalShortcutManager: Failed to register ⌥O hotkey, error: \(status)")
+      logger("GlobalShortcutManager: Failed to register ⌃⌘O hotkey, error: \(status)")
     }
   }
 
