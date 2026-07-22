@@ -184,6 +184,32 @@ if [[ ! -f "$PACKAGE_SWIFT" || -L "$PACKAGE_SWIFT" \
   exit 1
 fi
 
+if ! swift package dump-package --package-path "$PACKAGE_DIR" >/dev/null 2>&1; then
+  echo "qualification Swift cache: Package.swift failed swift package dump-package: $PACKAGE_SWIFT" >&2
+  exit 1
+fi
+
+if ! python3 - "$PACKAGE_RESOLVED" <<'PY'
+import json
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as package_resolved:
+        data = json.load(package_resolved)
+except (OSError, TypeError, ValueError):
+    raise SystemExit(1)
+
+if not isinstance(data, dict) or data.get("version") != 3:
+    raise SystemExit(1)
+pins = data.get("pins")
+if not isinstance(pins, list) or not pins:
+    raise SystemExit(1)
+PY
+then
+  echo "qualification Swift cache: Package.resolved must be valid JSON version 3 with non-empty pins: $PACKAGE_RESOLVED" >&2
+  exit 1
+fi
+
 EXPECTED_MANIFEST="$(python3 - "$SOURCE_SHA" "$PACKAGE_SWIFT" "$PACKAGE_RESOLVED" "$XCODE" "$SWIFT" "$MACOS" "$ARCH" <<'PY'
 import hashlib
 import json
