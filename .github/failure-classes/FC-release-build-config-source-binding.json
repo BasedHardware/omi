@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-release-build-config-source-binding",
+  "violated_contract": "An immutable desktop release tag must contain the artifact-producing build configuration and release-control revision that selected it, and the exact tagged source must have the checks required by the release gate.",
+  "canonical_prevention": "Treat build configuration and release-control files as desktop candidate inputs, keep the planner and exact-SHA CI producer path sets aligned, and enforce that alignment with contract tests.",
+  "evidence_prs": [10356],
+  "scope_hints": [
+    "codemagic.yaml",
+    ".github/scripts/plan-desktop-release.py",
+    ".github/workflows/desktop_auto_release.yml",
+    ".github/workflows/desktop-swift-ci.yml"
+  ],
+  "status": "open"
+}
