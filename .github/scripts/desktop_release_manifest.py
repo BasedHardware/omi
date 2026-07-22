@@ -38,11 +38,6 @@ TOP_LEVEL_FIELDS = frozenset(
         "dmg_url",
         "dmg_sha256",
         "ed_signature",
-        "beta_zip_url",
-        "beta_zip_sha256",
-        "beta_dmg_url",
-        "beta_dmg_sha256",
-        "beta_ed_signature",
         "qualification_evidence_asset",
         "qualification_evidence_sha256",
         "qualification_tier",
@@ -240,11 +235,6 @@ def validate_manifest(value: object) -> dict[str, Any]:
     _require_release_asset_url(manifest, "dmg_url", release_id=release_id, asset_name="omi.dmg")
     _require_sha256(manifest, "dmg_sha256")
     _require_string(manifest, "ed_signature")
-    _require_release_asset_url(manifest, "beta_zip_url", release_id=release_id, asset_name="Omi.Beta.zip")
-    _require_sha256(manifest, "beta_zip_sha256")
-    _require_release_asset_url(manifest, "beta_dmg_url", release_id=release_id, asset_name="omi-beta.dmg")
-    _require_sha256(manifest, "beta_dmg_sha256")
-    _require_string(manifest, "beta_ed_signature")
 
     evidence_asset = _require_string(manifest, "qualification_evidence_asset")
     if not EVIDENCE_ASSET_RE.fullmatch(evidence_asset) and evidence_asset != "desktop-smoke-result.json":
