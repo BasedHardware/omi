@@ -915,7 +915,7 @@ async def test_pusher_dead_letters_a_job_that_exhausted_its_attempt_budget(monke
         lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 4, 'attempt_count': 5},
     )
     monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
-    monkeypatch.setattr(jobs_db, 'mark_finalization_dead_letter', dead_letter)
+    monkeypatch.setattr(pusher_router, 'final_attempt_failed', dead_letter)
     monkeypatch.setattr(pusher_router, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
     monkeypatch.setattr(
         pusher_router,
@@ -927,7 +927,7 @@ async def test_pusher_dead_letters_a_job_that_exhausted_its_attempt_budget(monke
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
-    dead_letter.assert_called_once_with('job-1', 3, 4, 5, firestore_client=None)
+    dead_letter.assert_called_once_with('job-1', 3, 4, 5)
     retryable.assert_not_called()
     assert json.loads(websocket.sent[0][4:]) == {
         'conversation_id': 'conversation-1',
