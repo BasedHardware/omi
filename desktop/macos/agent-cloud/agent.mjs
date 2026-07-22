@@ -696,11 +696,21 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
 
 // --- Persistent Session (streaming input mode) ---
 
-function startPersistentSession(send, log) {
+function startPersistentSession(initialSink, log) {
   if (!isDatabaseReady()) {
     log("Cannot start persistent session: database not ready");
     return null;
   }
+
+  // The session outlives any single WebSocket connection (single-user VM):
+  // the client sink is swappable so a reconnect reattaches to the live
+  // session and its context instead of starting from amnesia. Events emitted
+  // while detached are dropped; the turn keeps running and its full text
+  // still arrives in the result after reattach.
+  let currentSink = initialSink;
+  const send = (msg) => {
+    if (currentSink) currentSink(msg);
+  };
 
   const sessionAbort = new AbortController();
 
@@ -891,6 +901,10 @@ function startPersistentSession(send, log) {
     setTurnActive: (v) => { turnActive = v; },
     startTurnTimer: () => { turnStartedAt = Date.now(); firstEventSent = false; },
     markInterrupted: () => { interruptRequested = true; },
+    setSink: (sink) => { currentSink = sink; },
+    // A stale socket's close event can fire after a newer socket attached —
+    // only clear the sink if it is still ours.
+    detachSink: (sink) => { if (currentSink === sink) currentSink = null; },
   };
 }
 
@@ -1348,15 +1362,26 @@ function startServer() {
     },
   });
 
+  // Single persistent session per VM (single user); survives WS reconnects.
+  let sharedSession = null;
+
   wss.on("connection", (ws) => {
     log("Client connected");
-    let session = null; // persistent session for this WS connection
 
     const send = (msg) => {
       if (ws.readyState === ws.OPEN) {
         ws.send(JSON.stringify(msg));
       }
     };
+
+    // Reattach to the shared sharedSession (single-user VM) so a reconnect keeps
+    // the conversation context instead of starting from amnesia.
+    if (sharedSession) {
+      sharedSession.setSink(send);
+      send({ type: "session_state", active: true, sessionId: sharedSession.getSessionId() ?? "" });
+    } else {
+      send({ type: "session_state", active: false });
+    }
 
     ws.on("message", async (data) => {
       let msg;
@@ -1369,20 +1394,20 @@ function startServer() {
 
       switch (msg.type) {
         case "prewarm": {
-          if (session) {
-            log("Prewarm: session already active");
+          if (sharedSession) {
+            log("Prewarm: sharedSession already active");
             send({ type: "prewarm_ack", success: true });
             break;
           }
-          log("Prewarm: starting persistent session...");
-          session = startPersistentSession(send, log);
-          if (!session) {
+          log("Prewarm: starting persistent sharedSession...");
+          sharedSession = startPersistentSession(send, log);
+          if (!sharedSession) {
             send({ type: "prewarm_ack", success: false });
             break;
           }
-          session.sessionIdReady.then(() => {
+          sharedSession.sessionIdReady.then(() => {
             send({ type: "prewarm_ack", success: true });
-            log("Prewarm: session ready");
+            log("Prewarm: sharedSession ready");
           }).catch(() => {
             send({ type: "prewarm_ack", success: false });
           });
@@ -1394,38 +1419,38 @@ function startServer() {
           const prompt = msg.prompt;
           log(`Query: ${prompt?.slice(0, 100)}`);
 
-          // Start session if not started yet
-          if (!session) {
-            log("No active session, starting on first query...");
-            session = startPersistentSession(send, log);
-            if (!session) {
+          // Start sharedSession if not started yet
+          if (!sharedSession) {
+            log("No active sharedSession, starting on first query...");
+            sharedSession = startPersistentSession(send, log);
+            if (!sharedSession) {
               send({ type: "error", message: "Database not available" });
               break;
             }
           }
 
           // Wait for session_id
-          await session.sessionIdReady;
-          const sid = session.getSessionId();
+          await sharedSession.sessionIdReady;
+          const sid = sharedSession.getSessionId();
           if (!sid) {
             send({ type: "error", message: "Session failed to initialize" });
-            session = null;
+            sharedSession = null;
             break;
           }
 
           // If a turn is still active, interrupt first
-          if (session.isTurnActive()) {
+          if (sharedSession.isTurnActive()) {
             log("Interrupting active turn for new query");
-            session.markInterrupted();
-            try { await session.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
+            sharedSession.markInterrupted();
+            try { await sharedSession.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
           }
 
-          session.setTurnActive(true);
-          session.startTurnTimer();
+          sharedSession.setTurnActive(true);
+          sharedSession.startTurnTimer();
           send({ type: "status", message: "Processing..." });
 
-          // Push user message into the persistent session via streamInput
-          session.messageQueue.push({
+          // Push user message into the persistent sharedSession via streamInput
+          sharedSession.messageQueue.push({
             type: "user",
             message: { role: "user", content: prompt },
             parent_tool_use_id: null,
@@ -1436,9 +1461,9 @@ function startServer() {
 
         case "stop": {
           log("Stop requested");
-          if (session?.isTurnActive()) {
-            session.markInterrupted();
-            try { await session.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
+          if (sharedSession?.isTurnActive()) {
+            sharedSession.markInterrupted();
+            try { await sharedSession.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
           }
           break;
         }
@@ -1450,12 +1475,9 @@ function startServer() {
 
     ws.on("close", () => {
       log("Client disconnected");
-      if (session) {
-        session.messageQueue.end();
-        session.query.close();
-        session.sessionAbort.abort();
-        session = null;
-      }
+      // Detach only — the session (and any in-flight turn) survives so a
+      // reconnect resumes with full context instead of amnesia.
+      sharedSession?.detachSink(send);
     });
 
     ws.on("error", (err) => {

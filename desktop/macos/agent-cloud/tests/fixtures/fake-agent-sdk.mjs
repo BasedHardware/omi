@@ -11,6 +11,7 @@ export { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 export function query({ prompt }) {
   let interruptResolve;
   const interruptRequested = new Promise((resolve) => { interruptResolve = resolve; });
+  let turnCount = 0; // survives across turns — a "COUNT" prompt reveals it, proving session continuity
 
   function streamText(text) {
     return { type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text } } };
@@ -23,6 +24,13 @@ export function query({ prompt }) {
     if (text === "ready") {
       // Prewarm turn — persistent sessions suppress its output.
       yield resultMsg("ok");
+      return;
+    }
+    turnCount += 1;
+    if (text.includes("COUNT")) {
+      yield { type: "stream_event", event: { type: "content_block_start", content_block: { type: "text" } } };
+      yield streamText(`turn:${turnCount}`);
+      yield resultMsg(`turn:${turnCount}`);
       return;
     }
     yield { type: "stream_event", event: { type: "content_block_start", content_block: { type: "text" } } };

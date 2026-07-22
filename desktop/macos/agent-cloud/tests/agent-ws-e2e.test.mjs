@@ -116,6 +116,39 @@ describe("agent-cloud WS contract (e2e)", () => {
     expect(JSON.stringify(messages)).not.toContain("SECRET-INTERNAL");
   }, 20000);
 
+  it("keeps the session (and its context) alive across reconnects", async () => {
+    // First connection: run one turn, then disconnect like a backgrounded app.
+    let ws = await connect();
+    let done = collectUntilResult(ws);
+    ws.send(JSON.stringify({ type: "query", prompt: "COUNT check one" }));
+    let messages = await done;
+    const firstTurn = Number(messages.at(-1).text.match(/^turn:(\d+)$/)[1]);
+    ws.close();
+    await new Promise((r) => setTimeout(r, 100)); // let the server observe the close
+
+    // Reconnect: the server must reattach the SAME session, not start fresh.
+    ws = await connect();
+    const hello = await new Promise((resolve) => {
+      const onMsg = (data) => {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === "session_state") {
+          ws.off("message", onMsg);
+          resolve(msg);
+        }
+      };
+      ws.on("message", onMsg);
+    });
+    expect(hello.active).toBe(true);
+
+    done = collectUntilResult(ws);
+    ws.send(JSON.stringify({ type: "query", prompt: "COUNT check two" }));
+    messages = await done;
+    ws.close();
+    // turn n+1 proves the same SDK session consumed both queries — a fresh
+    // session would restart its count (the reconnect-amnesia regression).
+    expect(messages.at(-1).text).toBe(`turn:${firstTurn + 1}`);
+  }, 20000);
+
   it("marks stopped turns as interrupted partial results", async () => {
     const ws = await connect();
     const done = collectUntilResult(ws);
