@@ -1,0 +1,19 @@
+docs/superpowers/specs/2026-07-22-desktop-chat-backend-authoritative-design.md
+  s_d1c8f9524de8ea::t_7b7edfc1c1f814 1-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "086912def756f4f373bdbc28dc6ef1b158cdd4cb",
+  "prompts": {},
+  "sessions": {
+    "s_d1c8f9524de8ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3de85890-77ef-4a30-be1e-c38b001d53f9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
