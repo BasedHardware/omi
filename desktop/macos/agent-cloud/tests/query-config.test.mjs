@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ALLOWED_TOOLS, RESEARCHER_TOOLS, buildAgentDefinitions } from "../query-config.mjs";
+import { ALLOWED_TOOLS, RESEARCHER_TOOLS, buildAgentDefinitions, normalizeIntegrationKey } from "../query-config.mjs";
 
 describe("query-config", () => {
   it("restricts the researcher to the omi-tools data tools", () => {
@@ -32,5 +32,29 @@ describe("query-config", () => {
 
   it("includes Task in the main allowed tools so subagents are invocable", () => {
     expect(ALLOWED_TOOLS).toContain("Task");
+  });
+
+  describe("normalizeIntegrationKey", () => {
+    // Gmail has no standalone backend provider — it rides on the google_calendar
+    // grant. If the connect-link tool forwarded "gmail" verbatim the backend 400s
+    // and the model hallucinates setup steps (the exact bug this fixes).
+    it("resolves gmail and its aliases to the google_calendar grant", () => {
+      for (const alias of ["gmail", "Gmail", " GMAIL ", "google_mail", "email", "contacts"]) {
+        expect(normalizeIntegrationKey(alias)).toBe("google_calendar");
+      }
+    });
+
+    it("passes through an already-canonical key unchanged", () => {
+      expect(normalizeIntegrationKey("google_calendar")).toBe("google_calendar");
+    });
+
+    it("leaves an unknown integration key alone (backend decides)", () => {
+      expect(normalizeIntegrationKey("todoist")).toBe("todoist");
+    });
+
+    it("is null-safe", () => {
+      expect(normalizeIntegrationKey(null)).toBe("");
+      expect(normalizeIntegrationKey(undefined)).toBe("");
+    });
   });
 });

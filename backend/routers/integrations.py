@@ -46,7 +46,13 @@ AUTH_PROVIDERS: Dict[str, Dict[str, Any]] = {
         'redirect_path': '/v2/integrations/google-calendar/callback',
         'query': {
             'response_type': 'code',
-            'scope': 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/contacts.other.readonly',
+            # gmail.readonly rides on this same Google grant: get_gmail_messages_tool
+            # reads the 'google_calendar' integration token (see gmail_tools.py),
+            # so the Gmail read scope must be requested here or every Gmail read 403s.
+            # NOTE: gmail.readonly is a Google *restricted* scope — the OAuth client
+            # needs Google's restricted-scope verification before this activates,
+            # and existing users must re-consent (prompt=consent already set below).
+            'scope': 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/contacts.other.readonly https://www.googleapis.com/auth/gmail.readonly',
             'access_type': 'offline',
             'prompt': 'consent',
         },
