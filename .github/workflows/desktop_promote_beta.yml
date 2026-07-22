@@ -1,6 +1,9 @@
 name: Promote Qualified Desktop Beta
 
 on:
+  workflow_run:
+    workflows: ["Qualify Desktop Beta Candidate"]
+    types: [completed]
   workflow_call:
     inputs:
       release_tag:
@@ -8,21 +11,60 @@ on:
         required: true
         type: string
 
-permissions: {}
+permissions:
+  contents: read
 
 concurrency:
   group: desktop-beta-promotion
   cancel-in-progress: false
 
 jobs:
+  resolve-candidate:
+    if: >-
+      github.event_name == 'workflow_call' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'workflow_dispatch' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.candidate.outputs.release_tag }}
+    steps:
+      - name: Checkout trusted promotion controls
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Derive and validate immutable candidate tag
+        id: candidate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || inputs.release_tag }}
+          QUALIFICATION_SHA: ${{ github.event.workflow_run.head_sha || '' }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s\n' "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+-macos$'; then
+            echo "Invalid immutable macOS release tag: $RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          git fetch --force origin "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          TAG_SHA=$(git rev-list -n1 "$RELEASE_TAG")
+          if [[ "$EVENT_NAME" == "workflow_run" && "$TAG_SHA" != "$QUALIFICATION_SHA" ]]; then
+            echo "Tag $RELEASE_TAG at $TAG_SHA does not match successful qualification SHA $QUALIFICATION_SHA." >&2
+            exit 1
+          fi
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
   promote:
+    needs: resolve-candidate
     environment: beta
     runs-on: ubuntu-latest
     steps:
       - name: Ask the backend to admit and promote the exact qualified candidate
         env:
           BETA_PROMOTION_TOKEN: ${{ secrets.BETA_PROMOTION_TOKEN }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ needs.resolve-candidate.outputs.release_tag }}
         run: |
           set -euo pipefail
           curl --fail-with-body --silent --show-error \

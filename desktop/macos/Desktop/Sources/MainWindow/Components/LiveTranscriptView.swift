@@ -105,6 +105,39 @@ struct RecordingBarTranscriptText: View {
   }
 }
 
+/// Live transcript card shown at the top of Conversations while recording —
+/// updates in real time as speech is transcribed. Observes the monitor directly
+/// so the surrounding page doesn't re-render on every segment.
+struct ConversationsLiveTranscript: View {
+  @ObservedObject private var monitor = LiveTranscriptMonitor.shared
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      HStack(spacing: OmiSpacing.xs) {
+        Circle().fill(Color.red).frame(width: 7, height: 7)
+        Text("Live").scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundColor(OmiColors.textSecondary)
+        Spacer()
+      }
+      if monitor.isEmpty {
+        Text("Listening…").scaledFont(size: OmiType.body).foregroundColor(OmiColors.textTertiary)
+          .padding(.vertical, OmiSpacing.sm)
+      } else {
+        LiveTranscriptView(segments: monitor.segments)
+          .frame(maxHeight: 220)
+      }
+    }
+    .padding(OmiSpacing.lg)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.cardRadius, style: .continuous)
+        .fill(OmiColors.backgroundSecondary)
+        .overlay(
+          RoundedRectangle(cornerRadius: OmiChrome.cardRadius, style: .continuous)
+            .stroke(OmiColors.border.opacity(0.3), lineWidth: 1))
+    )
+  }
+}
+
 /// Live transcript view showing speaker segments during recording
 struct LiveTranscriptView: View {
   let segments: [SpeakerSegment]

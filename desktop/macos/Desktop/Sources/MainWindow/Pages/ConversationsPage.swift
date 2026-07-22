@@ -36,6 +36,14 @@ struct ConversationsPage: View {
   // Compact view mode - persisted preference
   @AppStorage("conversationsCompactView") private var isCompactView = true
 
+  // Listening mode — used only to decide whether the manual "Start Recording"
+  // affordance is meaningful (see startRecordingButton gating).
+  @AppStorage("systemAudioCaptureMode") private var systemAudioCaptureModeRaw =
+    AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
+  private var listeningCaptureMode: AssistantSettings.SystemAudioCaptureMode {
+    CaptureListeningLogic.listeningCaptureMode(raw: systemAudioCaptureModeRaw)
+  }
+
   // Search state
   @State private var searchQuery: String = ""
   @State private var searchResults: [ServerConversation] = []
@@ -229,13 +237,25 @@ struct ConversationsPage: View {
 
         quickNoteButton
 
-        if !appState.isTranscribing {
+        // Only offer the manual "Start Recording" affordance when listening is
+        // set to Always. In Meetings-only (the default) or Off, showing it while
+        // nothing is transcribing misleads the user into thinking capture is
+        // active — during an actual meeting isTranscribing is already true and
+        // the live transcript replaces this button.
+        if !appState.isTranscribing && listeningCaptureMode == .always {
           startRecordingButton
         }
       }
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.top, OmiSpacing.lg)
       .padding(.bottom, OmiSpacing.md)
+
+      // Live transcript while recording — updates as it's spoken.
+      if appState.isTranscribing {
+        ConversationsLiveTranscript()
+          .padding(.horizontal, OmiSpacing.xxl)
+          .padding(.bottom, OmiSpacing.md)
+      }
 
       // Conversation list
       conversationListSection

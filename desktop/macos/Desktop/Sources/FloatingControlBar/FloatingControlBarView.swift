@@ -550,9 +550,78 @@ struct FloatingControlBarView: View {
   private func barNotification(_ notification: FloatingBarNotification) -> some View {
     if notification.assistantId == "reach_error" {
       reachErrorCard(notification)
+    } else if notification.assistantId == NotchMoment.receiptAssistantId {
+      notchReceiptCard(notification)
+    } else if notification.assistantId == NotchMoment.endAssistantId {
+      notchEndCard(notification)
     } else {
       notificationView(notification)
     }
+  }
+
+  /// Live receipt — "✓ Noted — <task>" with Undo, shown while listening as Omi
+  /// writes something down. Monochrome, on the pill's black glass. Auto-collapses.
+  private func notchReceiptCard(_ notification: FloatingBarNotification) -> some View {
+    HStack(spacing: 10) {
+      Text(notification.title)
+        .scaledFont(size: 12.5)
+        .foregroundColor(.white)
+        .lineLimit(1)
+      Spacer(minLength: 8)
+      Button {
+        NotchMomentsCoordinator.shared.undoLastReceipt()
+        FloatingControlBarManager.shared.dismissCurrentNotification()
+      } label: {
+        Text("Undo")
+          .scaledFont(size: 11.5)
+          .foregroundColor(.white.opacity(0.55))
+          .underline()
+      }
+      .buttonStyle(.plain)
+    }
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  /// Conversation ends — the USP moment. "N follow-ups ready" + Review / Later.
+  private func notchEndCard(_ notification: FloatingBarNotification) -> some View {
+    VStack(alignment: .leading, spacing: 2) {
+      if !notification.message.isEmpty {
+        Text(notification.message)
+          .scaledFont(size: 11)
+          .foregroundColor(.white.opacity(0.55))
+          .lineLimit(1)
+      }
+      Text(notification.title)
+        .scaledFont(size: 13, weight: .semibold)
+        .foregroundColor(.white)
+        .lineLimit(1)
+      HStack(spacing: 7) {
+        Button {
+          NotchMomentsCoordinator.shared.reviewFollowUps()
+          FloatingControlBarManager.shared.dismissCurrentNotification()
+        } label: {
+          Text("Review")
+            .scaledFont(size: 12, weight: .semibold)
+            .foregroundColor(.black)
+            .padding(.horizontal, 11).padding(.vertical, 4)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        Button {
+          FloatingControlBarManager.shared.dismissCurrentNotification()
+        } label: {
+          Text("Later").scaledFont(size: 12).foregroundColor(.white.opacity(0.5))
+        }
+        .buttonStyle(.plain)
+      }
+      .padding(.top, 4)
+    }
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   /// Hard reach failure (retries exhausted). Persists until the user picks
@@ -1433,7 +1502,7 @@ struct FloatingControlBarView: View {
       onEscape: onEscape,
       onOpenMainApp: {
         (window as? FloatingControlBarWindow)?.closeAIConversation()
-        (NSApp.delegate as? AppDelegate)?.openMainAppChat()
+        AppDelegate.summonWindowTarget()?.openMainAppChat()
       },
       onRate: onRate,
       onShareLink: onShareLink,
@@ -2037,7 +2106,7 @@ private struct AgentMainChatView: View {
     HStack(spacing: OmiSpacing.xs) {
       Button {
         onEscape()
-        (NSApp.delegate as? AppDelegate)?.openMainAppChat()
+        AppDelegate.summonWindowTarget()?.openMainAppChat()
       } label: {
         HStack(spacing: OmiSpacing.xs) {
           Text("Continue in Omi")

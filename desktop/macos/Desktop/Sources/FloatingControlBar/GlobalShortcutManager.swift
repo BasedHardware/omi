@@ -75,6 +75,7 @@ class GlobalShortcutManager: @unchecked Sendable {
 
   private enum HotKeyID: UInt32 {
     case askOmi = 2
+    case summonOmi = 3
   }
 
   private var shortcutObserver: NSObjectProtocol?
@@ -145,6 +146,31 @@ class GlobalShortcutManager: @unchecked Sendable {
     guard !isRegistrationSuspended else { return }
     // Register Ask Omi shortcut from user settings
     registerAskOmi()
+    registerSummonHotkey()
+  }
+
+  /// Registers ⌃⌘O as a dedicated global Carbon hotkey that summons Omi (fronts the
+  /// app + opens chat), independent of the user-configurable Ask-Omi shortcut. A
+  /// Carbon hotkey fires system-wide without any extra permission. ⌃⌘O is chosen to
+  /// dodge two collisions: bare ⌘O is File ▸ Open in every app (the frontmost app's
+  /// menu swallows it), and any Option-based combo clashes with push-to-talk (Option
+  /// held = talk). ⌃⌘O uses neither, so it fires cleanly.
+  private func registerSummonHotkey() {
+    if let ref = hotKeyRefs.removeValue(forKey: .summonOmi) {
+      _ = unregisterHotKey(ref)
+    }
+    var hotKeyRef: EventHotKeyRef?
+    let hotKeyID = EventHotKeyID(signature: FourCharCode(0x4F4D_4921), id: HotKeyID.summonOmi.rawValue)  // "OMI!"
+    let status = RegisterEventHotKey(
+      UInt32(kVK_ANSI_O), UInt32(controlKey | cmdKey), hotKeyID,
+      GetApplicationEventTarget(), 0, &hotKeyRef
+    )
+    if status == noErr, let hotKeyRef {
+      hotKeyRefs[.summonOmi] = .carbon(hotKeyRef)
+      logger("GlobalShortcutManager: Registered ⌃⌘O Omi summon hotkey")
+    } else {
+      logger("GlobalShortcutManager: Failed to register ⌃⌘O hotkey, error: \(status)")
+    }
   }
 
   func setRegistrationSuspended(_ suspended: Bool) {
@@ -286,7 +312,7 @@ class GlobalShortcutManager: @unchecked Sendable {
     }
 
     switch id {
-    case .askOmi:
+    case .askOmi, .summonOmi:
       openOmiFromShortcut()
     }
 
@@ -297,8 +323,10 @@ class GlobalShortcutManager: @unchecked Sendable {
     NSLog("GlobalShortcutManager: Open Omi shortcut detected")
     DispatchQueue.main.async {
       // Typing moved to the main app: the shortcut opens Omi itself
-      // instead of the floating bar's typed input panel.
-      (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
+      // instead of the floating bar's typed input panel — and lands straight in
+      // the chat surface (the one continuous thread), not the resting hero.
+      AppDelegate.summonWindowTarget()?.openMainAppWindow()
+      NotificationCenter.default.post(name: .navigateToChat, object: nil)
     }
   }
 

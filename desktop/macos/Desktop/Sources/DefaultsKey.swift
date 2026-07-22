@@ -40,6 +40,10 @@ enum DefaultsKey: String {
   case onboardingStep = "onboardingStep"
   case onboardingFurthestStep = "onboardingFurthestStep"
   case onboardingMemoryImportOwnerUserId = "onboardingMemoryImportOwnerUserID"
+  case onboardingHowDidYouHearSource = "onboardingHowDidYouHearSource"
+  case onboardingRole = "onboardingRole"
+  case onboardingJustCompleted = "onboardingJustCompleted"
+  case hasCompletedFileIndexing = "hasCompletedFileIndexing"
   case homeOmiDeviceAccountHistory = "home-omi-device-account-history"
   case chatScreenshotSharingEnabled = "chatScreenshotSharingEnabled"
   /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
