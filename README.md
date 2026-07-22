@@ -163,7 +163,6 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 - [Swift device SDK](sdks/swift/)
 - [React Native device SDK](sdks/react-native/)
 - [MCP Server](mcp/) — Model Context Protocol integration
-- [MCP Server](mcp/) — Model Context Protocol integration
 
 ### Architecture
 - [Backend Deep Dive](https://docs.omi.me/doc/developer/backend/backend_deepdive)
