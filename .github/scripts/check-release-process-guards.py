@@ -624,6 +624,8 @@ def check_desktop_codemagic_release() -> list[str]:
         errors.append("Codemagic must not write release-body dispatch state outside the trusted workflow serialiser")
     if "candidate remains non-live" not in desktop_workflow_body:
         errors.append("desktop qualification handoff must state that a failed dispatch cannot publish beta")
+    if "ERROR: qualification dispatch was not confirmed after bounded retry" not in dispatch_body or "exit 1" not in dispatch_body:
+        errors.append("desktop qualification handoff must fail closed after bounded dispatch retries")
     if "gh release delete \"$CM_TAG\"" in desktop_workflow_body:
         errors.append("desktop candidate retries must not delete immutable qualification evidence")
     if "docker info" in desktop_workflow_body:
