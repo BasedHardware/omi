@@ -136,10 +136,11 @@ final class NotchViewModel: ObservableObject {
   }
 
   /// The compact pill between listening and responding: camera strip + the orb
-  /// (now the rotating ring), centered — no text. Distinctly narrower than the
-  /// expanded voice width so the width visibly contracts into "thinking".
+  /// (now the rotating ring), centered — no text. Narrower than the expanded
+  /// voice width so the island visibly contracts into "thinking", but never
+  /// narrower than the camera module itself.
   var thinkingSize: CGSize {
-    CGSize(width: clampValue(closedNotchSize.width * 0.6, 170, 215), height: closedNotchSize.height + 42)
+    CGSize(width: closedNotchSize.width, height: closedNotchSize.height + 42)
   }
 
   var hintSize: CGSize {

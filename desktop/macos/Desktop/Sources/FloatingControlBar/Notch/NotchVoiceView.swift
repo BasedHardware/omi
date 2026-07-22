@@ -50,14 +50,21 @@ struct NotchVoiceView: View {
     case .listening:
       Text(text.isEmpty ? "Listening…" : text)
     case .responding:
+      // The reply streams as Omi speaks. Audio can lead the first text token,
+      // so until words arrive the speaking orb carries it (no "Thinking…"
+      // label here — that belongs to the thinking pill).
       // ponytail: voice replies are short — clips at half-screen and the tap
       // opens the app for the full conversation. Add an inner ScrollView if
       // long spoken replies become common.
-      Text(text.isEmpty ? "Thinking…" : text)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onOpenApp)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityHint("Open the full conversation")
+      if text.isEmpty {
+        Color.clear.frame(height: 1)
+      } else {
+        Text(text)
+          .contentShape(Rectangle())
+          .onTapGesture(perform: onOpenApp)
+          .accessibilityAddTraits(.isButton)
+          .accessibilityHint("Open the full conversation")
+      }
     }
   }
 }
