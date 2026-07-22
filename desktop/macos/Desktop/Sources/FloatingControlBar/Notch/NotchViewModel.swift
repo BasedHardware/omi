@@ -25,6 +25,12 @@ final class NotchViewModel: ObservableObject {
   /// answer, capped at half the screen. Deliberately NOT part of
   /// `NotchPresentation` — it rides its own animation timeline.
   @Published var chatBodyHeight: CGFloat?
+  /// Measured height of the live voice content (transcript while listening,
+  /// streaming reply while responding). Drives the notch's grow as words wrap
+  /// to new lines. Transient — a voice turn always starts fresh, so unlike
+  /// `chatBodyHeight` it is not persisted. Rides the same isolated height
+  /// timeline as chat.
+  @Published var voiceBodyHeight: CGFloat?
   /// Agent drill-in within the agents tab (nil = the list).
   @Published var openAgentPillID: UUID?
   /// True while something must stay on screen regardless of the pointer.
@@ -116,18 +122,28 @@ final class NotchViewModel: ObservableObject {
 
   var currentOpenContentSize: CGSize { openContentSize(for: selectedTab) }
 
-  var listeningSize: CGSize {
-    CGSize(
-      width: clampValue(closedNotchSize.width + NotchMetrics.listeningExtraWidth, 280, 380),
-      height: closedNotchSize.height + NotchMetrics.listeningExtraHeight)
+  /// Fixed, restrained width for the expanded voice states; only the HEIGHT
+  /// grows with the measured content (transcript / streaming reply), so the
+  /// island grows downward out of the notch as the user speaks or the answer
+  /// streams — the Dynamic Island grow, not a wide pop.
+  var voiceWidth: CGFloat { clampValue(screenFrame.width * 0.24, 300, 380) }
+  var voiceMinHeight: CGFloat { clampValue(closedNotchSize.height + 82, 120, 168) }
+
+  var voiceExpandedSize: CGSize {
+    let height = voiceBodyHeight.map { clampValue($0, voiceMinHeight, chatMaxHeight) } ?? voiceMinHeight
+    return CGSize(width: voiceWidth, height: height)
   }
 
+  /// The compact pill between listening and responding: camera strip + the orb
+  /// (now the rotating ring), centered — no text.
   var thinkingSize: CGSize {
-    CGSize(width: closedNotchSize.width + NotchMetrics.thinkingExtraWidth, height: closedNotchSize.height)
+    CGSize(width: clampValue(closedNotchSize.width - 60, 200, 260), height: closedNotchSize.height + 42)
   }
 
   var hintSize: CGSize {
-    CGSize(width: listeningSize.width, height: closedNotchSize.height + NotchMetrics.hintRowHeight)
+    CGSize(
+      width: clampValue(closedNotchSize.width + NotchMetrics.listeningExtraWidth, 280, 380),
+      height: closedNotchSize.height + NotchMetrics.hintRowHeight)
   }
 
   var notificationSize: CGSize {
@@ -141,7 +157,7 @@ final class NotchViewModel: ObservableObject {
   func size(for presentation: NotchPresentation) -> CGSize {
     switch presentation {
     case .open(let tab): return openContentSize(for: tab)
-    case .listening: return listeningSize
+    case .listening, .responding: return voiceExpandedSize
     case .thinking: return thinkingSize
     case .hint: return hintSize
     case .notification: return notificationSize
@@ -160,6 +176,7 @@ final class NotchViewModel: ObservableObject {
     }
     size.width = max(size.width, notificationSize.width)
     size.height = max(size.height, notificationSize.height)
+    size.width = max(size.width, voiceWidth)
     return size
   }
 
@@ -257,21 +274,16 @@ final class NotchViewModel: ObservableObject {
     return now().timeIntervalSince(openedAt) > 0.6
   }
 
+  /// Voice-first notch: hover never opens anything. The closed notch is a
+  /// passive identity + settings surface; the panel only expands for a voice
+  /// turn (via the presentation ladder) or an explicit agents/notification
+  /// open. Kept as a no-op (rather than removing the hover wiring) so the
+  /// hover-driven shadow in `NotchView` still works.
   func hoverEntered(delay: TimeInterval = 0.28) {
-    guard state == .closed else { return }
+    // ponytail: intentionally does nothing — hover-to-open is retired.
     hoverOpenTask?.cancel()
-    hoverOpenTask = Task { [weak self, sleep] in
-      await sleep(delay)
-      guard !Task.isCancelled else { return }
-      // The dwell task runs outside any SwiftUI transaction — wrap the open
-      // so the frame morph rides the spring instead of snapping.
-      withAnimation(NotchAnimation.open) { self?.open() }
-    }
   }
 
-  /// Hover only ever OPENS. Auto-close is owned solely by
-  /// NotchScreenManager's pointer tracking, so leaving the hover region here
-  /// just cancels a still-pending open — it never closes.
   func hoverExited() {
     hoverOpenTask?.cancel()
   }

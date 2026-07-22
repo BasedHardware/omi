@@ -15,13 +15,15 @@ struct NotchView: View {
   // MARK: - Presentation ladder
 
   /// Single value that both the panel size and the rendered content derive
-  /// from. Priority: open > listening > thinking > hint > notification > idle.
+  /// from. Priority:
+  /// open > listening > thinking > responding > hint > notification > idle.
   private var presentation: NotchPresentation {
     NotchPresentation.derive(
       isOpen: vm.state == .open,
       tab: vm.selectedTab,
       isVoiceListening: barState.isVoiceListening,
       isThinking: barState.isThinking,
+      isResponding: barState.isVoiceResponseActive,
       hintText: barState.pttHintText.isEmpty ? barState.transientHintText : barState.pttHintText,
       notificationID: barState.currentNotification?.id
     )
@@ -29,12 +31,14 @@ struct NotchView: View {
 
   // MARK: - Animations (two isolated timelines)
 
-  /// Discrete morphs: open/close/tab/voice/notification. Springs.
+  /// Discrete morphs: open/close/voice/notification. Springs. The expanded
+  /// voice states grow with the open spring; the compact thinking pill and the
+  /// passive surfaces settle with the close spring.
   private var morphAnimation: Animation {
     if reduceMotion { return .easeInOut(duration: 0.25) }
     switch presentation {
-    case .open: return NotchAnimation.open
-    case .idle, .listening, .thinking, .hint, .notification: return NotchAnimation.close
+    case .open, .listening, .responding: return NotchAnimation.open
+    case .idle, .thinking, .hint, .notification: return NotchAnimation.close
     }
   }
 
@@ -71,6 +75,13 @@ struct NotchView: View {
     .frame(width: vm.windowSize.width, height: vm.windowSize.height, alignment: .top)
     .animation(morphAnimation, value: presentation)
     .animation(heightAnimation, value: vm.chatBodyHeight)
+    .animation(heightAnimation, value: vm.voiceBodyHeight)
+    // Drop the measured height when the voice turn ends so the next turn's
+    // first frame starts from the compact minimum instead of the old reply's
+    // height.
+    .onChange(of: barState.isVoicePresentationActive) { _, active in
+      if !active { vm.voiceBodyHeight = nil }
+    }
   }
 
   /// The floating composer glued below the body's bottom edge: it offsets by
@@ -112,33 +123,22 @@ struct NotchView: View {
       bodyContent
         .frame(width: displayedSize.width, height: displayedSize.height, alignment: .top)
         .clipShape(NotchShape(topCornerRadius: topCornerRadius, bottomCornerRadius: bottomCornerRadius))
+      // The Omi orb is rendered once across the whole voice turn so it morphs
+      // in place (waveform -> ring -> waveform) instead of cross-fading. It sits
+      // just below the camera housing, centered.
+      voiceOrbLayer
     }
     .animation(morphAnimation, value: presentation)
     .animation(heightAnimation, value: vm.chatBodyHeight)
+    .animation(heightAnimation, value: vm.voiceBodyHeight)
     .contentShape(NotchShape(topCornerRadius: topCornerRadius, bottomCornerRadius: bottomCornerRadius))
     .onHover(perform: handleHover)
-    .onTapGesture(perform: handleTap)
     .onExitCommand {
       guard vm.state == .open else { return }
       withAnimation(NotchAnimation.close) { vm.close() }
     }
-    // A voice answer streaming while closed opens the panel under the mouse
-    // so the reply lands in view (chat-first: the answer IS the chat). The
-    // text mirror usually fires first (first token); the glow covers turns
-    // that produce audio before any text.
-    .onChange(of: barState.isVoiceResponseGlowActive) { _, active in
-      guard active else { return }
-      openForVoiceAnswerIfClosed()
-    }
-    .onChange(of: barState.liveVoiceAssistantText.isEmpty) { _, isEmpty in
-      guard !isEmpty else { return }
-      openForVoiceAnswerIfClosed()
-    }
-  }
-
-  private func openForVoiceAnswerIfClosed() {
-    guard vm.state == .closed, vm.screenFrame.contains(NSEvent.mouseLocation) else { return }
-    withAnimation(NotchAnimation.open) { vm.open(tab: .chat) }
+    // Voice-first: listening / thinking / responding all surface through the
+    // presentation ladder on the already-visible notch — no force-open needed.
   }
 
   @ViewBuilder
@@ -156,25 +156,26 @@ struct NotchView: View {
       .clipped()
       .transition(contentTransition)
     case .listening:
-      VStack(spacing: 2) {
-        voiceChrome {
-          VoiceWaveformBars(isActive: true)
-            .scaleEffect(0.72)
-            .frame(width: 28, height: 15)
-        }
-        Text(barState.displayedQuery.isEmpty ? "Listening…" : barState.displayedQuery)
-          .font(.system(size: 11, weight: .medium))
-          .foregroundStyle(.white.opacity(0.7))
-          .lineLimit(1)
-          .truncationMode(.head)
-          .padding(.horizontal, 14)
-      }
+      NotchVoiceView(
+        phase: .listening,
+        topReserve: voiceTopReserve,
+        onHeightChange: updateVoiceBodyHeight,
+        onOpenApp: {}
+      )
       .transition(contentTransition)
     case .thinking:
-      voiceChrome {
-        OmiThinkingMark()
-          .frame(width: 22, height: 22)
-      }
+      // Just the reserved camera + orb space; the orb overlay draws the ring.
+      Color.clear
+        .frame(height: voiceThinkingReserve)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .transition(contentTransition)
+    case .responding:
+      NotchVoiceView(
+        phase: .responding,
+        topReserve: voiceTopReserve,
+        onHeightChange: updateVoiceBodyHeight,
+        onOpenApp: { MainWindowReveal.activate() }
+      )
       .transition(contentTransition)
     case .hint(let text):
       VStack(spacing: 2) {
@@ -199,24 +200,36 @@ struct NotchView: View {
     }
   }
 
-  /// Compact voice chrome: the state indicator replaces the logo, still
-  /// hugging the camera module like the closed chrome.
-  private func voiceChrome<Indicator: View>(@ViewBuilder indicator: () -> Indicator) -> some View {
-    HStack(spacing: 0) {
-      Spacer(minLength: 0)
-      indicator()
-        .frame(
-          width: NotchMetrics.closedSideWidth + 10, height: vm.closedNotchSize.height,
-          alignment: .trailing)
-      Color.clear
-        .frame(width: cameraGap)
-      settingsButton
-        .frame(
-          width: NotchMetrics.closedSideWidth + 10, height: vm.closedNotchSize.height,
-          alignment: .leading)
-      Spacer(minLength: 0)
+  // MARK: - Voice orb (one instance across the whole turn, morphs in place)
+
+  /// Height reserved for the morphing orb below the camera housing.
+  private var voiceOrbHeight: CGFloat { 30 }
+  private var voiceOrbTopGap: CGFloat { 4 }
+  /// Space above the transcript: camera strip + gap + orb + a little breathing
+  /// room. Matches the orb overlay's top offset so the text sits right below it.
+  private var voiceTopReserve: CGFloat {
+    vm.closedNotchSize.height + voiceOrbTopGap + voiceOrbHeight + 8
+  }
+  /// Thinking has no text — just the camera strip + orb.
+  private var voiceThinkingReserve: CGFloat {
+    vm.closedNotchSize.height + voiceOrbTopGap + voiceOrbHeight + 8
+  }
+
+  private var voiceOrbMode: NotchVoiceOrb.Mode {
+    if barState.isVoiceListening { return .listening }
+    if barState.isThinking { return .thinking }
+    return .speaking
+  }
+
+  @ViewBuilder
+  private var voiceOrbLayer: some View {
+    if barState.isVoicePresentationActive {
+      NotchVoiceOrb(mode: voiceOrbMode)
+        .frame(width: 72, height: voiceOrbHeight)
+        .padding(.top, vm.closedNotchSize.height + voiceOrbTopGap)
+        .allowsHitTesting(false)
+        .transition(.opacity)
     }
-    .frame(height: vm.closedNotchSize.height)
   }
 
   // MARK: - Closed chrome (always-visible Omi identity)
@@ -228,31 +241,27 @@ struct NotchView: View {
   }
 
   /// Logo and gear hug the camera module: [logo][camera][gear] centered as a
-  /// cluster, outer space breathes.
+  /// cluster, outer space breathes. Voice-first: the mark is an inert identity
+  /// element (no tap) — only the settings gear is interactive on the closed
+  /// notch.
   private var closedChrome: some View {
     HStack(spacing: 0) {
       Spacer(minLength: 0)
-      Button {
-        withAnimation(NotchAnimation.open) { vm.open(tab: .agents) }
-      } label: {
-        NotchOmiMark()
-          .frame(width: 24, height: 24)
-          // Recording dot: transcription is running (legacy bar indicator).
-          .overlay(alignment: .topTrailing) {
-            if barState.isRecording {
-              Circle()
-                .fill(Color.red.opacity(0.9))
-                .frame(width: 5, height: 5)
-            }
+      NotchOmiMark()
+        .frame(width: 24, height: 24)
+        // Recording dot: transcription is running (legacy bar indicator).
+        .overlay(alignment: .topTrailing) {
+          if barState.isRecording {
+            Circle()
+              .fill(Color.red.opacity(0.9))
+              .frame(width: 5, height: 5)
           }
-          .frame(
-            width: NotchMetrics.closedSideWidth, height: vm.closedNotchSize.height,
-            alignment: .trailing
-          )
-          .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .accessibilityLabel("Omi agents")
+        }
+        .frame(
+          width: NotchMetrics.closedSideWidth, height: vm.closedNotchSize.height,
+          alignment: .trailing
+        )
+        .accessibilityLabel("Omi")
       Color.clear
         .frame(width: cameraGap)
       settingsButton
@@ -355,11 +364,13 @@ struct NotchView: View {
     }
   }
 
-  /// Chat-first: any click on the closed chrome opens chat, except the logo
-  /// which opens the agents list (and the gear, which is its own button).
-  private func handleTap() {
-    guard vm.state == .closed else { return }
-    withAnimation(NotchAnimation.open) { vm.open(tab: .chat) }
+  /// Feeds the measured voice-content height into the view model behind a 4pt
+  /// jitter filter (sub-pixel noise must not drive the height animation or the
+  /// measure->resize->remeasure loop oscillates). Same guard the chat body uses.
+  private func updateVoiceBodyHeight(_ height: CGFloat) {
+    if abs((vm.voiceBodyHeight ?? 0) - height) > 4 {
+      vm.voiceBodyHeight = height
+    }
   }
 
   private func openSettings() {
