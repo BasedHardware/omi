@@ -358,12 +358,21 @@ jobs:
           rm -rf "$control_scripts"
           cp -a .workflow-source/backend/scripts "$control_scripts"
           rm -rf .workflow-source
-          printf 'DEPLOY_CONTROL_SCRIPTS=%s\n' "$control_scripts" >> "$GITHUB_ENV"
 
       - name: Checkout admitted runtime source
         uses: actions/checkout@v7
         with:
           ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+
+      - name: Install workflow-owned deployment-control scripts in admitted workspace
+        run: |
+          set -euo pipefail
+          control_scripts="$GITHUB_WORKSPACE/.deploy-control/scripts"
+          rm -rf "$GITHUB_WORKSPACE/.deploy-control"
+          mkdir -p "$(dirname "$control_scripts")"
+          cp -a "$RUNNER_TEMP/backend-deploy-control-scripts" "$control_scripts"
+          rm -rf "$RUNNER_TEMP/backend-deploy-control-scripts"
+          printf 'DEPLOY_CONTROL_SCRIPTS=%s\n' "$control_scripts" >> "$GITHUB_ENV"
 
       - name: Google Auth
         id: auth
