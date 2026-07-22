@@ -1982,7 +1982,7 @@ workflows:
               exit 1
             fi
             URL_SCHEME="omi-computer"
-            DMG_PATH="$BUILD_DIR/$APP_NAME.dmg"
+            DMG_PATH="$BUILD_DIR/omi.dmg"
             SPARKLE_ZIP_PATH="$BUILD_DIR/Omi.zip"
           fi
           echo "VERSION=$VERSION" >> $CM_ENV
