@@ -71,7 +71,7 @@ grep -q -- "--expected-bundle-id requires a value" /tmp/omi-smoke-preview-missin
 
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/omi-smoke-test.XXXXXX")"
 TMP_ROOTS+=("$tmp_root")
-tmp_app="$tmp_root/omi.app"
+tmp_app="$tmp_root/Omi.app"
 mkdir -p "$tmp_app/Contents/MacOS" "$tmp_app/Contents/Resources" "$tmp_app/Contents/Frameworks"
 cat > "$tmp_app/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -227,10 +227,18 @@ chmod +x "$mock_bin"/*
 
 canonical_dmg_app="$tmp_root/Omi.app"
 signed_beta_app="$tmp_root/signed/Omi Beta.app"
+renamed_canonical_app="$tmp_root/Anything.app"
+renamed_beta_app="$tmp_root/signed/Anything Beta.app"
 make_signed_smoke_fixture "$canonical_dmg_app" \
   com.omi.computer-macos \
   https://api.omi.me/v2/desktop/appcast.xml
 make_signed_smoke_fixture "$signed_beta_app" \
+  com.omi.computer-macos.beta \
+  'https://api.omi.me/v2/desktop/appcast.xml?identity=beta'
+make_signed_smoke_fixture "$renamed_canonical_app" \
+  com.omi.computer-macos \
+  https://api.omi.me/v2/desktop/appcast.xml
+make_signed_smoke_fixture "$renamed_beta_app" \
   com.omi.computer-macos.beta \
   'https://api.omi.me/v2/desktop/appcast.xml?identity=beta'
 dummy_dmg="$tmp_root/fixture.dmg"
@@ -260,6 +268,28 @@ if PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$canonical_dmg_app" \
 fi
 grep -q "DMG must contain exact Omi Beta.app" /tmp/omi-smoke-beta-wrong-dmg.err \
   || fail "wrong-name DMG rejection should name the exact expected bundle"
+
+if PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$renamed_canonical_app" \
+  "$SMOKE" --app "$renamed_canonical_app" --dmg "$dummy_dmg" \
+  --tag v0.12.34+12034-macos \
+  >/tmp/omi-smoke-renamed-canonical.out 2>/tmp/omi-smoke-renamed-canonical.err; then
+  fail "canonical identity must reject a renamed app and matching DMG"
+fi
+grep -q "app bundle name for com.omi.computer-macos must be Omi.app, got Anything.app" \
+  /tmp/omi-smoke-renamed-canonical.err \
+  || fail "renamed canonical rejection should bind Omi.app to its bundle identity"
+
+if PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$renamed_beta_app" \
+  "$SMOKE" --app "$renamed_beta_app" --dmg "$dummy_dmg" \
+  --tag v0.12.34+12034-macos \
+  --expected-bundle-id com.omi.computer-macos.beta \
+  --expected-feed-url 'https://api.omi.me/v2/desktop/appcast.xml?identity=beta' \
+  >/tmp/omi-smoke-renamed-beta.out 2>/tmp/omi-smoke-renamed-beta.err; then
+  fail "beta identity must reject a renamed app and matching DMG"
+fi
+grep -q "app bundle name for com.omi.computer-macos.beta must be Omi Beta.app, got Anything Beta.app" \
+  /tmp/omi-smoke-renamed-beta.err \
+  || fail "renamed beta rejection should bind Omi Beta.app to its bundle identity"
 
 # Regression (v0.12.91 build failure): macOS mktemp creates the LITERAL template
 # file when characters follow the final XXXXXX, so the second smoke invocation
