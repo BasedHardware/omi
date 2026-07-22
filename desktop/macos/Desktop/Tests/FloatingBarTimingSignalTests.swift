@@ -2,11 +2,13 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// BL-005 / S-14b: guards the signal-driven conversions in the floating bar so
-/// they aren't silently reverted to fixed-delay `asyncAfter` timing, and pins the
-/// `.asyncAfter(` call-site count under `FloatingControlBar/` to the SwiftLint
-/// `omi_floating_control_bar_async_after` custom rule baseline (in
+/// Pins the `.asyncAfter(` call-site count under `FloatingControlBar/` to the
+/// SwiftLint `omi_floating_control_bar_async_after` custom rule baseline (in
 /// `Desktop/.swiftlint.yml`, enforced by the down-only baseline guard).
+///
+/// Window-key signal helpers (`runWhenMainAppWindowKey` /
+/// `didBecomeKeyNotification`) were removed with idle-notch simplification
+/// (#10309); do not reintroduce a source-string tripwire for that retired path.
 final class FloatingBarTimingSignalTests: XCTestCase {
   /// Keep in sync with the SwiftLint baseline count for omi_floating_control_bar_async_after.
   private static let asyncAfterBaseline = 22
@@ -18,25 +20,12 @@ final class FloatingBarTimingSignalTests: XCTestCase {
       .appendingPathComponent("Sources/FloatingControlBar")
   }
 
-  private func floatingBarViewSource() throws -> String {
-    try String(
-      contentsOf: floatingControlBarDir().appendingPathComponent("FloatingControlBarView.swift"))
-  }
-
-  func testWindowActivationKeysOffWindowSignalNotFixedDelay() throws {
-    let source = try floatingBarViewSource()
-    XCTAssertTrue(
-      source.contains("func runWhenMainAppWindowKey"),
-      "window activation should route through the window-key signal helper")
-    XCTAssertTrue(
-      source.contains("NSWindow.didBecomeKeyNotification"),
-      "the transition should key off didBecomeKey, not a fixed delay")
-  }
-
   /// Anti-regression: no new fixed-delay `asyncAfter` may be added under
   /// `FloatingControlBar/` above the pinned baseline. Recurses the directory the
   /// same way the Python ratchet does; comment mentions of the word are excluded
   /// because the match requires the leading dot and open paren.
+  // omi-test-quality: source-inspection -- static contract: asyncAfter call-site
+  // count under FloatingControlBar/ is a down-only ratchet paired with SwiftLint
   func testAsyncAfterCallSitesAtOrBelowBaseline() throws {
     let fm = FileManager.default
     let dir = floatingControlBarDir()

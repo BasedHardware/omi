@@ -134,8 +134,16 @@ jobs:
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
 
       - name: Run macOS-scoped manifest checks
+        env:
+          # Match pr-preflight: Desktop Swift Static Contracts runs run_checks.py
+          # directly, so it must honor no-changelog-needed itself.
+          SKIP_DESKTOP_CHANGELOG: ${{ github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ','), 'no-changelog-needed') }}
         run: |
-          python3 .github/scripts/run_checks.py --lane ci --platform macos --base "${{ needs.changes.outputs.diff_base }}" --skip-pr-body-checks
+          extra=()
+          if [ "${SKIP_DESKTOP_CHANGELOG}" = "true" ]; then
+            extra+=(--skip-changelog)
+          fi
+          python3 .github/scripts/run_checks.py --lane ci --platform macos --base "${{ needs.changes.outputs.diff_base }}" --skip-pr-body-checks "${extra[@]}"
 
       - name: Save Swift formatter and linter tools after checks
         if: ${{ always() && steps.swift-tools-cache.outputs.cache-hit != 'true' }}
