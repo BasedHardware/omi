@@ -406,8 +406,9 @@ def validate_manual_workflow(text: str) -> list[str]:
     )
     if "github.event.inputs.branch" in text or re.search(r"(?m)^      branch:\n", text):
         errors.append("manual backend deploy must not accept an arbitrary branch or ref")
-    if "github.sha" in text:
-        errors.append("manual backend deploy must not substitute the dispatch default SHA for admitted source")
+    control_source_ref = "ref: ${{ github.sha }}"
+    if text.count(control_source_ref) != 1 or "Checkout workflow-owned deploy-control source" not in text:
+        errors.append("manual backend deploy must stage workflow-owned control scripts from github.sha")
 
     repair_job = mapping_block(text, "repair-traffic", 2)
     if repair_job is None:
