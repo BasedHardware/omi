@@ -1,0 +1,23 @@
+app/android/app/src/main/kotlin/com/friend/ios/PigeonCommunicator.g.kt
+  s_424d550d86fd05::t_1fc9a01d9dfcce 69,761,778,795,812,829,846,863,880,1286,1303,1320,1337,1354,1371,1388,1409,1797,1814,1831,1849,1867,1885,1903,1920,1937
+app/ios/Flutter/RayBanMetaCredentials.xcconfig.template
+  s_424d550d86fd05::t_e8558f68880716 9-10
+backend/utils/llm/chat.py
+  s_424d550d86fd05::t_680491eafb98c3 1268,1302
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "dc14ff475ffb22ac46f63731731702d7f092e950",
+  "prompts": {},
+  "sessions": {
+    "s_424d550d86fd05": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7d83f64d-8ce5-47f1-b308-b8839508880a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
