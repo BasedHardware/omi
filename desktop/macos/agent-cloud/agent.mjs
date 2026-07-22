@@ -523,6 +523,56 @@ instead of hand-writing GROUP BY queries per day. Captures are ~10s apart.`,
   }
 );
 
+// Real one-click connect link. When a connector reports "not connected", the
+// agent should hand the user a real OAuth URL to click — not invent setup
+// steps. This calls the backend's existing /v1/integrations/{app_key}/oauth-url
+// (verified live) with the user's token and returns the real Google consent URL.
+const getConnectLinkTool = tool(
+  "get_connect_link",
+  `Get a one-click link the user clicks to connect an integration to Omi.
+Call this WHENEVER a connector/tool reports it is "not connected" (e.g. calendar,
+gmail), or the user asks how to connect one. Return the real link to the user and
+tell them to click it and sign in — NEVER describe manual setup steps or invent
+other methods. integration is the app key, e.g. "google_calendar".`,
+  { integration: z.string().describe('Integration app key, e.g. "google_calendar"') },
+  async ({ integration }) => {
+    if (!userFirebaseToken) {
+      return { content: [{ type: "text", text: "The user must be signed in to Omi before connecting integrations." }] };
+    }
+    try {
+      const resp = await fetch(`${BACKEND_URL}/v1/integrations/${encodeURIComponent(integration)}/oauth-url`, {
+        headers: { Authorization: `Bearer ${userFirebaseToken}` },
+      });
+      if (!resp.ok) {
+        const body = await resp.text();
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `No one-click connect link is available for "${integration}" (HTTP ${resp.status}). ` +
+                `Tell the user this integration must be connected from Omi Settings → Apps & Integrations. Detail: ${body.slice(0, 200)}`,
+            },
+          ],
+        };
+      }
+      const data = await resp.json();
+      const url = data.auth_url || data.url;
+      if (!url) return { content: [{ type: "text", text: `No link returned for "${integration}".` }] };
+      return {
+        content: [
+          {
+            type: "text",
+            text: `CONNECT LINK for ${integration}: ${url}\nGive this link to the user verbatim and tell them to click it and sign in with Google; once done, ask them to try again.`,
+          },
+        ],
+      };
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error getting connect link for ${integration}: ${err.message}` }] };
+    }
+  }
+);
+
 // --- JSON Schema → Zod converter for backend tools ---
 
 function jsonSchemaToZod(schema) {
@@ -1003,6 +1053,14 @@ async function runCli(userMessage) {
   if (!openDatabase()) {
     console.error(`ERROR: Database not found at ${DB_PATH}`);
     process.exit(1);
+  }
+
+  // Real-connector hook: with a real Firebase token set, load the user's actual
+  // backend connectors (calendar/gmail/health/…) the same way the WS /auth path
+  // does, so connector interaction can be exercised against live api.omi.me.
+  if (process.env.OMI_FIREBASE_TOKEN) {
+    userFirebaseToken = process.env.OMI_FIREBASE_TOKEN;
+    await fetchAndRegisterBackendTools();
   }
 
   console.log(`\n${"=".repeat(60)}`);
