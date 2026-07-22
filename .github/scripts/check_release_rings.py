@@ -51,7 +51,7 @@ def check() -> list[str]:
             paths[Path(".github/workflows/gcp_backend.yml")],
             (
                 "release_sha:",
-                "default: 'all'",
+                "default: 'cloud-run-only'",
                 "github.ref == 'refs/heads/main'",
                 "firestore_readiness:",
                 "GCP_FIRESTORE_READONLY_CREDENTIALS",
@@ -64,6 +64,8 @@ def check() -> list[str]:
                 "Verify serving backend release vector",
                 "backend/scripts/verify_backend_release_vector.py",
                 "github.event.inputs.environment == 'prod'",
+                "environment=prod, deploy_targets=all is unsupported",
+                "Smoke promoted production serving API",
             ),
         )
     )
@@ -71,8 +73,8 @@ def check() -> list[str]:
     verification = workflow.find("Verify serving backend release vector")
     if promotion < 0 or verification < 0 or verification <= promotion:
         errors.append("canonical serving release-vector verification must follow traffic promotion")
-    if "environment=prod, deploy_targets=all is unsupported" in workflow:
-        errors.append("canonical production deploy must permit deploy_targets=all")
+    if "probe-transcription-candidate-from-cloud-run.sh" in workflow:
+        errors.append("canonical production deploy must not create an ephemeral Cloud Run candidate probe")
     for binding in OBSOLETE_RELEASE_BINDINGS:
         if binding in workflow:
             errors.append(f"gcp_backend.yml: obsolete release binding {binding!r} must not be required")
@@ -80,8 +82,8 @@ def check() -> list[str]:
         if (ROOT / relative).exists():
             errors.append(f"{relative}: obsolete release-ring authority must be deleted")
     for relative, path in paths.items():
-        if "beta" in path.read_text(encoding="utf-8").lower():
-            errors.append(f"{relative}: backend beta-ring logic is forbidden")
+        if "release-ring deployment control plane" in path.read_text(encoding="utf-8").lower():
+            errors.append(f"{relative}: backend release-ring deployment control plane is forbidden")
     return errors
 
 

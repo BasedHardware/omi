@@ -26,7 +26,7 @@ on:
       deploy_targets:
         description: 'Deploy all backend surfaces or Cloud Run only'
         required: true
-        default: 'all'
+        default: 'cloud-run-only'
         type: choice
         options:
           - all
@@ -63,8 +63,8 @@ concurrency:
 env:
   SERVICE: backend
   REGION: us-central1
-  # A per-run Cloud Run tag exposes only the no-traffic production candidate
-  # to the known-audio gate. It is removed before normal traffic promotion.
+  # Development keeps its existing tagged no-traffic candidate probe. Production
+  # instead validates the exact serving release after its rollback-safe shift.
   TRANSCRIPTION_CANDIDATE_TAG: stt-gate-${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:
@@ -85,6 +85,10 @@ jobs:
           fi
           if [[ "$DEPLOY_TARGETS" != "all" && "$DEPLOY_TARGETS" != "cloud-run-only" ]]; then
             echo "Invalid deploy_targets: $DEPLOY_TARGETS. Must be 'all' or 'cloud-run-only'." >&2
+            exit 1
+          fi
+          if [[ "$DEPLOY_ENVIRONMENT" == "prod" && "$DEPLOY_TARGETS" == "all" ]]; then
+            echo "environment=prod, deploy_targets=all is unsupported; use cloud-run-only." >&2
             exit 1
           fi
 
@@ -540,7 +544,7 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
-            ${{ format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG) }}
+            ${{ github.event.inputs.environment == 'development' && format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG) || '' }}
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
@@ -667,12 +671,10 @@ jobs:
           python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-live-cloud-run
 
       # Development probes the no-traffic tagged revision directly from the
-      # runner. Production cloud-run-only resolves the same immutable tag but
-      # proves it from an ephemeral VPC-connected Cloud Run Job with both Cloud
-      # Run IAM and Firebase authentication before any traffic movement.
+      # runner. Production has no tagged candidate URL or private probe job.
       - name: Resolve transcription candidate URL
         id: transcription-candidate
-        if: ${{ github.event.inputs.environment == 'development' || github.event.inputs.environment == 'prod' }}
+        if: ${{ github.event.inputs.environment == 'development' }}
         run: |
           candidate_url="$(python3 backend/scripts/resolve_cloud_run_tagged_url.py \
             --project=${{ vars.GCP_PROJECT_ID }} \
@@ -680,14 +682,7 @@ jobs:
             --service=${{ env.SERVICE }} \
             --revision=${{ steps.capture-backend-revision.outputs.revision }} \
             --tag="$TRANSCRIPTION_CANDIDATE_TAG")"
-          identity_audience="$(gcloud run services describe "${{ env.SERVICE }}" \
-            --project="${{ vars.GCP_PROJECT_ID }}" --region="${{ env.REGION }}" --format='value(status.url)')"
-          [[ -n "$identity_audience" ]] || { echo 'ERROR: canonical Cloud Run IAM audience is empty' >&2; exit 1; }
-          [[ "$identity_audience" != "$candidate_url" ]] || {
-            echo 'ERROR: canonical Cloud Run IAM audience must differ from tagged candidate URL' >&2; exit 1;
-          }
           printf 'url=%s\n' "$candidate_url" >> "$GITHUB_OUTPUT"
-          printf 'identity_audience=%s\n' "$identity_audience" >> "$GITHUB_OUTPUT"
 
       - name: Gate backend candidate on known audio
         if: ${{ github.event.inputs.environment == 'development' }}
@@ -697,37 +692,7 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           firebase_auth_project_id: based-hardware
 
-      - name: Mint Firebase token for internal production candidate probe
-        if: ${{ github.event.inputs.environment == 'prod' }}
-        env:
-          PROBE_SECRET_PROJECT: ${{ vars.GCP_PROJECT_ID }}
-          FIREBASE_AUTH_PROJECT_ID: based-hardware
-        run: |
-          set -euo pipefail
-          umask 077
-          python3 backend/scripts/firebase_release_probe_token.py \
-            --secret-project "$PROBE_SECRET_PROJECT" \
-            --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
-            --token-output "$RUNNER_TEMP/firebase-production-candidate-token"
-
-      - name: Gate internal production candidate on known audio from Cloud Run VPC
-        if: ${{ github.event.inputs.environment == 'prod' }}
-        run: |
-          set -euo pipefail
-          bash backend/scripts/probe-transcription-candidate-from-cloud-run.sh \
-            --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "${{ env.REGION }}" \
-            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
-            --candidate-url "${{ steps.transcription-candidate.outputs.url }}" \
-            --identity-audience "${{ steps.transcription-candidate.outputs.identity_audience }}" \
-            --network "${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
-            --subnet "${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
-            --firebase-token-file "$RUNNER_TEMP/firebase-production-candidate-token" \
-            --name-suffix "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-
-      # This is the Cloud Run-only acceptance boundary. GKE config, secrets,
-      # and backend-listen stay untouched until every no-traffic revision is
-      # proven ready and the environment-specific known-audio gate has passed.
+      # This Cloud Run-only acceptance boundary runs before any traffic shift.
       - name: Accept no-traffic Cloud Run candidate
         run: |
           python3 backend/scripts/verify_backend_release_vector.py \
@@ -743,7 +708,7 @@ jobs:
             --evidence-path artifacts/backend-cloud-run-candidate-release-vector.json
 
       - name: Remove passed transcription candidate tag
-        if: ${{ success() && (github.event.inputs.environment == 'development' || github.event.inputs.environment == 'prod') }}
+        if: ${{ success() && github.event.inputs.environment == 'development' }}
         run: |
           gcloud run services update-traffic ${{ env.SERVICE }} \
             --project=${{ vars.GCP_PROJECT_ID }} \
@@ -754,7 +719,7 @@ jobs:
       - name: Remove failed transcription candidate tag
         # Tag is created at deploy-backend; clean it up on any later failure,
         # not only after the candidate URL resolution step succeeds.
-        if: ${{ failure() && steps.deploy-backend.outcome == 'success' && (github.event.inputs.environment == 'development' || github.event.inputs.environment == 'prod') }}
+        if: ${{ failure() && steps.deploy-backend.outcome == 'success' && github.event.inputs.environment == 'development' }}
         run: |
           gcloud run services update-traffic ${{ env.SERVICE }} \
             --project=${{ vars.GCP_PROJECT_ID }} \
@@ -896,8 +861,32 @@ jobs:
             --evidence-path artifacts/backend-serving-release-vector.json \
             $CLOUD_RUN_ONLY
 
+      - name: Smoke promoted production serving API
+        id: smoke-promoted-production-serving-api
+        if: ${{ github.event.inputs.environment == 'prod' }}
+        env:
+          PROBE_SECRET_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          FIREBASE_AUTH_PROJECT_ID: based-hardware
+        run: |
+          set -euo pipefail
+          umask 077
+          token_file="$RUNNER_TEMP/firebase-production-serving-token"
+          trap 'rm -f "$token_file"' EXIT
+          python3 backend/scripts/firebase_release_probe_token.py \
+            --secret-project "$PROBE_SECRET_PROJECT" \
+            --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
+            --token-output "$token_file"
+          reservation_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --request POST https://api.omi.me/v2/desktop/beta/candidates/reserve \
+            --header 'Content-Type: application/json' --data '{}')"
+          # An expected validation response proves the route is present without a reservation mutation.
+          test "$reservation_status" = 401
+          python3 backend/scripts/transcription_capability_probe.py \
+            --candidate-api-url https://api.omi.me \
+            --bearer-token-file "$token_file" --json-only
+
       - name: Restore Cloud Run traffic snapshot after failed promotion
-        if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'failure') }}
+        if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'failure' || steps.smoke-promoted-production-serving-api.outcome == 'failure') }}
         run: |
           python3 backend/scripts/cloud_run_traffic_snapshot.py restore \
             --snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json \

@@ -566,11 +566,11 @@
       "invariants": [
         "preflight fails before revision creation when Secret Manager bindings are missing",
         "traffic shifts only after candidate revisions are Ready=True",
-        "all four Cloud Run traffic specs are durably captured before promotion and restored automatically after a failed shift or serving-vector check",
+        "all four Cloud Run traffic specs are durably captured before promotion and restored automatically after a failed shift, serving-vector check, or production serving smoke",
         "GKE runtime config, backend secrets, and backend-listen mutate only after the no-traffic Cloud Run candidate is accepted",
         "spec.traffic mismatches are repaired or block deploy with an explicit command",
         "normal deploys cannot change the serving sync ledger fence mode",
-        "production backend traffic cannot shift until the exact tagged candidate proves the known-audio full route",
+        "production backend traffic shifts only after the Cloud Run-only candidate vector passes, then rolls back if the post-promotion serving route or known-audio smoke fails",
         "gateway-first serving cannot be promoted until the ready workload, EndpointSlice, ingress/ILB attachment, and authenticated Cloud Run VPC route all pass"
       ]
     },

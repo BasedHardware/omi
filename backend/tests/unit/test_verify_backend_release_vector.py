@@ -829,6 +829,15 @@ def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_sna
             "&& (steps.shift-cloud-run-traffic.outcome == 'failure' "
             "|| steps.verify-serving-release-vector.outcome == 'failure') }}"
         )
+        if relative == '.github/workflows/gcp_backend.yml':
+            serving_smoke = text.index('Smoke promoted production serving API')
+            assert serving_vector < serving_smoke < restore
+            expected_restore_condition = (
+                "if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' "
+                "&& (steps.shift-cloud-run-traffic.outcome == 'failure' "
+                "|| steps.verify-serving-release-vector.outcome == 'failure' "
+                "|| steps.smoke-promoted-production-serving-api.outcome == 'failure') }}"
+            )
         assert expected_restore_condition in restore_step
         assert 'backend/scripts/cloud_run_traffic_snapshot.py restore' in restore_step
 
@@ -837,8 +846,8 @@ def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_sna
         assert 'cloud-run-traffic-restore.json' in evidence_upload
 
 
-def test_production_full_stack_boundary_is_early_and_uses_a_cleaned_up_dual_auth_vpc_probe():
-    """Static workflow contract: prod/all reaches the candidate gate before mutation."""
+def test_production_cloud_run_only_boundary_smokes_serving_after_promotion():
+    """Static workflow contract: prod/all fails before mutation; smoke is post-promotion."""
     root = BACKEND_DIR.parent
     workflow = (root / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8')
     boundary = workflow.split('\n  validate-production-boundary:\n', 1)[1].split('\n  repair-traffic:\n', 1)[0]
@@ -850,43 +859,21 @@ def test_production_full_stack_boundary_is_early_and_uses_a_cleaned_up_dual_auth
     for forbidden in ('actions/checkout', 'google-github-actions/auth', 'docker build', 'docker push', 'gcloud run'):
         assert forbidden not in boundary
 
-    resolve = workflow.index('Resolve transcription candidate URL')
-    probe = workflow.index('Gate internal production candidate on known audio from Cloud Run VPC')
     snapshot = workflow.index('Capture Cloud Run pre-promotion traffic snapshot')
     traffic = workflow.index('Shift Cloud Run traffic to validated revisions')
     verify = workflow.index('Verify serving backend release vector')
+    smoke = workflow.index('Smoke promoted production serving API')
     restore = workflow.index('Restore Cloud Run traffic snapshot after failed promotion')
-    assert resolve < probe < snapshot < traffic < verify < restore
+    assert snapshot < traffic < verify < smoke < restore
     assert '--tag={0}' in workflow
-    assert '--candidate-url "${{ steps.transcription-candidate.outputs.url }}"' in workflow
-    assert '--firebase-token-file "$RUNNER_TEMP/firebase-production-candidate-token"' in workflow
+    assert "default: 'cloud-run-only'" in workflow
+    assert 'environment=prod, deploy_targets=all is unsupported' in workflow
+    assert 'https://api.omi.me/v2/desktop/beta/candidates/reserve' in workflow
+    assert '--candidate-api-url https://api.omi.me' in workflow
+    assert 'firebase-production-serving-token' in workflow
+    assert "steps.smoke-promoted-production-serving-api.outcome == 'failure'" in workflow
     assert 'CLOUD_RUN_ONLY="--cloud-run-only"' in workflow
-
-    probe_script = (root / 'backend/scripts/probe-transcription-candidate-from-cloud-run.sh').read_text(
-        encoding='utf-8'
-    )
-    for required in (
-        '--service-account="$SERVICE_ACCOUNT"',
-        '--network="$NETWORK"',
-        '--subnet="$SUBNET"',
-        '--vpc-egress=all-traffic',
-        'compute networks subnets describe "$SUBNET"',
-        'privateIpGoogleAccess',
-        '--role=roles/run.invoker',
-        'trap cleanup EXIT',
-        'gcloud run jobs delete',
-        'remove-iam-policy-binding backend',
-        'service-accounts delete',
-    ):
-        assert required in probe_script
-
-    vpc_runner = (root / 'backend/scripts/run_vpc_transcription_candidate_probe.py').read_text(encoding='utf-8')
-    probe_source = (root / 'backend/scripts/transcription_capability_probe.py').read_text(encoding='utf-8')
-    assert 'X-Serverless-Authorization' in probe_source
-    assert 'FIREBASE_PROBE_TOKEN' in vpc_runner
-    assert 'identity_token = _identity_token(identity_audience)' in vpc_runner
-    assert 'api_url=candidate_url' in vpc_runner
-    assert 'cloud_run_identity_token=identity_token' in vpc_runner
+    assert 'probe-transcription-candidate-from-cloud-run.sh' not in workflow
 
 
 def test_backend_listen_rollout_wait_can_cover_a_real_rollout():
