@@ -358,10 +358,10 @@ jobs:
             }
           fi
 
-  # The workflow_run promotion trigger reads this run's conclusion, so exactly
-  # one job may fail the run: qualification succeeds iff at least one lane
-  # published immutable evidence.
   verdict:
+    # The workflow_run promotion trigger reads this run's conclusion, so
+    # exactly one job may fail the run: qualification succeeds iff at least
+    # one lane published immutable evidence.
     needs: [codemagic-lane, qualify]
     if: always()
     runs-on: ubuntu-latest
