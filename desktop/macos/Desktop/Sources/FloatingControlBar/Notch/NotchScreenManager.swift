@@ -35,6 +35,13 @@ final class NotchScreenManager {
   private weak var barState: FloatingControlBarState?
   private weak var chatProvider: ChatProvider?
 
+  /// Whether panels should be on screen. Panels are created hidden; only
+  /// `showAll` (reached through show / snooze-clear / temporary-notification)
+  /// reveals them, so a disabled or snoozed launch never flashes the notch.
+  /// Consulted on display hot-plug so a newly attached screen matches the
+  /// current visibility instead of always ordering front.
+  private var panelsVisible = false
+
   /// Lock-free-enough throttle usable from the monitor callback thread.
   private final class PointerThrottle: @unchecked Sendable {
     private let lock = NSLock()
@@ -142,6 +149,12 @@ final class NotchScreenManager {
     panels.values.contains { $0.vm.state == .open }
   }
 
+  /// Count of panels currently ordered on screen. The regression guard for the
+  /// disabled/snoozed launch path: panels must stay at 0 until `showAll`.
+  var visibleWindowCount: Int {
+    panels.values.filter { $0.window.isVisible }.count
+  }
+
   /// True while an open panel's composer (or any text field inside it) holds
   /// keyboard focus. Automation's proxy for "the conversation is focused".
   var anyPanelKeyboardFocused: Bool {
@@ -160,14 +173,29 @@ final class NotchScreenManager {
 
   /// Order every panel back on screen (show / clearing snooze).
   func showAll() {
-    for (_, panel) in panels { panel.window.orderFrontRegardless() }
+    panelsVisible = true
+    applyPanelVisibility()
   }
 
   /// Order every panel off screen (hide / snooze / disable).
   func hideAll() {
-    for (_, panel) in panels {
-      panel.vm.close()
-      panel.window.orderOut(nil)
+    panelsVisible = false
+    for (_, panel) in panels { panel.vm.close() }
+    applyPanelVisibility()
+  }
+
+  /// A panel belongs on screen when the notch is passively visible OR that
+  /// panel is explicitly open (Ask Omi summon / notification click-through). So
+  /// an explicit open surfaces even while the passive bar is disabled or
+  /// snoozed, and closing it hides the panel again — matching the pre-notch
+  /// "show temporarily, hide on close" behavior. Re-applied on every open/close.
+  private func applyPanelVisibility() {
+    for panel in panels.values {
+      if panelsVisible || panel.vm.state == .open {
+        panel.window.orderFrontRegardless()
+      } else {
+        panel.window.orderOut(nil)
+      }
     }
   }
 
@@ -211,6 +239,10 @@ final class NotchScreenManager {
       outsideSince.removeValue(forKey: id)
       lastPointer.removeValue(forKey: id)
     }
+
+    // Newly created panels start hidden; a screen attached while the notch is
+    // visible (or with an open panel) is surfaced here.
+    applyPanelVisibility()
   }
 
   private func makePanel(for screen: NSScreen) -> Panel {
@@ -229,8 +261,14 @@ final class NotchScreenManager {
       withAnimation(NotchAnimation.close) { vm.close() }
     }
     vm.attach(window: window)
-    vm.onStateChange = { [weak self] in self?.updateMouseMonitors() }
-    window.orderFrontRegardless()
+    vm.onStateChange = { [weak self] in
+      self?.updateMouseMonitors()
+      // An explicit open must surface the panel even when the passive bar is
+      // hidden; closing it re-hides when the bar is disabled/snoozed.
+      self?.applyPanelVisibility()
+    }
+    // Created hidden. Visibility is owned by applyPanelVisibility so the
+    // persisted enabled/snoozed/deferred launch state is respected.
     return Panel(window: window, vm: vm)
   }
 
