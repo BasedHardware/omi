@@ -4,13 +4,13 @@
     "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": 1678,
     "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4238,
     "desktop/macos/Desktop/Sources/MemoryExportService.swift": 1578,
-    "desktop/macos/Desktop/Sources/OmiApp.swift": 1646
+    "desktop/macos/Desktop/Sources/OmiApp.swift": 1649
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/AuthService.swift": "Apple first-auth name capture signals observers (authNameDidUpdate) and persists the name to Firebase so it survives reinstalls.",
     "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": "Reach-error card gains a debug bridge action so the actionable failure surface is verifiable in-process.",
     "desktop/macos/Desktop/Sources/MemoryExportService.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
-    "desktop/macos/Desktop/Sources/OmiApp.swift": "openMainAppChat() gives the floating bar Continue-in-Omi affordances a chat-landing entry next to openMainAppWindow()."
+    "desktop/macos/Desktop/Sources/OmiApp.swift": "openMainAppChat() adds a chat-landing entry beside openMainAppWindow(), and one startup call wires AgentCompletionVoiceDelivery into launch beside the other singleton starts; the service is a separate file."
   },
   "threshold": 1500
 }
