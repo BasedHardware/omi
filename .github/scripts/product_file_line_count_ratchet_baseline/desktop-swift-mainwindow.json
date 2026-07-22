@@ -4,8 +4,8 @@
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3643,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4409,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3298,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5711,
-    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1693
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5706,
+    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1692
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "SB redesign: Omi-mark avatar on replies that spins while thinking (so the extra typing-dots indicator is suppressed for Omi's own replies) and tool-call chips gated to the streaming turn only; a component split is tracked follow-up.",
@@ -13,7 +13,7 @@
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": "SB redesign: chat-as-home hub with the auto-rotating knows-list (now surfacing learned insights alongside tasks/asks), de-privatized status controls for the persistent top bar, and the post-onboarding opener in the home-chat empty state; a component split is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": "Bridge memory search now awaits the active initial or pagination projection before refreshing, preventing an immediate post-navigation marker search from using stale lifecycle capability state.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": "SB redesign: adds the Notion-style status board (time-bucket columns, task cards with priority/due chips) and Board/List toggle alongside the existing list; a component split is tracked follow-up.",
-    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": "SB redesign: adds the hover-expand AppNavRail (icons→labels) and the merged/simplified navigation (Memory, Insights) driving selectedIndex; a component split is tracked follow-up."
+    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": "SB redesign: adds the hover-expand AppNavRail (icons\u2192labels) and the merged/simplified navigation (Memory, Insights) driving selectedIndex; a component split is tracked follow-up."
   },
   "threshold": 1500
 }
