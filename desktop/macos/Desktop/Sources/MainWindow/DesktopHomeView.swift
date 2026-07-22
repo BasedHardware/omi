@@ -1323,13 +1323,15 @@ private struct PageContentView: View {
 
   var body: some View {
     pages
-      .overlay(alignment: .bottom) {
-        if Self.floatingAskBarTabs.contains(selectedIndex) {
-          FloatingPageAskBar(
-            chatProvider: viewModelContainer.chatProvider,
-            selectedTabIndex: $selectedTabIndex)
-        }
-      }
+    // Floating ask-bar experiment shelved for launch (Nik, Jul 22 2026) — the
+    // omi-askbar test bundle showed it working; re-enable by restoring:
+    // .overlay(alignment: .bottom) {
+    //   if Self.floatingAskBarTabs.contains(selectedIndex) {
+    //     FloatingPageAskBar(
+    //       chatProvider: viewModelContainer.chatProvider,
+    //       selectedTabIndex: $selectedTabIndex)
+    //   }
+    // }
   }
 
   @ViewBuilder
