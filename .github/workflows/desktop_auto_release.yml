@@ -1,6 +1,7 @@
 name: Build Desktop Release Candidate
 
 on:
+  workflow_dispatch:
   schedule:
     # Retry hourly; planner quiet-window, exact-SHA checks, and active-release
     # fences still admit at most one eligible candidate at a time.
