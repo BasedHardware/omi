@@ -276,18 +276,20 @@ class ShortcutSettings: ObservableObject {
     modifiers: [.command, .shift]
   )
   static let askOmiCommandJShortcut = KeyboardShortcut(keyCode: 38, keyDisplay: "J", modifiers: .command)
-  // ⌘O collides with the universal "Open" shortcut, so Carbon refuses to
-  // register it as a global hotkey and it silently never fired. ⌃⌥O is a safe,
-  // near-conflict-free global combo (same family as the ⌃⌥R Rewind hotkey).
+  // ⌘O is the default open hotkey again: it registers reliably via the
+  // dedicated Carbon hotkey (GlobalShortcutManager.registerCommandO), so it no
+  // longer collides with the universal "Open" shortcut the way a plain global
+  // registration did. ⌃⌥O stays defined as a conflict-free alternative users can
+  // bind, but is no longer the default or a preset.
   static let askOmiControlOptionOShortcut = KeyboardShortcut(
     keyCode: 31, keyDisplay: "O", modifiers: [.control, .option])
-  static let defaultAskOmiShortcut = askOmiControlOptionOShortcut
+  static let defaultAskOmiShortcut = askOmiCommandOShortcut
 
   static let askOmiPresets: [KeyboardShortcut] = [
-    askOmiControlOptionOShortcut,
-    askOmiCommandJShortcut,
+    askOmiCommandOShortcut,
     askOmiCommandReturnShortcut,
     askOmiCommandShiftReturnShortcut,
+    askOmiCommandJShortcut,
   ]
 
   static let pttPresets: [KeyboardShortcut] = [
@@ -570,23 +572,14 @@ class ShortcutSettings: ObservableObject {
         legacyMapper: Self.legacyPTTShortcut
       ) ?? Self.pttPresets[0]
 
-    // Migration: ⌘O silently failed to register as a global hotkey (it collides
-    // with the universal "Open" shortcut), so the Ask-Omi hotkey never fired.
-    // Move anyone still on the old ⌘O binding to the safe ⌃⌥O default and
-    // persist it so the Settings UI stays in sync.
-    let loadedAskOmi =
+    // ⌘O registers reliably now via the dedicated Carbon hotkey
+    // (GlobalShortcutManager.registerCommandO), so a saved ⌘O binding is honored
+    // as-is — no ⌘O → ⌃⌥O migration.
+    self.askOmiShortcut =
       Self.loadShortcut(
         forKey: Self.askOmiShortcutDefaultsKey,
         legacyMapper: Self.legacyAskOmiShortcut
       ) ?? Self.defaultAskOmiShortcut
-    let migratedAskOmi =
-      loadedAskOmi == Self.askOmiCommandOShortcut ? Self.defaultAskOmiShortcut : loadedAskOmi
-    self.askOmiShortcut = migratedAskOmi
-    if loadedAskOmi == Self.askOmiCommandOShortcut,
-      let data = try? JSONEncoder().encode(Self.defaultAskOmiShortcut)
-    {
-      UserDefaults.standard.set(data, forKey: Self.askOmiShortcutDefaultsKey)
-    }
 
     self.askOmiEnabled = UserDefaults.standard.object(forKey: "shortcut_askOmiEnabled") as? Bool ?? true
     self.pttEnabled = UserDefaults.standard.object(forKey: "shortcut_pttEnabled") as? Bool ?? true
