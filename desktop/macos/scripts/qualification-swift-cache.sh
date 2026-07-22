@@ -46,24 +46,79 @@ SWIFT="${OMI_QUALIFICATION_SWIFT_CACHE_SWIFT:-$(xcrun swift --version 2>&1)}"
 MACOS="${OMI_QUALIFICATION_SWIFT_CACHE_MACOS:-$(printf '%s (%s)' "$(sw_vers -productVersion)" "$(sw_vers -buildVersion)")}"
 ARCH="${OMI_QUALIFICATION_SWIFT_CACHE_ARCH:-$(uname -m)}"
 TEMP_DIR=""
+LOCK_DIR=""
+LOCK_HELD=0
 
-cleanup_temp() {
+cleanup() {
   if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then
     rm -rf "$TEMP_DIR"
   fi
+  if [[ "$LOCK_HELD" -eq 1 && -n "$LOCK_DIR" && -d "$LOCK_DIR" && ! -L "$LOCK_DIR" ]]; then
+    rm -rf "$LOCK_DIR"
+  fi
 }
-trap cleanup_temp EXIT
+trap cleanup EXIT
 
-if [[ -L "$CACHE_ROOT" ]]; then
-  echo "qualification Swift cache: refusing symlinked cache root: $CACHE_ROOT" >&2
+symlinked_component="$(python3 - "$CACHE_ROOT" <<'PY'
+import os
+import sys
+
+path = os.path.abspath(os.path.expanduser(sys.argv[1]))
+current = os.path.sep
+for component in path.split(os.path.sep)[1:]:
+    current = os.path.join(current, component)
+    if os.path.lexists(current) and os.path.islink(current):
+        print(current)
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+)" && {
+  echo "qualification Swift cache: refusing symlinked cache path component: $symlinked_component" >&2
   exit 1
-fi
+}
 if [[ -e "$CACHE_ROOT" && ! -d "$CACHE_ROOT" ]]; then
   echo "qualification Swift cache: cache root collision: $CACHE_ROOT" >&2
   exit 1
 fi
 mkdir -p "$CACHE_ROOT"
 chmod 700 "$CACHE_ROOT"
+
+# Recheck after creation, then serialize all validation, cleanup, and publication
+# for this exact SHA. mkdir is the atomic lock acquisition primitive on macOS.
+symlinked_component="$(python3 - "$CACHE_ROOT" <<'PY'
+import os
+import sys
+
+path = os.path.abspath(os.path.expanduser(sys.argv[1]))
+current = os.path.sep
+for component in path.split(os.path.sep)[1:]:
+    current = os.path.join(current, component)
+    if os.path.lexists(current) and os.path.islink(current):
+        print(current)
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+)" && {
+  echo "qualification Swift cache: refusing symlinked cache path component: $symlinked_component" >&2
+  exit 1
+}
+LOCK_DIR="$CACHE_ROOT/.${SOURCE_SHA}.lock"
+for _ in {1..1200}; do
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    LOCK_HELD=1
+    printf '%s\n' "$$" > "$LOCK_DIR/pid"
+    break
+  fi
+  if [[ -L "$LOCK_DIR" || ! -d "$LOCK_DIR" ]]; then
+    echo "qualification Swift cache: lock destination collision: $LOCK_DIR" >&2
+    exit 1
+  fi
+  sleep 0.05
+done
+if [[ "$LOCK_HELD" -ne 1 ]]; then
+  echo "qualification Swift cache: timed out waiting for exact-SHA cache lock: $LOCK_DIR" >&2
+  exit 1
+fi
 
 if [[ -L "$CACHE_DIR" ]]; then
   echo "qualification Swift cache: refusing symlinked exact-SHA cache entry: $CACHE_DIR" >&2

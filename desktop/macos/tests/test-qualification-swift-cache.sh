@@ -3,7 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE_HELPER="$SCRIPT_DIR/../scripts/qualification-swift-cache.sh"
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/omi-qualification-swift-cache-test.XXXXXX")"
+TMP_ROOT_RAW="$(mktemp -d "${TMPDIR:-/tmp}/omi-qualification-swift-cache-test.XXXXXX")"
+TMP_ROOT="$(cd "$TMP_ROOT_RAW" && pwd -P)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
 fail() {
@@ -46,6 +47,54 @@ make_repo "$REPO_A"
 cp -R "$REPO_A" "$REPO_A_OTHER_PATH"
 SHA_A="$(git -C "$REPO_A" rev-parse HEAD)"
 SHA_B="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+# Publication must serialize same-SHA creators. The mv shim holds both old
+# implementations immediately after their no-destination precheck, making the
+# directory-into-directory race deterministic instead of scheduler-dependent.
+CONCURRENT_CACHE="$TMP_ROOT/concurrent-cache"
+MV_SHIM_DIR="$TMP_ROOT/mv-shim"
+MV_BARRIER="$TMP_ROOT/mv-barrier"
+mkdir -p "$MV_SHIM_DIR" "$MV_BARRIER"
+REAL_MV="$(command -v mv)"
+cat > "$MV_SHIM_DIR/mv" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+marker="$OMI_TEST_MV_BARRIER/$$"
+: > "$marker"
+for _ in {1..200}; do
+  count="$(find "$OMI_TEST_MV_BARRIER" -type f | wc -l | tr -d ' ')"
+  [[ "$count" -ge 2 ]] && break
+  sleep 0.01
+done
+exec "$OMI_TEST_REAL_MV" "$@"
+SH
+chmod +x "$MV_SHIM_DIR/mv"
+for process in {1..16}; do
+  env PATH="$MV_SHIM_DIR:$PATH" \
+    OMI_TEST_MV_BARRIER="$MV_BARRIER" \
+    OMI_TEST_REAL_MV="$REAL_MV" \
+    OMI_QUALIFICATION_SWIFT_CACHE_ROOT="$CONCURRENT_CACHE" \
+    "$CACHE_HELPER" prepare "$SHA_A" "$REPO_A" \
+    >"$TMP_ROOT/concurrent-$process.out" 2>"$TMP_ROOT/concurrent-$process.err" &
+  concurrent_pids[$process]=$!
+done
+for process in {1..16}; do
+  wait "${concurrent_pids[$process]}" || fail "concurrent prepare $process failed: $(cat "$TMP_ROOT/concurrent-$process.err")"
+done
+[[ "$(sort -u "$TMP_ROOT"/concurrent-*.out | wc -l | tr -d ' ')" == "1" ]] \
+  || fail "concurrent prepares returned different source paths"
+[[ "$(grep -hF 'qualification Swift cache MISS' "$TMP_ROOT"/concurrent-*.err | wc -l | tr -d ' ')" == "1" ]] \
+  || fail "concurrent publication must have exactly one MISS"
+[[ "$(grep -hF 'qualification Swift cache HIT' "$TMP_ROOT"/concurrent-*.err | wc -l | tr -d ' ')" == "15" ]] \
+  || fail "concurrent publication must make every other caller a HIT"
+[[ -z "$(find "$CONCURRENT_CACHE/$SHA_A" -mindepth 1 -maxdepth 1 -name ".${SHA_A}.prepare.*" -print)" ]] \
+  || fail "concurrent publication nested a prepare clone inside the final entry"
+
+mkdir -p "$TMP_ROOT/symlink-ancestor-target"
+ln -s "$TMP_ROOT/symlink-ancestor-target" "$TMP_ROOT/symlink-ancestor"
+expect_rejected symlink-ancestor "refusing symlinked cache path component" \
+  env OMI_QUALIFICATION_SWIFT_CACHE_ROOT="$TMP_ROOT/symlink-ancestor/cache" \
+  "$CACHE_HELPER" prepare "$SHA_A" "$REPO_A"
 
 first_source="$($CACHE_HELPER prepare "$SHA_A" "$REPO_A")"
 expected_source="$OMI_QUALIFICATION_SWIFT_CACHE_ROOT/$SHA_A/source"
