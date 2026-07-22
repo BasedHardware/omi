@@ -2,13 +2,13 @@
   "files": {
     "desktop/macos/Desktop/Sources/AuthService.swift": 3294,
     "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": 1678,
-    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4264,
+    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4291,
     "desktop/macos/Desktop/Sources/MemoryExportService.swift": 1578,
     "desktop/macos/Desktop/Sources/OmiApp.swift": 1638
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/AuthService.swift": "Apple first-auth name capture signals observers (authNameDidUpdate) and persists the name to Firebase so it survives reinstalls.",
-    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": "Adds a non-prod send_main_draft action that drives the composer's sendMainDraft path so the draft clear/restore behavior is verifiable end to end; +26 lines.",
+    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": "Non-prod voice-notch verification: debug_bar_state gains a text param and a reset_usage_limit test bypass, and capture_floating_bar_png now falls back to the NotchWindow so the in-process capture works in the notch build; +27 lines.",
     "desktop/macos/Desktop/Sources/MemoryExportService.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
     "desktop/macos/Desktop/Sources/OmiApp.swift": "shared openMainAppWindow helper for menu bar + Open Omi shortcut"
   },
