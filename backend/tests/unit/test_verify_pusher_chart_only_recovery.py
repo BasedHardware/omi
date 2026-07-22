@@ -111,6 +111,37 @@ def test_recovery_profile_ignores_api_server_deployment_defaults(recovery: Simpl
     assert recovery.allowed_recovery_drift(live, rendered) == []
 
 
+def test_recovery_profile_ignores_helm_annotations_and_service_defaults(recovery: SimpleNamespace):
+    """Helm-managed annotations and cluster-added Service fields are absent from helm template."""
+    live = deployment(
+        "gcr.io/project/pusher:2ae7f78", {"secretKeyRef": {"name": "prod-omi-backend-secrets", "key": "REDIS_DB_HOST"}}
+    )
+    live["metadata"]["annotations"] = {
+        "deployment.kubernetes.io/revision": "3",
+        "meta.helm.sh/release-name": "prod-omi-pusher",
+        "meta.helm.sh/release-namespace": "prod-omi-backend",
+    }
+    rendered = deployment(f"gcr.io/project/pusher@{DIGEST}")
+    assert recovery.allowed_recovery_drift(live, rendered) == []
+
+    # Service drift comparison should also ignore cluster-added defaults.
+    live_svc = {
+        "kind": "Service",
+        "metadata": {
+            "name": "prod-omi-pusher",
+            "annotations": {"meta.helm.sh/release-name": "prod-omi-pusher"},
+        },
+        "spec": {
+            "clusterIP": "10.0.0.1",
+            "clusterIPs": ["10.0.0.1"],
+            "internalTrafficPolicy": "Cluster",
+            "sessionAffinityConfig": {},
+        },
+    }
+    rendered_svc = {"kind": "Service", "metadata": {"name": "prod-omi-pusher"}, "spec": {}}
+    assert recovery.validate_chart_owned_resource_drift(live_svc, rendered_svc, "Service") == []
+
+
 def test_redis_validation_rejects_secret_and_configmap_errors(recovery: SimpleNamespace):
     assert recovery.validate_redis_source(deployment("x").copy(), "prod-omi-backend-config") == []
     secret = deployment("x", {"secretKeyRef": {"name": "prod-omi-backend-secrets", "key": "REDIS_DB_HOST"}})

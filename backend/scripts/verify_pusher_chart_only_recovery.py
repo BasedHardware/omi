@@ -28,16 +28,13 @@ VOLATILE_METADATA = {
     "selfLink",
     "uid",
 }
-HELM_RELEASE_ANNOTATIONS = {
-    "meta.helm.sh/release-name",
-    "meta.helm.sh/release-namespace",
-}
-
 # Kubernetes API-server/controller-populated Deployment fields that are absent
 # from ``helm template`` output.  ``normalize()`` strips them so the drift
 # comparison does not spuriously fail on a healthy live Deployment.
 VOLATILE_DEPLOYMENT_ANNOTATIONS = {
     "deployment.kubernetes.io/revision",
+    "meta.helm.sh/release-name",
+    "meta.helm.sh/release-namespace",
 }
 VOLATILE_DEPLOYMENT_SPEC = {
     "revisionHistoryLimit",
@@ -50,6 +47,15 @@ VOLATILE_POD_TEMPLATE_SPEC = {
 VOLATILE_CONTAINER_FIELDS = {
     "terminationMessagePath",
     "terminationMessagePolicy",
+}
+
+# Cluster-added Service fields absent from ``helm template`` output.
+VOLATILE_SERVICE_SPEC = {
+    "clusterIP",
+    "clusterIPs",
+    "healthCheckNodePort",
+    "ipFamilies",
+    "ipFamilyPolicy",
 }
 
 
@@ -171,20 +177,13 @@ def normalize(obj: dict[str, Any]) -> dict[str, Any]:
         metadata.pop("namespace", None)
         annotations = metadata.get("annotations")
         if isinstance(annotations, dict):
-            for key in HELM_RELEASE_ANNOTATIONS:
+            for key in VOLATILE_DEPLOYMENT_ANNOTATIONS:
                 annotations.pop(key, None)
             if not annotations:
                 metadata.pop("annotations", None)
     if result.get("kind") == "Service":
         spec = result.get("spec", {})
-        for key in (
-            "clusterIP",
-            "clusterIPs",
-            "healthCheckNodePort",
-            "ipFamilies",
-            "ipFamilyPolicy",
-            "sessionAffinityConfig",
-        ):
+        for key in VOLATILE_SERVICE_SPEC:
             spec.pop(key, None)
         # These fields are defaulted by the Service API when the chart omits
         # them. Strip only their documented defaults; non-default policies are
@@ -193,21 +192,15 @@ def normalize(obj: dict[str, Any]) -> dict[str, Any]:
             spec.pop("internalTrafficPolicy", None)
         if spec.get("sessionAffinity") == "None":
             spec.pop("sessionAffinity", None)
+        if spec.get("sessionAffinityConfig") == {}:
+            spec.pop("sessionAffinityConfig", None)
     if result.get("kind") == "Deployment":
         _strip_deployment_defaults(result)
     return remove_nulls(result)
 
 
 def _strip_deployment_defaults(deployment: dict[str, Any]) -> None:
-    """Remove API-server/controller-populated fields absent from helm template."""
-    metadata = deployment.get("metadata", {})
-    annotations = metadata.get("annotations")
-    if isinstance(annotations, dict):
-        for key in VOLATILE_DEPLOYMENT_ANNOTATIONS:
-            annotations.pop(key, None)
-        if not annotations:
-            metadata.pop("annotations", None)
-
+    """Remove Deployment-specific API-server/controller defaults absent from helm template."""
     spec = deployment.get("spec", {})
     for key in VOLATILE_DEPLOYMENT_SPEC:
         spec.pop(key, None)
