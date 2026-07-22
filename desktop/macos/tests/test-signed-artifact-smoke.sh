@@ -135,6 +135,132 @@ fi
 grep -q "SUFeedURL mismatch" /tmp/omi-smoke-beta-feed.err \
   && fail "--expected-feed-url should accept the identity-scoped feed"
 
+make_signed_smoke_fixture() {
+  local app="$1"
+  local bundle_id="$2"
+  local feed_url="$3"
+
+  mkdir -p \
+    "$app/Contents/MacOS" \
+    "$app/Contents/Frameworks/Sparkle.framework" \
+    "$app/Contents/Resources/agent/src/runtime" \
+    "$app/Contents/Resources/agent/node_modules/@img/sharp-darwin-arm64/lib" \
+    "$app/Contents/Resources/agent/node_modules/@img/sharp-darwin-x64/lib" \
+    "$app/Contents/Resources/agent/node_modules/@img/sharp-libvips-darwin-arm64/lib" \
+    "$app/Contents/Resources/agent/node_modules/@img/sharp-libvips-darwin-x64/lib" \
+    "$app/Contents/Resources/pi-mono-extension" \
+    "$app/Contents/Resources/Omi Computer_Omi Computer.bundle"
+  cat > "$app/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key><string>Omi Computer</string>
+  <key>CFBundleIdentifier</key><string>$bundle_id</string>
+  <key>CFBundleShortVersionString</key><string>0.12.34</string>
+  <key>CFBundleVersion</key><string>12034</string>
+  <key>CFBundleURLTypes</key>
+  <array><dict><key>CFBundleURLSchemes</key><array><string>omi-computer</string></array></dict></array>
+  <key>SUFeedURL</key><string>$feed_url</string>
+</dict>
+</plist>
+PLIST
+  cat > "$app/Contents/Resources/.env" <<'ENV'
+OMI_PYTHON_API_URL=https://api.omi.me
+OMI_DESKTOP_API_URL=https://desktop-backend-hhibjajaja-uc.a.run.app/
+ENV
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/MacOS/Omi Computer"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+  chmod +x "$app/Contents/MacOS/Omi Computer" "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+  touch \
+    "$app/Contents/Resources/agent/src/runtime/omi-tool-manifest.ts" \
+    "$app/Contents/Resources/agent/node_modules/@img/sharp-darwin-arm64/lib/sharp-darwin-arm64.node" \
+    "$app/Contents/Resources/agent/node_modules/@img/sharp-darwin-x64/lib/sharp-darwin-x64.node" \
+    "$app/Contents/Resources/agent/node_modules/@img/sharp-libvips-darwin-arm64/lib/libvips-cpp.42.dylib" \
+    "$app/Contents/Resources/agent/node_modules/@img/sharp-libvips-darwin-x64/lib/libvips-cpp.42.dylib"
+}
+
+mock_bin="$tmp_root/mock-bin"
+mkdir -p "$mock_bin"
+cat > "$mock_bin/codesign" <<'SH'
+#!/usr/bin/env bash
+if [[ " $* " == *" --entitlements "* ]]; then
+  printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict/></plist>'
+elif [[ "${1:-}" == "-dv" ]]; then
+  printf 'TeamIdentifier=9536L8KLMP\nRuntime Version=15.0.0\n' >&2
+fi
+SH
+cat > "$mock_bin/spctl" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+cat > "$mock_bin/xcrun" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+cat > "$mock_bin/hdiutil" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "attach" ]]; then
+  while [[ $# -gt 0 ]]; do
+    if [[ "$1" == "-mountpoint" ]]; then
+      mountpoint="$2"
+      break
+    fi
+    shift
+  done
+  cp -R "$OMI_TEST_DMG_APP_SOURCE" "$mountpoint/"
+fi
+SH
+cat > "$mock_bin/file" <<'SH'
+#!/usr/bin/env bash
+printf '%s: Mach-O 64-bit executable arm64 x86_64\n' "${1:-fixture}"
+SH
+cat > "$mock_bin/otool" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+cat > "$mock_bin/strings" <<'SH'
+#!/usr/bin/env bash
+printf 'LocalAgentAPIServer\nRewindDatabase\n'
+SH
+chmod +x "$mock_bin"/*
+
+canonical_dmg_app="$tmp_root/Omi.app"
+signed_beta_app="$tmp_root/signed/Omi Beta.app"
+make_signed_smoke_fixture "$canonical_dmg_app" \
+  com.omi.computer-macos \
+  https://api.omi.me/v2/desktop/appcast.xml
+make_signed_smoke_fixture "$signed_beta_app" \
+  com.omi.computer-macos.beta \
+  'https://api.omi.me/v2/desktop/appcast.xml?identity=beta'
+dummy_dmg="$tmp_root/fixture.dmg"
+touch "$dummy_dmg"
+
+PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$canonical_dmg_app" \
+  "$SMOKE" --app "$canonical_dmg_app" --dmg "$dummy_dmg" \
+  --tag v0.12.34+12034-macos \
+  >/tmp/omi-smoke-canonical-dmg.out 2>/tmp/omi-smoke-canonical-dmg.err \
+  || fail "canonical Omi.app DMG should pass: $(cat /tmp/omi-smoke-canonical-dmg.err)"
+
+PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$signed_beta_app" \
+  "$SMOKE" --app "$signed_beta_app" --dmg "$dummy_dmg" \
+  --tag v0.12.34+12034-macos \
+  --expected-bundle-id com.omi.computer-macos.beta \
+  --expected-feed-url 'https://api.omi.me/v2/desktop/appcast.xml?identity=beta' \
+  >/tmp/omi-smoke-beta-dmg.out 2>/tmp/omi-smoke-beta-dmg.err \
+  || fail "Omi Beta.app DMG should pass: $(cat /tmp/omi-smoke-beta-dmg.err)"
+
+if PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$canonical_dmg_app" \
+  "$SMOKE" --app "$signed_beta_app" --dmg "$dummy_dmg" \
+  --tag v0.12.34+12034-macos \
+  --expected-bundle-id com.omi.computer-macos.beta \
+  --expected-feed-url 'https://api.omi.me/v2/desktop/appcast.xml?identity=beta' \
+  >/tmp/omi-smoke-beta-wrong-dmg.out 2>/tmp/omi-smoke-beta-wrong-dmg.err; then
+  fail "beta smoke must reject a DMG containing only Omi.app"
+fi
+grep -q "DMG must contain exact Omi Beta.app" /tmp/omi-smoke-beta-wrong-dmg.err \
+  || fail "wrong-name DMG rejection should name the exact expected bundle"
+
 # Regression (v0.12.91 build failure): macOS mktemp creates the LITERAL template
 # file when characters follow the final XXXXXX, so the second smoke invocation
 # in one build (stable then Omi Beta) dies with "File exists". Every template
