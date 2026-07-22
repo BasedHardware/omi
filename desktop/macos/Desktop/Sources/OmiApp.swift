@@ -1073,7 +1073,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       let isRealAppWindow = window.frame.width > 300 && window.frame.height > 200
       let isMenuBarPopover = window.title.hasPrefix("Item-")
       if isRealAppWindow && !isMenuBarPopover {
+        // A summon can come from any Space/desktop, so the window must follow the
+        // user here — otherwise activating the app leaves the window stranded on
+        // its original Space and nothing appears. `.moveToActiveSpace` pulls it to
+        // the current desktop; also un-minimize and (belt-and-suspenders) nudge it
+        // on-screen if it drifted off a disconnected display.
+        window.collectionBehavior.insert(.moveToActiveSpace)
+        if window.isMiniaturized { window.deminiaturize(nil) }
+        if let screen = NSScreen.main, !screen.visibleFrame.intersects(window.frame) {
+          window.center()
+        }
         window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
         window.appearance = NSAppearance(named: .darkAqua)
         return true
       }
