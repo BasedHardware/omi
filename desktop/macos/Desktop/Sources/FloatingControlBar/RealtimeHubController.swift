@@ -98,6 +98,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Authoritative owner is the kernel journal / voice-context turn IDs; restore
   /// through `RealtimeHubContinuityRestore` + `RealtimeTurnJournalAuthority`.
   var acceptedSpawnJournalReceiptByContinuityKey: [String: AcceptedSpawnJournalReceipt] = [:]
+  /// One bounded same-turn recovery after a failed spawn. The first failure
+  /// returns typed guidance to the provider; a repeat closes the turn.
+  var spawnFailureContinuationPolicy = RealtimeSpawnFailureContinuationPolicy()
   let legacyVoiceJournalImportStore = LegacyVoiceJournalImportStore.shared
   var legacyVoiceJournalImportTask: Task<Void, Never>?
   var legacyVoiceJournalImportedOwners = Set<String>()

@@ -25,6 +25,12 @@ covers:
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingWelcomeStepView.swift
   - desktop/macos/Desktop/Sources/PostOnboardingPromptViews.swift
   - desktop/macos/Desktop/Sources/FileIndexing/FileIndexingView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel+Steps.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/OnboardingOpenerComposer.swift
+  - desktop/macos/Desktop/Sources/MainWindow/OnboardingOpenerView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/OnboardingWalkthroughOverlay.swift
 preconditions:
   - automation_bridge_ready
 

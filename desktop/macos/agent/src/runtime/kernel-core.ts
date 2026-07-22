@@ -1024,7 +1024,13 @@ export class KernelCore {
             sessionId: accepted.session.sessionId,
           });
           refreshMcpAttemptContext(
-            mcpServersForBinding(input.mcpServers ?? [], accepted.session.sessionId, adapterId, this.runtimeNodeId),
+            mcpServersForBinding(
+              attemptInput.mcpServers ?? [],
+              accepted.session.sessionId,
+              adapterId,
+              this.runtimeNodeId,
+              attemptInput.cwd,
+            ),
             { capabilityRef: toolCapability.capabilityRef },
           );
           this.markAttemptRunning(attempt, binding);
@@ -1643,7 +1649,13 @@ export class KernelCore {
         cwd: input.input.cwd ?? binding.cwd ?? input.session.defaultCwd ?? process.cwd(),
         model: input.input.model ?? binding.modelId ?? undefined,
         systemPrompt: input.input.systemPrompt,
-        mcpServers: mcpServersForBinding(input.input.mcpServers ?? [], input.session.sessionId, input.adapterId, this.runtimeNodeId),
+        mcpServers: mcpServersForBinding(
+          input.input.mcpServers ?? [],
+          input.session.sessionId,
+          input.adapterId,
+          this.runtimeNodeId,
+          input.input.cwd,
+        ),
         metadata: {
           ...(input.input.metadata ?? {}),
           executionRole: input.session.executionRole,
@@ -1703,7 +1715,13 @@ export class KernelCore {
       cwd: input.input.cwd ?? input.session.defaultCwd ?? process.cwd(),
       model: input.input.model,
       systemPrompt: input.input.systemPrompt,
-      mcpServers: mcpServersForBinding(input.input.mcpServers ?? [], input.session.sessionId, input.adapterId, this.runtimeNodeId),
+      mcpServers: mcpServersForBinding(
+        input.input.mcpServers ?? [],
+        input.session.sessionId,
+        input.adapterId,
+        this.runtimeNodeId,
+        input.input.cwd,
+      ),
       metadata: {
         ...(input.input.metadata ?? {}),
         executionRole: input.session.executionRole,
@@ -1874,7 +1892,10 @@ export class KernelCore {
       return input;
     }
     const requestedCwd = input.cwd ?? session.defaultCwd;
-    if (requestedCwd && !this.artifactStorage.isRootDirectory(requestedCwd)) {
+    // Leaf agents are assigned an isolated Omi artifact directory for every
+    // attempt. A delegated objective or a caller-supplied cwd must not turn
+    // that into a user-visible default such as Desktop.
+    if (session.executionRole !== "leaf" && requestedCwd && !this.artifactStorage.isRootDirectory(requestedCwd)) {
       return input;
     }
     const cwd = this.artifactStorage.prepareRunDirectory({

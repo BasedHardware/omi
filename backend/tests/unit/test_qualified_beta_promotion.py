@@ -16,6 +16,7 @@ from utils.qualified_beta_promotion import (
     REPOSITORY,
     GitHubQualifiedBetaReader,
     QualifiedBetaAdmissionError,
+    _asset_url,
     _current_time,
     _timestamp,
     build_qualified_beta_manifest,
@@ -100,6 +101,109 @@ class FakeQualifiedBetaReader:
     async def download(self, url):
         self.download_calls.append(url)
         return self.downloaded[url]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("github_status", "expected"),
+    (("ahead", True), ("identical", True), ("behind", False), ("diverged", False)),
+)
+async def test_github_merged_source_uses_head_relative_to_base_direction(monkeypatch, github_status, expected):
+    reader = GitHubQualifiedBetaReader()
+
+    async def fake_api(path):
+        assert path == f"compare/{SHA}...main"
+        return {"status": github_status}
+
+    monkeypatch.setattr(reader, "_api", fake_api)
+    assert await reader.is_merged_source(SHA) is expected
+
+
+@pytest.mark.parametrize(
+    "tag_path",
+    (TAG, TAG.replace("+", "%2B")),
+)
+def test_asset_url_accepts_only_literal_or_github_canonical_plus_encoding(tag_path):
+    url = f"https://github.com/{REPOSITORY}/releases/download/{tag_path}/Omi.zip"
+    assert _asset_url({"browser_download_url": url}, TAG, "Omi.zip") == url
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
+        f"https://github.com/{REPOSITORY}/releases/download/{TAG.replace('+', '%2b')}/Omi.zip",
+        f"https://github.com/attacker/omi/releases/download/{TAG}/Omi.zip",
+        f"https://github.com/{REPOSITORY}/releases/download/{TAG}/other.zip",
+    ),
+)
+def test_asset_url_rejects_noncanonical_or_wrong_identity(url):
+    with pytest.raises(QualifiedBetaAdmissionError, match="asset identity"):
+        _asset_url({"browser_download_url": url}, TAG, "Omi.zip")
+
+
+class FakeHTTPResponse:
+    def __init__(self, status_code, *, headers=None, content=b""):
+        self.status_code = status_code
+        self.headers = headers or {}
+        self.content = content
+
+
+class FakeHTTPClient:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    async def get(self, url, **kwargs):
+        self.calls.append((url, kwargs))
+        return self.responses.pop(0)
+
+
+@pytest.mark.asyncio
+async def test_github_asset_download_follows_one_exact_asset_host_redirect_without_auth(monkeypatch):
+    redirect = "https://release-assets.githubusercontent.com/github-production-release-asset/123/file?sig=abc"
+    client = FakeHTTPClient(
+        [FakeHTTPResponse(302, headers={"location": redirect}), FakeHTTPResponse(200, content=b"artifact")]
+    )
+    monkeypatch.setattr("utils.qualified_beta_promotion.get_web_fetch_client", lambda: client)
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+
+    reader = GitHubQualifiedBetaReader()
+    assert await reader.download("https://github.com/BasedHardware/omi/releases/download/tag/Omi.zip") == b"artifact"
+    assert client.calls[0][1]["headers"]["Authorization"] == "Bearer test-token"
+    assert client.calls[1] == (redirect, {})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "redirect",
+    (
+        "http://release-assets.githubusercontent.com/file",
+        "https://attacker.example/file",
+        "https://user@release-assets.githubusercontent.com/file",
+        "https://release-assets.githubusercontent.com:444/file",
+    ),
+)
+async def test_github_asset_download_rejects_untrusted_redirects(monkeypatch, redirect):
+    client = FakeHTTPClient([FakeHTTPResponse(302, headers={"location": redirect})])
+    monkeypatch.setattr("utils.qualified_beta_promotion.get_web_fetch_client", lambda: client)
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+
+    with pytest.raises(QualifiedBetaAdmissionError, match="asset is unavailable"):
+        await GitHubQualifiedBetaReader().download("https://github.com/BasedHardware/omi/releases/download/tag/Omi.zip")
+    assert len(client.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_github_asset_download_rejects_a_second_redirect(monkeypatch):
+    redirect = "https://release-assets.githubusercontent.com/file"
+    client = FakeHTTPClient(
+        [FakeHTTPResponse(302, headers={"location": redirect}), FakeHTTPResponse(302, headers={"location": redirect})]
+    )
+    monkeypatch.setattr("utils.qualified_beta_promotion.get_web_fetch_client", lambda: client)
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+
+    with pytest.raises(QualifiedBetaAdmissionError, match="asset is unavailable"):
+        await GitHubQualifiedBetaReader().download("https://github.com/BasedHardware/omi/releases/download/tag/Omi.zip")
 
 
 def _digest(value):

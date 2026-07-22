@@ -8,6 +8,10 @@ import Foundation
 /// `run.sh`, and that relaunch must remain isolated.
 package struct DesktopStorageIdentity: Equatable {
   package static let namedDevelopmentBundlePrefix = "com.omi.omi-"
+  /// The separately-installable "Omi Beta" app. Kept in sync with
+  /// `AppBuild.betaProductionBundleIdentifier` (asserted by a unit test); OmiSupport
+  /// sits below the main target, so the literal is duplicated rather than imported.
+  package static let betaProductionBundleIdentifier = "com.omi.computer-macos.beta"
 
   package let bundleIdentifier: String?
   package let localProfileEnabled: Bool
@@ -38,13 +42,23 @@ package struct DesktopStorageIdentity: Equatable {
     }
   }
 
+  package var isBetaProductionBundle: Bool {
+    bundleIdentifier == Self.betaProductionBundleIdentifier
+  }
+
   package var usesIsolatedStorage: Bool {
-    localProfileEnabled || isNamedDevelopmentBundle
+    localProfileEnabled || isNamedDevelopmentBundle || isBetaProductionBundle
   }
 
   package var applicationSupportPathComponents: [String] {
     if let bundleIdentifier, isNamedDevelopmentBundle {
       return ["Omi Dev Bundles", bundleIdentifier]
+    }
+    // Omi Beta owns a separate root so a live beta and a live stable instance never
+    // share one SQLite database. It deliberately does not claim the legacy shared
+    // `Omi/` data (isolated ⇒ no legacy migration): beta starts fresh.
+    if isBetaProductionBundle {
+      return ["Omi Beta"]
     }
     if localProfileEnabled {
       return [localProfileStorageName ?? "Omi"]

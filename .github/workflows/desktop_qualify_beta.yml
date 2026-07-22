@@ -21,13 +21,25 @@ concurrency:
 
 # This workflow deliberately runs only on the dedicated, trusted macOS runner.
 # Do not add pull_request or push triggers: the runner has Docker and a GitHub
-# App token that can request beta promotion after exact qualification passes.
+# App token that can publish immutable evidence after exact qualification passes.
 jobs:
   qualify:
     runs-on: [self-hosted, macos, omi-desktop-qualification]
     permissions:
       contents: write
     steps:
+      - name: Remove stale uninitialized PlatformIO gitlink
+        shell: bash
+        run: |
+          set -euo pipefail
+          stale_gitlink="$GITHUB_WORKSPACE/omiGlass/firmware/.pio/libdeps/seeed_xiao_esp32s3/libopus"
+          if [ -d "$stale_gitlink" ] && [ ! -e "$stale_gitlink/.git" ]; then
+            rmdir "$stale_gitlink" || {
+              echo "Refusing to remove nonempty uninitialized gitlink: $stale_gitlink" >&2
+              exit 1
+            }
+          fi
+
       - name: Checkout qualification controls
         uses: actions/checkout@v7
         with:
@@ -69,8 +81,8 @@ jobs:
           git fetch --force origin "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
           LATEST_TAG=$(git for-each-ref --count=1 --sort=-v:refname --format='%(refname:strip=2)' 'refs/tags/v*-macos')
           test -n "$LATEST_TAG"
-          TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
-          CHECKOUT_SHA=$(git rev-parse "$RELEASE_TAG")
+          TARGET_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
+          CHECKOUT_SHA=$(git rev-parse "HEAD^{commit}")
           rm -rf /tmp/desktop-beta-qualification
           mkdir -p /tmp/desktop-beta-qualification
           gh release view "$RELEASE_TAG" --repo "$REPO" \
@@ -79,13 +91,21 @@ jobs:
           gh release download "$RELEASE_TAG" --repo "$REPO" \
             --pattern 'desktop-smoke-result.json' \
             --dir /tmp/desktop-beta-qualification
+          # Present only on releases that ship the side-by-side Omi Beta identity.
+          gh release download "$RELEASE_TAG" --repo "$REPO" \
+            --pattern 'desktop-smoke-result-beta.json' \
+            --dir /tmp/desktop-beta-qualification 2>/dev/null || true
           gh release download "$RELEASE_TAG" --repo "$REPO" \
             --pattern 'Omi.zip' --pattern 'omi.dmg' \
             --dir /tmp/desktop-beta-qualification/assets
+          gh release download "$RELEASE_TAG" --repo "$REPO" \
+            --pattern 'Omi.Beta.zip' --pattern 'omi-beta.dmg' \
+            --dir /tmp/desktop-beta-qualification/assets 2>/dev/null || true
 
           python3 .github/scripts/check-desktop-auto-beta-candidate.py \
             --release-json /tmp/desktop-beta-qualification/release.json \
             --smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result.json \
+            --beta-smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result-beta.json \
             --release-tag "$RELEASE_TAG" \
             --latest-tag "$LATEST_TAG" \
             --tag-sha "$TARGET_SHA" \
@@ -113,9 +133,14 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
+          TARGET_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
           STABLE_DMG=/tmp/desktop-beta-qualification/assets/omi.dmg
           test -n "$STABLE_DMG"
+          # Side-by-side Omi Beta assets are optional until every release ships them.
+          BETA_EVIDENCE_ASSETS=""
+          if [ -f /tmp/desktop-beta-qualification/assets/Omi.Beta.zip ]; then
+            BETA_EVIDENCE_ASSETS="--asset Omi.Beta.zip=/tmp/desktop-beta-qualification/assets/Omi.Beta.zip --asset omi-beta.dmg=/tmp/desktop-beta-qualification/assets/omi-beta.dmg"
+          fi
           python3 .github/scripts/desktop_qualification_evidence.py build \
             --release-json /tmp/desktop-beta-qualification/release.json \
             --release-tag "$RELEASE_TAG" --source-sha "$TARGET_SHA" \
@@ -123,6 +148,7 @@ jobs:
             --qualification-run-id "$GITHUB_RUN_ID" \
             --asset Omi.zip=/tmp/desktop-beta-qualification/assets/Omi.zip \
             --asset "omi.dmg=$STABLE_DMG" \
+            $BETA_EVIDENCE_ASSETS \
             --evidence /tmp/desktop-beta-qualification/qualification-evidence.json
 
       - name: Upload immutable qualification evidence
@@ -144,9 +170,15 @@ jobs:
           gh release upload "$RELEASE_TAG" --repo "$REPO" \
             /tmp/desktop-beta-qualification/qualification-evidence.json#"qualification-evidence-${RELEASE_TAG}.json"
 
-  promote-qualified-beta:
-    needs: qualify
-    if: needs.qualify.result == 'success'
-    uses: ./.github/workflows/desktop_promote_beta.yml
-    with:
-      release_tag: ${{ inputs.release_tag }}
+      - name: Remove regenerated uninitialized PlatformIO gitlink before checkout post-action
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          stale_gitlink="$GITHUB_WORKSPACE/omiGlass/firmware/.pio/libdeps/seeed_xiao_esp32s3/libopus"
+          if [ -d "$stale_gitlink" ] && [ ! -e "$stale_gitlink/.git" ]; then
+            rmdir "$stale_gitlink" || {
+              echo "Refusing to remove nonempty uninitialized gitlink: $stale_gitlink" >&2
+              exit 1
+            }
+          fi

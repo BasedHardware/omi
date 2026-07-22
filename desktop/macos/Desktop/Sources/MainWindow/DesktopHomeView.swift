@@ -38,11 +38,16 @@ struct DesktopHomeView: View {
   @AppStorage("onboardingFurthestStep") private var onboardingFurthestStep = 0
   @AppStorage("onboardingJustCompleted") private var onboardingJustCompleted = false
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
+  /// Reference instant for the top bar's "new since you were last here" counts —
+  /// updated to now whenever Omi resigns front (see the didResignActive handler).
+  @AppStorage("topBarNewSince") private var topBarNewSinceRaw: Double = 0
 
   // Settings sidebar state
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
   @State private var highlightedSettingId: String? = nil
   @State private var showTryAskingPopup = false
+  /// Post-onboarding coach-mark walkthrough: nil = inactive, else current step index.
+  @State private var walkthroughStep: Int? = nil
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
   @State private var lastActivationRefresh = Date.distantPast
@@ -108,11 +113,11 @@ struct DesktopHomeView: View {
             appState.hasCompletedOnboarding = true
           }
         } else {
-          OnboardingView(
+          SBOnboardingView(
             appState: appState, chatProvider: viewModelContainer.chatProvider, onComplete: nil
           )
           .onAppear {
-            log("DesktopHomeView: Showing OnboardingView (signed in, not onboarded)")
+            log("DesktopHomeView: Showing SBOnboardingView (signed in, not onboarded)")
           }
         }
       } else {
@@ -124,8 +129,13 @@ struct DesktopHomeView: View {
             .onAppear {
               if UserDefaults.standard.bool(forKey: "onboardingJustCompleted") {
                 UserDefaults.standard.removeObject(forKey: "onboardingJustCompleted")
-                log("DesktopHomeView: Onboarding just completed — navigating to Dashboard")
+                log("DesktopHomeView: Onboarding just completed — starting UI walkthrough")
+                // Land on Home; the top bar's nav pills (always visible) are what
+                // the coach-marks spotlight, so keep the chat-first layout with the
+                // old rail collapsed rather than expanding it.
                 selectedIndex = SidebarNavItem.dashboard.rawValue
+                isSidebarCollapsed = true
+                walkthroughStep = 0
               }
             }
           mainContent
@@ -156,6 +166,9 @@ struct DesktopHomeView: View {
                   }
                 )
               }
+            }
+            .overlayPreferenceValue(SidebarCoachAnchorKey.self) { anchors in
+              walkthroughOverlay(anchors)
             }
             .overlay(alignment: .top) {
               if let policy = updatePolicyManager.visiblePolicy, !policy.isRequired {
@@ -434,6 +447,11 @@ struct DesktopHomeView: View {
       log(
         "DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)"
       )
+      // Register Geist/Geist Mono for the sign-in + conversational onboarding surfaces.
+      // (Kept out of OmiApp to respect the product-file line-count ratchet.)
+      OmiFontRegistration.registerAll()
+      // Drive the notch "moments" (live receipts + conversation-end) off real state.
+      NotchMomentsCoordinator.shared.start(appState: appState)
       // Force dark appearance and disable minSize computation on NSHostingView.
       // By default, every @Published change triggers
       // updateWindowContentSizeExtremaIfNecessary() → minSize() → sizeThatFits()
@@ -478,13 +496,35 @@ struct DesktopHomeView: View {
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       enforceMainWindowMinimumSize()
       reportAutomationState()
+      // First-run seed so the counter doesn't count the entire backlog as "new".
+      if topBarNewSinceRaw == 0 { topBarNewSinceRaw = Date().timeIntervalSince1970 }
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
       reportAutomationState()
+      // Mark the moment Omi went to the background; anything created after this
+      // shows in the top bar's "new since you were last here" counter.
+      topBarNewSinceRaw = Date().timeIntervalSince1970
     }
     .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationNavigateRequested)) {
       notification in
       handleAutomationNavigation(notification)
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .navigateToChat)) { _ in
+      // The global shortcut / notch "Ask Omi" opens the continuous chat, which
+      // lives on the chat-first home. DashboardPage focuses the input when it's
+      // already mounted; if we're on another tab, switch home first and re-emit
+      // so the now-mounted page catches it. Guard on the tab to avoid a loop.
+      if selectedIndex != SidebarNavItem.dashboard.rawValue {
+        selectedIndex = SidebarNavItem.dashboard.rawValue
+        DispatchQueue.main.async {
+          NotificationCenter.default.post(name: .navigateToChat, object: nil)
+        }
+      }
+    }
+    // "Continue in Omi" from the floating bar: switch to the Home tab; the
+    // dashboard consumes the pending request and opens the chat panel.
+    .onReceive(NotificationCenter.default.publisher(for: .openMainChatRequested)) { _ in
+      selectedIndex = SidebarNavItem.dashboard.rawValue
     }
   }
 
@@ -602,6 +642,21 @@ struct DesktopHomeView: View {
 
   private var showsPrimarySidebar: Bool {
     useLegacyHomeDesign && !hideSidebar
+  }
+
+  /// The constant floating top bar (nav + new-item counts + Capture/Listening)
+  /// replaces the old left nav rail. It shows on every main content page —
+  /// including Settings, whose page has no back button, so the bar's nav pills
+  /// are the way out. Permissions/help are full-screen utility flows with their
+  /// own chrome and stay bar-less.
+  private var showsTopBar: Bool {
+    guard !useLegacyHomeDesign, let item = SidebarNavItem(rawValue: selectedIndex) else { return false }
+    return ![.permissions, .help].contains(item)
+  }
+
+  /// Reference instant for the top bar's "new since you were last here" counts.
+  private var topBarSinceDate: Date {
+    topBarNewSinceRaw > 0 ? Date(timeIntervalSince1970: topBarNewSinceRaw) : Date()
   }
 
   private var currentAppStateLabel: String {
@@ -791,7 +846,11 @@ struct DesktopHomeView: View {
     ) {
       async let conversations: Void = loadConversationsIfNeeded()
       async let folders: Void = loadFoldersIfNeeded()
-      _ = await (conversations, folders)
+      // Warm memories + tasks too so the top bar's new-item counter has data
+      // even before those tabs are visited.
+      async let memories: Void = viewModelContainer.memoriesViewModel.loadMemoriesIfNeeded()
+      async let tasks: Void = viewModelContainer.tasksStore.loadTasksIfNeeded()
+      _ = await (conversations, folders, memories, tasks)
     }
     if !scheduled { didScheduleConversationWarmup = false }
   }
@@ -887,6 +946,57 @@ struct DesktopHomeView: View {
       index == SidebarNavItem.memories.rawValue
   }
 
+  // MARK: - Post-onboarding UI walkthrough (coach-marks)
+
+  // Anchored to the top bar's nav pills (Home, Memory, Tasks, Apps) + the
+  // Capture/Listening controls — see DesktopTopBar's `.anchorPreference`s.
+  private static let walkthroughSteps: [OnboardingCoachStep] = [
+    .init(
+      itemRawValue: SidebarNavItem.dashboard.rawValue, title: "Home",
+      body: "Your day at a glance, and where you talk to me."),
+    .init(
+      itemRawValue: SidebarNavItem.conversations.rawValue, title: "Memory",
+      body: "Everything I hear and remember, with a live transcript as you speak."),
+    .init(
+      itemRawValue: SidebarNavItem.tasks.rawValue, title: "Tasks",
+      body: "The to-dos I pull out of your day, all in one place."),
+    .init(
+      itemRawValue: SidebarNavItem.apps.rawValue, title: "Apps",
+      body: "Connect tools and extend what I can do."),
+    .init(
+      itemRawValue: SidebarCoachAnchorKey.captureAnchorID, title: "Capture",
+      body: "Start or pause listening here, and rewind to replay what I just heard."),
+  ]
+
+  @ViewBuilder private func walkthroughOverlay(_ anchors: [Int: Anchor<CGRect>]) -> some View {
+    if let step = walkthroughStep {
+      OnboardingWalkthroughOverlay(
+        steps: Self.walkthroughSteps,
+        index: step,
+        anchors: anchors,
+        onNext: { advanceWalkthrough() },
+        onSkip: { finishWalkthrough() }
+      )
+    }
+  }
+
+  private func advanceWalkthrough() {
+    guard let step = walkthroughStep else { return }
+    if step + 1 < Self.walkthroughSteps.count {
+      walkthroughStep = step + 1
+    } else {
+      finishWalkthrough()
+    }
+  }
+
+  private func finishWalkthrough() {
+    walkthroughStep = nil
+    isSidebarCollapsed = true
+    // Land in the normal chat-first Home (the regular chat the user uses day to
+    // day), not a separate Chat tab — onboarding shouldn't have its own chat UI.
+    selectedIndex = SidebarNavItem.dashboard.rawValue
+  }
+
   private var mainContent: some View {
     HStack(spacing: 0) {
       // Sidebar slot: settings sidebar overlays main sidebar
@@ -940,18 +1050,9 @@ struct DesktopHomeView: View {
 
       // Main content area with rounded container
       ZStack {
-        // Content container background
+        // Content container background — clean flat neutral dark (no gradient).
         RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
-          .fill(
-            LinearGradient(
-              colors: [
-                OmiColors.backgroundSecondary.opacity(0.96),
-                OmiColors.backgroundPrimary.opacity(0.96),
-              ],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
+          .fill(Color(red: 0.050, green: 0.052, blue: 0.059))
           .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
               .stroke(OmiColors.border.opacity(0.22), lineWidth: 1)
@@ -962,19 +1063,22 @@ struct DesktopHomeView: View {
         // Extracted into a separate struct so that pages like TasksPage
         // are not re-rendered when AppState publishes unrelated changes.
         VStack(spacing: 0) {
-          // Settings has its own Back affordance in SettingsSidebar, so skip the
-          // redundant Home chrome there.
-          if !useLegacyHomeDesign && selectedIndex != SidebarNavItem.dashboard.rawValue
-            && selectedIndex != SidebarNavItem.chat.rawValue && !isInSettings
-          {
-            PageChromeBar(
-              onHome: {
-                selectedIndex = SidebarNavItem.dashboard.rawValue
+          // Constant floating top bar — primary nav, new-item counts, and the
+          // Capture/Listening controls. Replaces the old left nav rail.
+          if showsTopBar {
+            DesktopTopBar(
+              selectedIndex: $selectedIndex,
+              appState: appState,
+              memoriesViewModel: viewModelContainer.memoriesViewModel,
+              tasksStore: viewModelContainer.tasksStore,
+              sinceDate: topBarSinceDate,
+              onRewind: {
+                OmiMotion.withGated(Self.pageNavigationAnimation) {
+                  selectedIndex = SidebarNavItem.rewind.rawValue
+                }
               }
             )
-            .padding(.horizontal, OmiSpacing.lg)
-            .padding(.top, OmiSpacing.md)
-            .padding(.bottom, OmiSpacing.xxs)
+            .zIndex(1)
           }
 
           PageContentView(
@@ -1105,55 +1209,92 @@ struct DesktopHomeView: View {
   }
 }
 
-private struct PageChromeBar: View {
-  let onHome: () -> Void
-
-  var body: some View {
-    HStack(spacing: OmiSpacing.sm) {
-      PageChromeButton(title: "Home", systemImage: "house.fill", action: onHome)
-      Spacer()
-    }
-    .frame(height: 34)
-  }
-}
-
-private struct PageChromeButton: View {
-  let title: String
-  let systemImage: String
-  let action: () -> Void
-  @State private var isHovering = false
-
-  var body: some View {
-    Button(action: action) {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: systemImage)
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-        Text(title)
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-      }
-      .foregroundStyle(isHovering ? OmiColors.textPrimary : OmiColors.textSecondary)
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.xs)
-      .background(
-        Capsule(style: .continuous)
-          .fill(.ultraThinMaterial)
-      )
-      .overlay(
-        Capsule(style: .continuous)
-          .stroke(isHovering ? OmiColors.success.opacity(0.34) : OmiColors.border.opacity(0.4), lineWidth: 1)
-      )
-      .contentShape(Capsule())
-    }
-    .buttonStyle(.plain)
-    .onHover { isHovering = $0 }
-    .help(title)
-    .accessibilityLabel(title)
-  }
-}
-
 /// Isolated page content switch — does NOT observe AppState or ViewModelContainer
 /// as @ObservedObject, so pages like TasksPage won't re-render when unrelated
 /// AppState properties (conversations, permissions, etc.) change.
+/// A minimal SB-styled segmented toggle used to fold two related surfaces into
+/// one tab (Conversations/Memories, Focus/Insights).
+private struct HubSegmentedControl: View {
+  @Environment(\.sbTheme) private var sb
+  let segments: [String]
+  @Binding var selection: Int
+
+  var body: some View {
+    HStack(spacing: 4) {
+      ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
+        Button {
+          withAnimation(.easeOut(duration: 0.15)) { selection = index }
+        } label: {
+          Text(segment)
+            .geist(size: 13, weight: selection == index ? .semibold : .medium)
+            .foregroundStyle(selection == index ? sb.ink : sb.ink(.w45))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(
+              RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(selection == index ? sb.ink(.w1) : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
+      }
+    }
+    .padding(4)
+    .background(
+      RoundedRectangle(cornerRadius: 10, style: .continuous).fill(sb.ink(.w04))
+    )
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+/// "Memory" tab — Conversations + Memories folded into one surface.
+private struct MemoryHubPage: View {
+  let appState: AppState
+  let viewModelContainer: ViewModelContainer
+  @State private var segment = 0
+
+  var body: some View {
+    VStack(spacing: 0) {
+      // The "Memory" rail item lands here, so Memories is the default segment;
+      // Conversations (with its live transcript) is second, and the Brain Map
+      // graph is its own tab.
+      HubSegmentedControl(segments: ["Memories", "Conversations", "Brain Map"], selection: $segment)
+        .padding(.top, 22)
+        .padding(.horizontal, 28)
+        .padding(.bottom, 4)
+
+      if segment == 0 {
+        MemoriesPage(
+          viewModel: viewModelContainer.memoriesViewModel,
+          graphViewModel: viewModelContainer.memoryGraphViewModel)
+      } else if segment == 1 {
+        ConversationsPageHost(appState: appState)
+      } else {
+        MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
+      }
+    }
+  }
+}
+
+/// "Focus" tab — Focus + Insights folded into one surface.
+private struct FocusHubPage: View {
+  @State private var segment = 0
+
+  var body: some View {
+    VStack(spacing: 0) {
+      HubSegmentedControl(segments: ["Insights", "Focus"], selection: $segment)
+        .padding(.top, 22)
+        .padding(.horizontal, 28)
+        .padding(.bottom, 4)
+
+      if segment == 0 {
+        InsightPage()
+      } else {
+        FocusPage()
+      }
+    }
+  }
+}
+
 private struct PageContentView: View {
   let selectedIndex: Int
   let appState: AppState
@@ -1161,6 +1302,20 @@ private struct PageContentView: View {
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingId: String?
   @Binding var selectedTabIndex: Int
+
+  /// The list/detail pages (Conversations, Memories, Tasks, Apps) render their
+  /// content in a centered, width-capped column so wide monitors get calm
+  /// gutters instead of a full-bleed stretch — matching the Focus/Insights
+  /// pages, which already self-constrain. Pages paint a clear background, so the
+  /// gutters show the shell surface seamlessly.
+  private static let listPageContentWidth: CGFloat = 900
+
+  @ViewBuilder
+  private func constrainedListPage<V: View>(_ page: V) -> some View {
+    page
+      .frame(maxWidth: Self.listPageContentWidth, maxHeight: .infinity)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
 
   var body: some View {
     Group {
@@ -1176,7 +1331,7 @@ private struct PageContentView: View {
           taskChatCoordinator: viewModelContainer.taskChatCoordinator,
           selectedIndex: $selectedTabIndex)
       case 1:
-        ConversationsPageHost(appState: appState)
+        constrainedListPage(MemoryHubPage(appState: appState, viewModelContainer: viewModelContainer))
       case 2:
         ChatPage(
           appProvider: viewModelContainer.appProvider,
@@ -1184,26 +1339,29 @@ private struct PageContentView: View {
           onHome: { selectedTabIndex = SidebarNavItem.dashboard.rawValue }
         )
       case 3:
-        MemoriesPage(
-          viewModel: viewModelContainer.memoriesViewModel,
-          graphViewModel: viewModelContainer.memoryGraphViewModel)
+        constrainedListPage(
+          MemoriesPage(
+            viewModel: viewModelContainer.memoriesViewModel,
+            graphViewModel: viewModelContainer.memoryGraphViewModel))
       case 4:
-        TasksPage(
-          viewModel: viewModelContainer.tasksViewModel,
-          chatCoordinator: viewModelContainer.taskChatCoordinator,
-          chatProvider: viewModelContainer.chatProvider)
+        constrainedListPage(
+          TasksPage(
+            viewModel: viewModelContainer.tasksViewModel,
+            chatCoordinator: viewModelContainer.taskChatCoordinator,
+            chatProvider: viewModelContainer.chatProvider))
       case 5:
-        FocusPage()
+        FocusHubPage()
       case 6:
         InsightPage()
       case 7:
         RewindPage(appState: appState)
       case 8:
-        AppsPage(
-          appProvider: viewModelContainer.appProvider,
-          appState: appState,
-          connectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
-          handlesAutomationPresentations: viewModelContainer.isInitialLoadComplete)
+        constrainedListPage(
+          AppsPage(
+            appProvider: viewModelContainer.appProvider,
+            appState: appState,
+            connectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
+            handlesAutomationPresentations: viewModelContainer.isInitialLoadComplete))
       case 9:
         SettingsPage(
           appState: appState,

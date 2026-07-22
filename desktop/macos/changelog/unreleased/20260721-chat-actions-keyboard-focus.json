@@ -1,0 +1,3 @@
+{
+  "change": "Chat message actions and timestamps now also reveal on keyboard focus, not only mouse hover"
+}

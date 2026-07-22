@@ -1,9 +1,11 @@
 name: Build Desktop Release Candidate
 
 on:
+  workflow_dispatch:
   schedule:
-    # One daily candidate at most. Developers use scripts/omi-main for head.
-    - cron: '17 10 * * *'
+    # Retry hourly; planner quiet-window, exact-SHA checks, and active-release
+    # fences still admit at most one eligible candidate at a time.
+    - cron: '17 * * * *'
 
 permissions:
   contents: write
@@ -18,6 +20,7 @@ jobs:
     outputs:
       should_release: ${{ steps.plan.outputs.should_release }}
       reason: ${{ steps.plan.outputs.reason }}
+      source_sha: ${{ steps.plan.outputs.source_sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -42,8 +45,54 @@ jobs:
       - name: Show release plan
         run: echo "${{ steps.plan.outputs.reason }}"
 
-  tag-release:
+  pre-tag-readiness:
     needs: [plan-release]
+    if: needs.plan-release.outputs.should_release == 'true'
+    # Trusted self-hosted M1 — the same runner qualification uses. The runner's
+    # single-job capacity plus the dev-harness ownership sentinel serialize use
+    # with in-flight qualification; no prod environment or pointer secrets here.
+    runs-on: [self-hosted, macos, omi-desktop-qualification]
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    concurrency:
+      group: desktop-pre-tag-readiness
+      cancel-in-progress: false
+    steps:
+      - name: Fail-closed dispatch boundary
+        run: |
+          set -euo pipefail
+          # Readiness only: contents:read, no prod environment, no release or
+          # Beta/Stable pointer authority, no new secrets/environments/IAM. The
+          # gate validates source + an OFFLINE stack and must never mutate prod.
+          test -n "${{ needs.plan-release.outputs.source_sha }}"
+
+      - name: Checkout exact source (persisted actions/checkout lifecycle)
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan-release.outputs.source_sha }}
+          fetch-depth: 0
+
+      - name: Run trusted-M1 pre-tag readiness gate
+        env:
+          SOURCE_SHA: ${{ needs.plan-release.outputs.source_sha }}
+          OMI_READINESS_LANE: ci
+        run: |
+          set -euo pipefail
+          desktop/macos/scripts/pre-tag-readiness.sh \
+            --evidence /tmp/pre-tag-readiness-evidence.json \
+            "$SOURCE_SHA"
+
+      - name: Upload readiness evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-pre-tag-readiness-evidence
+          path: /tmp/pre-tag-readiness-evidence.json
+          if-no-files-found: error
+
+  tag-release:
+    needs: [plan-release, pre-tag-readiness]
     if: needs.plan-release.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     concurrency:
@@ -74,6 +123,33 @@ jobs:
 
           python3 .github/scripts/plan-desktop-release.py \
             --repository "${{ github.repository }}"
+
+      - name: Download pre-tag readiness evidence
+        if: steps.recheck.outputs.should_release == 'true'
+        uses: actions/download-artifact@v7
+        with:
+          name: desktop-pre-tag-readiness-evidence
+          path: /tmp/pre-tag-readiness
+
+      - name: Verify readiness evidence covers the exact source
+        if: steps.recheck.outputs.should_release == 'true'
+        run: |
+          set -euo pipefail
+          # Never trust caller claims: prove the trusted-M1 evidence covers the
+          # EXACT source SHA about to be tagged, ran offline, and carries no
+          # production authority. Mismatch aborts before the immutable tag.
+          EVIDENCE="$(find /tmp/pre-tag-readiness -name 'pre-tag-readiness-evidence.json' | head -1)"
+          test -n "$EVIDENCE" || { echo "no readiness evidence artifact found" >&2; exit 1; }
+          python3 .github/scripts/verify-pre-tag-readiness.py verify \
+            --evidence "$EVIDENCE" \
+            --source-sha "${{ steps.recheck.outputs.source_sha }}"
+
+      - name: Checkout exact releasable desktop source
+        if: steps.recheck.outputs.should_release == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.recheck.outputs.source_sha }}
+          fetch-depth: 0
 
       - name: Compute next version and consolidate changelog
         if: steps.recheck.outputs.should_release == 'true'
@@ -123,7 +199,8 @@ jobs:
           git add desktop/macos/CHANGELOG.json desktop/macos/changelog
           git commit -m "chore: consolidate changelog for v${VERSION}" || echo "No changelog changes to commit"
 
-          # The planner checked the newest queued releasable desktop source SHA.
+          # The planner checked and this job checked out the newest queued
+          # releasable desktop source SHA.
           # Tag this commit so Codemagic receives the consolidated release notes too.
           # NOTE: commit message must NOT contain [skip ci].
           git tag "$RELEASE_TAG"

@@ -7,6 +7,7 @@
 #   ./scripts/desktop-core-harness.sh --tier 0
 #   ./scripts/desktop-core-harness.sh --tier 1 --bundle omi-core-e2e
 #   ./scripts/desktop-core-harness.sh --tier 2 --bundle omi-core-e2e --keep-stack
+#   ./scripts/desktop-core-harness.sh --readiness
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -20,6 +21,7 @@ FAULT_SUITE=0
 FAULT_BUNDLE="omi-fault"
 KEEP_STACK=0
 SELF_CHECK=0
+READINESS=0
 SKIP_BACKEND_CONTRACTS=0
 PORT="${OMI_AUTOMATION_PORT:-47777}"
 DEV_STACK_PROVIDER_MODE=""
@@ -29,12 +31,13 @@ usage() {
 Desktop core E2E harness.
 
 Options:
-  --tier N                    Run tier N checks (0-3). Required unless --self-check.
+  --tier N                    Run tier N checks (0-3). Required unless --self-check or --readiness.
   --bundle NAME               Named test bundle for T1+ (default: omi-core-e2e)
   --port PORT                 Automation bridge port (default: OMI_AUTOMATION_PORT or 47777)
   --keep-stack                On T2+, leave dev-up running after the run
   --fault-suite               Start omi-fault-inject + omi-fault bundle; run chat-fault-5xx flow
   --self-check                Static checks (flow lint + gauntlet self-check; backend contracts locally)
+  --readiness                 Pre-tag readiness: self-check + offline dev-stack probe (no app launch, no E2E flows)
   --skip-backend-contracts    With --self-check, skip backend preflight + pytest contracts (CI desktop gate)
   --help                      Show this help
 USAGE
@@ -62,6 +65,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --self-check)
       SELF_CHECK=1
+      ;;
+    --readiness)
+      READINESS=1
       ;;
     --skip-backend-contracts)
       SKIP_BACKEND_CONTRACTS=1
@@ -96,6 +102,7 @@ finalize_run() {
   local flows_json="$6"
   python3 - "$run_dir/manifest.json" "$passed" "$tier_value" "$started_at" "$duration_s" "$flows_json" "$BUNDLE" "$(git_sha)" "$DEV_STACK_PROVIDER_MODE" <<'PY'
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -111,6 +118,9 @@ manifest = {
 }
 if provider_mode:
     manifest["provider_mode"] = provider_mode
+lane = os.environ.get("OMI_READINESS_LANE")
+if lane:
+    manifest["lane"] = lane
 Path(path).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
   if [[ "$passed" == "true" ]]; then
@@ -182,8 +192,14 @@ refuse_prod_bundle() {
   fi
 }
 
+DEV_STACK_TEARDOWN_DONE=0
+
 maybe_teardown_dev_stack() {
-  if [[ "$KEEP_STACK" -eq 0 && "${TIER:-0}" -ge 2 ]]; then
+  if [[ "$DEV_STACK_TEARDOWN_DONE" -eq 1 ]]; then
+    return 0
+  fi
+  if [[ "$KEEP_STACK" -eq 0 && ( "${TIER:-0}" -ge 2 || "${READINESS:-0}" -eq 1 ) ]]; then
+    DEV_STACK_TEARDOWN_DONE=1
     make -C "$REPO_ROOT" dev-down >/dev/null 2>&1 || true
   fi
 }
@@ -667,9 +683,33 @@ if [[ "$FAULT_SUITE" -eq 1 ]]; then
   echo "desktop-core-harness fault-suite failed (evidence: $RUN_DIR)" >&2
   exit 1
 fi
+if [[ "$READINESS" -eq 1 ]]; then
+  # Pre-tag readiness gate: validate the exact desktop source + bounded offline
+  # dev stack on the trusted self-hosted M1 BEFORE an immutable tag is created.
+  # Distinct from post-tag qualification: no app launch, no E2E flows, no signed
+  # artifacts. provider_mode=offline is enforced by ensure_dev_stack (no prod).
+  if [[ "$(uname -s)" != "Darwin" ]]; then
+    echo "desktop-core-harness: --readiness requires macOS (trusted self-hosted M1)" >&2
+    exit 1
+  fi
+  RUN_DIR="$HARNESS_ROOT/$(run_id)-readiness"
+  mkdir -p "$RUN_DIR"
+  STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  START_SEC=$(date +%s)
+  FLOW_RESULTS="[]"
+  trap maybe_teardown_dev_stack EXIT
+  run_self_check
+  ensure_dev_stack
+  maybe_teardown_dev_stack
+  trap - EXIT
+  DURATION=$(( $(date +%s) - START_SEC ))
+  finalize_run "$RUN_DIR" true "readiness" "$STARTED_AT" "$DURATION" "$FLOW_RESULTS"
+  echo "desktop-core-harness readiness passed (evidence: $RUN_DIR)"
+  exit 0
+fi
 
 if [[ -z "$TIER" ]]; then
-  echo "--tier is required unless --self-check or --fault-suite" >&2
+  echo "--tier is required unless --self-check, --readiness, or --fault-suite" >&2
   usage >&2
   exit 2
 fi

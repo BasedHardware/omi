@@ -24,6 +24,9 @@ struct ConversationDetailView: View {
 
   // Transcript drawer state (replaces tab system)
   @State private var showTranscriptDrawer = false
+  // When expanded, the transcript drawer fills the window (the summary pane
+  // collapses) for full-width reading; collapsed it's the fixed side drawer.
+  @State private var isTranscriptExpanded = false
 
   // Entry animation
   @State private var hasAppeared = false
@@ -152,16 +155,22 @@ struct ConversationDetailView: View {
           .padding(OmiSpacing.xxl)
         }
       }
-      .frame(maxWidth: .infinity)
+      // Collapses to zero width when the transcript is expanded so the drawer
+      // can fill the window; otherwise it's the greedy main pane.
+      .frame(maxWidth: isTranscriptExpanded ? 0 : .infinity)
+      .opacity(isTranscriptExpanded ? 0 : 1)
+      .clipped()
 
-      // Transcript drawer (slides in from right)
+      // Transcript drawer (slides in from right; expands to fill on demand)
       if showTranscriptDrawer {
-        Rectangle()
-          .fill(OmiColors.border)
-          .frame(width: 1)
+        if !isTranscriptExpanded {
+          Rectangle()
+            .fill(OmiColors.border)
+            .frame(width: 1)
+        }
 
         transcriptDrawerView
-          .frame(width: 450)
+          .frame(maxWidth: isTranscriptExpanded ? .infinity : 450)
           .transition(.move(edge: .trailing))
       }
     }
@@ -627,6 +636,24 @@ struct ConversationDetailView: View {
 
         Spacer()
 
+        // Expand / collapse the drawer to fill the window for full-width reading
+        Button(action: {
+          OmiMotion.withGated(.easeInOut(duration: 0.25)) {
+            isTranscriptExpanded.toggle()
+          }
+        }) {
+          Image(
+            systemName: isTranscriptExpanded
+              ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
+          )
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(OmiColors.textSecondary)
+          .frame(width: 28, height: 28)
+          .background(Circle().fill(OmiColors.backgroundTertiary))
+        }
+        .buttonStyle(.plain)
+        .help(isTranscriptExpanded ? "Collapse transcript" : "Expand transcript")
+
         // Copy button
         Button(action: copyTranscript) {
           Image(systemName: "doc.on.doc")
@@ -645,6 +672,7 @@ struct ConversationDetailView: View {
         Button(action: {
           OmiMotion.withGated(.easeInOut(duration: 0.25)) {
             showTranscriptDrawer = false
+            isTranscriptExpanded = false
           }
         }) {
           Image(systemName: "xmark")

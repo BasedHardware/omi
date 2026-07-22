@@ -922,6 +922,97 @@ class TestDownloadEndpoint:
         assert resp.status_code == 200
         assert "https://example.com/omi-setup.exe" in resp.text
 
+    @pytest.mark.asyncio
+    async def test_windows_beta_falls_back_to_stable_when_beta_empty(self):
+        # After a prerelease is promoted, the beta slot is empty until the next
+        # cut; the public windows.omi.me/beta link must keep serving stable.
+        mock_releases = [
+            {
+                "channel": "stable",
+                "version_info": {"version": "1.0.1", "build": "0"},
+                "release": {"assets": [_exe_asset("https://example.com/omi-setup.exe")]},
+            },
+        ]
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases),
+            patch("routers.updates.record_fallback") as mock_fallback,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/windows?channel=beta")
+        assert resp.status_code == 200
+        assert "https://example.com/omi-setup.exe" in resp.text
+        # Landing page reflects the channel actually served, not the requested
+        # one, and says why out loud (the download auto-starts, so the title
+        # alone is easy to miss).
+        assert "Omi Beta" not in resp.text
+        assert "serving the latest stable release instead" in resp.text
+        mock_fallback.assert_called_once()
+        assert mock_fallback.call_args.kwargs["outcome"] == "recovered"
+
+    @pytest.mark.asyncio
+    async def test_windows_stable_falls_back_to_beta_when_no_stable(self):
+        # Launch-day shape: only prereleases exist, windows.omi.me must still serve.
+        mock_releases = [
+            {
+                "channel": "beta",
+                "version_info": {"version": "1.0.2", "build": "0"},
+                "release": {"assets": [_exe_asset("https://example.com/beta-setup.exe")]},
+            },
+        ]
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases),
+            patch("routers.updates.record_fallback") as mock_fallback,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/windows")
+        assert resp.status_code == 200
+        assert "https://example.com/beta-setup.exe" in resp.text
+        assert "Omi Beta for Windows" in resp.text
+        mock_fallback.assert_called_once()
+        # Serving a prerelease to the public stable link is a hit, not a heal.
+        assert mock_fallback.call_args.kwargs["outcome"] == "degraded"
+
+    @pytest.mark.asyncio
+    async def test_windows_beta_prefers_beta_when_present(self):
+        mock_releases = [
+            {
+                "channel": "stable",
+                "version_info": {"version": "1.0.1", "build": "0"},
+                "release": {"assets": [_exe_asset("https://example.com/omi-setup.exe")]},
+            },
+            {
+                "channel": "beta",
+                "version_info": {"version": "1.0.2", "build": "0"},
+                "release": {"assets": [_exe_asset("https://example.com/beta-setup.exe")]},
+            },
+        ]
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases),
+            patch("routers.updates.record_fallback") as mock_fallback,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/windows?channel=beta")
+        assert resp.status_code == 200
+        assert "https://example.com/beta-setup.exe" in resp.text
+        mock_fallback.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_windows_404_when_both_channels_empty(self):
+        # Releases exist but neither channel has a resolvable installer asset;
+        # the 404 must name the channel the caller asked for, not the fallback.
+        mock_releases = [
+            {
+                "channel": "stable",
+                "version_info": {"version": "1.0.1", "build": "0"},
+                "release": {"assets": [_dmg_asset()]},
+            },
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/windows?channel=beta")
+        assert resp.status_code == 404
+        assert "channel: beta" in resp.json()["detail"]
+
 
 # --- Clear cache endpoint ---
 
@@ -1483,3 +1574,134 @@ class TestDesktopPreviewEndpoints:
         assert accepted.status_code == 200
         assert accepted.json() == {"success": True, **delisted}
         delist.assert_called_once_with(PREVIEW_SLUG, expected_generation=2)
+
+
+# --- Beta identity (side-by-side "Omi Beta" app, PR #10059 re-land) ---
+
+
+def _beta_zip_asset(url="https://example.com/Omi.Beta.zip"):
+    return {"name": "Omi.Beta.zip", "browser_download_url": url}
+
+
+def _beta_dmg_asset(url="https://example.com/omi-beta.dmg"):
+    return {"name": "omi-beta.dmg", "browser_download_url": url}
+
+
+def _beta_live_entry(channel="beta", assets=None, metadata=None, tag="v1.0.0+100-macos"):
+    return {
+        "channel": channel,
+        "release": {"tag_name": tag, "published_at": "2026-03-01T00:00:00Z", "body": "", "assets": assets or []},
+        "version_info": {"version": "1.0.0", "build": "100", "tag_name": tag},
+        "metadata": metadata or {},
+    }
+
+
+class TestBetaIdentityServing:
+    @pytest.mark.asyncio
+    async def test_appcast_identity_beta_serves_beta_enclosure_and_drops_stable_items(self):
+        entries = [
+            _beta_live_entry(
+                channel="stable", assets=[_zip_asset(), _dmg_asset()], metadata={"edSignature": "stable-sig"}
+            ),
+            _beta_live_entry(
+                channel="beta",
+                assets=[_zip_asset(), _beta_zip_asset(), _beta_dmg_asset()],
+                metadata={"edSignature": "stable-sig", "betaEdSignature": "beta-sig"},
+            ),
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/appcast.xml", params={"identity": "beta"})
+
+        assert resp.status_code == 200
+        xml = resp.text
+        assert xml.count("<item>") == 1
+        assert "Omi.Beta.zip" in xml
+        assert 'edSignature="beta-sig"' in xml
+        assert "stable-sig" not in xml
+
+    @pytest.mark.asyncio
+    async def test_appcast_default_identity_is_unchanged_by_beta_assets(self):
+        entries = [
+            _beta_live_entry(
+                channel="beta",
+                assets=[_zip_asset(), _beta_zip_asset()],
+                metadata={"edSignature": "stable-sig", "betaEdSignature": "beta-sig"},
+            ),
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/appcast.xml")
+
+        assert resp.status_code == 200
+        assert "Omi.Beta.zip" not in resp.text
+        assert "https://example.com/Omi.zip" in resp.text
+
+    @pytest.mark.asyncio
+    async def test_appcast_identity_beta_omits_releases_without_beta_artifacts(self):
+        entries = [_beta_live_entry(channel="beta", assets=[_zip_asset()], metadata={"edSignature": "sig"})]
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries),
+            patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=[]),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/appcast.xml", params={"identity": "beta"})
+
+        assert resp.status_code == 200
+        assert resp.text.count("<item>") == 0
+
+    @pytest.mark.asyncio
+    async def test_appcast_identity_beta_resolves_pointer_entries_from_release_by_tag(self):
+        entries = [_beta_live_entry(channel="beta", assets=[_zip_asset()], metadata={"edSignature": "sig"})]
+        gh_release = {
+            "tag_name": "v1.0.0+100-macos",
+            "draft": False,
+            "published_at": "2026-03-01T00:00:00Z",
+            "body": "<!-- KEY_VALUE_START\nbetaEdSignature: beta-sig-from-body\nKEY_VALUE_END -->",
+            "assets": [_zip_asset(), _beta_zip_asset("https://example.com/by-tag/Omi.Beta.zip")],
+        }
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries),
+            patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=[gh_release]),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/appcast.xml", params={"identity": "beta"})
+
+        assert resp.status_code == 200
+        assert "https://example.com/by-tag/Omi.Beta.zip" in resp.text
+        assert 'edSignature="beta-sig-from-body"' in resp.text
+
+    @pytest.mark.asyncio
+    async def test_download_latest_identity_beta_serves_beta_dmg(self):
+        entries = [
+            _beta_live_entry(
+                channel="beta",
+                assets=[_zip_asset(), _dmg_asset(), _beta_dmg_asset("https://example.com/dl/omi-beta.dmg")],
+                metadata={"edSignature": "sig"},
+            ),
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/latest", params={"identity": "beta"})
+
+        assert resp.status_code == 200
+        assert "https://example.com/dl/omi-beta.dmg" in resp.text
+
+    @pytest.mark.asyncio
+    async def test_download_beta_endpoint_falls_back_to_stable_dmg_pre_rollout(self):
+        # Public macos.omi.me/beta must not 404 while no live beta release ships
+        # beta-identity artifacts; the strict guard stays on the Sparkle feed.
+        entries = [
+            _beta_live_entry(channel="beta", assets=[_zip_asset(), _dmg_asset()], metadata={"edSignature": "sig"}),
+        ]
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries),
+            patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=[]),
+            patch("routers.updates.record_fallback") as fallback,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/beta")
+
+        assert resp.status_code == 200
+        assert "https://example.com/omi.dmg" in resp.text
+        fallback.assert_called_once()

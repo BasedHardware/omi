@@ -1,0 +1,3 @@
+{
+  "change": "Second Brain onboarding: it now resumes where you left off if you quit mid-flow (e.g. after stepping away to grant a permission) instead of restarting, and already-granted permissions show as done; press a summon or push-to-talk shortcut directly to select it (no more pick-the-row-then-test two-step); restored ⌘O as an open-Omi option; connecting Calendar or Gmail now opens Google sign-in when you're not signed into a browser instead of silently flipping to Retry; and agent rows show 'checking…' while detecting installs so a not-installed agent no longer briefly offers a dead Connect button"
+}

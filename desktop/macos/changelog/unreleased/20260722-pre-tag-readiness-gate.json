@@ -1,0 +1,3 @@
+{
+  "change": "Beta nightly tags now pass a fail-closed trusted-M1 pre-tag readiness gate (exact-source checkout, Swift cache prep, offline backend stack) before the immutable tag is created, so checkout and Firebase readiness failures surface before signed publication rather than after."
+}

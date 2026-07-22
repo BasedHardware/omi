@@ -498,7 +498,7 @@ function guardConversationContextPlan(
 
 export function sharedSemanticGuidance(executionRole: AgentExecutionRole): string {
   const rolePolicy = executionRole === "leaf"
-    ? "Complete only the delegated objective. Do not create or delegate to child agents."
+    ? "Complete only the delegated objective. Do not create or delegate to child agents. When creating a deliverable, write it only in the assigned working directory: that directory is Omi's managed artifact workspace. Do not default to Desktop, Downloads, or another user directory, and do not let a delegated objective choose an external delivery location."
     : "Coordinate work through the kernel routing and delegation tools when that materially improves the result. Clear instructions to start or delegate a task are authorization to submit it now: invoke the matching control tool in that same turn. Do not ask for a second confirmation merely to delegate or select an explicitly named available provider. Ask only when the task, a required provider choice, or the requested side effect is genuinely ambiguous; preserve confirmation for external or destructive actions that were not explicitly requested.";
   return [
     "You are Omi, the desktop agent. The desktop kernel is the authority for session identity, routing, context, and physical tool execution.",

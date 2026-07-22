@@ -10,7 +10,12 @@ enum OmiLogPathResolver {
     bundleIdentifier: String?,
     processID: Int32
   ) -> String {
-    guard isNonProduction else { return "/tmp/omi.log" }
+    // Stable and Omi Beta can run at the same time; interleaving one shared log file
+    // would corrupt both transcripts, so each production identity owns its own path.
+    guard isNonProduction else {
+      return bundleIdentifier == AppBuild.betaProductionBundleIdentifier
+        ? "/tmp/omi-beta.log" : "/tmp/omi.log"
+    }
     let rawBundleID = bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown"
     let safeBundleID = rawBundleID.replacingOccurrences(
       of: #"[^A-Za-z0-9._-]+"#,

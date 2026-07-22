@@ -3,6 +3,40 @@ import XCTest
 
 @testable import Omi_Computer
 
+private actor PTTBatchContextGate {
+  private var transcriptionStartWaiters: [CheckedContinuation<Void, Never>] = []
+  private var transcriptionStarted = false
+  private var contextDidRelease = false
+
+  func waitForContextRelease() async {
+    while !contextDidRelease && !Task.isCancelled {
+      await Task.yield()
+    }
+  }
+
+  func releaseContext() {
+    contextDidRelease = true
+  }
+
+  func markTranscriptionStarted() {
+    transcriptionStarted = true
+    let waiters = transcriptionStartWaiters
+    transcriptionStartWaiters.removeAll()
+    waiters.forEach { $0.resume() }
+  }
+
+  func waitForTranscriptionStart() async {
+    guard !transcriptionStarted else { return }
+    await withCheckedContinuation { continuation in
+      transcriptionStartWaiters.append(continuation)
+    }
+  }
+
+  func hasContextReleased() -> Bool {
+    contextDidRelease
+  }
+}
+
 final class PushToTalkShortcutActivationTests: XCTestCase {
   func testTypingChordCancelsPendingModifierOnlyPTTBeforeItCanBargeIn() {
     var gate = ModifierOnlyPTTActivationGate()
@@ -61,5 +95,33 @@ final class PushToTalkShortcutActivationTests: XCTestCase {
         phase: .playing(.nativeRealtime)
       )
     )
+  }
+
+  @MainActor
+  func testBatchTranscriptionStartsBeforeContextOCRCompletes() async throws {
+    let gate = PTTBatchContextGate()
+    let contextTask = Task {
+      await gate.waitForContextRelease()
+    }
+    let transcriptionTask = Task {
+      try await PushToTalkManager.runBatchTranscriptionBeforeContext(
+        contextTask: contextTask
+      ) {
+        await gate.markTranscriptionStarted()
+        return TranscriptionService.BatchTranscriptionResult(
+          transcript: "fixture", provider: "fixture", model: "fixture")
+      }
+    }
+
+    await gate.waitForTranscriptionStart()
+    let contextReleased = await gate.hasContextReleased()
+    XCTAssertFalse(
+      contextReleased,
+      "Batch STT must start while screen/OCR context capture is still in flight")
+
+    let result = try await transcriptionTask.value
+    XCTAssertEqual(result.transcript, "fixture")
+    contextTask.cancel()
+    await contextTask.value
   }
 }

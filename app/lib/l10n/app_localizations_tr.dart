@@ -9618,10 +9618,10 @@ class AppLocalizationsTr extends AppLocalizations {
       'Verileriniz varsayılan olarak güçlü şifreleme ile korunur ve nasıl saklanıp kullanılacağını siz kontrol edersiniz.';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => 'Doğruluk';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => 'Temel';
 
   @override
   String get cloudTranscription => 'Bulut transkripsiyonu';
@@ -9630,52 +9630,52 @@ class AppLocalizationsTr extends AppLocalizations {
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => 'Modeli Sil';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'Bu modeli silmek istediğinizden emin misiniz?';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => 'İndirildi';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => 'Daha hızlı';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => 'Otomatik';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => 'Daha yüksek';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => 'Büyük';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => 'Daha düşük';
 
   @override
-  String get whisperModelSizeMedium => 'Medium';
+  String get whisperModelSizeMedium => 'Orta';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => 'Model silindi';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => 'Model indirilemedi';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc => 'Whisper modeli indirilemedi. Lütfen tekrar deneyin.';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => 'Model indirildi';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper modeli başarıyla indirildi';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => 'Model Boyutu';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => 'Yok';
 
   @override
   String get onDeviceTranscription => 'Cihaz üzerinde transkripsiyon';
@@ -9684,10 +9684,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onDeviceTranscriptionDesc => 'Transkripsiyon cihazınızda yerel olarak işlenir';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => 'Daha yavaş';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => 'Küçük';
 
   @override
   String get sttProviderSoniox => 'Soniox';
@@ -9702,10 +9702,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => 'Hız';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => 'Çok küçük';
 
   @override
   String get transcriptionLanguage => 'Transkripsiyon dili';
@@ -9720,51 +9720,52 @@ class AppLocalizationsTr extends AppLocalizations {
   String get whisperModelDesc => 'Cihaz üzerinde transkripsiyon için model seçin';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => 'Ücretsiz plana düşürülsün mü?';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => 'Şu kısıtlamalarla karşılaşacaksınız:';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => '7 kat pil tüketimi';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => '%30 daha düşük transkripsiyon kalitesi';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => '5-7 saniye gecikme';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => 'Konuşmacılar tanımlanamaz';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => 'Yine de Düşür';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => 'Google Takvim Bağlı Değil';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt =>
+      'Konuşmaları takvim etkinliklerine bağlamak için Google Takvim hesabınızı bağlayın.';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return '\"$title\" etkinliğine bağlandı';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => 'Takvim etkinliği bağlanamadı';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => 'Geri bildiriminiz için teşekkürler!';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => 'Mesajı kopyala';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => 'Ayarlarda ara…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => 'Ses yüklenirken hata oluştu';
 
   @override
   String get rayBanMetaMicPickerTitle => 'Ray-Ban Meta mikrofonunuzu seçin';

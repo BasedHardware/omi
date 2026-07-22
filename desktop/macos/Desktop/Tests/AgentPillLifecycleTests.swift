@@ -71,9 +71,9 @@ import XCTest
   }
 
   func testMainChatSpawnReceiptProjectsTheExistingFloatingPill() throws {
+    let pillSource = try agentPillSource()
     let providerSource = try chatProviderSource()
     let viewSource = try floatingControlBarViewSource()
-    let pillSource = try agentPillSource()
 
     XCTAssertTrue(providerSource.contains("AgentPillsManager.shared.upsertSpawnedPill("))
     XCTAssertTrue(providerSource.contains("producingJournalSurface: mainChatSurfaceReference()"))
@@ -373,9 +373,9 @@ import XCTest
     XCTAssertFalse(windowSource.contains("resolveDelegationAndDispatch"))
     XCTAssertTrue(windowSource.contains("await dispatchChatQuery("))
     XCTAssertFalse(source.contains("AgentPillFollowUpRoutingPolicy"))
-    // The bar has no typed pill composer since typing moved to the app's chat:
-    // pill steering routes to the main app instead of parsing wording locally.
-    XCTAssertTrue(source.contains("(NSApp.delegate as? AppDelegate)?.openMainAppWindow()"))
+    // The bar's typed follow-up composer was retired (#10181): its "Continue
+    // in Omi" affordance routes to the main chat instead of spawning.
+    XCTAssertTrue(source.contains("openMainAppChat()"))
   }
 
   func testSubagentChatRendersMarkdownAndLargeBackHitTarget() throws {
@@ -462,53 +462,32 @@ import XCTest
     XCTAssertFalse(view.contains("agentFollowUp"))
   }
 
-  func testNotchHoverMenuKeepsAskOmiReachable() throws {
+  func testNotchHoverMenuIsAgentOnlyAfterChatEntryRetirement() throws {
     let source = try floatingControlBarViewSource()
 
-    guard let rowRange = source.range(of: "private var notchOmiChatRow: some View"),
-      let heightRange = source.range(of: "private var notchChromeHeight: CGFloat")
-    else {
-      return XCTFail("Expected notch Omi Chat hover row section")
-    }
-    let rowSource = String(source[rowRange.lowerBound..<heightRange.lowerBound])
-
-    XCTAssertTrue(rowSource.contains("Text(\"Omi Chat\")"))
-    XCTAssertTrue(rowSource.contains("openOmiChatFromNotchRow()"))
-    XCTAssertTrue(rowSource.contains("private var notchOmiChatOverlayHitTarget: some View"))
-    XCTAssertTrue(rowSource.contains(".accessibilityLabel(\"Omi Chat\")"))
-    XCTAssertTrue(rowSource.contains("notchShortcutHint(\"Ask\""))
-    XCTAssertTrue(rowSource.contains("notchShortcutHint(systemImage: \"mic.fill\""))
-    XCTAssertFalse(rowSource.contains("notchShortcutHint(\"PTT\""))
+    XCTAssertFalse(source.contains("private var notchOmiChatRow: some View"))
+    XCTAssertFalse(source.contains("private var notchOmiChatOverlayHitTarget: some View"))
+    XCTAssertFalse(source.contains("openOmiChatFromNotchRow()"))
+    XCTAssertTrue(source.contains("NotchAgentMenuPresentation.shouldPresent(agentCount: agentPills.pills.count)"))
   }
 
-  func testNotchSettingsHitTargetDoesNotCoverChatRows() throws {
+  func testNotchIdleTapUsesTheMainChatAuthority() throws {
     let source = try floatingControlBarViewSource()
 
     XCTAssertTrue(
       source.contains(
-        "            notchAgentLogoHitTarget\n              .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)"
+        "notchAgentLogoHitTarget\n            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)"
       ))
     XCTAssertFalse(
       source.contains(
         "notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight + notchHoverMenuHeight)"
       ))
-    XCTAssertTrue(source.contains("@State private var notchSettingsHovering = false"))
-    XCTAssertTrue(source.contains("if !state.isVoicePresentationActive && notchSettingsHovering"))
-    XCTAssertTrue(source.contains("private var notchSettingsButton: some View"))
-    XCTAssertTrue(source.contains(".frame(width: 44, height: 44)"))
-    XCTAssertTrue(source.contains(".accessibilityIdentifier(\"notch_floating_bar_settings\")"))
-    XCTAssertFalse(
-      source.contains(
-        ".background(Color.white.opacity(0.12))\n                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))"
-      ))
-    XCTAssertTrue(source.contains("notchSettingsHovering = showsHoverChrome"))
-    XCTAssertTrue(source.contains("openFloatingBarSettings()"))
+    XCTAssertTrue(source.contains("private func openMainChatFromIdleNotch()"))
+    XCTAssertTrue(source.contains("NotchIdleTapRoute.perform("))
+    XCTAssertTrue(source.contains("(NSApp.delegate as? AppDelegate)?.openMainAppChat()"))
+    XCTAssertFalse(source.contains("gearshape.fill"))
+    XCTAssertFalse(source.contains("openFloatingBarSettings()"))
     XCTAssertTrue(source.contains("openAgentChatsFromNotchLogo()"))
-    XCTAssertFalse(
-      source.contains(
-        ".onHover { hovering in\n            withAnimation(.easeInOut(duration: 0.12)) {\n                notchSettingsHovering = hovering"
-      ))
-    XCTAssertFalse(source.contains(".onTapGesture {\n                    openFloatingBarSettings()\n                }"))
   }
 
   func testNotchChatSizingPreservesSurfaceWidthAndGlowList() throws {
@@ -623,19 +602,8 @@ import XCTest
     XCTAssertFalse(
       source.contains(".animation(.spring(response: 0.18, dampingFraction: 0.9), value: shouldShowNotchHoverMenu)"))
     XCTAssertTrue(source.contains(".transition(.identity)"))
-    XCTAssertTrue(
-      source.contains(
-        "            notchOmiChatRow\n              .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"
-      ))
-    XCTAssertTrue(
-      source.contains(".allowsHitTesting(!shouldUseOmiChatOverlayHitTarget && notchSwitcherProgress > 0.6)"))
-    XCTAssertTrue(
-      source.contains(
-        "          notchOmiChatOverlayHitTarget\n            .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"
-      ))
-    XCTAssertTrue(source.contains(".offset(y: notchChromeHeight)"))
-    XCTAssertTrue(source.contains(".zIndex(2)"))
-    XCTAssertTrue(source.contains("height: notchHoverMenuHeight - FloatingControlBarWindow.notchAgentListRowHeight"))
+    XCTAssertFalse(source.contains("notchOmiChatRow"))
+    XCTAssertFalse(source.contains("notchOmiChatOverlayHitTarget"))
     XCTAssertTrue(source.contains("state.present(.agent(pill.id))"))
     XCTAssertTrue(source.contains("private let agentChatSwitchTransition = Animation.easeOut(duration: 0.10)"))
     XCTAssertTrue(source.contains("if state.conversationSurface == .agent(pill.id)"))
@@ -648,21 +616,19 @@ import XCTest
     XCTAssertTrue(source.contains(".frame(width: 44, height: 44)"))
     XCTAssertTrue(
       source.contains("        .onTapGesture {\n          openAgentChatsFromNotchLogo()\n        }"))
-    XCTAssertTrue(source.contains("Image(systemName: \"gearshape.fill\")"))
+    XCTAssertFalse(source.contains("Image(systemName: \"gearshape.fill\")"))
     XCTAssertTrue(source.contains("private func openAgentChatsFromNotchLogo()"))
     XCTAssertTrue(source.contains("showAgentListFromConversation()"))
     XCTAssertTrue(source.contains("setAgentSwitcherHovering(hovering)"))
     XCTAssertFalse(source.contains("@State private var agentSwitcherPinned"))
     XCTAssertFalse(source.contains("@State private var agentSwitcherHovering"))
     XCTAssertTrue(source.contains("leaveAgentConversation()"))
-    XCTAssertTrue(source.contains("Text(\"Omi Chat\")"))
     XCTAssertTrue(
       source.contains("barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)"))
     XCTAssertTrue(source.contains(".opacity(rowRevealProgress)"))
     XCTAssertFalse(source.contains("NotchLogoPlaceholderDot(progress: logoPlaceholderProgress)"))
-    XCTAssertTrue(source.contains("private var shouldUseOmiChatOverlayHitTarget: Bool"))
-    XCTAssertTrue(source.contains("if state.usesNotchIsland && shouldUseOmiChatOverlayHitTarget"))
-    XCTAssertTrue(source.contains("rowTopOffset: FloatingControlBarWindow.notchAgentListRowHeight"))
+    XCTAssertTrue(source.contains("if state.usesNotchIsland && shouldShowNotchHoverMenu"))
+    XCTAssertTrue(source.contains("rowTopOffset: 0"))
     XCTAssertTrue(source.contains("private var showingNotchWaveform: Bool"))
     XCTAssertTrue(source.contains("private var escToClearHint: some View"))
     XCTAssertTrue(
@@ -835,13 +801,14 @@ import XCTest
   }
 
   func testSubagentFollowUpsOnlyContinueTheCanonicalSession() throws {
-    // omi-test-quality: source-inspection -- static contract: the bar's typed composer is gone; follow-ups continue only through the manager bound to the pill's canonical session.
+    // omi-test-quality: source-inspection -- static contract: the bar's typed composer is gone; the pill's only affordance opens the main chat.
     let viewSource = try floatingControlBarViewSource()
-    let pillSource = try agentPillSource()
 
     XCTAssertFalse(viewSource.contains("AgentPillFollowUpRoutingPolicy"))
-    XCTAssertTrue(pillSource.contains("guard pill.canonicalSessionId == sessionId else { return }"))
-    XCTAssertTrue(pillSource.contains("DesktopCoordinatorService.shared.continueAgent("))
+    // Typed steering from the pill was retired (#10181): the composer's only
+    // affordance opens the main chat, so no second send path can exist.
+    XCTAssertFalse(viewSource.contains("manager.continueAgent(from:"))
+    XCTAssertTrue(viewSource.contains("openMainAppChat()"))
   }
 
   func testSpawnAgentToolCallOpensSubagentChat() throws {
@@ -926,10 +893,10 @@ import XCTest
     let inputSource = String(viewSource[inputRange.lowerBound..<inputEnd.lowerBound])
 
     XCTAssertTrue(inputSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
-    // Archiving the previous exchange moved into the window alongside sizing;
-    // the view must not archive on its own.
+    // Archiving moved with the retired typed follow-up (#10181): the window's
+    // query paths own it now; the view must not archive on its own.
+    XCTAssertTrue(windowSource.contains("state.archiveCurrentExchange(using:"))
     XCTAssertFalse(viewSource.contains("archiveCurrentExchange"))
-    XCTAssertTrue(windowSource.contains("state.archiveCurrentExchange(using: self.historyChatProvider)"))
     XCTAssertTrue(viewSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
     XCTAssertFalse(inputSource.contains("state.showingAIResponse = true"))
     XCTAssertFalse(viewSource.contains("state.conversationSurface == .mainResponse || state.showingAIResponse"))

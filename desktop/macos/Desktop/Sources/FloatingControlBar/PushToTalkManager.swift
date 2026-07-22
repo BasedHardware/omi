@@ -1081,6 +1081,22 @@ class PushToTalkManager: ObservableObject {
     voiceTurnCoordinator.publish(.finalize(turnID: turnID))
   }
 
+  /// Start batch STT immediately while the already-frontloaded screen/OCR task
+  /// continues in parallel. Context is correction-only and opportunistic: it
+  /// may update `currentContextSnapshot` before `sendTranscript`, but a slow or
+  /// hung screen capture must never hold the completed transcription hostage.
+  /// The manager retains ownership of `contextTask` and cancels it at the normal
+  /// turn-cleanup fence; this helper deliberately does not create an orphan
+  /// observer or await an unbounded OCR operation.
+  @MainActor
+  static func runBatchTranscriptionBeforeContext(
+    contextTask: Task<Void, Never>?,
+    transcribe: @escaping () async throws -> TranscriptionService.BatchTranscriptionResult
+  ) async throws -> TranscriptionService.BatchTranscriptionResult {
+    _ = contextTask
+    return try await transcribe()
+  }
+
   private func continueFinalization() {
     guard let turnID = currentVoiceTurnID,
       voiceTurnCoordinator.activeTurnID == turnID,
@@ -1277,7 +1293,6 @@ class PushToTalkManager: ObservableObject {
 
       Task {
         do {
-          await self.contextCaptureTask?.value
           guard self.voiceTurnCoordinator.activeTurnID == turnID else { return }
           let language = AssistantSettings.shared.effectiveTranscriptionLanguage
           let audioSeconds = Double(audioData.count) / (16000.0 * 2.0)
@@ -1286,11 +1301,15 @@ class PushToTalkManager: ObservableObject {
           )
 
           self.activeTracer?.begin("batch_transcribe", metadata: ["method": "TranscriptionService.batchTranscribe"])
-          var batchResult = try await TranscriptionService.batchTranscribe(
-            audioData: audioData,
-            language: language,
-            contextKeywords: self.currentContextSnapshot?.keywords ?? []
-          )
+          var batchResult = try await Self.runBatchTranscriptionBeforeContext(
+            contextTask: self.contextCaptureTask
+          ) {
+            try await TranscriptionService.batchTranscribe(
+              audioData: audioData,
+              language: language,
+              contextKeywords: self.currentContextSnapshot?.keywords ?? []
+            )
+          }
           guard self.voiceTurnCoordinator.activeTurnID == turnID else { return }
 
           if (batchResult.transcript == nil || batchResult.transcript?.isEmpty == true)
@@ -1428,6 +1447,12 @@ class PushToTalkManager: ObservableObject {
       query = lastInterimText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     let contextKeywords = currentContextSnapshot?.keywords ?? []
+    // Context improves lexical correction but is no longer needed once this
+    // transcript is ready. Cancel any still-running OCR before clearing the
+    // snapshot so a late callback cannot repopulate state for this turn or the
+    // next one between transcription and terminal cleanup.
+    contextCaptureTask?.cancel()
+    contextCaptureTask = nil
     if !query.isEmpty {
       query = PTTTranscriptContextualCorrector.correct(query, keywords: contextKeywords)
     }
