@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(OMI_DEVICE_BLE "Build optional SimpleBLE client (scan/listen)" OFF)
+set(OMI_DEVICE_SIMPLEBLE_SOURCE_DIR "" CACHE PATH
+  "Path to a vendored SimpleBLE source tree (overrides the pinned FetchContent download)")
 
 set(OMI_DEVICE_SOURCES src/protocol.cpp)
 
@@ -16,39 +18,36 @@ if(OMI_DEVICE_BLE)
     set(OMI_DEVICE_BLE_LINKED ON)
     message(STATUS "OMI_DEVICE_BLE: using installed simpleble")
   else()
-    set(_omi_simpleble_src "${CMAKE_BINARY_DIR}/_deps/simpleble-src")
-    set(_omi_simpleble_cmake "${_omi_simpleble_src}/simpleble/CMakeLists.txt")
-    if(NOT EXISTS "${_omi_simpleble_cmake}")
-      find_package(Git QUIET)
-      if(NOT Git_FOUND)
-        message(WARNING
-          "OMI_DEVICE_BLE=ON but simpleble not found and Git is missing.\n"
-          "Install SimpleBLE (find_package simpleble) or install Git to FetchContent.\n"
-          "Shipping sources at src/ble.cpp; building without BLE client.")
-      else()
-        message(STATUS "OMI_DEVICE_BLE: fetching SimpleBLE (v0.10.3)...")
-        execute_process(
-          COMMAND "${GIT_EXECUTABLE}" clone --depth 1 --branch v0.10.3
-                  https://github.com/simpleble/simpleble.git "${_omi_simpleble_src}"
-          RESULT_VARIABLE _omi_sb_rc
-          ERROR_VARIABLE _omi_sb_err
-          OUTPUT_VARIABLE _omi_sb_out
-        )
-        if(NOT _omi_sb_rc EQUAL 0)
-          message(WARNING
-            "OMI_DEVICE_BLE=ON but failed to fetch SimpleBLE:\n${_omi_sb_err}${_omi_sb_out}\n"
-            "Install SimpleBLE system-wide or re-run with network access.\n"
-            "Shipping sources at src/ble.cpp; building without BLE client.")
-        endif()
-      endif()
+    # Explicit vendored or pinned FetchContent path for SimpleBLE.
+    if(OMI_DEVICE_SIMPLEBLE_SOURCE_DIR)
+      set(_omi_simpleble_src "${OMI_DEVICE_SIMPLEBLE_SOURCE_DIR}")
+      message(STATUS "OMI_DEVICE_BLE: using vendored SimpleBLE at ${_omi_simpleble_src}")
+    else()
+      include(FetchContent)
+      FetchContent_Declare(
+        simpleble
+        GIT_REPOSITORY https://github.com/simpleble/simpleble.git
+        GIT_TAG        v0.10.3
+        GIT_SHALLOW    TRUE
+        GIT_PROGRESS   TRUE
+      )
+      FetchContent_MakeAvailable(simpleble)
+      set(_omi_simpleble_src "${simpleble_SOURCE_DIR}")
+      message(STATUS "OMI_DEVICE_BLE: using fetched SimpleBLE v0.10.3 from ${_omi_simpleble_src}")
     endif()
 
-    if(EXISTS "${_omi_simpleble_cmake}")
-      set(SIMPLEBLE_INSTALL OFF CACHE BOOL "" FORCE)
-      add_subdirectory("${_omi_simpleble_src}/simpleble" "${CMAKE_BINARY_DIR}/_deps/simpleble-build")
-      set(OMI_DEVICE_BLE_LINKED ON)
-      message(STATUS "OMI_DEVICE_BLE: using fetched SimpleBLE from ${_omi_simpleble_src}")
+    set(_omi_simpleble_cmake "${_omi_simpleble_src}/simpleble/CMakeLists.txt")
+    if(NOT EXISTS "${_omi_simpleble_cmake}")
+      message(FATAL_ERROR
+        "OMI_DEVICE_BLE=ON but SimpleBLE was not found.\n"
+        "Install simpleble (find_package simpleble), set "
+        "-DOMI_DEVICE_SIMPLEBLE_SOURCE_DIR=<path>, or ensure network access for the "
+        "pinned FetchContent download from https://github.com/simpleble/simpleble.git (v0.10.3).")
     endif()
+
+    set(SIMPLEBLE_INSTALL OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${_omi_simpleble_src}/simpleble" "${CMAKE_BINARY_DIR}/_deps/simpleble-build")
+    set(OMI_DEVICE_BLE_LINKED ON)
   endif()
 
   if(OMI_DEVICE_BLE_LINKED)
