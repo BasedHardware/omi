@@ -264,18 +264,14 @@ def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_stt_ca
     assert 'OMI_TRANSCRIPTION_SYNTHETIC_' not in manual
     assert 'Remove passed transcription candidate tag' in manual
     assert 'Remove failed transcription candidate tag' in manual
-    assert (
-        'if: ${{ failure() && steps.deploy-backend.outcome == \'success\''
-        " && (github.event.inputs.environment == 'development'"
-        " || github.event.inputs.deploy_targets == 'cloud-run-only') }}" in manual
-    )
+    assert "github.event.inputs.environment == 'development'" in manual
     assert manual.index('Gate backend candidate on known audio') < manual.index(
         'Shift Cloud Run traffic to validated revisions'
     )
 
 
-def test_production_cloud_run_only_uses_internal_authenticated_candidate_probe():
-    """Prod Cloud Run promotion uses the VPC probe; full-stack prod rejects early."""
+def test_production_cloud_run_only_smokes_the_promoted_serving_api():
+    """Prod Cloud Run promotion rolls back on runner-local serving smoke failure."""
     import yaml
 
     root = Path(__file__).resolve().parents[3]
@@ -286,10 +282,12 @@ def test_production_cloud_run_only_uses_internal_authenticated_candidate_probe()
     public_probe = by_name['Gate backend candidate on known audio']
     assert public_probe['if'] == "${{ github.event.inputs.environment == 'development' }}"
 
-    internal_probe = by_name['Gate internal production candidate on known audio from Cloud Run VPC']
-    assert "github.event.inputs.environment == 'prod'" in internal_probe['if']
-    assert "github.event.inputs.deploy_targets == 'cloud-run-only'" in internal_probe['if']
-    assert 'probe-transcription-candidate-from-cloud-run.sh' in internal_probe['run']
+    serving_smoke = by_name['Smoke promoted production serving API']
+    assert serving_smoke['if'] == "${{ github.event.inputs.environment == 'prod' }}"
+    assert 'https://api.omi.me/v2/desktop/beta/candidates/reserve' in serving_smoke['run']
+    assert '--candidate-api-url https://api.omi.me' in serving_smoke['run']
+    assert 'firebase-production-serving-token' in serving_smoke['run']
+    assert 'FIREBASE_PROBE_TOKEN' not in serving_smoke['run']
 
     for name in (
         'Resolve transcription candidate URL',
@@ -298,12 +296,17 @@ def test_production_cloud_run_only_uses_internal_authenticated_candidate_probe()
     ):
         condition = by_name[name].get('if') or ''
         assert "github.event.inputs.environment == 'development'" in condition
-        assert "github.event.inputs.deploy_targets == 'cloud-run-only'" in condition
 
     deploy_flags = by_name['Deploy ${{ env.SERVICE }} to Cloud Run']['with']['flags']
     assert "github.event.inputs.environment == 'development'" in deploy_flags
-    assert "github.event.inputs.deploy_targets == 'cloud-run-only'" in deploy_flags
-    assert steps.index(internal_probe) < steps.index(by_name['Shift Cloud Run traffic to validated revisions'])
+    assert steps.index(by_name['Verify serving backend release vector']) < steps.index(serving_smoke)
+    assert steps.index(serving_smoke) < steps.index(
+        by_name['Restore Cloud Run traffic snapshot after failed promotion']
+    )
+    assert (
+        "steps.smoke-promoted-production-serving-api.outcome == 'failure'"
+        in by_name['Restore Cloud Run traffic snapshot after failed promotion']['if']
+    )
 
 
 def test_static_processed_segment_marker_follows_partial_result_checkpoint():

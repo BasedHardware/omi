@@ -4,6 +4,12 @@ import { SETTINGS_TABS, type SettingsTabId } from './tabs'
 
 const HOVER = 'hover:bg-[var(--nav-sel)]'
 
+// This Back control is NOT a duplicate of the PageChromeBar "Home" pill — they go to
+// different places, exactly as on macOS, which ships both:
+//   - the Home pill  -> Home                    (DesktopHomeView.swift:907-917)
+//   - this Back      -> the page you came FROM  (SettingsSidebar.swift:478-499, wired
+//     to previousIndexBeforeSettings at DesktopHomeView.swift:855-862; Home is only
+//     its fallback when there is no previous page).
 export function SettingsTabRail(props: {
   active: SettingsTabId
   onSelect: (id: SettingsTabId) => void
@@ -31,7 +37,7 @@ export function SettingsTabRail(props: {
           value={query}
           onChange={(e) => onQuery(e.target.value)}
           placeholder="Search settings…"
-          className="glass-subtle w-full rounded-lg py-2 pl-9 pr-3 text-sm text-text-secondary placeholder:text-white/35 focus:outline-none"
+          className="glass-subtle focus-ring w-full rounded-lg py-2 pl-9 pr-3 text-sm text-text-secondary placeholder:text-white/35"
         />
       </div>
       {SETTINGS_TABS.map(({ id, label, Icon }) => {

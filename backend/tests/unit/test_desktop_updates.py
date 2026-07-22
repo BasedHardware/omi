@@ -13,7 +13,9 @@ from routers.updates import (
     _format_changelog_html,
     _generate_appcast_xml,
     _get_dmg_download_url,
+    _get_installer_download_url,
     _get_sparkle_zip_download_url,
+    _get_windows_installer_download_url,
     _parse_changelog_to_changes,
     _parse_desktop_version,
     _preview_download_landing_html,
@@ -84,6 +86,12 @@ class TestParseDesktopVersion:
     def test_no_v_prefix(self):
         result = _parse_desktop_version("1.0.0+100-macos")
         assert result is not None
+
+    def test_windows_tag_without_build(self):
+        result = _parse_desktop_version("v1.2.0-windows")
+        assert result is not None
+        assert result["version"] == "1.2.0"
+        assert result["build"] == "0"
 
     def test_two_component_version_macos(self):
         # Newer release tags omit the patch component (e.g. v11.0+11000-macos).
@@ -266,6 +274,30 @@ class TestAssetHelpers:
     def test_empty_assets(self):
         assert _get_sparkle_zip_download_url({}) is None
         assert _get_dmg_download_url({}) is None
+        assert _get_windows_installer_download_url({}) is None
+
+    def test_windows_installer_found(self):
+        release = {"assets": [{"name": "omi-setup.exe", "browser_download_url": "https://example.com/omi-setup.exe"}]}
+        assert _get_windows_installer_download_url(release) == "https://example.com/omi-setup.exe"
+
+    def test_windows_installer_ignores_versioned_and_cased_names(self):
+        release = {
+            "assets": [
+                {"name": "Omi-for-Windows-Setup-1.0.1.exe", "browser_download_url": "https://example.com/vers.exe"},
+                {"name": "Omi-Setup.exe", "browser_download_url": "https://example.com/cased.exe"},
+            ]
+        }
+        assert _get_windows_installer_download_url(release) is None
+
+    def test_installer_dispatch_by_platform(self):
+        release = {
+            "assets": [
+                {"name": "omi.dmg", "browser_download_url": "https://example.com/omi.dmg"},
+                {"name": "omi-setup.exe", "browser_download_url": "https://example.com/omi-setup.exe"},
+            ]
+        }
+        assert _get_installer_download_url(release, "macos") == "https://example.com/omi.dmg"
+        assert _get_installer_download_url(release, "windows") == "https://example.com/omi-setup.exe"
 
 
 # --- Channel validation ---
@@ -327,6 +359,10 @@ def _zip_asset(url="https://example.com/Omi.zip"):
 
 def _dmg_asset(url="https://example.com/omi.dmg"):
     return {"name": "omi.dmg", "browser_download_url": url}
+
+
+def _exe_asset(url="https://example.com/omi-setup.exe"):
+    return {"name": "omi-setup.exe", "browser_download_url": url}
 
 
 # --- _get_legacy_live_desktop_releases ---
@@ -514,6 +550,62 @@ class TestResolveDesktopReleases:
 
         assert all(entry["source"] == "pointer_lkg" for entry in result)
         legacy.assert_not_awaited()
+
+
+class TestWindowsReleaseStateMapping:
+    """Windows releases carry no KEY_VALUE block: published state is liveness
+    and GitHub's prerelease flag is the channel (desktop_windows_release.yml)."""
+
+    @pytest.mark.asyncio
+    async def test_windows_prerelease_maps_to_beta(self):
+        from routers.updates import _get_legacy_live_desktop_releases as get_releases
+
+        releases = [
+            {**_make_github_release("v1.0.1-windows", assets=[_exe_asset()]), "prerelease": True},
+        ]
+        with patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=releases):
+            result = await get_releases("windows")
+        assert len(result) == 1
+        assert result[0]["channel"] == "beta"
+        assert result[0]["version_info"]["version"] == "1.0.1"
+        assert result[0]["version_info"]["build"] == "0"
+
+    @pytest.mark.asyncio
+    async def test_windows_full_release_maps_to_stable(self):
+        from routers.updates import _get_legacy_live_desktop_releases as get_releases
+
+        releases = [
+            {**_make_github_release("v1.0.1-windows", assets=[_exe_asset()]), "prerelease": False},
+        ]
+        with patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=releases):
+            result = await get_releases("windows")
+        assert len(result) == 1
+        assert result[0]["channel"] == "stable"
+
+    @pytest.mark.asyncio
+    async def test_windows_explicit_key_value_block_still_wins(self):
+        from routers.updates import _get_legacy_live_desktop_releases as get_releases
+
+        releases = [
+            {
+                **_make_github_release("v1.0.1-windows", body_kv={"isLive": "false"}, assets=[_exe_asset()]),
+                "prerelease": False,
+            },
+        ]
+        with patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=releases):
+            result = await get_releases("windows")
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_macos_still_requires_explicit_is_live(self):
+        from routers.updates import _get_legacy_live_desktop_releases as get_releases
+
+        releases = [
+            {**_make_github_release("v1.0.0+100-macos", assets=[_dmg_asset()]), "prerelease": False},
+        ]
+        with patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=releases):
+            result = await get_releases("macos")
+        assert result == []
 
 
 class TestLegacyDesktopReleaseFiltering:
@@ -779,6 +871,56 @@ class TestDownloadEndpoint:
                 resp = await client.get("/v2/desktop/download/latest?channel=stable")
         # Fallback loop also finds no DMG, so 404
         assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_windows_platform_serves_exe_installer(self):
+        mock_releases = [
+            {
+                "channel": "stable",
+                "version_info": {"version": "1.0.1", "build": "0"},
+                "release": {"assets": [_exe_asset("https://example.com/omi-setup.exe")]},
+            },
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/latest?platform=windows&channel=stable")
+        assert resp.status_code == 200
+        assert "https://example.com/omi-setup.exe" in resp.text
+        assert "for Windows" in resp.text
+
+    @pytest.mark.asyncio
+    async def test_windows_platform_404_when_only_dmg_asset(self):
+        mock_releases = [
+            {
+                "channel": "stable",
+                "version_info": {"version": "1.0.1", "build": "0"},
+                "release": {"assets": [_dmg_asset()]},
+            },
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/latest?platform=windows&channel=stable")
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_windows_convenience_route_defaults_to_stable(self):
+        mock_releases = [
+            {
+                "channel": "beta",
+                "version_info": {"version": "2.0.0", "build": "0"},
+                "release": {"assets": [_exe_asset("https://example.com/beta-setup.exe")]},
+            },
+            {
+                "channel": "stable",
+                "version_info": {"version": "1.0.1", "build": "0"},
+                "release": {"assets": [_exe_asset("https://example.com/omi-setup.exe")]},
+            },
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/windows")
+        assert resp.status_code == 200
+        assert "https://example.com/omi-setup.exe" in resp.text
 
 
 # --- Clear cache endpoint ---

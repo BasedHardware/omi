@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "apps": [
+    { "id": "zoom", "name": "Zoom", "exes": ["zoom.exe", "cpthost.exe"] },
+    {
+      "id": "teams",
+      "name": "Microsoft Teams",
+      "exes": ["ms-teams.exe", "teams.exe"],
+      "packaged": ["msteams"]
+    },
+    { "id": "discord", "name": "Discord", "exes": ["discord.exe"] },
+    { "id": "slack", "name": "Slack", "exes": ["slack.exe"] },
+    {
+      "id": "webex",
+      "name": "Webex",
+      "exes": ["webexmta.exe", "ciscocollabhost.exe", "atmgr.exe"]
+    },
+    { "id": "skype", "name": "Skype", "exes": ["skype.exe"] },
+    { "id": "gotomeeting", "name": "GoToMeeting", "exes": ["g2mcomm.exe"] },
+    { "id": "ringcentral", "name": "RingCentral", "exes": ["ringcentral.exe"] }
+  ],
+  "browsers": [
+    "chrome.exe",
+    "msedge.exe",
+    "firefox.exe",
+    "brave.exe",
+    "opera.exe",
+    "opera_gx.exe",
+    "vivaldi.exe",
+    "arc.exe"
+  ],
+  "titles": [
+    { "id": "meet-web", "name": "Google Meet", "pattern": "^Meet\\s+[-–—]\\s" },
+    { "id": "zoom-web", "name": "Zoom", "pattern": "Zoom Meeting" },
+    { "id": "teams-web", "name": "Microsoft Teams", "pattern": "\\| Microsoft Teams" },
+    { "id": "webex-web", "name": "Webex", "pattern": "\\bWebex\\b" }
+  ]
+}

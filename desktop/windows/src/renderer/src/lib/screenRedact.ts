@@ -1,24 +1,31 @@
 // src/renderer/src/lib/screenRedact.ts
-export const DEFAULT_DENYLIST: string[] = [
-  '1password', 'bitwarden', 'keepass', 'lastpass', 'dashlane',
-  'windows security', 'windows hello', 'log in', 'login', 'sign in',
-  'password', 'bank', 'chase', 'wells fargo', 'paypal', 'coinbase'
-]
+//
+// The context predicates now live in `shared/screenPrivacy.ts` so the
+// main-process proactive assistants can apply the exact same gate before a
+// frame's pixels leave the device. Re-exported here so existing renderer
+// callers keep importing them from this module.
+export {
+  DEFAULT_DENYLIST,
+  isPrivateWindow,
+  isDeniedContext
+} from '../../../shared/screenPrivacy'
 
-const PRIVATE_MARKERS = ['incognito', 'inprivate', 'private browsing']
-
-export function isPrivateWindow(windowTitle: string): boolean {
-  const t = windowTitle.toLowerCase()
-  return PRIVATE_MARKERS.some((m) => t.includes(m))
-}
-
-export function isDeniedContext(ctx: {
-  app: string
-  windowTitle: string
-  processName: string
-}): boolean {
-  const hay = `${ctx.app} ${ctx.windowTitle} ${ctx.processName}`.toLowerCase()
-  return DEFAULT_DENYLIST.some((n) => hay.includes(n))
+// The user's own Insight app denylist (InsightSettings.denylist) — applied ON TOP
+// of DEFAULT_DENYLIST as an additional OR leg, never a replacement. Pure and
+// framework-free so the renderer Insight filter (and any future reuse) can call it
+// directly. Mirrors isDeniedContext's matching: case-insensitive substring over
+// app + windowTitle + processName. An empty list (or blank entries) never matches,
+// so it can't accidentally exclude everything.
+export function isUserDenied(
+  frame: { app: string; windowTitle: string; processName: string },
+  userDenylist: string[]
+): boolean {
+  if (userDenylist.length === 0) return false
+  const hay = `${frame.app} ${frame.windowTitle} ${frame.processName}`.toLowerCase()
+  return userDenylist.some((n) => {
+    const t = n.trim().toLowerCase()
+    return t.length > 0 && hay.includes(t)
+  })
 }
 
 const PATTERNS: RegExp[] = [

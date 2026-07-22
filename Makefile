@@ -8,16 +8,21 @@ export PYTHON
 DESKTOP_USER ?= alice
 DESKTOP_APP_NAME ?=
 
-.PHONY: setup setup-main setup-hooks preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local run-canonical-promotion
+.PHONY: setup setup-main setup-hooks setup-backend preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local run-canonical-promotion
 
-setup: setup-main setup-hooks
-	@echo "Worktree setup complete."
+# Baseline setup is deliberately limited to prerequisites that the default
+# pre-push gate may require; app and desktop runtime environments stay opt-in.
+setup: setup-main setup-hooks setup-backend
+	@echo "Worktree setup complete: hooks installed and backend pre-push environment ready."
 
 setup-main:
 	@bash scripts/setup-refresh-main.sh
 
 setup-hooks:
 	@bash scripts/install-git-hooks.sh
+
+setup-backend:
+	@bash backend/scripts/sync-python-deps.sh
 
 preflight:
 	python3 .github/scripts/pr_preflight.py --lane local --base origin/main

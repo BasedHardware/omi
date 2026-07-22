@@ -8,12 +8,20 @@ import {
   resumeInsightDismiss
 } from '../insight/toastWindow'
 import { fireNativeInsight } from '../insight/notification'
-import { insertInsight, recentInsights } from './db'
+import {
+  insertInsight,
+  recentInsights,
+  dismissInsight,
+  dismissAllInsights,
+  clearInsights
+} from './db'
 import type { InsightPayload, InsightSettings } from '../../shared/types'
 
 // Show an insight using the user's chosen style: the in-app acrylic toast
-// ('omi') or a native Windows notification ('native').
-function deliverInsight(p: InsightPayload): void {
+// ('omi') or a native Windows notification ('native'). Exported so the proactive
+// assistants' notification throttle (assistants/core/notify.ts) delivers through
+// the same one place, rather than growing a second toast path.
+export function deliverInsight(p: InsightPayload): void {
   if (getInsightSettings().notificationStyle === 'native') fireNativeInsight(p)
   else showInsightToast(p)
 }
@@ -27,6 +35,12 @@ export function registerInsightHandlers(): void {
     insertInsight(p)
   })
   ipcMain.handle('insight:recent', async (_e, limit: number) => recentInsights(limit))
+  // History-page mutations over the same SQLite `insights` table. `dismissed` is
+  // the read/handled marker — dismissAll is Mac's "Mark All Read", clearAll is
+  // "Clear All History".
+  ipcMain.handle('insight:dismissRecord', async (_e, id: number) => dismissInsight(id))
+  ipcMain.handle('insight:dismissAll', async () => dismissAllInsights())
+  ipcMain.handle('insight:clearAll', async () => clearInsights())
   ipcMain.on('insight:show', (_e, p: InsightPayload) => deliverInsight(p))
   ipcMain.on('insight:dismiss', () => hideInsightToast())
   ipcMain.on('insight:hoverStart', () => pauseInsightDismiss())

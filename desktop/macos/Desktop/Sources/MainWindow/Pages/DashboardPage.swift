@@ -224,7 +224,7 @@ struct DashboardPage: View {
   @ObservedObject private var homeSuggestionsStore = HomeSuggestionsStore.shared
   @StateObject private var intelligenceStore = DashboardIntelligenceStore()
   @State private var dismissedKnowsTaskIDs: Set<String> = []
-  @State private var didAutoOpenChatForHistory = false
+  @State private var homeHistoryAutoOpenPolicy = HomeStageHistoryAutoOpenPolicy()
   @Binding var selectedIndex: Int
   @State private var citedConversation: ServerConversation? = nil
   @State private var selectedCatalogApp: OmiApp?
@@ -1175,9 +1175,10 @@ struct DashboardPage: View {
   /// immediately overridden by the next `messages.count` change. (There is no
   /// user-facing path back to the hub once history exists — chat is Home.)
   private func autoOpenChatForExistingHistoryIfNeeded() {
-    guard !didAutoOpenChatForHistory else { return }
-    guard !useLegacyHomeDesign, homeMode == .hub, !chatProvider.messages.isEmpty else { return }
-    didAutoOpenChatForHistory = true
+    guard
+      homeHistoryAutoOpenPolicy.shouldAutoOpen(
+        isLegacy: useLegacyHomeDesign, mode: homeMode, hasMessages: !chatProvider.messages.isEmpty)
+    else { return }
     homeMode = .chat
     reportHomeAutomationMode()
   }
@@ -1238,6 +1239,7 @@ struct DashboardPage: View {
 
   private func closeHomeStagePanel() {
     homeAskFieldFocused = false
+    homeHistoryAutoOpenPolicy.suppressAutoOpenForExplicitHubClose()
     OmiMotion.withGated(Self.homeStageAnimation) {
       homeMode = .hub
     }

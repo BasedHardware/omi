@@ -1566,9 +1566,9 @@ def mcp_authorize(
     client_name = str(client.get("name") or client_id)
     permissions = [SCOPE_PERMISSION_TEXT[item] for item in scopes]
     return templates.TemplateResponse(
+        request,
         "mcp_oauth_authorize.html",
         {
-            "request": request,
             "client_name": client_name,
             "oauth_params": {
                 "response_type": response_type,

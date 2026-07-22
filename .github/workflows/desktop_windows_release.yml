@@ -1,0 +1,332 @@
+name: Auto Release Desktop (Windows) on Main
+
+# Windows counterpart to desktop_auto_release.yml (macOS). Same SHAPE:
+#   merge to main touching the desktop app -> bump the patch version, tag it,
+#   build the installer, publish it to a prerelease (beta) GitHub Release.
+#
+# Difference from macOS: macOS only tags here and hands the build to Codemagic.
+# Windows has no external CI, so this workflow ALSO builds + publishes, on a
+# windows-latest runner, using electron-builder (NSIS) + gh.
+#
+# The git tag `v<version>-windows` is the source of truth for the version
+# (mirrors macOS, where the tag — not a checked-in version field — drives
+# releases). The version is stamped into package.json at build time from the
+# tag; the same bump is synced back to main as a best-effort PR so the checked-in
+# version tracks reality.
+#
+# electron-builder config: the build steps pass `--config electron-builder.config.mjs`
+# explicitly. electron-builder only AUTO-detects electron-builder.<ext>; the
+# `.config.mjs` name is NOT auto-detected, and that JS config is what computes the
+# pi-mono asarUnpack closure at pack time. Dropping the flag would silently ship an
+# installer missing that closure and break the coding agent. `pnpm build:win`
+# already carries the flag; the signed path passes it by hand.
+#
+# Loop prevention (the bump must not re-trigger this workflow):
+#   1. Every git write here uses GITHUB_TOKEN, and GitHub does not start new
+#      workflow runs for pushes made with GITHUB_TOKEN. This alone breaks the loop.
+#   2. Belt-and-suspenders: the plan job skips commits whose message is a release
+#      bump, and skips when there is no releasable desktop/windows change since
+#      the latest tag (so an empty/no-op push never cuts a release).
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'desktop/windows/**'
+  workflow_dispatch:
+    inputs:
+      release_mode:
+        description: 'Release behavior'
+        required: false
+        default: 'release_now'
+        type: choice
+        options:
+          - release_now
+          - force_release
+      next_version:
+        description: 'Optional explicit version to tag (for example, 1.2.0)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  # Serialize releases; never cancel a run mid-publish (a cancelled run can leave
+  # a pushed tag with no assets).
+  group: desktop-windows-release-main
+  cancel-in-progress: false
+
+jobs:
+  plan-and-tag:
+    runs-on: ubuntu-latest
+    # Fast-path loop guard: never act on our own release-bump commit.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      !startsWith(github.event.head_commit.message, 'chore(windows): release v')
+    outputs:
+      should_release: ${{ steps.plan.outputs.should_release }}
+      version: ${{ steps.plan.outputs.version }}
+      release_tag: ${{ steps.plan.outputs.release_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Plan release (compute next version, tag, sync back to main)
+        id: plan
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_MODE: ${{ github.event.inputs.release_mode || 'release_now' }}
+          NEXT_VERSION: ${{ github.event.inputs.next_version || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          set_output() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
+
+          # --- Latest Windows release tag (source of truth for the version) ---
+          LATEST=$(git tag -l 'v*-windows' | sort -V | tail -1)
+          echo "Latest windows tag: ${LATEST:-none}"
+
+          # --- Is there a releasable desktop/windows change since that tag? ---
+          # (git diff --quiet exits 1 on differences; keep it out of a `head`
+          # pipe so pipefail+SIGPIPE can't abort the step.)
+          HAS_CHANGES=false
+          if [ -z "$LATEST" ]; then
+            [ -n "$(git ls-files desktop/windows)" ] && HAS_CHANGES=true
+          elif ! git diff --quiet --diff-filter=ACDMR "${LATEST}..HEAD" -- desktop/windows; then
+            HAS_CHANGES=true
+          fi
+
+          if [ "$HAS_CHANGES" != "true" ] && [ "$RELEASE_MODE" != "force_release" ]; then
+            echo "No releasable desktop/windows changes since ${LATEST:-repo start}."
+            set_output should_release false
+            exit 0
+          fi
+
+          # --- Compute the next version (patch bump) ---
+          if [ -n "$NEXT_VERSION" ]; then
+            if ! [[ "$NEXT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "next_version must be a semantic version like 1.2.0" >&2
+              exit 1
+            fi
+            VERSION="$NEXT_VERSION"
+          else
+            if [ -n "$LATEST" ]; then
+              BASE=$(echo "$LATEST" | sed -E 's/^v(.+)-windows$/\1/')
+            else
+              # First release: continue from the checked-in version.
+              BASE=$(node -p "require('./desktop/windows/package.json').version")
+            fi
+            MAJOR=$(echo "$BASE" | cut -d. -f1)
+            MINOR=$(echo "$BASE" | cut -d. -f2)
+            PATCH=$(echo "$BASE" | cut -d. -f3)
+            PATCH=$(( ${PATCH:-0} + 1 ))
+            VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          fi
+
+          RELEASE_TAG="v${VERSION}-windows"
+          echo "New version: $VERSION"
+          echo "New tag    : $RELEASE_TAG"
+
+          if git rev-parse -q --verify "refs/tags/${RELEASE_TAG}" >/dev/null; then
+            echo "Tag ${RELEASE_TAG} already exists — aborting to avoid clobbering a release." >&2
+            exit 1
+          fi
+
+          # --- Stamp package.json and tag that commit ---
+          # The commit lives on the tag only; main receives it via the sync PR
+          # below. Pushing the tag carries the bump commit to origin, so the build
+          # job checks out the tag and gets the right version.
+          node -e "const f='desktop/windows/package.json',fs=require('fs');const j=JSON.parse(fs.readFileSync(f));j.version='${VERSION}';fs.writeFileSync(f,JSON.stringify(j,null,2)+'\n');"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add desktop/windows/package.json
+          git commit -m "chore(windows): release v${VERSION}"
+          git tag "$RELEASE_TAG"
+          git push origin "$RELEASE_TAG"
+
+          set_output should_release true
+          set_output version "$VERSION"
+          set_output release_tag "$RELEASE_TAG"
+
+          # --- Best-effort: sync the version bump back to main via PR ---
+          # main may be protected; if the PR cannot be merged automatically the
+          # release still succeeded (the tag is authoritative) and the PR waits
+          # for a manual merge. GITHUB_TOKEN pushes do not re-trigger this workflow.
+          BRANCH="release/windows-v${VERSION}"
+          git checkout -B "$BRANCH"
+          git push --force-with-lease origin "$BRANCH" || {
+            echo "Could not push sync branch; skipping main sync (release already tagged).";
+            exit 0;
+          }
+
+          PR_NUMBER=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number' || echo "")
+          if [ -z "$PR_NUMBER" ]; then
+            gh pr create \
+              --title "chore(windows): sync release v${VERSION} to main [skip ci]" \
+              --body "Auto-generated: stamps desktop/windows/package.json to v${VERSION} to match the ${RELEASE_TAG} release." \
+              --base main --head "$BRANCH" || {
+                echo "Could not open sync PR (non-fatal).";
+                exit 0;
+              }
+            PR_NUMBER=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number' || echo "")
+          fi
+
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr merge "$PR_NUMBER" --merge --admin || \
+            gh pr merge "$PR_NUMBER" --merge --auto || \
+            gh pr merge "$PR_NUMBER" --merge || \
+            echo "Sync PR #$PR_NUMBER needs a manual merge (release already published)."
+          fi
+
+  build-and-publish:
+    needs: [plan-and-tag]
+    if: needs.plan-and-tag.outputs.should_release == 'true'
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop/windows
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan-and-tag.outputs.release_tag }}
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: desktop/windows/pnpm-lock.yaml
+      # OCR + UI-automation helpers are .NET projects built during install/build.
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Provision .env (ships public Firebase/PostHog config)
+        shell: pwsh
+        run: Copy-Item .env.example .env
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Sign only when Azure Trusted Signing secrets are present. When absent the
+      # installer is built unsigned (Windows SmartScreen shows "unknown
+      # publisher"); the release notes say so. See docs/release-pipeline.md.
+      - name: Detect signing secrets
+        id: signing
+        shell: bash
+        env:
+          # All-or-nothing: every secret the signed build path needs (auth +
+          # profile) must be present, or a partial set would run the signed path
+          # with an empty value and die at signing instead of falling back unsigned.
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_PUBLISHER_NAME: ${{ secrets.AZURE_PUBLISHER_NAME }}
+          AZURE_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_ACCOUNT: ${{ secrets.AZURE_CODE_SIGNING_ACCOUNT }}
+          AZURE_PROFILE: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
+        run: |
+          if [ -n "${AZURE_TENANT_ID}" ] && [ -n "${AZURE_CLIENT_ID}" ] && [ -n "${AZURE_CLIENT_SECRET}" ] && \
+             [ -n "${AZURE_PUBLISHER_NAME}" ] && [ -n "${AZURE_ENDPOINT}" ] && [ -n "${AZURE_ACCOUNT}" ] && [ -n "${AZURE_PROFILE}" ]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build signed installer (Azure Trusted Signing)
+        if: steps.signing.outputs.signed == 'true'
+        shell: bash
+        env:
+          # Auth (electron-builder / @azure/identity read these from the env).
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          # Signing profile (injected as electron-builder config overrides so the
+          # committed config stays inert for unsigned local builds).
+          AZURE_PUBLISHER_NAME: ${{ secrets.AZURE_PUBLISHER_NAME }}
+          AZURE_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_ACCOUNT: ${{ secrets.AZURE_CODE_SIGNING_ACCOUNT }}
+          AZURE_PROFILE: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
+        # --config electron-builder.config.mjs is REQUIRED — that JS config computes
+        # the pi-mono asarUnpack closure; without it electron-builder auto-detects no
+        # config and ships an installer that breaks the coding agent.
+        run: |
+          npm run build
+          pnpm exec electron-builder --win --x64 --config electron-builder.config.mjs --publish never \
+            -c.win.azureSignOptions.publisherName="$AZURE_PUBLISHER_NAME" \
+            -c.win.azureSignOptions.endpoint="$AZURE_ENDPOINT" \
+            -c.win.azureSignOptions.certificateProfileName="$AZURE_PROFILE" \
+            -c.win.azureSignOptions.codeSigningAccountName="$AZURE_ACCOUNT"
+
+      - name: Build unsigned installer
+        if: steps.signing.outputs.signed != 'true'
+        shell: bash
+        # pnpm build:win == `npm run build && electron-builder --win --x64 --config
+        # electron-builder.config.mjs --publish never` — it carries the required config
+        # flag AND --publish never. The latter matters: the config's `publish` block is
+        # the electron-updater FEED pointer, but electron-builder also treats it as an
+        # upload target and auto-publishes when CI + a git tag are detected (this job
+        # checks out the release tag). Without --publish never it dies on a missing
+        # GH_TOKEN; the real upload happens in the explicit `gh release` step below.
+        run: pnpm build:win
+
+      - name: Collect release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          # electron-builder (NSIS) writes the installer, its blockmap, and the
+          # electron-updater feed metadata (latest.yml) to dist/.
+          ls -la dist || true
+          test -f dist/latest.yml || { echo "latest.yml missing — auto-update feed would be broken." >&2; exit 1; }
+          compgen -G "dist/*.exe" >/dev/null || { echo "installer .exe missing." >&2; exit 1; }
+          compgen -G "dist/*.exe.blockmap" >/dev/null || { echo "installer blockmap missing." >&2; exit 1; }
+          # Canonical stable-name copy the backend download endpoints resolve
+          # (backend/routers/updates.py matches exactly `omi-setup.exe`, the
+          # case-sensitive Windows analog of macOS's `omi.dmg`). The dist/*.exe
+          # glob in the upload step below picks it up automatically.
+          installer=$(compgen -G "dist/Omi-for-Windows-Setup-*.exe" | head -1)
+          test -n "$installer" || { echo "versioned installer not found for canonical copy." >&2; exit 1; }
+          cp "$installer" dist/omi-setup.exe
+
+      - name: Publish prerelease (beta) GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.plan-and-tag.outputs.release_tag }}
+          VERSION: ${{ needs.plan-and-tag.outputs.version }}
+          SIGNED: ${{ steps.signing.outputs.signed }}
+        run: |
+          set -euo pipefail
+          if [ "$SIGNED" = "true" ]; then
+            SIGN_NOTE="Signed with Azure Trusted Signing."
+          else
+            SIGN_NOTE="**Unsigned build** — Windows SmartScreen will warn \"unknown publisher\". Signing activates automatically once the Azure Trusted Signing secrets are set (see desktop/windows/docs/release-pipeline.md)."
+          fi
+          NOTES="Automated Windows beta build for v${VERSION}.
+
+          ${SIGN_NOTE}
+
+          Install: download and run the \`.exe\`. Installed apps auto-update from stable releases."
+
+          # Create the release if the plan job did not (idempotent on re-run).
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --title "Omi for Windows ${VERSION} (beta)" \
+              --notes "$NOTES" \
+              --prerelease
+          fi
+
+          # --clobber so a re-run overwrites partial uploads.
+          gh release upload "$RELEASE_TAG" --clobber \
+            dist/*.exe \
+            dist/*.exe.blockmap \
+            dist/latest.yml

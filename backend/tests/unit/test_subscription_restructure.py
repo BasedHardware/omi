@@ -439,7 +439,8 @@ def test_version_gating_unknown_platform(load_subscription):
     with load_subscription() as sub_mod:
         assert sub_mod.should_show_new_plans(None, None) is False
         assert sub_mod.should_show_new_plans('linux', '1.0.0') is False
-        assert sub_mod.should_show_new_plans('web', '1.0.0') is False
+        # 'web' is NOT unknown: it is an always-latest client that always gets
+        # the new catalog (see test_version_gating_web_always_new).
 
 
 def test_subscription_deprecation_fields():

@@ -3,19 +3,65 @@
 // setBackgroundMaterial('acrylic'→'mica'→none) — same DWM-backdrop approach as
 // the overlay. Anchored bottom-right, shown WITHOUT stealing focus, auto-dismissed
 // after a timeout (paused while hovered).
+//
+// The MEETING toast (Phase 5) reuses this same window + renderer route rather
+// than spawning a second toast surface: one acrylic notification window, two
+// payload channels ('insight:payload' / 'meeting:toast'), last-writer-wins on
+// visibility. Meeting toasts are rare and insights fire at most every 15 min,
+// so a clobber is a non-issue and we avoid ~100 lines of duplicated window
+// lifecycle + a second always-alive BrowserWindow.
 import { BrowserWindow, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
-import type { InsightPayload } from '../../shared/types'
+import iconPath from '../../../resources/icon.png?asset'
+import type { InsightPayload, MeetingToastPayload, WhatsNewPayload } from '../../shared/types'
 import { rendererBaseUrl } from '../rendererServer'
 
 const WIDTH = 360
 const HEIGHT = 168
+// The what's-new card carries more copy (a 3-item changelog + a button) than an
+// insight/meeting toast, so it gets a taller window sized to its content — three
+// changes each wrapping to two lines, the headline, and the release-notes button
+// all fit without clipping. Insight/meeting toasts reset the window to HEIGHT.
+const WHATS_NEW_HEIGHT = 244
 const MARGIN = 16
 const AUTO_DISMISS_MS = 8000
+// The ask-toast is a decision prompt — give it longer before it slips away.
+const MEETING_ASK_DISMISS_MS = 30_000
+// The what's-new card is informational (a short read + optional link) — give it
+// longer than an insight so it isn't gone before it's read.
+const WHATS_NEW_DISMISS_MS = 20_000
 
 let toastWindow: BrowserWindow | null = null
 let dismissTimer: ReturnType<typeof setTimeout> | null = null
+// Dismiss duration of the toast currently shown — hover-resume must re-arm
+// with the SAME budget (an ask-toast paused at 30s must not resume at 8s).
+let currentDismissMs = AUTO_DISMISS_MS
+
+function armDismiss(ms: number): void {
+  currentDismissMs = ms
+  if (dismissTimer) clearTimeout(dismissTimer)
+  dismissTimer = setTimeout(hideInsightToast, ms)
+}
+// The meeting payload currently on screen. Kept so the toast renderer can PULL
+// it on mount ('meeting:getToast'): a push sent between the window's
+// did-finish-load and React's effect subscription would otherwise vanish — a
+// real race when a meeting activates within seconds of startup (E2E, or a
+// meeting already running when Omi launches).
+let currentMeetingToast: MeetingToastPayload | null = null
+
+export function getCurrentMeetingToast(): MeetingToastPayload | null {
+  return currentMeetingToast
+}
+
+// The what's-new payload currently on screen. Same pull-on-mount rationale as the
+// meeting toast: a push sent between the toast window's did-finish-load and the
+// renderer's effect subscription would otherwise vanish.
+let currentWhatsNew: WhatsNewPayload | null = null
+
+export function getCurrentWhatsNew(): WhatsNewPayload | null {
+  return currentWhatsNew
+}
 
 function applyMaterial(win: BrowserWindow): void {
   const w = win as BrowserWindow & { setBackgroundMaterial?: (m: string) => void }
@@ -48,10 +94,14 @@ function ensureWindow(): BrowserWindow {
     focusable: true,
     hasShadow: true,
     backgroundColor: '#000000',
+    // Frameless + skipTaskbar, but still set the app icon so Alt-Tab/system
+    // listings never show the default Electron icon for this window.
+    icon: iconPath,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
-      webSecurity: false,
+      // webSecurity ON (matches the main window). CORS is handled by the
+      // main-process webRequest header injection, not by weakening this.
       backgroundThrottling: false
     }
   })
@@ -61,31 +111,40 @@ function ensureWindow(): BrowserWindow {
   })
   // Same-origin as the main window (see overlay/window.ts) so the toast sees
   // the signed-in auth state.
+  // Slim per-window entry (insight-toast.html) instead of the full-app index.html
+  // — see perf/win-slim-aux-windows. The `#/insight-toast` hash is preserved so
+  // window-role detection (windowRole.ts) and IPC sender labeling
+  // (voicePlaneIpc.ts) are unchanged.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/insight-toast`)
+    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/insight-toast.html#/insight-toast`)
   } else if (rendererBaseUrl()) {
-    win.loadURL(`${rendererBaseUrl()}/index.html#/insight-toast`)
+    win.loadURL(`${rendererBaseUrl()}/insight-toast.html#/insight-toast`)
   } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'insight-toast' })
+    win.loadFile(join(__dirname, '../renderer/insight-toast.html'), { hash: 'insight-toast' })
   }
   applyMaterial(win)
   toastWindow = win
   return win
 }
 
-function position(win: BrowserWindow): void {
+function position(win: BrowserWindow, height: number = HEIGHT): void {
   const wa = screen.getPrimaryDisplay().workArea
   win.setBounds({
     x: wa.x + wa.width - WIDTH - MARGIN,
-    y: wa.y + wa.height - HEIGHT - MARGIN,
+    y: wa.y + wa.height - height - MARGIN,
     width: WIDTH,
-    height: HEIGHT
+    height
   })
 }
 
 export function showInsightToast(payload: InsightPayload): void {
   const win = ensureWindow()
   position(win)
+  // An insight replaces whatever is on the shared toast — clear any meeting /
+  // what's-new payload so a later toast-window reload can't resurface a stale card
+  // via meeting:getToast / whatsnew:getPending.
+  currentMeetingToast = null
+  currentWhatsNew = null
   // showInactive: appear on top without taking focus from the user's current app.
   win.showInactive()
   const send = (): void => {
@@ -93,11 +152,50 @@ export function showInsightToast(payload: InsightPayload): void {
   }
   if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
   else send()
-  if (dismissTimer) clearTimeout(dismissTimer)
-  dismissTimer = setTimeout(hideInsightToast, AUTO_DISMISS_MS)
+  armDismiss(AUTO_DISMISS_MS)
+}
+
+/** Show (or update) the meeting toast in the shared toast window. Ask-toasts
+ *  linger longer (a decision prompt); capture notices use the standard timeout.
+ *  Never silent capture: every auto-start goes through here. */
+export function showMeetingToast(payload: MeetingToastPayload): void {
+  const win = ensureWindow()
+  position(win)
+  win.showInactive()
+  currentMeetingToast = payload
+  currentWhatsNew = null
+  const send = (): void => {
+    if (!win.isDestroyed()) win.webContents.send('meeting:toast', payload)
+  }
+  if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
+  else send()
+  armDismiss(payload.kind === 'ask' ? MEETING_ASK_DISMISS_MS : AUTO_DISMISS_MS)
+}
+
+/** Show the post-update what's-new card in the shared toast window (Phase 8).
+ *  Informational, so it uses a longer dismiss and never steals focus. */
+export function showWhatsNewToast(payload: WhatsNewPayload): void {
+  const win = ensureWindow()
+  position(win, WHATS_NEW_HEIGHT)
+  win.showInactive()
+  currentMeetingToast = null
+  currentWhatsNew = payload
+  const send = (): void => {
+    if (!win.isDestroyed()) win.webContents.send('whatsnew:toast', payload)
+  }
+  if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
+  else send()
+  armDismiss(WHATS_NEW_DISMISS_MS)
+}
+
+/** Hide the shared toast window (same surface as the insight toast). */
+export function hideMeetingToast(): void {
+  hideInsightToast()
 }
 
 export function hideInsightToast(): void {
+  currentMeetingToast = null
+  currentWhatsNew = null
   if (dismissTimer) {
     clearTimeout(dismissTimer)
     dismissTimer = null
@@ -113,11 +211,11 @@ export function pauseInsightDismiss(): void {
   }
 }
 
-/** Resume the auto-dismiss when the pointer leaves. No-op if already hidden. */
+/** Resume the auto-dismiss when the pointer leaves. No-op if already hidden.
+ *  Re-arms with the CURRENT toast's duration (ask-toasts keep their 30s). */
 export function resumeInsightDismiss(): void {
   if (!toastWindow || toastWindow.isDestroyed() || !toastWindow.isVisible()) return
-  if (dismissTimer) clearTimeout(dismissTimer)
-  dismissTimer = setTimeout(hideInsightToast, AUTO_DISMISS_MS)
+  armDismiss(currentDismissMs)
 }
 
 /** Pre-create the (hidden) toast window so the first insight shows instantly. */

@@ -47,6 +47,7 @@ from utils.apps import get_available_app_by_id
 from utils.conversation_helpers import extract_memory_ids
 from utils.chat import (
     acquire_chat_session,
+    emit_stream_error_fallback,
     initial_message_util,
     process_voice_message_segment,
     process_voice_message_segment_stream,
@@ -427,6 +428,7 @@ def send_message(
 
     async def generate_stream():
         callback_data = {}
+        answered = False
         stream_exhausted = False
         # Set usage context for streaming (can't use 'with' across yields)
         usage_token = set_usage_context(uid, Features.CHAT)
@@ -439,6 +441,7 @@ def send_message(
                 callback_data=callback_data,
                 chat_session=chat_session,
                 context=data.context,
+                platform=x_app_platform,
             ):
                 if chunk:
                     msg = chunk.replace("\n", "__CRLF__")
@@ -457,6 +460,12 @@ def send_message(
                         # a yielded terminal frame is not a client-render acknowledgement.
                         journey_attempt.finish('success')
                         yield f"done: {encoded_response}\n\n"
+                        answered = True
+
+            if not answered:
+                yield await emit_stream_error_fallback(
+                    uid, app_id_from_app, chat_session, label='chat', error_recorded=bool(callback_data.get('error'))
+                )
             stream_exhausted = True
         except asyncio.CancelledError:
             journey_attempt.finish('cancelled')
@@ -643,7 +652,9 @@ def create_voice_message_stream(
         )
         quota_recorded = False
         try:
-            async for chunk in process_voice_message_segment_stream(first_wav, uid, language=resolved_language):
+            async for chunk in process_voice_message_segment_stream(
+                first_wav, uid, language=resolved_language, platform=x_app_platform
+            ):
                 if chunk.startswith('message: '):
                     attempt.finish(TranscriptionOutcome.SUCCESS)
                 if not quota_recorded and chunk.startswith('message: '):
