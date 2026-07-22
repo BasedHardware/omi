@@ -1,0 +1,21 @@
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_77f2b8dfbc2e90::t_1dcf50cde08691 1173,1180-1181
+desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
+  s_77f2b8dfbc2e90::t_790bf3374a5557 1602
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "d9ad37dc17a3a65ae6a1c9aac22c6102b803303e",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
