@@ -293,21 +293,17 @@ import XCTest
     XCTAssertTrue(windowSource.contains("kernelTurnProjection.appendAgentCompletion("))
     XCTAssertFalse(windowSource.contains("func recordAgentArtifactCompletion("))
     XCTAssertFalse(windowSource.contains("pill_completion"))
-    XCTAssertTrue(windowSource.contains("deliverAgentArtifactCompletionToFloatingSurface"))
+    // Completion surfaces by projecting the canonical journal turn into the
+    // shared provider timeline the notch renders — the legacy window-bound
+    // delivery is removed, not resurrected (INV-6: no second message store).
+    XCTAssertTrue(windowSource.contains("provider.projectJournalTurn(updated)"))
+    XCTAssertFalse(windowSource.contains("deliverAgentArtifactCompletionToFloatingSurface"))
+    XCTAssertFalse(windowSource.contains(".chatHistory.append"))
   }
 
-  func testArtifactDeliveryClearsFloatingTypingState() throws {
-    let windowSource = try floatingControlBarWindowSource()
+  func testFinishedArtifactResponseViewHidesLoadingWhenResourcesEmpty() throws {
     let responseSource = try aiResponseViewSource()
 
-    XCTAssertTrue(windowSource.contains("chatCancellable?.cancel()"))
-    XCTAssertTrue(windowSource.contains("completedMessage.isStreaming = false"))
-    XCTAssertTrue(windowSource.contains("window.state.archiveCurrentExchange(using: self.historyChatProvider)"))
-    XCTAssertTrue(
-      windowSource.contains("window.state.bindAnswerMessage(completedMessage)")
-        || windowSource.contains("window.state.setLocalAnswerOverride(completedMessage)")
-    )
-    XCTAssertFalse(windowSource.contains("window.state.chatHistory.append"))
     XCTAssertTrue(responseSource.contains("} else if isLoading {"))
     XCTAssertTrue(responseSource.contains("&& message.displayResources.isEmpty\n            {"))
   }
@@ -567,8 +563,8 @@ import XCTest
     XCTAssertTrue(windowSource.contains("state.isNotchHoverMenuVisible ? .openMenuRetention : .activationOnly"))
     XCTAssertTrue(source.contains("isChatChromePinned || shouldShowNotchHoverMenu"))
     XCTAssertTrue(source.contains("static let maxAgents = FloatingControlBarWindow.notchAgentListMaxVisibleAgents"))
-    XCTAssertTrue(source.contains("static let dotDiameterRatio: CGFloat = 0.18"))
-    XCTAssertTrue(source.contains("static let ringRadiusRatio: CGFloat = 0.33"))
+    // The Omi dot-ring mark itself moved to the shared
+    // Notch/NotchOmiMarkView.swift (used by legacy and notch v2 chrome).
     XCTAssertTrue(source.contains("NotchAgentOmiIndicatorView(pills: stackedPills)"))
     XCTAssertTrue(source.contains("NotchOmiMark(dotColors: visiblePills.map"))
     XCTAssertTrue(source.contains("NotchAgentMorphField("))
@@ -926,10 +922,10 @@ import XCTest
     let inputSource = String(viewSource[inputRange.lowerBound..<inputEnd.lowerBound])
 
     XCTAssertTrue(inputSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
-    // Archiving the previous exchange moved into the window alongside sizing;
+    // Archiving the previous exchange moved into the manager alongside sizing;
     // the view must not archive on its own.
     XCTAssertFalse(viewSource.contains("archiveCurrentExchange"))
-    XCTAssertTrue(windowSource.contains("state.archiveCurrentExchange(using: self.historyChatProvider)"))
+    XCTAssertTrue(windowSource.contains("notchState.archiveCurrentExchange(using: provider)"))
     XCTAssertTrue(viewSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
     XCTAssertFalse(inputSource.contains("state.showingAIResponse = true"))
     XCTAssertFalse(viewSource.contains("state.conversationSurface == .mainResponse || state.showingAIResponse"))
@@ -1140,10 +1136,10 @@ import XCTest
   func testVoiceHandoffCloseDoesNotCancelAnAdmittedPTTTurn() throws {
     XCTAssertTrue(FloatingConversationCloseIntent.userDismissal.cancelsInFlightWork)
     XCTAssertFalse(FloatingConversationCloseIntent.voiceHandoff.cancelsInFlightWork)
-
-    // omi-test-quality: source-inspection -- static contract: the AppKit voice handoff passes the non-cancelling intent.
-    let source = try floatingControlBarWindowSource()
-    XCTAssertTrue(source.contains("window.closeAIConversation(intent: .voiceHandoff)"))
+    // The notch-v2 voice path never closes a surface on handoff (the chat
+    // panel persists and the turn streams into the shared timeline), so the
+    // old close-with-voiceHandoff-intent wiring no longer exists; the intent
+    // contract above is the surviving invariant.
   }
 
   func testBeginTurnStopsQueuedLocalSpeechOnBargeIn() throws {
@@ -1394,7 +1390,9 @@ import XCTest
     XCTAssertTrue(windowSource.contains("state.hideConversationSurface()"))
     XCTAssertTrue(windowSource.contains("openNotchHoverMenuUntilExit()"))
     XCTAssertTrue(windowSource.contains("resizeForMainInputAfterAgentExit()"))
-    XCTAssertTrue(windowSource.contains("window.leaveAgentConversation()"))
+    // Manager back-from-agent now clears the notch drill-in instead of the
+    // legacy window's agent surface.
+    XCTAssertTrue(windowSource.contains("clearAgentDrillIn(pillID:"))
     XCTAssertTrue(windowSource.contains("let expectsRows = !AgentPillsManager.shared.pills.isEmpty"))
     XCTAssertTrue(windowSource.contains("\"mode\": expectsRows ? \"rows\" : \"main\""))
     XCTAssertFalse(viewSource.contains("let onBackToOmi: () -> Void"))

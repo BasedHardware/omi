@@ -4,6 +4,19 @@ tier: 2
 description: Ask Omi open + stubbed typed turn on the floating bar (distinct from perf benchmarks)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/MainWindowReveal.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchAgentsView.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchChatView.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchMetrics.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchNotificationCard.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchOmiMarkView.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchPresentation.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchScreenManager.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchShape.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchTrayView.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchView.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchViewModel.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchWindow.swift
   - desktop/macos/Desktop/Sources/Chat/ChatDraftStore.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AIResponseView.swift
   - desktop/macos/Desktop/Sources/MainWindow/ClickThroughView.swift

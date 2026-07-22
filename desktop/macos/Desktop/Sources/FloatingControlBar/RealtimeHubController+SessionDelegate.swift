@@ -663,8 +663,23 @@ extension RealtimeHubController {
       providerTranscriptFinalized = !turnTranscript.trimmingCharacters(
         in: .whitespacesAndNewlines
       ).isEmpty
+      // Surface the settled question in the notch chat's live strip so the
+      // user message renders before the streaming reply (live partials stay
+      // hidden per the noise policy below).
+      if providerTranscriptFinalized {
+        FloatingControlBarManager.shared.barState?.liveVoiceUserText = turnTranscript
+      }
     } else {
       turnTranscript += text
+      // Surface the growing partial in the notch's listening pill so the user
+      // sees their words as they speak. Ephemeral: the settled final above
+      // replaces it, and this never reaches the committed chat transcript.
+      // ponytail: partials can catch background noise on a near-silent hold; the
+      // final is authoritative, so the transient pill text is an acceptable cost.
+      let partial = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+      if !partial.isEmpty {
+        FloatingControlBarManager.shared.barState?.liveVoiceUserText = partial
+      }
     }
     if !text.isEmpty { lastInputTranscriptUpdateAt = Date() }
     // Don't surface Gemini's LIVE partial transcript on the bar: on a quiet/near-silent
@@ -761,6 +776,16 @@ extension RealtimeHubController {
     else { return }
     if !text.isEmpty {
       assistantText += text
+      // Mirror the streaming reply so the notch chat can render it live (the
+      // journaled exchange only lands on the timeline at turn end). If the
+      // transcript-final event was missed, backfill the question here so the
+      // user message always renders above the reply.
+      if let barState = FloatingControlBarManager.shared.barState {
+        if barState.liveVoiceUserText.isEmpty, !turnTranscript.isEmpty {
+          barState.liveVoiceUserText = turnTranscript
+        }
+        barState.liveVoiceAssistantText = assistantText
+      }
       if let turnID = VoiceTurnCoordinator.shared.activeTurnID,
         let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity
       {

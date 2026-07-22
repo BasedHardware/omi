@@ -296,9 +296,9 @@ class GlobalShortcutManager: @unchecked Sendable {
   private func openOmiFromShortcut() {
     NSLog("GlobalShortcutManager: Open Omi shortcut detected")
     DispatchQueue.main.async {
-      // Typing moved to the main app: the shortcut opens Omi itself
-      // instead of the floating bar's typed input panel.
-      (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
+      // Chat-first notch: the shortcut opens the notch chat with the
+      // composer focused, on the screen under the mouse.
+      FloatingControlBarManager.shared.notchScreenManager?.openPrimary(tab: .chat)
     }
   }
 
