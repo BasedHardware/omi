@@ -4,7 +4,10 @@
 # omi-test-quality: source-inspection -- static contract: GitHub workflow authority is YAML-only.
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -21,6 +24,70 @@ def codemagic() -> str:
 
 
 class DesktopReleaseFlowContractTests(unittest.TestCase):
+    def _qualification_identity_expressions(self) -> tuple[str, str]:
+        qualification = workflow("desktop_qualify_beta.yml")
+        candidate_step = qualification.split("      - name: Download and validate newest candidate evidence", 1)[1]
+        candidate_step = candidate_step.split("\n      - name:", 1)[0]
+        target = re.search(r"^\s*TARGET_SHA=\$\((.+)\)$", candidate_step, re.MULTILINE)
+        checkout = re.search(r"^\s*CHECKOUT_SHA=\$\((.+)\)$", candidate_step, re.MULTILINE)
+        self.assertIsNotNone(target)
+        self.assertIsNotNone(checkout)
+        return target.group(1), checkout.group(1)
+
+    def _precheckout_gitlink_cleanup_script(self) -> str:
+        qualification = workflow("desktop_qualify_beta.yml")
+        cleanup_name = "      - name: Remove stale uninitialized PlatformIO gitlink"
+        checkout_name = "      - name: Checkout qualification controls"
+        self.assertLess(qualification.index(cleanup_name), qualification.index(checkout_name))
+        cleanup_step = qualification.split(cleanup_name, 1)[1].split("\n      - name:", 1)[0]
+        script = cleanup_step.split("        run: |\n", 1)[1]
+        return "\n".join(line[10:] if line.startswith("          ") else line for line in script.splitlines())
+
+    def _run_precheckout_gitlink_cleanup(self, workspace: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["bash", "-c", self._precheckout_gitlink_cleanup_script()],
+            cwd=workspace,
+            env={**os.environ, "GITHUB_WORKSPACE": str(workspace)},
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    def _assert_qualification_tag_identity(self, *, annotated: bool) -> None:
+        target_expression, checkout_expression = self._qualification_identity_expressions()
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            git_env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+
+            def run_git(*args: str) -> None:
+                subprocess.run(["git", *args], cwd=repo, env=git_env, check=True)
+
+            run_git("init", "-q")
+            run_git("config", "user.name", "Contract Test")
+            run_git("config", "user.email", "contract@example.com")
+            (repo / "candidate.txt").write_text("immutable candidate\n", encoding="utf-8")
+            run_git("add", "candidate.txt")
+            run_git("-c", "core.hooksPath=/dev/null", "commit", "-qm", "candidate")
+            release_tag = "v0.12.105+12105-macos"
+            tag_args = ["git", "tag"]
+            if annotated:
+                tag_args.extend(["-a", "-m", "candidate"])
+            tag_args.append(release_tag)
+            subprocess.run(tag_args, cwd=repo, env=git_env, check=True)
+            run_git("checkout", "-q", release_tag)
+            result = subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    f'TARGET_SHA=$({target_expression}); CHECKOUT_SHA=$({checkout_expression}); '
+                    'test "$TARGET_SHA" = "$CHECKOUT_SHA"',
+                ],
+                cwd=repo,
+                env={"PATH": "/usr/bin:/bin", "RELEASE_TAG": release_tag},
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0)
+
     def test_canonical_release_and_qualification_use_lowercase_dmg_asset(self) -> None:
         build_identity = codemagic().split("- name: Resolve trusted source and build identity", 1)[1]
         build_identity = build_identity.split("- name: ", 1)[0]
@@ -40,7 +107,16 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         beta = workflow("desktop_promote_beta.yml")
         self.assertIn("schedule:", candidate)
         self.assertNotIn("workflow_dispatch:", candidate)
-        self.assertIn("uses: ./.github/workflows/desktop_promote_beta.yml", qualification)
+        self.assertNotIn("uses: ./.github/workflows/desktop_promote_beta.yml", qualification)
+        self.assertNotIn("promote-qualified-beta:", qualification)
+        self.assertIn('workflows: ["Qualify Desktop Beta Candidate"]', beta)
+        self.assertIn("types: [completed]", beta)
+        self.assertIn("github.event.workflow_run.conclusion == 'success'", beta)
+        self.assertIn("github.event.workflow_run.event == 'workflow_dispatch'", beta)
+        self.assertIn("github.event.workflow_run.head_branch", beta)
+        self.assertIn("github.event.workflow_run.head_sha", beta)
+        self.assertIn("Invalid immutable macOS release tag", beta)
+        self.assertIn("does not match successful qualification SHA", beta)
         self.assertIn("workflow_call:", beta)
         self.assertNotIn("workflow_dispatch:", beta)
         self.assertEqual(beta.count("/v2/desktop/beta/promote-qualified"), 1)
@@ -69,6 +145,54 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         )
         self.assertTrue(set(invoked_options).issubset(supported_options))
         self.assertNotIn("--no-promote", qualify_step)
+
+    def test_beta_qualification_peels_every_compared_identity_to_a_commit(self) -> None:
+        target_expression, checkout_expression = self._qualification_identity_expressions()
+        self.assertEqual(target_expression, 'git rev-parse "$RELEASE_TAG^{commit}"')
+        self.assertEqual(checkout_expression, 'git rev-parse "HEAD^{commit}"')
+        self.assertEqual(
+            workflow("desktop_qualify_beta.yml").count('TARGET_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")'),
+            2,
+        )
+
+    def test_beta_qualification_accepts_annotated_tag_at_exact_checkout_commit(self) -> None:
+        self._assert_qualification_tag_identity(annotated=True)
+
+    def test_beta_qualification_accepts_lightweight_tag_at_exact_checkout_commit(self) -> None:
+        self._assert_qualification_tag_identity(annotated=False)
+
+    def test_beta_qualification_removes_only_empty_uninitialized_gitlink_before_checkout(self) -> None:
+        relative = Path("omiGlass/firmware/.pio/libdeps/seeed_xiao_esp32s3/libopus")
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            stale = workspace / relative
+            stale.mkdir(parents=True)
+            result = self._run_precheckout_gitlink_cleanup(workspace)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(stale.exists())
+
+    def test_beta_qualification_preserves_initialized_or_nonempty_gitlinks(self) -> None:
+        relative = Path("omiGlass/firmware/.pio/libdeps/seeed_xiao_esp32s3/libopus")
+        with self.subTest("initialized"):
+            with tempfile.TemporaryDirectory() as directory:
+                workspace = Path(directory)
+                initialized = workspace / relative
+                (initialized / ".git").mkdir(parents=True)
+                result = self._run_precheckout_gitlink_cleanup(workspace)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(initialized.exists())
+
+        with self.subTest("nonempty-uninitialized"):
+            with tempfile.TemporaryDirectory() as directory:
+                workspace = Path(directory)
+                nonempty = workspace / relative
+                nonempty.mkdir(parents=True)
+                marker = nonempty / "preserve.txt"
+                marker.write_text("do not delete\n", encoding="utf-8")
+                result = self._run_precheckout_gitlink_cleanup(workspace)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertTrue(marker.exists())
+                self.assertIn("Refusing to remove nonempty uninitialized gitlink", result.stderr)
 
     def test_stable_is_manual_and_uses_one_explicit_confirmation(self) -> None:
         stable = workflow("desktop_promote_prod.yml")
@@ -130,6 +254,45 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertNotIn("/v2/desktop/beta/breakglass", preflight)
         self.assertNotIn("/v2/desktop/channels/promote", preflight)
         self.assertNotIn("stable", preflight.lower())
+
+    def test_beta_admission_control_is_manual_protected_and_beta_only(self) -> None:
+        admission = workflow("desktop_beta_admission_control.yml")
+        self.assertIn("workflow_dispatch:", admission)
+        for forbidden_trigger in ("\n  schedule:", "\n  push:", "\n  workflow_call:", "\n  workflow_run:"):
+            self.assertNotIn(forbidden_trigger, admission)
+        self.assertIn("permissions: {}", admission)
+        self.assertIn("environment: prod", admission)
+        self.assertIn("timeout-minutes: 5", admission)
+        self.assertIn("group: desktop-beta-promotion", admission)
+        self.assertIn("cancel-in-progress: false", admission)
+        self.assertIn("- enable", admission)
+        self.assertIn("- disable", admission)
+        self.assertIn("ENABLE BETA AUTOMATION", admission)
+        self.assertIn("DISABLE BETA AUTOMATION", admission)
+        validation = admission.index("      - name: Validate explicit Beta admission intent")
+        authentication = admission.index("      - name: Use the existing production Google identity")
+        mutation = admission.index("      - name: Change only the desktop Beta admission fence")
+        self.assertLess(validation, authentication)
+        self.assertLess(authentication, mutation)
+        self.assertIn("secrets.GCP_CREDENTIALS", admission)
+        self.assertIn("gcloud secrets versions access latest --secret=ADMIN_KEY", admission)
+        self.assertIn('[[ -n "$ADMIN_KEY" ]]', admission)
+        self.assertIn('echo "::add-mask::$ADMIN_KEY"', admission)
+        self.assertIn("unset ADMIN_KEY", admission)
+        self.assertEqual(admission.count("https://api.omi.me/v2/desktop/beta/admission"), 1)
+        self.assertIn("--request PUT", admission)
+        self.assertIn("'{promotion_enabled: $promotion_enabled}'", admission)
+        self.assertIn('keys == ["generation", "promotion_enabled"]', admission)
+        self.assertIn(".promotion_enabled == $expected", admission)
+        self.assertIn(".generation | type == \"number\"", admission)
+        for forbidden_authority in (
+            "BETA_PROMOTION_TOKEN",
+            "/v2/desktop/beta/breakglass",
+            "/v2/desktop/beta/promote-qualified",
+            "/v2/desktop/channels/promote",
+        ):
+            self.assertNotIn(forbidden_authority, admission)
+        self.assertNotIn("stable", admission.lower())
 
     def test_backend_release_vector_verifies_after_prod_traffic_shift(self) -> None:
         backend = workflow("gcp_backend.yml")
