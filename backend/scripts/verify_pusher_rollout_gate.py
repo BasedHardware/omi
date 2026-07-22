@@ -456,14 +456,19 @@ def rollback_contract(root: Path = ROOT, environment: str = "prod") -> RollbackC
             "(not by this static script)."
         ),
         capture_command=(
-            f"kubectl get deployment {release} " f"-o jsonpath='{{.spec.template.spec.containers[0].image}}'"
+            f"# Tag mode — extracts just the tag from the full image ref:\n"
+            f"kubectl get deployment {release} "
+            f"-o jsonpath='{{.spec.template.spec.containers[0].image}}' | sed 's/.*://'\n"
+            f"# Digest mode — extracts just the sha256 digest:\n"
+            f"# kubectl get deployment {release} "
+            f"-o jsonpath='{{.spec.template.spec.containers[0].image}}' | grep -oE 'sha256:[a-f0-9]{{64}}'"
         ),
         restore_command=(
             f"helm upgrade --install {release} ./backend/charts/pusher "
             f"-f backend/charts/pusher/{environment}_omi_pusher_values.yaml "
-            "--set image.tag=<prior-tag>   # tag mode\n"
-            "      # OR, for a digest-pinned release (build-once promotion):\n"
-            "      # --set image.digest=sha256:<prior-digest> --set image.tag= --set image.pullPolicy=IfNotPresent"
+            f"--set-string image.tag=<prior-tag>   # tag mode\n"
+            f"      # OR, for a digest-pinned release (build-once promotion):\n"
+            f"      # --set-string image.digest=sha256:<prior-digest> --set-string image.tag= --set-string image.pullPolicy=IfNotPresent"
         ),
         traffic_rollback=(
             "Traffic/runtime rollback (Helm upgrade to the prior immutable tag) is SAFE and always available. "
