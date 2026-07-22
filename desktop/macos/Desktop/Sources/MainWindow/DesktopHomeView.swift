@@ -43,6 +43,8 @@ struct DesktopHomeView: View {
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
   @State private var highlightedSettingId: String? = nil
   @State private var showTryAskingPopup = false
+  /// Post-onboarding coach-mark walkthrough: nil = inactive, else current step index.
+  @State private var walkthroughStep: Int? = nil
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
   @State private var lastActivationRefresh = Date.distantPast
@@ -124,9 +126,12 @@ struct DesktopHomeView: View {
             .onAppear {
               if UserDefaults.standard.bool(forKey: "onboardingJustCompleted") {
                 UserDefaults.standard.removeObject(forKey: "onboardingJustCompleted")
-                log("DesktopHomeView: Onboarding just completed — landing in Chat with opener")
-                selectedIndex = SidebarNavItem.chat.rawValue
-                viewModelContainer.chatProvider.presentOnboardingOpener()
+                log("DesktopHomeView: Onboarding just completed — starting UI walkthrough")
+                // Land on Home with the sidebar expanded so the coach-marks can
+                // point at the real nav items, then hand off to Chat at the end.
+                selectedIndex = SidebarNavItem.dashboard.rawValue
+                isSidebarCollapsed = false
+                walkthroughStep = 0
               }
             }
           mainContent
@@ -157,6 +162,9 @@ struct DesktopHomeView: View {
                   }
                 )
               }
+            }
+            .overlayPreferenceValue(SidebarCoachAnchorKey.self) { anchors in
+              walkthroughOverlay(anchors)
             }
             .overlay(alignment: .top) {
               if let policy = updatePolicyManager.visiblePolicy, !policy.isRequired {
@@ -897,6 +905,54 @@ struct DesktopHomeView: View {
       index == SidebarNavItem.dashboard.rawValue || index == SidebarNavItem.tasks.rawValue
     viewModelContainer.memoriesViewModel.isActive =
       index == SidebarNavItem.memories.rawValue
+  }
+
+  // MARK: - Post-onboarding UI walkthrough (coach-marks)
+
+  private static let walkthroughSteps: [OnboardingCoachStep] = [
+    .init(
+      itemRawValue: SidebarNavItem.dashboard.rawValue, title: "Home",
+      body: "Your day at a glance: what happened, and what's next."),
+    .init(
+      itemRawValue: SidebarNavItem.conversations.rawValue, title: "Conversations",
+      body: "Everything I hear, with a live transcript as you speak."),
+    .init(
+      itemRawValue: SidebarNavItem.tasks.rawValue, title: "Tasks",
+      body: "The to-dos I pull out of your day, all in one place."),
+    .init(
+      itemRawValue: SidebarNavItem.focus.rawValue, title: "Focus",
+      body: "What deserves your attention right now."),
+    .init(
+      itemRawValue: SidebarNavItem.chat.rawValue, title: "Chat",
+      body: "Talk to me anytime. Ask about anything I know."),
+  ]
+
+  @ViewBuilder private func walkthroughOverlay(_ anchors: [Int: Anchor<CGRect>]) -> some View {
+    if let step = walkthroughStep {
+      OnboardingWalkthroughOverlay(
+        steps: Self.walkthroughSteps,
+        index: step,
+        anchors: anchors,
+        onNext: { advanceWalkthrough() },
+        onSkip: { finishWalkthrough() }
+      )
+    }
+  }
+
+  private func advanceWalkthrough() {
+    guard let step = walkthroughStep else { return }
+    if step + 1 < Self.walkthroughSteps.count {
+      walkthroughStep = step + 1
+    } else {
+      finishWalkthrough()
+    }
+  }
+
+  private func finishWalkthrough() {
+    walkthroughStep = nil
+    isSidebarCollapsed = true
+    selectedIndex = SidebarNavItem.chat.rawValue
+    viewModelContainer.chatProvider.presentOnboardingOpener()
   }
 
   private var mainContent: some View {

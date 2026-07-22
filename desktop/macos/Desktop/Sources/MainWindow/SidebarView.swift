@@ -250,6 +250,7 @@ struct SidebarView: View {
                 )
               }
             }
+            .anchorPreference(key: SidebarCoachAnchorKey.self, value: .bounds) { [item.rawValue: $0] }
           }
 
           Spacer()

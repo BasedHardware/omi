@@ -237,6 +237,13 @@ struct ConversationsPage: View {
       .padding(.top, OmiSpacing.lg)
       .padding(.bottom, OmiSpacing.md)
 
+      // Live transcript while recording — updates as it's spoken.
+      if appState.isTranscribing {
+        ConversationsLiveTranscript()
+          .padding(.horizontal, OmiSpacing.xxl)
+          .padding(.bottom, OmiSpacing.md)
+      }
+
       // Conversation list
       conversationListSection
     }
