@@ -1,0 +1,19 @@
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_ba6911a59cf527::t_8973eb4e4307bb 1076-1085,1087
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "1ff7809af8eeebe69039d270f090f1e93dc43322",
+  "prompts": {},
+  "sessions": {
+    "s_ba6911a59cf527": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "437ec1d8-1792-4aa9-a5ce-2846124cd673",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
