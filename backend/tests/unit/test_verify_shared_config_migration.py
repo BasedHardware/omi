@@ -233,3 +233,110 @@ spec:
     out = capsys.readouterr().out
     assert rc == 0, out
     assert "super-secret-leak-that-must-never-appear" not in out
+
+
+# ---------------------------------------------------------------------------
+# envFrom bulk-load blind spot (the agreed review finding) + workload generality
+# ---------------------------------------------------------------------------
+
+# A Deployment that consumes the shared ConfigMap ONLY via envFrom (no explicit
+# per-key ref) — the binding style the original guard missed.
+ENVFROM_ONLY_RENDER = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dev-omi-pusher
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: migrate
+          envFrom:
+            - configMapRef:
+                name: dev-omi-backend-config
+      containers:
+        - name: pusher
+          envFrom:
+            - configMapRef:
+                name: dev-omi-backend-config
+"""
+
+
+def test_envfrom_object_removal_is_caught(guard, tmp_path, capsys):
+    """A bulk-loaded ConfigMap removed from the proposed inventory must fail."""
+    rendered = _write(tmp_path / "rendered.yaml", ENVFROM_ONLY_RENDER)
+    inventory = _write(
+        tmp_path / "proposed.yaml",
+        "secrets:\n  dev-omi-backend-secrets:\n    - OPENAI_API_KEY\n",
+    )
+    rc = guard.main(["--rendered", rendered, "--source-inventory", inventory])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "envFrom bulk-loads configmap/dev-omi-backend-config" in out
+    assert "absent from the proposed source inventory" in out
+
+
+def test_envfrom_key_removal_is_caught_with_previous_inventory(guard, tmp_path, capsys):
+    """A key removed from a bulk-loaded object is the outage class — must fail."""
+    rendered = _write(tmp_path / "rendered.yaml", ENVFROM_ONLY_RENDER)
+    proposed = _write(
+        tmp_path / "proposed.yaml",
+        "configmaps:\n  dev-omi-backend-config:\n    - REDIS_DB_HOST\n",
+    )
+    previous = _write(
+        tmp_path / "previous.yaml",
+        "configmaps:\n  dev-omi-backend-config:\n    - REDIS_DB_HOST\n    - RETIRED_KEY\n",
+    )
+    rc = guard.main(["--rendered", rendered, "--source-inventory", proposed, "--previous-inventory", previous])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "envFrom bulk-loads configmap/dev-omi-backend-config" in out
+    assert "RETIRED_KEY" in out
+    assert "2026-07-22 outage class" in out
+
+
+def test_envfrom_passes_when_no_key_removed(guard, tmp_path, capsys):
+    """A bulk-loaded object whose keys are unchanged (or only added) passes."""
+    rendered = _write(tmp_path / "rendered.yaml", ENVFROM_ONLY_RENDER)
+    proposed = _write(
+        tmp_path / "proposed.yaml",
+        "configmaps:\n  dev-omi-backend-config:\n    - REDIS_DB_HOST\n    - NEW_KEY\n",
+    )
+    previous = _write(
+        tmp_path / "previous.yaml",
+        "configmaps:\n  dev-omi-backend-config:\n    - REDIS_DB_HOST\n",
+    )
+    rc = guard.main(["--rendered", rendered, "--source-inventory", proposed, "--previous-inventory", previous])
+    assert rc == 0, capsys.readouterr().out
+
+
+def test_statefulset_and_initcontainers_are_scanned(guard, tmp_path, capsys):
+    """A StatefulSet and an initContainer referencing a removed key both fail."""
+    rendered = _write(
+        tmp_path / "rendered.yaml",
+        """\
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: dev-cache
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: bootstrap
+          env:
+            - name: REDIS_DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: dev-omi-backend-secrets
+                  key: REDIS_DB_HOST
+      containers:
+        - name: cache
+""",
+    )
+    inventory = _write(tmp_path / "proposed.yaml", PROPOSED_INVENTORY)
+    rc = guard.main(["--rendered", rendered, "--source-inventory", inventory])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "REDIS_DB_HOST" in out
+    assert "not present in the proposed source inventory" in out
