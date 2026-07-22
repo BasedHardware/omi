@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import hashlib
 import json
 from unittest.mock import MagicMock
 
@@ -18,6 +19,11 @@ from database.desktop_update_channels import (
     register_release_manifest,
     reserve_beta_candidate,
     set_beta_admission_enabled,
+)
+from database.desktop_beta_breakglass import (
+    BETA_BREAKGLASS_AUDITS_COLLECTION,
+    emergency_rollout_beta,
+    rollback_beta,
 )
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
@@ -648,3 +654,139 @@ class TestPointerRepointRules:
                 expected_current_release_id=current["release_id"],
                 expected_generation=7,
             )
+
+
+class TestBetaBreakglass:
+    def _stored(self, build: int, *, qualified: bool = True):
+        tag = f"v0.12.{build - 12000}+{build}-macos"
+        return normalize_release_manifest(
+            _manifest(
+                release_id=tag,
+                version=f"0.12.{build - 12000}",
+                build_number=build,
+                zip_url=f"https://github.com/BasedHardware/omi/releases/download/{tag}/Omi.zip",
+                dmg_url=f"https://github.com/BasedHardware/omi/releases/download/{tag}/omi.dmg",
+                qualification_tier="T2" if qualified else "emergency",
+                qualification_passed=qualified,
+                qualification_evidence_asset=(
+                    "qualification-evidence-" + tag + ".json" if qualified else "desktop-smoke-result.json"
+                ),
+                compatibility_contract={
+                    "schema_version": 1,
+                    "app_release_id": tag,
+                    "app_version": f"0.12.{build - 12000}",
+                    "app_build_number": build,
+                    "backend_mode": "app_only",
+                    "environment_contract_version": "desktop-backend-env-v1",
+                },
+            )
+        )
+
+    def _request(self, current: str, target: str, generation: int, *, operation: str):
+        return {
+            "current_release_id": current,
+            "target_release_id": target,
+            "expected_generation": generation,
+            "actor": "release-operator",
+            "reason": "Beta crashes before startup",
+            "incident_url": "https://github.com/BasedHardware/omi/issues/12345",
+            "request_id": "https://github.com/BasedHardware/omi/actions/runs/12345/attempts/1",
+            "normal_path_unavailable": "qualification runner is unavailable" if operation == "rollout" else None,
+        }
+
+    def test_rollback_only_repoints_retained_t2_manifest_and_pauses_admission_atomically(self):
+        broken, known_good = self._stored(12084), self._stored(12073)
+        client = StrictFirestore(
+            {
+                (BETA_ADMISSION_COLLECTION, BETA_ADMISSION_DOCUMENT): _control(enabled=True, generation=7),
+                ("desktop_release_manifests", broken["release_id"]): broken,
+                ("desktop_release_manifests", known_good["release_id"]): known_good,
+                ("desktop_update_channels", "macos-beta"): {
+                    "release_id": broken["release_id"],
+                    "build_number": broken["build_number"],
+                    "generation": 4,
+                },
+            }
+        )
+        receipt = rollback_beta(
+            self._request(broken["release_id"], known_good["release_id"], 4, operation="rollback"),
+            firestore_client=client,
+            now=datetime(2026, 7, 22, 12, 5, tzinfo=timezone.utc),
+        )
+        assert receipt["pointer"]["release_id"] == known_good["release_id"]
+        assert client.rows[(BETA_ADMISSION_COLLECTION, BETA_ADMISSION_DOCUMENT)]["promotion_enabled"] is False
+        audit_id = hashlib.sha256(
+            "https://github.com/BasedHardware/omi/actions/runs/12345/attempts/1".encode()
+        ).hexdigest()
+        audit = client.rows[(BETA_BREAKGLASS_AUDITS_COLLECTION, audit_id)]
+        assert audit["operation"] == "rollback"
+        assert audit["resulting_generation"] == 5
+
+    def test_breakglass_rejects_invalid_incident_identity_and_stale_cas_without_writes(self):
+        broken, target = self._stored(12084), self._stored(12073)
+        base = {
+            (BETA_ADMISSION_COLLECTION, BETA_ADMISSION_DOCUMENT): _control(enabled=True, generation=7),
+            ("desktop_release_manifests", broken["release_id"]): broken,
+            ("desktop_release_manifests", target["release_id"]): target,
+            ("desktop_update_channels", "macos-beta"): {
+                "release_id": broken["release_id"],
+                "build_number": broken["build_number"],
+                "generation": 4,
+            },
+        }
+        for field, value in (
+            ("incident_url", "https://example.com/incident"),
+            ("request_id", "manual-request-id"),
+            ("expected_generation", 3),
+        ):
+            client = StrictFirestore(base)
+            request = self._request(broken["release_id"], target["release_id"], 4, operation="rollback")
+            request[field] = value
+            with pytest.raises(ValueError):
+                rollback_beta(request, firestore_client=client, now=datetime(2026, 7, 22, 12, tzinfo=timezone.utc))
+            assert ("desktop_update_channels", "macos-beta") in client.rows
+            assert not any(path[0] == BETA_BREAKGLASS_AUDITS_COLLECTION for path in client.rows)
+
+    def test_emergency_rollout_requires_higher_exact_evidence_and_preserves_failed_qualification_truth(self):
+        broken, emergency = self._stored(12084), self._stored(12085, qualified=False)
+        client = StrictFirestore(
+            {
+                (BETA_ADMISSION_COLLECTION, BETA_ADMISSION_DOCUMENT): _control(enabled=True, generation=7),
+                ("desktop_release_manifests", broken["release_id"]): broken,
+                ("desktop_update_channels", "macos-beta"): {
+                    "release_id": broken["release_id"],
+                    "build_number": broken["build_number"],
+                    "generation": 4,
+                },
+            }
+        )
+        request = self._request(broken["release_id"], emergency["release_id"], 4, operation="rollout")
+        receipt = emergency_rollout_beta(
+            request, emergency, firestore_client=client, now=datetime(2026, 7, 22, 12, 5, tzinfo=timezone.utc)
+        )
+        assert receipt["pointer"]["release_id"] == emergency["release_id"]
+        assert client.rows[("desktop_release_manifests", emergency["release_id"])]["qualification_passed"] is False
+        assert client.rows[(BETA_ADMISSION_COLLECTION, BETA_ADMISSION_DOCUMENT)]["promotion_enabled"] is False
+
+    def test_audit_collision_or_write_failure_leaves_pointer_unchanged(self):
+        broken, target = self._stored(12084), self._stored(12073)
+        request = self._request(broken["release_id"], target["release_id"], 4, operation="rollback")
+        client = StrictFirestore(
+            {
+                (BETA_ADMISSION_COLLECTION, BETA_ADMISSION_DOCUMENT): _control(enabled=True, generation=7),
+                ("desktop_release_manifests", broken["release_id"]): broken,
+                ("desktop_release_manifests", target["release_id"]): target,
+                ("desktop_update_channels", "macos-beta"): {
+                    "release_id": broken["release_id"],
+                    "build_number": broken["build_number"],
+                    "generation": 4,
+                },
+                (
+                    BETA_BREAKGLASS_AUDITS_COLLECTION,
+                    hashlib.sha256(str(request["request_id"]).encode()).hexdigest(),
+                ): {"already": "exists"},
+            }
+        )
+        with pytest.raises(Exception):
+            rollback_beta(request, firestore_client=client)
+        assert client.rows[("desktop_update_channels", "macos-beta")]["release_id"] == broken["release_id"]
