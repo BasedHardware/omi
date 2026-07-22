@@ -1,0 +1,120 @@
+name: Retry Failed Desktop Beta Qualification
+
+# Recover a *transient* failed/cancelled qualification of the newest immutable
+# published macOS candidate. This re-dispatches ONLY the trusted qualification
+# workflow; it never creates a build, never promotes, and never reaches Stable.
+# Promotion stays the single completed-success authority
+# (desktop_promote_beta.yml). The decision script re-derives the candidate and
+# run state from server data; on schedule the workflow supplies no tag, so no
+# caller claim is trusted.
+on:
+  schedule:
+    # Twice hourly, offset from the :17 candidate build, so a transient
+    # failed/cancelled qualification of the newest candidate recovers within
+    # ~30 minutes without racing the hourly planner.
+    - cron: '13,43 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  # A single retry planner; the per-tag qualification concurrency in
+  # desktop_qualify_beta.yml serializes the actual qualification runs.
+  group: desktop-beta-qualification-retry
+  cancel-in-progress: false
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      should_retry: ${{ steps.decide.outputs.should_retry }}
+      release_tag: ${{ steps.decide.outputs.release_tag }}
+      reason: ${{ steps.decide.outputs.reason }}
+    steps:
+      - name: Checkout retry controls
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Generate Omi Bot token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+
+      - name: Gather server-derived candidate and qualification state
+        id: gather
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/desktop-beta-retry
+          git fetch --force origin 'refs/tags/v*-macos:refs/tags/v*-macos'
+          LATEST_TAG=$(git for-each-ref --count=1 --sort=-v:refname \
+            --format='%(refname:strip=2)' 'refs/tags/v*-macos')
+          test -n "$LATEST_TAG"
+          TAG_SHA=$(git rev-list -n1 "$LATEST_TAG")
+          # Read-only production state: a release view plus the qualification
+          # run list. Transient API errors degrade to empty JSON, which the
+          # decision script turns into a safe "no" rather than a failed job.
+          gh release view "$LATEST_TAG" --repo "$REPO" \
+            --json tagName,body,isDraft,isPrerelease,publishedAt,assets \
+            > /tmp/desktop-beta-retry/release.json 2>/dev/null \
+            || echo '{}' > /tmp/desktop-beta-retry/release.json
+          gh api "repos/$REPO/actions/workflows/desktop_qualify_beta.yml/runs?event=workflow_dispatch&per_page=100" \
+            --jq '.workflow_runs' > /tmp/desktop-beta-retry/runs.json 2>/dev/null \
+            || echo '[]' > /tmp/desktop-beta-retry/runs.json
+          {
+            echo "latest_tag=$LATEST_TAG"
+            echo "tag_sha=$TAG_SHA"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Decide whether to retry the newest candidate
+        id: decide
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/desktop_beta_qualification_retry.py decide \
+            --release-json /tmp/desktop-beta-retry/release.json \
+            --runs-json /tmp/desktop-beta-retry/runs.json \
+            --release-tag "${{ steps.gather.outputs.latest_tag }}" \
+            --tag-sha "${{ steps.gather.outputs.tag_sha }}" \
+            --output /tmp/desktop-beta-retry/decision.json
+          python3 - <<'PY'
+          import json, os
+          decision = json.load(open('/tmp/desktop-beta-retry/decision.json'))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+              fh.write(f"should_retry={'true' if decision['should_retry'] else 'false'}\n")
+              for key in ('release_tag', 'reason'):
+                  fh.write(f"{key}={decision.get(key, '')}\n")
+          PY
+          {
+            echo '### Desktop Beta qualification retry'
+            echo
+            echo '```json'
+            cat /tmp/desktop-beta-retry/decision.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Re-dispatch trusted macOS qualification for the newest candidate
+        if: steps.decide.outputs.should_retry == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.decide.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          # Per-tag GitHub concurrency and immutable qualification evidence own
+          # duplicate dispatches; this handoff only recovers a transient
+          # failed/cancelled qualification of the exact newest candidate.
+          # The Omi Bot app token (not the default GITHUB_TOKEN) is required:
+          # a run dispatched by GITHUB_TOKEN does not trigger the downstream
+          # workflow_run promotion in desktop_promote_beta.yml on success.
+          gh workflow run desktop_qualify_beta.yml --repo "$REPO" \
+            -f release_tag="$RELEASE_TAG" --ref "$RELEASE_TAG"
+          echo "Re-dispatched qualification for $RELEASE_TAG after a transient failed/cancelled run." >> "$GITHUB_STEP_SUMMARY"

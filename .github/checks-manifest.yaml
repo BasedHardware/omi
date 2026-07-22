@@ -414,6 +414,12 @@ checks:
     platforms: ["macos"]
     reason: "Exact-source retries must keep stable absolute SwiftPM paths while rejecting stale provenance, symlinks, collisions, and incomplete entries"
 
+  - id: desktop-beta-qualification-retry
+    command: ["python3", ".github/scripts/test_desktop_beta_qualification_retry.py"]
+    triggers: [".github/workflows/desktop_retry_beta_qualification.yml", ".github/scripts/desktop_beta_qualification_retry.py", ".github/scripts/test_desktop_beta_qualification_retry.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-49 bounded automatic retry of transient failed/cancelled Beta qualification must stay tag-bound, exact-SHA, bounded, and never re-dispatch in-progress/successful runs"
+
 exempt:
   - path: ".github/scripts/check-desktop-auto-beta-candidate.py"
     reason: "release pipeline check requires published candidate artifacts and workflow inputs"
