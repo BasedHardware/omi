@@ -176,7 +176,26 @@ def is_concurrent_rollout(deployment: dict[str, Any]) -> bool:
     status = deployment.get("status", {})
     generation = metadata.get("generation")
     observed = status.get("observedGeneration")
-    return generation is None or observed is None or generation != observed
+    if generation is None or observed is None or generation != observed:
+        return True
+
+    replicas = status.get("replicas")
+    if not isinstance(replicas, int) or replicas < 0:
+        return True
+    if any(status.get(field) != replicas for field in ("updatedReplicas", "readyReplicas", "availableReplicas")):
+        return True
+    if status.get("unavailableReplicas") not in (None, 0):
+        return True
+
+    conditions = status.get("conditions")
+    if not isinstance(conditions, list):
+        return True
+    complete_conditions = {
+        condition.get("type")
+        for condition in conditions
+        if isinstance(condition, dict) and condition.get("status") == "True"
+    }
+    return not {"Available", "Progressing"}.issubset(complete_conditions)
 
 
 def ready_replicas(deployment: dict[str, Any]) -> int:

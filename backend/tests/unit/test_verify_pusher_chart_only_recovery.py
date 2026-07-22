@@ -50,7 +50,17 @@ def deployment(image: str, redis_source: dict | None = None) -> dict:
                 }
             }
         },
-        "status": {"observedGeneration": 2, "readyReplicas": 7},
+        "status": {
+            "observedGeneration": 2,
+            "replicas": 7,
+            "updatedReplicas": 7,
+            "readyReplicas": 7,
+            "availableReplicas": 7,
+            "conditions": [
+                {"type": "Available", "status": "True"},
+                {"type": "Progressing", "status": "True", "reason": "NewReplicaSetAvailable"},
+            ],
+        },
     }
 
 
@@ -288,6 +298,7 @@ def test_redis_validation_accepts_post_repair_env_without_secret_key(recovery: S
 
 def test_target_and_readiness_guards_fail_closed(recovery: SimpleNamespace):
     live = deployment("x")
+    assert not recovery.is_concurrent_rollout(live)
     live["status"]["observedGeneration"] = 1
     assert recovery.is_concurrent_rollout(live)
     assert recovery.ready_replicas(live) == 7
@@ -297,6 +308,17 @@ def test_target_and_readiness_guards_fail_closed(recovery: SimpleNamespace):
         "prod-omi-pusher",
         "prod-omi-backend-config",
     )
+
+
+def test_rollout_guard_rejects_an_incomplete_rollout_with_current_observed_generation(recovery: SimpleNamespace):
+    live = deployment("x")
+    live["status"]["updatedReplicas"] = 6
+    live["status"]["unavailableReplicas"] = 1
+    assert recovery.is_concurrent_rollout(live)
+
+    missing_completion_evidence = deployment("x")
+    missing_completion_evidence["status"].pop("conditions")
+    assert recovery.is_concurrent_rollout(missing_completion_evidence)
 
 
 @pytest.mark.parametrize("kind", ["Service", "HorizontalPodAutoscaler", "PodDisruptionBudget"])
