@@ -796,8 +796,10 @@ struct DashboardPage: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-      // Rolling suggestions sit just above the ask bar while the chat is empty.
-      if chatProvider.messages.isEmpty {
+      // Rolling suggestions sit just above the ask bar while the chat is empty —
+      // but not for a just-onboarded user, whose empty chat shows the personalized
+      // onboarding opener (with its own starter questions) instead.
+      if chatProvider.messages.isEmpty && chatProvider.onboardingOpener == nil {
         homeRollingSuggestions
           .frame(width: askBarWidth)
           .padding(.bottom, OmiSpacing.sm)

@@ -47,6 +47,9 @@ struct DesktopTopBar: View {
       countsPill
       Spacer(minLength: OmiSpacing.md)
       CaptureListeningControls(appState: appState, onRewind: onRewind)
+        .anchorPreference(key: SidebarCoachAnchorKey.self, value: .bounds) {
+          [SidebarCoachAnchorKey.captureAnchorID: $0]
+        }
     }
     .frame(height: 44)
     .padding(.horizontal, OmiSpacing.lg)
@@ -78,6 +81,9 @@ struct DesktopTopBar: View {
         }
         .buttonStyle(.plain)
         .help(item.title)
+        // Publish each pill's frame so the post-onboarding walkthrough can
+        // spotlight it (the coach-marks used to anchor to the old nav rail).
+        .anchorPreference(key: SidebarCoachAnchorKey.self, value: .bounds) { [item.index: $0] }
       }
     }
   }

@@ -8,6 +8,9 @@ struct SidebarCoachAnchorKey: PreferenceKey {
   static func reduce(value: inout [Int: Anchor<CGRect>], nextValue: () -> [Int: Anchor<CGRect>]) {
     value.merge(nextValue()) { $1 }
   }
+  /// Anchor id for the Capture/Listening controls (not a `SidebarNavItem`), so the
+  /// walkthrough can spotlight them too. High value to never collide with nav raws.
+  static let captureAnchorID = 900
 }
 
 /// One coach-mark: which sidebar item to spotlight + the copy shown beside it.
@@ -61,9 +64,10 @@ struct OnboardingWalkthroughOverlay: View {
 
   private func tooltip(near rect: CGRect, in size: CGSize) -> some View {
     let cardWidth: CGFloat = 268
-    // Sidebar is on the left, so place the card to the item's right, clamped.
-    let x = min(rect.maxX + 24 + cardWidth / 2, size.width - cardWidth / 2 - 20)
-    let y = min(max(rect.midY, 96), size.height - 130)
+    // The nav lives in the top bar, so drop the card BELOW the spotlighted item,
+    // horizontally centered on it and clamped to the window edges.
+    let x = min(max(rect.midX, cardWidth / 2 + 20), size.width - cardWidth / 2 - 20)
+    let y = min(rect.maxY + 78, size.height - 120)
     let isLast = index + 1 >= steps.count
     return VStack(alignment: .leading, spacing: 8) {
       Text(step.title).font(.system(size: 15, weight: .semibold)).foregroundColor(.white)

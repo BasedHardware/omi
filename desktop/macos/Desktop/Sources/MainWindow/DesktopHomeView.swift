@@ -130,10 +130,11 @@ struct DesktopHomeView: View {
               if UserDefaults.standard.bool(forKey: "onboardingJustCompleted") {
                 UserDefaults.standard.removeObject(forKey: "onboardingJustCompleted")
                 log("DesktopHomeView: Onboarding just completed — starting UI walkthrough")
-                // Land on Home with the sidebar expanded so the coach-marks can
-                // point at the real nav items, then hand off to Chat at the end.
+                // Land on Home; the top bar's nav pills (always visible) are what
+                // the coach-marks spotlight, so keep the chat-first layout with the
+                // old rail collapsed rather than expanding it.
                 selectedIndex = SidebarNavItem.dashboard.rawValue
-                isSidebarCollapsed = false
+                isSidebarCollapsed = true
                 walkthroughStep = 0
               }
             }
@@ -940,7 +941,8 @@ struct DesktopHomeView: View {
 
   // MARK: - Post-onboarding UI walkthrough (coach-marks)
 
-  // Anchored to the redesign's AppNavRail items (Home, Memory, Tasks, Insights, Apps).
+  // Anchored to the top bar's nav pills (Home, Memory, Tasks, Apps) + the
+  // Capture/Listening controls — see DesktopTopBar's `.anchorPreference`s.
   private static let walkthroughSteps: [OnboardingCoachStep] = [
     .init(
       itemRawValue: SidebarNavItem.dashboard.rawValue, title: "Home",
@@ -952,11 +954,11 @@ struct DesktopHomeView: View {
       itemRawValue: SidebarNavItem.tasks.rawValue, title: "Tasks",
       body: "The to-dos I pull out of your day, all in one place."),
     .init(
-      itemRawValue: SidebarNavItem.focus.rawValue, title: "Insights",
-      body: "What deserves your attention right now."),
-    .init(
       itemRawValue: SidebarNavItem.apps.rawValue, title: "Apps",
       body: "Connect tools and extend what I can do."),
+    .init(
+      itemRawValue: SidebarCoachAnchorKey.captureAnchorID, title: "Capture",
+      body: "Start or pause listening here, and rewind to replay what I just heard."),
   ]
 
   @ViewBuilder private func walkthroughOverlay(_ anchors: [Int: Anchor<CGRect>]) -> some View {
