@@ -1086,10 +1086,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         window.appearance = NSAppearance(named: .darkAqua)
+        // macOS 14+/26 frequently refuses to let a background app activate itself
+        // from a global hotkey, so the window is only ordered front within our own
+        // layer and stays behind the active app. Briefly raise its window level so
+        // it shows ABOVE the frontmost app; clicking it activates us, and we drop
+        // back to a normal level shortly after so it isn't permanently on top.
+        window.level = .floating
+        Self.dropSummonWindowLevelSoon(window)
         return true
       }
     }
     return false
+  }
+
+  @MainActor private static func dropSummonWindowLevelSoon(_ window: NSWindow) {
+    // Keep the window floating long enough to be seen and clicked, then drop it
+    // back to a normal level so it isn't permanently pinned above everything. If
+    // the user clicked it in the meantime we're the active app and it stays on top
+    // anyway; if not, it settles back into the normal window order.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+      window.level = .normal
+    }
   }
 
   @MainActor @objc private func checkForUpdates() {
