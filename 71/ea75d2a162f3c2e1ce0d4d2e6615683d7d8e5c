@@ -1,0 +1,32 @@
+desktop/macos/Desktop/Sources/MainWindow/CaptureListeningControls.swift
+  s_77f2b8dfbc2e90::t_4d9319dae8bc5e 1-212
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_77f2b8dfbc2e90::t_b539ec880f21f0 639-646
+  s_77f2b8dfbc2e90::t_f2f218a288737e 1044-1063
+  s_77f2b8dfbc2e90::t_793029ea90863c 1247-1249,1258-1259
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryExportDestinationSheet.swift
+  s_77f2b8dfbc2e90::t_d24a4d4bf2fa80 140-148
+  s_77f2b8dfbc2e90::t_139885465ccc6c 68-73
+desktop/macos/changelog/unreleased/20260721-sb-persistent-status-and-cards.json
+  s_77f2b8dfbc2e90::t_3b002f767f0bec 1-3
+desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
+  s_77f2b8dfbc2e90::t_2456f072bad451 1232-1238
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_77f2b8dfbc2e90::t_cf9432a4eb53e5 3884,3922,3992
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "71ea75d2a162f3c2e1ce0d4d2e6615683d7d8e5c",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
