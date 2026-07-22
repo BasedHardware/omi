@@ -103,6 +103,7 @@ from utils.sync.pipeline import (
     _download_staged_files,
     _finalize_sync_job_failure,
     finalize_sync_job_failure_now,
+    finalize_sync_job_superseded,
     SyncJobRunLeaseLost,
     bind_or_converge_sync_ledger_completion,
     _finalize_sync_audio_files,
@@ -113,6 +114,7 @@ from utils.sync.pipeline import (
     build_person_embeddings_cache,
     process_segment,
     retrieve_vad_segments,
+    SyncConversationPersistenceFenced,
 )
 from utils.stt.outcomes import TranscriptionOutcome, failure_from_exception
 from utils.sync.rate_limit import (
@@ -1674,6 +1676,25 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                 content_run_bound=ledger_fence_active,
                 ledger_fence_active=ledger_fence_active,
             )
+        except SyncConversationPersistenceFenced:
+            latest_job = await run_blocking(db_executor, get_sync_job, job_id) or job
+            await finalize_sync_job_superseded(
+                job_id=job_id,
+                run_lock_token=lock_token if ledger_fence_active else None,
+                lane=sync_lane,
+                provider=latest_job.get('stt_provider') or 'unknown',
+                model=latest_job.get('stt_model') or 'unknown',
+            )
+            if sync_lane == SyncLane.BACKFILL.value:
+                await run_blocking(db_executor, release_backfill_slot, uid, job_id)
+            if content_id:
+                release_claim = (
+                    release_sync_content_claim_after_job_retired if ledger_fence_active else release_sync_content_claim
+                )
+                await run_blocking(db_executor, release_claim, uid, content_id, job_id)
+            await _delete_staged_blobs_async(blob_paths)
+            logger.info('event=sync_transcription_job outcome=superseded lane=%s', sync_lane)
+            return JSONResponse(status_code=200, content={'status': 'superseded'})
         except SyncJobRunLeaseLost as error:
             latest_job = await run_blocking(db_executor, get_sync_job, job_id)
             if latest_job and latest_job.get('status') in TERMINAL_STATUSES:

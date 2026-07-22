@@ -1,51 +1,222 @@
-import { app, shell, BrowserWindow, ipcMain, session, nativeImage, desktopCapturer } from 'electron'
+import {
+  app,
+  shell,
+  BrowserWindow,
+  ipcMain,
+  session,
+  nativeImage,
+  desktopCapturer,
+  powerMonitor
+} from 'electron'
 import { join } from 'path'
 import { appendFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { supportsMica } from './windowsVersion'
+import { APP_BG_HEX, HOME_BG_HEX, WCO_SYMBOL_HEX } from '../shared/chrome'
 import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
-import { registerOmiListenHandlers } from './ipc/omiListen'
+import { isAllowedExternalScheme } from './externalUrl'
+import { installContextMenu } from './contextMenu'
+import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
+import type { ConversationFolder, LiveNote } from '../shared/types'
+import {
+  registerOmiListenHandlers,
+  startTestListenSession,
+  stopTestListenSession
+} from './ipc/omiListen'
+import { registerCaptureBridge } from './ipc/captureBridge'
+import { registerSoak } from './soak'
+import { createCaptureWindow, getCaptureWindow, getCaptureWc } from './captureWindow'
 import { registerFileIndexHandlers } from './ipc/fileIndex'
+import { cancelStartupRescan } from './fileIndex/indexer'
 import { registerMemoryImportHandlers } from './ipc/memoryImport'
 import { registerMemoryExportHandlers } from './ipc/memoryExport'
+import { registerChatFilesHandlers } from './ipc/chatFiles'
 import { registerKgHandlers } from './ipc/kg'
+import { registerAuthHandlers } from './ipc/auth'
 import { registerIntegrationsHandlers } from './ipc/integrations'
 import { registerLocalGraphHandlers } from './ipc/localGraph'
 import { registerUsageHandlers } from './ipc/usage'
 import { registerMemoryCleanupHandlers } from './ipc/memoryCleanup'
 import { startForegroundMonitor } from './usage/foregroundMonitor'
-import { getOverlayWindow, toggleOverlay } from './overlay/window'
+import {
+  registerBarIpc,
+  destroyBar,
+  handleSummonPress,
+  setSummonGestureAccelerator,
+  setBarEnabled,
+  setPeekWatchSuspended,
+  getBarWindow,
+  isBarInteractive,
+  isBarVisible,
+  showBar,
+  hideBar,
+  endActiveSummonHold
+} from './bar/window'
 import {
   registerOverlayShortcut,
   unregisterOverlayShortcut,
+  suspendOverlayShortcut,
+  resumeOverlayShortcut,
+  setOverlayAccelerator,
+  getOverlayAccelerator,
+  getOverlaySummonState,
   OVERLAY_ACCELERATOR
 } from './overlay/shortcut'
 import { registerOverlayHandlers } from './overlay/ipc'
 import { seedUserAssistOnce } from './usage/userAssistSeed'
 import { registerRewindHandlers } from './ipc/rewind'
 import { registerScreenHandlers } from './ipc/screen'
+import { registerChatPrivacyHandlers } from './ipc/chatPrivacy'
+import { registerAssistantSettingsHandlers } from './ipc/assistantSettings'
+import { registerBillingIpc } from './billing/checkoutWindow'
+import { registerAppsIpc } from './apps/checkAppSetup'
+import { helperProcess } from './ocr/helperProcess'
 import { registerInsightHandlers } from './ipc/insight'
-import { createInsightToastWindow } from './insight/toastWindow'
+import {
+  createInsightToastWindow,
+  showWhatsNewToast,
+  getCurrentWhatsNew
+} from './insight/toastWindow'
+import { maybeGetWhatsNew, releaseNotesUrl } from './whatsNew'
+import { registerMeetingHandlers } from './ipc/meeting'
+import { startMeetingMonitor, stopMeetingMonitor, meetingDebug } from './meeting/meetingMonitor'
 import { registerAutomationHandlers } from './ipc/automation'
+import { registerCodingAgentHandlers } from './ipc/codingAgent'
+import { initClaudeAgentConfigDir } from './codingAgent/agentConfigDir'
+import { registerMainChatHandlers } from './ipc/mainChat'
+import { registerAgentCardHandlers } from './ipc/agentCards'
+import { registerVoiceHubHandlers } from './ipc/voiceHub'
+import { registerVoiceToolHandlers } from './ipc/voiceTool'
+import { registerByokHandlers } from './ipc/byok'
+import { registerMcpExportsHandlers } from './ipc/mcpExports'
+import { registerAuthStoreHandlers } from './ipc/authStore'
+import { registerPiMonoHandlers } from './ipc/pimono'
+import { probeAgentStoreRuntimeAtStartup } from './agentKernel/startup'
+import { registerAgentControlIpc } from './ipc/agentControl'
+import { registerAudioMuteHandlers } from './ipc/audioMute'
+import { systemAudioMuteBridge } from './audio/systemAudioMute'
+import { registerVoicePlaneIpc } from './voice/voicePlaneIpc'
 import { automationBridge } from './automation/bridge'
 import {
   startAutomationTargetTracker,
   stopAutomationTargetTracker
 } from './automation/foregroundTarget'
 import { registerScreenSynthHandlers } from './ipc/screenSynth'
+import { registerAiUserProfileHandlers } from './ipc/aiUserProfile'
+import { registerTaskHandlers } from './ipc/tasks'
+import { registerBackendDegradedIpc, resetBackendDegraded } from './observability/backendDegraded'
+import { resetPendingDeletes } from './tasks/taskSyncEngine'
+import { onSessionReset } from './assistants/core/session'
+import { setTaskDeletionListener } from './tasks/taskSyncEngine'
+import { removeFromIndex as removeTaskFromEmbeddingIndex } from './tasks/taskEmbeddingService'
+import { createGlowWindow, registerGlowIpc, destroyGlow } from './glow/glowWindow'
+import { maybeGenerateOnStartup as maybeGenerateAiProfileOnStartup } from './assistants/aiUserProfile/service'
+import { setTokenRefresher } from './assistants/core/session'
+import { makeRendererTokenRefresher } from './assistants/core/tokenPull'
+import { registerFocusAssistant } from './assistants/focus/register'
+import { registerInsightAssistant } from './assistants/insight/register'
+import { registerMemoryAssistant } from './assistants/memory/register'
+import { registerTaskAssistant, bringUpTaskEmbeddingIndex } from './assistants/tasks/register'
+import { startTaskPromotionService } from './assistants/tasks/promotionService'
+import { registerGoalGeneration } from './assistants/goals/register'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
+import { startRewindEmbedding } from './rewind/embeddingService'
 import { startRewindRetention } from './rewind/retentionRunner'
+import { startOrphanSweep } from './rewind/orphanSweep'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
 import { perfMark, flushPerfMarks } from '../shared/perf'
+import { startStartupProfiler } from './dev/startupProfiler'
+import { scheduleStartupSteps } from './startupScheduler'
+// Dev-only benchmarking / sandbox machinery. Every call below is behind
+// `import.meta.env.DEV`, so this module is tree-shaken out of packaged main.
+import * as devBench from './dev/bench'
+import { initSentry, captureMessage } from './sentry'
+import { initMainLog } from './mainLog'
+import { registerMicPermissionHandlers } from './ipc/micPermission'
+import { initCrashSentinel, crashDetectedOnBoot, markCleanExit } from './crashSentinel'
+import { isQuitting, quitApp } from './lifecycle'
+import { classifyChildProcessGone } from './childProcessGone'
+import { isHideWindowShortcut } from './windowShortcuts'
+import { shouldBlockNavigation } from './navigationGuard'
+import { disableApplicationMenu } from './appMenu'
+import {
+  createTray,
+  updateTrayState,
+  setTrayScreenCapture,
+  destroyTray,
+  isTrayCreated
+} from './tray'
+import { initAutoUpdater, getPendingUpdate, checkForUpdatesNow } from './updater'
+import {
+  registerRecordShortcut,
+  setRecordAcceleratorForced,
+  getRecordShortcut,
+  suspendRecordShortcut,
+  resumeRecordShortcut
+} from './shortcuts'
+import { getAppSettings, setAppSettings, onAppSettingsChanged } from './appSettings'
+import { showBestEffortNotification } from './notify'
+import { buildHotkeyConflictNotice } from './hotkeyNotice'
 
-// Default the perf log to the user data dir so marks double as lightweight prod
-// telemetry. The bench runner overrides OMI_PERF_LOG to point at .bench/.
-// app.getPath('userData') is valid before app.whenReady().
-if (!process.env.OMI_PERF_LOG) {
-  process.env.OMI_PERF_LOG = join(app.getPath('userData'), 'perf.jsonl')
+// Default main-window content size. Single source of truth for both window
+// creation and the Settings → Font Size "Reset Window Size" affordance
+// (window:resetSize), so the two can never drift.
+const DEFAULT_WINDOW_WIDTH = 1280
+const DEFAULT_WINDOW_HEIGHT = 820
+
+// THE main window — single module-level owner. Everything that outlives the
+// whenReady scope (tray menu, updater, shortcuts, second-instance handoff,
+// activate) reads through this variable so a re-created window can never leave
+// a consumer bound to a destroyed instance.
+let mainWindow: BrowserWindow | null = null
+
+// Whether the mic record chord is currently registered at all (Settings →
+// Shortcuts "Off"). Seeded from persisted appSettings at startup; the ONLY thing
+// that keeps a disabled chord from being resurrected by the rebind capture's
+// resume path (shortcuts:resume-capture). Persisted mirror: recordHotkeyEnabled.
+let recordShortcutEnabled = true
+
+function withMainWindow(fn: (win: BrowserWindow) => void): void {
+  if (mainWindow && !mainWindow.isDestroyed()) fn(mainWindow)
 }
+
+/** Surface the main window: un-minimize, show, focus. */
+function surfaceMainWindow(): void {
+  withMainWindow((win) => {
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+  })
+}
+
+// Tray-only start: when launched at login with --hidden, create the window but
+// don't show it (the user opens it from the tray). See setLoginItemSettings.
+const startHidden = process.argv.includes('--hidden')
+
+// In dev, default the perf log to userData so marks capture to disk (the bench
+// runner overrides OMI_PERF_LOG). Packaged builds write nothing unless the env
+// var is explicitly set — no silent prod telemetry file. Runs before app:start.
+if (import.meta.env.DEV) devBench.applyDevPerfLogDefault()
+// PRODUCTION TOO: never let a GPU-process crash permanently blocklist WebGL.
+// After a few GPU crashes Chromium domain-blocks 3D APIs for the origin "until
+// restart", so every subsequent context request returns null and the WebGL
+// surfaces (brain map, orb) are dead for the rest of the session — no remount can
+// recover them. Field evidence: crash.log carries genuine `child-process-gone
+// type=GPU reason=crashed` entries across Jul 10-14, under hardware GL AND under
+// SwiftShader (which runs INSIDE the GPU process, so it can crash too). Note the
+// `reason=killed` entries in that same log are NOT crashes — they are clean quits
+// (see childProcessGone.ts); don't read them as evidence of anything. Disabling the
+// block costs a healthy machine nothing and is what lets the renderer's recovery
+// remounts actually get a fresh context. Must run before app ready.
+app.disableDomainBlockingFor3DAPIs()
+// Dev GPU stability: render in software + keep WebGL on SwiftShader, so the orb /
+// brain map / blur / effects stay reliable on flaky dev GPUs (hybrid laptop,
+// asleep display, headless soak). Must run before app ready. Packaged builds keep
+// full hardware acceleration.
+if (import.meta.env.DEV) devBench.applyDevGpuStability()
 perfMark('app:start')
 
 // --- Global crash observability --------------------------------------------
@@ -81,7 +252,19 @@ const RENDERER_RELOAD_WINDOW_MS = 60_000
 const RENDERER_RELOAD_MAX = 3
 const rendererReloadTimes = new WeakMap<Electron.WebContents, number[]>()
 app.on('render-process-gone', (_e, wc, details) => {
-  logFatal('render-process-gone', `reason=${details.reason} exitCode=${details.exitCode}`)
+  // Include the URL so a crash is attributable to a specific window (main /bar /
+  // capture /insight-toast) instead of an anonymous "renderer crashed".
+  const url = ((): string => {
+    try {
+      return wc.getURL()
+    } catch {
+      return '?'
+    }
+  })()
+  logFatal(
+    'render-process-gone',
+    `url=${url} reason=${details.reason} exitCode=${details.exitCode}`
+  )
   // Skip clean exits (intentional teardown) and destroyed windows.
   if (details.reason === 'clean-exit' || wc.isDestroyed()) return
   const now = Date.now()
@@ -104,45 +287,129 @@ app.on('render-process-gone', (_e, wc, details) => {
     /* window may be mid-teardown */
   }
 })
-app.on('child-process-gone', (_e, details) =>
-  logFatal('child-process-gone', `type=${details.type} reason=${details.reason}`)
-)
+app.on('child-process-gone', (_e, details) => {
+  // Include the utility's name/service (e.g. "Audio Service", "Video Capture")
+  // so a Utility crash points at the actual subsystem rather than just "Utility".
+  const summary =
+    `type=${details.type}` +
+    (details.name ? ` name=${details.name}` : '') +
+    (details.serviceName ? ` service=${details.serviceName}` : '') +
+    ` reason=${details.reason} exitCode=${details.exitCode}`
+  // On Windows a normal quit kills children via TerminateProcess, which Chromium
+  // reports as `type=GPU reason=killed exitCode=1` — identical in every field to a
+  // real GPU kill. Without the isQuitting() check every clean quit wrote a fatal
+  // "GPU crash" to crash.log (five quits read as a five-crash loop) and broadcast
+  // context-loss at windows already being destroyed. See childProcessGone.ts.
+  const { fatal, broadcastGpuLoss } = classifyChildProcessGone(details, isQuitting())
+  if (!fatal) {
+    console.log(`[shutdown] child process gone during teardown: ${summary}`)
+    return
+  }
+  logFatal('child-process-gone', summary)
+  // A GPU-process crash loses every live WebGL context, but the RENDERERS stay
+  // alive — so render-process-gone (which reloads) never fires, and a WebGL
+  // <canvas> (the brain map) is left painted as Chromium's broken-image
+  // placeholder with nothing to recover it. Chromium restarts the GPU process on
+  // its own; broadcast so WebGL surfaces remount and brand images re-decode.
+  if (broadcastGpuLoss) {
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send(GPU_CONTEXT_LOST_CHANNEL)
+    }
+  }
+})
+// A HUNG (not crashed) UI thread never fires render-process-gone — the process is
+// alive but wedged, so none of the handlers above see it. Electron surfaces this
+// as the webContents 'unresponsive' event (there is no app-level equivalent), so
+// attach it as each webContents is created — covering every window (main /bar
+// /capture /insight-toast /glow) uniformly. Log + report to Sentry at message
+// level, mirroring the crash handlers above. Purely OBSERVATIONAL: we do NOT kill
+// or force-reload the window — a hang often self-clears (recorded by 'responsive'),
+// and auto-killing a wedged-but-recoverable UI is a heavier behavior change out of
+// scope here.
+app.on('web-contents-created', (_e, wc) => {
+  const urlOf = (): string => {
+    try {
+      return wc.getURL()
+    } catch {
+      return '?'
+    }
+  }
+  wc.on('unresponsive', () => {
+    logFatal('unresponsive', `url=${urlOf()} webContents=${wc.id}`)
+    captureMessage('Renderer unresponsive', {
+      area: 'lifecycle-unresponsive',
+      level: 'warning',
+      extra: { url: urlOf(), webContentsId: wc.id }
+    })
+  })
+  // The recovery signal — a transient hang that cleared. Console-only (not a fatal
+  // event, and we don't Sentry-report heals, matching how render-process-gone
+  // skips clean exits) so crash.log stays a log of things that actually went wrong.
+  wc.on('responsive', () => {
+    console.log(`[lifecycle] renderer responsive again: url=${urlOf()} webContents=${wc.id}`)
+  })
+  // Stray file drop guard: a file dropped anywhere outside an HTML5 drop zone
+  // makes Electron navigate the window to that local file:// URL, blanking the
+  // app until reload. Cancel that here for every window (main/bar/capture/glow/
+  // insight-toast) uniformly. Only foreign file:// navigations are cancelled —
+  // in-app HashRouter routing and the initial load never fire will-navigate, and
+  // http(s)/mailto links keep their existing handling. See navigationGuard.ts.
+  wc.on('will-navigate', (event, url) => {
+    if (shouldBlockNavigation(url, urlOf())) {
+      event.preventDefault()
+      // Never log the raw URL — a dropped-file path can contain personal data.
+      console.warn(
+        `[main] blocked stray in-window navigation to a local file (webContents ${wc.id})`
+      )
+    }
+  })
+})
 
-// Opt-in sandbox isolation. By default Electron derives userData from the
-// product name ("omi-windows"), which is the real user's data + signed-in
-// Firebase session. Set OMI_SANDBOX to pin a throwaway userData dir instead,
-// so a sandbox build can't share (and clobber) the production omi.db /
-// local_kg schema. Must run before any DB open (db.ts resolves userData lazily
-// on first IPC). NOTE: default = production data, so normal runs load memories.
-// In bench mode (OMI_BENCH=1) we NEVER pin, so the runner's isolated
-// --user-data-dir is honored (pinning here would override it and collide caches).
-//
-// The VALUE names the profile, so concurrent worktrees each get their OWN
-// userData dir and never contend for the shared Chromium GPU/disk/quota caches
-// (that contention crashes the WebGL brain map — the only GPU-backed surface —
-// while the plain-DOM UI survives). Use a distinct OMI_SANDBOX=<name> per
-// worktree to run several at once. OMI_SANDBOX=1 keeps the original shared
-// "…-sandbox-chat-kg" profile for backward compatibility (no re-login).
-//
-// This is intentionally OPT-IN, NOT auto-derived from the worktree folder: the
-// user's real data + Firebase session + onboarding floor live in the DEFAULT
-// profile, and Chromium can't safely share one profile across two live
-// instances anyway. So the MAIN worktree must stay on the default (real data),
-// and only the SECONDARY worktree(s) you run alongside it should set
-// OMI_SANDBOX=<name> to isolate. (An earlier auto-derive moved this worktree off
-// the default profile and blanked the brain map's onboarding floor — never do
-// that.)
 // Desktop-automation bridge (real Windows UI actions). ON by default; set
 // OMI_AUTOMATION='0' as a kill-switch to disable it. Gates both the IPC
 // registration and the foreground-target tracker; the renderer reads the same
 // flag (window.omi.automationEnabled) to skip its action-planner pre-step.
 const AUTOMATION_ENABLED = process.env.OMI_AUTOMATION !== '0'
 
-const sandbox = process.env.OMI_SANDBOX
-if (sandbox && process.env.OMI_BENCH !== '1') {
-  const suffix = sandbox === '1' ? 'chat-kg' : sandbox.replace(/[^a-zA-Z0-9._-]/g, '-')
-  app.setPath('userData', join(app.getPath('appData'), `omi-windows-sandbox-${suffix}`))
-}
+// OMI_SANDBOX pins a throwaway userData dir for parallel dev worktrees so they
+// don't clobber the real profile (dev-only; see dev/bench). Runs before the
+// single-instance lock and any DB open.
+if (import.meta.env.DEV) devBench.applySandboxUserDataOverride()
+
+// Single-instance lock: only ONE Omi runs per userData profile. A second launch
+// hands off to the first (see the 'second-instance' handler) and exits. Acquired
+// AFTER the sandbox repin above so distinct OMI_SANDBOX profiles (and the E2E
+// harness's --user-data-dir) each get their own lock instead of contending.
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) app.quit()
+
+// Tee main-process console output to a bounded file under userData/logs so
+// packaged-build failures (agent spawns, provider errors, service crashes) are
+// diagnosable from an installed app, where stdout is invisible. Gated on the
+// lock so a throwaway second-launch process doesn't write; after the sandbox
+// override above so dev worktrees log to their own profile. See mainLog.ts.
+if (gotSingleInstanceLock) initMainLog(app.getPath('userData'))
+
+// Wipe stale Chromium GPU/shader caches for THIS profile before the GPU process
+// opens them — a force-killed dev build corrupts them and the corruption poisons
+// the next launch's WebGL. Gated on the single-instance lock so a throwaway
+// second launch can't delete the RUNNING instance's live caches; still before
+// whenReady/first-window, so it lands ahead of GPU-process init.
+if (import.meta.env.DEV && gotSingleInstanceLock) devBench.clearStaleGpuCaches()
+
+// Crash/error reporting. After the lock check so the throwaway second-launch
+// process doesn't pay SDK setup; no-op unless a DSN is configured, and only
+// enabled for packaged builds (see sentry.ts).
+if (gotSingleInstanceLock) initSentry()
+
+// Clean-shutdown sentinel: detect a crash on the PREVIOUS launch (a hard crash /
+// OS kill / main-process death that bypassed uncaughtException leaves no trace
+// otherwise) and report it to Sentry as a message — developer-facing telemetry
+// only, no user banner (macOS lastSessionCleanExit + detectAndReportCrash parity).
+// After Sentry init so a detected crash can report, and gated on the lock so a
+// losing duplicate process (same userData → same sentinel file) never reads or
+// rewrites the live instance's flag. The clean-exit write is in will-quit below.
+if (gotSingleInstanceLock) initCrashSentinel()
 
 const icon = nativeImage.createFromPath(iconPath)
 import {
@@ -151,35 +418,118 @@ import {
   getLocalConversation,
   listLocalConversations,
   deleteLocalConversation,
-  updateLocalConversationTitle
+  updateLocalConversationTitle,
+  updateLocalConversationSync,
+  claimConversationForPosting,
+  listConversationFolders,
+  replaceConversationFolders,
+  upsertConversationFolder,
+  deleteConversationFolder,
+  createTranscriptionSession,
+  createLiveNote,
+  updateLiveNote,
+  deleteLiveNote,
+  listLiveNotes,
+  insertVoiceTurn,
+  listPendingVoiceTurns,
+  markVoiceTurnAcked,
+  recordVoiceTurnFailure,
+  pruneOrphanedRewindEmbeddings,
+  getDbRecoveryStatus,
+  initDatabase,
+  wipeUserData
 } from './ipc/db'
+
+// The first time the user closes the window to the tray, tell them Omi is still
+// running (otherwise "it disappeared but didn't quit" is confusing). Shown once,
+// persisted in app-settings.json.
+function maybeShowCloseToTrayNotice(): void {
+  if (getAppSettings().closeToTrayNoticeShown) return
+  setAppSettings({ closeToTrayNoticeShown: true })
+  showBestEffortNotification(
+    'Omi is still running',
+    'Omi keeps listening in the tray. Right-click the tray icon to pause or quit.'
+  )
+}
 
 function createWindow(): BrowserWindow {
   // Create the browser window. 1280x820 gives the two-column Record layout
-  // (transcript + screen sidebar) room without overflow; min-size prevents the
-  // sidebar from clipping below a usable threshold.
+  // (transcript + screen sidebar) room without overflow; the 500px floor keeps
+  // a narrow snapped window usable (the sidebar collapses).
+  //
+  // Windows-11 chrome: the native title bar is hidden and replaced by the
+  // Window Controls Overlay (native caption buttons → Snap Layouts hover
+  // works); the renderer draws its own 36px drag strip. On 22H2+ the window
+  // gets the Mica system backdrop (the renderer goes translucent via
+  // data-mica); older builds fall back to the flat token canvas.
+  const mica = supportsMica()
   const mainWindow = new BrowserWindow({
     title: 'omi',
-    width: 1280,
-    height: 820,
-    minWidth: 1024,
-    minHeight: 640,
+    width: DEFAULT_WINDOW_WIDTH,
+    height: DEFAULT_WINDOW_HEIGHT,
+    minWidth: 500,
+    minHeight: 600,
     show: false,
     autoHideMenuBar: true,
-    frame: true,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      // The overlay paints only the caption-button cluster; it must match the
+      // app's top strip (the transparent TitleBar drag region, so the color
+      // directly behind the buttons is the page background — #0f0f0f, restored
+      // as the Mica tint base in useMicaChrome, or the flat non-Mica canvas).
+      //
+      // #0f0f0f is the base for every route EXCEPT Home, whose Hub paints a darker
+      // stage (--home-paper #050505); the strip matches that on Home (see TitleBar),
+      // so a static #0f0f0f cluster would read as a lighter box there. The renderer
+      // flips the overlay per route via chrome:titleBarSurface (HOME_BG_HEX on Home,
+      // APP_BG_HEX elsewhere). The CREATION color is seeded with the Home tone, not
+      // the base: the app deterministically cold-starts on Home (HashRouter '/' →
+      // /home), so seeding Home avoids a first-frame lighter-box flash before the
+      // renderer's flip lands; the flip switches it to the base when you leave Home.
+      //
+      // #0f0f0f is deliberate, not a leftover. The caption seam looked wrong ONLY
+      // because the Mica tint was dead code (the page rendered fully transparent,
+      // so the strip was raw 100%-bleed Mica — much lighter than the opaque
+      // caption). Restoring the tint (useMicaChrome) makes the strip 82%-opaque
+      // #0f0f0f, and the caption blends into it. Verified on a real composited
+      // desktop (setTitleBarOverlay sweep + CopyFromScreen sampling): Windows
+      // FLATTENS the overlay alpha (rgba(15,15,15,0.82) rendered as opaque
+      // ~#0e0e0e, no desktop bleed) so a translucent overlay is impossible, and
+      // solids #1a1a1a / #252525 both rendered as a VISIBLY LIGHTER box around
+      // the buttons — the overlay renders at ~its set solid tone, so it stays
+      // seamless only when it equals the strip beneath it (why it is route-aware).
+      // (Trade-off: the strip is translucent and the overlay is opaque, so on a
+      // very light wallpaper the 18% bleed lifts the strip slightly above the
+      // overlay tone — a subtle, not a box-shaped, mismatch. See PR notes.)
+      // All tones derive from shared/chrome (single source of truth with the
+      // renderer's Mica tint + the CSS --bg-primary / --home-paper / --text-tertiary
+      // tokens).
+      color: HOME_BG_HEX,
+      symbolColor: WCO_SYMBOL_HEX,
+      height: 36
+    },
     transparent: false,
-    backgroundColor: '#121212',
+    ...(mica ? { backgroundMaterial: 'mica' as const } : { backgroundColor: '#0f0f0f' }),
     icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
-      webSecurity: false, // Disabled to work around Omi API CORS preflight issues
+      // Tell the preload whether Mica is active (renderer sets data-mica).
+      additionalArguments: [`--omi-mica=${mica ? '1' : '0'}`],
+      // webSecurity stays ON. The Omi API CORS gap is handled by the header
+      // injection + OPTIONS-preflight forcing in the webRequest hooks below, so
+      // we no longer weaken the renderer's web security to work around it.
       // Keep renderer timers running at full rate when the window is minimized/
       // hidden, so Rewind's background screen capture keeps sampling instead of
       // being throttled to ~once/minute by Chromium's background policy.
       backgroundThrottling: false
     }
   })
+
+  // Windows' standard right-click editing menu (native, so Narrator/UIA see a real
+  // menu). Electron ships no default context menu — without this, right-clicking
+  // anywhere in the app does nothing.
+  installContextMenu(mainWindow)
 
   // NOTE: the main window is intentionally NOT content-protected. We used to call
   // setContentProtection(true) here (Windows WDA_EXCLUDEFROMCAPTURE) so Rewind/chat
@@ -188,44 +538,55 @@ function createWindow(): BrowserWindow {
   // unchanged frames, and the foreground-window metadata records when Omi is
   // frontmost. (The floating overlay keeps its own protection in overlay/window.ts.)
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    // Tray-only login start (--hidden): keep the window hidden until the user
+    // opens it from the tray.
+    if (!startHidden) mainWindow.show()
+  })
+
+  // Close = hide to tray (Windows stays resident in the tray), unless the app is
+  // really quitting. The overlay and background services keep running so Omi
+  // keeps listening. Real teardown happens on quit (see will-quit).
+  mainWindow.on('close', (e) => {
+    if (!isQuitting()) {
+      e.preventDefault()
+      mainWindow.hide()
+      maybeShowCloseToTrayNotice()
+    }
+  })
+
+  // Ctrl+Q quits for real while the window is focused (tray Quit and the
+  // app:quit IPC are the other real-quit paths). Ctrl+W hides to tray — the
+  // keyboard equivalent of the close button (macOS gets Cmd+W for free from its
+  // Window scene). Both are scoped to the main window via its own webContents.
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.control && input.key.toLowerCase() === 'q') quitApp()
+    // Route through mainWindow.close() so it reuses the exact hide-to-tray path in
+    // the 'close' handler above — hides, never quits or destroys the window.
+    if (isHideWindowShortcut(input)) {
+      event.preventDefault()
+      mainWindow.close()
+    }
   })
   perfMark('window:created')
 
-  // Allow Firebase + Google OAuth popups to open as real Electron windows so
-  // signInWithPopup() can postMessage back to the opener. Everything else
-  // routes to the system browser.
+  // Dev only: tag the window title with the worktree instance (e.g. " — fix-orb")
+  // so overlapping parallel dev windows are tellable apart. No-op on primary.
+  if (import.meta.env.DEV) devBench.applyDevWindowTitleSuffix(mainWindow)
+
+  // Everything window.open()ed routes to the system browser — there is no
+  // embedded OAuth popup anymore (Google blocks webview OAuth; sign-in runs the
+  // backend PKCE flow in the system browser via src/main/ipc/auth.ts).
   mainWindow.webContents.setWindowOpenHandler((details) => {
     const url = details.url
-    const isOAuth =
-      url.startsWith('https://accounts.google.com/') ||
-      url.startsWith('https://based-hardware.firebaseapp.com/') ||
-      url.includes('/__/auth/') ||
-      url.includes('firebaseapp.com/__/auth')
-    if (isOAuth) {
-      return {
-        action: 'allow',
-        overrideBrowserWindowOptions: {
-          width: 480,
-          height: 720,
-          autoHideMenuBar: true,
-          webPreferences: { nodeIntegration: false, contextIsolation: true }
-        }
-      }
-    }
     // Hand only web/mail links to the OS. A prompt-injected chat reply could emit
     // a file://, UNC, or custom-protocol URL; passing those to shell.openExternal
     // enables NTLM-hash leak / protocol-handler abuse. Defense-in-depth alongside
     // the renderer's Markdown scheme allow-list.
-    try {
-      const scheme = new URL(url).protocol
-      if (scheme === 'http:' || scheme === 'https:' || scheme === 'mailto:') {
-        shell.openExternal(url)
-      } else {
-        console.warn('[main] blocked external open of non-web URL scheme:', scheme)
-      }
-    } catch {
-      console.warn('[main] blocked external open of unparseable URL')
+    if (isAllowedExternalScheme(url, ['http', 'https', 'mailto'])) {
+      shell.openExternal(url)
+    } else {
+      // Never log the raw URL — it may carry a token/secret in its query string.
+      console.warn('[main] blocked external open of a non-web or unparseable URL')
     }
     return { action: 'deny' }
   })
@@ -249,7 +610,33 @@ function createWindow(): BrowserWindow {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
+  // Lost the single-instance race: this process is already quitting — do no
+  // window/service setup, just let it exit and hand off to the first instance.
+  if (!gotSingleInstanceLock) return
   perfMark('main:ready')
+  // Startup-burst profiler (inert unless OMI_STARTUP_PROFILE=<path> is set).
+  startStartupProfiler()
+
+  // Open (and, if it is corrupt, recover) omi.db before anything else can touch
+  // it. This has to happen here, first: recovery REPLACES the database file, and
+  // both the read-only chat handle and the KG write worker's own connection open
+  // lazily later — swapping the file under them would strand them on a deleted
+  // inode. Single-instance lock is already held, so no other process has it open.
+  // Never fatal: a throw here would be an unstartable app, and the renderer can
+  // still run (every DB call surfaces its own error).
+  try {
+    const recovery = initDatabase()
+    if (recovery.recovered) {
+      console.error(
+        `[main] omi.db was corrupt and has been recovered: ` +
+          `${recovery.rowsRecovered} row(s) restored, reset=${recovery.reset}, ` +
+          `backup=${recovery.backupPath}`
+      )
+    }
+  } catch (e) {
+    console.error('[main] database init failed', e)
+  }
+  perfMark('main:db-ready')
 
   // Production only (dev uses the vite dev server): serve the packaged renderer
   // over localhost so Firebase auth sees an authorized origin. Must be up before
@@ -264,7 +651,13 @@ app.whenReady().then(async () => {
       )
     }
   }
-  // Set app user model id for windows
+  // Set the App User Model ID before any BrowserWindow or Notification is created,
+  // so Windows attributes toasts + taskbar grouping to Omi (packaged toasts fail
+  // silently otherwise). This MUST run first: it matches electron-builder.yml's
+  // appId (com.omiwindows.app) exactly — the NSIS shortcut AUMID the installer
+  // writes — which is what lets packaged toasts attribute correctly. Both
+  // Notification sites (notify.ts, insight/notification.ts) are user-event-driven
+  // and structurally cannot fire before createWindow below, so this always wins.
   electronApp.setAppUserModelId('com.omiwindows.app')
 
   // Default open or close DevTools by F12 in development
@@ -274,11 +667,27 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // Omi's API doesn't advertise http://localhost:5173 as a CORS-allowed origin.
-  // In Electron we control the network stack, so strip the Origin header on
-  // outgoing requests and inject permissive CORS response headers. Scoped to
-  // the specific upstreams — everything else flows normally.
-  const apiUrls = ['https://api.omi.me/*', 'https://desktop-backend-hhibjajaja-uc.a.run.app/*']
+  // Remove Electron's stock application menu before any window is created, so a
+  // packaged-build user can't press Alt to reach Reload / Force Reload / Toggle
+  // DevTools. Dev DevTools stays on the F12 shortcut above (that's not the menu).
+  // See appMenu.ts for why removing it breaks no edit/app shortcuts.
+  disableApplicationMenu()
+
+  // Omi's API doesn't advertise the renderer's localhost origin as CORS-allowed.
+  // We used to work around this by disabling webSecurity on every window; that's
+  // now OFF (webSecurity is ON — see the window webPreferences), so instead we
+  // control the network stack: strip the Origin header on outgoing requests and
+  // inject permissive CORS response headers. Scoped to the specific upstreams —
+  // everything else flows normally.
+  const apiUrls = [
+    'https://api.omi.me/*',
+    'https://desktop-backend-hhibjajaja-uc.a.run.app/*',
+    // PostHog analytics ingestion. Added proactively for the webSecurity-on switch.
+    // Static analysis suggests it may not actually need CORS help (a same-shape
+    // JSON POST that PostHog answers with permissive CORS), but including it is
+    // harmless and avoids a surprise block if PostHog tightens its headers.
+    'https://us.i.posthog.com/*'
+  ]
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: apiUrls }, (details, cb) => {
     const headers = { ...details.requestHeaders }
     delete headers.Origin
@@ -286,14 +695,23 @@ app.whenReady().then(async () => {
     cb({ requestHeaders: headers })
   })
   session.defaultSession.webRequest.onHeadersReceived({ urls: apiUrls }, (details, cb) => {
-    cb({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'access-control-allow-origin': ['*'],
-        'access-control-allow-headers': ['*'],
-        'access-control-allow-methods': ['GET, POST, PUT, PATCH, DELETE, OPTIONS']
-      }
-    })
+    const responseHeaders = {
+      ...details.responseHeaders,
+      'access-control-allow-origin': ['*'],
+      // `*` does NOT cover Authorization even for non-credentialed requests, so
+      // list it (and content-type) explicitly alongside the wildcard.
+      'access-control-allow-headers': ['authorization, content-type, *'],
+      'access-control-allow-methods': ['GET, POST, PUT, PATCH, DELETE, OPTIONS']
+    }
+    // Preflight gotcha (surfaces only with webSecurity ON): a CORS preflight
+    // OPTIONS must get a 2xx carrying the allow-* headers or the browser blocks
+    // the real request. The Omi API may not answer OPTIONS with a success + these
+    // headers, so force a 200 for preflights on the allowlisted hosts.
+    if (details.method === 'OPTIONS') {
+      cb({ responseHeaders, statusLine: 'HTTP/1.1 200 OK' })
+      return
+    }
+    cb({ responseHeaders })
   })
 
   // System-audio (loopback) capture for the Screen recording mode (which mixes
@@ -326,8 +744,23 @@ app.whenReady().then(async () => {
   // Generic renderer-side startup mark (e.g. 'renderer:eval' once the bundle has
   // finished evaluating), recorded on the main clock to bisect startup phases.
   ipcMain.on('perf:mark', (_e, name: string) => perfMark(String(name)))
-  // Trivial round-trip used to measure raw IPC overhead in bench mode.
-  ipcMain.handle('bench:echo', async (_e, x: number) => x)
+  // Route-aware caption-overlay tone. Home paints a DARKER stage (--home-paper)
+  // than the app base (--bg-primary), and the native WCO caption cluster can't be
+  // transparent, so a static overlay color sits as a lighter box over Home's
+  // near-black strip. The renderer flips this when entering/leaving Home so the
+  // buttons blend on Home while every other route keeps the app-base tone. `onHome`
+  // is the renderer's only input; height/symbol stay fixed at the creation values.
+  ipcMain.on('chrome:titleBarSurface', (_e, onHome: boolean) =>
+    withMainWindow((win) =>
+      win.setTitleBarOverlay({
+        color: onHome ? HOME_BG_HEX : APP_BG_HEX,
+        symbolColor: WCO_SYMBOL_HEX,
+        height: 36
+      })
+    )
+  )
+  // Dev-only bench IPC (bench:echo round-trip). Tree-shaken from packaged main.
+  if (import.meta.env.DEV) devBench.registerBenchIpc()
   ipcMain.handle('db:remapConversationId', async (_e, fromId: string, toId: string) =>
     remapConversationId(fromId, toId)
   )
@@ -340,17 +773,92 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:updateLocalConversationTitle', async (_e, id: string, title: string) =>
     updateLocalConversationTitle(id, title)
   )
+  ipcMain.handle('db:updateLocalConversationSync', async (_e, id, patch) =>
+    updateLocalConversationSync(id, patch)
+  )
+  // Track 4: conversation folders (local cache) + starred/folder mirror.
+  ipcMain.handle('db:listConversationFolders', async () => listConversationFolders())
+  ipcMain.handle('db:replaceConversationFolders', async (_e, folders: ConversationFolder[]) =>
+    replaceConversationFolders(folders)
+  )
+  ipcMain.handle('db:upsertConversationFolder', async (_e, folder: ConversationFolder) =>
+    upsertConversationFolder(folder)
+  )
+  ipcMain.handle('db:deleteConversationFolder', async (_e, id: string) =>
+    deleteConversationFolder(id)
+  )
+  ipcMain.handle(
+    'db:claimConversationForPosting',
+    async (_e, id: string, resetAttempts?: boolean) =>
+      claimConversationForPosting(id, resetAttempts)
+  )
+  // PR8: LiveNotes — AI + manual notes during a live recording (local-only).
+  ipcMain.handle(
+    'db:createTranscriptionSession',
+    async (_e, session: { id: string; startedAt: number; createdAt: number }) =>
+      createTranscriptionSession(session)
+  )
+  ipcMain.handle('db:createLiveNote', async (_e, note: LiveNote) => createLiveNote(note))
+  ipcMain.handle('db:updateLiveNote', async (_e, id: string, text: string, updatedAt: number) =>
+    updateLiveNote(id, text, updatedAt)
+  )
+  ipcMain.handle('db:deleteLiveNote', async (_e, id: string) => deleteLiveNote(id))
+  ipcMain.handle('db:listLiveNotes', async (_e, sessionId: string) => listLiveNotes(sessionId))
+  // Track 2: Voice & PTT depth — durable voice-turn outbox (unconsumed until
+  // Phase B / Track 1 wire the kernel-write path; see ipc/voiceTurnOutbox.ts).
+  ipcMain.handle('db:insertVoiceTurn', async (_e, entry) => insertVoiceTurn(entry))
+  ipcMain.handle('db:listPendingVoiceTurns', async (_e, limit?: number) =>
+    listPendingVoiceTurns(limit)
+  )
+  ipcMain.handle('db:markVoiceTurnAcked', async (_e, idempotencyKey: string) =>
+    markVoiceTurnAcked(idempotencyKey)
+  )
+  ipcMain.handle('db:recordVoiceTurnFailure', async (_e, idempotencyKey: string, error: string) =>
+    recordVoiceTurnFailure(idempotencyKey, error)
+  )
+  // Sign-out teardown: clear every user-scoped table so a second account on this
+  // machine can't see the prior user's local data (renderer authTeardown.ts).
+  ipcMain.handle('db:wipeUserData', async () => wipeUserData())
   registerOmiListenHandlers()
+  // Capture bridge: routes commands from UI windows to the hidden capture window
+  // and events back. Registered before the capture window is created so no early
+  // command/event is missed. Reads the capture wc live so a respawn is picked up.
+  registerCaptureBridge(getCaptureWc, () =>
+    mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
+  )
+  // Soak telemetry (inert unless OMI_SOAK=1): samples process metrics + listen
+  // byte counters to userData/soak.jsonl for the 8h idle-soak verification.
+  registerSoak()
   registerFileIndexHandlers()
   registerLocalGraphHandlers()
   registerMemoryImportHandlers()
   registerMemoryExportHandlers()
+  registerChatFilesHandlers()
   registerKgHandlers()
+  // Google sign-in (system browser + loopback). On success, surface the main
+  // window OVER the browser: Windows blocks background apps from stealing
+  // foreground focus, so a plain show()/focus() only flashes the taskbar —
+  // briefly forcing always-on-top makes the surface actually happen (same
+  // trick as integrations/oauth.ts focusOmi).
+  registerAuthHandlers(() => {
+    withMainWindow((win) => {
+      if (win.isMinimized()) win.restore()
+      win.setAlwaysOnTop(true)
+      win.show()
+      win.focus()
+      win.setAlwaysOnTop(false)
+    })
+    app.focus({ steal: true })
+  })
   registerIntegrationsHandlers()
   registerUsageHandlers()
   registerMemoryCleanupHandlers()
   registerRewindHandlers()
   registerScreenHandlers()
+  registerChatPrivacyHandlers()
+  registerAssistantSettingsHandlers()
+  registerBillingIpc()
+  registerAppsIpc()
   // Cross-window conversations refresh: any renderer that writes a local
   // conversation (main window OR overlay) notifies here; rebroadcast to every
   // window so each invalidates its own per-process conversations cache (e.g. an
@@ -361,6 +869,27 @@ app.whenReady().then(async () => {
     }
   })
   registerInsightHandlers()
+  registerMeetingHandlers()
+  // What's-new toast (Phase 8): the renderer pulls the pending payload on mount
+  // (push-during-load race), and opens the release notes in the system browser.
+  ipcMain.handle('whatsnew:getPending', async () => getCurrentWhatsNew())
+  ipcMain.on('whatsnew:openNotes', () => void shell.openExternal(releaseNotesUrl()))
+  // Onboarding mic-permission recovery: deep-link straight to Windows Settings →
+  // Privacy & security → Microphone. The target is a fixed literal (never a
+  // renderer-supplied URL), so no scheme allow-list is needed — unlike
+  // billing:openExternal, this cannot be steered at an arbitrary protocol handler.
+  ipcMain.on(
+    'settings:openMicPrivacy',
+    () => void shell.openExternal('ms-settings:privacy-microphone')
+  )
+  // Real Windows mic consent (Capability Access Manager registry). Chromium's
+  // permission layer knows nothing about the per-app privacy toggle and answers
+  // `granted` unconditionally, so onboarding must ask the OS, not the browser.
+  registerMicPermissionHandlers()
+  // Database corruption recovery: the renderer pulls this once on mount and tells
+  // the user what happened to their data. macOS declares the equivalent flag but
+  // never sets it, so its recovery UI can never fire; ours reports for real.
+  ipcMain.handle('db:recoveryStatus', () => getDbRecoveryStatus())
   perfMark('main:handlers-registered')
   // One-time cold-start seed: rank the first brain map by real historical app
   // usage from the Windows UserAssist registry. No-op when disabled/off-Windows/
@@ -375,144 +904,591 @@ app.whenReady().then(async () => {
   // Screen-activity synthesis IPC (cheap handler registration; the renderer drives
   // cadence). Rewind handlers/services are already registered/deferred above + below.
   registerScreenSynthHandlers()
+  // Isolate the Claude coding agent's credentials from the user's real ~/.claude
+  // by pinning CLAUDE_CONFIG_DIR to an Omi-owned dir BEFORE the coding-agent IPC
+  // (sign-in / sign-out) or any agent spawn can touch it. userData is already
+  // final here (sandbox override runs at module load, before whenReady).
+  initClaudeAgentConfigDir(app.getPath('userData'))
+  // Coding-agent task IPC (cheap handler registration; adapter subprocesses spawn
+  // only when a task actually runs).
+  registerCodingAgentHandlers()
+  // Main-chat (kernel-routed pi-mono) IPC. DARK: the door exists but nothing in the
+  // renderer calls it yet; default typed chat still routes through /v2/messages.
+  registerMainChatHandlers()
+  // Shared-thread agent cards (B4, INV-CHAT-1): the always-alive writer that
+  // materializes exactly two artifacts per background run (spawn + one completion)
+  // onto the producing surface's kernel conversation, plus the renderer read.
+  registerAgentCardHandlers()
+  // Realtime-hub voice turns → the one kernel transcript (INV-CHAT-1): record a
+  // completed hub turn into the typed conversation + read the continuity seed back.
+  registerVoiceHubHandlers()
+  // Realtime-hub tool loop (INV-AGENT): the voice tool catalog + in-process dispatch
+  // to the SAME host executor registry the typed path uses (authority host-derived).
+  registerVoiceToolHandlers()
+  // BYOK key management IPC (encrypted-at-rest provider keys for Settings).
+  registerByokHandlers()
+  // "Use omi memory anywhere" MCP export connectors (hosted key + config writers).
+  registerMcpExportsHandlers()
+  // Firebase auth token store IPC (encrypted-at-rest ID/refresh tokens). Backs the
+  // renderer's custom Firebase Persistence so the session never sits in plaintext
+  // localStorage. Cheap handler registration; the store is constructed lazily.
+  registerAuthStoreHandlers()
+  // pi-mono managed-cloud chat session relay (cheap handler registration). The
+  // renderer pushes the Firebase session (token lives renderer-side); the store
+  // is inert until then and nothing spawns pi-mono until PR-D registers it.
+  registerPiMonoHandlers()
+  // Track 3 (AI user profile): once-daily synthesized "about the user" doc that
+  // grounds other AI pipelines. Cheap handler registration; the renderer pushes
+  // a session (Firebase token + base URLs) and drives generation. The background
+  // startup check + daily timer are wired at ready-to-show below.
+  registerAiUserProfileHandlers()
+  // Track 3 (task sync engine): local-first Tasks list. Cheap handler registration;
+  // the engine reads the shared backend session (relayed by the renderer) and syncs
+  // on demand when a list/reconcile channel is invoked.
+  registerTaskHandlers()
+  // 429-storm degraded-mode: pull channel so a window that mounts mid-storm can sync
+  // the current state (the transitions themselves broadcast on `backend:degraded`).
+  registerBackendDegradedIpc()
+  // Cross-account hygiene: drop per-user tombstones + storm state on sign-out so they
+  // never bleed into the next account that signs in.
+  onSessionReset(() => {
+    resetPendingDeletes()
+    resetBackendDegraded()
+  })
+  // FIX (ii): keep the in-memory task-embedding index consistent — every hard-delete
+  // path in the sync engine (deleteTask + the reconcile sweep) hands the storage-
+  // returned ids here so their vectors are evicted. DI seam, no hard import either way.
+  setTaskDeletionListener((deleted) => {
+    for (const { source, id } of deleted) removeTaskFromEmbeddingIndex(source, id)
+  })
+  // Track 3 (focus halo): the click-through ring the Focus assistant fires around
+  // the active window (red = distracted, green = refocused). Handler registration
+  // only; the window itself is created at ready-to-show below.
+  registerGlowIpc()
+  // Agent-kernel SQLite runtime guard (non-fatal): validates the production
+  // better-sqlite3 driver path that unit tests can't cover. Logs and continues
+  // on failure — the kernel is not yet wired to any caller.
+  probeAgentStoreRuntimeAtStartup()
+  // Agent control plane (trusted direct control). Handler registration only —
+  // the kernel is constructed lazily on the first control call, and user-facing
+  // chat is NOT routed through it.
+  registerAgentControlIpc()
+  // PTT system-audio mute IPC (Track 2 A4). Handler registration only — the
+  // native helper is warm-spawned below, off the first-paint critical path.
+  registerAudioMuteHandlers()
 
-  const mainWindow = createWindow()
+  // `win` is this launch's instance for one-shot wiring below (ready-to-show,
+  // bench); long-lived consumers read the module-level `mainWindow` instead.
+  const win = (mainWindow = createWindow())
+
+  // Pull-based token freshness: let main-process REST callers (task sync, and any
+  // other assistant on the shared core/session) refresh the Firebase token on
+  // demand by asking the renderer, instead of 401ing on a stale relayed token when
+  // this hidden window's background push refresh is throttled. Reads the
+  // module-level `mainWindow` so a re-created window is always the pull target.
+  setTokenRefresher(
+    makeRendererTokenRefresher(() =>
+      mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
+    )
+  )
+
+  // System tray: the app's anchor while windows are hidden. Reflects listening
+  // state (renderer reports via tray:state), toggles the window, and owns Quit.
+  // Every dep reads through the module-level ref (never a captured instance) so
+  // the tray keeps working if the window is ever re-created.
+  createTray({
+    showMainWindow: surfaceMainWindow,
+    hideMainWindow: () => withMainWindow((win) => win.hide()),
+    isMainWindowVisible: () =>
+      !!mainWindow &&
+      !mainWindow.isDestroyed() &&
+      mainWindow.isVisible() &&
+      !mainWindow.isMinimized(),
+    toggleListening: () => withMainWindow((win) => win.webContents.send('tray:toggle-listening')),
+    openSettings: () => {
+      surfaceMainWindow()
+      withMainWindow((win) => win.webContents.send('tray:open-settings'))
+    },
+    // Manual update check (mirrors Settings → About and Mac's "Check for Updates").
+    // checkForUpdatesNow never throws; log the outcome for a manual tester.
+    checkForUpdates: () => {
+      void checkForUpdatesNow().then((r) => console.log('[tray] update check:', r.status))
+    },
+    // "Screen Analysis" toggle → flip the screenAnalysisEnabled master. Writing the
+    // setting is the whole action: the proactive coordinator subscribes to
+    // onAppSettingsChanged and starts/stops its screen-analysis loop off that write
+    // (assistants/core/coordinator.ts), and the onAppSettingsChanged hook below
+    // refreshes the checkbox. No separate start/stop call here.
+    toggleScreenCapture: () =>
+      setAppSettings({ screenAnalysisEnabled: !getAppSettings().screenAnalysisEnabled }),
+    quit: quitApp
+  })
+  // Seed the checkbox from the persisted value, then keep it in sync with any
+  // writer (the tray toggle itself, a backend settings sync, a future Settings
+  // switch). setTrayScreenCapture is a no-op when the value is unchanged.
+  setTrayScreenCapture(getAppSettings().screenAnalysisEnabled)
+  onAppSettingsChanged((s) => setTrayScreenCapture(s.screenAnalysisEnabled))
+
+  // Auto-update (packaged builds only; see updater.ts). Never crashes the app.
+  initAutoUpdater(() => mainWindow)
+
+  // E2E hook (only when OMI_E2E=1; never in prod): expose the main-process facts
+  // the lifecycle harness asserts via electronApp.evaluate.
+  if (process.env.OMI_E2E === '1') {
+    ;(globalThis as unknown as { __omiE2E?: Record<string, unknown> }).__omiE2E = {
+      trayCreated: () => isTrayCreated(),
+      // The harness must target the MAIN window — getAllWindows() also returns
+      // the insight toast / overlay, which have different close semantics.
+      mainWindowId: mainWindow.id,
+      // VAD-playback harness: start/stop a real capture session (mic -> pipeline
+      // -> VAD gate -> counted-and-dropped bytes) with zero auth or network.
+      startCaptureForTest: async ({ source }: { source: 'mic' | 'system' }) => {
+        if (!startTestListenSession('e2e-vad-playback', source)) return false
+        const wc = getCaptureWc()
+        if (!wc || wc.isDestroyed()) return false
+        wc.send('omi-capture:cmd', {
+          cmd: { type: 'audio-start', sessionId: 'e2e-vad-playback', source },
+          ownerId: wc.id
+        })
+        return true
+      },
+      stopCaptureForTest: () => {
+        const wc = getCaptureWc()
+        if (wc && !wc.isDestroyed()) {
+          wc.send('omi-capture:cmd', {
+            cmd: { type: 'audio-stop', sessionId: 'e2e-vad-playback' },
+            ownerId: wc.id
+          })
+        }
+        stopTestListenSession('e2e-vad-playback')
+      },
+      // Bar harness: drive reveal paths without the global hotkey / edge strip
+      // (the harness asserts focus behavior + takes screenshots).
+      barShow: (mode: 'peek' | 'expanded' | 'ptt', reveal?: 'summon' | 'ptt') => {
+        setBarEnabled(true) // the hermetic harness has no onboarding to enable it
+        showBar(mode, reveal ?? (mode === 'ptt' ? 'ptt' : 'summon'))
+      },
+      barEnable: () => setBarEnabled(true),
+      // Screenshot capture on a live desktop: the cursor is outside the peek
+      // footprint, so the retract watchdog would hide the bar mid-capture.
+      barHoldPeekOpen: (hold: boolean) => setPeekWatchSuspended(!!hold),
+      barHide: () => hideBar(),
+      barSummonFire: () => handleSummonPress(),
+      barState: () => {
+        const win = getBarWindow()
+        return {
+          exists: !!win && !win.isDestroyed(),
+          visible: isBarVisible(),
+          focused: !!win && !win.isDestroyed() && win.isFocused(),
+          focusable: !!win && !win.isDestroyed() && win.isFocusable(),
+          // Real hit-testing state: must be false right after ANY present —
+          // only the cursor entering the visible surface enables it.
+          interactive: isBarInteractive(),
+          id: win && !win.isDestroyed() ? win.id : null
+        }
+      },
+      // Meeting detection: inject fake Tier1/Tier2 signals + read the machine
+      // phase, so the toast + capture wiring is drivable without real Zoom.
+      meeting: meetingDebug(),
+      // Crash sentinel: whether THIS boot detected the previous session as a crash
+      // (the sentinel file itself is asserted directly from userDataDir).
+      crashDetectedOnBoot: () => crashDetectedOnBoot()
+    }
+  }
 
   // Defer non-essential background services until the window is ready to show, so
   // their synchronous setup (foreground-monitor koffi/user32 init ~60ms, rewind
   // capture/OCR/retention loops, screen-source prewarm) runs AFTER first paint
   // instead of delaying the window from appearing. None are needed before the UI
   // is up; their IPC handlers are already registered above.
-  mainWindow.once('ready-to-show', () => {
-    // Foreground app-usage tracking. No-ops when disabled in Settings or off-Windows.
-    startForegroundMonitor()
-    // Track the last non-Omi foreground window so the automation planner snapshots
-    // the app the user was actually using (Omi is foreground once they click chat).
-    if (AUTOMATION_ENABLED) startAutomationTargetTracker()
-    // Load the user's persisted Rewind settings — capture is ON by default for a
-    // fresh install, and any change the user makes in Settings survives restarts.
-    // OCR/retention loops are cheap no-ops until frames exist.
-    startRewindCapture()
-    startRewindOcr()
-    startRewindRetention()
+  win.once('ready-to-show', () => {
+    // Stagger the background-service starts + auxiliary-window creations across the
+    // first ~second instead of running them all in this one tick. They used to
+    // block the main thread ~1s and spawn 3 renderers + churn the DWM compositor
+    // simultaneously at first paint, stuttering the whole desktop. Order is
+    // preserved (capture first for continuous recording; glow before the Focus
+    // assistant that uses it); nothing is dropped. See startupScheduler.ts.
+    scheduleStartupSteps(
+      [
+        // The hidden always-alive capture window: owns all audio + Rewind capture,
+        // independent of any UI window. Runs first so continuous recording comes up
+        // promptly (the 2s PTT pre-roll and 30s silence finalizer tolerate the small
+        // delay). Skipped under the dev perf bench (its measurement must not include a
+        // second renderer).
+        {
+          name: 'captureWindow',
+          run: () => {
+            if (!(import.meta.env.DEV && devBench.isBenchMode())) createCaptureWindow()
+          }
+        },
+        // Foreground app-usage tracking. No-ops when disabled in Settings or off-Windows.
+        { name: 'foregroundMonitor', run: () => startForegroundMonitor() },
+        // Track the last non-Omi foreground window so the automation planner snapshots
+        // the app the user was actually using (Omi is foreground once they click chat).
+        {
+          name: 'automationTargetTracker',
+          run: () => {
+            if (AUTOMATION_ENABLED) startAutomationTargetTracker()
+          }
+        },
+        // Load the user's persisted Rewind settings — capture is ON by default for a
+        // fresh install, and any change the user makes in Settings survives restarts.
+        // OCR/retention loops are cheap no-ops until frames exist.
+        { name: 'rewindCapture', run: () => startRewindCapture() },
+        { name: 'rewindOcr', run: () => startRewindOcr() },
+        // Semantic-search indexer (Track 4). Starts its flush timer here; the queue
+        // and the launch backfill only move once the renderer relays a Firebase
+        // session (see rewind/embeddingService.ts).
+        { name: 'rewindEmbedding', run: () => startRewindEmbedding() },
+        // Embeddings are derived from screen content, so any that outlived their frame
+        // are data the user asked us to forget. Retention deletes them inline now; this
+        // sweeps up anything an earlier build left behind. No-op on a healthy database.
+        {
+          name: 'pruneOrphanedEmbeddings',
+          run: () => {
+            const dropped = pruneOrphanedRewindEmbeddings()
+            if (dropped > 0) console.log(`[rewind-embed] dropped ${dropped} orphaned embedding(s)`)
+          }
+        },
+        { name: 'rewindRetention', run: () => startRewindRetention() },
+        // Delete JPEGs orphaned by a crash between the file write and the DB insert
+        // (Windows-specific — frames are per-file). Startup pass + every 6h.
+        { name: 'orphanSweep', run: () => startOrphanSweep() },
+        // Pre-create the (hidden) acrylic toast window so the first Omi insight shows instantly.
+        { name: 'insightToastWindow', run: () => createInsightToastWindow() },
+        // Pre-create the focus-halo window. It is created ONCE and never hidden after
+        // its off-screen prime — a transparent frameless window fades in via the OS
+        // show-animation on every hide→show (the bug that read as the bar "plummeting"),
+        // so the halo parks off-screen instead. See main/glow/glowWindow.ts.
+        { name: 'glowWindow', run: () => createGlowWindow() },
+        // Meeting detection (Phase 5): event-driven Tier1/Tier2 monitor → toast +
+        // auto-capture via the capture window. No-op off-Windows; 'off' mode keeps
+        // the machine latched silent.
+        { name: 'meetingMonitor', run: () => startMeetingMonitor({ getCaptureWc }) },
+        // Track 3 (AI user profile): run the >24h startup check + start the daily
+        // timer. No-ops until the renderer has pushed a session (Firebase token lives
+        // renderer-side) and is gated on the aiProfileEnabled setting.
+        { name: 'aiUserProfile', run: () => maybeGenerateAiProfileOnStartup() },
+        // Track 3 (Focus assistant): register it with the coordinator, which brings
+        // up the shared screen-analysis loop (gated on screenAnalysisEnabled). The
+        // loop only polls frames once an assistant is registered, so this is the call
+        // that turns the proactive stack on. The glow window above is pre-created; the
+        // renderer relays a session that Focus (and the AI profile) read.
+        { name: 'focusAssistant', run: () => registerFocusAssistant() },
+        // Track 3 (Insight assistant): Mac's two-phase tool-calling "Advice" pipeline.
+        // A coordinator peer to Focus (same shared loop); the sole Insight engine now
+        // that the renderer bootstrap no longer runs one.
+        { name: 'insightAssistant', run: () => registerInsightAssistant() },
+        // Track 3 (Memory assistant): Mac's interval-based single-shot memory
+        // extractor. A coordinator peer to Focus/Insight (same shared loop); no glow,
+        // no notification — it records durable facts silently.
+        { name: 'memoryAssistant', run: () => registerMemoryAssistant() },
+        // Track 3 (Task assistant): Mac's screen→task extractor. A coordinator peer to
+        // Focus/Insight/Memory (same shared loop) that stages tasks silently, gated on
+        // the `taskEnabled` setting (default ON, under the screenAnalysisEnabled master).
+        // Bring the task-title embedding index up too (loadIndex + a one-shot backfill
+        // once the renderer relays a session).
+        { name: 'taskAssistant', run: () => registerTaskAssistant() },
+        { name: 'taskEmbeddingIndex', run: () => bringUpTaskEmbeddingIndex() },
+        // Start the promotion safety net (startup promote + 60s bypass-debounce timer),
+        // the Windows port of Mac's TaskPromotionService.start(). This drains staged
+        // tasks the inline post-extraction promote leaves behind (a frame stages N tasks
+        // but the 30s debounce only promotes task 1) and promotes app-closed backlog on
+        // sign-in. Unconditional (not taskEnabled-gated), matching Mac.
+        { name: 'taskPromotion', run: () => startTaskPromotionService() },
+        // Track 3 (Goals, Wave C): client-side goal auto-generation. NOT a coordinator
+        // peer — it's a time-triggered job (no screen frames). Registers the manual
+        // Suggest IPC and starts the periodic scheduler; both no-op until a session is
+        // relayed and the goalAutoGenerationEnabled toggle is on (default OFF).
+        { name: 'goalGeneration', run: () => registerGoalGeneration() }
+      ],
+      undefined,
+      undefined,
+      isQuitting
+    )
     // Warm the (slow) screen-source-id cache a few seconds later, off the critical
     // path, so enabling capture later is an instant cache hit.
     setTimeout(() => prewarmPrimarySourceId(), 4000)
-    // Pre-create the (hidden) acrylic toast window so the first Omi insight shows instantly.
-    createInsightToastWindow()
+    // Warm-spawn the audio-mute helper so the first PTT hold never pays the
+    // cold-spawn cost. Deferred off first paint; a silent no-op when the helper
+    // binary was never built (no .NET SDK) — PTT then simply doesn't mute.
+    setTimeout(() => systemAudioMuteBridge.warm(), 4000)
+    // Post-update "what's new" (Phase 8): a few seconds after startup (once the
+    // toast window has loaded), surface the changelog for the version we just
+    // updated into. No-op on a fresh install or an unchanged version.
+    setTimeout(() => {
+      const whatsNew = maybeGetWhatsNew()
+      if (whatsNew) showWhatsNewToast(whatsNew)
+    }, 6000)
   })
 
-  // Overlay: wire IPC + global shortcut. The overlay window is created lazily on
-  // first summon (so it inherits the already signed-in Firebase session).
-  registerOverlayHandlers(() => {
-    if (mainWindow.isMinimized()) mainWindow.restore()
-    mainWindow.show()
-    mainWindow.focus()
-  })
-  const shortcutOk = registerOverlayShortcut(OVERLAY_ACCELERATOR, toggleOverlay)
+  // Bar (replaces the old floating overlay): wire IPC + the global summon
+  // shortcut. The shortcut callback feeds the gesture machine (auto-repeat
+  // fires group into ONE gesture: tap toggles the expanded bar, a physical
+  // hold is push-to-talk — the "bar flaps while holding the hotkey" fix).
+  registerOverlayHandlers(surfaceMainWindow)
+  // The bar chat is a viewport over the main window's single chat engine
+  // (INV-CHAT-1): bar IPC forwards send/state routing to the main window here,
+  // since bar/window.ts has no reference to it.
+  registerBarIpc((channel, ...args) => withMainWindow((w) => w.webContents.send(channel, ...args)))
+  // Voice-plane flight recorder + resetVoicePlane command (2026-07-18 supervisor):
+  // one cross-window event timeline plus the app-restart-equivalent scoped to voice.
+  registerVoicePlaneIpc()
+  // Register the PERSISTED summon chord (default Shift+Space), so a rebind
+  // survives restarts and a taken chord fails loudly (surfaced in Settings) at
+  // launch. The legacy renderer `overlayShortcut` preference is re-applied by
+  // App.tsx on startup and kept in step by the Settings rebind (dual-write).
+  const summonAccel = getAppSettings().summonHotkey ?? OVERLAY_ACCELERATOR
+  setSummonGestureAccelerator(summonAccel)
+  const shortcutOk = registerOverlayShortcut(summonAccel, handleSummonPress)
   if (!shortcutOk) {
     console.warn(
-      '[overlay] summon shortcut unavailable; overlay can still be opened via a future rebind UI'
+      '[bar] summon shortcut unavailable; the bar can still be revealed from the top edge'
     )
   }
-  // Closing the main window must also tear down the always-alive (hidden) overlay
-  // window — otherwise it keeps a window open, 'window-all-closed' never fires, and
-  // the app lingers as an invisible background process (overlay has skipTaskbar).
-  mainWindow.on('closed', () => {
-    const overlay = getOverlayWindow()
-    if (overlay && !overlay.isDestroyed()) overlay.destroy()
+  // A PTT hold in flight when the session locks or the machine suspends would
+  // never see its physical key-up (GetAsyncKeyState freezes across those
+  // transitions), so the recording visualizer would stick. Finalize the hold on
+  // those events instead — the direct trigger for the stuck-visualizer class.
+  powerMonitor.on('lock-screen', () => endActiveSummonHold('lock-screen'))
+  powerMonitor.on('suspend', () => endActiveSummonHold('suspend'))
+
+  // A7c wake / zombie-session refresh (item E): while the machine was suspended/locked
+  // the OS kills the warm realtime-hub TCP socket, so the first PTT press after resume
+  // would commit onto a dead session (no reply, no fallback, hang). Nudge the main
+  // window's warm-hub driver to refresh the idle socket now. Cheapest to always send;
+  // the renderer no-ops when signed out / the hub is disabled / a turn is active.
+  const refreshHubOnWake = (): void => withMainWindow((w) => w.webContents.send('voiceHub:wake'))
+  powerMonitor.on('resume', refreshHubOnWake)
+  powerMonitor.on('unlock-screen', refreshHubOnWake)
+
+  // Mic record chord (default Ctrl+Space, rebindable + persisted). Fires
+  // 'recorder:hotkey' at the renderer (receiver already exists) and surfaces the
+  // window if it was hidden, so a global hotkey both starts capture AND brings Omi
+  // to the front.
+  // Always create the slot (so getRecordShortcut + a later enable work); when the
+  // user has turned the chord off, `claim: false` attaches the handler WITHOUT
+  // registering — the OS never claims Ctrl+Space, not even for an instant (the
+  // whole point of Off is to free it for the IME). A later enable resumes the slot,
+  // whose handler is already attached.
+  recordShortcutEnabled = getAppSettings().recordHotkeyEnabled !== false
+  const recordState = registerRecordShortcut(
+    getAppSettings().recordHotkey,
+    () => {
+      surfaceMainWindow()
+      withMainWindow((w) => w.webContents.send('recorder:hotkey', 'mic'))
+    },
+    { claim: recordShortcutEnabled }
+  )
+  if (recordShortcutEnabled && !recordState.registered) {
+    console.warn(`[shortcut] record chord "${recordState.accelerator}" is unavailable (in use?)`)
+  }
+
+  // Surface a failed startup registration to the user ONCE (same first-run pattern
+  // as maybeShowCloseToTrayNotice): the console.warns above only reach the logs and
+  // the conflict is otherwise visible only in Settings → Shortcuts, which a new
+  // user never opens — so a taken summon/record chord leaves their hotkey silently
+  // dead. Shown once ever, and only after a real conflict, so a user who first hits
+  // it later is still told.
+  const hotkeyNotice = buildHotkeyConflictNotice([
+    { name: 'Summon', accelerator: summonAccel, registered: shortcutOk },
+    {
+      name: 'Record',
+      accelerator: recordState.accelerator,
+      registered: recordState.registered,
+      enabled: recordShortcutEnabled
+    }
+  ])
+  if (hotkeyNotice && !getAppSettings().hotkeyConflictNoticeShown) {
+    setAppSettings({ hotkeyConflictNoticeShown: true })
+    showBestEffortNotification(hotkeyNotice.title, hotkeyNotice.body)
+  }
+
+  // Renderer → tray: reflect the reported listening state on the tray icon/menu.
+  ipcMain.on('tray:state', (_e, state) => updateTrayState(state))
+
+  // Launch-at-login (writes the HKCU Run key; --hidden → tray-only start).
+  // Packaged builds only: in dev process.execPath is the bare electron.exe
+  // WITHOUT the app path, so a dev-written Run entry would launch an empty
+  // Electron shell at every login (found live during Phase 1 verification).
+  ipcMain.handle('app:get-login-item', () => ({
+    openAtLogin: app.isPackaged ? app.getLoginItemSettings().openAtLogin : false,
+    supported: app.isPackaged
+  }))
+  ipcMain.handle('app:set-login-item', (_e, enabled: boolean) => {
+    if (!app.isPackaged) {
+      console.log('[login-item] skipped in dev (execPath is bare electron.exe)')
+      return
+    }
+    app.setLoginItemSettings({ openAtLogin: !!enabled, path: process.execPath, args: ['--hidden'] })
   })
 
-  // Bench mode: after the renderer has loaded, run the fixed DB + IPC workload,
-  // flush marks, and quit. Guarded entirely behind OMI_BENCH so prod is unaffected.
-  if (process.env.OMI_BENCH === '1') {
-    // Resolve when the renderer reports its first painted frame, so we can be
-    // sure the renderer:first-paint mark is recorded before we quit (the
-    // workload may otherwise finish first once seeding is fast).
-    const firstPaint = new Promise<void>((resolve) => {
-      ipcMain.once('perf:firstPaint', () => resolve())
+  // Settings → Font Size "Reset Window Size": restore the main window to its
+  // default content size and re-center it (macOS resetWindowToDefaultSize parity).
+  ipcMain.handle('window:resetSize', () => {
+    withMainWindow((win) => {
+      if (win.isMaximized()) win.unmaximize()
+      if (win.isFullScreen()) win.setFullScreen(false)
+      win.setContentSize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
+      win.center()
     })
-    // Resolve when the AUTHENTICATED shell reports it has mounted+painted
-    // (renderer:app-ready). Only fires when signed in + onboarded; on the
-    // Login/unauthenticated path it never arrives, so callers must keep a
-    // fallback. The perf:mark handler above already records the mark on disk.
-    const appReady = new Promise<void>((resolve) => {
-      const onMark = (_e: unknown, name: string): void => {
-        if (String(name) === 'renderer:app-ready') {
-          ipcMain.off('perf:mark', onMark)
-          resolve()
-        }
-      }
-      ipcMain.on('perf:mark', onMark)
-    })
-    mainWindow.webContents.once('did-finish-load', async () => {
-      // Animation bench: just wait for the renderer probe's jank summary, record
-      // it, and quit. We deliberately DON'T run the DB/IPC workload here — its
-      // main-thread + IPC traffic would land during the recording window and
-      // pollute the frame-timing measurement.
-      if (process.env.OMI_ANIM_BENCH === '1') {
-        await new Promise<void>((resolve) => {
-          ipcMain.once('perf:animResult', (_e, stats) => {
-            perfMark('anim:startup', stats as Record<string, unknown>)
-            resolve()
-          })
-          setTimeout(resolve, 15000)
-        })
-        flushPerfMarks()
-        app.quit()
-        return
-      }
-      try {
-        // Wait for the authed shell to be ready BEFORE running the workload, so
-        // the bench measures the real authed-startup path. Fall back to
-        // first-paint (unauthenticated Login run) and a hard 30s cap so the
-        // bench always completes. The workload runs synchronously in main and
-        // would otherwise block main from processing these IPCs, back-dating the
-        // marks by the workload's duration (a measurement artifact).
-        // app-ready is preferred. On an authed run the spinner first-paints
-        // almost immediately while auth+onboarding+mount take a few more
-        // seconds, so the first-paint fallback gets an 8s grace to let app-ready
-        // win; only a genuinely unauthenticated run falls through to it.
-        await Promise.race([
-          appReady,
-          firstPaint.then(() => new Promise((r) => setTimeout(r, 8000))),
-          new Promise((r) => setTimeout(r, 30000))
-        ])
-        // The DB/IPC workload (src/main/bench/workload.ts) was removed for the
-        // public release (commit dd1904d). Bench mode now only records the
-        // startup-timing marks captured above, then flushes and quits.
-      } catch (e) {
-        console.error('[bench] workload failed:', e)
-      } finally {
-        flushPerfMarks()
-        app.quit()
-      }
-    })
-  }
+  })
+
+  // Record-chord get/rebind. Rebinds persist and never throw on a conflict — a
+  // taken chord returns registered=false so the UI can prompt for another.
+  ipcMain.handle('shortcuts:get-record', () => ({
+    ...getRecordShortcut(),
+    enabled: recordShortcutEnabled
+  }))
+  // Summon (floating-bar) chord: current binding + whether the OS claimed it, so
+  // Settings → Shortcuts can show a conflict instead of a silently-dead shortcut.
+  ipcMain.handle('shortcuts:get-summon', () => getOverlaySummonState())
+  // Query the staged update on demand (the update:ready event fires once,
+  // usually while Settings isn't mounted — see updater.getPendingUpdate).
+  ipcMain.handle('update:get-pending', () => getPendingUpdate())
+  // App identity for Settings → About.
+  ipcMain.handle('app:get-version', () => ({ name: app.getName(), version: app.getVersion() }))
+  // Manual update check (About). Inert in unpackaged dev (returns `unsupported`).
+  ipcMain.handle('update:check', () => checkForUpdatesNow())
+  // "Receive beta updates" opt-in (Mac's beta update channel). Persisted; the
+  // updater subscribes to app-settings writes and flips allowPrerelease + re-checks
+  // live (see updater.ts). Returns the written value so the UI reflects the truth.
+  ipcMain.handle('update:get-beta-optin', () => getAppSettings().betaUpdatesEnabled)
+  ipcMain.handle(
+    'update:set-beta-optin',
+    (_e, enabled: boolean) =>
+      setAppSettings({ betaUpdatesEnabled: enabled === true }).betaUpdatesEnabled
+  )
+
+  // Suspend/resume global chords while the settings UI captures raw keys for a
+  // rebind — otherwise pressing the CURRENT chord fires it instead of being
+  // captured. (The overlay's own recorder uses overlay:suspendShortcut.)
+  ipcMain.on('shortcuts:suspend-capture', () => {
+    suspendRecordShortcut()
+    suspendOverlayShortcut()
+  })
+  ipcMain.on('shortcuts:resume-capture', () => {
+    // Don't resurrect a chord the user has turned off — resume only when enabled.
+    if (recordShortcutEnabled) resumeRecordShortcut()
+    resumeOverlayShortcut()
+  })
+
+  ipcMain.handle('shortcuts:set-record', (_e, accelerator: string) => {
+    if (typeof accelerator !== 'string' || !accelerator.trim()) {
+      return { ok: false, registered: getRecordShortcut().registered }
+    }
+    // Forced (no rollback): the user's exact choice becomes the current chord even
+    // when the OS can't claim it, so what we persist and show always matches what
+    // they picked (a rollback would leave the old chord live under a new label).
+    const next = setRecordAcceleratorForced(accelerator.trim())
+    // Selecting a binding (Default/Custom) is an explicit intent to enable the
+    // chord, independent of whether the OS could claim it right now — a conflict
+    // (registered=false) surfaces as the card's "held by another app" warning, it
+    // must NOT refuse to enable. So always persist the accelerator + enable intent.
+    recordShortcutEnabled = true
+    setAppSettings({ recordHotkey: next.accelerator, recordHotkeyEnabled: true })
+    return { ok: next.registered, registered: next.registered }
+  })
+
+  // Turn the record chord fully on/off (Settings → Shortcuts "Off" chip). Off
+  // releases the OS chord (frees Ctrl+Space for the IME); on re-registers the
+  // stored accelerator, surfacing registered=false when now held by another app.
+  ipcMain.handle('shortcuts:set-record-enabled', (_e, enabled: boolean) => {
+    recordShortcutEnabled = enabled === true
+    setAppSettings({ recordHotkeyEnabled: recordShortcutEnabled })
+    if (recordShortcutEnabled) {
+      resumeRecordShortcut()
+    } else {
+      suspendRecordShortcut()
+    }
+    return { ...getRecordShortcut(), enabled: recordShortcutEnabled }
+  })
+
+  // Rebind the summon chord (mirrors overlay:setAccelerator used by onboarding):
+  // re-register globally and rebuild the bar's tap/hold gesture on the new key.
+  // Returns registered=false when the chord is taken (main rolled back). The
+  // renderer persists the accelerator in preferences (overlayShortcut) on ok, and
+  // App.tsx re-applies it to main on the next startup.
+  ipcMain.handle('shortcuts:set-summon', (_e, accelerator: string) => {
+    if (typeof accelerator !== 'string' || !accelerator.trim()) {
+      return { ok: false, registered: getOverlaySummonState().registered }
+    }
+    const ok = setOverlayAccelerator(accelerator.trim())
+    if (ok) {
+      setSummonGestureAccelerator(getOverlayAccelerator())
+      // Persist so the chord survives restarts and main re-registers it at launch.
+      setAppSettings({ summonHotkey: getOverlayAccelerator() })
+    }
+    return { ok, registered: ok }
+  })
+
+  // Renderer → quit for real (menu/button in the UI).
+  ipcMain.on('app:quit', () => quitApp())
+
+  // Renderer → restart. Used by the database-corruption prompt: the repair can only
+  // run at startup (before the read-only handle and the KG worker's own connection
+  // exist), so the fix is one clean relaunch.
+  ipcMain.on('app:relaunch', () => {
+    app.relaunch()
+    quitApp()
+  })
+
+  // Dev perf bench: after the renderer loads, record the startup-timing marks and
+  // quit. Entirely dev-only — tree-shaken from packaged main (see dev/bench).
+  if (import.meta.env.DEV) devBench.runBenchDriver(win)
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow()
   })
 })
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+// A second launch attempt handed off to us (see requestSingleInstanceLock):
+// surface the existing window instead of starting a new instance.
+app.on('second-instance', () => {
+  surfaceMainWindow()
 })
 
-// On a normal shutdown: flush buffered perf marks, release the overlay shortcut,
-// and tear down the automation helper process + foreground-window hook.
+// On win32 the app lives in the tray, so it must NOT quit when the last window
+// hides/closes — only an explicit Quit ends it (see lifecycle.quitApp). macOS
+// keeps its historical behavior; other platforms quit when all windows close.
+app.on('window-all-closed', () => {
+  if (process.platform === 'win32' || process.platform === 'darwin') return
+  app.quit()
+})
+
+// On a normal shutdown (the quitting flag is already set — lifecycle.ts's
+// before-quit hook runs first): tear down the tray + always-alive overlay window,
+// flush perf marks, release the overlay shortcut, and dispose the automation
+// helper + foreground-window hook.
 app.on('will-quit', () => {
+  // Mark this session as a clean exit FIRST (cheap synchronous write) so the next
+  // launch's crash sentinel doesn't false-report. Gated on the lock: a losing
+  // duplicate process shares this profile's sentinel file and must never overwrite
+  // the live instance's dirty flag with "clean". A crash never reaches here → the
+  // flag stays dirty → correctly detected next launch.
+  if (gotSingleInstanceLock) markCleanExit()
+  cancelStartupRescan()
+  stopMeetingMonitor()
+  destroyTray()
+  destroyBar()
+  destroyGlow()
+  const capture = getCaptureWindow()
+  if (capture && !capture.isDestroyed()) capture.destroy()
   unregisterOverlayShortcut()
   flushPerfMarks()
   automationBridge.dispose()
   stopAutomationTargetTracker()
+  // Kill the long-running OCR/window-info helper subprocess. Without this it
+  // outlives the app on every quit, so orphaned omi-*-ocr-helper.exe processes
+  // pile up across launches (no production dispose() call site before this).
+  helperProcess.dispose()
+  // Same for the PTT audio-mute helper — and here it's not just hygiene: quitting
+  // mid-hold would otherwise orphan a helper still holding the system-audio mute,
+  // leaving the user's speakers muted with Omi gone. dispose() closes its stdin,
+  // which is its cue to unmute and exit.
+  systemAudioMuteBridge.dispose()
 })
 
 // In this file you can include the rest of your app's specific main process

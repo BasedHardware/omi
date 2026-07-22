@@ -31,8 +31,13 @@ workflows:
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
         - $HOME/Library/Caches/CocoaPods
-    # Automatic app deploys are dispatched by .github/workflows/mobile_internal_auto.yml
-    # after GitHub paths filtering, so desktop-only merges never allocate mobile runners.
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+      cancel_previous_builds: true
     when:
       changeset:
         includes:
@@ -248,8 +253,13 @@ workflows:
         - $HOME/opt
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
-    # Automatic app deploys are dispatched by .github/workflows/mobile_internal_auto.yml
-    # after GitHub paths filtering, so desktop-only merges never allocate mobile runners.
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+      cancel_previous_builds: true
     when:
       changeset:
         includes:
@@ -1874,7 +1884,7 @@ workflows:
         - desktop_secrets
       vars:
         BINARY_NAME: "Omi Computer"
-        APP_NAME: "omi"
+        APP_NAME: "Omi"
         BUNDLE_ID: "com.omi.computer-macos"
         BUILD_DIR: "build"
         GITHUB_REPO: "BasedHardware/omi"
@@ -2573,7 +2583,7 @@ workflows:
 
       - name: Create DMG installer
         script: |
-          set -e
+          set -euo pipefail
           pip3 install --break-system-packages "dmgbuild==$DMGBUILD_VERSION"
 
           STAGING_DIR="/tmp/omi-dmg-staging-$$"
@@ -2583,6 +2593,16 @@ workflows:
           # Re-staple in staging dir if needed
           xcrun stapler validate "$STAGING_DIR/$APP_NAME.app" 2>/dev/null || \
             xcrun stapler staple "$STAGING_DIR/$APP_NAME.app"
+
+          # Finder metadata is not signed application content and makes strict
+          # codesign verification fail after the app is copied out of the DMG.
+          # Remove only these forbidden metadata forks so the staple remains.
+          while IFS= read -r path; do
+            xattr -d com.apple.FinderInfo "$path" 2>/dev/null || true
+            xattr -d com.apple.ResourceFork "$path" 2>/dev/null || true
+          done < <(find "$STAGING_DIR/$APP_NAME.app" -print)
+          codesign --verify --deep --strict --verbose=2 "$STAGING_DIR/$APP_NAME.app"
+          xcrun stapler validate "$STAGING_DIR/$APP_NAME.app"
 
           # Use dmgbuild instead of create-dmg — writes .DS_Store directly
           # without Finder/AppleScript (which hangs in CI with --skip-jenkins)
@@ -2861,11 +2881,15 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 120
     environment:
-      # Do not reuse desktop_secrets or the normal release groups. This group
-      # contains the preview-only signing/notarization credentials, the
-      # DESKTOP_PREVIEW_PUBLISH_KEY, and a GCS identity restricted to previews/.
+      # TEMPORARY — tracked by #10221. The dedicated Preview group was not
+      # provisioned with the signing/notarization inputs required by the shared
+      # signed-artifact steps. Reuse the existing groups only to unblock an
+      # immutable Preview publication; restore a signing-only group and remove
+      # these broad imports in the follow-up.
       groups:
         - desktop_preview_secrets
+        - appstore_credentials
+        - desktop_secrets
       vars:
         PREVIEW_MODE: "true"
         BINARY_NAME: "Omi Computer"

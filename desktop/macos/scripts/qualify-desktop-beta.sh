@@ -12,7 +12,6 @@ REPO_ROOT="$(cd "$DESKTOP_DIR/../.." && pwd)"
 KEYVALUE_PY="$SCRIPT_DIR/release-keyvalue.py"
 
 KEEP_STACK=0
-PROMOTE=1
 AUTOMATIC=0
 SIGNED_SMOKE_RESULT=""
 CANDIDATE_GATE_RESULT=""
@@ -21,15 +20,14 @@ RELEASE_TAG=""
 
 usage() {
   cat <<'USAGE'
-Qualify a macOS desktop candidate (rebuild tag + T2 core E2E + promote beta).
+Qualify a macOS desktop candidate (rebuild tag + T2 core E2E).
 
 Usage:
-  qualify-desktop-beta.sh [--keep-stack] [--no-promote] [--automatic] [--github-actions-artifact] \
+  qualify-desktop-beta.sh [--keep-stack] [--automatic] [--github-actions-artifact] \
     [--signed-smoke-result PATH --candidate-gate-result PATH] <vX.Y.Z+BUILD-macos>
 
 Options:
   --keep-stack   Leave dev-harness stack running on exit (default: make dev-down)
-  --no-promote   Write qualification evidence without dispatching beta promotion
   --automatic    Run richer automatic gates and require this to remain the newest candidate
   --signed-smoke-result PATH  Codemagic signed-artifact smoke evidence (required with --automatic)
   --candidate-gate-result PATH  Digest-bound candidate gate evidence (required with --automatic)
@@ -41,10 +39,6 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --keep-stack)
       KEEP_STACK=1
-      shift
-      ;;
-    --no-promote)
-      PROMOTE=0
       shift
       ;;
     --automatic)
@@ -375,16 +369,5 @@ python3 "$KEYVALUE_PY" update-qualified-beta "$BODY_FILE" "$STAMP" "$SHA" "$ASSE
 gh release upload "$RELEASE_TAG" "/tmp/$ASSET" --repo BasedHardware/omi
 gh release edit "$RELEASE_TAG" --repo BasedHardware/omi --notes-file "$BODY_FILE"
 
-if [[ "$PROMOTE" -eq 1 ]]; then
-  PROMOTION_ARGS=(--repo BasedHardware/omi -f release_tag="$RELEASE_TAG")
-  if [[ "$AUTOMATIC" -eq 1 ]]; then
-    PROMOTION_ARGS+=(-f automatic=true)
-  fi
-  gh workflow run desktop_promote_beta.yml "${PROMOTION_ARGS[@]}"
-fi
-
 QUALIFICATION_SUCCESS=1
 echo "Qualified $RELEASE_TAG for beta at $SHA (evidence asset: $ASSET, automation port: $AUTOMATION_PORT)"
-if [[ "$PROMOTE" -eq 1 ]]; then
-  echo "Dispatched qualified beta promotion for $RELEASE_TAG"
-fi

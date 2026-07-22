@@ -666,6 +666,7 @@ async def execute_agentic_chat_stream(
     callback_data: dict = None,
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
+    platform: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """Execute an agentic chat interaction with streaming.
 
@@ -680,7 +681,7 @@ async def execute_agentic_chat_stream(
         async with asyncio.timeout(AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS):
             tz = await run_blocking(db_executor, get_user_timezone, uid)
             system_prompt = await run_blocking(
-                db_executor, _get_agentic_qa_prompt, uid, app, messages, context=context, tz=tz
+                db_executor, _get_agentic_qa_prompt, uid, app, messages, context=context, tz=tz, platform=platform
             )
 
             # Get prompt metadata for tracing/versioning

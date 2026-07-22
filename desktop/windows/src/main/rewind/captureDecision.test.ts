@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { shouldCaptureFrame, DUP_HAMMING_THRESHOLD } from './captureDecision'
+import { shouldCaptureFrame, DUP_HAMMING_THRESHOLD, KEYFRAME_ANCHOR_MS } from './captureDecision'
 
 const base = {
   locked: false,
@@ -9,7 +9,9 @@ const base = {
   appName: 'Code.exe',
   excludedApps: [] as string[],
   hash: '1111000011110000',
-  lastHash: '0000111100001111' // very different
+  lastHash: '0000111100001111', // very different
+  nowMs: 1_000_000,
+  lastCapturedAtMs: 995_000 // 5s ago — inside the keyframe window
 }
 
 describe('shouldCaptureFrame', () => {
@@ -74,7 +76,7 @@ describe('shouldCaptureFrame', () => {
       shouldCaptureFrame({ ...base, appName: 'Google Chrome', windowTitle: 'Wikipedia — Octopus' })
     ).toEqual({ capture: true })
   })
-  it('skips a near-duplicate of the last frame', () => {
+  it('skips a near-duplicate of the last frame within the keyframe window', () => {
     expect(shouldCaptureFrame({ ...base, lastHash: base.hash })).toEqual({
       capture: false,
       reason: 'duplicate'
@@ -85,5 +87,31 @@ describe('shouldCaptureFrame', () => {
     const flipped = base.hash.split('')
     for (let i = 0; i <= DUP_HAMMING_THRESHOLD; i++) flipped[i] = flipped[i] === '1' ? '0' : '1'
     expect(shouldCaptureFrame({ ...base, lastHash: flipped.join('') })).toEqual({ capture: true })
+  })
+  // --- Keyframe anchor (Mac frameDedupeMaxInterval = 30s) ---
+  it('skips an identical frame within 30s of the last stored frame', () => {
+    expect(
+      shouldCaptureFrame({
+        ...base,
+        lastHash: base.hash,
+        nowMs: 1_000_000,
+        lastCapturedAtMs: 1_000_000 - (KEYFRAME_ANCHOR_MS - 1_000) // 29s ago
+      })
+    ).toEqual({ capture: false, reason: 'duplicate' })
+  })
+  it('force-captures an identical frame past 30s as a periodic anchor', () => {
+    expect(
+      shouldCaptureFrame({
+        ...base,
+        lastHash: base.hash,
+        nowMs: 1_000_000,
+        lastCapturedAtMs: 1_000_000 - (KEYFRAME_ANCHOR_MS + 1_000) // 31s ago
+      })
+    ).toEqual({ capture: true })
+  })
+  it('captures the first-ever frame even if the hash matches (nothing stored yet)', () => {
+    expect(
+      shouldCaptureFrame({ ...base, lastHash: base.hash, lastCapturedAtMs: null })
+    ).toEqual({ capture: true })
   })
 })

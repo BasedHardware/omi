@@ -4,24 +4,6 @@ on:
   schedule:
     # One daily candidate at most. Developers use scripts/omi-main for head.
     - cron: '17 10 * * *'
-  workflow_dispatch:
-    inputs:
-      release_mode:
-        description: 'Release behavior'
-        required: false
-        default: 'release_now'
-        type: choice
-        options:
-          - release_now
-          - force_release
-          # break_glass additionally bypasses the Desktop Swift source check.
-          # force_release does not: it only overrides the active-release and
-          # no-changes checks. Use this when the source gate itself is broken.
-          - break_glass
-      next_version:
-        description: 'Optional explicit desktop version to tag (for example, 0.12.0)'
-        required: false
-        type: string
 
 permissions:
   contents: write
@@ -53,11 +35,9 @@ jobs:
         id: plan
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          RELEASE_MODE: ${{ github.event.inputs.release_mode || 'auto' }}
         run: |
           python3 .github/scripts/plan-desktop-release.py \
-            --repository "${{ github.repository }}" \
-            --mode "$RELEASE_MODE"
+            --repository "${{ github.repository }}"
 
       - name: Show release plan
         run: echo "${{ steps.plan.outputs.reason }}"
@@ -86,7 +66,6 @@ jobs:
         id: recheck
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          RELEASE_MODE: ${{ github.event.inputs.release_mode || 'auto' }}
         run: |
           if [ -z "${GH_TOKEN:-}" ]; then
             echo "Omi Bot token not available; cannot inspect previous release build status."
@@ -94,28 +73,16 @@ jobs:
           fi
 
           python3 .github/scripts/plan-desktop-release.py \
-            --repository "${{ github.repository }}" \
-            --mode "$RELEASE_MODE"
+            --repository "${{ github.repository }}"
 
       - name: Compute next version and consolidate changelog
         if: steps.recheck.outputs.should_release == 'true'
         id: version
-        env:
-          NEXT_VERSION: ${{ github.event.inputs.next_version || '' }}
         run: |
           # Get latest desktop release tag
           LATEST=$(git tag -l 'v*-macos' | sort -V | tail -1)
 
-          if [ -n "$NEXT_VERSION" ]; then
-            if ! [[ "$NEXT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "next_version must be a semantic version like 0.12.0" >&2
-              exit 1
-            fi
-            VERSION="$NEXT_VERSION"
-            if [ -n "$LATEST" ]; then
-              python3 -c 'import sys; latest=sys.argv[1].removeprefix("v").split("+", 1)[0]; candidate=sys.argv[2]; parse=lambda v: tuple(int(p) for p in v.split(".")); sys.exit(0 if parse(candidate) > parse(latest) else f"next_version {candidate} must be greater than latest desktop version {latest}")' "$LATEST" "$VERSION"
-            fi
-          elif [ -z "$LATEST" ]; then
+          if [ -z "$LATEST" ]; then
             VERSION="0.0.1"
           else
             # Strip v prefix and +build-macos suffix  e.g. v0.11.11+11011-macos -> 0.11.11

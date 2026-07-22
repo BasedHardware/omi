@@ -5,10 +5,14 @@ import { omiApi } from '../../lib/apiClient'
 import { auth, onAuthStateChanged } from '../../lib/firebase'
 import { toast } from '../../lib/toast'
 import { GenerateGoalsButton } from '../ui/GenerateGoalsButton'
+import { goalEmoji } from '../../lib/goalEmoji'
+import { isCompleted, progressColor, progressPct } from '../../lib/goalVisuals'
 
 // Compact dashboard surface for the idle Home screen: the active goals with
 // their progress, mirroring the macOS dashboard Goals widget. Reads the same
-// /v1/goals/all feed the Goals page uses; tapping opens the Goals page.
+// /v1/goals/all feed the Goals page uses; tapping opens the Goals page. The
+// completion/progress math and the emoji/color visuals come from the shared
+// goal libs so Home and the Goals page render identically.
 type Goal = {
   id: string
   title: string
@@ -16,22 +20,6 @@ type Goal = {
   current_value?: number | null
   // Done when is_active === false (matches the live backend Goal model).
   is_active?: boolean
-}
-
-// Complete when server-archived (is_active === false) or progress reached the
-// target. Mirrors pages/Goals.tsx (the backend has no is_active write path).
-function isCompleted(g: Goal): boolean {
-  if (g.is_active === false) return true
-  const target = g.target_value ?? 0
-  return target > 0 && (g.current_value ?? 0) >= target
-}
-
-function progressPct(g: Goal): number {
-  if (isCompleted(g)) return 100
-  const target = g.target_value ?? 0
-  const current = g.current_value ?? 0
-  if (target > 0) return Math.max(0, Math.min(100, Math.round((current / target) * 100)))
-  return 0
 }
 
 const MAX_SHOWN = 2
@@ -157,13 +145,18 @@ export function QuickGoalsWidget({ onReady }: { onReady?: () => void }): React.J
           return (
             <div key={g.id}>
               <div className="flex items-center justify-between gap-2 text-[11px]">
-                <span className="truncate text-white/65">{g.title}</span>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span aria-hidden="true" className="shrink-0 text-[13px] leading-none">
+                    {goalEmoji(g.title)}
+                  </span>
+                  <span className="truncate text-white/65">{g.title}</span>
+                </span>
                 <span className="shrink-0 text-white/35">{pct}%</span>
               </div>
               <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/10">
                 <div
-                  className="h-full rounded-full bg-white/45 transition-all duration-500"
-                  style={{ width: `${pct}%` }}
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${pct}%`, backgroundColor: progressColor(pct / 100) }}
                 />
               </div>
             </div>

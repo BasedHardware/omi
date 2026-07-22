@@ -1,0 +1,3 @@
+{
+  "change": "Fixed active Zoom/Teams/Meet screen shares stopping when Omi captured a screenshot — Omi now pauses its screen capture while you are presenting"
+}

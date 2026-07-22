@@ -3,10 +3,23 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type {
   OmiBridgeApi,
   OmiOverlayApi,
+  OmiBarApi,
+  OmiGlowApi,
+  GlowPresetName,
+  GlowShowPayload,
+  BarMode,
+  BarShowPayload,
+  BarChatState,
+  BarUsageLimitPayload,
+  VoiceHubBarState,
   LocalConversation,
+  ConversationFolder,
+  ConversationSyncPatch,
   CaptureChoice,
   ListenStartArgs,
   ListenMessage,
+  CaptureCommand,
+  CaptureEvent,
   ExportMemory,
   GoogleSource,
   KnowledgeGraph,
@@ -14,10 +27,48 @@ import type {
   OnboardingGraphEdge,
   UsageSettings,
   RewindSettings,
+  RewindSearchGroup,
+  RewindCaptureDirective,
   InsightPayload,
+  MeetingToastPayload,
+  WhatsNewPayload,
   AutomationPlan,
-  StepResult
+  StepResult,
+  CodingAgentCommandOverrides,
+  CodingAgentEvent,
+  CodingAgentId,
+  CodingAgentRunArgs,
+  AgentThreadCardMsg,
+  MainChatEvent,
+  MainChatSendArgs,
+  VoiceHubRecordTurnArgs,
+  VoiceHubSeedContextArgs,
+  VoiceToolExecuteArgs,
+  VoiceTurnOutboxInput,
+  AiUserProfileRecord,
+  AssistantSettingsView,
+  ActionItemRecord,
+  TaskCreateFields,
+  TaskUpdateFields,
+  TaskDashboardSlices,
+  TaskOpFailure,
+  LiveNote,
+  GoalGenerateResult,
+  GoalCandidateResult,
+  GoalCandidate,
+  XConnectorSession,
+  XStatus,
+  XSyncResult,
+  XRunState
 } from '../shared/types'
+import type { ByokEnrollResult, ByokProvider } from '../shared/byok'
+import type {
+  McpConnectorId,
+  McpExportsSnapshot,
+  McpConnectResult,
+  McpCloudConnectorInfo
+} from '../shared/mcpExports'
+import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
 
 const omi: OmiBridgeApi = {
   getCaptureSources: () => ipcRenderer.invoke('capture:getSources'),
@@ -30,21 +81,77 @@ const omi: OmiBridgeApi = {
   deleteLocalConversation: (id: string) => ipcRenderer.invoke('db:deleteLocalConversation', id),
   updateLocalConversationTitle: (id: string, title: string) =>
     ipcRenderer.invoke('db:updateLocalConversationTitle', id, title),
+  updateLocalConversationSync: (id: string, patch: ConversationSyncPatch) =>
+    ipcRenderer.invoke('db:updateLocalConversationSync', id, patch),
+  // --- Track 4: conversation folders / starred ---
+  listConversationFolders: () => ipcRenderer.invoke('db:listConversationFolders'),
+  replaceConversationFolders: (folders: ConversationFolder[]) =>
+    ipcRenderer.invoke('db:replaceConversationFolders', folders),
+  upsertConversationFolder: (folder: ConversationFolder) =>
+    ipcRenderer.invoke('db:upsertConversationFolder', folder),
+  deleteConversationFolder: (id: string) => ipcRenderer.invoke('db:deleteConversationFolder', id),
+  claimConversationForPosting: (id: string, resetAttempts?: boolean) =>
+    ipcRenderer.invoke('db:claimConversationForPosting', id, resetAttempts),
+  // --- PR8: LiveNotes (local-only AI + manual notes during a live recording) ---
+  createTranscriptionSession: (session: { id: string; startedAt: number; createdAt: number }) =>
+    ipcRenderer.invoke('db:createTranscriptionSession', session),
+  createLiveNote: (note: LiveNote) => ipcRenderer.invoke('db:createLiveNote', note),
+  updateLiveNote: (id: string, text: string, updatedAt: number) =>
+    ipcRenderer.invoke('db:updateLiveNote', id, text, updatedAt),
+  deleteLiveNote: (id: string) => ipcRenderer.invoke('db:deleteLiveNote', id),
+  listLiveNotes: (sessionId: string) => ipcRenderer.invoke('db:listLiveNotes', sessionId),
+  // --- Track 2: Voice & PTT depth (voice turn outbox) ---
+  insertVoiceTurn: (entry: VoiceTurnOutboxInput) => ipcRenderer.invoke('db:insertVoiceTurn', entry),
+  listPendingVoiceTurns: (limit?: number) => ipcRenderer.invoke('db:listPendingVoiceTurns', limit),
+  markVoiceTurnAcked: (idempotencyKey: string) =>
+    ipcRenderer.invoke('db:markVoiceTurnAcked', idempotencyKey),
+  recordVoiceTurnFailure: (idempotencyKey: string, error: string) =>
+    ipcRenderer.invoke('db:recordVoiceTurnFailure', idempotencyKey, error),
+  wipeUserData: () => ipcRenderer.invoke('db:wipeUserData'),
   onRecordHotkey: (cb: (choice: CaptureChoice) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, choice: CaptureChoice): void => cb(choice)
     ipcRenderer.on('recorder:hotkey', listener)
     return () => ipcRenderer.removeListener('recorder:hotkey', listener)
+  },
+  onGpuContextLost: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on(GPU_CONTEXT_LOST_CHANNEL, listener)
+    return () => ipcRenderer.removeListener(GPU_CONTEXT_LOST_CHANNEL, listener)
   },
   listenStart: (args: ListenStartArgs) => ipcRenderer.invoke('omi-listen:start', args),
   listenStop: (sessionId: string) => ipcRenderer.invoke('omi-listen:stop', sessionId),
   listenFeed: (sessionId: string, pcm: ArrayBuffer) => {
     ipcRenderer.send('omi-listen:feed', sessionId, pcm)
   },
+  listenFinalize: (sessionId: string) => ipcRenderer.send('omi-listen:finalize', sessionId),
   onListenMessage: (cb: (msg: ListenMessage) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, msg: ListenMessage): void => cb(msg)
     ipcRenderer.on('omi-listen:message', listener)
     return () => ipcRenderer.removeListener('omi-listen:message', listener)
   },
+  captureCommand: (cmd: CaptureCommand) => ipcRenderer.send('omi-capture:cmd', cmd),
+  onCaptureCommand: (cb: (cmd: CaptureCommand, ownerId: number) => void) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      payload: { cmd: CaptureCommand; ownerId: number }
+    ): void => cb(payload.cmd, payload.ownerId)
+    ipcRenderer.on('omi-capture:cmd', listener)
+    return () => ipcRenderer.removeListener('omi-capture:cmd', listener)
+  },
+  captureEmit: (event: CaptureEvent, ownerId?: number) =>
+    ipcRenderer.send('omi-capture:event', { event, ownerId }),
+  onCaptureEvent: (cb: (e: CaptureEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, ev: CaptureEvent): void => cb(ev)
+    ipcRenderer.on('omi-capture:event', listener)
+    return () => ipcRenderer.removeListener('omi-capture:event', listener)
+  },
+  allowVirtualMic: process.env.OMI_ALLOW_VIRTUAL_MIC === '1',
+  e2e: process.env.OMI_E2E === '1',
+  // Offline fake-auth for the shell E2E (survives production builds). Gated on a
+  // dedicated flag the app never sets itself, so it can never activate in normal
+  // use — and separate from OMI_E2E so the bar/meeting/lifecycle specs (which set
+  // only OMI_E2E) still boot to the signed-out screen. See lib/dev/e2eAuth.
+  e2eFakeAuth: process.env.OMI_E2E_FAKE_AUTH === '1',
   indexFilesScan: () => ipcRenderer.invoke('fileIndex:scan'),
   indexFilesStatus: () => ipcRenderer.invoke('fileIndex:status'),
   indexFilesApps: (limit?: number) => ipcRenderer.invoke('fileIndex:apps', limit),
@@ -56,12 +163,20 @@ const omi: OmiBridgeApi = {
   usageFlush: () => ipcRenderer.invoke('usage:flush'),
   usageGetSettings: () => ipcRenderer.invoke('usage:getSettings'),
   usageSetSettings: (next: UsageSettings) => ipcRenderer.invoke('usage:setSettings', next),
+  getChatScreenshotSharing: () => ipcRenderer.invoke('chat:getScreenshotSharing'),
+  setChatScreenshotSharing: (enabled: boolean) =>
+    ipcRenderer.invoke('chat:setScreenshotSharing', enabled),
+  openCheckout: (url: string) => ipcRenderer.invoke('billing:openCheckout', url),
+  openExternalUrl: (url: string) => ipcRenderer.invoke('billing:openExternal', url),
+  checkAppSetup: (args: { url: string; uid: string }) =>
+    ipcRenderer.invoke('apps:checkSetup', args),
   memoryImportParse: (dump: string) => ipcRenderer.invoke('memoryImport:parse', dump),
   memoryExportObsidian: (memories: ExportMemory[]) =>
     ipcRenderer.invoke('memoryExport:obsidian', memories),
   memoryExportFile: (memories: ExportMemory[]) => ipcRenderer.invoke('memoryExport:file', memories),
   memoryExportNotion: (args: { token: string; parentPageId: string; memories: ExportMemory[] }) =>
     ipcRenderer.invoke('memoryExport:notion', args),
+  openChatFiles: () => ipcRenderer.invoke('chat:openFiles'),
   kgFileIndexDigest: () => ipcRenderer.invoke('kg:fileIndexDigest'),
   kgSaveGraph: (graph) => ipcRenderer.invoke('kg:saveGraph', graph),
   kgStatus: () => ipcRenderer.invoke('kg:status'),
@@ -69,6 +184,7 @@ const omi: OmiBridgeApi = {
   kgSearchFiles: (q, fileType?, limit?) => ipcRenderer.invoke('kg:searchFiles', q, fileType, limit),
   kgExecuteSql: (sql) => ipcRenderer.invoke('kg:executeSql', sql),
   readStickyNotes: () => ipcRenderer.invoke('integrations:stickyNotes:read'),
+  signInWithGoogle: () => ipcRenderer.invoke('auth:google:signIn'),
   googleConnect: () => ipcRenderer.invoke('integrations:google:connect'),
   googleDisconnect: () => ipcRenderer.invoke('integrations:google:disconnect'),
   googleStatus: () => ipcRenderer.invoke('integrations:google:status'),
@@ -76,6 +192,141 @@ const omi: OmiBridgeApi = {
   googleCalendarFetchNew: () => ipcRenderer.invoke('integrations:google:calendarFetchNew'),
   googleMarkProcessed: (source: GoogleSource, ids: string[]) =>
     ipcRenderer.invoke('integrations:google:markProcessed', source, ids),
+  // --- Gmail session connector (Option B): Omi-owned login window + own-session
+  // cookie replay. connect opens the login window and resolves once signed in. ---
+  gmailSessionConnect: (email?: string) =>
+    ipcRenderer.invoke('integrations:gmailSession:connect', email),
+  gmailSessionStatus: () => ipcRenderer.invoke('integrations:gmailSession:status'),
+  gmailSessionVerify: () => ipcRenderer.invoke('integrations:gmailSession:verify'),
+  gmailSessionFetch: (query?: string, maxResults?: number) =>
+    ipcRenderer.invoke('integrations:gmailSession:fetch', query, maxResults),
+  gmailSessionDisconnect: () => ipcRenderer.invoke('integrations:gmailSession:disconnect'),
+  // --- X (Twitter) connector. Session ({apiBase, token}) is relayed per call; the
+  // connect run lives in main and streams progress via onXProgress. ---
+  xStatus: (session: XConnectorSession): Promise<XStatus> =>
+    ipcRenderer.invoke('integrations:x:status', session),
+  xConnect: (session: XConnectorSession): Promise<XRunState> =>
+    ipcRenderer.invoke('integrations:x:connect', session),
+  xRunState: (): Promise<XRunState> => ipcRenderer.invoke('integrations:x:runState'),
+  xSync: (session: XConnectorSession): Promise<XSyncResult> =>
+    ipcRenderer.invoke('integrations:x:sync', session),
+  xDisconnect: (session: XConnectorSession): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('integrations:x:disconnect', session),
+  onXProgress: (cb: (state: XRunState) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, state: XRunState): void => cb(state)
+    ipcRenderer.on('integrations:x:progress', listener)
+    return () => ipcRenderer.removeListener('integrations:x:progress', listener)
+  },
+  // --- Track 3 (AI user profile) ---
+  aiProfileSetSession: (
+    session: { apiBase: string; desktopApiBase: string; token: string } | null
+  ) => ipcRenderer.invoke('aiProfile:setSession', session),
+  aiProfileGenerateNow: (session?: { apiBase: string; desktopApiBase: string; token: string }) =>
+    ipcRenderer.invoke('aiProfile:generateNow', session) as Promise<AiUserProfileRecord>,
+  aiProfileGetLatest: () =>
+    ipcRenderer.invoke('aiProfile:getLatest') as Promise<AiUserProfileRecord | null>,
+  aiProfileEdit: (id: number, text: string) => ipcRenderer.invoke('aiProfile:edit', id, text),
+  aiProfileDelete: (id: number) => ipcRenderer.invoke('aiProfile:delete', id),
+  aiProfileDeleteAll: () => ipcRenderer.invoke('aiProfile:deleteAll'),
+  // --- Main-process token PULL (session freshness) ---
+  onSessionTokenRequest: (cb: (requestId: number) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, requestId: number): void => cb(requestId)
+    ipcRenderer.on('session:tokenRequest', listener)
+    return () => ipcRenderer.removeListener('session:tokenRequest', listener)
+  },
+  respondSessionToken: (
+    requestId: number,
+    session: { apiBase: string; desktopApiBase: string; token: string } | null
+  ) => ipcRenderer.send('session:tokenResponse', requestId, session),
+  // --- Track 3 (task sync engine) ---
+  // Local-first tasks: reads return local rows instantly + kick a background sync;
+  // subscribe to onTasksChanged to re-fetch when the store updates.
+  tasksListIncomplete: (opts?: { limit?: number; offset?: number }) =>
+    ipcRenderer.invoke('tasks:listIncomplete', opts) as Promise<ActionItemRecord[]>,
+  tasksListCompleted: (opts?: { limit?: number; offset?: number }) =>
+    ipcRenderer.invoke('tasks:listCompleted', opts) as Promise<ActionItemRecord[]>,
+  tasksListDeleted: (opts?: { limit?: number; offset?: number }) =>
+    ipcRenderer.invoke('tasks:listDeleted', opts) as Promise<ActionItemRecord[]>,
+  tasksDashboardSlices: () =>
+    ipcRenderer.invoke('tasks:dashboardSlices') as Promise<TaskDashboardSlices>,
+  tasksCreate: (fields: TaskCreateFields) =>
+    ipcRenderer.invoke('tasks:create', fields) as Promise<ActionItemRecord>,
+  tasksToggle: (args: { backendId: string; completed: boolean }) =>
+    ipcRenderer.invoke('tasks:toggle', args) as Promise<void>,
+  tasksUpdate: (args: { backendId: string; fields: TaskUpdateFields }) =>
+    ipcRenderer.invoke('tasks:update', args) as Promise<void>,
+  tasksDelete: (args: { backendId: string }) =>
+    ipcRenderer.invoke('tasks:delete', args) as Promise<void>,
+  tasksReconcile: () => ipcRenderer.invoke('tasks:reconcile') as Promise<void>,
+  onTasksChanged: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('tasks:changed', listener)
+    return () => ipcRenderer.removeListener('tasks:changed', listener)
+  },
+  onTasksOpFailed: (cb: (failure: TaskOpFailure) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, failure: TaskOpFailure): void => cb(failure)
+    ipcRenderer.on('tasks:opFailed', listener)
+    return () => ipcRenderer.removeListener('tasks:opFailed', listener)
+  },
+  backendDegradedState: () => ipcRenderer.invoke('backend:degradedState') as Promise<boolean>,
+  onBackendDegraded: (cb: (degraded: boolean) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, degraded: boolean): void => cb(degraded)
+    ipcRenderer.on('backend:degraded', listener)
+    return () => ipcRenderer.removeListener('backend:degraded', listener)
+  },
+  goalsGenerateCandidate: () =>
+    ipcRenderer.invoke('goals:generateCandidate') as Promise<GoalCandidateResult>,
+  goalsCreateCandidate: (candidate: GoalCandidate) =>
+    ipcRenderer.invoke('goals:createCandidate', candidate) as Promise<GoalGenerateResult>,
+  goalsGetAutoGeneration: () =>
+    ipcRenderer.invoke('goals:getAutoGenerationEnabled') as Promise<boolean>,
+  goalsSetAutoGeneration: (enabled: boolean) =>
+    ipcRenderer.invoke('goals:setAutoGenerationEnabled', enabled) as Promise<boolean>,
+  onGoalsChanged: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('goals:changed', listener)
+    return () => ipcRenderer.removeListener('goals:changed', listener)
+  },
+  // --- Track 3 (proactive-assistant settings — Notifications tab) ---
+  assistantsGetSettings: () =>
+    ipcRenderer.invoke('assistants:getSettings') as Promise<AssistantSettingsView>,
+  assistantsSetSettings: (patch: Partial<AssistantSettingsView>) =>
+    ipcRenderer.invoke('assistants:setSettings', patch) as Promise<AssistantSettingsView>,
+  onAssistantSettingsChanged: (cb: (view: AssistantSettingsView) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, view: AssistantSettingsView): void => cb(view)
+    ipcRenderer.on('assistants:settingsChanged', listener)
+    return () => ipcRenderer.removeListener('assistants:settingsChanged', listener)
+  },
+  // Dev/QA only (handler registered on dev builds): force one Focus analysis of
+  // the latest captured frame, so the pipeline + halo can be exercised without
+  // waiting for a natural context switch.
+  focusAnalyzeNow: () =>
+    ipcRenderer.invoke('focus:analyzeNow') as Promise<{ ok: boolean; reason?: string }>,
+  // Dev/QA only (handlers registered on dev builds): observe the REAL Insight
+  // privacy/cost gates. debugActivity returns only distinct app names from the
+  // real Phase-1 aggregate; debugSql returns only a row count from the real
+  // execute_sql closure; debugIsEnabled returns the real isEnabled() (optionally
+  // after applying a notifications patch).
+  insightDebugActivity: (denylist: string[]) =>
+    ipcRenderer.invoke('insight:debugActivity', denylist) as Promise<{
+      apps: string[]
+      rowCount: number
+    }>,
+  insightDebugSql: (query: string, denylist: string[]) =>
+    ipcRenderer.invoke('insight:debugSql', query, denylist) as Promise<{
+      rowCount: number
+      error?: string
+    }>,
+  insightDebugIsEnabled: (patch?: {
+    notificationsEnabled?: boolean
+    notificationFrequency?: number
+  }) =>
+    ipcRenderer.invoke('insight:debugIsEnabled', patch) as Promise<{
+      isEnabled: boolean
+      insightEnabled: boolean
+      notificationsEnabled: boolean
+      notificationFrequency: number
+    }>,
   memoriesBulkDelete: (args: { baseURL: string; token: string; ids: string[] }) =>
     ipcRenderer.invoke('memories:bulkDelete', args),
   onMemoriesDeleteProgress: (
@@ -89,15 +340,140 @@ const omi: OmiBridgeApi = {
     return () => ipcRenderer.removeListener('memories:deleteProgress', listener)
   },
   rewindFrames: (from: number, to: number) => ipcRenderer.invoke('rewind:frames', from, to),
+  rewindFramesSampled: (from: number, to: number) =>
+    ipcRenderer.invoke('rewind:framesSampled', from, to),
   rewindDayBounds: () => ipcRenderer.invoke('rewind:dayBounds'),
+  rewindFrameCount: () => ipcRenderer.invoke('rewind:frameCount'),
   rewindSearch: (query: string) => ipcRenderer.invoke('rewind:search', query),
+  // --- Track 4 (Rewind semantic search) --- Phase 2 of a search: the same results
+  // with semantic hits merged in, pushed if/when the embedding round-trip lands.
+  // Keyword results are already on screen by then — see the rewind:search handler.
+  onRewindSearchResults: (cb: (r: { query: string; groups: RewindSearchGroup[] }) => void) => {
+    const listener = (_e: unknown, r: { query: string; groups: RewindSearchGroup[] }): void => cb(r)
+    ipcRenderer.on('rewind:search-results', listener)
+    return () => ipcRenderer.removeListener('rewind:search-results', listener)
+  },
+  // Session relay for the main-process embedding indexer + query embedder, which
+  // are inert without a Firebase token.
+  rewindSetEmbedSession: (session: { desktopApiBase: string; token: string } | null) =>
+    ipcRenderer.invoke('rewind:setEmbedSession', session),
   rewindFrameImage: (imagePath: string) => ipcRenderer.invoke('rewind:frameImage', imagePath),
+  // --- Track 4 --- per-line OCR boxes for the on-image search highlight overlay
+  rewindFrameOcrLines: (frameId: number) => ipcRenderer.invoke('rewind:frameOcrLines', frameId),
   rewindGetSettings: () => ipcRenderer.invoke('rewind:getSettings'),
   rewindSetSettings: (next: RewindSettings) => ipcRenderer.invoke('rewind:setSettings', next),
   rewindPruneNow: () => ipcRenderer.invoke('rewind:pruneNow'),
+  rewindRebuildIndex: () => ipcRenderer.invoke('rewind:rebuildIndex'),
   rewindPrimarySourceId: () => ipcRenderer.invoke('rewind:primarySourceId'),
   rewindSaveFrame: (data: Uint8Array) => ipcRenderer.invoke('rewind:saveFrame', data),
   screenReadText: () => ipcRenderer.invoke('screen:readNow'),
+  codingAgentList: (commandOverrides?: CodingAgentCommandOverrides) =>
+    ipcRenderer.invoke('codingAgent:list', commandOverrides),
+  codingAgentRun: (args: CodingAgentRunArgs) => ipcRenderer.invoke('codingAgent:run', args),
+  codingAgentCancel: (taskId: string) => ipcRenderer.invoke('codingAgent:cancel', taskId),
+  codingAgentTest: (agentId: CodingAgentId, commandOverrides?: CodingAgentCommandOverrides) =>
+    ipcRenderer.invoke('codingAgent:test', agentId, commandOverrides),
+  codingAgentAuthStatus: () => ipcRenderer.invoke('codingAgent:authStatus'),
+  codingAgentStartAuth: () => ipcRenderer.invoke('codingAgent:startAuth'),
+  codingAgentSignOut: () => ipcRenderer.invoke('codingAgent:signOut'),
+  onCodingAgentEvent: (cb: (event: CodingAgentEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, event: CodingAgentEvent): void => cb(event)
+    ipcRenderer.on('codingAgent:event', listener)
+    return () => ipcRenderer.removeListener('codingAgent:event', listener)
+  },
+  codingAgentDetect: () => ipcRenderer.invoke('codingAgent:detect'),
+  codingAgentCodexKeyStatus: () => ipcRenderer.invoke('codingAgent:codexKeyStatus'),
+  codingAgentSetCodexKey: (key: string) => ipcRenderer.invoke('codingAgent:setCodexKey', key),
+  chatGetEngine: () => ipcRenderer.invoke('chat:getEngine'),
+  mainChatSend: (args: MainChatSendArgs) => ipcRenderer.invoke('mainChat:send', args),
+  mainChatCancel: (runId: string) => ipcRenderer.invoke('mainChat:cancel', runId),
+  onMainChatEvent: (cb: (event: MainChatEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, event: MainChatEvent): void => cb(event)
+    ipcRenderer.on('mainChat:event', listener)
+    return () => ipcRenderer.removeListener('mainChat:event', listener)
+  },
+  getAgentCardsForChat: (chatId: string) => ipcRenderer.invoke('agentCards:get', chatId),
+  onAgentCardEvent: (cb: (card: AgentThreadCardMsg) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, card: AgentThreadCardMsg): void => cb(card)
+    ipcRenderer.on('agentCards:event', listener)
+    return () => ipcRenderer.removeListener('agentCards:event', listener)
+  },
+  voiceHubRecordTurn: (args: VoiceHubRecordTurnArgs) =>
+    ipcRenderer.invoke('voiceHub:recordTurn', args),
+  voiceHubGetSeedContext: (args?: VoiceHubSeedContextArgs) =>
+    ipcRenderer.invoke('voiceHub:getSeedContext', args ?? {}),
+  voiceHubToolCatalog: () => ipcRenderer.invoke('voiceHub:toolCatalog'),
+  voiceToolExecute: (args: VoiceToolExecuteArgs) => ipcRenderer.invoke('voiceHub:execute', args),
+  // pi-mono managed-cloud chat session relay: the Firebase token lives only in
+  // the renderer, so push it (and re-push on ~hourly refresh) to the main-side
+  // pi-mono session store; null on sign-out. Inert until PR-D spawns pi-mono.
+  pimonoSetSession: (session: { desktopApiBase: string; token: string } | null) =>
+    ipcRenderer.invoke('pimono:setSession', session),
+  byokGetAll: () => ipcRenderer.invoke('byok:getAll'),
+  byokSet: (provider: ByokProvider, key: string) => ipcRenderer.invoke('byok:set', provider, key),
+  byokClear: (provider: ByokProvider) => ipcRenderer.invoke('byok:clear', provider),
+  byokClearAll: () => ipcRenderer.invoke('byok:clearAll'),
+  byokIsActive: () => ipcRenderer.invoke('byok:isActive'),
+  // Live-validate the stored keys and reconcile backend BYOK activation. The
+  // Firebase token is relayed from the renderer (its session owns it).
+  byokEnroll: (token: string): Promise<ByokEnrollResult> =>
+    ipcRenderer.invoke('byok:enroll', token),
+  // Sign-out: drop the backend BYOK enrollment (local keys are cleared via
+  // byokClearAll in the teardown path). Best-effort.
+  byokDeactivate: (token: string): Promise<void> => ipcRenderer.invoke('byok:deactivate', token),
+  onByokChanged: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('byok:changed', listener)
+    return () => ipcRenderer.removeListener('byok:changed', listener)
+  },
+  // --- "Use omi memory anywhere" MCP export connectors ---
+  // The renderer relays its Firebase token + uid; main mints/reads the hosted key
+  // and writes the tool's config itself (the key never crosses to the renderer).
+  mcpStatus: (ownerUserId: string): Promise<McpExportsSnapshot> =>
+    ipcRenderer.invoke('mcp:status', ownerUserId),
+  mcpConnect: (
+    connectorId: McpConnectorId,
+    token: string,
+    ownerUserId: string
+  ): Promise<McpConnectResult> =>
+    ipcRenderer.invoke('mcp:connect', connectorId, token, ownerUserId),
+  mcpDisconnect: (connectorId: McpConnectorId, ownerUserId: string): Promise<McpExportsSnapshot> =>
+    ipcRenderer.invoke('mcp:disconnect', connectorId, ownerUserId),
+  mcpRotateKey: (token: string, ownerUserId: string): Promise<McpExportsSnapshot> =>
+    ipcRenderer.invoke('mcp:rotateKey', token, ownerUserId),
+  onMcpChanged: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('mcp:changed', listener)
+    return () => ipcRenderer.removeListener('mcp:changed', listener)
+  },
+  // Sign-out / account-switch: wipe the hosted MCP key (belt-and-suspenders with
+  // the clear inside wipeUserData). Best-effort.
+  mcpClearKey: (): Promise<void> => ipcRenderer.invoke('mcp:clearKey'),
+  // Cloud (OAuth) connector cards — static field values (no secret, no key).
+  mcpCloudInfo: (): Promise<McpCloudConnectorInfo[]> => ipcRenderer.invoke('mcp:cloudInfo'),
+  mcpOpenCloudConnector: (url: string): Promise<void> =>
+    ipcRenderer.invoke('mcp:openCloudConnector', url),
+  // Memory-PACK variant: main formats the pack, copies it to the clipboard, and
+  // opens the provider chat. Returns the opened URL.
+  mcpMemoryPack: (
+    provider: 'gemini' | 'chatgpt' | 'claude',
+    memories: ExportMemory[]
+  ): Promise<string> => ipcRenderer.invoke('mcp:memoryPack', provider, memories),
+  // Encrypted-at-rest Firebase auth persistence (main-process safeStorage/DPAPI).
+  // Backs lib/encryptedAuthPersistence — Firebase drives the read/write/migrate
+  // lifecycle over these channels; token values never touch plaintext localStorage.
+  authStore: {
+    isAvailable: () => ipcRenderer.invoke('authStore:isAvailable'),
+    get: (key: string) => ipcRenderer.invoke('authStore:get', key),
+    set: (key: string, value: string) => ipcRenderer.invoke('authStore:set', key, value),
+    remove: (key: string) => ipcRenderer.invoke('authStore:remove', key),
+    onChanged: (cb: (key: string) => void) => {
+      const listener = (_e: Electron.IpcRendererEvent, payload: { key: string }): void =>
+        cb(payload.key)
+      ipcRenderer.on('authStore:changed', listener)
+      return () => ipcRenderer.removeListener('authStore:changed', listener)
+    }
+  },
   screenSynthFramesSince: () => ipcRenderer.invoke('screenSynth:framesSince'),
   screenSynthGetState: () => ipcRenderer.invoke('screenSynth:getState'),
   screenSynthSetState: (patch) => ipcRenderer.invoke('screenSynth:setState', patch),
@@ -108,10 +484,26 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('rewind:settings', listener)
     return () => ipcRenderer.removeListener('rewind:settings', listener)
   },
+  rewindGetCaptureDirective: () => ipcRenderer.invoke('rewind:getCaptureDirective'),
+  onRewindCaptureDirective: (cb: (d: RewindCaptureDirective) => void) => {
+    const listener = (_e: unknown, d: RewindCaptureDirective): void => cb(d)
+    ipcRenderer.on('rewind:capture-directive', listener)
+    return () => ipcRenderer.removeListener('rewind:capture-directive', listener)
+  },
+  dbRecoveryStatus: () => ipcRenderer.invoke('db:recoveryStatus'),
+  onDbCorruptionDetected: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('db:corruption-detected', listener)
+    return () => ipcRenderer.removeListener('db:corruption-detected', listener)
+  },
+  relaunchApp: () => ipcRenderer.send('app:relaunch'),
   insightGetSettings: () => ipcRenderer.invoke('insight:getSettings'),
   insightSetSettings: (patch) => ipcRenderer.invoke('insight:setSettings', patch),
   insightAdd: (p) => ipcRenderer.invoke('insight:add', p),
   insightRecent: (limit) => ipcRenderer.invoke('insight:recent', limit),
+  insightDismissRecord: (id) => ipcRenderer.invoke('insight:dismissRecord', id),
+  insightDismissAll: () => ipcRenderer.invoke('insight:dismissAll'),
+  insightClearAll: () => ipcRenderer.invoke('insight:clearAll'),
   insightShow: (p) => ipcRenderer.send('insight:show', p),
   insightDismiss: () => ipcRenderer.send('insight:dismiss'),
   insightHoverStart: () => ipcRenderer.send('insight:hoverStart'),
@@ -122,12 +514,41 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('insight:payload', listener)
     return () => ipcRenderer.removeListener('insight:payload', listener)
   },
+  meetingGetSettings: () => ipcRenderer.invoke('meeting:getSettings'),
+  meetingGetToast: () => ipcRenderer.invoke('meeting:getToast'),
+  meetingSetSettings: (patch) => ipcRenderer.invoke('meeting:setSettings', patch),
+  meetingAction: (meetingId, action) => ipcRenderer.send('meeting:action', meetingId, action),
+  onMeetingToast: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: MeetingToastPayload): void => cb(p)
+    ipcRenderer.on('meeting:toast', listener)
+    return () => ipcRenderer.removeListener('meeting:toast', listener)
+  },
+  onWhatsNewToast: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: WhatsNewPayload): void => cb(p)
+    ipcRenderer.on('whatsnew:toast', listener)
+    return () => ipcRenderer.removeListener('whatsnew:toast', listener)
+  },
+  whatsNewGetPending: () => ipcRenderer.invoke('whatsnew:getPending'),
+  whatsNewOpenNotes: () => ipcRenderer.send('whatsnew:openNotes'),
+  openMicPrivacySettings: () => ipcRenderer.send('settings:openMicPrivacy'),
+  getMicPermissionState: () => ipcRenderer.invoke('permissions:micState'),
   perfFirstPaint: () => ipcRenderer.send('perf:firstPaint'),
   perfMark: (name: string) => ipcRenderer.send('perf:mark', name),
+  // Main-window WCO caption tone. Home paints a darker stage than the app base, so
+  // the shell flips the native caption cluster to the home tone on Home (and back
+  // elsewhere) to keep it seamless. Main-window only; a no-op on other windows.
+  setTitleBarSurface: (onHome: boolean) => ipcRenderer.send('chrome:titleBarSurface', onHome),
+  // Main-window chrome: whether the window was created with a Windows 11 Mica
+  // background material (renderer goes translucent so the material shows).
+  // Passed via additionalArguments at window construction.
+  micaEnabled: process.argv.includes('--omi-mica=1'),
   perfAnimResult: (stats: Record<string, number>) => ipcRenderer.send('perf:animResult', stats),
   isAnimBench: process.env.OMI_ANIM_BENCH === '1',
   benchEcho: (x: number) => ipcRenderer.invoke('bench:echo', x),
   isBench: process.env.OMI_BENCH === '1',
+  // True only in the E2E harness (OMI_E2E=1) — gates renderer-side test hooks
+  // (e.g. the capture window's YAMNet classify hook). Never true in prod.
+  isE2E: process.env.OMI_E2E === '1',
   // Desktop automation bridge. ON by default; OMI_AUTOMATION='0' disables it.
   // The renderer checks `automationEnabled` before its planner pre-step.
   automationEnabled: process.env.OMI_AUTOMATION !== '0',
@@ -145,12 +566,119 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('automation:step', listener)
     return () => ipcRenderer.removeListener('automation:step', listener)
   },
+  // PTT system-audio mute (Track 2 A4). `send`, never `invoke` — the hold path
+  // is never awaited, so a slow or missing helper can't delay a capture.
+  muteSystemAudio: () => ipcRenderer.send('audio:muteSystemAudio'),
+  restoreSystemAudio: () => ipcRenderer.send('audio:restoreSystemAudio'),
   notifyConversationsChanged: () => ipcRenderer.send('conversations:notify-changed'),
   onConversationsChanged: (cb: () => void) => {
     const listener = (): void => cb()
     ipcRenderer.on('conversations:changed', listener)
     return () => ipcRenderer.removeListener('conversations:changed', listener)
-  }
+  },
+  // --- Bar chat bridge (main-window side) ---
+  onBarChatSend: (cb: (payload: { text: string; fromVoice: boolean }) => void) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      payload: { text: string; fromVoice: boolean }
+    ): void => cb(payload)
+    ipcRenderer.on('chat:barSend', listener)
+    return () => ipcRenderer.removeListener('chat:barSend', listener)
+  },
+  onBarChatInterrupt: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('chat:barInterrupt', listener)
+    return () => ipcRenderer.removeListener('chat:barInterrupt', listener)
+  },
+  onBarUsageLimit: (cb: (payload: BarUsageLimitPayload) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: BarUsageLimitPayload): void =>
+      cb(payload)
+    ipcRenderer.on('chat:barUsageLimit', listener)
+    return () => ipcRenderer.removeListener('chat:barUsageLimit', listener)
+  },
+  onBarRequestChatState: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('chat:barRequestState', listener)
+    return () => ipcRenderer.removeListener('chat:barRequestState', listener)
+  },
+  publishChatState: (state: BarChatState) => ipcRenderer.send('chat:publishState', state),
+  // --- Warm-hub PTT driver (main-window side; A5 PR-6b) ---
+  onVoiceHubBegin: (cb: (payload: { backfillMs: number }) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: { backfillMs: number }): void =>
+      cb(payload)
+    ipcRenderer.on('voiceHub:begin', listener)
+    return () => ipcRenderer.removeListener('voiceHub:begin', listener)
+  },
+  onVoiceHubEnd: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('voiceHub:end', listener)
+    return () => ipcRenderer.removeListener('voiceHub:end', listener)
+  },
+  onVoiceHubCancel: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('voiceHub:cancel', listener)
+    return () => ipcRenderer.removeListener('voiceHub:cancel', listener)
+  },
+  onVoiceHubWake: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('voiceHub:wake', listener)
+    return () => ipcRenderer.removeListener('voiceHub:wake', listener)
+  },
+  publishVoiceHubState: (state: VoiceHubBarState) =>
+    ipcRenderer.send('voiceHub:publishState', state),
+  publishVoicePlaybackLevel: (level: number) =>
+    ipcRenderer.send('voiceHub:publishPlaybackLevel', level),
+  // --- Voice-plane flight recorder + reset (2026-07-18 supervisor) ---
+  voiceFlightRecord: (type: string, data?: Record<string, unknown>) =>
+    ipcRenderer.send('voice:flightRecord', type, data),
+  resetVoicePlane: (trigger: string) => ipcRenderer.send('voice:resetPlane', trigger),
+  onVoicePlaneReset: (cb: (payload: { trigger: string }) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: { trigger: string }): void =>
+      cb(payload)
+    ipcRenderer.on('voice:planeReset', listener)
+    return () => ipcRenderer.removeListener('voice:planeReset', listener)
+  },
+  // --- Tray + lifecycle (Phase 1) ---
+  trayReportState: (state) => ipcRenderer.send('tray:state', state),
+  onTrayToggleListening: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('tray:toggle-listening', listener)
+    return () => ipcRenderer.removeListener('tray:toggle-listening', listener)
+  },
+  onTrayOpenSettings: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('tray:open-settings', listener)
+    return () => ipcRenderer.removeListener('tray:open-settings', listener)
+  },
+  getLoginItemSettings: () => ipcRenderer.invoke('app:get-login-item'),
+  setLaunchAtLogin: (enabled: boolean) => ipcRenderer.invoke('app:set-login-item', enabled),
+  quitApp: () => ipcRenderer.send('app:quit'),
+  onUpdateReady: (cb: (info: { version: string }) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, info: { version: string }): void => cb(info)
+    ipcRenderer.on('update:ready', listener)
+    return () => ipcRenderer.removeListener('update:ready', listener)
+  },
+  getRecordHotkey: () => ipcRenderer.invoke('shortcuts:get-record'),
+  setRecordHotkey: (accelerator: string) => ipcRenderer.invoke('shortcuts:set-record', accelerator),
+  setRecordHotkeyEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('shortcuts:set-record-enabled', enabled),
+  getSummonHotkey: () => ipcRenderer.invoke('shortcuts:get-summon'),
+  setSummonHotkey: (accelerator: string) => ipcRenderer.invoke('shortcuts:set-summon', accelerator),
+  getAppVersion: () => ipcRenderer.invoke('app:get-version'),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  getBetaUpdatesOptIn: () => ipcRenderer.invoke('update:get-beta-optin'),
+  setBetaUpdatesOptIn: (enabled: boolean) => ipcRenderer.invoke('update:set-beta-optin', enabled),
+  getPendingUpdate: () => ipcRenderer.invoke('update:get-pending'),
+  suspendShortcutCapture: () => ipcRenderer.send('shortcuts:suspend-capture'),
+  resumeShortcutCapture: () => ipcRenderer.send('shortcuts:resume-capture'),
+  // --- Track 6 (UI surfaces) additions ---
+  resetWindowSize: () => ipcRenderer.invoke('window:resetSize'),
+  // --- Track 1 (agent control plane) — trusted direct control ---
+  agentControlCall: (name: string, input: Record<string, unknown> = {}) =>
+    ipcRenderer.invoke('agentControl:call', name, input),
+  // No agentControlSetOwner: the renderer must not be able to repoint the
+  // kernel's active owner. See src/main/ipc/agentControl.ts.
+  agentControlTools: () => ipcRenderer.invoke('agentControl:tools')
 }
 
 const omiOverlay: OmiOverlayApi = {
@@ -161,7 +689,6 @@ const omiOverlay: OmiOverlayApi = {
   },
   hide: () => ipcRenderer.send('overlay:hide'),
   setEnabled: (enabled: boolean) => ipcRenderer.send('overlay:setEnabled', enabled),
-  setHeight: (px: number) => ipcRenderer.send('overlay:setHeight', px),
   focusMain: () => ipcRenderer.send('overlay:focusMain'),
   onActiveChange: (cb: (active: boolean) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, active: boolean): void => cb(active)
@@ -196,6 +723,12 @@ const omiOverlay: OmiOverlayApi = {
     ipcRenderer.on('overlay:voiceCaptured', listener)
     return () => ipcRenderer.removeListener('overlay:voiceCaptured', listener)
   },
+  notifyVoiceFailed: (message: string) => ipcRenderer.send('overlay:voiceFailed', message),
+  onVoiceFailed: (cb: (message: string) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, message: string): void => cb(message)
+    ipcRenderer.on('overlay:voiceFailed', listener)
+    return () => ipcRenderer.removeListener('overlay:voiceFailed', listener)
+  },
   notifyAsked: () => ipcRenderer.send('overlay:asked'),
   onAsked: (cb: () => void) => {
     const listener = (): void => cb()
@@ -204,11 +737,93 @@ const omiOverlay: OmiOverlayApi = {
   }
 }
 
+const omiBar: OmiBarApi = {
+  ready: () => ipcRenderer.send('bar:ready'),
+  showAck: (token: number) => ipcRenderer.send('bar:showAck', token),
+  requestHide: () => ipcRenderer.send('bar:requestHide'),
+  expand: () => ipcRenderer.send('bar:expand'),
+  collapse: () => ipcRenderer.send('bar:collapse'),
+  setInteractive: (interactive: boolean) => ipcRenderer.send('bar:setInteractive', interactive),
+  keepAlive: (active: boolean) => ipcRenderer.send('bar:keepAlive', active),
+  sendChat: (text: string, fromVoice: boolean) =>
+    ipcRenderer.send('bar:sendChat', { text, fromVoice }),
+  interruptTts: () => ipcRenderer.send('bar:interruptTts'),
+  notifyUsageLimit: (payload: BarUsageLimitPayload) => ipcRenderer.send('bar:usageLimit', payload),
+  requestChatState: () => ipcRenderer.send('bar:requestChatState'),
+  onChatState: (cb: (state: BarChatState) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, state: BarChatState): void => cb(state)
+    ipcRenderer.on('chat:state', listener)
+    return () => ipcRenderer.removeListener('chat:state', listener)
+  },
+  onShow: (cb: (p: BarShowPayload) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: BarShowPayload): void => cb(p)
+    ipcRenderer.on('bar:show', listener)
+    return () => ipcRenderer.removeListener('bar:show', listener)
+  },
+  onMode: (cb: (mode: BarMode) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, mode: BarMode): void => cb(mode)
+    ipcRenderer.on('bar:mode', listener)
+    return () => ipcRenderer.removeListener('bar:mode', listener)
+  },
+  onWillHide: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('bar:willHide', listener)
+    return () => ipcRenderer.removeListener('bar:willHide', listener)
+  },
+  onParked: (cb: (parked: boolean) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, parked: boolean): void => cb(!!parked)
+    ipcRenderer.on('bar:parked', listener)
+    return () => ipcRenderer.removeListener('bar:parked', listener)
+  },
+  onPtt: (cb: (phase: 'down' | 'up') => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, phase: 'down' | 'up'): void => cb(phase)
+    ipcRenderer.on('bar:ptt', listener)
+    return () => ipcRenderer.removeListener('bar:ptt', listener)
+  },
+  voiceHubBegin: (payload: { backfillMs: number }) =>
+    ipcRenderer.send('bar:voiceHubBegin', payload),
+  voiceHubEnd: () => ipcRenderer.send('bar:voiceHubEnd'),
+  voiceHubCancel: () => ipcRenderer.send('bar:voiceHubCancel'),
+  onVoiceHubState: (cb: (state: VoiceHubBarState) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, state: VoiceHubBarState): void => cb(state)
+    ipcRenderer.on('voiceHub:state', listener)
+    return () => ipcRenderer.removeListener('voiceHub:state', listener)
+  },
+  onVoicePlaybackLevel: (cb: (level: number) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, level: number): void => cb(level)
+    ipcRenderer.on('voiceHub:playbackLevel', listener)
+    return () => ipcRenderer.removeListener('voiceHub:playbackLevel', listener)
+  },
+  getContentProtection: () => ipcRenderer.invoke('bar:getContentProtection'),
+  setContentProtection: (enabled: boolean) =>
+    ipcRenderer.invoke('bar:setContentProtection', enabled)
+}
+
+const omiGlow: OmiGlowApi = {
+  ready: () => ipcRenderer.send('glow:ready'),
+  showAck: (token: number) => ipcRenderer.send('glow:showAck', token),
+  trigger: (preset: GlowPresetName) => ipcRenderer.send('glow:trigger', preset),
+  dismiss: () => ipcRenderer.send('glow:dismiss'),
+  getCurrent: () => ipcRenderer.invoke('glow:getCurrent'),
+  onShow: (cb: (p: GlowShowPayload) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: GlowShowPayload): void => cb(p)
+    ipcRenderer.on('glow:show', listener)
+    return () => ipcRenderer.removeListener('glow:show', listener)
+  },
+  onHide: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('glow:hide', listener)
+    return () => ipcRenderer.removeListener('glow:hide', listener)
+  }
+}
+
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('omi', omi)
     contextBridge.exposeInMainWorld('omiOverlay', omiOverlay)
+    contextBridge.exposeInMainWorld('omiBar', omiBar)
+    contextBridge.exposeInMainWorld('omiGlow', omiGlow)
   } catch (error) {
     console.error(error)
   }
@@ -219,4 +834,8 @@ if (process.contextIsolated) {
   window.omi = omi
   // @ts-ignore (define in dts)
   window.omiOverlay = omiOverlay
+  // @ts-ignore (define in dts)
+  window.omiBar = omiBar
+  // @ts-ignore (define in dts)
+  window.omiGlow = omiGlow
 }

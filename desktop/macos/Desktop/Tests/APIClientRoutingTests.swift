@@ -318,7 +318,7 @@ final class APIClientRoutingTests: XCTestCase {
       ))
     XCTAssertFalse(
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(
-        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        bundleIdentifier: AppBuild.productionBundleIdentifier,
         updateChannel: "beta"
       ))
   }

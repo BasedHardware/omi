@@ -385,7 +385,10 @@ def workflow_contract_errors(contracts: Iterable[ImageContract]) -> list[str]:
         for workflow in contract.deployment_workflows:
             workflow_text = workflow.read_text(encoding="utf-8")
             workflow_name = _repository_relative(workflow)
-            if "runtime_image_contracts.py smoke" not in workflow_text:
+            if not any(
+                marker in workflow_text
+                for marker in ("runtime_image_contracts.py smoke", 'runtime_image_contracts.py" smoke')
+            ):
                 errors.append(f"{contract.name}: {workflow_name} does not smoke its registered runtime image")
             if dockerfile not in workflow_text:
                 errors.append(

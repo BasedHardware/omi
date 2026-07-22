@@ -20,12 +20,126 @@ env:
   CANDIDATE_TAG: candidate
 
 jobs:
+  scope:
+    name: Decide backend deployment scope
+    # This unprivileged decision runs before source admission, Firestore
+    # readiness, image work, or any cloud mutation. workflow_run does not
+    # support a safe workflow-level paths filter, so inspect its immutable SHA.
+    permissions:
+      contents: 'read'
+    runs-on: ubuntu-latest-m
+    outputs:
+      applies: ${{ steps.scope.outputs.applies }}
+    steps:
+      - name: Checkout triggering main commit for scope decision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          # The parent diff is the only local scope proof required here. Current
+          # main/supersession proof below is bounded to read-only GitHub API calls.
+          fetch-depth: 2
+
+      - name: Decide whether the triggering commit can affect the backend deployment
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if ! git cat-file -e "${RELEASE_SHA}^{commit}"; then
+            echo "Cannot resolve triggering Release Eligibility SHA: $RELEASE_SHA" >&2
+            exit 1
+          fi
+
+          # The scope checkout is intentionally shallow. A stale Release
+          # Eligibility result may be a green no-op only after two bounded,
+          # read-only GitHub API proofs bind the current main and comparison
+          # identities. Any API, JSON, or identity ambiguity falls through to
+          # the privileged current-main source-admission guard below.
+          api_base="${GITHUB_API_URL:-https://api.github.com}"
+          ref_path="$(mktemp)"
+          compare_path="$(mktemp)"
+          trap 'rm -f "$ref_path" "$compare_path"' EXIT
+          api_headers=(
+            -H "Authorization: Bearer $GH_TOKEN"
+            -H "Accept: application/vnd.github+json"
+            -H "X-GitHub-Api-Version: 2022-11-28"
+          )
+          ref_status="$(curl --silent --show-error --output "$ref_path" --write-out '%{http_code}' \
+            "${api_headers[@]}" \
+            "$api_base/repos/$GITHUB_REPOSITORY/git/ref/heads/main" || true)"
+          if [[ "$ref_status" != "200" ]] || ! main_sha="$(jq -er '
+            if .ref == "refs/heads/main" and .object.type == "commit" and (.object.sha | test("^[0-9a-f]{40}$"))
+            then .object.sha else error("unexpected main ref identity") end
+          ' "$ref_path" 2>/dev/null)"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy scope"
+              echo "In scope: supersession API proof was unavailable or ambiguous; preserving fail-closed source admission."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          compare_status="$(curl --silent --show-error --output "$compare_path" --write-out '%{http_code}' \
+            "${api_headers[@]}" \
+            "$api_base/repos/$GITHUB_REPOSITORY/compare/$RELEASE_SHA...$main_sha" || true)"
+          if [[ "$compare_status" != "200" ]] || ! comparison="$(jq -er \
+            --arg release_sha "$RELEASE_SHA" \
+            --arg main_sha "$main_sha" '
+              if .base_commit.sha == $release_sha and .head_commit.sha == $main_sha and
+                (.status == "behind" or .status == "ahead" or .status == "identical" or .status == "diverged")
+              then .status else error("unexpected comparison identity") end
+            ' "$compare_path" 2>/dev/null)"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy scope"
+              echo "In scope: supersession API proof was unavailable or ambiguous; preserving fail-closed source admission."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [[ "$comparison" == "behind" ]]; then
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy superseded no-op"
+              echo "Green no-op: GitHub compare confirmed triggering SHA $RELEASE_SHA is behind current main $main_sha."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if ! parent_sha="$(git rev-parse "${RELEASE_SHA}^" 2>/dev/null)"; then
+            # An unavailable parent is uncertain scope: retain the existing
+            # exact-SHA admission and deployment path rather than skip.
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy scope"
+              echo "In scope: could not resolve the triggering commit parent."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "$parent_sha" "$RELEASE_SHA")"
+          printf 'Changed files for %s:\n%s\n' "$RELEASE_SHA" "$changed_files"
+          if grep -Eq '^(backend/|\.github/workflows/(gcp_backend_auto_dev|release-eligibility)\.yml$|\.github/actions/(release-eligibility|sync-backfill-lifecycle)/|\.github/scripts/(verify_auto_backend_release_admission|desktop_release_manifest|desktop_qualification_admission|desktop_qualification_evidence)\.py$)' <<<"$changed_files"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy scope"
+              echo "In scope: the triggering commit can affect backend runtime or deployment inputs."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy no-op"
+              echo "Green no-op: the triggering commit cannot affect backend runtime or deployment inputs."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   firestore_readiness:
     # A workflow_run can access deployment credentials, so never run source
     # code until the first completed proof identifies the exact current commit
     # on this repository's main branch. Every later checkout and release vector
     # uses that admitted SHA rather than a mutable default branch ref.
+    needs: scope
     if: >-
+      needs.scope.outputs.applies == 'true' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.run_attempt == 1 &&
@@ -497,7 +611,6 @@ jobs:
 
       - name: Deploy backend-secrets to GKE
         env:
-          BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
           ENVIRONMENT: ${{ vars.ENV }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}

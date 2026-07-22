@@ -373,7 +373,9 @@ import XCTest
     XCTAssertFalse(windowSource.contains("resolveDelegationAndDispatch"))
     XCTAssertTrue(windowSource.contains("await dispatchChatQuery("))
     XCTAssertFalse(source.contains("AgentPillFollowUpRoutingPolicy"))
-    XCTAssertTrue(source.contains("manager.continueAgent(from: pill, text: trimmed, attachments: staged)"))
+    // The bar has no typed pill composer since typing moved to the app's chat:
+    // pill steering routes to the main app instead of parsing wording locally.
+    XCTAssertTrue(source.contains("(NSApp.delegate as? AppDelegate)?.openMainAppWindow()"))
   }
 
   func testSubagentChatRendersMarkdownAndLargeBackHitTarget() throws {
@@ -832,11 +834,14 @@ import XCTest
     XCTAssertFalse(body.contains("FloatingControlBarGeometry.targetFrame("))
   }
 
-  func testSubagentComposerOnlyContinuesItsCanonicalSession() throws {
+  func testSubagentFollowUpsOnlyContinueTheCanonicalSession() throws {
+    // omi-test-quality: source-inspection -- static contract: the bar's typed composer is gone; follow-ups continue only through the manager bound to the pill's canonical session.
     let viewSource = try floatingControlBarViewSource()
+    let pillSource = try agentPillSource()
 
     XCTAssertFalse(viewSource.contains("AgentPillFollowUpRoutingPolicy"))
-    XCTAssertTrue(viewSource.contains("manager.continueAgent(from: pill, text: trimmed, attachments: staged)"))
+    XCTAssertTrue(pillSource.contains("guard pill.canonicalSessionId == sessionId else { return }"))
+    XCTAssertTrue(pillSource.contains("DesktopCoordinatorService.shared.continueAgent("))
   }
 
   func testSpawnAgentToolCallOpensSubagentChat() throws {
@@ -921,7 +926,10 @@ import XCTest
     let inputSource = String(viewSource[inputRange.lowerBound..<inputEnd.lowerBound])
 
     XCTAssertTrue(inputSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
-    XCTAssertTrue(viewSource.contains("state.archiveCurrentExchange(using: floatingChatProvider)"))
+    // Archiving the previous exchange moved into the window alongside sizing;
+    // the view must not archive on its own.
+    XCTAssertFalse(viewSource.contains("archiveCurrentExchange"))
+    XCTAssertTrue(windowSource.contains("state.archiveCurrentExchange(using: self.historyChatProvider)"))
     XCTAssertTrue(viewSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
     XCTAssertFalse(inputSource.contains("state.showingAIResponse = true"))
     XCTAssertFalse(viewSource.contains("state.conversationSurface == .mainResponse || state.showingAIResponse"))

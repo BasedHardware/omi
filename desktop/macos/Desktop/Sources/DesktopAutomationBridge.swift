@@ -2030,14 +2030,13 @@ final class DesktopAutomationActionRegistry {
       params: ["folderPath", "maxResults", "remember"]
     ) { params in
       let maxResults = min(max(intParam(params["maxResults"], default: 20), 1), 250)
-      let folderPath = params["folderPath"]?.trimmingCharacters(in: .whitespacesAndNewlines)
       let remember = boolParam(params["remember"], default: false)
 
       do {
         let selectedFolderPath: String?
-        if let folderPath, !folderPath.isEmpty {
+        if let requestedFolder = try AppleNotesReadProbe.resolveRequestedFolder(path: params["folderPath"]) {
           let resolved = try await AppleNotesReaderService.shared.validateSelectedFolder(
-            path: folderPath,
+            path: requestedFolder.path,
             remember: remember
           )
           selectedFolderPath = resolved.path

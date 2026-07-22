@@ -193,11 +193,57 @@ stage_production_node_modules() {
     npm ci --omit=dev --no-fund --no-audit
   )
 
+  stage_darwin_sharp_arches "$package_dir" "$temp_dir"
   prune_non_macos_node_packages "$temp_dir"
   prune_packaged_node_modules "$temp_dir"
   rm -rf "$output_dir"
   mv "$temp_dir/node_modules" "$output_dir"
   rm -rf "$temp_dir"
+}
+
+stage_darwin_sharp_arches() {
+  local package_dir="$1"
+  local output_dir="$2"
+  local lock_path="$package_dir/package-lock.json"
+  local package_arch sharp_version libvips_version overlay
+
+  # npm installs optional native packages only for the builder architecture.
+  # The release app is universal, so overlay both Darwin pairs pinned by lock.
+  for package_arch in arm64 x64; do
+    sharp_version="$(node -e '
+      const lock = require(process.argv[1]);
+      const pkg = lock.packages?.[`node_modules/@img/sharp-darwin-${process.argv[2]}`];
+      if (pkg?.version) process.stdout.write(pkg.version);
+    ' "$lock_path" "$package_arch")"
+    libvips_version="$(node -e '
+      const lock = require(process.argv[1]);
+      const pkg = lock.packages?.[`node_modules/@img/sharp-libvips-darwin-${process.argv[2]}`];
+      if (pkg?.version) process.stdout.write(pkg.version);
+    ' "$lock_path" "$package_arch")"
+
+    if [ -z "$sharp_version" ] && [ -z "$libvips_version" ]; then
+      return 0
+    fi
+    [ -n "$sharp_version" ] && [ -n "$libvips_version" ] || {
+      echo "ERROR: package lock must pin Sharp and libvips for darwin-$package_arch" >&2
+      exit 1
+    }
+
+    overlay="$(mktemp -d "$PACKAGED_RUNTIME_DIR/sharp-$package_arch.XXXXXX")"
+    npm install --prefix "$overlay" --force --ignore-scripts --no-save --package-lock=false \
+        --no-fund --no-audit \
+        "@img/sharp-darwin-$package_arch@$sharp_version" \
+        "@img/sharp-libvips-darwin-$package_arch@$libvips_version"
+    mkdir -p "$output_dir/node_modules/@img"
+    rm -rf \
+      "$output_dir/node_modules/@img/sharp-darwin-$package_arch" \
+      "$output_dir/node_modules/@img/sharp-libvips-darwin-$package_arch"
+    cp -R "$overlay/node_modules/@img/sharp-darwin-$package_arch" \
+      "$output_dir/node_modules/@img/"
+    cp -R "$overlay/node_modules/@img/sharp-libvips-darwin-$package_arch" \
+      "$output_dir/node_modules/@img/"
+    rm -rf "$overlay"
+  done
 }
 
 prune_non_macos_node_packages() {
@@ -605,6 +651,17 @@ validate_runtime_tree() {
 
   [ -d "$PI_MONO_PACKAGED_NODE_MODULES" ] || return 1
   validate_packaged_symlinks || return 1
+
+  local sharp_arch expected_arch sharp_native libvips_native
+  for sharp_arch in arm64 x64; do
+    expected_arch="$sharp_arch"
+    [ "$sharp_arch" = "x64" ] && expected_arch="x86_64"
+    sharp_native="$AGENT_PACKAGED_NODE_MODULES/@img/sharp-darwin-$sharp_arch/lib/sharp-darwin-$sharp_arch.node"
+    libvips_native="$AGENT_PACKAGED_NODE_MODULES/@img/sharp-libvips-darwin-$sharp_arch/lib/libvips-cpp.42.dylib"
+    [ -f "$sharp_native" ] && [ -f "$libvips_native" ] || return 1
+    file "$sharp_native" | grep -q "$expected_arch" || return 1
+    file "$libvips_native" | grep -q "$expected_arch" || return 1
+  done
 
   local staged_version
   staged_version="$("$NODE_RESOURCE" --version 2>/dev/null)" || return 1

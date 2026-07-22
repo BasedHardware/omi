@@ -85,11 +85,7 @@ RUN_SCOPED_EXEMPTIONS = {
     "parakeet_gpu_tests.yml": "JOB_NAME: parakeet-gpu-test-${{ github.run_id }}",
 }
 
-# The record builder reads the serving public ConfigMap so that a record carries
-# deployable public values. It never runs Helm, kubectl apply, or a Cloud Run
-# mutation; classifying credential acquisition alone as a writer would hide
-# that distinction and force a meaningless deploy lock.
-READ_ONLY_WORKFLOW_EXEMPTIONS = {}
+READ_ONLY_WORKFLOW_EXEMPTIONS: dict[str, str] = {}
 
 # Firestore index creation is a schema migration, not ordinary deploy work.
 # Keep a single auditable writer so backend readiness can stay read-only.
@@ -240,7 +236,10 @@ def validate_serving_release_vector(name: str, text: str) -> list[str]:
         [],
     )
     verifier_text = "\n".join(verifier_step)
-    if "backend/scripts/verify_backend_release_vector.py" not in verifier_text:
+    if not any(
+        marker in verifier_text
+        for marker in ("backend/scripts/verify_backend_release_vector.py", "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py")
+    ):
         errors.append(f"{name}: release-vector verification must use the canonical verifier")
     if "--environment" not in verifier_text:
         errors.append(f"{name}: release-vector verification must bind an environment")
@@ -266,6 +265,7 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
     snapshot_index = step_index("Capture Cloud Run pre-promotion traffic snapshot")
     promotion_index = step_index("Shift Cloud Run traffic to validated revisions")
     serving_vector_index = step_index("Verify serving backend release vector")
+    production_smoke_index = step_index("Smoke promoted production serving API")
     restore_index = step_index("Restore Cloud Run traffic snapshot after failed promotion")
     required_steps = {
         "candidate acceptance": candidate_index,
@@ -278,9 +278,14 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
 
     candidate_step = steps[candidate_index] if candidate_index >= 0 else []
     candidate_text = "\n".join(candidate_step)
-    for marker in ("backend/scripts/verify_backend_release_vector.py", "--candidate", "--cloud-run-only"):
+    for marker in ("--candidate", "--cloud-run-only"):
         if marker not in candidate_text:
             errors.append(f"{name}: candidate acceptance must include {marker!r}")
+    if not any(
+        marker in candidate_text
+        for marker in ("backend/scripts/verify_backend_release_vector.py", "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py")
+    ):
+        errors.append(f"{name}: candidate acceptance must include the canonical release-vector verifier")
 
     for marker in (
         "Apply non-secret backend runtime config",
@@ -299,9 +304,17 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
         errors.append(f"{name}: serving release-vector verification must follow traffic promotion")
     if restore_index <= serving_vector_index:
         errors.append(f"{name}: traffic snapshot restoration must follow serving release-vector verification")
+    if name == "gcp_backend.yml":
+        if production_smoke_index <= serving_vector_index:
+            errors.append(f"{name}: production serving smoke must follow serving release-vector verification")
+        if restore_index <= production_smoke_index:
+            errors.append(f"{name}: traffic snapshot restoration must follow production serving smoke")
 
     snapshot_step = "\n".join(steps[snapshot_index]) if snapshot_index >= 0 else ""
-    if "backend/scripts/cloud_run_traffic_snapshot.py capture" not in snapshot_step:
+    if not any(
+        marker in snapshot_step
+        for marker in ("backend/scripts/cloud_run_traffic_snapshot.py capture", 'cloud_run_traffic_snapshot.py" capture')
+    ):
         errors.append(f"{name}: pre-promotion snapshot must use the canonical Cloud Run snapshot helper")
     for service in ("backend", "backend-sync", "backend-sync-backfill", "backend-integration"):
         if f"--service {service}" not in snapshot_step:
@@ -313,9 +326,21 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
         "&& (steps.shift-cloud-run-traffic.outcome == 'failure' "
         "|| steps.verify-serving-release-vector.outcome == 'failure') }}"
     )
+    if name == "gcp_backend.yml":
+        restore_condition = (
+            "if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' "
+            "&& (steps.shift-cloud-run-traffic.outcome == 'failure' "
+            "|| steps.verify-serving-release-vector.outcome == 'failure' "
+            "|| steps.smoke-promoted-production-serving-api.outcome == 'failure') }}"
+        )
     if restore_condition not in restore_step:
         errors.append(f"{name}: traffic restoration must run after a failed promotion when its snapshot exists")
-    if "backend/scripts/cloud_run_traffic_snapshot.py restore" not in restore_step:
+    if name == "gcp_backend.yml" and "steps.smoke-promoted-production-serving-api.outcome == 'failure'" not in restore_step:
+        errors.append(f"{name}: traffic restoration must include failed production serving smoke")
+    if not any(
+        marker in restore_step
+        for marker in ("backend/scripts/cloud_run_traffic_snapshot.py restore", 'cloud_run_traffic_snapshot.py" restore')
+    ):
         errors.append(f"{name}: traffic restoration must use the canonical Cloud Run snapshot helper")
     for artifact in ("cloud-run-pre-promotion-traffic-snapshot.json", "cloud-run-traffic-restore.json"):
         if artifact not in text:
@@ -570,8 +595,15 @@ def check_repository() -> list[str]:
     for name, text in workflow_text.items():
         errors.extend(validate_pusher_config_preflight(name, text))
     release_vector_workflows = sorted(
-        name for name, text in workflow_text.items() if "backend/scripts/verify_backend_release_vector.py" in text
+        name
+        for name, text in workflow_text.items()
+        if any(
+            marker in text
+            for marker in ("backend/scripts/verify_backend_release_vector.py", "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py")
+        )
     )
+    # Release-ring deploys are admitted from an immutable record and bind the
+    # verifier to that record's source SHA and this deployment run identity.
     allowed_release_vector_workflows = {"gcp_backend.yml", "gcp_backend_auto_dev.yml"}
     for name in release_vector_workflows:
         if name not in allowed_release_vector_workflows:

@@ -12,7 +12,7 @@ import { Ctx } from './appState'
  */
 export function AppStateProvider(props: { children: React.ReactNode }): React.JSX.Element {
   const recorder = useRecorder()
-  const chat = useChat({ surface: 'main' })
+  const chat = useChat()
   const [pickerOpen, setPickerOpen] = useState(false)
 
   // Hold the live recorder in a ref (updated after each render) so the keydown

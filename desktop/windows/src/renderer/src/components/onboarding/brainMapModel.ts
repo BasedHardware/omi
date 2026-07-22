@@ -17,16 +17,16 @@ export type BrainEdge = { a: number; b: number; o: number }
 const MAX_NODES = 100
 const DECORATIVE_COUNT = 15
 
-// Map a memory category to a node hue, matching the desktop app's scheme:
-// app-related memories are purple, everything else (answers like language and
-// goals, plus general memories) is blue.
+// Map a memory category to a node hue: app-related memories are pink (never
+// purple — INV-UI-1), everything else (answers like language and goals, plus
+// general memories) is blue.
 export function categoryHue(category?: string | null): number {
   const c = (category ?? '').toLowerCase()
-  if (c.includes('app')) return 275 // purple
+  if (c.includes('app')) return 330 // pink
   return 210 // blue
 }
 
-// Hue for a memory node. App-index memories are forced purple regardless of
+// Hue for a memory node. App-index memories are forced pink regardless of
 // the server-assigned category (the server may ignore/reassign our category),
 // detected by the deterministic "Uses " content prefix or the provenance tag.
 // Everything else defers to categoryHue.
@@ -34,7 +34,7 @@ export function memoryHue(m: Memory): number {
   const content = m.content ?? ''
   const isAppMemory =
     content.startsWith(APP_MEMORY_PREFIX) || (m.tags?.includes(APP_MEMORY_TAG) ?? false)
-  if (isAppMemory) return 275 // purple
+  if (isAppMemory) return 330 // pink
   return categoryHue(m.category)
 }
 

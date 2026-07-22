@@ -145,14 +145,9 @@ jobs:
           gh release upload "$RELEASE_TAG" --repo "$REPO" \
             /tmp/desktop-beta-qualification/qualification-evidence.json#"qualification-evidence-${RELEASE_TAG}.json"
 
-      - name: Request protected beta promotion
-        if: steps.candidate.outcome == 'success' && steps.qualify.outcome == 'success'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          gh workflow run desktop_promote_beta.yml --repo "$REPO" \
-            --ref "$RELEASE_TAG" \
-            -f release_tag="$RELEASE_TAG"
+  promote-qualified-beta:
+    needs: qualify
+    if: needs.qualify.result == 'success'
+    uses: ./.github/workflows/desktop_promote_beta.yml
+    with:
+      release_tag: ${{ inputs.release_tag }}

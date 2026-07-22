@@ -1,6 +1,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import runpy
 import tempfile
 
 import pytest
@@ -12,6 +13,7 @@ PROMOTE_BETA_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_promote_b
 PROMOTE_PROD_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_promote_prod.yml"
 QUALIFY_BETA_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_qualify_beta.yml"
 CODEMAGIC_CONFIG = REPO_ROOT / "codemagic.yaml"
+DMGBUILD_SETTINGS = REPO_ROOT / "desktop" / "macos" / "dmg-assets" / "dmgbuild_settings.py"
 QUALIFICATION_ADMISSION = SCRIPTS / "desktop_qualification_admission.py"
 
 
@@ -28,6 +30,7 @@ prepare_beta = _load("prepare_desktop_beta_promotion", "prepare-desktop-beta-pro
 repair_installer = _load("desktop_repair_installer", "desktop_repair_installer.py")
 qualification_evidence = _load("desktop_qualification_evidence", "desktop_qualification_evidence.py")
 manifest_contract = _load("desktop_release_manifest", "desktop_release_manifest.py")
+promotion_policy = _load("desktop_prod_promotion_policy", "check-desktop-prod-promotion-policy.py")
 
 
 def _release(body: str | None = None):
@@ -237,6 +240,39 @@ def test_qualification_workflow_binds_immutable_controls_and_candidate_identity(
     assert "ref: ${{ inputs.release_tag }}" in qualification
     assert "qualification-evidence-${RELEASE_TAG}.json" in qualification
     assert "gh release upload" in qualification
+
+
+def test_codemagic_produces_canonical_app_and_strictly_verifiable_dmg():
+    workflow = CODEMAGIC_CONFIG.read_text(encoding="utf-8")
+    smoke = (REPO_ROOT / "desktop/macos/scripts/smoke-signed-desktop-artifact.sh").read_text(encoding="utf-8")
+    assert workflow.count('APP_NAME: "Omi"') == 1
+    assert 'APP_NAME: "omi"' not in workflow
+    assert "xattr -d com.apple.FinderInfo" in workflow
+    assert "xattr -d com.apple.ResourceFork" in workflow
+    assert 'codesign --verify --deep --strict --verbose=2 "$STAGING_DIR/$APP_NAME.app"' in workflow
+    assert 'dmg_app="$DMG_MOUNTPOINT/Omi.app"' in smoke
+    assert "DMG-contained Omi.app failed deep strict codesign verification" in smoke
+
+
+def test_dmgbuild_does_not_attach_finder_info_to_the_signed_app():
+    settings = runpy.run_path(
+        str(DMGBUILD_SETTINGS),
+        init_globals={"defines": {"app_name": "Omi", "app_path": "/tmp/Omi.app"}},
+    )
+
+    assert settings.get("hide_extensions", []) == []
+
+
+def test_universal_release_stages_and_smokes_both_sharp_architectures():
+    prepare = (REPO_ROOT / "desktop/macos/scripts/prepare-agent-runtime.sh").read_text(encoding="utf-8")
+    smoke = (REPO_ROOT / "desktop/macos/scripts/smoke-signed-desktop-artifact.sh").read_text(encoding="utf-8")
+    assert "stage_darwin_sharp_arches" in prepare
+    assert "for package_arch in arm64 x64" in prepare
+    assert 'npm install --prefix "$overlay" --force' in prepare
+    assert "@img/sharp-darwin-$package_arch@$sharp_version" in prepare
+    assert "@img/sharp-libvips-darwin-$package_arch@$libvips_version" in prepare
+    assert "for sharp_arch in arm64 x64" in prepare
+    assert "agent runtime missing Sharp/libvips darwin-$sharp_arch pair" in smoke
 
 
 def test_prepare_manifest_rejects_caller_hashes_that_do_not_match_trusted_evidence():
@@ -472,10 +508,14 @@ def test_stable_promotion_remains_manual_only():
     assert "promote-stable" in workflow
 
 
-def test_stable_workflow_allows_retained_repoint_but_requires_current_beta_for_promote_and_safe_retries():
+def test_stable_promotion_policy_guard_matches_the_workflow_owned_contract():
+    assert promotion_policy.validate(PROMOTE_PROD_WORKFLOW.read_text()) == []
+
+
+def test_stable_workflow_reads_current_beta_and_owns_its_cas_inputs():
     workflow = PROMOTE_PROD_WORKFLOW.read_text()
 
-    assert "check_stable_pointer_precondition.py" in workflow
+    assert "Read current pointers and capture workflow-owned CAS inputs" in workflow
     assert "Fetch exact retained qualified manifest" in workflow
     assert "actions/download-artifact@v7" not in workflow
     assert "prepare-desktop-beta-promotion.py" not in workflow
@@ -485,12 +525,18 @@ def test_stable_workflow_allows_retained_repoint_but_requires_current_beta_for_p
     assert 'Authorization: Bearer $ACCESS_TOKEN' in workflow
     assert 'Authorization: Bearer ***' not in workflow
     assert 'ref: ${{ inputs.release_tag }}' in workflow
+    assert "operation:" not in workflow
+    assert "repoint" not in workflow
 
 
-def test_stable_workflow_retains_its_own_human_qualification_admission_path():
+def test_stable_workflow_selects_its_own_trusted_qualification():
     workflow = PROMOTE_PROD_WORKFLOW.read_text()
-    assert 'gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID"' in workflow
+    assert (
+        'actions/workflows/desktop_qualify_beta.yml/runs?event=workflow_dispatch&status=completed&per_page=100'
+        in workflow
+    )
     assert "desktop_qualification_admission.py" in workflow
+    assert "qualification_run_id:" not in workflow
 
 
 def test_beta_pointer_lost_response_retry_remains_exact_and_generation_stable():
@@ -532,6 +578,6 @@ def test_stable_repair_is_published_immutably_before_stable_pointer_advances():
     assert "--if-generation-match=0" in workflow
     assert "manifest_sha256" in workflow
     assert '"$BASE/macos-beta"' in workflow
-    assert "expected_current_release_id:" in workflow
-    assert "expected_generation:" in workflow
+    assert "EXPECTED_RELEASE_ID" in workflow
+    assert "EXPECTED_GENERATION" in workflow
     assert "gcloud run deploy" not in workflow

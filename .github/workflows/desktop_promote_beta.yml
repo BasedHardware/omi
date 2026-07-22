@@ -1,7 +1,7 @@
 name: Promote Qualified Desktop Beta
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       release_tag:
         description: 'Qualified v*-macos candidate tag to promote to beta'

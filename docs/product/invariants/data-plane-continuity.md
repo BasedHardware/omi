@@ -3,11 +3,13 @@
 **Status:** locked
 
 **Statement:** A production-family Omi artifact has exactly one customer data
-plane. Stable, internal, alpha, beta, TestFlight, Play Internal, and the
-separately installable macOS **Omi Beta** app all use the canonical production
-API, agent endpoint, desktop API, Firebase/Firestore identity, and account
-universe. A user who installs an earlier build must see the same account,
-recordings, conversations, integrations, and sync state as on stable.
+plane. Stable, internal, alpha, beta, TestFlight, and Play Internal all use the
+canonical production API, agent endpoint, desktop API, Firebase/Firestore
+identity, and account universe. On macOS, Beta and Stable are channels of the
+same canonical `Omi.app` / `com.omi.computer-macos` identity; Beta is represented
+only by its channel pointer and feed. A user who installs an earlier build must
+see the same account, recordings, conversations, integrations, and sync state
+as on stable.
 
 A release channel controls *eligibility, rollout exposure, diagnostics, and
 feature availability*. It MUST NOT select a different account or customer-data
@@ -23,7 +25,7 @@ The canonical current production routing is:
 | Flutter agent WebSocket | `wss://agent.omi.me/v1/agent/ws` |
 | macOS Python API | `https://api.omi.me/` |
 | macOS desktop API | `https://desktop-backend-hhibjajaja-uc.a.run.app/` |
-| macOS beta identity | `com.omi.computer-macos.beta`, in `AppBuild.productionFamilyBundleIdentifiers` |
+| macOS production identity | `Omi.app` / `com.omi.computer-macos`; Beta and Stable share this identity |
 | macOS Firebase/Firestore config | the shipped production customer project (`based-hardware`) |
 
 ## MUST NOT
@@ -33,8 +35,8 @@ The canonical current production routing is:
   preference, update channel, process environment, or bundled `.env` value.
 - Treat `OMI_BETA_RELEASE_RING`, `STAGING_API_URL`, `api-beta.omi.me`, or an
   equivalent beta/staging selector as a production-family routing mechanism.
-- Treat the macOS beta bundle identity as a development identity. Its separate
-  local storage and update channel do not create separate customer data.
+- Create a separate macOS Beta app or bundle identity. Beta is a channel pointer
+  and feed for the canonical production app, not a separate install identity.
 - Publish an external preview under a production-family identity. An external
   preview needs a reserved preview identity plus signed metadata that explicitly
   selects its permitted data plane; malformed metadata fails closed to the
@@ -55,9 +57,9 @@ reuse a production-family identity.
 
 - `app/test/unit/env_test.dart` — production startup rejects non-canonical API
   and agent routing.
-- `desktop/macos/Desktop/Tests/APIClientRoutingTests.swift` — stable and Omi
-  Beta resolve only canonical production endpoints despite contaminated process
-  values.
+- `desktop/macos/Desktop/Tests/APIClientRoutingTests.swift` — the canonical
+  production identity resolves only canonical production endpoints for both
+  Stable and Beta channels despite contaminated process values.
 - `desktop/macos/Desktop/Tests/ExternalPreviewBuildTests.swift` — preview
   identities require signed backend metadata and fail closed.
 - `.github/scripts/check-mobile-production-routing.py` — exact production

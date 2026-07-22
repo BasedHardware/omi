@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
-import { getPreferences, setPreferences, completeOnboarding, setPendingRoute } from '../lib/preferences'
+import {
+  getPreferences,
+  setPreferences,
+  completeOnboarding,
+  setPendingRoute
+} from '../lib/preferences'
+import { clampOnboardingStep } from '../lib/onboardingProgress'
 import { syncLanguage, setDisplayName } from '../lib/userProfile'
 import { resolveLanguageCode, languageLabel } from '../lib/languages'
 import { trackHowDidYouHear } from '../lib/analytics'
@@ -8,6 +14,7 @@ import { NameStep } from '../components/onboarding/NameStep'
 import { LanguageStep } from '../components/onboarding/LanguageStep'
 import { HowDidYouHearStep } from '../components/onboarding/HowDidYouHearStep'
 import { TrustStep } from '../components/onboarding/TrustStep'
+import { BackgroundPrivacyStep } from '../components/onboarding/BackgroundPrivacyStep'
 import { ScreenPermissionStep } from '../components/onboarding/ScreenPermissionStep'
 import { BuildProfileStep } from '../components/onboarding/BuildProfileStep'
 import { MicPermissionStep } from '../components/onboarding/MicPermissionStep'
@@ -15,6 +22,7 @@ import { AutomationPermissionStep } from '../components/onboarding/AutomationPer
 import { ShortcutSetupStep } from '../components/onboarding/ShortcutSetupStep'
 import { VoiceIntroStep } from '../components/onboarding/VoiceIntroStep'
 import { AskDemoStep } from '../components/onboarding/AskDemoStep'
+import { DataSourcesStep } from '../components/onboarding/DataSourcesStep'
 import { GoalStep } from '../components/onboarding/GoalStep'
 import { AutoCreatedTasksStep } from '../components/onboarding/AutoCreatedTasksStep'
 import { createGoal } from '../lib/goals'
@@ -25,23 +33,41 @@ import { createGoal } from '../lib/goals'
 // only changes onboarding.
 import { BrainGraph } from '../components/graph/BrainGraph'
 import {
-  resetOnboardingGraph,
+  initOnboardingGraph,
   addUserNode,
   addLanguageNode,
   useOnboardingGraph
 } from '../lib/onboardingGraph'
 
-const TOTAL_STEPS = 13
+const TOTAL_STEPS = 15
 
 export function Onboarding(): React.JSX.Element {
-  const [step, setStep] = useState(0)
+  // Resume where the user left off if they quit mid-onboarding. Clamped in case
+  // the step list changed between app versions.
+  const [step, setStep] = useState(() =>
+    clampOnboardingStep(getPreferences().onboardingStep, TOTAL_STEPS)
+  )
   const prefs = getPreferences()
 
-  // First onboarding mount clears any prior local graph so the reveal starts
-  // empty (mirrors the macOS "clear graph on first onboarding start").
+  // A FRESH onboarding start clears any prior local graph so the reveal begins
+  // empty (mirrors the macOS "clear graph on first onboarding start"); a RESUME
+  // hydrates the persisted one instead. Onboarding re-mounts whenever the
+  // renderer reloads (the main process reloads a crashed renderer) or the app is
+  // relaunched mid-wizard, and it comes back at the saved step — clearing on
+  // those mounts wiped the `user` node written by the name step, which took the
+  // user off their own map and orphaned every edge (they all anchor at `user`),
+  // leaving a map of unconnected dots. Reads prefs directly so this stays a
+  // mount-only effect.
   useEffect(() => {
-    void resetOnboardingGraph()
+    const p = getPreferences()
+    void initOnboardingGraph(clampOnboardingStep(p.onboardingStep, TOTAL_STEPS), p.displayName)
   }, [])
+
+  // Persist the current step so a quit-and-relaunch resumes here. Cleared when
+  // onboarding completes (completeOnboarding) or is reset (resetOnboarding).
+  useEffect(() => {
+    setPreferences({ onboardingStep: step })
+  }, [step])
 
   const graph = useOnboardingGraph()
 
@@ -104,7 +130,7 @@ export function Onboarding(): React.JSX.Element {
     if (step === 0) {
       return (
         <NameStep
-          stepIndex={0}
+          stepIndex={step}
           totalSteps={TOTAL_STEPS}
           initialValue={prefs.displayName ?? ''}
           onContinue={handleName}
@@ -114,7 +140,7 @@ export function Onboarding(): React.JSX.Element {
     if (step === 1) {
       return (
         <LanguageStep
-          stepIndex={1}
+          stepIndex={step}
           totalSteps={TOTAL_STEPS}
           initialValue={prefs.language}
           onContinue={handleLanguage}
@@ -125,7 +151,7 @@ export function Onboarding(): React.JSX.Element {
     if (step === 2) {
       return (
         <HowDidYouHearStep
-          stepIndex={2}
+          stepIndex={step}
           totalSteps={TOTAL_STEPS}
           onContinue={handleHowDidYouHear}
           onBack={back}
@@ -133,63 +159,106 @@ export function Onboarding(): React.JSX.Element {
       )
     }
     if (step === 3) {
-      return <TrustStep stepIndex={3} totalSteps={TOTAL_STEPS} onContinue={next} onBack={back} />
+      return <TrustStep stepIndex={step} totalSteps={TOTAL_STEPS} onContinue={next} onBack={back} />
     }
     if (step === 4) {
+      // Background/privacy consent: always-on listening, tray residence, and
+      // launch-at-login, established up front for this tray-resident companion.
+      return (
+        <BackgroundPrivacyStep
+          stepIndex={step}
+          totalSteps={TOTAL_STEPS}
+          onContinue={next}
+          onBack={back}
+        />
+      )
+    }
+    if (step === 5) {
       return (
         <ScreenPermissionStep
-          stepIndex={4}
+          stepIndex={step}
+          totalSteps={TOTAL_STEPS}
+          onContinue={next}
+          onBack={back}
+          onSkip={next}
+        />
+      )
+    }
+    if (step === 6) {
+      // Discovery step: scans automatically with the orbit animation (it replaced
+      // the old button-driven DiskAccessStep, now deleted).
+      return (
+        <BuildProfileStep
+          stepIndex={step}
           totalSteps={TOTAL_STEPS}
           onContinue={next}
           onSkip={next}
         />
       )
     }
-    if (step === 5) {
-      // The old DiskAccessStep (button-driven file scan) is hidden; this
-      // discovery step scans automatically with the orbit animation instead.
-      return (
-        <BuildProfileStep stepIndex={5} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
-      )
-    }
-    if (step === 6) {
-      return (
-        <MicPermissionStep stepIndex={6} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
-      )
-    }
     if (step === 7) {
       return (
-        <AutomationPermissionStep
-          stepIndex={7}
+        <MicPermissionStep
+          stepIndex={step}
           totalSteps={TOTAL_STEPS}
           onContinue={next}
+          onBack={back}
           onSkip={next}
         />
       )
     }
     if (step === 8) {
-      // Floating-bar shortcut setup: enables + warms the overlay so the user can
-      // test the press here, then advances to the voice intro.
       return (
-        <ShortcutSetupStep stepIndex={8} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+        <AutomationPermissionStep
+          stepIndex={step}
+          totalSteps={TOTAL_STEPS}
+          onContinue={next}
+          onBack={back}
+          onSkip={next}
+        />
       )
     }
     if (step === 9) {
+      // Floating-bar shortcut setup: enables + warms the overlay so the user can
+      // test the press here, then advances to the voice intro.
       return (
-        <VoiceIntroStep stepIndex={9} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+        <ShortcutSetupStep
+          stepIndex={step}
+          totalSteps={TOTAL_STEPS}
+          onContinue={next}
+          onSkip={next}
+        />
       )
     }
     if (step === 10) {
-      // Ask demo: type a question in the bar → Omi's answer (Mac comparison)
-      // reveals, then advances to the goal step.
       return (
-        <AskDemoStep stepIndex={10} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+        <VoiceIntroStep stepIndex={step} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
       )
     }
     if (step === 11) {
+      // Ask demo: type a question in the bar → Omi's answer (Mac comparison)
+      // reveals, then advances to the goal step.
+      return (
+        <AskDemoStep stepIndex={step} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+      )
+    }
+    if (step === 12) {
+      // Data sources: curated OAuth-connector + memory-log import list to seed the
+      // second brain with more context. Nothing required — Continue and Skip both
+      // advance to the Goal step.
+      return (
+        <DataSourcesStep
+          stepIndex={step}
+          totalSteps={TOTAL_STEPS}
+          onContinue={next}
+          onSkip={next}
+        />
+      )
+    }
+    if (step === 13) {
       return (
         <GoalStep
-          stepIndex={11}
+          stepIndex={step}
           totalSteps={TOTAL_STEPS}
           apps={appNames}
           onContinue={handleGoal}
@@ -208,33 +277,60 @@ export function Onboarding(): React.JSX.Element {
   // navigation — only its data changes as the graph grows.
   // Steps that show the step card centered on the whole screen with NO brain
   // map: the name screen (0), the "I'm going to ask you for a few permissions"
-  // screen (3, TrustStep), the floating-bar steps (8 shortcut, 9 voice, 10 ask
-  // demo), and the final auto-created-tasks screen (12). The Goal step (11) keeps
-  // the map (it personalizes its suggestion from the revealed app nodes). The map
-  // is only hidden (display:none), never unmounted, so it persists and returns
-  // smoothly on the next steps.
+  // screen (3, TrustStep), the background/privacy consent screen (4), the
+  // floating-bar steps (9 shortcut, 10 voice, 11 ask demo), and the final
+  // auto-created-tasks screen (14). The Data Sources (12) and Goal (13) steps keep
+  // the map — Data Sources reinforces "your 2nd brain is live" and Goal
+  // personalizes its suggestion from the revealed app nodes. The map is only
+  // hidden (display:none), never unmounted, so it persists and returns smoothly
+  // on the next steps.
   const hideBrainMap =
-    step === 0 || step === 3 || step === 8 || step === 9 || step === 10 || step === 12
+    step === 0 ||
+    step === 3 ||
+    step === 4 ||
+    step === 9 ||
+    step === 10 ||
+    step === 11 ||
+    step === 14
 
   return (
     <div className="app-canvas relative flex h-full">
-      <img
-        src="https://personas.omi.me/omilogo.png"
-        alt="omi"
-        className="absolute left-6 top-6 z-20 h-6 w-auto"
-      />
-      <div className="flex flex-1 items-center justify-center p-8">{renderStep()}</div>
+      {/* Mac's split shape (OnboardingStepScaffold.swift: content pane
+          `.frame(minWidth: 470, idealWidth: 520, maxWidth: 560)`, graph pane
+          `.frame(maxWidth: .infinity)`): the CONTENT pane is bounded by its own
+          constraints and the map takes whatever is left — never the reverse.
+          Below `lg` the map is hidden and the content pane relaxes to the full
+          window (a split pane is nonsense near the 500px minWidth).
+          `min-w-0` is load-bearing on the map pane: a flex item defaults to
+          min-width:auto, so it cannot shrink below its content's intrinsic
+          width. The old map square was sized off the pane HEIGHT, so it demanded
+          ~780px and squeezed the step card to ~200px at 1024px wide. */}
       <div
+        data-testid="onboarding-content-pane"
+        className={
+          // The bounded basis only applies when the map is actually beside it.
+          // On map-less steps the card owns the whole canvas and stays centered
+          // on the window (Mac's `.centered` layout mode).
+          hideBrainMap
+            ? 'flex w-full min-w-0 items-center justify-center p-8'
+            : 'flex w-full min-w-0 shrink-0 items-center justify-center p-8 lg:w-[520px] lg:min-w-[470px] lg:max-w-[560px]'
+        }
+      >
+        {renderStep()}
+      </div>
+      <div
+        data-testid="onboarding-map-pane"
         className={
           hideBrainMap
             ? 'hidden'
-            : 'flex flex-1 items-center justify-center border-l border-white/5 p-8'
+            : 'hidden min-w-0 flex-1 items-center justify-center border-l border-white/5 p-8 lg:flex'
         }
       >
-        {/* Sized container for the brain map. The graph fills this box (and is
-            framed to it), so its on-screen size is controlled here: change the
-            max-h value to make it expand more or less. */}
-        <div className="relative aspect-square h-full max-h-[760px] max-w-full -translate-x-8">
+        {/* Sized container for the brain map. WIDTH-driven (never height-driven),
+            so the square can always shrink with its pane instead of forcing the
+            pane open. The cap keeps it from outgrowing the viewport height —
+            raise/lower 760px to make the map expand more or less. */}
+        <div className="relative aspect-square w-full max-w-[min(760px,calc(100vh-4rem))]">
           <BrainGraph graph={graph} centerNodeId="user" interactive={false} shuffleKey={step} />
         </div>
       </div>

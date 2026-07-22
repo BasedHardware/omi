@@ -275,6 +275,7 @@ async def execute_chat_stream(
     callback_data: Dict[str, Any] = {},
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
+    platform: Optional[str] = None,
 ) -> AsyncGenerator[Optional[str], None]:
     """Route chat requests to the appropriate handler.
 
@@ -302,7 +303,7 @@ async def execute_chat_stream(
     # 3. Default: Anthropic agentic chat
     # Claude decides implicitly whether to use tools — no requires_context() needed
     async for chunk in execute_agentic_chat_stream(
-        uid, messages, app, callback_data=callback_data, chat_session=chat_session, context=context
+        uid, messages, app, callback_data=callback_data, chat_session=chat_session, context=context, platform=platform
     ):
         yield chunk
 
