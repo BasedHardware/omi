@@ -146,7 +146,6 @@ jobs:
       # empty value — code reads os.getenv(...) as None.
       - name: Upgrade backend-secrets Helm chart
         env:
-          BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
           ENVIRONMENT: ${{ vars.ENV }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}

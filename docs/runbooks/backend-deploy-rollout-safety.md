@@ -1,14 +1,17 @@
 # Backend Deploy Rollout Safety
 
-## Immutable production release records
+## Production backend deployment
 
-release-record.yml records one immutable production backend vector: the four
-Cloud Run services, backend configuration and secrets, backend-listen, pusher,
-LLM gateway, and agent proxy. It does not deploy. An operator may manually
-dispatch deploy-release-ring.yml with the recorded ID and confirm=deploy-prod;
-that workflow shares the deploy-backend-stack-prod lock and validates
-no-traffic revisions before traffic mutation. There is no backend beta ring.
-This does not change desktop Beta or Stable update-channel pointers.
+Dispatch `gcp_backend.yml` once with `environment=prod`, `mode=deploy`,
+`deploy_targets=all`, and the exact admitted `release_sha`. The selected prod
+environment provides the single production approval. The workflow checks
+Firestore readiness before mutation, creates and validates no-traffic Cloud Run
+candidates, reconciles backend secrets using the script-derived service-account
+default, updates the GKE backend surfaces, snapshots Cloud Run traffic before
+promotion, restores it after a failed promotion or serving-vector check, and
+hard-gates the final serving release vector. There is no release-record bucket,
+separate deployer identity, or backend beta ring. This does not change desktop
+Beta or Stable update-channel pointers.
 
 Use this runbook when a backend deploy may have produced stale runtime, partial traffic shifts, or GKE pods serving an old ReplicaSet. All commands below are read-only unless explicitly marked as a template for a future deploy workflow.
 ```

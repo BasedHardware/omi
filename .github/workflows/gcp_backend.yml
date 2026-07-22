@@ -87,10 +87,6 @@ jobs:
             echo "Invalid deploy_targets: $DEPLOY_TARGETS. Must be 'all' or 'cloud-run-only'." >&2
             exit 1
           fi
-          if [[ "$DEPLOY_ENVIRONMENT" == "prod" && "$DEPLOY_TARGETS" == "all" ]]; then
-            echo 'ERROR: environment=prod, deploy_targets=all is unsupported: transactional GKE/config rollback parity does not exist. Use cloud-run-only; direct GKE workflows remain the production path for those surfaces.' >&2
-            exit 1
-          fi
 
   repair-traffic:
     if: >-
@@ -544,7 +540,7 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
-            ${{ (github.event.inputs.environment == 'development' || github.event.inputs.deploy_targets == 'cloud-run-only') && format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG) || '' }}
+            ${{ format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG) }}
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
@@ -676,7 +672,7 @@ jobs:
       # Run IAM and Firebase authentication before any traffic movement.
       - name: Resolve transcription candidate URL
         id: transcription-candidate
-        if: ${{ github.event.inputs.environment == 'development' || github.event.inputs.deploy_targets == 'cloud-run-only' }}
+        if: ${{ github.event.inputs.environment == 'development' || github.event.inputs.environment == 'prod' }}
         run: |
           candidate_url="$(python3 backend/scripts/resolve_cloud_run_tagged_url.py \
             --project=${{ vars.GCP_PROJECT_ID }} \
@@ -702,7 +698,7 @@ jobs:
           firebase_auth_project_id: based-hardware
 
       - name: Mint Firebase token for internal production candidate probe
-        if: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.deploy_targets == 'cloud-run-only' }}
+        if: ${{ github.event.inputs.environment == 'prod' }}
         env:
           PROBE_SECRET_PROJECT: ${{ vars.GCP_PROJECT_ID }}
           FIREBASE_AUTH_PROJECT_ID: based-hardware
@@ -715,7 +711,7 @@ jobs:
             --token-output "$RUNNER_TEMP/firebase-production-candidate-token"
 
       - name: Gate internal production candidate on known audio from Cloud Run VPC
-        if: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.deploy_targets == 'cloud-run-only' }}
+        if: ${{ github.event.inputs.environment == 'prod' }}
         run: |
           set -euo pipefail
           bash backend/scripts/probe-transcription-candidate-from-cloud-run.sh \
@@ -747,7 +743,7 @@ jobs:
             --evidence-path artifacts/backend-cloud-run-candidate-release-vector.json
 
       - name: Remove passed transcription candidate tag
-        if: ${{ success() && (github.event.inputs.environment == 'development' || github.event.inputs.deploy_targets == 'cloud-run-only') }}
+        if: ${{ success() && (github.event.inputs.environment == 'development' || github.event.inputs.environment == 'prod') }}
         run: |
           gcloud run services update-traffic ${{ env.SERVICE }} \
             --project=${{ vars.GCP_PROJECT_ID }} \
@@ -758,7 +754,7 @@ jobs:
       - name: Remove failed transcription candidate tag
         # Tag is created at deploy-backend; clean it up on any later failure,
         # not only after the candidate URL resolution step succeeds.
-        if: ${{ failure() && steps.deploy-backend.outcome == 'success' && (github.event.inputs.environment == 'development' || github.event.inputs.deploy_targets == 'cloud-run-only') }}
+        if: ${{ failure() && steps.deploy-backend.outcome == 'success' && (github.event.inputs.environment == 'development' || github.event.inputs.environment == 'prod') }}
         run: |
           gcloud run services update-traffic ${{ env.SERVICE }} \
             --project=${{ vars.GCP_PROJECT_ID }} \
@@ -811,7 +807,6 @@ jobs:
       - name: Deploy backend-secrets to GKE using Helm
         if: ${{ github.event.inputs.deploy_targets == 'all' }}
         env:
-          BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
           ENVIRONMENT: ${{ vars.ENV }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
