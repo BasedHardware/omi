@@ -2576,50 +2576,16 @@ private struct HomeKnowsRowView: View {
 
 private struct HomeCanvasBackground: View {
   var body: some View {
-    ZStack {
-      HomePalette.paper
-
-      // Neutral key light high behind the wordmark, with a soft ambient
-      // wash so the redesigned Home stage reads against the dark canvas.
-      RadialGradient(
-        colors: [Color.white.opacity(0.040), .clear],
-        center: UnitPoint(x: 0.5, y: 0.16),
-        startRadius: 0,
-        endRadius: 560
-      )
-
-      RadialGradient(
-        colors: [HomePalette.stageGlow.opacity(0.075), .clear],
-        center: UnitPoint(x: 0.48, y: 0.24),
-        startRadius: 0,
-        endRadius: 680
-      )
-
-      RadialGradient(
-        colors: [HomePalette.stageGlow.opacity(0.040), .clear],
-        center: UnitPoint(x: 0.20, y: 0.78),
-        startRadius: 100,
-        endRadius: 560
-      )
-
-      RadialGradient(
-        colors: [.clear, HomePalette.paper.opacity(0.88), Color.black.opacity(0.62)],
-        center: UnitPoint(x: 0.50, y: 0.48),
-        startRadius: 470,
-        endRadius: 900
-      )
-
-      LinearGradient(
-        stops: [
-          .init(color: .clear, location: 0.50),
-          .init(color: HomePalette.stageGlow.opacity(0.026), location: 0.78),
-          .init(color: Color.white.opacity(0.014), location: 0.90),
-          .init(color: .clear, location: 1.0),
-        ],
-        startPoint: .top,
-        endPoint: .bottom
-      )
-    }
+    // A clean, flat neutral-dark canvas — no muddy glow. One very soft
+    // top-to-bottom lift keeps the surface from reading dead-flat.
+    LinearGradient(
+      colors: [
+        Color(red: 0.056, green: 0.058, blue: 0.065),
+        Color(red: 0.040, green: 0.042, blue: 0.048),
+      ],
+      startPoint: .top,
+      endPoint: .bottom
+    )
     .ignoresSafeArea()
   }
 }

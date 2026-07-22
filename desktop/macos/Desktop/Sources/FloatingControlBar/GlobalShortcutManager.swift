@@ -297,8 +297,10 @@ class GlobalShortcutManager: @unchecked Sendable {
     NSLog("GlobalShortcutManager: Open Omi shortcut detected")
     DispatchQueue.main.async {
       // Typing moved to the main app: the shortcut opens Omi itself
-      // instead of the floating bar's typed input panel.
+      // instead of the floating bar's typed input panel — and lands straight in
+      // the chat surface (the one continuous thread), not the resting hero.
       (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
+      NotificationCenter.default.post(name: .navigateToChat, object: nil)
     }
   }
 

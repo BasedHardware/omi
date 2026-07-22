@@ -610,6 +610,12 @@ struct DesktopHomeView: View {
     useLegacyHomeDesign && !hideSidebar
   }
 
+  /// The redesign's floating hover-expand nav rail shows on every non-settings
+  /// page (settings has its own sidebar).
+  private var showsAppNavRail: Bool {
+    !useLegacyHomeDesign && !isInSettings
+  }
+
   private var currentAppStateLabel: String {
     if authState.isRestoringAuth { return "restoring_auth" }
     if authState.sessionPhase == .recoveryRequired { return "auth_recovery" }
@@ -942,26 +948,13 @@ struct DesktopHomeView: View {
         }
         .fixedSize(horizontal: true, vertical: false)
         .clipped()
-      } else if !useLegacyHomeDesign {
-        // Redesign: a persistent thin nav rail beside every page so navigation
-        // never has to route back through Home.
-        AppNavRail(selectedIndex: $selectedIndex)
       }
 
       // Main content area with rounded container
       ZStack {
-        // Content container background
+        // Content container background — clean flat neutral dark (no gradient).
         RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
-          .fill(
-            LinearGradient(
-              colors: [
-                OmiColors.backgroundSecondary.opacity(0.96),
-                OmiColors.backgroundPrimary.opacity(0.96),
-              ],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
+          .fill(Color(red: 0.050, green: 0.052, blue: 0.059))
           .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
               .stroke(OmiColors.border.opacity(0.22), lineWidth: 1)
@@ -989,6 +982,14 @@ struct DesktopHomeView: View {
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
       .padding(OmiSpacing.md)
+      // Reserve the rail's resting width so content doesn't sit under it; the
+      // rail floats on top (overlay below) and expands over content on hover.
+      .padding(.leading, showsAppNavRail ? AppNavRail.restWidth : 0)
+    }
+    .overlay(alignment: .leading) {
+      if showsAppNavRail {
+        AppNavRail(selectedIndex: $selectedIndex)
+      }
     }
     .overlay {
       // Goal completion celebration overlay

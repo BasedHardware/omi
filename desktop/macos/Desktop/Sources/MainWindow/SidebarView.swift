@@ -1579,6 +1579,11 @@ enum OmiDeviceImage {
 struct AppNavRail: View {
   @Binding var selectedIndex: Int
   @Environment(\.sbTheme) private var sb
+  @State private var isExpanded = false
+
+  /// Rail width at rest (icons only) and expanded (icons + labels).
+  static let restWidth: CGFloat = 60
+  static let expandedWidth: CGFloat = 216
 
   private var items: [SidebarNavItem] {
     [.dashboard, .conversations, .memories, .tasks, .focus, .insight, .rewind, .apps]
@@ -1591,6 +1596,7 @@ struct AppNavRail: View {
           icon: item.icon,
           title: item.title,
           isSelected: selectedIndex == item.rawValue,
+          isExpanded: isExpanded,
           action: { select(item) }
         )
       }
@@ -1601,12 +1607,25 @@ struct AppNavRail: View {
         icon: SidebarNavItem.settings.icon,
         title: SidebarNavItem.settings.title,
         isSelected: selectedIndex == SidebarNavItem.settings.rawValue,
+        isExpanded: isExpanded,
         action: { select(.settings) }
       )
     }
     .padding(.vertical, 16)
-    .frame(width: 60)
-    .frame(maxHeight: .infinity)
+    .padding(.horizontal, 10)
+    .frame(width: isExpanded ? Self.expandedWidth : Self.restWidth, alignment: .leading)
+    .frame(maxHeight: .infinity, alignment: .top)
+    // Flat panel matching the content surface; floats over content when expanded.
+    .background(Color(red: 0.050, green: 0.052, blue: 0.059))
+    .overlay(alignment: .trailing) {
+      if isExpanded {
+        Rectangle().fill(sb.ink(.w07)).frame(width: 1)
+      }
+    }
+    .contentShape(Rectangle())
+    .onHover { hovering in
+      withAnimation(.easeOut(duration: 0.18)) { isExpanded = hovering }
+    }
   }
 
   private func select(_ item: SidebarNavItem) {
@@ -1620,6 +1639,7 @@ private struct AppNavRailButton: View {
   let icon: String
   let title: String
   let isSelected: Bool
+  let isExpanded: Bool
   let action: () -> Void
 
   @Environment(\.sbTheme) private var sb
@@ -1627,15 +1647,26 @@ private struct AppNavRailButton: View {
 
   var body: some View {
     Button(action: action) {
-      Image(systemName: icon)
-        .font(.system(size: 15, weight: .medium))
-        .foregroundStyle(isSelected || isHovering ? sb.ink : sb.ink(.w38))
-        .frame(width: 40, height: 40)
-        .background(
-          RoundedRectangle(cornerRadius: 11, style: .continuous)
-            .fill(isSelected ? sb.ink(.w09) : (isHovering ? sb.ink(.w05) : Color.clear))
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+      HStack(spacing: 12) {
+        Image(systemName: icon)
+          .font(.system(size: 15, weight: .medium))
+          .frame(width: 40, height: 40)
+
+        if isExpanded {
+          Text(title)
+            .geist(size: 14, weight: isSelected ? .medium : .regular)
+            .lineLimit(1)
+            .fixedSize()
+        }
+      }
+      .foregroundStyle(isSelected || isHovering ? sb.ink : sb.ink(.w38))
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .frame(height: 40)
+      .background(
+        RoundedRectangle(cornerRadius: 11, style: .continuous)
+          .fill(isSelected ? sb.ink(.w09) : (isHovering ? sb.ink(.w05) : Color.clear))
+      )
+      .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
     }
     .buttonStyle(.plain)
     .onHover { isHovering = $0 }
