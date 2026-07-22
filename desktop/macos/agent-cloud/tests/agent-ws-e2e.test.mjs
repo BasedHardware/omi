@@ -113,8 +113,13 @@ describe("agent-cloud WS contract (e2e)", () => {
     );
     expect(subProgress.length).toBeGreaterThanOrEqual(1);
 
-    // The leak canary must never reach the client in any message.
-    expect(JSON.stringify(messages)).not.toContain("SECRET-INTERNAL");
+    // The leak canary must never enter the ANSWER stream (text_delta/result) —
+    // ephemeral `status` progress MAY carry subagent text (researcher-progress
+    // feature, presentation-only by contract).
+    const answerStream = messages.filter((m) => m.type === "text_delta" || m.type === "result");
+    expect(JSON.stringify(answerStream)).not.toContain("SECRET-INTERNAL");
+    const progress = messages.filter((m) => m.type === "status" && m.message?.startsWith("Researching…"));
+    expect(progress.length).toBeGreaterThanOrEqual(1);
   }, 20000);
 
   it("keeps the session (and its context) alive across reconnects", async () => {

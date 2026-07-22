@@ -6,7 +6,7 @@ const { query, tool, createSdkMcpServer } = await import(
   process.env.OMI_AGENT_SDK_MODULE || "@anthropic-ai/claude-agent-sdk"
 );
 import { ALLOWED_TOOLS, buildAgentDefinitions } from "./query-config.mjs";
-import { subagentClientEvents } from "./stream-routing.mjs";
+import { createSubagentRouter } from "./stream-routing.mjs";
 import {
   activityCounts,
   appUsageMatrix,
@@ -132,12 +132,11 @@ function openDatabase() {
   db = Database(DB_PATH);  // writable for /sync inserts; agent tool still blocks non-SELECT
   db.pragma("journal_mode = WAL");
 
-  // Ensure performance indexes exist (incremental sync doesn't transfer indexes)
-  try {
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_screenshots_date_local ON screenshots(date(timestamp, 'localtime'))`);
-  } catch (e) {
-    console.log(`[db] Index creation skipped: ${e.message}`);
-  }
+  // No extra indexes needed: E6 scale bench (600K rows, 2026-07-22) showed the
+  // covering idx_screenshots_timestamp serves every range-comparison query the
+  // tools issue (worst tool call 126ms p50). The old date(timestamp,'localtime')
+  // index attempt failed on every open (non-deterministic date()) and date()-
+  // wrapped WHEREs full-scan anyway — range comparisons are the supported shape.
 
   // Rebuild schema + system prompt + MCP server
   const schema = getSchema();
@@ -652,12 +651,14 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
   };
 
   const q = query({ prompt, options });
+  const routeSubagent = createSubagentRouter();
 
   for await (const message of q) {
     if (abortController.signal.aborted) break;
 
-    // Subagent-origin messages: surface tool starts as progress, never their text.
-    const subEvents = subagentClientEvents(message);
+    // Subagent-origin messages: tool starts + throttled text snippets as
+    // progress; their text never enters the answer stream.
+    const subEvents = routeSubagent(message);
     if (subEvents) {
       for (const e of subEvents) send(e);
       continue;
@@ -825,11 +826,13 @@ function startPersistentSession(initialSink, log) {
   let interruptRequested = false; // set when a stop/preemption cuts the current turn short
 
   // Background message processing loop — runs for entire WS lifetime
+  const routeSubagent = createSubagentRouter();
   const loopPromise = (async () => {
     try {
       for await (const message of q) {
-        // Subagent-origin messages: surface tool starts as progress, never their text.
-        const subEvents = subagentClientEvents(message);
+        // Subagent-origin messages: tool starts + throttled text snippets as
+        // progress; their text never enters the answer stream.
+        const subEvents = routeSubagent(message);
         if (subEvents) {
           if (!isPrewarmTurn) for (const e of subEvents) send(e);
           continue;
