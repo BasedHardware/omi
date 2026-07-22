@@ -156,3 +156,21 @@ export function formatTopWindows(perApp) {
   }
   return out;
 }
+
+// E7 batch shape: run several independent read queries in ONE tool call.
+// The latency win is eliminating model round-trips (2-6s each), not SQL time
+// (E6: worst single query 126ms at 600K rows) — so execution stays serial.
+// Errors are isolated per query: one bad statement never voids the batch.
+export function runSqlBatch(runOne, queries) {
+  const parts = queries.map((sql, i) => {
+    const head = sql.replace(/\s+/g, " ").trim().slice(0, 80);
+    let body;
+    try {
+      body = runOne(sql);
+    } catch (e) {
+      body = JSON.stringify({ error: e?.message || String(e) });
+    }
+    return `-- [${i + 1}] ${head}\n${body}`;
+  });
+  return parts.join("\n\n");
+}

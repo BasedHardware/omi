@@ -9,6 +9,7 @@ import { ALLOWED_TOOLS, buildAgentDefinitions } from "./query-config.mjs";
 import { createSubagentRouter } from "./stream-routing.mjs";
 import {
   activityCounts,
+  runSqlBatch,
   appUsageMatrix,
   emptyRangeStatement,
   formatAppUsage,
@@ -329,10 +330,28 @@ Don't use when (if those tools are available):
 Note: Database is read-only (SELECT only). SELECT queries auto-limit to 200 rows.
 Supports FTS5 MATCH queries for keyword search (e.g., WHERE screenshots_fts MATCH 'keyword').
 
+BATCHING: when you need several independent queries (comparisons, multiple
+tables, multiple time ranges), pass them ALL in the "queries" array in ONE
+call — results come back labeled per query. Never issue sequential
+execute_sql calls for queries that don't depend on each other's results.
+
 Key tables: screenshots (appName, windowTitle, ocrText, timestamp), transcription_sessions (title, overview, startedAt, finishedAt), transcription_segments (sessionId, speaker, text, startTime), action_items (description, completed, priority, dueAt, category), memories (content, category, source), staged_tasks (description, priority, source), focus_sessions (status, appOrSite, durationSeconds), observations (appName, contextSummary, currentActivity), goals (title, goalType, targetValue, currentValue), indexed_files (path, filename, fileType, folder), live_notes (sessionId, text, timestamp), ai_user_profiles (profileText, generatedAt).`,
-  { query: z.string().describe("SQL query to execute against omi.db") },
-  async ({ query }) => {
-    const result = executeSqlQuery(query);
+  {
+    query: z.string().optional().describe("Single SQL query to execute against omi.db"),
+    queries: z
+      .array(z.string())
+      .min(1)
+      .max(8)
+      .optional()
+      .describe("Batch of independent SQL queries executed in one call; results return labeled in order"),
+  },
+  async ({ query, queries }) => {
+    const batch = queries ?? (query !== undefined ? [query] : []);
+    if (batch.length === 0) {
+      return { content: [{ type: "text", text: JSON.stringify({ error: "Provide query or queries" }) }] };
+    }
+    console.log(`[sql] calls=1 statements=${batch.length}`);
+    const result = batch.length === 1 ? executeSqlQuery(batch[0]) : runSqlBatch(executeSqlQuery, batch);
     return { content: [{ type: "text", text: result }] };
   }
 );

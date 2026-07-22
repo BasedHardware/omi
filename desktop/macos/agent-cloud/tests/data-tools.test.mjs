@@ -10,8 +10,7 @@ import {
   emptyRangeStatement,
   formatAppUsage,
   resolveRange,
-  topWindows,
-} from "../data-tools.mjs";
+  topWindows, runSqlBatch } from "../data-tools.mjs";
 
 const dirs = [];
 afterEach(() => { while (dirs.length) rmSync(dirs.pop(), { recursive: true, force: true }); });
@@ -90,5 +89,25 @@ describe("topWindows", () => {
     expect(per[0].appName).toBe("Warp");
     expect(per[0].windows[0]).toMatchObject({ windowTitle: "build logs", captures: 2 });
     db.close();
+  });
+});
+
+describe("runSqlBatch", () => {
+  it("labels each result in order", () => {
+    const out = runSqlBatch((sql) => `rows-for:${sql}`, ["SELECT 1", "SELECT 2"]);
+    expect(out).toContain("-- [1] SELECT 1\nrows-for:SELECT 1");
+    expect(out).toContain("-- [2] SELECT 2\nrows-for:SELECT 2");
+  });
+
+  it("isolates per-query errors so one bad statement never voids the batch", () => {
+    const out = runSqlBatch(
+      (sql) => {
+        if (sql.includes("BAD")) throw new Error("no such table");
+        return "ok";
+      },
+      ["SELECT good", "SELECT BAD", "SELECT good2"],
+    );
+    expect(out).toContain('-- [2] SELECT BAD\n{"error":"no such table"}');
+    expect(out).toContain("-- [3] SELECT good2\nok");
   });
 });

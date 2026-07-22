@@ -49,6 +49,8 @@ ${schemaText}
 
 Your job: run the queries needed to answer the objective, then return distilled findings.
 - Use execute_sql for structured queries (auto-limited to 200 rows; FTS5 MATCH available).
+- Independent queries go in execute_sql's "queries" array in ONE call (results
+  return labeled) — never issue them as sequential single calls.
 - Use semantic_search for fuzzy/conceptual recall over screenshot OCR text.
 - Use get_daily_recap for activity summaries. ONE call covers any date range
   (start_date/end_date) — never call it once per day. Its "no activity" reply is
