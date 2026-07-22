@@ -93,7 +93,6 @@ def render_oauth_response(
 
     if success:
         context: Dict[str, Any] = {
-            'request': request,
             'title': f"{config['name']} Auth",
             'icon': '✓',
             'message': 'Authentication Successful!',
@@ -110,7 +109,6 @@ def render_oauth_response(
         }
 
         context = {
-            'request': request,
             'title': f"{config['name']} Auth Error",
             'icon': '❌',
             'message': f"{'Security' if error_type == 'invalid_state' else 'Configuration' if error_type == 'config_error' else 'Authentication'} Error",
@@ -119,7 +117,7 @@ def render_oauth_response(
             'show_spinner': False,
         }
 
-    return templates.TemplateResponse('oauth_callback.html', context)
+    return templates.TemplateResponse(request, 'oauth_callback.html', context)
 
 
 def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dict[str, str]]:

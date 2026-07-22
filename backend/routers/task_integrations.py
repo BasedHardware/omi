@@ -84,7 +84,7 @@ def render_oauth_response(
             'show_spinner': False,
         }
 
-    return templates.TemplateResponse('oauth_callback.html', context)
+    return templates.TemplateResponse(request, 'oauth_callback.html', context)
 
 
 def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dict[str, str]]:
