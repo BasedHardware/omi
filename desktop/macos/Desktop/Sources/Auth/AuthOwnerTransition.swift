@@ -21,6 +21,46 @@ func performAuthOwnerTransition<T: Sendable>(
 extension AuthService {
   // MARK: - Auth Persistence (UserDefaults for dev builds)
 
+  /// Revoke the remote session and publish the signed-out credential generation
+  /// only after owner-bound storage is safely prepared. A preparation failure
+  /// therefore leaves the previous session intact instead of exposing a signed-
+  /// out UI with the previous owner's local authority still active.
+  @discardableResult
+  func commitSignedOutSession(
+    attempt: AuthSessionAttempt,
+    phase: AuthSessionPhase,
+    beforeClearingCredentials: @escaping @MainActor @Sendable () throws -> Void = {},
+    prepareLocalStorageTransition:
+      @escaping @Sendable (_ previousOwner: String?, _ plannedNextOwner: String?) async throws -> Void = { _, _ in
+        RewindIndexer.shared.suspendForOwnerTransition()
+        try await RewindStorage.shared.resetForOwnerTransition()
+      }
+  ) async throws -> Bool {
+    let attemptFence = sessionAttemptFence
+    let committed = try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+      plannedNextOwner: { _, previousOwner in
+        attemptFence.isCurrent(attempt) ? nil : previousOwner
+      },
+      prepareLocalStorageTransition: prepareLocalStorageTransition,
+      { _ in
+        try await MainActor.run {
+          try attemptFence.commitIfCurrent(attempt) {
+            try beforeClearingCredentials()
+            self.clearTokens()
+            AuthState.shared.userEmail = nil
+            AuthState.shared.transition(to: phase)
+            let defaults = UserDefaults.standard
+            defaults.set(false, forKey: .authIsSignedIn)
+            defaults.removeObject(forKey: .authUserEmail)
+            defaults.removeObject(forKey: .authUserId)
+            defaults.synchronize()
+            return true
+          } ?? false
+        }
+      })
+    return committed && sessionAttemptFence.isCurrent(attempt)
+  }
+
   @discardableResult
   func saveAuthState(
     isSignedIn: Bool,

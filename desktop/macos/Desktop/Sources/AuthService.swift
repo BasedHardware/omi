@@ -685,10 +685,19 @@ class AuthService {
     // stop background services — it only clears the Firebase SDK user.
     // The REST-backed session remains authoritative if the Firebase SDK was
     // unavailable at launch. Only clear an SDK session when one exists.
-    if let auth = configuredFirebaseAuth() {
-      try? auth.signOut()
+    do {
+      return try await commitSignedOutSession(
+        attempt: attempt,
+        phase: .needsReauth,
+        beforeClearingCredentials: { [self] in
+          if let auth = configuredFirebaseAuth() {
+            try auth.signOut()
+          }
+        })
+    } catch {
+      logError("AUTH: Session invalidation could not release owner-bound storage", error: error)
+      return false
     }
-    return await commitSignedOutSession(attempt: attempt, phase: .needsReauth)
   }
 
   // MARK: - Configuration (call after FirebaseApp.configure())
@@ -868,29 +877,6 @@ class AuthService {
     AuthState.shared.userEmail = email
     sessionCoordinator.resetAfterSuccessfulSignIn()
     return true
-  }
-
-  /// Clear credentials before the awaited owner transition. This ordering is
-  /// deliberate: a newer sign-in can begin while SQLite is closing, but a stale
-  /// sign-out has no token-deletion step left to run after that suspension.
-  @discardableResult
-  func commitSignedOutSession(
-    attempt: AuthSessionAttempt,
-    phase: AuthSessionPhase
-  ) async -> Bool {
-    let cleared =
-      sessionAttemptFence.commitIfCurrent(attempt) {
-        clearTokens()
-        AuthState.shared.userEmail = nil
-        AuthState.shared.transition(to: phase)
-        return true
-      } ?? false
-    guard cleared else { return false }
-    return await saveAuthState(
-      isSignedIn: false,
-      email: nil,
-      userId: nil,
-      attempt: attempt)
   }
 
   private func restoreAuthState(attempt: AuthSessionAttempt) async {
@@ -2257,7 +2243,7 @@ class AuthService {
     NSLog("OMI AUTH: Saved tokens for user %@, expires at %@", userId, expiryTime.description)
   }
 
-  private func clearTokens() {
+  func clearTokens() {
     tokenStorageHooks.deleteKeychainString(authTokenKeychainService, authTokenKeychainAccount)
     clearUserDefaultsTokens()
     invalidateStoredTokensCache()
@@ -2867,37 +2853,18 @@ class AuthService {
 
   func signOut() async throws {
     let sessionAttempt = beginSessionAttempt()
-    // Track sign out and reset analytics
-    AnalyticsManager.shared.signedOut()
-    AnalyticsManager.shared.reset()
-
-    // Clear Sentry user context (skip in dev builds)
-    if !AnalyticsManager.isDevBuild {
-      SentrySDK.setUser(nil)
-    }
-
     let signingOutUserID = UserDefaults.standard.string(forKey: .authUserId)
-    if let auth = configuredFirebaseAuth() {
-      try auth.signOut()
-    } else {
-      // A REST-backed session has no SDK credential to revoke; continue with
-      // the same fenced local token and owner cleanup below.
-      log("AuthService: Firebase SDK unavailable; signing out the REST-backed session")
-    }
-    // Reset coordinator only after the Firebase sign-out succeeds when the SDK
-    // exists, so a keychain error cannot falsely report .signedOut while local
-    // tokens remain intact. A REST-backed session has no SDK state to clear.
-    sessionCoordinator.resetAfterNuclearSignOut()
-    CredentialHealthManager.shared.reset()
-    APIKeyService.shared.clear()
-    ChatDraftStore.shared.clearAll(ownerID: signingOutUserID)
-    // Clear credentials before the awaited owner/SQLite transition. If a
-    // newer sign-in starts while the old pool is closing, this stale
-    // sign-out has no later token deletion that could wipe the new session.
     guard
-      await commitSignedOutSession(
+      try await commitSignedOutSession(
         attempt: sessionAttempt,
-        phase: .signedOut)
+        phase: .signedOut,
+        beforeClearingCredentials: { [self] in
+          if let auth = configuredFirebaseAuth() {
+            try auth.signOut()
+          } else {
+            log("AuthService: Firebase SDK unavailable; signing out the REST-backed session")
+          }
+        })
     else {
       log("AuthService: stale sign-out completion ignored")
       return
@@ -2906,6 +2873,18 @@ class AuthService {
       log("AuthService: sign-out superseded by a newer session")
       return
     }
+
+    // Destructive session projections follow the committed owner revocation so
+    // a storage failure cannot leave a partially signed-out prior-owner session.
+    AnalyticsManager.shared.signedOut()
+    AnalyticsManager.shared.reset()
+    if !AnalyticsManager.isDevBuild {
+      SentrySDK.setUser(nil)
+    }
+    sessionCoordinator.resetAfterNuclearSignOut()
+    CredentialHealthManager.shared.reset()
+    APIKeyService.shared.clear()
+    ChatDraftStore.shared.clearAll(ownerID: signingOutUserID)
 
     // Stop trial polling and reset banner state for this user session
     if let state = AppState.current {

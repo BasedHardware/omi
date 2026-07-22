@@ -74,7 +74,7 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertTrue(authSource.contains("func invalidateSession(reason:"))
     XCTAssertTrue(authSource.contains("func performLightSessionInvalidation()"))
     XCTAssertTrue(authSource.contains("clearTokens()"))
-    XCTAssertTrue(authSource.contains("commitSignedOutSession(attempt: attempt"))
+    XCTAssertTrue(authSource.contains("commitSignedOutSession("))
 
     // Nuclear signOut still wipes onboarding — invalidate must not.
     let signOutRange = authSource.range(of: "func signOut() async throws")

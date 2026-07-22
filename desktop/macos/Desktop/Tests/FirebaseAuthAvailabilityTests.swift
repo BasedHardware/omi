@@ -27,7 +27,7 @@ final class FirebaseAuthAvailabilityTests: XCTestCase {
 
   override func tearDown() async throws {
     let cleanupAttempt = auth.beginSessionAttempt()
-    _ = await auth.commitSignedOutSession(attempt: cleanupAttempt, phase: .signedOut)
+    _ = try? await auth.commitSignedOutSession(attempt: cleanupAttempt, phase: .signedOut)
     auth.firebaseAuthAvailability = .live
     auth.tokenStorageHooks = .live
     await RewindDatabase.shared.close()
