@@ -24,22 +24,20 @@ struct MemoryGraphPage: View {
         HStack {
           Spacer()
 
-          if viewModel.isRebuilding {
-            ProgressView()
-              .scaleEffect(0.6)
-              .tint(.white.opacity(0.5))
-          } else {
-            Button {
-              Task { await viewModel.rebuildGraph() }
-            } label: {
-              Image(systemName: "arrow.clockwise")
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(.white.opacity(0.5))
-                .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.plain)
-            .help("Rebuild graph")
+          // Rebuild control: while rebuilding it just dims and disables — the
+          // single centered spinner below is the only progress indicator, so
+          // the header never shows a second spinner of its own.
+          Button {
+            Task { await viewModel.rebuildGraph() }
+          } label: {
+            Image(systemName: "arrow.clockwise")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(.white.opacity(viewModel.isRebuilding ? 0.2 : 0.5))
+              .frame(width: 28, height: 28)
           }
+          .buttonStyle(.plain)
+          .disabled(viewModel.isRebuilding)
+          .help("Rebuild graph")
         }
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.top, OmiSpacing.md)
@@ -47,11 +45,24 @@ struct MemoryGraphPage: View {
         Spacer()
       }
 
-      // Loading / empty state — centered spinner, no extra chrome
-      if viewModel.isLoading || (viewModel.isEmpty && !viewModel.isRebuilding) {
+      // Exactly one status view: a single centered spinner while loading or
+      // rebuilding, otherwise an empty-state message — never a perpetual spinner
+      // (the empty case used to spin forever because there was no exit).
+      if viewModel.isLoading || viewModel.isRebuilding {
         ProgressView()
           .scaleEffect(1.2)
           .tint(.white.opacity(0.4))
+      } else if viewModel.isEmpty {
+        VStack(spacing: OmiSpacing.sm) {
+          Image(systemName: "brain")
+            .scaledFont(size: OmiType.heading)
+            .foregroundColor(.white.opacity(0.3))
+          Text("Brain map will appear once enough linked memories are available.")
+            .scaledFont(size: 12.5)
+            .foregroundColor(.white.opacity(0.5))
+            .multilineTextAlignment(.center)
+        }
+        .padding(OmiSpacing.lg)
       }
     }
     .task {
@@ -72,23 +83,18 @@ struct MemoryGraphInlineCard: View {
 
         Spacer()
 
-        if viewModel.isRebuilding {
-          ProgressView()
-            .scaleEffect(0.7)
+        Button {
+          Task { await viewModel.rebuildGraph() }
+        } label: {
+          Image(systemName: "arrow.clockwise")
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            .foregroundColor(viewModel.isRebuilding ? OmiColors.textTertiary : OmiColors.textSecondary)
             .frame(width: 32, height: 32)
-        } else {
-          Button {
-            Task { await viewModel.rebuildGraph() }
-          } label: {
-            Image(systemName: "arrow.clockwise")
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
-              .frame(width: 32, height: 32)
-              .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 12)
-          }
-          .buttonStyle(.plain)
-          .help("Rebuild brain map")
+            .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 12)
         }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isRebuilding)
+        .help("Rebuild brain map")
       }
 
       ZStack {
@@ -98,7 +104,7 @@ struct MemoryGraphInlineCard: View {
           MemoryGraphSceneView(viewModel: viewModel)
         }
 
-        if viewModel.isLoading || (viewModel.isEmpty && !viewModel.isRebuilding) {
+        if viewModel.isLoading || viewModel.isRebuilding {
           ProgressView()
             .scaleEffect(1.1)
             .tint(.white.opacity(0.45))

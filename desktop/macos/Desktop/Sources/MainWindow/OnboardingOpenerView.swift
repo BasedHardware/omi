@@ -50,6 +50,9 @@ struct OnboardingOpenerView: View {
               RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(OmiColors.border.opacity(0.5), lineWidth: 1)
             )
+            // The stroke leaves a transparent interior, so without an explicit
+            // hit shape only the text/icon were clickable — make the whole row tap.
+            .contentShape(.rect(cornerRadius: 12))
           }
           .buttonStyle(.plain)
         }

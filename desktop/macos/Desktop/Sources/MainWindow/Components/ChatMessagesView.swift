@@ -91,6 +91,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Horizontal inset of the message column. Home passes 0 so bubbles align
   /// exactly with the ask bar's edges; other surfaces keep the default gutter.
   var horizontalContentPadding: CGFloat = OmiSpacing.xxl
+  /// Extra trailing inset only. Home passes a small value so the macOS overlay
+  /// scrollbar doesn't clip right-aligned user pills when horizontalContentPadding
+  /// is 0; the left edge stays aligned with the ask bar. Default 0.
+  var trailingContentPadding: CGFloat = 0
   @ViewBuilder var welcomeContent: () -> WelcomeContent
 
   /// IDs of messages that are near-duplicates of an earlier message in the same session.
@@ -171,6 +175,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         messageContent
       }
       .padding(.horizontal, horizontalContentPadding)
+      .padding(.trailing, trailingContentPadding)
       .padding(.vertical, OmiSpacing.xl)
       // Do not enable text selection on the whole stack. SelectionOverlay on every
       // chrome Text (agent card headers, tool summaries, timestamps) can peg the
