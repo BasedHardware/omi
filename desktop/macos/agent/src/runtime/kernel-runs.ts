@@ -301,6 +301,7 @@ export class KernelRuns extends KernelCore {
       metadata: {
         ...(input.metadata ?? {}),
         spawnKind: "background_agent",
+        ...(input.toolPolicy ? { toolPolicy: { allowedToolNames: [...input.toolPolicy.allowedToolNames] } } : {}),
       },
       admittedContextSnapshot: input.admittedContextSnapshot,
       authoritySignal: input.authoritySignal,
@@ -397,6 +398,7 @@ export class KernelRuns extends KernelCore {
         parentRunId: parentRun.runId,
         maxDepth: input.maxDepth ?? DEFAULT_DELEGATION_MAX_DEPTH,
         maxBudgetUsd: input.maxBudgetUsd ?? DEFAULT_DELEGATION_MAX_BUDGET_USD,
+        ...(input.toolPolicy ? { toolPolicy: { allowedToolNames: [...input.toolPolicy.allowedToolNames] } } : {}),
       },
       authoritySignal: input.authoritySignal,
     };
