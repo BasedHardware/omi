@@ -492,12 +492,15 @@ assert_sparkle_and_artifacts() {
     DMG_MOUNTPOINT="$(mktemp -d "${TMPDIR:-/tmp}/omi-signed-smoke-dmg.XXXXXX")"
     hdiutil attach "$DMG_PATH" -nobrowse -readonly -mountpoint "$DMG_MOUNTPOINT" -quiet \
       || fail "DMG attach failed"
-    local dmg_app
-    dmg_app="$DMG_MOUNTPOINT/Omi.app"
-    [[ -d "$dmg_app/Contents" ]] || fail "DMG must contain canonical Omi.app"
+    local dmg_app_name dmg_app
+    dmg_app_name="$(basename "$APP_BUNDLE")"
+    [[ "$dmg_app_name" == *.app && "$dmg_app_name" != ".app" ]] \
+      || fail "validated app bundle name must end in .app: $dmg_app_name"
+    dmg_app="$DMG_MOUNTPOINT/$dmg_app_name"
+    [[ -d "$dmg_app/Contents" ]] || fail "DMG must contain exact $dmg_app_name"
     codesign --verify --deep --strict --verbose=2 "$dmg_app" >/dev/null 2>&1 \
-      || fail "DMG-contained Omi.app failed deep strict codesign verification"
-    assert_bundle_matches_current "$dmg_app" "DMG"
+      || fail "DMG-contained $dmg_app_name failed deep strict codesign verification"
+    assert_bundle_matches_current "$dmg_app" "DMG-contained $dmg_app_name"
     record_artifact "dmg" "$DMG_PATH"
   fi
 
