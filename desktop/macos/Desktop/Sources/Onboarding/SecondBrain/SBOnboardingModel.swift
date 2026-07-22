@@ -376,7 +376,7 @@ final class SBOnboardingModel: ObservableObject {
       await AgentVMService.shared.startPipeline()
       await GoalGenerationService.shared.generateNow()
     }
-    _ = LaunchAtLoginManager.shared.setEnabled(true)
+    applyLaunchAtLoginSelection()
 
     if AppBuild.usesLazyDevPermissions {
       AssistantSettings.shared.screenAnalysisEnabled = false
@@ -396,6 +396,21 @@ final class SBOnboardingModel: ObservableObject {
       if !exists {
         _ = await TasksStore.shared.createTask(description: welcome, dueAt: Date(), priority: "low")
       }
+    }
+  }
+
+  /// Apply the user's launch-at-login selection at completion — **preserve** their
+  /// choice (`launchAtLogin`) rather than force-enabling it, and report the actual
+  /// value to analytics. Previously this unconditionally called `setEnabled(true)`,
+  /// which overrode a user who declined auto-start. The `setEnabled`/`report` seams
+  /// keep this hermetic in tests (no real login-item registration side effects).
+  func applyLaunchAtLoginSelection(
+    setEnabled: (Bool) -> Bool = { LaunchAtLoginManager.shared.setEnabled($0) },
+    report: (Bool) -> Void = { AnalyticsManager.shared.launchAtLoginChanged(enabled: $0, source: "sb_onboarding_complete") }
+  ) {
+    let enabled = launchAtLogin
+    if setEnabled(enabled) {
+      report(enabled)
     }
   }
 
