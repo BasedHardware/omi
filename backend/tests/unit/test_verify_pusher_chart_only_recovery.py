@@ -149,6 +149,37 @@ def test_chart_owned_resources_reject_unexpected_drift(recovery: SimpleNamespace
     ]
 
 
+def test_service_recovery_profile_ignores_helm_and_api_defaults_but_not_real_drift(recovery: SimpleNamespace):
+    rendered = {
+        "apiVersion": "v1",
+        "kind": "Service",
+        "metadata": {
+            "name": "prod-omi-pusher",
+            "annotations": {"cloud.google.com/neg": '{"ingress": true}'},
+        },
+        "spec": {"type": "ClusterIP", "ports": [{"name": "http", "port": 8080}], "selector": {"app": "pusher"}},
+    }
+    live = copy.deepcopy(rendered)
+    live["metadata"]["annotations"].update(
+        {"meta.helm.sh/release-name": "prod-omi-pusher", "meta.helm.sh/release-namespace": "prod-omi-backend"}
+    )
+    live["spec"].update({"clusterIP": "10.0.0.7", "internalTrafficPolicy": "Cluster", "sessionAffinity": "None"})
+
+    assert recovery.validate_chart_owned_resource_drift(live, rendered, "Service") == []
+
+    annotation_drift = copy.deepcopy(live)
+    annotation_drift["metadata"]["annotations"]["cloud.google.com/neg"] = '{"ingress": false}'
+    assert recovery.validate_chart_owned_resource_drift(annotation_drift, rendered, "Service") == [
+        "recovery profile would change Service outside the allowlist"
+    ]
+
+    policy_drift = copy.deepcopy(live)
+    policy_drift["spec"]["internalTrafficPolicy"] = "Local"
+    assert recovery.validate_chart_owned_resource_drift(policy_drift, rendered, "Service") == [
+        "recovery profile would change Service outside the allowlist"
+    ]
+
+
 def test_serving_digest_is_read_only_and_rejects_mixed_or_missing_status(recovery: SimpleNamespace):
     pods = {
         "items": [

@@ -28,6 +28,10 @@ VOLATILE_METADATA = {
     "selfLink",
     "uid",
 }
+HELM_RELEASE_ANNOTATIONS = {
+    "meta.helm.sh/release-name",
+    "meta.helm.sh/release-namespace",
+}
 
 # Kubernetes API-server/controller-populated Deployment fields that are absent
 # from ``helm template`` output.  ``normalize()`` strips them so the drift
@@ -165,6 +169,12 @@ def normalize(obj: dict[str, Any]) -> dict[str, Any]:
         for key in VOLATILE_METADATA:
             metadata.pop(key, None)
         metadata.pop("namespace", None)
+        annotations = metadata.get("annotations")
+        if isinstance(annotations, dict):
+            for key in HELM_RELEASE_ANNOTATIONS:
+                annotations.pop(key, None)
+            if not annotations:
+                metadata.pop("annotations", None)
     if result.get("kind") == "Service":
         spec = result.get("spec", {})
         for key in (
@@ -176,6 +186,13 @@ def normalize(obj: dict[str, Any]) -> dict[str, Any]:
             "sessionAffinityConfig",
         ):
             spec.pop(key, None)
+        # These fields are defaulted by the Service API when the chart omits
+        # them. Strip only their documented defaults; non-default policies are
+        # meaningful drift and must remain visible to the recovery profile.
+        if spec.get("internalTrafficPolicy") == "Cluster":
+            spec.pop("internalTrafficPolicy", None)
+        if spec.get("sessionAffinity") == "None":
+            spec.pop("sessionAffinity", None)
     if result.get("kind") == "Deployment":
         _strip_deployment_defaults(result)
     return remove_nulls(result)
