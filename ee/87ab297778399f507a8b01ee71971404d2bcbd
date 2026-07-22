@@ -1,0 +1,35 @@
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_424d550d86fd05::t_beb99fa5fb9e46 5,13
+desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift
+  s_424d550d86fd05::t_4e96d7e2ce0023 105-106
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_424d550d86fd05::t_af442d413daa4e 862-863,956-957,970-971
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBWallpaper.swift
+  s_424d550d86fd05::t_5500748399a7fa 40-51
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel+Steps.swift
+  s_424d550d86fd05::t_cc1e89d247804c 229-235,238-243,488-489,495-496
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
+  s_424d550d86fd05::t_60cb44247fe96e 151-153,163-165,191-192,235-237,257-259,310-312,326-328,337-339,372-374,385-387,428-430,502-504,536-540,550-552,558-560,583-585
+desktop/macos/Desktop/Sources/SignInView.swift
+  s_424d550d86fd05::t_04db6065f49d9a 100-102
+desktop/macos/Desktop/Sources/Theme/SecondBrainTokens.swift
+  s_424d550d86fd05::t_892f37e2f940e0 99-101
+desktop/macos/Desktop/Tests/DashboardCaptureStateTests.swift
+  s_424d550d86fd05::t_674e03f9a4d29b 10-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "ee87ab297778399f507a8b01ee71971404d2bcbd",
+  "prompts": {},
+  "sessions": {
+    "s_424d550d86fd05": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7d83f64d-8ce5-47f1-b308-b8839508880a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
