@@ -172,6 +172,35 @@ extension SBOnboardingModel {
   func answerFiles() { advance(userAnswer: fdaState == .on ? "Allowed" : "Skip", to: .accessibility) }
   func answerAccessibility() { advance(userAnswer: accState == .on ? "Allowed" : "Skip", to: .automation) }
   func answerAutomation() { advance(userAnswer: autoState == .on ? "Allowed" : "Skip", to: .shortcutOpen) }
+
+  /// The permission key a step gates on, or nil for non-permission steps.
+  func permissionKey(for step: Step) -> String? {
+    switch step {
+    case .mic: return "microphone"
+    case .systemAudio: return "system_audio"
+    case .screen: return "screen_recording"
+    case .files: return "full_disk_access"
+    case .accessibility: return "accessibility"
+    case .automation: return "automation"
+    default: return nil
+    }
+  }
+
+  /// Starting at `target`, skip past any permission step whose permission is
+  /// already granted — so the user is never asked for something they've already
+  /// given (matches the legacy onboarding's live permission detection). Refreshes
+  /// each permission's TCC state before deciding, and reflects the grant so the
+  /// row is already ✓ if we ever land on it. Returns the first step to actually ask.
+  func firstUnaskedStep(from target: Step) -> Step {
+    var step = target
+    while let key = permissionKey(for: step) {
+      refreshPermCheck(key)
+      guard isGranted(key), let next = Step(rawValue: step.rawValue + 1) else { break }
+      setPermOn(key)
+      step = next
+    }
+    return step
+  }
 }
 
 // MARK: - Summon shortcut (pick → press → notch)
@@ -484,6 +513,8 @@ extension SBOnboardingModel {
       }
       let cal = await CalendarReaderService.shared.verifyConnection()
       if cal.isConnected { self.contextStates["calendar"] = "on" }
+      let gmail = await GmailReaderService.shared.verifyConnection()
+      if gmail.isConnected { self.contextStates["gmail"] = "on" }
     }
   }
 

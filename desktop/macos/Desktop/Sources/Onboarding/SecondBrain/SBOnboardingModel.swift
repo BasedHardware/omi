@@ -93,7 +93,9 @@ final class SBOnboardingModel: ObservableObject {
   /// otherwise it's fetched from the backend after sign-in). `givenName` is plain
   /// UserDefaults, not observable, so without this a name landing after the name
   /// step already streamed would never fill in.
-  private var nameObserver: NSObjectProtocol?
+  /// `nonisolated(unsafe)` so the nonisolated `deinit` can remove it — the token is
+  /// only ever written on the main actor and `removeObserver` is thread-safe.
+  nonisolated(unsafe) private var nameObserver: NSObjectProtocol?
 
   init(appState: AppState, chatProvider: ChatProvider, onComplete: (() -> Void)?) {
     self.appState = appState
@@ -204,8 +206,10 @@ final class SBOnboardingModel: ObservableObject {
     // granted before the quit shows ✓ rather than prompting again.
     let savedRaw = UserDefaults.standard.integer(forKey: Self.resumeStepKey)
     if savedRaw > Step.promise.rawValue, let resumed = Step(rawValue: savedRaw) {
-      step = resumed
-      streamMessage(for: resumed)
+      // Skip a resumed permission step the user granted while away.
+      let target = firstUnaskedStep(from: resumed)
+      step = target
+      streamMessage(for: target)
       return
     }
     streamMessage(for: .promise)
@@ -266,9 +270,12 @@ final class SBOnboardingModel: ObservableObject {
       thread.append(Msg(isOmi: false, text: userAnswer))
     }
     teardownStep(step)
-    step = next
-    UserDefaults.standard.set(next.rawValue, forKey: Self.resumeStepKey)
-    streamMessage(for: next)
+    // Don't ask for a permission the user has already granted — skip straight to
+    // the first step that still needs an answer.
+    let target = firstUnaskedStep(from: next)
+    step = target
+    UserDefaults.standard.set(target.rawValue, forKey: Self.resumeStepKey)
+    streamMessage(for: target)
   }
 
   /// Tear down any live monitors/tasks a step installed before leaving it.

@@ -250,7 +250,6 @@ struct SidebarView: View {
                 )
               }
             }
-            .anchorPreference(key: SidebarCoachAnchorKey.self, value: .bounds) { [item.rawValue: $0] }
           }
 
           Spacer()
@@ -1614,7 +1613,6 @@ struct AppNavRail: View {
           isExpanded: isExpanded,
           action: { select(item.index, title: item.title) }
         )
-        .anchorPreference(key: SidebarCoachAnchorKey.self, value: .bounds) { [item.index: $0] }
       }
 
       Spacer(minLength: 12)

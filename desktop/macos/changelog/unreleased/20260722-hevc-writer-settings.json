@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a Rewind crash on some Intel Macs when starting HEVC video capture"
+}

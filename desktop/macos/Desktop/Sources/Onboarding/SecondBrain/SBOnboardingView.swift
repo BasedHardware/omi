@@ -442,8 +442,6 @@ struct SBOnboardingView: View {
 
   private var screenDemoWidget: some View {
     VStack(alignment: .leading, spacing: 12) {
-      macLineup
-        .frame(maxWidth: 380)
       VStack(alignment: .leading, spacing: 6) {
         HStack(spacing: 5) {
           Text("Hold").geist(size: 14).foregroundStyle(sb.ink(.w85))
@@ -457,25 +455,6 @@ struct SBOnboardingView: View {
       SBInkButton(title: "Continue") { model.answerScreenDemo() }
     }
     .frame(maxWidth: 380, alignment: .leading)
-  }
-
-  /// The Mac lineup illustration reused from the legacy floating-bar demo step.
-  private static let macLineupImage: NSImage? = {
-    guard let url = Bundle.resourceBundle.url(forResource: "onboarding_mac_lineup", withExtension: "png") else {
-      return nil
-    }
-    return NSImage(contentsOf: url)
-  }()
-
-  @ViewBuilder private var macLineup: some View {
-    if let img = Self.macLineupImage {
-      Image(nsImage: img)
-        .resizable()
-        .interpolation(.high)
-        .scaledToFit()
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(sb.ink(.w1), lineWidth: 1))
-    }
   }
 
   // MARK: agents + context connectors

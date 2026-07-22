@@ -13,6 +13,27 @@ struct RewindVideoChunkReservation: Equatable, Sendable {
   let relativePath: String
 }
 
+/// Signals that one exact writer generation was cancelled before it produced a
+/// durable MP4 trailer. The encoder deliberately emits this ownership token
+/// instead of reaching into persistence: the indexer/storage boundary owns the
+/// corresponding database and filesystem recovery.
+struct RewindAbandonedVideoChunkError: Error, Sendable {
+  let relativePath: String
+}
+
+/// A marker could not be persisted before a writer needed cancellation. The
+/// storage owner must use its DB-first fallback before it force-cancels this
+/// exact reservation.
+struct RewindAbandonedVideoChunkMarkerWriteError: Error, Sendable {
+  let reservation: RewindVideoChunkReservation
+}
+
+enum RewindVideoChunkCancellationResult: Sendable {
+  case noActiveChunk
+  case markerRecorded(RewindVideoChunkReservation)
+  case markerWriteFailed(RewindVideoChunkReservation)
+}
+
 private enum RewindVideoChunkLifecyclePhase: Equatable, Sendable {
   case writing
   case finalizing
@@ -161,6 +182,16 @@ actor VideoChunkEncoder {
   // published, without relying on wall-clock scheduling.
   private var beforeFinishWritingForTesting: (@Sendable () async -> Void)?
   private var finalizationJoinedForTesting: (@Sendable () -> Void)?
+  /// When set, appends succeed this many times before every later append fails.
+  /// This intentionally models an AVFoundation append failure after rows may
+  /// already have been persisted for earlier frames in the same chunk.
+  private var appendFailureAfterSuccessfulFramesForTesting: Int?
+  /// Exercises the DB-first owner-transition fallback when a sidecar cannot
+  /// be created before cancellation.
+  private var abandonmentMarkerWriteFailuresForTesting = 0
+  /// Exercises finalization recovery at the indexer stop boundary without
+  /// relying on an AVFoundation codec failure.
+  private var finishWritingFailuresForTesting = 0
 
   // MARK: - Types
 
@@ -188,7 +219,7 @@ actor VideoChunkEncoder {
   func initialize(videosDirectory: URL) async throws {
     if isInitialized {
       guard self.videosDirectory != videosDirectory else { return }
-      await resetForUserSwitch()
+      throw RewindError.storageError("Video encoder must reset before changing storage owner")
     }
 
     self.videosDirectory = videosDirectory
@@ -206,6 +237,23 @@ actor VideoChunkEncoder {
   ) {
     beforeFinishWritingForTesting = beforeFinishWriting
     finalizationJoinedForTesting = finalizationJoined
+  }
+
+  func setAppendFailureAfterSuccessfulFramesForTesting(_ successfulFrames: Int?) {
+    if let successfulFrames {
+      precondition(successfulFrames >= 0)
+    }
+    appendFailureAfterSuccessfulFramesForTesting = successfulFrames
+  }
+
+  func setAbandonmentMarkerWriteFailuresForTesting(_ failures: Int) {
+    precondition(failures >= 0)
+    abandonmentMarkerWriteFailuresForTesting = failures
+  }
+
+  func setFinishWritingFailuresForTesting(_ failures: Int) {
+    precondition(failures >= 0)
+    finishWritingFailuresForTesting = failures
   }
 
   func hasFinalizedChunkForDedupe() -> Bool {
@@ -226,7 +274,9 @@ actor VideoChunkEncoder {
     if frameTimestamps.count >= maxBufferFrames {
       log("VideoChunkEncoder: Buffer exceeded \(maxBufferFrames) frames, forcing flush to prevent memory leak")
       logError("VideoChunkEncoder: Emergency buffer flush triggered - \(frameTimestamps.count) frames")
-      try await emergencyReset(reason: "buffer_overflow")
+      if let abandonment = try await emergencyReset(reason: "buffer_overflow") {
+        throw abandonment
+      }
     }
 
     // Check if aspect ratio changed significantly.
@@ -315,7 +365,9 @@ actor VideoChunkEncoder {
 
         if consecutiveWriteFailures >= maxConsecutiveFailures {
           logError("VideoChunkEncoder: Too many video writer failures, performing emergency reset")
-          try await emergencyReset(reason: "writer_start_failure")
+          if let abandonment = try await emergencyReset(reason: "writer_start_failure") {
+            throw abandonment
+          }
         }
         throw error
       }
@@ -340,6 +392,8 @@ actor VideoChunkEncoder {
       }
       consecutiveWriteFailures = 0  // Reset on successful write
       resetStalenessTimer()
+    } catch let abandonment as RewindAbandonedVideoChunkError {
+      throw abandonment
     } catch {
       // `waitForWriterInputReady` can suspend. If a cancel/restart replaced
       // this writer while it was waiting, the old call must not increment or
@@ -354,7 +408,9 @@ actor VideoChunkEncoder {
 
       if consecutiveWriteFailures >= maxConsecutiveFailures {
         logError("VideoChunkEncoder: Too many write failures, performing emergency reset")
-        try await emergencyReset(reason: "write_failure")
+        if let abandonment = try await emergencyReset(reason: "write_failure") {
+          throw abandonment
+        }
       }
       throw error
     }
@@ -463,17 +519,12 @@ actor VideoChunkEncoder {
     let writer = try AVAssetWriter(outputURL: fullPath, fileType: .mp4)
     writer.shouldOptimizeForNetworkUse = true
 
-    let settings: [String: Any] = [
-      AVVideoCodecKey: AVVideoCodecType.hevc,
-      AVVideoWidthKey: width,
-      AVVideoHeightKey: height,
-      AVVideoCompressionPropertiesKey: [
-        AVVideoAverageBitRateKey: bitrate,
-        AVVideoExpectedSourceFrameRateKey: max(1, Int(ceil(frameRate))),
-        AVVideoMaxKeyFrameIntervalDurationKey: 10,
-        AVVideoAllowFrameReorderingKey: false,
-      ],
-    ]
+    let settings = Self.hevcVideoSettings(
+      width: width,
+      height: height,
+      bitrate: bitrate,
+      frameRate: frameRate
+    )
 
     let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
     input.expectsMediaDataInRealTime = true
@@ -525,6 +576,29 @@ actor VideoChunkEncoder {
     SentrySDK.addBreadcrumb(breadcrumb)
   }
 
+  /// HEVC's VideoToolbox encoder rejects
+  /// `AVVideoMaxKeyFrameIntervalDurationKey` on some Intel/macOS combinations
+  /// (including hvc1), terminating the app while constructing the writer input.
+  /// Keep the common HEVC settings in one testable factory and omit that
+  /// unsupported property; keyframe cadence is encoder-controlled instead.
+  nonisolated static func hevcVideoSettings(
+    width: Int,
+    height: Int,
+    bitrate: Int,
+    frameRate: Double
+  ) -> [String: Any] {
+    [
+      AVVideoCodecKey: AVVideoCodecType.hevc,
+      AVVideoWidthKey: width,
+      AVVideoHeightKey: height,
+      AVVideoCompressionPropertiesKey: [
+        AVVideoAverageBitRateKey: bitrate,
+        AVVideoExpectedSourceFrameRateKey: max(1, Int(ceil(frameRate))),
+        AVVideoAllowFrameReorderingKey: false,
+      ],
+    ]
+  }
+
   /// Presentation timestamp (in seconds) for the frame at `frameOffset` within a chunk.
   /// Callers pass the offset of the frame being written now; the writer requires strictly
   /// increasing timestamps, so this must be a strictly increasing function of frameOffset
@@ -559,7 +633,9 @@ actor VideoChunkEncoder {
 
       if writerNotReadyCount >= maxConsecutiveNotReadyFailures {
         logError("VideoChunkEncoder: Video writer not ready \(writerNotReadyCount)x, resetting encoder state")
-        try await emergencyReset(reason: "writer_not_ready_loop")
+        if let abandonment = try await emergencyReset(reason: "writer_not_ready_loop") {
+          throw abandonment
+        }
       } else {
         log("VideoChunkEncoder: Video writer not ready (\(writerNotReadyCount)/\(maxConsecutiveNotReadyFailures))")
       }
@@ -593,6 +669,12 @@ actor VideoChunkEncoder {
       ),
       preferredTimescale: 600
     )
+    if let successfulFrames = appendFailureAfterSuccessfulFramesForTesting {
+      guard successfulFrames > 0 else {
+        throw RewindError.storageError("Injected append failure for abandoned-chunk recovery test")
+      }
+      appendFailureAfterSuccessfulFramesForTesting = successfulFrames - 1
+    }
     guard adaptor.append(pixelBuffer, withPresentationTime: presentationTime) else {
       if let writerError = assetWriter?.error {
         throw RewindError.storageWriteFailed("Failed to append frame to HEVC writer", underlying: writerError)
@@ -637,16 +719,30 @@ actor VideoChunkEncoder {
     do {
       try await finishWriting(writer)
     } catch {
-      writer.cancelWriting()
       // A cancellation/restart may have replaced this writer while its finish
       // callback was pending. That stale completion is an expected no-op for
       // the caller rather than an error from the newer generation.
-      guard resetCurrentChunkState(onlyIfCurrent: reservation) else {
+      guard chunkLifecycle.owns(reservation) else {
         resolveInFlightFinalization(reservation, with: .success(false))
         return false
       }
-      resolveInFlightFinalization(reservation, with: .failure(error))
-      throw error
+
+      // A failed finish may leave an MP4 without its trailer. Record its exact
+      // path before cancelling the writer so recovery survives a crash between
+      // this failure and the indexer/storage cleanup.
+      switch cancelCurrentChunkAfterRecordingAbandonment() {
+      case .markerRecorded(let abandonedReservation):
+        let abandonment = RewindAbandonedVideoChunkError(relativePath: abandonedReservation.relativePath)
+        resolveInFlightFinalization(reservation, with: .failure(abandonment))
+        throw abandonment
+      case .markerWriteFailed(let failedReservation):
+        let markerFailure = RewindAbandonedVideoChunkMarkerWriteError(reservation: failedReservation)
+        resolveInFlightFinalization(reservation, with: .failure(markerFailure))
+        throw markerFailure
+      case .noActiveChunk:
+        resolveInFlightFinalization(reservation, with: .success(false))
+        return false
+      }
     }
 
     guard resetCurrentChunkState(onlyIfCurrent: reservation) else {
@@ -770,8 +866,20 @@ actor VideoChunkEncoder {
     do {
       _ = try await finalizeCurrentChunk()
     } catch {
-      logError("VideoChunkEncoder: Failed to finalize stale video chunk", error: error)
+      do {
+        let recovered = try await RewindStorage.shared.recoverAbandonedVideoChunkIfNeeded(error)
+        if !recovered {
+          logError("VideoChunkEncoder: Failed to finalize stale video chunk", error: error)
+        }
+      } catch {
+        logError("VideoChunkEncoder: Failed to recover stale video chunk", error: error)
+      }
     }
+  }
+
+  func finalizeStaleChunkForTesting() async {
+    guard let reservation = chunkLifecycle.activeReservation else { return }
+    await finalizeStaleChunkIfNeeded(onlyIfCurrent: reservation)
   }
 
   // MARK: - Helpers
@@ -898,6 +1006,10 @@ actor VideoChunkEncoder {
   }
 
   private func finishWriting(_ writer: AVAssetWriter) async throws {
+    guard finishWritingFailuresForTesting == 0 else {
+      finishWritingFailuresForTesting -= 1
+      throw RewindError.storageError("Injected finishWriting failure for abandoned-chunk recovery test")
+    }
     let writerBox = AssetWriterBox(writer)
     try await withCheckedThrowingContinuation { continuation in
       writerBox.writer.finishWriting {
@@ -956,34 +1068,38 @@ actor VideoChunkEncoder {
 
   // MARK: - Cleanup
 
-  /// Cancel any in-progress encoding and clean up
-  func cancel() async {
-    stalenessCheckTask?.cancel()
-    stalenessCheckTask = nil
-
-    let cancelledFinalization = inFlightFinalization?.reservation
-    writerInput?.markAsFinished()
-    assetWriter?.cancelWriting()
-    _ = resetCurrentChunkState()
-    if let cancelledFinalization {
-      resolveInFlightFinalization(cancelledFinalization, with: .success(false))
-    }
-    writerNotReadyCount = 0
+  /// Cancel any in-progress encoding. A marker is written before the writer is
+  /// touched; callers that own persistence can use the marker-write-failure
+  /// result to execute the DB-first fallback.
+  @discardableResult
+  func cancel() -> RewindVideoChunkCancellationResult {
+    cancelCurrentChunkAfterRecordingAbandonment()
   }
 
-  func resetForUserSwitch() async {
-    await cancel()
+  /// Stop the current owner before its database/directory configuration is
+  /// released. RewindStorage reconciles the marker or performs the fallback,
+  /// then calls `clearConfigurationAfterUserSwitch`.
+  @discardableResult
+  func resetForUserSwitch() -> RewindVideoChunkCancellationResult {
+    cancelCurrentChunkAfterRecordingAbandonment()
+  }
+
+  func clearConfigurationAfterUserSwitch() {
     videosDirectory = nil
     isInitialized = false
     hasFinalizedAnyChunk = false
   }
 
+  /// This is intentionally only callable by the storage owner after it has
+  /// tombstoned the old path in the still-open old-user database.
+  func forceCancelAfterStorageFallback(for reservation: RewindVideoChunkReservation) {
+    guard chunkLifecycle.owns(reservation) else { return }
+    cancelCurrentChunkState()
+  }
+
   /// Emergency reset when encoding fails repeatedly or buffer overflows
   /// Clears all state and allows fresh start on next frame
-  private func emergencyReset(reason: String = "failure_threshold") async throws {
-    stalenessCheckTask?.cancel()
-    stalenessCheckTask = nil
-
+  private func emergencyReset(reason: String = "failure_threshold") async throws -> RewindAbandonedVideoChunkError? {
     let droppedFrames = frameTimestamps.count
     emergencyResetCount += 1
 
@@ -1005,17 +1121,59 @@ actor VideoChunkEncoder {
     logError(
       "VideoChunkEncoder: Emergency reset (reason=\(reason)) - dropping \(droppedFrames) frames to prevent memory leak")
 
+    switch cancelCurrentChunkAfterRecordingAbandonment() {
+    case .noActiveChunk:
+      log("VideoChunkEncoder: Emergency reset complete, ready for new frames")
+      return nil
+    case .markerRecorded(let abandonedReservation):
+      log("VideoChunkEncoder: Emergency reset complete, ready for new frames")
+      return RewindAbandonedVideoChunkError(relativePath: abandonedReservation.relativePath)
+    case .markerWriteFailed(let failedReservation):
+      throw RewindAbandonedVideoChunkMarkerWriteError(reservation: failedReservation)
+    }
+  }
+
+  /// Records the recovery sidecar before an AVFoundation cancellation can make
+  /// the partial MP4 unreadable. This actor contains no persistence dependency;
+  /// RewindStorage later consumes the durable record.
+  private func cancelCurrentChunkAfterRecordingAbandonment() -> RewindVideoChunkCancellationResult {
+    if let reservation = chunkLifecycle.activeReservation {
+      do {
+        try recordAbandonment(reservation)
+      } catch {
+        logError("VideoChunkEncoder: Refusing to cancel chunk without durable recovery marker", error: error)
+        return .markerWriteFailed(reservation)
+      }
+      cancelCurrentChunkState()
+      return .markerRecorded(reservation)
+    }
+
+    cancelCurrentChunkState()
+    return .noActiveChunk
+  }
+
+  private func recordAbandonment(_ reservation: RewindVideoChunkReservation) throws {
+    guard let videosDirectory else {
+      throw RewindError.storageError("Video encoder has no storage directory for abandoned chunk")
+    }
+    guard abandonmentMarkerWriteFailuresForTesting == 0 else {
+      abandonmentMarkerWriteFailuresForTesting -= 1
+      throw RewindError.storageError("Injected abandoned-chunk marker write failure")
+    }
+    _ = try RewindAbandonedVideoChunkJournal.record(reservation: reservation, in: videosDirectory)
+  }
+
+  private func cancelCurrentChunkState() {
+    stalenessCheckTask?.cancel()
+    stalenessCheckTask = nil
     let cancelledFinalization = inFlightFinalization?.reservation
     writerInput?.markAsFinished()
     assetWriter?.cancelWriting()
-
-    resetCurrentChunkState()
+    _ = resetCurrentChunkState()
     if let cancelledFinalization {
       resolveInFlightFinalization(cancelledFinalization, with: .success(false))
     }
     writerNotReadyCount = 0
-
-    log("VideoChunkEncoder: Emergency reset complete, ready for new frames")
   }
 
   struct EncoderStatus {

@@ -92,7 +92,7 @@ enum RewindArtifactGauntlet {
       }
       chunkPath = storedChunkPath
 
-      let flush = try await VideoChunkEncoder.shared.flushCurrentChunk()
+      let flush = try await RewindStorage.shared.flushCurrentVideoChunk()
       guard let flush, flush.videoChunkPath == storedChunkPath, flush.frames.count == persistedRows.count else {
         throw RewindError.storageError("Rewind artifact gauntlet could not finalize its video chunk")
       }

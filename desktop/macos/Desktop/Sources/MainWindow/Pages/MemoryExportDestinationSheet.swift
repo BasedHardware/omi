@@ -8,21 +8,24 @@ struct ExportsSection: View {
 
   // Claude/Claude Code and ChatGPT/Codex each share one choice. Their setup
   // sheets keep the cloud and CLI paths distinct without making this list uneven.
-  private var entries: [(destination: MemoryExportDestination, title: String?, subtitle: String?)] {
+  private var entries: [(destination: MemoryExportDestination, title: String?, subtitle: String?, description: String?)]
+  {
     MemoryExportDestination.allCases.compactMap { d in
       switch d {
       case .claudeCode, .codex:
         return nil
       case .claude:
         return (
-          .claude, "Claude / Claude Code", "Claude Code (CLI) or Claude cloud — choose in setup."
+          .claude, "Claude / Claude Code", nil,
+          "Claude Code (CLI) or Claude cloud — choose in setup."
         )
       case .chatgpt:
         return (
-          .chatgpt, "ChatGPT / Codex", "Add Omi in ChatGPT or connect Codex locally — choose in setup."
+          .chatgpt, "ChatGPT / Codex", "ChatGPT app or Codex CLI",
+          "Add Omi in ChatGPT or connect Codex locally — choose in setup."
         )
       default:
-        return (d, nil, nil)
+        return (d, nil, nil, nil)
       }
     }
   }
@@ -75,6 +78,7 @@ struct ExportsSection: View {
             destination: entry.destination,
             titleOverride: entry.title,
             subtitleOverride: entry.subtitle,
+            descriptionOverride: entry.description,
             status: status(for: entry.destination)
           ) {
             onSelectDestination(entry.destination)
@@ -89,6 +93,7 @@ private struct MemoryExportRow: View {
   let destination: MemoryExportDestination
   var titleOverride: String? = nil
   var subtitleOverride: String? = nil
+  var descriptionOverride: String? = nil
   let status: MemoryExportStatus
   let action: () -> Void
 
@@ -114,34 +119,76 @@ private struct MemoryExportRow: View {
     return status.hasConnection
   }
 
+  private var statusPrimaryText: String {
+    if status.exportedCount > 0 {
+      return "\(status.exportedCount.formatted()) memories exported"
+    }
+    return status.hasConnection ? "Connected" : "Not connected"
+  }
+
+  private var statusSecondaryText: String? {
+    if let lastExportedAt = status.lastExportedAt {
+      let relative = RelativeDateTimeFormatter().localizedString(for: lastExportedAt, relativeTo: Date())
+      return "Exported \(relative)"
+    }
+    return status.detailText
+  }
+
+  // Mirrors ImportConnectorCard so the Imports and Exports grids read as one
+  // system: identical icon block, description slot, and status/action footer.
   var body: some View {
     Button(action: action) {
-      HStack(spacing: OmiSpacing.md) {
-        ConnectorBrandIcon(brand: destination.brand, size: 34, cornerRadius: 9)
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+        HStack(spacing: OmiSpacing.md) {
+          ConnectorBrandIcon(
+            brand: destination.brand, size: 50, cornerRadius: OmiChrome.smallControlRadius)
 
-        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-          Text(titleOverride ?? destination.title)
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
-            .lineLimit(1)
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text(titleOverride ?? destination.title)
+              .scaledFont(size: OmiType.body, weight: .medium)
+              .foregroundColor(OmiColors.textPrimary)
+              .lineLimit(1)
 
-          Text(subtitleOverride ?? destination.description)
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
-            .lineLimit(1)
-            .truncationMode(.tail)
+            Text(subtitleOverride ?? destination.subtitle)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(OmiColors.textTertiary)
+              .lineLimit(1)
+          }
+
+          Spacer()
         }
 
-        Spacer(minLength: 12)
+        Text(descriptionOverride ?? destination.description)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(OmiColors.textSecondary)
+          .lineLimit(2)
+          .multilineTextAlignment(.leading)
 
-        ImportConnectorActionButton(
-          title: actionTitle, isConnected: showsConnectedState)
+        HStack {
+          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+            Text(statusPrimaryText)
+              .scaledFont(size: OmiType.caption, weight: .medium)
+              .foregroundColor(
+                status.hasConnection || status.exportedCount > 0
+                  ? OmiColors.textSecondary : OmiColors.textTertiary)
+
+            if let statusSecondaryText {
+              Text(statusSecondaryText)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(OmiColors.textTertiary)
+                .lineLimit(1)
+            }
+          }
+
+          Spacer()
+
+          ImportConnectorActionButton(
+            title: actionTitle, isConnected: showsConnectedState)
+        }
       }
       .padding(OmiSpacing.md)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .fill(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
-      )
+      .background(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
+      .cornerRadius(OmiChrome.smallControlRadius)
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
           .stroke(OmiColors.backgroundTertiary, lineWidth: 1)

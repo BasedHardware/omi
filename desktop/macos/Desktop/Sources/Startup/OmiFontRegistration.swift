@@ -16,11 +16,16 @@ enum OmiFontRegistration {
 
     // `.process("Resources")` may or may not preserve the `Fonts/` subdirectory in the
     // built bundle, so look in both the root and the subdirectory and de-duplicate.
+    // MUST be `Bundle.resourceBundle`, never SwiftPM's generated `Bundle.module`:
+    // the generated accessor only checks the app ROOT and a baked-in absolute
+    // `.build` path from the build machine, so it fatalErrors on every real user
+    // install (v0.12.110 launch crash) while passing on any machine that has the
+    // repo checked out.
     var urls = Set<URL>()
-    if let root = Bundle.module.urls(forResourcesWithExtension: "ttf", subdirectory: nil) {
+    if let root = Bundle.resourceBundle.urls(forResourcesWithExtension: "ttf", subdirectory: nil) {
       urls.formUnion(root)
     }
-    if let sub = Bundle.module.urls(forResourcesWithExtension: "ttf", subdirectory: "Fonts") {
+    if let sub = Bundle.resourceBundle.urls(forResourcesWithExtension: "ttf", subdirectory: "Fonts") {
       urls.formUnion(sub)
     }
 
