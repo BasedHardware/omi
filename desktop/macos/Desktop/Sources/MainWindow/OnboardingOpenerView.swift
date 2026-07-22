@@ -26,8 +26,14 @@ struct OnboardingOpenerView: View {
             .frame(width: 44, height: 44)
         }
         Text(opener.greeting)
-          .font(.system(size: 22, weight: .medium, design: .serif))
+          .font(.system(size: 26, weight: .medium, design: .serif))
           .foregroundColor(OmiColors.textPrimary)
+          .multilineTextAlignment(.center)
+          .fixedSize(horizontal: false, vertical: true)
+
+        Text(opener.subline)
+          .scaledFont(size: OmiType.subheading)
+          .foregroundColor(OmiColors.textSecondary)
           .multilineTextAlignment(.center)
           .fixedSize(horizontal: false, vertical: true)
       }
@@ -69,27 +75,27 @@ private struct OpenerStarterCard: View {
     Button(action: action) {
       HStack(spacing: OmiSpacing.md) {
         Image(systemName: icon)
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
-          .frame(width: 18)
-        Text(question)
           .scaledFont(size: OmiType.subheading)
+          .foregroundColor(OmiColors.textTertiary)
+          .frame(width: 22)
+        Text(question)
+          .scaledFont(size: OmiType.subheading, weight: .medium)
           .foregroundColor(OmiColors.textPrimary)
           .lineLimit(1)
           .truncationMode(.tail)
         Spacer(minLength: OmiSpacing.sm)
         Image(systemName: "chevron.right")
-          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundColor(isHovering ? OmiColors.textSecondary : OmiColors.textTertiary.opacity(0.6))
       }
       .padding(.horizontal, OmiSpacing.lg)
-      .padding(.vertical, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.lg)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
           .fill(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundSecondary.opacity(0.55))
       )
-      .contentShape(.rect(cornerRadius: 12))
+      .contentShape(.rect(cornerRadius: 14))
     }
     .buttonStyle(.plain)
     .onHover { isHovering = $0 }
