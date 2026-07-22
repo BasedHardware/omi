@@ -1,0 +1,21 @@
+desktop/macos/Desktop/Tests/FloatingBarTimingSignalTests.swift
+  s_77f2b8dfbc2e90::t_ec21d030f185c2 27-28,31,34,39-41,43
+  s_77f2b8dfbc2e90::t_7e81a91be4a960 36-37
+  s_77f2b8dfbc2e90::t_405c5023da36dc 26,29-30,32-33,42,44-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "48943196353dfcfb1ec062cb037597a9199545a3",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": null
+    }
+  }
+}
