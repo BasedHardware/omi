@@ -1,0 +1,28 @@
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_77f2b8dfbc2e90::t_b4d2a40f74d5ec 1095
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
+  s_77f2b8dfbc2e90::t_c3203b77ec804f 107
+  s_77f2b8dfbc2e90::t_bd2ac58491a530 27-36,38-40,48-51,55-65
+  s_77f2b8dfbc2e90::t_24a22ed7cd66da 86-91,93,95-97
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift
+  s_77f2b8dfbc2e90::t_e42b1910f09fb4 178
+  s_77f2b8dfbc2e90::t_d5abd69c4e394b 94-97
+desktop/macos/Desktop/Sources/MainWindow/OnboardingOpenerView.swift
+  s_77f2b8dfbc2e90::t_815834fd931c9b 53-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "ef073880881ad2ca867642b3f977b0c48d2d14d1",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
