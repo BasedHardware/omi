@@ -1531,6 +1531,10 @@ class TestAsyncCoordinatorBehavioral:
         response = {
             '_merged': {'replaced-conversation': 'en', 'current-conversation': 'fr'},
             'updated_memories': {'replaced-conversation', 'current-conversation'},
+            # A conversation can appear in both new_memories (created in an
+            # earlier segment) and updated_memories (merged into by a later
+            # segment).  The fence must discard it from both.
+            'new_memories': {'replaced-conversation'},
         }
         checkpointed_fences = []
 
@@ -1548,6 +1552,7 @@ class TestAsyncCoordinatorBehavioral:
         assert response == {
             '_fenced_conversation_ids': {'replaced-conversation'},
             'updated_memories': {'current-conversation'},
+            'new_memories': set(),
         }
         assert checkpointed_fences == [{'fenced': {'replaced-conversation'}, 'updated': {'current-conversation'}}]
         assert pipeline._reprocess_conversation_after_update.call_args_list == [
@@ -2629,7 +2634,12 @@ class TestAsyncCoordinatorBehavioral:
             pipeline.users_db.get_data_protection_level = MagicMock(return_value=None)
             pipeline.build_person_embeddings_cache = MagicMock(return_value={})
             pipeline.get_sync_job = MagicMock(
-                return_value={'partial_result': {'updated_memories': ['fenced-conversation', 'current-conversation']}}
+                return_value={
+                    'partial_result': {
+                        'updated_memories': ['fenced-conversation', 'current-conversation'],
+                        'new_memories': ['fenced-conversation'],
+                    }
+                }
             )
             pipeline.get_sync_content_partial_result = MagicMock(
                 return_value={'fenced_conversation_ids': ['fenced-conversation']}
@@ -2658,6 +2668,7 @@ class TestAsyncCoordinatorBehavioral:
             finalized_response = pipeline._finalize_sync_audio_files.call_args.args[1]
             assert finalized_response['updated_memories'] == {'current-conversation'}
             assert 'fenced-conversation' not in finalized_response['updated_memories']
+            assert 'fenced-conversation' not in finalized_response['new_memories']
         finally:
             self._cleanup(stubs['saved_modules'])
 

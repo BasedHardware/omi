@@ -1294,6 +1294,7 @@ def _reprocess_merged_conversations(uid: str, response: dict, on_fenced=None):
         except SyncConversationPersistenceFenced:
             response.setdefault(_RESPONSE_FENCED_CONVERSATION_IDS, set()).add(conversation_id)
             response.get('updated_memories', set()).discard(conversation_id)
+            response.get('new_memories', set()).discard(conversation_id)
             if on_fenced:
                 on_fenced()
             logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
@@ -2014,7 +2015,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             fenced_conversation_ids = set(partial_result.get(_PARTIAL_RESULT_FENCED_CONVERSATION_IDS) or [])
             response = {
                 'updated_memories': set(partial_result.get('updated_memories') or []) - fenced_conversation_ids,
-                'new_memories': set(partial_result.get('new_memories') or []),
+                'new_memories': set(partial_result.get('new_memories') or []) - fenced_conversation_ids,
                 _RESPONSE_FENCED_CONVERSATION_IDS: fenced_conversation_ids,
             }
             segment_errors = []
