@@ -56,6 +56,11 @@ struct SBOnboardingView: View {
       .padding(.top, 20).padding(.trailing, 24)
     }
     .onAppear { model.begin() }
+    // Safety net: the `.shortcut` step suspends global hotkeys and nulls the main
+    // menu (restored only via the advance/skip/complete buttons). If the view is
+    // removed by any other path (e.g. auth flips to signed-out), restore them here
+    // so hotkeys/menu aren't left disabled until relaunch. Idempotent when unarmed.
+    .onDisappear { model.disarmShortcutSummon() }
   }
 
   private var panel: some View {
