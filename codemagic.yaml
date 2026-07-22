@@ -2909,7 +2909,7 @@ workflows:
             *) echo 'ERROR: malformed candidate tag ref.' >&2; exit 1 ;;
           esac
           GH_TOKEN="$GITHUB_TOKEN" \
-            gh api "repos/$GITHUB_REPO/actions/workflows/desktop_qualify_beta.yml/runs?event=workflow_dispatch&per_page=100" \
+            gh api --paginate --slurp "repos/$GITHUB_REPO/actions/workflows/desktop_qualify_beta.yml/runs?event=workflow_dispatch&per_page=100" \
             > "$dispatch_dir/runs.json"
           admission_args=(
             --ref-json "$dispatch_dir/ref.json"
@@ -2920,7 +2920,7 @@ workflows:
           if [[ "$tag_type" == tag ]]; then
             admission_args+=(--annotated-tag-json "$dispatch_dir/annotated-tag.json")
           fi
-          python3 .github/scripts/desktop_beta_qualification_admission.py "${admission_args[@]}"
+          python3 ../../.github/scripts/desktop_beta_qualification_admission.py "${admission_args[@]}"
           if ! jq -e '.admitted == true' "$dispatch_dir/decision.json" >/dev/null; then
             echo "Skipping duplicate trusted qualification dispatch: $(jq -r .reason "$dispatch_dir/decision.json")"
             exit 0

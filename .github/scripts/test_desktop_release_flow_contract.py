@@ -244,8 +244,21 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
 
     def test_codemagic_avoids_known_duplicate_qualification_dispatches(self) -> None:
         dispatch = codemagic().split("Dispatch trusted macOS beta qualification", 1)[1]
-        self.assertIn("desktop_beta_qualification_admission.py", dispatch)
+        release = codemagic().split("  omi-desktop-swift-release:\n", 1)[1]
+        release = re.split(r"\n  [A-Za-z0-9_-]+:\n", release, maxsplit=1)[0]
+        working_directory = re.search(r"^    working_directory: (.+)$", release, re.MULTILINE)
+        invocation = re.search(
+            r"^\s*python3 (?P<path>\S*desktop_beta_qualification_admission\.py) ", dispatch, re.MULTILINE
+        )
+        self.assertIsNotNone(working_directory)
+        self.assertIsNotNone(invocation)
+        script_path = invocation.group("path")
+        script_cwd = ROOT / working_directory.group(1)
+        self.assertEqual((script_cwd / script_path).resolve(), ROOT / ".github/scripts/desktop_beta_qualification_admission.py")
+        result = subprocess.run(["python3", script_path, "--help"], cwd=script_cwd, check=False, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Skipping duplicate trusted qualification dispatch", dispatch)
+        self.assertIn("gh api --paginate --slurp", dispatch)
         self.assertIn("actions/workflows/desktop_qualify_beta.yml/runs", dispatch)
 
     def test_beta_qualification_cleanup_accepts_missing_gitlink(self) -> None:

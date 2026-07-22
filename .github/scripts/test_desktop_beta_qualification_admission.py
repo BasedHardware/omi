@@ -29,8 +29,12 @@ def _run(*, run_id: int, status: str = "completed", conclusion: str | None = "fa
     }
 
 
+def _response(runs: list[dict]) -> dict:
+    return {"total_count": len(runs), "workflow_runs": runs}
+
+
 def _decide(runs: list[dict], **kwargs: object) -> dict:
-    return admission.decide(_ref(), {"workflow_runs": runs}, release_tag=TAG, **kwargs)
+    return admission.decide(_ref(), _response(runs), release_tag=TAG, **kwargs)
 
 
 class AdmissionTests(unittest.TestCase):
@@ -59,18 +63,39 @@ class AdmissionTests(unittest.TestCase):
     def test_annotated_tag_peels_to_exact_commit(self) -> None:
         ref = {"ref": f"refs/tags/{TAG}", "object": {"type": "tag", "sha": "b" * 40}}
         tag = {"sha": "b" * 40, "object": {"type": "commit", "sha": SHA}}
-        decision = admission.decide(ref, {"workflow_runs": []}, release_tag=TAG, annotated_tag=tag)
+        decision = admission.decide(ref, _response([]), release_tag=TAG, annotated_tag=tag)
         self.assertEqual(decision["source_sha"], SHA)
 
     def test_malformed_api_response_fails_closed(self) -> None:
         with self.assertRaisesRegex(ValueError, "malformed"):
-            admission.decide(_ref(), {"workflow_runs": {}}, release_tag=TAG)
+            admission.decide(_ref(), {"total_count": 0, "workflow_runs": {}}, release_tag=TAG)
         with self.assertRaisesRegex(ValueError, "non-object"):
-            admission.decide(_ref(), {"workflow_runs": [None]}, release_tag=TAG)
+            admission.decide(_ref(), {"total_count": 1, "workflow_runs": [None]}, release_tag=TAG)
 
     def test_malformed_exact_tag_ref_fails_closed(self) -> None:
         with self.assertRaisesRegex(ValueError, "does not bind"):
-            admission.decide({}, {"workflow_runs": []}, release_tag=TAG)
+            admission.decide({}, _response([]), release_tag=TAG)
+
+    def test_success_on_second_page_beyond_first_hundred_denies(self) -> None:
+        first_page = [_run(run_id=index, tag=OTHER_TAG) for index in range(1, 101)]
+        second_page = [_run(run_id=101, conclusion="success")]
+        pages = [
+            {"total_count": 101, "workflow_runs": first_page},
+            {"total_count": 101, "workflow_runs": second_page},
+        ]
+        decision = admission.decide(_ref(), pages, release_tag=TAG)
+        self.assertFalse(decision["admitted"])
+        self.assertIn("succeeded", decision["reason"])
+
+    def test_incomplete_paginated_response_fails_closed(self) -> None:
+        partial = {"total_count": 101, "workflow_runs": [_run(run_id=index) for index in range(1, 101)]}
+        with self.assertRaisesRegex(ValueError, "pagination is incomplete"):
+            admission.decide(_ref(), partial, release_tag=TAG)
+
+    def test_three_failed_attempts_reach_the_bound(self) -> None:
+        decision = _decide([_run(run_id=index, conclusion="failure") for index in range(1, 4)])
+        self.assertFalse(decision["admitted"])
+        self.assertIn("3-attempt", decision["reason"])
 
 
 if __name__ == "__main__":

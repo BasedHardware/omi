@@ -814,6 +814,7 @@ def check_desktop_qualification_runner() -> list[str]:
         "cancel-in-progress: false",
         "Fail-closed exact-candidate admission",
         "desktop_beta_qualification_admission.py",
+        "gh api --paginate --slurp",
         "needs: admit",
     ):
         if required_fragment not in text:

@@ -20,6 +20,7 @@ from typing import Any
 QUALIFICATION_WORKFLOW = ".github/workflows/desktop_qualify_beta.yml"
 TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+-macos$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+MAX_EXACT_CANDIDATE_ATTEMPTS = 3
 
 
 def _load(path: Path) -> Any:
@@ -61,11 +62,46 @@ def candidate_sha(ref: Any, release_tag: str, annotated_tag: Any | None) -> str:
     return _sha(nested.get("sha"), "annotated GitHub tag commit SHA")
 
 
-def _exact_runs(runs_response: Any, release_tag: str, source_sha: str) -> list[dict[str, Any]]:
-    if not isinstance(runs_response, dict) or not isinstance(runs_response.get("workflow_runs"), list):
+def _workflow_runs(runs_response: Any) -> list[dict[str, Any]]:
+    """Normalize every `gh api --paginate --slurp` page, or fail closed.
+
+    The API includes a total_count on every page. Requiring the concatenated
+    page length to match it rejects a partial page set, including an accidental
+    regression back to the first 100 records only.
+    """
+    pages = [runs_response] if isinstance(runs_response, dict) else runs_response
+    if not isinstance(pages, list) or not pages:
         raise ValueError("GitHub workflow-runs response is malformed")
+    total_count: int | None = None
+    all_runs: list[dict[str, Any]] = []
+    seen_ids: set[int] = set()
+    for page_index, page in enumerate(pages):
+        if not isinstance(page, dict) or not isinstance(page.get("workflow_runs"), list):
+            raise ValueError(f"GitHub workflow-runs page {page_index} is malformed")
+        page_total = page.get("total_count")
+        if not isinstance(page_total, int) or isinstance(page_total, bool) or page_total < 0:
+            raise ValueError(f"GitHub workflow-runs page {page_index} total_count is malformed")
+        if total_count is None:
+            total_count = page_total
+        elif page_total != total_count:
+            raise ValueError("GitHub workflow-runs pagination total_count changed during retrieval")
+        for run_index, run in enumerate(page["workflow_runs"]):
+            absolute_index = len(all_runs)
+            if not isinstance(run, dict):
+                raise ValueError(f"GitHub workflow-runs response contains non-object entry {absolute_index}")
+            run_id = _positive_id(run.get("id"), f"workflow run {absolute_index} id")
+            if run_id in seen_ids:
+                raise ValueError(f"GitHub workflow-runs response contains duplicate run id {run_id}")
+            seen_ids.add(run_id)
+            all_runs.append(run)
+    if total_count != len(all_runs):
+        raise ValueError("GitHub workflow-runs pagination is incomplete")
+    return all_runs
+
+
+def _exact_runs(runs_response: Any, release_tag: str, source_sha: str) -> list[dict[str, Any]]:
     selected: list[dict[str, Any]] = []
-    for index, run in enumerate(runs_response["workflow_runs"]):
+    for index, run in enumerate(_workflow_runs(runs_response)):
         if not isinstance(run, dict):
             raise ValueError(f"GitHub workflow-runs response contains non-object entry {index}")
         # These are core fields on every actions workflow-run response. Reject
@@ -115,6 +151,15 @@ def decide(
             "release_tag": release_tag,
             "source_sha": source_sha,
             "reason": f"exact candidate already succeeded in qualification run {successful['id']}",
+        }
+    if len(prior_runs) >= MAX_EXACT_CANDIDATE_ATTEMPTS:
+        return {
+            "admitted": False,
+            "release_tag": release_tag,
+            "source_sha": source_sha,
+            "reason": (
+                f"exact candidate has reached the {MAX_EXACT_CANDIDATE_ATTEMPTS}-attempt qualification bound"
+            ),
         }
     return {
         "admitted": True,
