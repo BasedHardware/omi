@@ -59,6 +59,11 @@ Swift desktop client
 - `adapters/*` translate a pinned run into provider calls. They cannot choose a
   different provider, mutate a session profile, or directly execute desktop
   effects.
+- `artifact-storage.ts` owns per-run managed artifact directories. Every leaf
+  attempt receives that directory as both its adapter cwd and MCP workspace;
+  delegated objectives and raw control-tool cwd values cannot default a
+  deliverable to Desktop. Explicit external-delivery reports remain a narrow
+  compatibility import path and are copied into the managed directory.
 - Generated tool manifests and Swift executors are updated together through
   `../scripts/generate-tool-surfaces.mjs`; hand-edited capability mirrors are
   prohibited.

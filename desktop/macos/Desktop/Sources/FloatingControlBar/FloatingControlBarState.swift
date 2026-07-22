@@ -142,6 +142,14 @@ enum NotchHoverSurfacePolicy {
   }
 }
 
+/// The compact idle notch has an explicit route to the main chat, while its
+/// expanded hover surface remains reserved for actionable subagents only.
+enum NotchAgentMenuPresentation {
+  static func shouldPresent(agentCount: Int) -> Bool {
+    agentCount > 0
+  }
+}
+
 /// Hidden provenance carried with a floating-bar notification so follow-up
 /// questions can explain where the notification came from without guessing.
 struct FloatingBarNotificationContext: Equatable {

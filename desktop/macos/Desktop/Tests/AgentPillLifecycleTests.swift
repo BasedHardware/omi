@@ -462,56 +462,32 @@ import XCTest
     XCTAssertFalse(view.contains("agentFollowUp"))
   }
 
-  func testNotchHoverMenuKeepsAskOmiReachable() throws {
+  func testNotchHoverMenuIsAgentOnlyAfterChatEntryRetirement() throws {
     let source = try floatingControlBarViewSource()
 
-    guard let rowRange = source.range(of: "private var notchOmiChatRow: some View"),
-      let heightRange = source.range(of: "private var notchChromeHeight: CGFloat")
-    else {
-      return XCTFail("Expected notch Omi Chat hover row section")
-    }
-    let rowSource = String(source[rowRange.lowerBound..<heightRange.lowerBound])
-
-    // The notch is a voice-first surface now (typed chat moved to the main-window
-    // ask bar), but the hover row must still reach Omi: tapping opens chat, it's
-    // labeled "Omi Chat" for accessibility, and it shows the push-to-talk hint.
-    XCTAssertTrue(rowSource.contains("Text(\"Talk to Omi\")"))
-    XCTAssertTrue(rowSource.contains("openOmiChatFromNotchRow()"))
-    XCTAssertTrue(rowSource.contains("private var notchOmiChatOverlayHitTarget: some View"))
-    XCTAssertTrue(rowSource.contains(".accessibilityLabel(\"Omi Chat\")"))
-    XCTAssertTrue(rowSource.contains("notchShortcutHint(systemImage: \"mic.fill\""))
-    // Typed chat was removed from the notch — no text-entry "Ask" hint remains.
-    XCTAssertFalse(rowSource.contains("notchShortcutHint(\"Ask\""))
-    XCTAssertFalse(rowSource.contains("notchShortcutHint(\"PTT\""))
+    XCTAssertFalse(source.contains("private var notchOmiChatRow: some View"))
+    XCTAssertFalse(source.contains("private var notchOmiChatOverlayHitTarget: some View"))
+    XCTAssertFalse(source.contains("openOmiChatFromNotchRow()"))
+    XCTAssertTrue(source.contains("NotchAgentMenuPresentation.shouldPresent(agentCount: agentPills.pills.count)"))
   }
 
-  func testNotchSettingsHitTargetDoesNotCoverChatRows() throws {
+  func testNotchIdleTapUsesTheMainChatAuthority() throws {
     let source = try floatingControlBarViewSource()
 
     XCTAssertTrue(
       source.contains(
-        "            notchAgentLogoHitTarget\n              .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)"
+        "notchAgentLogoHitTarget\n            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)"
       ))
     XCTAssertFalse(
       source.contains(
         "notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight + notchHoverMenuHeight)"
       ))
-    // Settings is a hover-only gear in the bar chrome (not a notch chat row),
-    // gated so it never shows during voice, and it opens the floating-bar
-    // settings. The notch logo opens the agent chats.
-    XCTAssertTrue(source.contains("if isHovering && !state.isVoiceListening"))
-    XCTAssertTrue(source.contains("Image(systemName: \"gearshape.fill\")"))
-    XCTAssertTrue(source.contains("openFloatingBarSettings()"))
+    XCTAssertTrue(source.contains("private func openMainChatFromIdleNotch()"))
+    XCTAssertTrue(source.contains("NotchIdleTapRoute.perform("))
+    XCTAssertTrue(source.contains("(NSApp.delegate as? AppDelegate)?.openMainAppChat()"))
+    XCTAssertFalse(source.contains("gearshape.fill"))
+    XCTAssertFalse(source.contains("openFloatingBarSettings()"))
     XCTAssertTrue(source.contains("openAgentChatsFromNotchLogo()"))
-    XCTAssertFalse(
-      source.contains(
-        ".background(Color.white.opacity(0.12))\n                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))"
-      ))
-    XCTAssertFalse(
-      source.contains(
-        ".onHover { hovering in\n            withAnimation(.easeInOut(duration: 0.12)) {\n                notchSettingsHovering = hovering"
-      ))
-    XCTAssertFalse(source.contains(".onTapGesture {\n                    openFloatingBarSettings()\n                }"))
   }
 
   func testNotchChatSizingPreservesSurfaceWidthAndGlowList() throws {
@@ -626,19 +602,8 @@ import XCTest
     XCTAssertFalse(
       source.contains(".animation(.spring(response: 0.18, dampingFraction: 0.9), value: shouldShowNotchHoverMenu)"))
     XCTAssertTrue(source.contains(".transition(.identity)"))
-    XCTAssertTrue(
-      source.contains(
-        "            notchOmiChatRow\n              .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"
-      ))
-    XCTAssertTrue(
-      source.contains(".allowsHitTesting(!shouldUseOmiChatOverlayHitTarget && notchSwitcherProgress > 0.6)"))
-    XCTAssertTrue(
-      source.contains(
-        "          notchOmiChatOverlayHitTarget\n            .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"
-      ))
-    XCTAssertTrue(source.contains(".offset(y: notchChromeHeight)"))
-    XCTAssertTrue(source.contains(".zIndex(2)"))
-    XCTAssertTrue(source.contains("height: notchHoverMenuHeight - FloatingControlBarWindow.notchAgentListRowHeight"))
+    XCTAssertFalse(source.contains("notchOmiChatRow"))
+    XCTAssertFalse(source.contains("notchOmiChatOverlayHitTarget"))
     XCTAssertTrue(source.contains("state.present(.agent(pill.id))"))
     XCTAssertTrue(source.contains("private let agentChatSwitchTransition = Animation.easeOut(duration: 0.10)"))
     XCTAssertTrue(source.contains("if state.conversationSurface == .agent(pill.id)"))
@@ -651,21 +616,19 @@ import XCTest
     XCTAssertTrue(source.contains(".frame(width: 44, height: 44)"))
     XCTAssertTrue(
       source.contains("        .onTapGesture {\n          openAgentChatsFromNotchLogo()\n        }"))
-    XCTAssertTrue(source.contains("Image(systemName: \"gearshape.fill\")"))
+    XCTAssertFalse(source.contains("Image(systemName: \"gearshape.fill\")"))
     XCTAssertTrue(source.contains("private func openAgentChatsFromNotchLogo()"))
     XCTAssertTrue(source.contains("showAgentListFromConversation()"))
     XCTAssertTrue(source.contains("setAgentSwitcherHovering(hovering)"))
     XCTAssertFalse(source.contains("@State private var agentSwitcherPinned"))
     XCTAssertFalse(source.contains("@State private var agentSwitcherHovering"))
     XCTAssertTrue(source.contains("leaveAgentConversation()"))
-    XCTAssertTrue(source.contains("Text(\"Omi Chat\")"))
     XCTAssertTrue(
       source.contains("barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)"))
     XCTAssertTrue(source.contains(".opacity(rowRevealProgress)"))
     XCTAssertFalse(source.contains("NotchLogoPlaceholderDot(progress: logoPlaceholderProgress)"))
-    XCTAssertTrue(source.contains("private var shouldUseOmiChatOverlayHitTarget: Bool"))
-    XCTAssertTrue(source.contains("if state.usesNotchIsland && shouldUseOmiChatOverlayHitTarget"))
-    XCTAssertTrue(source.contains("rowTopOffset: FloatingControlBarWindow.notchAgentListRowHeight"))
+    XCTAssertTrue(source.contains("if state.usesNotchIsland && shouldShowNotchHoverMenu"))
+    XCTAssertTrue(source.contains("rowTopOffset: 0"))
     XCTAssertTrue(source.contains("private var showingNotchWaveform: Bool"))
     XCTAssertTrue(source.contains("private var escToClearHint: some View"))
     XCTAssertTrue(
