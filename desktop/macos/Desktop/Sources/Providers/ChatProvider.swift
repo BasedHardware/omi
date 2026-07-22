@@ -1193,7 +1193,7 @@ class ChatProvider: ObservableObject {
 
   /// Multi-chat mode setting - when false, only default chat is shown (syncs with Flutter)
   /// When true, user can create multiple chat sessions
-  @AppStorage("multiChatEnabled") var multiChatEnabled = false
+  @AppStorage("multiChatEnabled") var multiChatEnabled = true
 
   // MARK: - Agent client
   // NOTE: initialized lazily so it reads the persisted bridgeMode from UserDefaults,

@@ -2779,9 +2779,12 @@ class FloatingControlBarManager {
       appState.toggleTranscription()
     }
 
-    // Typing lives in the main app — the bar's "chat" affordances jump there.
+    // Typing lives in the main app — the bar's "chat" affordances jump there,
+    // opening straight into the chat surface (which shares the notch transcript)
+    // rather than the resting hero.
     barWindow.onAskAI = {
       (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
+      NotificationCenter.default.post(name: .navigateToChat, object: nil)
     }
 
     // Hide persists the preference so bar stays hidden across restarts

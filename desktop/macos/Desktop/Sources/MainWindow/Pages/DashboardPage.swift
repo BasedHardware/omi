@@ -366,7 +366,18 @@ struct DashboardPage: View {
   }
 
   var body: some View {
-    applyHomeLifecycle(to: applyHomeSheets(to: homeSurface))
+    applyChatNavigation(to: applyHomeLifecycle(to: applyHomeSheets(to: homeSurface)))
+  }
+
+  /// Opening chat from the notch / Ask-Omi shortcut (posts `.navigateToChat`)
+  /// lands in the live chat surface — which shares the notch's transcript —
+  /// rather than the resting hero. Kept in its own modifier so the main
+  /// lifecycle chain stays type-checkable.
+  private func applyChatNavigation<Content: View>(to content: Content) -> some View {
+    content
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToChat)) { _ in
+        openHomeChat(focusInput: true)
+      }
   }
 
   private var homeSurface: some View {

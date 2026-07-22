@@ -291,7 +291,7 @@ struct SettingsContentView: View {
   @State var systemAudioCaptureMode: AssistantSettings.SystemAudioCaptureMode = .always
 
   // Multi-chat mode setting
-  @AppStorage("multiChatEnabled") var multiChatEnabled = false
+  @AppStorage("multiChatEnabled") var multiChatEnabled = true
   @AppStorage("conversationsCompactView") var conversationsCompactView = true
   @AppStorage("useLegacyHomeDesign") var useLegacyHomeDesign = false
 
