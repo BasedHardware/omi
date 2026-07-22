@@ -145,6 +145,7 @@ sys.modules['utils.other.endpoints'].with_rate_limit_context = MagicMock(
 )
 sys.modules['utils.other.endpoints'].check_rate_limit_inline = MagicMock()
 sys.modules['utils.other.endpoints'].check_api_key_rate_limit = MagicMock()
+sys.modules['utils.other.endpoints'].timeit = lambda _fn: _fn
 sys.modules['utils.apps'].update_personas_async = MagicMock()
 sys.modules['utils.executors'].db_executor = MagicMock()
 sys.modules['utils.executors'].postprocess_executor = MagicMock()
@@ -166,6 +167,10 @@ from routers import mcp_sse as sse  # noqa: E402
 
 NOW = datetime(2026, 6, 11, tzinfo=timezone.utc)
 UID = "user-1"
+# A non-None app/key identity for the memory-read gate on search/fetch. The gate itself
+# (authorize_memory_external_default_memory_read) is patched to "allowed" per-test where a
+# successful read is expected; here we only need a context whose .uid the REST path can read.
+_MEM_AUTH = MagicMock(uid=UID)
 
 
 def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
@@ -311,7 +316,20 @@ async def test_sse_get_keepalive_uses_transport_rate_limit():
 def test_sse_tool_security_schemes_match_runtime_scope_map():
     for tool in sse.MCP_TOOLS:
         advertised_scopes = tool['securitySchemes'][0]['scopes']
-        assert advertised_scopes == [sse.TOOL_REQUIRED_SCOPE[tool['name']]]
+        # Every scope a tool advertises must be the exact set enforced at runtime; search/fetch
+        # advertise (and now require) both memories.read and conversations.read.
+        assert advertised_scopes == sse._required_scopes(tool['name'])
+
+
+def test_search_requires_both_advertised_read_scopes():
+    # search/fetch advertise memories.read + conversations.read; granting only one must be
+    # rejected at request time, with the challenge listing the scopes required.
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    response, _ = sse.handle_mcp_message(
+        auth_context, {'id': 1, 'method': 'tools/call', 'params': {'name': 'search', 'arguments': {'query': 'x'}}}
+    )
+    assert response['error']['code'] == -32003
+    assert 'conversations.read' in response['error']['data']['_meta']['mcp/www_authenticate']
 
 
 def test_sse_tool_call_returns_mcp_auth_challenge_when_scope_missing():
@@ -602,3 +620,200 @@ class TestToolRegistry:
                     sse.execute_tool(UID, name, {})
                 except sse.ToolExecutionError as e:
                     assert 'Unknown tool' not in e.message
+
+
+class TestUnifiedSearchFetch:
+    """#4862: ChatGPT/Claude connector contract (search + fetch) over the memory bank."""
+
+    @pytest.fixture(autouse=True)
+    def _allow_memory_read(self):
+        # search/fetch now enforce the same product-level memory-read gate as get_memories.
+        # Grant it by default so the data-path tests below exercise search/fetch behavior; the
+        # explicit reject tests re-patch it to denied.
+        allow = MagicMock(return_value=MagicMock(allowed=True))
+        with patch.object(sse, 'authorize_memory_external_default_memory_read', allow), patch.object(
+            rest, 'authorize_memory_external_default_memory_read', allow
+        ):
+            yield
+
+    def test_tool_search_fetch_require_app_key_identity(self):
+        # No app/key identity (auth_context=None) fails closed with -32009, matching get_memories,
+        # rather than silently reading the memory bank.
+        for tool, args in [('search', {'query': 'x'}), ('fetch', {'id': 'memory:m1'})]:
+            with pytest.raises(sse.ToolExecutionError) as ei:
+                sse.execute_tool(UID, tool, args)
+            assert ei.value.code == -32009
+
+    def test_tool_search_fetch_denied_grant_is_32009(self):
+        # A present-but-denied grant is also rejected (fail closed).
+        deny = MagicMock(return_value=MagicMock(allowed=False, observability='denied'))
+        with patch.object(sse, 'authorize_memory_external_default_memory_read', deny):
+            for tool, args in [('search', {'query': 'x'}), ('fetch', {'id': 'memory:m1'})]:
+                with pytest.raises(sse.ToolExecutionError) as ei:
+                    sse.execute_tool(UID, tool, args, auth_context=_MEM_AUTH)
+                assert ei.value.code == -32009
+
+    def test_rest_search_denied_grant_raises_http(self):
+        deny = MagicMock(return_value=MagicMock(allowed=False, status_code=403, observability='denied'))
+        with patch.object(rest, 'authorize_memory_external_default_memory_read', deny):
+            with pytest.raises(rest.HTTPException) as ei:
+                rest.mcp_search_endpoint(rest.McpSearchRequest(query='x'), auth_context=_MEM_AUTH)
+            assert ei.value.status_code == 403
+
+    @patch('utils.mcp_search.conversations_db')
+    @patch('utils.mcp_search.memories_db')
+    @patch('utils.mcp_search.vector_db')
+    def test_tool_search_merges_memories_and_conversations(self, mock_vec, mock_mem, mock_conv):
+        mock_vec.find_similar_memories.return_value = [{'memory_id': 'm1', 'score': 0.9}]
+        mock_mem.get_memories_by_ids.return_value = [{'id': 'm1', 'content': 'Loves hiking'}]
+        mock_vec.query_vectors.return_value = ['c1']
+        mock_conv.get_conversations_by_id.return_value = [
+            {'id': 'c1', 'structured': {'title': 'Standup', 'overview': 'Sprint sync'}}
+        ]
+        result = sse.execute_tool(UID, 'search', {'query': 'hiking'}, auth_context=_MEM_AUTH)
+        ids = [r['id'] for r in result['results']]
+        assert 'memory:m1' in ids and 'conversation:c1' in ids
+        r0 = result['results'][0]
+        assert {'id', 'title', 'url', 'text'} <= set(r0.keys())
+        assert r0['url'].startswith('https://h.omi.me/')
+
+    @patch('utils.mcp_search.vector_db')
+    def test_tool_search_empty_query_is_invalid(self, mock_vec):
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'search', {'query': '   '}, auth_context=_MEM_AUTH)
+        assert ei.value.code == -32602
+
+    @patch('utils.mcp_search.conversations_db')
+    @patch('utils.mcp_search.memories_db')
+    @patch('utils.mcp_search.vector_db')
+    def test_tool_search_filters_locked_and_rejected(self, mock_vec, mock_mem, mock_conv):
+        mock_vec.find_similar_memories.return_value = [
+            {'memory_id': 'm1', 'score': 0.5},
+            {'memory_id': 'm2', 'score': 0.4},
+            {'memory_id': 'm3', 'score': 0.3},
+        ]
+        mock_mem.get_memories_by_ids.return_value = [
+            {'id': 'm1', 'content': 'ok'},
+            {'id': 'm2', 'content': 'locked', 'is_locked': True},
+            {'id': 'm3', 'content': 'rejected', 'user_review': False},
+        ]
+        mock_vec.query_vectors.return_value = ['c1']
+        mock_conv.get_conversations_by_id.return_value = [{'id': 'c1', 'is_locked': True, 'structured': {'title': 'x'}}]
+        result = sse.execute_tool(UID, 'search', {'query': 'q'}, auth_context=_MEM_AUTH)
+        # locked memory (m2), rejected memory (m3, user_review False), and locked conversation (c1) all dropped
+        assert [r['id'] for r in result['results']] == ['memory:m1']
+
+    @patch('utils.mcp_search.memories_db')
+    def test_tool_fetch_memory(self, mock_mem):
+        mock_mem.get_memory.return_value = {
+            'id': 'm1',
+            'content': 'Loves hiking',
+            'category': 'hobbies',
+            'created_at': NOW,
+        }
+        result = sse.execute_tool(UID, 'fetch', {'id': 'memory:m1'}, auth_context=_MEM_AUTH)
+        assert result['id'] == 'memory:m1' and result['text'] == 'Loves hiking'
+        assert result['metadata']['type'] == 'memory'
+        assert result['url'] == 'https://h.omi.me/memories/m1'
+
+    @patch('utils.mcp_search.conversations_db')
+    def test_tool_fetch_conversation(self, mock_conv):
+        mock_conv.get_conversation.return_value = {
+            'id': 'c1',
+            'structured': {'title': 'Standup', 'overview': 'Sprint sync', 'category': 'work'},
+            'transcript_segments': [{'text': 'Hello'}, {'text': 'World'}],
+            'created_at': NOW,
+        }
+        result = sse.execute_tool(UID, 'fetch', {'id': 'conversation:c1'}, auth_context=_MEM_AUTH)
+        assert result['title'] == 'Standup'
+        assert 'Sprint sync' in result['text'] and 'Hello' in result['text']
+        assert result['metadata']['type'] == 'conversation'
+
+    @patch('utils.mcp_search.memories_db')
+    def test_tool_fetch_not_found_is_32001(self, mock_mem):
+        mock_mem.get_memory.return_value = None
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'fetch', {'id': 'memory:nope'}, auth_context=_MEM_AUTH)
+        assert ei.value.code == -32001
+
+    @patch('utils.mcp_search.memories_db')
+    def test_tool_fetch_hides_rejected_or_superseded_memory_like_search(self, mock_mem):
+        # search hides rejected (user_review False) and superseded (invalid_at) memories,
+        # so fetch must treat them as not-found rather than leak their full text.
+        for hidden in (
+            {'id': 'm1', 'content': 'x', 'user_review': False},
+            {'id': 'm1', 'content': 'x', 'invalid_at': NOW},
+        ):
+            mock_mem.get_memory.return_value = hidden
+            with pytest.raises(sse.ToolExecutionError) as ei:
+                sse.execute_tool(UID, 'fetch', {'id': 'memory:m1'}, auth_context=_MEM_AUTH)
+            assert ei.value.code == -32001
+
+    @patch('utils.mcp_search.conversations_db')
+    def test_tool_fetch_locked_is_paywall(self, mock_conv):
+        mock_conv.get_conversation.return_value = {'id': 'c1', 'is_locked': True, 'structured': {'title': 'x'}}
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'fetch', {'id': 'conversation:c1'}, auth_context=_MEM_AUTH)
+        assert ei.value.code == -32002
+
+    def test_tool_fetch_bad_or_nonstring_id_is_invalid(self):
+        # No prefix, non-string, and a valid prefix with an empty raw id are all invalid (not 404).
+        for bad in ['garbage', 123, 'memory:', 'conversation:']:
+            with pytest.raises(sse.ToolExecutionError) as ei:
+                sse.execute_tool(UID, 'fetch', {'id': bad}, auth_context=_MEM_AUTH)
+            assert ei.value.code == -32602
+
+    @patch('utils.mcp_search.conversations_db')
+    @patch('utils.mcp_search.memories_db')
+    @patch('utils.mcp_search.vector_db')
+    def test_tool_search_conversation_preview_falls_back_to_transcript(self, mock_vec, mock_mem, mock_conv):
+        mock_vec.find_similar_memories.return_value = []
+        mock_vec.query_vectors.return_value = ['c1']
+        mock_conv.get_conversations_by_id.return_value = [
+            {'id': 'c1', 'structured': {'title': 'Call'}, 'transcript_segments': [{'text': 'Discussed the roadmap'}]}
+        ]
+        result = sse.execute_tool(UID, 'search', {'query': 'roadmap'}, auth_context=_MEM_AUTH)
+        stub = next(r for r in result['results'] if r['id'] == 'conversation:c1')
+        assert 'Discussed the roadmap' in stub['text']
+
+    @patch('utils.mcp_search.conversations_db')
+    @patch('utils.mcp_search.memories_db')
+    @patch('utils.mcp_search.vector_db')
+    def test_rest_search_empty(self, mock_vec, mock_mem, mock_conv):
+        mock_vec.find_similar_memories.return_value = []
+        mock_vec.query_vectors.return_value = []
+        assert rest.mcp_search_endpoint(rest.McpSearchRequest(query='hi'), auth_context=_MEM_AUTH) == {'results': []}
+
+    @patch('utils.mcp_search.memories_db')
+    def test_rest_fetch_not_found_404(self, mock_mem):
+        mock_mem.get_memory.return_value = None
+        with pytest.raises(rest.HTTPException) as ei:
+            rest.mcp_fetch_endpoint(id='memory:nope', auth_context=_MEM_AUTH)
+        assert ei.value.status_code == 404
+
+    def test_search_fetch_tools_registered(self):
+        names = {t['name'] for t in sse.MCP_TOOLS}
+        assert {'search', 'fetch'} <= names
+
+    @patch('utils.mcp_search.conversations_db')
+    @patch('utils.mcp_search.memories_db')
+    @patch('utils.mcp_search.vector_db')
+    def test_tools_call_emits_structured_content_for_search(self, mock_vec, mock_mem, mock_conv):
+        mock_vec.find_similar_memories.return_value = []
+        mock_vec.query_vectors.return_value = []
+        resp, _ = sse.handle_mcp_message(
+            sse.MCPAuthContext(
+                uid=UID,
+                auth_type='oauth',
+                scopes=['memories.read', 'conversations.read'],
+                memory_context=_MEM_AUTH,
+            ),
+            {
+                'jsonrpc': '2.0',
+                'id': 1,
+                'method': 'tools/call',
+                'params': {'name': 'search', 'arguments': {'query': 'x'}},
+            },
+        )
+        assert resp['result']['structuredContent'] == {'results': []}
+        assert resp['result']['content'][0]['type'] == 'text'

@@ -12658,6 +12658,68 @@
         "title": "McpCreateActionItem",
         "type": "object"
       },
+      "McpFetchResponse": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "title": "McpFetchResponse",
+        "type": "object"
+      },
       "McpOauthGrantsResponse": {
         "properties": {
           "grants": {
@@ -12815,6 +12877,94 @@
           }
         },
         "title": "McpScreenActivitySummaryResponse",
+        "type": "object"
+      },
+      "McpSearchRequest": {
+        "properties": {
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "McpSearchRequest",
+        "type": "object"
+      },
+      "McpSearchResponse": {
+        "properties": {
+          "results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/McpSearchResultItem"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "title": "McpSearchResponse",
+        "type": "object"
+      },
+      "McpSearchResultItem": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "title": "McpSearchResultItem",
         "type": "object"
       },
       "McpServerRequest": {
@@ -40269,6 +40419,56 @@
         ]
       }
     },
+    "/v1/mcp/fetch": {
+      "get": {
+        "operationId": "mcp_fetch_endpoint_v1_mcp_fetch_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpFetchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Mcp Fetch Endpoint",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
     "/v1/mcp/goals": {
       "get": {
         "operationId": "get_goals_v1_mcp_goals_get",
@@ -41089,6 +41289,55 @@
           }
         ],
         "summary": "Get Screen Activity",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/v1/mcp/search": {
+      "post": {
+        "operationId": "mcp_search_endpoint_v1_mcp_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Mcp Search Endpoint",
         "tags": [
           "mcp"
         ]

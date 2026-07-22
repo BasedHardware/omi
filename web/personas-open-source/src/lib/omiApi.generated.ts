@@ -2060,6 +2060,14 @@ export interface McpCreateActionItem {
   due_at?: string | null;
 }
 
+export interface McpFetchResponse {
+  id?: string | null;
+  metadata?: Record<string, unknown> | null;
+  text?: string | null;
+  title?: string | null;
+  url?: string | null;
+}
+
 export interface McpOauthGrantsResponse {
   grants?: Array<Record<string, unknown>>;
 }
@@ -2087,6 +2095,22 @@ export interface McpScreenActivityRow {
 export interface McpScreenActivitySummaryResponse {
   apps?: Record<string, McpScreenActivityAppSummary>;
   total_screenshots?: number;
+}
+
+export interface McpSearchRequest {
+  limit?: number | null;
+  query: string;
+}
+
+export interface McpSearchResponse {
+  results?: Array<McpSearchResultItem>;
+}
+
+export interface McpSearchResultItem {
+  id?: string | null;
+  text?: string | null;
+  title?: string | null;
+  url?: string | null;
 }
 
 export interface McpServerRequest {
@@ -3973,11 +3997,15 @@ export interface OmiApiSchemas {
   "McpApiKeyCreate": McpApiKeyCreate;
   "McpApiKeyCreated": McpApiKeyCreated;
   "McpCreateActionItem": McpCreateActionItem;
+  "McpFetchResponse": McpFetchResponse;
   "McpOauthGrantsResponse": McpOauthGrantsResponse;
   "McpRefreshToolsResponse": McpRefreshToolsResponse;
   "McpScreenActivityAppSummary": McpScreenActivityAppSummary;
   "McpScreenActivityRow": McpScreenActivityRow;
   "McpScreenActivitySummaryResponse": McpScreenActivitySummaryResponse;
+  "McpSearchRequest": McpSearchRequest;
+  "McpSearchResponse": McpSearchResponse;
+  "McpSearchResultItem": McpSearchResultItem;
   "McpServerRequest": McpServerRequest;
   "McpSseAuthMethodResponse": McpSseAuthMethodResponse;
   "McpSseAuthenticationResponse": McpSseAuthenticationResponse;
@@ -6260,6 +6288,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/mcp/fetch": {
+    get: {
+      operationId: "mcp_fetch_endpoint_v1_mcp_fetch_get";
+      responses: {
+        "200": McpFetchResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/mcp/goals": {
     get: {
       operationId: "get_goals_v1_mcp_goals_get";
@@ -6389,6 +6427,16 @@ export interface OmiApiPaths {
       operationId: "get_screen_activity_v1_mcp_screen_activity_get";
       responses: {
         "200": Array<McpScreenActivityRow> | McpScreenActivitySummaryResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/search": {
+    post: {
+      operationId: "mcp_search_endpoint_v1_mcp_search_post";
+      responses: {
+        "200": McpSearchResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -12053,6 +12101,24 @@ export async function get_daily_summaries_v1_mcp_daily_summaries_get(query: { li
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function mcp_fetch_endpoint_v1_mcp_fetch_get(query: { id: string }, init?: OmiApiClientInit): Promise<McpFetchResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/fetch`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_goals_v1_mcp_goals_get(query: { include_inactive?: boolean }, init?: OmiApiClientInit): Promise<Array<Record<string, unknown>>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/goals`;
@@ -12277,6 +12343,23 @@ export async function get_screen_activity_v1_mcp_screen_activity_get(query: { st
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
     },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function mcp_search_endpoint_v1_mcp_search_post(body: McpSearchRequest, init?: OmiApiClientInit): Promise<McpSearchResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/search`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();

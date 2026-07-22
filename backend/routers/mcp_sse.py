@@ -43,6 +43,7 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
+import utils.mcp_search as mcp_search
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
     read_default_read_rollout,
@@ -119,6 +120,8 @@ GOALS_READ_SECURITY = [{"type": "oauth2", "scopes": ["goals.read"]}]
 CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
 SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
 PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
+# search/fetch read across memories and conversations (the ChatGPT connector contract).
+SEARCH_SECURITY = [{"type": "oauth2", "scopes": ["memories.read", "conversations.read"]}]
 
 
 @dataclass
@@ -227,6 +230,11 @@ def invalid_mcp_auth_exception(
 
 
 TOOL_REQUIRED_SCOPE = {
+    # search/fetch read across both memories and conversations (the connector contract), so
+    # they require both scopes at request time, listed in the same order SEARCH_SECURITY
+    # advertises. A tool value may be a single scope or a list; all listed scopes must be granted.
+    "search": ["memories.read", "conversations.read"],
+    "fetch": ["memories.read", "conversations.read"],
     "get_user_profile": "memories.read",
     "get_memories": "memories.read",
     "search_memories": "memories.read",
@@ -266,19 +274,61 @@ SCOPE_PERMISSION_TEXT = {
 }
 
 
+def _required_scopes(tool_name: str) -> list[str]:
+    """The scopes a tool requires at request time, as a list. Most tools require a single
+    scope; the connector's search/fetch read across both memories and conversations, so
+    they require both. Every listed scope must be granted for the call to proceed."""
+    required = TOOL_REQUIRED_SCOPE.get(tool_name)
+    if required is None:
+        return []
+    if isinstance(required, str):
+        return [required]
+    return list(required)
+
+
 def _tools_for_scopes(scopes: List[str]) -> List[Dict[str, Any]]:
     scope_set = set(scopes)
-    return [tool for tool in MCP_TOOLS if TOOL_REQUIRED_SCOPE.get(tool["name"]) in scope_set]
+    return [tool for tool in MCP_TOOLS if set(_required_scopes(tool["name"])) <= scope_set]
 
 
 def _require_tool_scope(auth_context: MCPAuthContext, tool_name: str) -> None:
-    required_scope = TOOL_REQUIRED_SCOPE.get(tool_name)
-    if required_scope and required_scope not in set(auth_context.scopes):
-        raise ToolExecutionError(f"Insufficient scope: {required_scope}", code=-32003)
+    granted = set(auth_context.scopes)
+    for required_scope in _required_scopes(tool_name):
+        if required_scope not in granted:
+            raise ToolExecutionError(f"Insufficient scope: {required_scope}", code=-32003)
 
 
 # MCP Tool Definitions
 MCP_TOOLS: List[Dict[str, Any]] = [
+    {
+        "name": "search",
+        "description": (
+            "Search the user's Omi memory bank (memories and conversations) and return a list of matching "
+            "results. Each result has an id, title, url, and a text snippet. Pass an id to `fetch` to read the "
+            "full document. This is the standard connector entry point for retrieving the user's Omi data."
+        ),
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": SEARCH_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {"query": {"type": "string", "description": "The search query"}},
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "fetch",
+        "description": (
+            "Fetch the full document for a single result id returned by `search` (a `memory:<id>` or "
+            "`conversation:<id>`). Returns the id, title, full text, url, and metadata."
+        ),
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": SEARCH_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {"id": {"type": "string", "description": "A result id from search"}},
+            "required": ["id"],
+        },
+    },
     {
         "name": "get_user_profile",
         "description": (
@@ -774,6 +824,15 @@ def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
         raise ToolExecutionError(f"Invalid {field} format: '{value}'. Expected YYYY-MM-DD.", code=-32602)
 
 
+def _search_tool_error(error: mcp_search.SearchError) -> ToolExecutionError:
+    """Map a unified search/fetch error to the matching MCP/JSON-RPC error code."""
+    if isinstance(error, mcp_search.ItemNotFound):
+        return ToolExecutionError(str(error), code=-32001)
+    if isinstance(error, mcp_search.ItemLocked):
+        return ToolExecutionError(str(error), code=-32002)
+    return ToolExecutionError(str(error), code=-32602)
+
+
 def execute_tool(
     user_id: str,
     tool_name: str,
@@ -783,7 +842,29 @@ def execute_tool(
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
     memory_system = pin_memory_system(user_id, db_client=db)
 
-    if tool_name == "get_user_profile":
+    if tool_name == "search":
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
+        app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+        if not app_key_grant.allowed:
+            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
+        try:
+            return mcp_search.search(user_id, arguments.get("query"), arguments.get("limit"))
+        except mcp_search.SearchError as e:
+            raise _search_tool_error(e)
+
+    elif tool_name == "fetch":
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
+        app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+        if not app_key_grant.allowed:
+            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
+        try:
+            return mcp_search.fetch(user_id, arguments.get("id"))
+        except mcp_search.SearchError as e:
+            raise _search_tool_error(e)
+
+    elif tool_name == "get_user_profile":
         profile = users_db.get_ai_user_profile(user_id)
         if not profile or not profile.get("profile_text"):
             return {"profile": None, "message": "No profile has been generated for this user yet."}
@@ -1428,7 +1509,7 @@ def handle_mcp_message(
         except ToolExecutionError as e:
             error = create_mcp_error(msg_id, e.code, e.message)
             if e.code == -32003:
-                required_scope = TOOL_REQUIRED_SCOPE.get(tool_name)
+                required_scope = " ".join(_required_scopes(tool_name))
                 error["error"]["data"] = {
                     "_meta": {
                         "mcp/www_authenticate": (
@@ -1439,12 +1520,13 @@ def handle_mcp_message(
                 }
             return error, None
 
-        return (
-            create_mcp_response(
-                msg_id, {"content": [{"type": "text", "text": json.dumps(result, indent=2, default=str)}]}
-            ),
-            None,
-        )
+        call_result = {"content": [{"type": "text", "text": json.dumps(result, indent=2, default=str)}]}
+        # The ChatGPT connector / deep-research contract wants search and fetch results
+        # echoed as structuredContent alongside the JSON text. Their results are plain
+        # JSON-safe dicts, so this is emitted only for those two tools.
+        if tool_name in ("search", "fetch"):
+            call_result["structuredContent"] = result
+        return create_mcp_response(msg_id, call_result), None
 
     elif method == "ping":
         return create_mcp_response(msg_id, {}), None

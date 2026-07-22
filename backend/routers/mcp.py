@@ -40,6 +40,7 @@ from dependencies import (
 )
 from utils.other.endpoints import with_rate_limit, with_rate_limit_context
 from utils.log_sanitizer import sanitize_pii
+import utils.mcp_search as mcp_search
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
     guard_legacy_memory_write,
@@ -199,6 +200,75 @@ def edit_memory(
         operation="mcp_memory_edit",
     )
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Unified search + fetch: the ChatGPT/Claude connector contract (issue #4862)
+# ---------------------------------------------------------------------------
+
+
+class McpSearchRequest(BaseModel):
+    query: str
+    limit: Optional[int] = None
+
+
+def _search_http_error(error: mcp_search.SearchError) -> HTTPException:
+    if isinstance(error, mcp_search.ItemNotFound):
+        return HTTPException(status_code=404, detail=str(error))
+    if isinstance(error, mcp_search.ItemLocked):
+        return HTTPException(status_code=402, detail=str(error))
+    return HTTPException(status_code=400, detail=str(error))
+
+
+# POST (not GET) so the search query stays out of the URL and access logs.
+class McpSearchResultItem(BaseModel):
+    id: Optional[str] = None
+    title: Optional[str] = None
+    url: Optional[str] = None
+    text: Optional[str] = None
+
+
+class McpSearchResponse(BaseModel):
+    results: List[McpSearchResultItem] = []
+
+
+class McpFetchResponse(BaseModel):
+    id: Optional[str] = None
+    title: Optional[str] = None
+    text: Optional[str] = None
+    url: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+@router.post("/v1/mcp/search", response_model=McpSearchResponse, tags=["mcp"])
+def mcp_search_endpoint(
+    request: McpSearchRequest,
+    auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context),
+):
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    if not app_key_grant.allowed:
+        raise HTTPException(status_code=app_key_grant.status_code, detail=app_key_grant.observability)
+    uid = auth_context.uid
+    logger.info(f"mcp search {uid} query={sanitize_pii(request.query)}")
+    try:
+        return mcp_search.search(uid, request.query, request.limit)
+    except mcp_search.SearchError as e:
+        raise _search_http_error(e)
+
+
+@router.get("/v1/mcp/fetch", response_model=McpFetchResponse, tags=["mcp"])
+def mcp_fetch_endpoint(
+    id: str,
+    auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context),
+):
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    if not app_key_grant.allowed:
+        raise HTTPException(status_code=app_key_grant.status_code, detail=app_key_grant.observability)
+    uid = auth_context.uid
+    try:
+        return mcp_search.fetch(uid, id)
+    except mcp_search.SearchError as e:
+        raise _search_http_error(e)
 
 
 class UserProfile(BaseModel):
