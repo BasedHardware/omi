@@ -242,6 +242,13 @@ def test_backend_can_compose_dev_gateway_with_immutable_backend_image_but_prod_s
     assert "default: false\n        type: boolean" in workflow
     assert 'environment=prod, deploy_gateway=true is unsupported; use the standalone manual LLM gateway workflow.' in workflow
     assert 'deploy_gateway=true requires deploy_targets=all.' in workflow
+    gateway_publish = workflow.index('      - name: Build, smoke, and push combined LLM Gateway image')
+    gateway_deploy = workflow.index('      - name: Deploy LLM Gateway with backend stack')
+    assert gateway_publish < gateway_deploy
+    combined_publish_step = workflow[gateway_publish:gateway_deploy]
+    assert 'gateway_image="gcr.io/${{ vars.GCP_PROJECT_ID }}/llm-gateway:${{ steps.image-tag.outputs.short_sha }}"' in combined_publish_step
+    assert 'runtime_image_contracts.py" smoke' in combined_publish_step
+    assert 'docker push "$gateway_image"' in combined_publish_step
     assert 'Deploy LLM Gateway with backend stack' in workflow
     assert 'IMAGE_TAG="${{ steps.image-tag.outputs.short_sha }}" "$DEPLOY_CONTROL_SCRIPTS/deploy-llm-gateway.sh"' in workflow
     assert 'deploy-backend-stack-${{ github.event.inputs.environment }}' in workflow
