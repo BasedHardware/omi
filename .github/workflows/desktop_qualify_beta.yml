@@ -28,6 +28,18 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Remove stale uninitialized PlatformIO gitlink
+        shell: bash
+        run: |
+          set -euo pipefail
+          stale_gitlink="$GITHUB_WORKSPACE/omiGlass/firmware/.pio/libdeps/seeed_xiao_esp32s3/libopus"
+          if [ -d "$stale_gitlink" ] && [ ! -e "$stale_gitlink/.git" ]; then
+            rmdir "$stale_gitlink" || {
+              echo "Refusing to remove nonempty uninitialized gitlink: $stale_gitlink" >&2
+              exit 1
+            }
+          fi
+
       - name: Checkout qualification controls
         uses: actions/checkout@v7
         with:
