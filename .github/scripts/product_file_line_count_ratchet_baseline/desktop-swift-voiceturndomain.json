@@ -1,9 +1,9 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift": 2191
+    "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift": 2243
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift": "A recoverable screen-evidence transition must stay atomic with the reducer-owned lifecycle it modifies; extracting it would weaken that ownership boundary."
+    "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift": "Replacement failure fallback must stay atomic with reducer-owned deadlines and provider identity so captured audio has one transition authority."
   },
   "threshold": 1500
 }
