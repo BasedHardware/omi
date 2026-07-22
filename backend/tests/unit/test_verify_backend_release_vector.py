@@ -53,6 +53,13 @@ def _cloud_run_document(*, revision: str, image: str, environment: str = 'dev') 
     }
 
 
+def _cloud_run_revision_document(*, image: str, ready: str = 'True', reason: str = 'Ready') -> dict:
+    return {
+        'spec': {'containers': [{'image': image}]},
+        'status': {'conditions': [{'type': 'Ready', 'status': ready, 'reason': reason}]},
+    }
+
+
 def _documents(expectation: verifier.DeploymentExpectation) -> dict:
     documents = {
         f'cloud_run/{service}': _cloud_run_document(
@@ -62,6 +69,12 @@ def _documents(expectation: verifier.DeploymentExpectation) -> dict:
         )
         for service, revision in expectation.revisions.items()
     }
+    documents.update(
+        {
+            f'cloud_run_revision/{service}': _cloud_run_revision_document(image=expectation.image)
+            for service in expectation.revisions
+        }
+    )
     documents.update(
         {
             'gke/deployment': {
@@ -593,6 +606,20 @@ def test_read_only_commands_are_limited_to_queries() -> None:
     assert commands['cloud_run/backend'][:4] == ['gcloud', 'run', 'services', 'describe']
 
 
+def test_candidate_read_only_commands_describe_each_expected_revision() -> None:
+    expectation = _expectation()
+    commands = verifier.build_read_only_commands(expectation, include_candidate_revisions=True)
+
+    verifier.assert_commands_are_read_only(commands)
+    assert commands['cloud_run_revision/backend'][:5] == [
+        'gcloud',
+        'run',
+        'revisions',
+        'describe',
+        expectation.revisions['backend'],
+    ]
+
+
 def test_evaluate_accepts_matching_deployed_composition() -> None:
     expectation = _expectation()
 
@@ -628,11 +655,71 @@ def test_evaluate_rejects_a_partial_cloud_run_traffic_apply() -> None:
 def test_candidate_evaluation_accepts_ready_revision_before_traffic_promotion() -> None:
     expectation = _expectation()
     documents = _documents(expectation)
-    documents['cloud_run/backend']['status']['traffic'] = [{'revisionName': 'backend-old', 'percent': 100}]
+    for service, revision in expectation.revisions.items():
+        documents[f'cloud_run/{service}']['status'].update(
+            {
+                'latestCreatedRevisionName': revision,
+                'latestReadyRevisionName': f'{service}-old',
+                'traffic': [{'revisionName': f'{service}-old', 'percent': 100}],
+            }
+        )
+        documents[f'cloud_run_revision/{service}'] = _cloud_run_revision_document(
+            image=expectation.image,
+            ready='True',
+            reason='Retired',
+        )
 
     errors = verifier.evaluate(expectation, documents, require_serving_traffic=False)
 
     assert errors == []
+
+    serving_errors = verifier.evaluate(expectation, documents)
+    assert 'cloud_run/backend: latest ready revision is not backend-abcdef1-12345-1' in serving_errors
+    assert 'cloud_run/backend: expected revision does not receive 100% traffic' in serving_errors
+
+
+@pytest.mark.parametrize(
+    ('mutate', 'expected_error'),
+    (
+        (
+            lambda expectation, documents: documents['cloud_run_revision/backend']['status'].update(
+                {'conditions': [{'type': 'Ready', 'status': 'False'}]}
+            ),
+            'cloud_run/backend: expected revision is not Ready',
+        ),
+        (
+            lambda expectation, documents: documents.pop('cloud_run_revision/backend'),
+            'cloud_run/backend: expected revision is not Ready',
+        ),
+        (
+            lambda expectation, documents: documents['cloud_run/backend']['spec']['template']['spec']['containers'][
+                0
+            ].update({'image': 'gcr.io/based-hardware-dev/backend:wrong'}),
+            'cloud_run/backend: template image is not gcr.io/based-hardware-dev/backend:abcdef1',
+        ),
+        (
+            lambda expectation, documents: documents['cloud_run/backend']['status'].update(
+                {'traffic': [{'revisionName': expectation.revisions['backend'], 'percent': 100}]}
+            ),
+            'cloud_run/backend: expected revision carries traffic before promotion',
+        ),
+        (
+            lambda expectation, documents: documents['cloud_run/backend']['status'].update(
+                {'latestCreatedRevisionName': 'backend-wrong'}
+            ),
+            'cloud_run/backend: latest created revision is not backend-abcdef1-12345-1',
+        ),
+    ),
+)
+def test_candidate_evaluation_rejects_invalid_revision_state(mutate, expected_error: str) -> None:
+    expectation = _expectation()
+    documents = _documents(expectation)
+    for service in expectation.revisions:
+        documents[f'cloud_run/{service}']['status']['traffic'] = [{'revisionName': f'{service}-old', 'percent': 100}]
+
+    mutate(expectation, documents)
+
+    assert expected_error in verifier.evaluate(expectation, documents, require_serving_traffic=False)
 
 
 def test_evaluate_rejects_a_listener_rollout_timeout_when_updated_replicas_lag() -> None:
@@ -745,9 +832,11 @@ def test_evidence_records_the_derived_release_vector() -> None:
 def test_candidate_cloud_run_only_verification_does_not_require_listener_mutations() -> None:
     expectation = _expectation()
     documents = _documents(expectation)
-    cloud_run_only = {key: value for key, value in documents.items() if key.startswith('cloud_run/')}
+    for service in expectation.revisions:
+        documents[f'cloud_run/{service}']['status']['traffic'] = [{'revisionName': f'{service}-old', 'percent': 100}]
+    cloud_run_only = {key: value for key, value in documents.items() if key.startswith('cloud_run')}
 
-    commands = verifier.build_read_only_commands(expectation, include_listener=False)
+    commands = verifier.build_read_only_commands(expectation, include_listener=False, include_candidate_revisions=True)
     errors = verifier.evaluate(
         expectation,
         cloud_run_only,
@@ -766,6 +855,22 @@ def test_candidate_cloud_run_only_verification_does_not_require_listener_mutatio
     assert errors == []
     assert report['release_vector']['backend_listen_required'] is False
     assert 'gke_listener' not in report
+
+
+def test_candidate_failure_status_report_uses_candidate_evidence_before_promotion() -> None:
+    workflow = (BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8')
+    candidate = workflow[
+        workflow.index('Accept no-traffic Cloud Run candidate') : workflow.index('Remove passed transcription')
+    ]
+    status = workflow[
+        workflow.rindex('Cloud Run deploy status report') : workflow.index('Upload backend release-vector evidence')
+    ]
+
+    assert 'id: verify-cloud-run-candidate' in candidate
+    assert 'steps.verify-cloud-run-candidate.outcome' in status
+    assert 'artifacts/backend-cloud-run-candidate-release-vector.json' in status
+    assert 'steps.shift-cloud-run-traffic.outcome' in status
+    assert '"${expected_traffic[@]}"' in status
 
 
 def test_full_backend_deploys_verify_the_serving_release_vector_after_promotion() -> None:
