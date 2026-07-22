@@ -204,7 +204,7 @@ Design requirements:
 
 
 def _generate_app_icon_via_openai(icon_prompt: str) -> bytes:
-    client = OpenAI()
+    client = OpenAI(timeout=120.0, max_retries=1)
     response = client.images.generate(
         model="dall-e-3", prompt=icon_prompt, size="1024x1024", quality="standard", n=1, response_format="b64_json"
     )
@@ -214,7 +214,7 @@ def _generate_app_icon_via_openai(icon_prompt: str) -> bytes:
 
 async def download_image_from_url(url: str) -> bytes:
     """Download image from URL and return bytes."""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get(url)
         response.raise_for_status()
         return response.content
