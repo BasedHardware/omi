@@ -641,7 +641,7 @@ workflows:
 
   macos-prod-appstore:
     name: Release macOS to App Store
-    instance_type: mac_mini_m2
+    instance_type: mac_mini_m4
     max_build_duration: 120
     integrations:
       app_store_connect: codemagic_v4
@@ -1136,7 +1136,7 @@ workflows:
 
   # Retained only for local artifact diagnostics; it has no trigger or publisher.
   macos-prod-legacy-no-publish:
-    instance_type: mac_mini_m2
+    instance_type: mac_mini_m4
     max_build_duration: 120
     integrations:
       app_store_connect: codemagic_v4
@@ -1874,7 +1874,7 @@ workflows:
   # ============================================
   omi-desktop-swift-release:
     name: Release OMI Desktop (Swift)
-    instance_type: mac_mini_m2
+    instance_type: mac_mini_m4
     max_build_duration: 120
     environment:
       groups:
@@ -2930,7 +2930,7 @@ workflows:
   # this trusted configuration has loaded (same posture as the preview lane).
   omi-desktop-qualification:
     name: Qualify OMI Desktop Beta (hermetic T2)
-    instance_type: mac_mini_m2
+    instance_type: mac_mini_m4
     max_build_duration: 120
     environment:
       # Deliberately no credential groups (check-release-process-guards.py
@@ -3070,7 +3070,7 @@ workflows:
   # after this trusted configuration has loaded.
   omi-desktop-swift-preview:
     name: Publish OMI Desktop Preview (Swift)
-    instance_type: mac_mini_m2
+    instance_type: mac_mini_m4
     max_build_duration: 120
     environment:
       # TEMPORARY — tracked by #10221. The dedicated Preview group was not
