@@ -484,7 +484,9 @@ struct SBOnboardingView: View {
     VStack(alignment: .leading, spacing: 12) {
       VStack(spacing: 0) {
         ForEach(Array(model.agentRows.enumerated()), id: \.element.id) { i, row in
-          connectRow(row.name, row.detail, state: model.agentStates[row.id] ?? "idle") { model.connectAgent(row.id) }
+          connectRow(row.id, row.name, row.detail, state: model.agentStates[row.id] ?? "idle") {
+            model.connectAgent(row.id)
+          }
           if i < model.agentRows.count - 1 { Divider().overlay(sb.ink(.w08)) }
         }
       }
@@ -499,7 +501,7 @@ struct SBOnboardingView: View {
     VStack(alignment: .leading, spacing: 12) {
       VStack(spacing: 0) {
         ForEach(Array(model.contextRows.enumerated()), id: \.element.id) { i, row in
-          connectRow(row.name, row.detail, state: model.contextStates[row.id] ?? "idle") {
+          connectRow(row.id, row.name, row.detail, state: model.contextStates[row.id] ?? "idle") {
             model.connectContext(row.id)
           }
           if i < model.contextRows.count - 1 { Divider().overlay(sb.ink(.w08)) }
@@ -512,8 +514,11 @@ struct SBOnboardingView: View {
     .frame(maxWidth: 380, alignment: .leading)
   }
 
-  private func connectRow(_ name: String, _ detail: String, state: String, action: @escaping () -> Void) -> some View {
+  private func connectRow(_ id: String, _ name: String, _ detail: String, state: String, action: @escaping () -> Void)
+    -> some View
+  {
     HStack(spacing: 12) {
+      ConnectorBrandIcon(brand: Self.connectorBrand(for: id), size: 32, cornerRadius: 8)
       VStack(alignment: .leading, spacing: 1) {
         Text(name).geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
         Text(detail).geist(size: 12).foregroundStyle(sb.ink(.w4))
@@ -522,6 +527,25 @@ struct SBOnboardingView: View {
       connectTrailing(state, action: action)
     }
     .padding(.vertical, 10)
+  }
+
+  /// Map an onboarding connector row id to its brand mark. Ids mirror
+  /// `SBOnboardingModel.agentRows`/`contextRows`; anything unmapped falls back to
+  /// the generic agents glyph rather than an empty tile.
+  private static func connectorBrand(for id: String) -> ConnectorBrand {
+    switch id {
+    case "openclaw": return .openclaw
+    case "hermes": return .hermes
+    case "claudeCode": return .claudeCode
+    case "codex": return .codex
+    case "calendar": return .calendar
+    case "gmail": return .gmail
+    case "applenotes": return .appleNotes
+    case "files": return .localFiles
+    case "chatgpt": return .chatgpt
+    case "claude": return .claude
+    default: return .agents
+    }
   }
 
   @ViewBuilder
