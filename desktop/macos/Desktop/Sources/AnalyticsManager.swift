@@ -567,7 +567,7 @@ class AnalyticsManager {
   func chatQueryTelemetry(_ event: ChatQueryTelemetryEvent) {
     let payload = event.analyticsPayload
     PostHogManager.shared.track(payload.eventName, properties: payload.properties)
-    if case .failed(_, _, let errorClass, _) = event {
+    if case .failed(_, _, let errorClass, _, _) = event {
       DesktopDiagnosticsManager.shared.recordChatFailure(errorClass: errorClass.rawValue)
     }
     let diagnosticKeys = [
