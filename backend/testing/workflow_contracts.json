@@ -585,9 +585,13 @@
         "backend/charts/pusher/**",
         ".github/workflows/gcp_backend_pusher.yml",
         ".github/workflows/gcp_backend_pusher_auto_deploy.yml",
-        "backend/scripts/verify_pusher_rollout_budget.py"
+        "backend/scripts/verify_pusher_rollout_budget.py",
+        "backend/scripts/verify_pusher_chart_only_recovery.py"
       ],
-      "tests": ["tests/unit/test_verify_pusher_rollout_budget.py"],
+      "tests": [
+        "tests/unit/test_verify_pusher_rollout_budget.py",
+        "tests/unit/test_verify_pusher_chart_only_recovery.py"
+      ],
       "checks": [],
       "invariants": [
         "Pusher's Kubernetes progress deadline and CI rollout wait both cover every configured healthy-availability wave at the committed HPA ceiling",

@@ -427,7 +427,7 @@ def pusher_preflight_step_is_valid(name: str, step: list[str]) -> bool:
     nonfatal = any(
         candidate.strip().startswith("continue-on-error:") or candidate.strip() == "set +e" for candidate in step
     )
-    allowed_conditions = ["if: env.SERVICE == 'pusher'"] if name == "gcp_backend_pusher.yml" else []
+    allowed_conditions = ["if: env.SERVICE == 'pusher' && env.CHART_ONLY != 'true'"] if name == "gcp_backend_pusher.yml" else []
     if nonfatal or conditions != allowed_conditions:
         return False
 

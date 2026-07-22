@@ -23,6 +23,22 @@ on:
         description: 'Service to deploy'
         required: false
         default: 'pusher'
+      deployment_mode:
+        description: 'build-and-push (normal) or chart-only (Pusher recovery only)'
+        required: false
+        default: 'build-and-push'
+      image_repository:
+        description: 'Exact approved Pusher repository for chart-only recovery'
+        required: false
+        default: ''
+      image_digest:
+        description: 'Exact sha256 digest for chart-only recovery'
+        required: false
+        default: ''
+      ready_baseline:
+        description: 'Minimum already-Ready Pusher replicas to preserve during chart-only recovery'
+        required: false
+        default: ''
 
 # The LLM Gateway path reapplies shared backend-secrets; standalone pusher only
 # mutates its own GKE release and therefore keeps a separate environment lock.
@@ -32,6 +48,8 @@ concurrency:
 
 env:
   SERVICE: ${{ github.event.inputs.service || 'pusher' }}
+  DEPLOYMENT_MODE: ${{ github.event.inputs.deployment_mode || 'build-and-push' }}
+  CHART_ONLY: ${{ github.event.inputs.deployment_mode == 'chart-only' }}
   REGION: us-central1
 
 jobs:
@@ -57,6 +75,28 @@ jobs:
             echo "LLM Gateway deploys are dev-only until the prod launch checklist is explicitly completed."
             exit 1
           fi
+          if [[ "${{ env.DEPLOYMENT_MODE }}" != "build-and-push" && "${{ env.DEPLOYMENT_MODE }}" != "chart-only" ]]; then
+            echo "deployment_mode must be build-and-push or chart-only."
+            exit 1
+          fi
+          if [[ "${{ env.DEPLOYMENT_MODE }}" == "chart-only" ]]; then
+            if [[ "${{ env.SERVICE }}" != "pusher" ]]; then
+              echo "chart-only recovery is Pusher-only."
+              exit 1
+            fi
+            if [[ "${{ github.event.inputs.image_repository }}" != "gcr.io/${{ vars.GCP_PROJECT_ID }}/pusher" ]]; then
+              echo "chart-only recovery repository is not the selected environment's approved Pusher repository."
+              exit 1
+            fi
+            if [[ ! "${{ github.event.inputs.image_digest }}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+              echo "chart-only recovery requires an exact sha256 digest."
+              exit 1
+            fi
+            if [[ ! "${{ github.event.inputs.ready_baseline }}" =~ ^[1-9][0-9]*$ ]]; then
+              echo "chart-only recovery requires a positive Ready containment baseline."
+              exit 1
+            fi
+          fi
 
       # To workaround "no space left on device" issue of GitHub-hosted runner
       - name: Delete huge unnecessary tools folder
@@ -71,6 +111,7 @@ jobs:
       - name: Admit checked-out production source and image identity
         run: |
           set -euo pipefail
+          python3 -m pip install -q pyyaml
           CHECKED_OUT_SHA=$(git rev-parse HEAD)
           if [[ "${{ github.event.inputs.environment }}" == prod ]]; then
             git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
@@ -126,12 +167,15 @@ jobs:
             }
 
       - name: Login to GCR
+        if: env.CHART_ONLY != 'true'
         run: gcloud auth configure-docker
 
       - name: Set up Docker Buildx
+        if: env.CHART_ONLY != 'true'
         uses: docker/setup-buildx-action@v4
 
       - name: Build and Push Docker image
+        if: env.CHART_ONLY != 'true'
         run: |
           if [[ "${{ env.SERVICE }}" == "llm-gateway" ]]; then
             docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG} -f backend/Dockerfile .
@@ -154,7 +198,7 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Resolve production pusher runtime targets
-        if: env.SERVICE == 'pusher' && vars.ENV == 'prod'
+        if: env.SERVICE == 'pusher' && vars.ENV == 'prod' && env.CHART_ONLY != 'true'
         id: pusher-runtime-targets
         run: |
           set -euo pipefail
@@ -180,7 +224,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Apply non-secret pusher runtime config
-        if: env.SERVICE == 'pusher'
+        if: env.SERVICE == 'pusher' && env.CHART_ONLY != 'true'
         env:
           ACCOUNT_DELETION_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.account_deletion_handler_url }}
           CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
@@ -210,11 +254,63 @@ jobs:
         run: backend/scripts/deploy-backend-config.sh
 
       - name: Preflight pusher ConfigMap and Secret references
-        if: env.SERVICE == 'pusher'
+        if: env.SERVICE == 'pusher' && env.CHART_ONLY != 'true'
         run: |
           python3 -m pip install -q pyyaml
           python3 backend/scripts/verify_pusher_config_references.py \
             --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend
+
+      - name: Capture and validate chart-only Pusher recovery
+        if: env.SERVICE == 'pusher' && env.CHART_ONLY == 'true'
+        run: |
+          set -euo pipefail
+          NAMESPACE="${{ vars.ENV }}-omi-backend"
+          RELEASE="${{ vars.ENV }}-omi-pusher"
+          DEPLOYMENT="$RELEASE"
+          CONFIGMAP="${{ vars.ENV }}-omi-backend-config"
+          mkdir -p .pusher-recovery-snapshot
+          # Capture identity and readiness evidence only. ConfigMap contents are
+          # never printed or uploaded; the verifier reads its key names locally.
+          helm history "$RELEASE" -n "$NAMESPACE" -o json > .pusher-recovery-snapshot/helm-history.json
+          kubectl -n "$NAMESPACE" get deployment "$DEPLOYMENT" -o json > .pusher-recovery-snapshot/deployment.json
+          kubectl -n "$NAMESPACE" get configmap "$CONFIGMAP" -o json > .pusher-recovery-snapshot/configmap.json
+          kubectl -n "$NAMESPACE" get service "$RELEASE" -o json > .pusher-recovery-snapshot/service.json
+          kubectl -n "$NAMESPACE" get hpa "$RELEASE" -o json > .pusher-recovery-snapshot/hpa.json
+          kubectl -n "$NAMESPACE" get pdb "$RELEASE" -o json > .pusher-recovery-snapshot/pdb.json
+          kubectl -n "$NAMESPACE" get ingress "$RELEASE" -o json > .pusher-recovery-snapshot/ingress.json
+          kubectl -n "$NAMESPACE" get serviceaccount "$RELEASE" -o json > .pusher-recovery-snapshot/serviceaccount.json
+          kubectl -n "$NAMESPACE" get backendconfig "${{ vars.ENV }}-pusher-backend-config" -o json > .pusher-recovery-snapshot/backendconfig.json
+          kubectl -n "$NAMESPACE" get rs -l app.kubernetes.io/instance="$RELEASE" -o json > .pusher-recovery-snapshot/replicasets.json
+          kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/instance="$RELEASE" -o json > .pusher-recovery-snapshot/pods.json
+          helm template "$RELEASE" ./backend/charts/pusher \
+            -f "./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml" \
+            --set-string "image.repository=${{ github.event.inputs.image_repository }}" \
+            --set-string 'image.tag=' \
+            --set-string "image.digest=${{ github.event.inputs.image_digest }}" \
+            > .pusher-recovery-snapshot/rendered.yaml
+          python3 backend/scripts/verify_pusher_chart_only_recovery.py preflight \
+            --environment "${{ vars.ENV }}" --namespace "$NAMESPACE" --release "$RELEASE" --deployment "$DEPLOYMENT" \
+            --repository "${{ github.event.inputs.image_repository }}" --expected-repository "gcr.io/${{ vars.GCP_PROJECT_ID }}/pusher" \
+            --digest "${{ github.event.inputs.image_digest }}" --ready-baseline "${{ github.event.inputs.ready_baseline }}" \
+            --live-deployment .pusher-recovery-snapshot/deployment.json \
+            --live-configmap .pusher-recovery-snapshot/configmap.json \
+            --live-service .pusher-recovery-snapshot/service.json \
+            --live-hpa .pusher-recovery-snapshot/hpa.json \
+            --live-pdb .pusher-recovery-snapshot/pdb.json \
+            --live-ingress .pusher-recovery-snapshot/ingress.json \
+            --live-serviceaccount .pusher-recovery-snapshot/serviceaccount.json \
+            --live-backendconfig .pusher-recovery-snapshot/backendconfig.json \
+            --live-pods .pusher-recovery-snapshot/pods.json \
+            --rendered .pusher-recovery-snapshot/rendered.yaml \
+            --evidence pusher-recovery-evidence.json
+
+      - name: Upload redacted chart-only recovery evidence
+        if: always() && env.SERVICE == 'pusher' && env.CHART_ONLY == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pusher-chart-only-recovery-evidence-${{ github.run_id }}
+          path: pusher-recovery-evidence.json
+          if-no-files-found: ignore
 
       - name: Deploy Pusher to GKE cluster using Helm
         env:
@@ -250,12 +346,54 @@ jobs:
             fi
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service llm-gateway
           else
-            helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set-string "image.tag=${IMAGE_TAG}"
+            if [[ "${{ env.CHART_ONLY }}" == "true" ]]; then
+              # Re-read the live objects immediately before mutation. The
+              # verifier fails closed if the digest, ConfigMap key reference,
+              # ready baseline, or target identity can no longer be proven.
+              NAMESPACE="${{ vars.ENV }}-omi-backend"
+              RELEASE="${{ vars.ENV }}-omi-pusher"
+              kubectl -n "$NAMESPACE" get deployment "$RELEASE" -o json > .pusher-recovery-snapshot/preapply-deployment.json
+              kubectl -n "$NAMESPACE" get configmap "${{ vars.ENV }}-omi-backend-config" -o json > .pusher-recovery-snapshot/preapply-configmap.json
+              kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/instance="$RELEASE" -o json > .pusher-recovery-snapshot/preapply-pods.json
+              kubectl -n "$NAMESPACE" get ingress "$RELEASE" -o json > .pusher-recovery-snapshot/preapply-ingress.json
+              kubectl -n "$NAMESPACE" get serviceaccount "$RELEASE" -o json > .pusher-recovery-snapshot/preapply-serviceaccount.json
+              kubectl -n "$NAMESPACE" get backendconfig "${{ vars.ENV }}-pusher-backend-config" -o json > .pusher-recovery-snapshot/preapply-backendconfig.json
+              python3 backend/scripts/verify_pusher_chart_only_recovery.py preflight \
+                --environment "${{ vars.ENV }}" --namespace "$NAMESPACE" --release "$RELEASE" --deployment "$RELEASE" \
+                --repository "${{ github.event.inputs.image_repository }}" --expected-repository "gcr.io/${{ vars.GCP_PROJECT_ID }}/pusher" \
+                --digest "${{ github.event.inputs.image_digest }}" --ready-baseline "${{ github.event.inputs.ready_baseline }}" \
+                --live-deployment .pusher-recovery-snapshot/preapply-deployment.json \
+                --live-configmap .pusher-recovery-snapshot/preapply-configmap.json \
+                --live-service .pusher-recovery-snapshot/service.json \
+                --live-hpa .pusher-recovery-snapshot/hpa.json \
+                --live-pdb .pusher-recovery-snapshot/pdb.json \
+                --live-ingress .pusher-recovery-snapshot/preapply-ingress.json \
+                --live-serviceaccount .pusher-recovery-snapshot/preapply-serviceaccount.json \
+                --live-backendconfig .pusher-recovery-snapshot/preapply-backendconfig.json \
+                --live-pods .pusher-recovery-snapshot/preapply-pods.json \
+                --rendered .pusher-recovery-snapshot/rendered.yaml \
+                --expected-evidence pusher-recovery-evidence.json
+              helm -n "$NAMESPACE" upgrade "$RELEASE" ./backend/charts/pusher \
+                -f "./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml" \
+                --set-string "image.repository=${{ github.event.inputs.image_repository }}" \
+                --set-string 'image.tag=' \
+                --set-string "image.digest=${{ github.event.inputs.image_digest }}"
+            else
+              helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set-string "image.tag=${IMAGE_TAG}"
+            fi
             # Must cover the chart-derived Pusher rollout budget (fourteen
             # availability waves at the current production HPA ceiling).
             if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-pusher --timeout=9600s; then
               python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher || true
               exit 1
+            fi
+            if [[ "${{ env.CHART_ONLY }}" == "true" ]]; then
+              kubectl -n ${{ vars.ENV }}-omi-backend get deployment ${{ vars.ENV }}-omi-pusher -o json > .pusher-recovery-snapshot/postrollout-deployment.json
+              python3 backend/scripts/verify_pusher_chart_only_recovery.py postverify \
+                --environment "${{ vars.ENV }}" --namespace "${{ vars.ENV }}-omi-backend" --deployment "${{ vars.ENV }}-omi-pusher" \
+                --repository "${{ github.event.inputs.image_repository }}" --expected-repository "gcr.io/${{ vars.GCP_PROJECT_ID }}/pusher" \
+                --digest "${{ github.event.inputs.image_digest }}" --ready-baseline "${{ github.event.inputs.ready_baseline }}" \
+                --live-deployment .pusher-recovery-snapshot/postrollout-deployment.json
             fi
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher
           fi

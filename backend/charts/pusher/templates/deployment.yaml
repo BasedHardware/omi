@@ -54,7 +54,23 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: "{{ required "image.repository is required" .Values.image.repository }}:{{ required "image.tag is required" .Values.image.tag }}"
+          {{- $repository := required "image.repository is required" .Values.image.repository }}
+          {{- $tag := default "" .Values.image.tag }}
+          {{- $digest := default "" .Values.image.digest }}
+          {{- if or (contains "@" $repository) (not (regexMatch "^[a-z0-9][a-z0-9.-]*(?::[0-9]+)?(?:/[a-z0-9][a-z0-9._-]*)+$" $repository)) }}
+          {{- fail "image.repository must not include a tag or digest" }}
+          {{- end }}
+          {{- if and $tag $digest }}
+          {{- fail "image.tag and image.digest are mutually exclusive" }}
+          {{- end }}
+          {{- if $digest }}
+          {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" $digest) }}
+          {{- fail "image.digest must be sha256:<64 lowercase hex characters>" }}
+          {{- end }}
+          image: "{{ $repository }}@{{ $digest }}"
+          {{- else }}
+          image: "{{ $repository }}:{{ required "image.tag is required when image.digest is empty" $tag }}"
+          {{- end }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.envFrom }}
           envFrom:

@@ -18,6 +18,9 @@ image:
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
+  # An exact immutable digest for chart-only recovery. It cannot be combined
+  # with tag; ordinary development deployments continue to supply image.tag.
+  digest: ""
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
