@@ -76,7 +76,9 @@ function buildImportPrompt(rawText: string, source: MemorySource, existing: stri
 export function normalize(s: string): string {
   return s
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, '')
+    // Keep + and # so distinct facts like "C++" and "C#" do not normalize to the
+    // same key and get dropped as duplicates of each other.
+    .replace(/[^\p{L}\p{N}+#\s]/gu, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
