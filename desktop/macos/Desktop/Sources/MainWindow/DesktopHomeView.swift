@@ -500,6 +500,18 @@ struct DesktopHomeView: View {
       notification in
       handleAutomationNavigation(notification)
     }
+    .onReceive(NotificationCenter.default.publisher(for: .navigateToChat)) { _ in
+      // The global shortcut / notch "Ask Omi" opens the continuous chat, which
+      // lives on the chat-first home. DashboardPage focuses the input when it's
+      // already mounted; if we're on another tab, switch home first and re-emit
+      // so the now-mounted page catches it. Guard on the tab to avoid a loop.
+      if selectedIndex != SidebarNavItem.dashboard.rawValue {
+        selectedIndex = SidebarNavItem.dashboard.rawValue
+        DispatchQueue.main.async {
+          NotificationCenter.default.post(name: .navigateToChat, object: nil)
+        }
+      }
+    }
   }
 
   private func enforceMainWindowMinimumSize() {
@@ -1248,6 +1260,20 @@ private struct PageContentView: View {
   @Binding var highlightedSettingId: String?
   @Binding var selectedTabIndex: Int
 
+  /// The list/detail pages (Conversations, Memories, Tasks, Apps) render their
+  /// content in a centered, width-capped column so wide monitors get calm
+  /// gutters instead of a full-bleed stretch — matching the Focus/Insights
+  /// pages, which already self-constrain. Pages paint a clear background, so the
+  /// gutters show the shell surface seamlessly.
+  private static let listPageContentWidth: CGFloat = 900
+
+  @ViewBuilder
+  private func constrainedListPage<V: View>(_ page: V) -> some View {
+    page
+      .frame(maxWidth: Self.listPageContentWidth, maxHeight: .infinity)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
   var body: some View {
     Group {
       switch selectedIndex {
@@ -1262,7 +1288,7 @@ private struct PageContentView: View {
           taskChatCoordinator: viewModelContainer.taskChatCoordinator,
           selectedIndex: $selectedTabIndex)
       case 1:
-        MemoryHubPage(appState: appState, viewModelContainer: viewModelContainer)
+        constrainedListPage(MemoryHubPage(appState: appState, viewModelContainer: viewModelContainer))
       case 2:
         ChatPage(
           appProvider: viewModelContainer.appProvider,
@@ -1270,14 +1296,16 @@ private struct PageContentView: View {
           onHome: { selectedTabIndex = SidebarNavItem.dashboard.rawValue }
         )
       case 3:
-        MemoriesPage(
-          viewModel: viewModelContainer.memoriesViewModel,
-          graphViewModel: viewModelContainer.memoryGraphViewModel)
+        constrainedListPage(
+          MemoriesPage(
+            viewModel: viewModelContainer.memoriesViewModel,
+            graphViewModel: viewModelContainer.memoryGraphViewModel))
       case 4:
-        TasksPage(
-          viewModel: viewModelContainer.tasksViewModel,
-          chatCoordinator: viewModelContainer.taskChatCoordinator,
-          chatProvider: viewModelContainer.chatProvider)
+        constrainedListPage(
+          TasksPage(
+            viewModel: viewModelContainer.tasksViewModel,
+            chatCoordinator: viewModelContainer.taskChatCoordinator,
+            chatProvider: viewModelContainer.chatProvider))
       case 5:
         FocusHubPage()
       case 6:
@@ -1285,11 +1313,12 @@ private struct PageContentView: View {
       case 7:
         RewindPage(appState: appState)
       case 8:
-        AppsPage(
-          appProvider: viewModelContainer.appProvider,
-          appState: appState,
-          connectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
-          handlesAutomationPresentations: viewModelContainer.isInitialLoadComplete)
+        constrainedListPage(
+          AppsPage(
+            appProvider: viewModelContainer.appProvider,
+            appState: appState,
+            connectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
+            handlesAutomationPresentations: viewModelContainer.isInitialLoadComplete))
       case 9:
         SettingsPage(
           appState: appState,

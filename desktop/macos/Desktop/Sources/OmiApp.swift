@@ -1041,14 +1041,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   /// the menu-bar "Open Omi" item, the global Open Omi (formerly Ask Omi)
   /// shortcut, and the floating bar's "Continue in Omi" affordance.
   @MainActor func openMainAppWindow() {
-    NSApp.activate()
+    // `ignoringOtherApps: true` reliably steals focus from whatever app is
+    // frontmost (e.g. when summoned by the global shortcut mid-task); the
+    // no-arg `activate()` cooperative path often leaves Omi behind the caller.
+    NSApp.activate(ignoringOtherApps: true)
     var foundWindow = revealMainWindowIfAvailable()
     if !foundWindow {
       Self.openMainWindow?()
       foundWindow = revealMainWindowIfAvailable()
     }
     // Dock icon is always visible; just activate the app
-    NSApp.activate()
+    NSApp.activate(ignoringOtherApps: true)
     if !foundWindow {
       log("AppDelegate: [MENUBAR] WARNING - No Omi window found when opening main window")
     }

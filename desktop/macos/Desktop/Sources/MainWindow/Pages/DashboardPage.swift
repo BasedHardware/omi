@@ -749,7 +749,9 @@ struct DashboardPage: View {
   /// stage over the memory constellation, with the goals/error surfaces and
   /// the ask bar docked as one column at the bottom.
   private func homeHubStage(stageWidth: CGFloat, askBarWidth: CGFloat) -> some View {
-    let columnWidth = min(CGFloat(620), homeStageContentWidth(for: stageWidth))
+    // Keep the knows-list column tight so short rows (e.g. "Call Rabia") don't
+    // strand their trailing icon across a wide gap; long one-liners still fit.
+    let columnWidth = min(CGFloat(520), homeStageContentWidth(for: stageWidth))
 
     return VStack(spacing: 0) {
       Spacer(minLength: 0)
