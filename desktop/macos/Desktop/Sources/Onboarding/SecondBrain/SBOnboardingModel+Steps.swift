@@ -166,19 +166,27 @@ extension SBOnboardingModel {
   func answerScreen() { advance(userAnswer: scrState == .on ? "Allowed" : "Skip", to: .files) }
   func answerFiles() { advance(userAnswer: fdaState == .on ? "Allowed" : "Skip", to: .accessibility) }
   func answerAccessibility() { advance(userAnswer: accState == .on ? "Allowed" : "Skip", to: .automation) }
-  func answerAutomation() { advance(userAnswer: autoState == .on ? "Allowed" : "Skip", to: .shortcut) }
+  func answerAutomation() { advance(userAnswer: autoState == .on ? "Allowed" : "Skip", to: .shortcutOpen) }
 }
 
 // MARK: - Summon shortcut (pick → press → notch)
 
 extension SBOnboardingModel {
-  /// The pickable summon options: three global hotkeys + hold-to-talk.
-  var shortcutOptions: [(id: String, shortcut: ShortcutSettings.KeyboardShortcut, isPTT: Bool, label: String, sub: String)] {
+  /// Open-Omi options (tap to open the window).
+  var openShortcutOptions: [(id: String, shortcut: ShortcutSettings.KeyboardShortcut, sub: String)] {
     [
-      ("cmdO", ShortcutSettings.askOmiCommandOShortcut, false, "⌘O", "open + type"),
-      ("cmdReturn", ShortcutSettings.askOmiCommandReturnShortcut, false, "⌘↩", "open + type"),
-      ("cmdJ", ShortcutSettings.askOmiCommandJShortcut, false, "⌘J", "open + type"),
-      ("fn", ShortcutSettings.KeyboardShortcut(modifierOnly: .function), true, "hold fn", "hold + talk"),
+      ("cmdO", ShortcutSettings.askOmiCommandOShortcut, "tap to open"),
+      ("cmdReturn", ShortcutSettings.askOmiCommandReturnShortcut, "tap to open"),
+      ("cmdJ", ShortcutSettings.askOmiCommandJShortcut, "tap to open"),
+    ]
+  }
+
+  /// Push-to-talk options (hold to talk, hands-free).
+  var talkShortcutOptions: [(id: String, shortcut: ShortcutSettings.KeyboardShortcut, sub: String)] {
+    [
+      ("fn", ShortcutSettings.KeyboardShortcut(modifierOnly: .function), "hold to talk"),
+      ("opt", ShortcutSettings.KeyboardShortcut(modifierOnly: .option), "hold to talk"),
+      ("ctrl", ShortcutSettings.KeyboardShortcut(modifierOnly: .control), "hold to talk"),
     ]
   }
 
@@ -188,6 +196,11 @@ extension SBOnboardingModel {
   /// NSMenu key equivalents that AppKit dispatches before local monitors). Both are
   /// restored on leave. This is why the earlier attempt's monitor never fired.
   func armShortcutSummon() {
+    // Reset pick/press state so each shortcut step (open, then talk) starts fresh.
+    shortcutPicked = false
+    shortcutPressed = false
+    shortcutTokens = []
+    chosenShortcut = nil
     GlobalShortcutManager.shared.setRegistrationSuspended(true)
     if savedMainMenu == nil { savedMainMenu = NSApp.mainMenu }
     NSApp.mainMenu = nil
@@ -237,23 +250,28 @@ extension SBOnboardingModel {
     return matched
   }
 
-  /// Pick + persist the chosen key as the user's ONE talk-to-Omi key. We set it
-  /// as the push-to-talk chord so the exact key they picked is what the screen
-  /// demo prompts for and what actually triggers the voice turn — no separate,
-  /// surprising "fn". For a key chord (⌘O/⌘↩/⌘J) we also register it as the
-  /// Ask-Omi open hotkey so a tap opens Omi too.
-  func pickShortcut(_ option: (id: String, shortcut: ShortcutSettings.KeyboardShortcut, isPTT: Bool, label: String, sub: String)) {
-    chosenShortcut = option.shortcut
-    chosenShortcutIsPTT = option.isPTT
-    shortcutTokens = option.shortcut.displayTokens
+  /// Pick + persist a shortcut. `isTalk` → push-to-talk chord (held, drives the
+  /// voice demo); otherwise the Ask-Omi open hotkey (tapped to open the window).
+  func pickShortcut(_ shortcut: ShortcutSettings.KeyboardShortcut, isTalk: Bool) {
+    chosenShortcut = shortcut
+    chosenShortcutIsPTT = isTalk
+    shortcutTokens = shortcut.displayTokens
     shortcutPicked = true
     shortcutPressed = false
-    ShortcutSettings.shared.pttShortcut = option.shortcut
-    ShortcutSettings.shared.pttEnabled = true
+    if isTalk {
+      ShortcutSettings.shared.pttShortcut = shortcut
+      ShortcutSettings.shared.pttEnabled = true
+    } else {
+      ShortcutSettings.shared.askOmiShortcut = shortcut
+      ShortcutSettings.shared.askOmiEnabled = true
+    }
   }
 
-  func answerShortcut() {
-    advance(userAnswer: shortcutPressed ? "Nailed it" : (shortcutPicked ? "Got it" : "Continue"), to: .screenDemo)
+  func answerShortcutOpen() {
+    advance(userAnswer: shortcutPressed ? "Works" : (shortcutPicked ? "Set" : "Skip"), to: .shortcutTalk)
+  }
+  func answerShortcutTalk() {
+    advance(userAnswer: shortcutPressed ? "Works" : (shortcutPicked ? "Set" : "Skip"), to: .screenDemo)
   }
 }
 

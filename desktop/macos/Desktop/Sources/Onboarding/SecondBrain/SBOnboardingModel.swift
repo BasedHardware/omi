@@ -14,10 +14,15 @@ import Foundation
 @MainActor
 final class SBOnboardingModel: ObservableObject {
   enum Step: Int, CaseIterable {
-    case promise, name, language, role
+    case promise, name, howHeard, language, role
     case mic, systemAudio, screen, files, accessibility, automation
-    case shortcut, screenDemo, agents, context, capture
+    case shortcutOpen, shortcutTalk, screenDemo, agents, context, capture
   }
+
+  /// "How did you hear about Omi?" options (mirrors the legacy step).
+  static let howHeardSources = [
+    "Social media", "YouTube", "Friend", "Search engine", "AI chat", "Podcast", "Colleague", "Product Hunt", "Other",
+  ]
 
   struct Msg: Identifiable {
     let id = UUID()
@@ -104,6 +109,7 @@ final class SBOnboardingModel: ObservableObject {
       return
         "Hey, I'm Omi, your second brain. I hear your conversations, remember everything, and handle the follow-ups. Three quick things:"
     case .name: return "What should I call you?"
+    case .howHeard: return "Quick one. How did you hear about Omi?"
     case .language:
       return "What language do you speak? I'll listen and reply in it."
     case .role:
@@ -121,8 +127,10 @@ final class SBOnboardingModel: ObservableObject {
       return "Turn on Accessibility, so I can use your shortcut and click and type for you."
     case .automation:
       return "Turn on Automation, so I can control your other apps and get things done."
-    case .shortcut:
-      return "How do you want to reach me? Pick a key. Hit it anywhere and I show up."
+    case .shortcutOpen:
+      return "How do you want to open me? Pick a key, then give it a tap to try it."
+    case .shortcutTalk:
+      return "And to talk to me, hands-free? Pick a key to hold, then hold it and say something."
     case .screenDemo:
       return "Here's the fun part."
     case .agents:
@@ -143,10 +151,10 @@ final class SBOnboardingModel: ObservableObject {
     return "friend"
   }
 
-  /// Human hint for the chosen summon shortcut, used in the capture copy.
+  /// Human hint for the chosen open-Omi shortcut, used in the capture copy.
   var summonHint: String {
-    if !shortcutTokens.isEmpty { return shortcutTokens.joined(separator: "") }
-    return "Your shortcut"
+    let tokens = ShortcutSettings.shared.askOmiShortcut.displayTokens
+    return tokens.isEmpty ? "Your shortcut" : tokens.joined()
   }
 
   // MARK: lifecycle
@@ -191,13 +199,14 @@ final class SBOnboardingModel: ObservableObject {
   /// appears — used to kick off per-step live work (screen capture, demo setup).
   private func onStepShown(_ step: Step) {
     switch step {
+    case .language: prefillDetectedLanguage()
     case .mic: precheckPerm("microphone")
     case .systemAudio: precheckPerm("system_audio")
     case .screen: precheckPerm("screen_recording")
     case .files: precheckPerm("full_disk_access")
     case .accessibility: precheckPerm("accessibility")
     case .automation: precheckPerm("automation")
-    case .shortcut: armShortcutSummon()
+    case .shortcutOpen, .shortcutTalk: armShortcutSummon()
     case .screenDemo: startScreenDemo()
     case .agents: refreshAgentStates()
     case .context: refreshContextStates()
@@ -217,7 +226,7 @@ final class SBOnboardingModel: ObservableObject {
   /// Tear down any live monitors/tasks a step installed before leaving it.
   private func teardownStep(_ step: Step) {
     switch step {
-    case .shortcut: disarmShortcutSummon()
+    case .shortcutOpen, .shortcutTalk: disarmShortcutSummon()
     case .screenDemo: teardownVoiceDemo()
     default: break
     }
@@ -231,7 +240,16 @@ final class SBOnboardingModel: ObservableObject {
     let trimmed = nameDraft.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return }
     Task { await AuthService.shared.updateGivenName(trimmed) }
-    advance(userAnswer: trimmed, to: .language)
+    advance(userAnswer: trimmed, to: .howHeard)
+  }
+
+  /// Record the acquisition source (analytics + backend, like the legacy step),
+  /// then move on.
+  func pickHowHeard(_ source: String) {
+    UserDefaults.standard.set(source, forKey: "onboardingHowDidYouHearSource")
+    AnalyticsManager.shared.onboardingHowDidYouHear(source: source)
+    Task { try? await APIClient.shared.updateOnboardingAcquisitionSource(source) }
+    advance(userAnswer: source, to: .language)
   }
 
   /// Set the user's spoken language locally + on the backend (mirrors the legacy
@@ -241,6 +259,17 @@ final class SBOnboardingModel: ObservableObject {
     AssistantSettings.shared.voiceLanguages = [code]
     Task { _ = try? await APIClient.shared.updateUserLanguage(code) }
     advance(userAnswer: name, to: .role)
+  }
+
+  /// Auto-detect the Mac's language and pre-fill it so the picker defaults to it
+  /// (the user can still type to change). Only fills an empty field once.
+  func prefillDetectedLanguage() {
+    guard languageDraft.isEmpty, languageName == nil else { return }
+    let raw = Locale.current.language.languageCode?.identifier ?? Locale.preferredLanguages.first ?? "en"
+    let code = AssistantSettings.normalizeTranscriptionLanguageCode(raw)
+    if let match = AssistantSettings.supportedLanguages.first(where: { $0.code == code }) {
+      languageDraft = match.name
+    }
   }
 
   func answerLanguageText() {

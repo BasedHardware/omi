@@ -7,6 +7,8 @@ import SwiftUI
 struct SBOnboardingView: View {
   @Environment(\.sbTheme) private var sb
   @StateObject private var model: SBOnboardingModel
+  /// Language step: false shows the detected default + Continue; true reveals the picker.
+  @State private var languageChanging = false
 
   /// Same dune background as sign-in, for a continuous entry experience.
   private static let backgroundImage: NSImage? = {
@@ -91,6 +93,8 @@ struct SBOnboardingView: View {
         .onChange(of: model.thread.count) { _, _ in scrollDown(proxy) }
         .onChange(of: model.showWidget) { _, _ in scrollDown(proxy) }
         .onChange(of: model.streamingText) { _, _ in scrollDown(proxy) }
+        .onChange(of: model.shortcutPicked) { _, _ in scrollDown(proxy) }
+        .onChange(of: model.shortcutPressed) { _, _ in scrollDown(proxy) }
       }
       // No progress dots — the user shouldn't count steps or feel a finish line.
       Color.clear.frame(height: 14)
@@ -137,6 +141,7 @@ struct SBOnboardingView: View {
     switch model.step {
     case .promise: promiseWidget
     case .name: nameWidget
+    case .howHeard: howHeardWidget
     case .language: languageWidget
     case .role: roleWidget
     case .mic: permStepWidget("microphone", "Microphone", "hears your side of conversations") { model.answerMic() }
@@ -154,7 +159,8 @@ struct SBOnboardingView: View {
       }
     case .automation:
       permStepWidget("automation", "Automation", "drive your other apps to get things done") { model.answerAutomation() }
-    case .shortcut: shortcutWidget
+    case .shortcutOpen: shortcutWidget(isTalk: false)
+    case .shortcutTalk: shortcutWidget(isTalk: true)
     case .screenDemo: screenDemoWidget
     case .agents: agentsWidget
     case .context: contextWidget
@@ -198,38 +204,65 @@ struct SBOnboardingView: View {
     .frame(maxWidth: 360, alignment: .leading)
   }
 
+  private var howHeardWidget: some View {
+    FlowChips(items: SBOnboardingModel.howHeardSources) { source in
+      model.pickHowHeard(source)
+    }
+  }
+
   private var languageWidget: some View {
-    let draft = model.languageDraft.trimmingCharacters(in: .whitespaces).lowercased()
     let all = AssistantSettings.supportedLanguages
-    let matches: [(code: String, name: String)] =
-      draft.isEmpty
-      ? Array(all.prefix(6))
-      : Array(all.filter { $0.name.lowercased().contains(draft) || $0.code.lowercased().hasPrefix(draft) }.prefix(6))
-    return VStack(alignment: .leading, spacing: 8) {
-      TextField("Type a language…", text: $model.languageDraft)
-        .textFieldStyle(.plain).geist(size: 15).foregroundStyle(sb.ink)
-        .padding(.horizontal, 13).padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 10).fill(sb.ink(.w06)))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(sb.ink(.w12), lineWidth: 1))
-        .onSubmit { if let first = matches.first { model.pickLanguage(code: first.code, name: first.name) } }
-      if !matches.isEmpty {
-        VStack(spacing: 0) {
-          ForEach(matches, id: \.code) { lang in
-            Button { model.pickLanguage(code: lang.code, name: lang.name) } label: {
-              HStack {
-                Text(lang.name).geist(size: 14).foregroundStyle(sb.ink(.w85))
-                Spacer()
-                Text(lang.code).geistMono(size: 11).foregroundStyle(sb.ink(.w35))
-              }
-              .padding(.horizontal, 13).padding(.vertical, 9)
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            if lang.code != matches.last?.code { Divider().overlay(sb.ink(.w06)) }
+    let draft = model.languageDraft.trimmingCharacters(in: .whitespaces)
+    return VStack(alignment: .leading, spacing: 12) {
+      if !languageChanging, !draft.isEmpty {
+        // Auto-detected default: accept with one tap, or reveal the picker.
+        HStack(spacing: 8) {
+          Text(draft).geist(size: 17, weight: .medium).foregroundStyle(sb.ink)
+          Text("· detected").geist(size: 12.5).foregroundStyle(sb.ink(.w4))
+        }
+        SBInkButton(title: "Continue") {
+          if let m = all.first(where: { $0.name.lowercased() == draft.lowercased() }) {
+            model.pickLanguage(code: m.code, name: m.name)
+          } else {
+            model.answerLanguageText()
           }
         }
-        .overlay(RoundedRectangle(cornerRadius: 11).stroke(sb.ink(.w1), lineWidth: 1))
+        Button { languageChanging = true } label: {
+          Text("Change language").geist(size: 13).foregroundStyle(sb.ink(.w45))
+        }
+        .buttonStyle(.plain)
+      } else {
+        let filter = draft.lowercased()
+        let matches: [(code: String, name: String)] =
+          filter.isEmpty
+          ? Array(all.prefix(6))
+          : Array(
+            all.filter { $0.name.lowercased().contains(filter) || $0.code.lowercased().hasPrefix(filter) }.prefix(6))
+        TextField("Type a language…", text: $model.languageDraft)
+          .textFieldStyle(.plain).geist(size: 15).foregroundStyle(sb.ink)
+          .padding(.horizontal, 13).padding(.vertical, 10)
+          .background(RoundedRectangle(cornerRadius: 10).fill(sb.ink(.w06)))
+          .overlay(RoundedRectangle(cornerRadius: 10).stroke(sb.ink(.w12), lineWidth: 1))
+          .onSubmit { if let first = matches.first { model.pickLanguage(code: first.code, name: first.name) } }
+        if !matches.isEmpty {
+          VStack(spacing: 0) {
+            ForEach(matches, id: \.code) { lang in
+              Button { model.pickLanguage(code: lang.code, name: lang.name) } label: {
+                HStack {
+                  Text(lang.name).geist(size: 14).foregroundStyle(sb.ink(.w85))
+                  Spacer()
+                  Text(lang.code).geistMono(size: 11).foregroundStyle(sb.ink(.w35))
+                }
+                .padding(.horizontal, 13).padding(.vertical, 9)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+              }
+              .buttonStyle(.plain)
+              if lang.code != matches.last?.code { Divider().overlay(sb.ink(.w06)) }
+            }
+          }
+          .overlay(RoundedRectangle(cornerRadius: 11).stroke(sb.ink(.w1), lineWidth: 1))
+        }
       }
     }
     .frame(maxWidth: 340, alignment: .leading)
@@ -328,15 +361,16 @@ struct SBOnboardingView: View {
 
   // MARK: summon shortcut
 
-  private var shortcutWidget: some View {
-    VStack(alignment: .leading, spacing: 9) {
-      ForEach(model.shortcutOptions, id: \.id) { opt in
-        Button { model.pickShortcut(opt) } label: {
+  private func shortcutWidget(isTalk: Bool) -> some View {
+    let options = isTalk ? model.talkShortcutOptions : model.openShortcutOptions
+    return VStack(alignment: .leading, spacing: 9) {
+      ForEach(options, id: \.id) { opt in
+        Button { model.pickShortcut(opt.shortcut, isTalk: isTalk) } label: {
           HStack(spacing: 8) {
-            HStack(spacing: 4) {
+            HStack(spacing: 5) {
               ForEach(opt.shortcut.displayTokens, id: \.self) { tok in keycap(tok) }
             }
-            Text(opt.sub).geist(size: 12).foregroundStyle(sb.ink(.w45))
+            Text(opt.sub).geist(size: 13).foregroundStyle(sb.ink(.w45))
             Spacer()
             if model.chosenShortcut == opt.shortcut {
               Text("✓").geist(size: 14).foregroundStyle(sb.ink(.w7))
@@ -352,17 +386,33 @@ struct SBOnboardingView: View {
         .buttonStyle(.plain)
       }
       if model.shortcutPicked {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 10) {
           HStack(spacing: 6) {
             ForEach(model.shortcutTokens, id: \.self) { tok in keycap(tok, active: model.shortcutPressed) }
           }
-          Text(model.shortcutPressed ? "✓ Nice, that's your key." : "Now press it to test.")
-            .geist(size: 13).foregroundStyle(model.shortcutPressed ? sb.ink(.w7) : sb.ink(.w5))
+          Text(
+            model.shortcutPressed
+              ? "Perfect, that works."
+              : (isTalk ? "Now hold it and say something." : "Now give it a tap.")
+          )
+          .geist(size: 15, weight: .medium)
+          .foregroundStyle(model.shortcutPressed ? sb.ink(.w85) : sb.ink(.w6))
         }
-        .padding(.top, 4)
+        .padding(.top, 6)
       }
-      SBInkButton(title: model.shortcutPicked ? "Continue" : "Skip for now") { model.answerShortcut() }
-        .padding(.top, 2)
+      // Continue only appears once the key has actually been pressed; before that,
+      // just a quiet Skip so the user is never stuck.
+      Group {
+        if model.shortcutPressed {
+          SBInkButton(title: "Continue") { isTalk ? model.answerShortcutTalk() : model.answerShortcutOpen() }
+        } else {
+          Button { isTalk ? model.answerShortcutTalk() : model.answerShortcutOpen() } label: {
+            Text("Skip for now").geist(size: 13).foregroundStyle(sb.ink(.w35))
+          }
+          .buttonStyle(.plain)
+        }
+      }
+      .padding(.top, 6)
     }
     .frame(maxWidth: 380, alignment: .leading)
   }
@@ -491,23 +541,65 @@ struct SBOnboardingView: View {
   }
 }
 
-/// Simple wrapping chip row.
+/// Wrapping chip row where each chip hugs its content (no wide grid cells that
+/// push short chips far apart).
 private struct FlowChips: View {
   @Environment(\.sbTheme) private var sb
   let items: [String]
   let onPick: (String) -> Void
   var body: some View {
-    let cols = [GridItem(.adaptive(minimum: 90), spacing: 7)]
-    LazyVGrid(columns: cols, alignment: .leading, spacing: 7) {
+    ChipFlowLayout(spacing: 8, lineSpacing: 8) {
       ForEach(items, id: \.self) { item in
         Button { onPick(item) } label: {
           Text(item).geist(size: 14).foregroundStyle(sb.ink(.w85))
-            .padding(.horizontal, 16).padding(.vertical, 8)
+            .padding(.horizontal, 15).padding(.vertical, 8)
             .overlay(Capsule().stroke(sb.ink(.w14), lineWidth: 1))
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
       }
     }
     .frame(maxWidth: 380, alignment: .leading)
+  }
+}
+
+/// Minimal left-to-right wrapping flow layout (content-hugging).
+private struct ChipFlowLayout: Layout {
+  var spacing: CGFloat = 8
+  var lineSpacing: CGFloat = 8
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    let maxWidth = proposal.width ?? 380
+    var x: CGFloat = 0
+    var y: CGFloat = 0
+    var rowHeight: CGFloat = 0
+    for sub in subviews {
+      let size = sub.sizeThatFits(.unspecified)
+      if x + size.width > maxWidth, x > 0 {
+        x = 0
+        y += rowHeight + lineSpacing
+        rowHeight = 0
+      }
+      x += size.width + spacing
+      rowHeight = max(rowHeight, size.height)
+    }
+    return CGSize(width: maxWidth, height: y + rowHeight)
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    var x: CGFloat = bounds.minX
+    var y: CGFloat = bounds.minY
+    var rowHeight: CGFloat = 0
+    for sub in subviews {
+      let size = sub.sizeThatFits(.unspecified)
+      if x + size.width > bounds.minX + bounds.width, x > bounds.minX {
+        x = bounds.minX
+        y += rowHeight + lineSpacing
+        rowHeight = 0
+      }
+      sub.place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(size))
+      x += size.width + spacing
+      rowHeight = max(rowHeight, size.height)
+    }
   }
 }
