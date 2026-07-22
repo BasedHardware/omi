@@ -6,8 +6,12 @@
   "scripts": {
     "start": "node agent.mjs --serve",
     "cli": "node agent.mjs",
+    "test": "vitest run",
     "deploy": "bash scripts/deploy.sh",
     "upload-db": "bash scripts/upload-db.sh"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.2"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.39",

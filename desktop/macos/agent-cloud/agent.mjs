@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { query, tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
+import { ALLOWED_TOOLS, buildAgentDefinitions } from "./query-config.mjs";
 import Database from "better-sqlite3";
 import { z } from "zod";
 import { dirname, join } from "path";
@@ -100,6 +101,7 @@ let backendTools = [];
 // --- Database Setup (lazy — opened on first use or after upload) ---
 let db = null;
 let defaultSystemPrompt = null;
+let agentDefinitions = null;
 let omiServer = null;
 
 function openDatabase() {
@@ -145,7 +147,10 @@ GUIDELINES:
 - For conversation queries, use transcription_sessions + transcription_segments
 - For personal facts/preferences, query the memories table first
 - For calendar, email, health data — use the backend tools (get_calendar_events_tool, get_gmail_messages_tool, etc.)
+- For broad or exploratory data questions (patterns, trends, cross-table analysis), delegate to the researcher subagent via the Task tool — it explores the database in its own context and returns distilled findings. Call execute_sql/get_daily_recap directly only for single quick lookups.
 - Be concise and helpful. Format results clearly.`;
+
+  agentDefinitions = buildAgentDefinitions(schema);
 
   rebuildMcpServer();
 
@@ -571,16 +576,8 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
     model: "claude-opus-4-6",
     abortController,
     systemPrompt: systemPrompt || defaultSystemPrompt,
-    allowedTools: [
-      "Read",
-      "Write",
-      "Edit",
-      "Bash",
-      "Glob",
-      "Grep",
-      "WebSearch",
-      "WebFetch",
-    ],
+    allowedTools: ALLOWED_TOOLS,
+    agents: agentDefinitions ?? undefined,
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
     maxTurns: undefined,
@@ -695,7 +692,8 @@ function startPersistentSession(send, log) {
     model: "claude-sonnet-4-6",
     abortController: sessionAbort,
     systemPrompt: defaultSystemPrompt,
-    allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"],
+    allowedTools: ALLOWED_TOOLS,
+    agents: agentDefinitions ?? undefined,
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
     maxTurns: undefined,
