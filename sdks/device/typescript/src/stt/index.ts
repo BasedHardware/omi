@@ -11,6 +11,14 @@ export function parakeetWsUrl(apiUrl: string, sampleRate = 16000): string {
   return `${base}/v3/stream?sample_rate=${sampleRate}`;
 }
 
+export function deepgramWsUrl(apiKey: string, sampleRate = 16000): string {
+  return (
+    `wss://api.deepgram.com/v1/listen?punctuate=true&model=nova&language=en-US` +
+    `&encoding=linear16&sample_rate=${sampleRate}&channels=1` +
+    `&token=${encodeURIComponent(apiKey)}`
+  );
+}
+
 export function createDeepgramTranscriber(opts: {
   apiKey: string;
   sampleRate?: number;
@@ -19,12 +27,8 @@ export function createDeepgramTranscriber(opts: {
 }): StreamingTranscriber {
   const WS = opts.WebSocketImpl ?? WebSocket;
   const sampleRate = opts.sampleRate ?? 16000;
-  const url =
-    `wss://api.deepgram.com/v1/listen?punctuate=true&model=nova&language=en-US` +
-    `&encoding=linear16&sample_rate=${sampleRate}&channels=1`;
-  // Node needs headers via custom WS; browsers cannot set Authorization on WS.
+  const url = deepgramWsUrl(opts.apiKey, sampleRate);
   const ws = new WS(url);
-  (ws as any).headers = { Authorization: `Token ${opts.apiKey}` };
   ws.binaryType = 'arraybuffer';
   ws.onmessage = (event: MessageEvent) => {
     try {

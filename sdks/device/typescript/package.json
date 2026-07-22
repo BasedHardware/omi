@@ -14,7 +14,7 @@
     "README.md"
   ],
   "scripts": {
-    "test": "bun src/ble/noble.test.ts",
+    "test": "bun test",
     "typecheck": "bunx tsc --noEmit"
   },
   "peerDependencies": {
