@@ -5,6 +5,7 @@ on:
     branches: main
   pull_request:
     branches: main
+    types: [opened, synchronize, reopened, closed]
 
 concurrency:
   # Supersede stale revisions of the same PR, but never let a later main push
@@ -15,6 +16,7 @@ concurrency:
 jobs:
   changes:
     name: Detect Desktop Swift Changes
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     outputs:
       diff_base: ${{ steps.changed.outputs.diff_base }}
@@ -107,6 +109,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.should_run == 'true'
     runs-on: macos-15
+    timeout-minutes: 60
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -148,6 +151,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.should_run == 'true'
     runs-on: macos-15
+    timeout-minutes: 60
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -231,6 +235,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.should_release_compile == 'true'
     runs-on: macos-15
+    timeout-minutes: 60
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
