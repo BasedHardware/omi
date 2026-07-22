@@ -34,6 +34,8 @@ VOLATILE_METADATA = {
 # comparison does not spuriously fail on a healthy live Deployment.
 VOLATILE_DEPLOYMENT_ANNOTATIONS = {
     "deployment.kubernetes.io/revision",
+    "meta.helm.sh/release-name",
+    "meta.helm.sh/release-namespace",
 }
 VOLATILE_DEPLOYMENT_SPEC = {
     "revisionHistoryLimit",
@@ -46,6 +48,17 @@ VOLATILE_POD_TEMPLATE_SPEC = {
 VOLATILE_CONTAINER_FIELDS = {
     "terminationMessagePath",
     "terminationMessagePolicy",
+}
+
+# Cluster-added Service fields absent from ``helm template`` output.
+VOLATILE_SERVICE_SPEC = {
+    "clusterIP",
+    "clusterIPs",
+    "healthCheckNodePort",
+    "internalTrafficPolicy",
+    "ipFamilies",
+    "ipFamilyPolicy",
+    "sessionAffinityConfig",
 }
 
 
@@ -165,16 +178,15 @@ def normalize(obj: dict[str, Any]) -> dict[str, Any]:
         for key in VOLATILE_METADATA:
             metadata.pop(key, None)
         metadata.pop("namespace", None)
+        annotations = metadata.get("annotations")
+        if isinstance(annotations, dict):
+            for key in VOLATILE_DEPLOYMENT_ANNOTATIONS:
+                annotations.pop(key, None)
+            if not annotations:
+                metadata.pop("annotations", None)
     if result.get("kind") == "Service":
         spec = result.get("spec", {})
-        for key in (
-            "clusterIP",
-            "clusterIPs",
-            "healthCheckNodePort",
-            "ipFamilies",
-            "ipFamilyPolicy",
-            "sessionAffinityConfig",
-        ):
+        for key in VOLATILE_SERVICE_SPEC:
             spec.pop(key, None)
     if result.get("kind") == "Deployment":
         _strip_deployment_defaults(result)
@@ -182,15 +194,7 @@ def normalize(obj: dict[str, Any]) -> dict[str, Any]:
 
 
 def _strip_deployment_defaults(deployment: dict[str, Any]) -> None:
-    """Remove API-server/controller-populated fields absent from helm template."""
-    metadata = deployment.get("metadata", {})
-    annotations = metadata.get("annotations")
-    if isinstance(annotations, dict):
-        for key in VOLATILE_DEPLOYMENT_ANNOTATIONS:
-            annotations.pop(key, None)
-        if not annotations:
-            metadata.pop("annotations", None)
-
+    """Remove Deployment-specific API-server/controller defaults absent from helm template."""
     spec = deployment.get("spec", {})
     for key in VOLATILE_DEPLOYMENT_SPEC:
         spec.pop(key, None)
