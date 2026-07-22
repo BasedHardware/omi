@@ -29,7 +29,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from firebase_admin import auth, credentials, firestore
 from google.cloud.firestore import ArrayUnion
-from google.cloud.firestore_v1 import Query
+from google.cloud.firestore_v1 import Increment, Query
 from utils.executors import (
     critical_executor,
     db_executor,
@@ -40,7 +40,7 @@ from utils.executors import (
 
 logger = logging.getLogger(__name__)
 
-from resilience import COOLDOWN_SECONDS, circuit_open, classify_error  # noqa: E402
+from resilience import circuit_open, classify_error  # noqa: E402
 
 HISTORY_LIMIT = 10
 GCE_PROJECT = "based-hardware"
@@ -221,11 +221,11 @@ def _update_firestore_vm(
     uid: str, ip: str | None, status: str, *, restart_failed: bool = False, restart_succeeded: bool = False
 ) -> None:
     """Update the user's agentVm fields in Firestore (incl. circuit-breaker state)."""
-    update = {"agentVm.status": status}
+    update: Dict[str, Any] = {"agentVm.status": status}
     if ip:
         update["agentVm.ip"] = ip
     if restart_failed:
-        update["agentVm.restartFailures"] = firestore.Increment(1)
+        update["agentVm.restartFailures"] = Increment(1)
         update["agentVm.lastRestartFailureAt"] = time.time()
     if restart_succeeded:
         update["agentVm.restartFailures"] = 0
@@ -307,7 +307,7 @@ async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool =
                         db_executor, lambda: _update_firestore_vm(uid, vm.get("ip"), "ready", restart_succeeded=True)
                     )
                     return await run_blocking(db_executor, _refresh_vm, uid)
-                except Exception as e:
+                except Exception:
                     logger.error(f"[agent-proxy] Failed to reset VM {vm_name}", exc_info=True)
                     await run_blocking(
                         db_executor, lambda: _update_firestore_vm(uid, None, "error", restart_failed=True)
@@ -326,7 +326,7 @@ async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool =
         await run_blocking(db_executor, lambda: _update_firestore_vm(uid, ip, "ready", restart_succeeded=True))
         logger.info(f"[agent-proxy] VM {vm_name} restarted, ip={ip}")
         return await run_blocking(db_executor, _refresh_vm, uid)
-    except Exception as e:
+    except Exception:
         logger.error(f"[agent-proxy] Failed to restart VM {vm_name}", exc_info=True)
         await run_blocking(db_executor, lambda: _update_firestore_vm(uid, None, "error", restart_failed=True))
         return None
@@ -567,7 +567,7 @@ async def agent_ws(websocket: WebSocket):
 
     logger.info(f"[agent-proxy] uid={uid} connecting to vm={vm_ip}")
 
-    async def _connect_vm_with_retry():
+    async def _connect_vm_with_retry() -> Any:
         """User-blocking connect: retry transient failures with progress events."""
         for attempt in range(1, 4):
             try:
