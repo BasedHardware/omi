@@ -16,7 +16,12 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchTrayView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchViewModel.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchVoiceOrb.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchVoiceText.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchVoiceView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Notch/NotchWindow.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PTTCue.swift
+  - desktop/macos/Desktop/Sources/AudioLevelMonitor.swift
   - desktop/macos/Desktop/Sources/Chat/ChatDraftStore.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AIResponseView.swift
   - desktop/macos/Desktop/Sources/MainWindow/ClickThroughView.swift
