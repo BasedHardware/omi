@@ -109,7 +109,7 @@ for _ in {1..1200}; do
     printf '%s\n' "$$" > "$LOCK_DIR/pid"
     break
   fi
-  if [[ -L "$LOCK_DIR" || ! -d "$LOCK_DIR" ]]; then
+  if [[ ( -e "$LOCK_DIR" || -L "$LOCK_DIR" ) && ( -L "$LOCK_DIR" || ! -d "$LOCK_DIR" ) ]]; then
     echo "qualification Swift cache: lock destination collision: $LOCK_DIR" >&2
     exit 1
   fi
