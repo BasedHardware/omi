@@ -1,0 +1,19 @@
+desktop/macos/Desktop/Tests/MemoryGraphRevisitTests.swift
+  s_62099ccfd5cc12::t_b60ead8446da8d 16-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "b2a7eca6d1e8076a3b4cd07c4552742d8df66062",
+  "prompts": {},
+  "sessions": {
+    "s_62099ccfd5cc12": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bce3b3b3-c244-4ae8-bb2a-1ff7eccbcdbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
