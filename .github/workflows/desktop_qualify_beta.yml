@@ -91,13 +91,21 @@ jobs:
           gh release download "$RELEASE_TAG" --repo "$REPO" \
             --pattern 'desktop-smoke-result.json' \
             --dir /tmp/desktop-beta-qualification
+          # Present only on releases that ship the side-by-side Omi Beta identity.
+          gh release download "$RELEASE_TAG" --repo "$REPO" \
+            --pattern 'desktop-smoke-result-beta.json' \
+            --dir /tmp/desktop-beta-qualification 2>/dev/null || true
           gh release download "$RELEASE_TAG" --repo "$REPO" \
             --pattern 'Omi.zip' --pattern 'omi.dmg' \
             --dir /tmp/desktop-beta-qualification/assets
+          gh release download "$RELEASE_TAG" --repo "$REPO" \
+            --pattern 'Omi.Beta.zip' --pattern 'omi-beta.dmg' \
+            --dir /tmp/desktop-beta-qualification/assets 2>/dev/null || true
 
           python3 .github/scripts/check-desktop-auto-beta-candidate.py \
             --release-json /tmp/desktop-beta-qualification/release.json \
             --smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result.json \
+            --beta-smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result-beta.json \
             --release-tag "$RELEASE_TAG" \
             --latest-tag "$LATEST_TAG" \
             --tag-sha "$TARGET_SHA" \
@@ -128,6 +136,11 @@ jobs:
           TARGET_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
           STABLE_DMG=/tmp/desktop-beta-qualification/assets/omi.dmg
           test -n "$STABLE_DMG"
+          # Side-by-side Omi Beta assets are optional until every release ships them.
+          BETA_EVIDENCE_ASSETS=""
+          if [ -f /tmp/desktop-beta-qualification/assets/Omi.Beta.zip ]; then
+            BETA_EVIDENCE_ASSETS="--asset Omi.Beta.zip=/tmp/desktop-beta-qualification/assets/Omi.Beta.zip --asset omi-beta.dmg=/tmp/desktop-beta-qualification/assets/omi-beta.dmg"
+          fi
           python3 .github/scripts/desktop_qualification_evidence.py build \
             --release-json /tmp/desktop-beta-qualification/release.json \
             --release-tag "$RELEASE_TAG" --source-sha "$TARGET_SHA" \
@@ -135,6 +148,7 @@ jobs:
             --qualification-run-id "$GITHUB_RUN_ID" \
             --asset Omi.zip=/tmp/desktop-beta-qualification/assets/Omi.zip \
             --asset "omi.dmg=$STABLE_DMG" \
+            $BETA_EVIDENCE_ASSETS \
             --evidence /tmp/desktop-beta-qualification/qualification-evidence.json
 
       - name: Upload immutable qualification evidence

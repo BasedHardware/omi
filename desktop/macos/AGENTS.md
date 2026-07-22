@@ -257,7 +257,7 @@ See `.claude/settings.json` for connection details.
 
 ### App Names & Build Artifacts
 - `./run.sh` builds **"Omi Dev"** → installs to `/Applications/Omi Dev.app` (bundle ID: `com.omi.desktop-dev`)
-- **"Omi"** (bundle ID: `com.omi.computer-macos`) is built by Codemagic CI; Beta is an update-channel pointer for the same signed artifact
+- **"Omi"** stable (bundle ID: `com.omi.computer-macos`) and **"Omi Beta"** (bundle ID: `com.omi.computer-macos.beta`, isolated "Omi Beta" storage root, runs side-by-side with stable) are built by Codemagic CI only
 - To check which app is currently running: `ps aux | grep "Omi"`
 
 ### Testing with Named Bundles
@@ -508,7 +508,7 @@ agent-swift screenshot /tmp/evidence.png             # capture app window
 - Argument order: `get <property> <ref>`, `is <condition> <ref>`, `wait <condition> [<target>]`, `find <locator> <value>`.
 - 15 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `click`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
 - No app-side instrumentation needed — works via macOS Accessibility API on any Cocoa/SwiftUI app.
-- Dev bundle ID: `com.omi.desktop-dev`. Production: `com.omi.computer-macos` — never automate it.
+- Dev bundle ID: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos` (stable) and `com.omi.computer-macos.beta` (Omi Beta) — never automate prod.
 
 ### Changelog Entries
 
