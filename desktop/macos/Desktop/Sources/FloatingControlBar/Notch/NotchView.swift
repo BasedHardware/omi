@@ -13,6 +13,8 @@ struct NotchView: View {
   @State private var isHovering = false
   /// The latest streamed reply, captured so it can linger after the turn ends.
   @State private var lastReply = ""
+  /// Esc key monitors, live only while a reply lingers (zero idle cost).
+  @State private var lingerEscMonitors: [Any] = []
 
   // MARK: - Presentation ladder
 
@@ -110,6 +112,32 @@ struct NotchView: View {
       }
       lastReply = ""
     }
+    // Esc dismisses a lingering reply. The notch is non-activating, so a
+    // panel-key handler can't see Esc without stealing focus from your app;
+    // instead watch for it while (and only while) a reply lingers.
+    .onChange(of: vm.responseLinger != nil) { _, lingering in
+      if lingering { installLingerEscMonitors() } else { removeLingerEscMonitors() }
+    }
+    .onDisappear { removeLingerEscMonitors() }
+  }
+
+  private func installLingerEscMonitors() {
+    removeLingerEscMonitors()
+    let local = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+      guard event.keyCode == 53 else { return event }
+      MainActor.assumeIsolated { vm.clearLinger() }
+      return nil
+    }
+    let global = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
+      guard event.keyCode == 53 else { return }
+      MainActor.assumeIsolated { vm.clearLinger() }
+    }
+    lingerEscMonitors = [local, global].compactMap { $0 }
+  }
+
+  private func removeLingerEscMonitors() {
+    lingerEscMonitors.forEach { NSEvent.removeMonitor($0) }
+    lingerEscMonitors = []
   }
 
   /// The floating composer glued below the body's bottom edge: it offsets by

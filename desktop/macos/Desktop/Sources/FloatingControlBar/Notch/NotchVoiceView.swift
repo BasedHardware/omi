@@ -3,8 +3,9 @@ import SwiftUI
 /// The expanded voice content below the morphing Omi orb: the live transcript
 /// while listening, or the streaming / lingering reply while responding,
 /// centered under the orb. Reports its measured height so the panel grows in
-/// height as words wrap to new lines (the width is fixed). The reply is a tap
-/// target that opens the main app window (full text chat lives in the app now).
+/// height as words wrap to new lines (the width is fixed). Long replies scroll
+/// within the half-screen cap. The reply is a tap target that opens the main
+/// app window (full text chat lives in the app now).
 struct NotchVoiceView: View {
   /// The text to show (transcript or reply). Empty shows the placeholder while
   /// listening, or just the orb while responding.
@@ -21,14 +22,18 @@ struct NotchVoiceView: View {
   var body: some View {
     VStack(spacing: 0) {
       Color.clear.frame(height: topReserve)
-      transcript
-        .padding(.horizontal, 24)
-        .padding(.bottom, 14)
-    }
-    .onGeometryChange(for: CGFloat.self) {
-      $0.size.height
-    } action: {
-      onHeightChange($0)
+      // The text scrolls below the fixed orb area once the panel hits its
+      // half-screen cap; short content just sizes to fit (no scroll).
+      ScrollView(.vertical, showsIndicators: true) {
+        transcript
+          .padding(.horizontal, 24)
+          .padding(.bottom, 14)
+          .onGeometryChange(for: CGFloat.self) {
+            $0.size.height
+          } action: { height in
+            onHeightChange(topReserve + height)
+          }
+      }
     }
   }
 
@@ -44,9 +49,6 @@ struct NotchVoiceView: View {
   }
 
   private var styledText: some View {
-    // ponytail: voice replies are short — clips at half-screen and the tap
-    // opens the app for the full conversation. Add an inner ScrollView if long
-    // spoken replies become common.
     Text(text.isEmpty ? placeholder : text)
       .font(.system(size: 13, weight: emphasized ? .medium : .regular))
       .foregroundStyle(.white.opacity(text.isEmpty ? 0.5 : 0.9))
