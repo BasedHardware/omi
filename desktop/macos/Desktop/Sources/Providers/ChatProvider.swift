@@ -4877,10 +4877,7 @@ class ChatProvider: ObservableObject {
         )
         switch telemetryDisposition {
         case .failed(let errorClass):
-          telemetryAttempt.fail(
-            errorClass: errorClass,
-            partialResponse: hadPartialResponse,
-            detail: ChatQueryErrorDetail.from(error))
+          telemetryAttempt.fail(errorClass: errorClass, partialResponse: hadPartialResponse, detail: .from(error))
           logError(
             "Failed to get AI response attempt_id=\(telemetryAttempt.context.attemptId) error_class=\(errorClass.rawValue)",
             error: error
