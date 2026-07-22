@@ -532,7 +532,7 @@ async def agent_ws(websocket: WebSocket):
             await websocket.send_text(json.dumps({"type": "status", "message": "Starting your agent VM..."}))
             vm = await _ensure_vm_running(uid, vm, health_failed=True)
             if not vm or vm.get("status") != "ready" or not vm.get("ip"):
-                await websocket.send_text(json.dumps(_vm_unavailable_event(uid)))
+                await websocket.send_text(json.dumps(await run_blocking(db_executor, _vm_unavailable_event, uid)))
                 await websocket.close(code=4002, reason="VM startup failed")
                 return
             vm_ip = vm["ip"]
@@ -548,7 +548,7 @@ async def agent_ws(websocket: WebSocket):
         await websocket.send_text(json.dumps({"type": "status", "message": "Starting your agent VM..."}))
         vm = await _ensure_vm_running(uid, vm)
         if not vm or vm.get("status") != "ready" or not vm.get("ip"):
-            await websocket.send_text(json.dumps(_vm_unavailable_event(uid)))
+            await websocket.send_text(json.dumps(await run_blocking(db_executor, _vm_unavailable_event, uid)))
             await websocket.close(code=4002, reason="VM startup failed")
             return
         vm_ip = vm["ip"]
