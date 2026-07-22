@@ -1,0 +1,2861 @@
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_77f2b8dfbc2e90::t_dd99b2fd989972 3,5,7-8,11,13,15-16
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-root.json
+  s_77f2b8dfbc2e90::t_504c8e97218993 7
+  s_77f2b8dfbc2e90::t_db6a601ca369b7 13
+  s_882b8f33fd02fa::t_dd96550cbdafd2 5
+.github/actions/sync-backfill-lifecycle/action.yml
+  s_77f2b8dfbc2e90::t_e49c04918279ed 99,104
+.github/actions/transcription-release-candidate-probe/action.yml
+  s_77f2b8dfbc2e90::t_ddb17bd0da49d9 31,34,44,46
+.github/checks-manifest.yaml
+  s_77f2b8dfbc2e90::t_7a812065dc04c8 12-16,22-31,60,62,366,368,373,399-403
+.github/failure-classes/FC-concurrent-capture-contention.json
+  s_77f2b8dfbc2e90::t_e91895b89a81a1 1-9
+.github/failure-classes/FC-workflow-control-source-identity.json
+  s_77f2b8dfbc2e90::t_3fc05a306e0e96 1-16
+.github/scripts/check-deployment-concurrency.py
+  s_77f2b8dfbc2e90::t_0d46a167d96a1a 88,239-242,268,281,284-288,307-311,314-317,329-335,338-343,598-603,605-606
+.github/scripts/check-desktop-changelog.py
+  s_77f2b8dfbc2e90::t_b9e6ecf7658cf4 18-19
+.github/scripts/check-desktop-prod-promotion-policy.py
+  s_77f2b8dfbc2e90::t_052b60e862ea8c 8-10,16,20,22-23,39,41
+.github/scripts/check-gcp-backend-production-boundary.py
+  s_77f2b8dfbc2e90::t_a50498557e842f 2,9-18,25-60
+.github/scripts/check-mobile-production-routing.py
+  s_77f2b8dfbc2e90::t_2124b4349dddb1 37-38,44-45,64-71,103-109
+.github/scripts/check-release-process-guards.py
+  s_77f2b8dfbc2e90::t_ed103a0a70af51 156-160,428-432,469,899-918
+.github/scripts/check_backend_deploy_source_admission.py
+  s_77f2b8dfbc2e90::t_5b1ab08b0dff43 23,155-250,254-259,373-374,409-411
+.github/scripts/check_release_rings.py
+  s_77f2b8dfbc2e90::t_159b1e3772e80b 1-129
+.github/scripts/fixtures/codemagic_workflow_contract/v1.json
+  s_77f2b8dfbc2e90::t_b52c96f48510d2 3-4,6,11
+.github/scripts/plan-desktop-release.py
+  s_77f2b8dfbc2e90::t_e6d5601744de2d 191,201-214,218-226
+.github/scripts/product_file_line_count_ratchet_baseline/backend-other.json
+  s_77f2b8dfbc2e90::t_a3fa05ed4c9461 3,6
+.github/scripts/product_file_line_count_ratchet_baseline/backend-utils.json
+  s_77f2b8dfbc2e90::t_bcf8cd1985918a 8
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-proactiveassistants.json
+  s_77f2b8dfbc2e90::t_3ecc3e3be57c49 4
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-rewind.json
+  s_77f2b8dfbc2e90::t_d5b98238ea88a9 4,9
+.github/scripts/test_check_backend_deploy_source_admission.py
+  s_77f2b8dfbc2e90::t_86da7685fc0efd 199-295,312-313,575-586
+.github/scripts/test_check_gcp_backend_production_boundary.py
+  s_77f2b8dfbc2e90::t_a3165a8924a3ed 2,6,9-10,14-15,17-19,28,31-41,44-50,52-54,56-59
+.github/scripts/test_check_mobile_production_routing.py
+  s_77f2b8dfbc2e90::t_8207c83237927e 107-140,155,169-203
+.github/scripts/test_check_release_process_guards.py
+  s_77f2b8dfbc2e90::t_f870f0ceb36d21 83-98,193-198,200-202,312-355,408,425,468,489,493-499
+.github/scripts/test_check_release_rings.py
+  s_77f2b8dfbc2e90::t_2a26da6ed7d8b9 1-94
+.github/scripts/test_desktop_changelog.py
+  s_77f2b8dfbc2e90::t_0d9bf7693c640c 2,25-30,70-85
+.github/scripts/test_desktop_release_flow_contract.py
+  s_77f2b8dfbc2e90::t_6db39c9cdc8631 2,4,7,11,14-15,18-28,30-40,42-52,54-64,68
+.github/scripts/test_plan_desktop_release.py
+  s_77f2b8dfbc2e90::t_4cc9a615a21a61 2,29-30,32-36,38,43,53,55,57,66,68-71
+.github/workflows/desktop_auto_release.yml
+  s_77f2b8dfbc2e90::t_3880a6a17702e9 40,76,85
+.github/workflows/desktop_promote_beta.yml
+  s_77f2b8dfbc2e90::t_2746f700bd838e 4
+.github/workflows/desktop_promote_prod.yml
+  s_77f2b8dfbc2e90::t_c352e206ca5541 48,63-76,102,112-130,158
+.github/workflows/desktop_qualify_beta.yml
+  s_77f2b8dfbc2e90::t_64984683ad8982 148-153
+.github/workflows/desktop_recover_beta.yml
+  s_77f2b8dfbc2e90::t_471cd6fa20ae9f 1,3-5,8-20,26,29-33,35-48,50-54
+.github/workflows/desktop_windows_release.yml
+  s_77f2b8dfbc2e90::t_0eca25d8e54897 1-332
+.github/workflows/gcp_backend.yml
+  s_77f2b8dfbc2e90::t_4e3b847b3dcad8 29,66-67,91,345-366,371-386,400,453,472,490,496,514,524,557,564,584,695,708,711,714,716,732,734,736,749,760,808,817,835,838,843,857,891,902-925,927,929,942,948-962,971
+.github/workflows/gcp_backend_auto_dev.yml
+  s_77f2b8dfbc2e90::t_e0295948f13897 23-134,140,142
+AGENTS.md
+  s_77f2b8dfbc2e90::t_1b89fa376ec69a 70,125-126,134
+Makefile
+  s_77f2b8dfbc2e90::t_771e1a1916ee97 11,13-16,24-26
+README.md
+  s_77f2b8dfbc2e90::t_f24319d5c31d8e 46
+backend/charts/pusher/prod_omi_pusher_values.yaml
+  s_77f2b8dfbc2e90::t_1e9ff7a73d6ee5 137-138
+backend/database/sync_jobs.py
+  s_77f2b8dfbc2e90::t_f439f7679122c6 50
+backend/route_policy_manifest.yaml
+  s_77f2b8dfbc2e90::t_965df1fb5071e1 32-53
+backend/routers/chat.py
+  s_77f2b8dfbc2e90::t_f392df2a8d1a18 50,431,444,463-468,655-657
+backend/routers/sync.py
+  s_77f2b8dfbc2e90::t_d4463f98f0a15d 106,117,1679-1697
+backend/routers/updates.py
+  s_77f2b8dfbc2e90::t_1079bc6719fd25 118-120,122,139-141,144-145,151-153,155-156,163,259-279,315-325,482-483,486-498,504,539,555,784-785,787-789,791,805-815
+backend/scripts/runtime_image_contracts.py
+  s_77f2b8dfbc2e90::t_0484b9c8df50de 388-391
+backend/scripts/sync-python-deps.sh
+  s_77f2b8dfbc2e90::t_c9c79e0d3de0d9 37
+backend/scripts/validate-backend-runtime-env.py
+  s_77f2b8dfbc2e90::t_0238f515c4fa60 89-93,113,132,156,817,830,835,838-843,1009-1020,1022-1030,1381,1398,1440,1449,1489-1490
+backend/scripts/verify_backend_release_vector.py
+  s_77f2b8dfbc2e90::t_de78e42b99332b 42,72-73,83-85,96,111-126,169-174,219,244,255-269,274-275,364-377,451-454,463,476-481
+backend/testing/e2e/test_sync_lifecycle.py
+  s_77f2b8dfbc2e90::t_9e8c35040a02e6 98,122-123
+backend/testing/sync_cloud_tasks_stack/README.md
+  s_77f2b8dfbc2e90::t_a1e7eb99f022ba 62-65,76-77
+backend/testing/sync_cloud_tasks_stack/app.py
+  s_77f2b8dfbc2e90::t_015bca89807cb8 236,287,320-326,328-329
+backend/testing/sync_cloud_tasks_stack/run.py
+  s_77f2b8dfbc2e90::t_8cd6e9c4e0c357 122,137,225,826-855,917,928,965-969
+backend/testing/workflow_contracts.json
+  s_77f2b8dfbc2e90::t_d7e3fbe0aeeb4a 569,573
+backend/tests/unit/_chat_router_test_harness.py
+  s_77f2b8dfbc2e90::t_2156d20b54b537 1-220
+backend/tests/unit/test_auto_dev_backend_scope.py
+  s_77f2b8dfbc2e90::t_932adaa557a89b 3,6-7,9-10,12-13,16-28,31-32,35-77,79-80,82-93,95-97,100-106,109-158
+backend/tests/unit/test_backend_runtime_env_validator.py
+  s_77f2b8dfbc2e90::t_4bcf314ec7df95 117,126,309-382,550-572
+backend/tests/unit/test_chat_quota_counting_router.py
+  s_77f2b8dfbc2e90::t_78a8a8acddda47 7,13-14,20-27,29-32,34,36-37,39,52,63,72
+backend/tests/unit/test_chat_stream_error_fallback.py
+  s_77f2b8dfbc2e90::t_ced68df255541f 1-323
+backend/tests/unit/test_desktop_release_scripts.py
+  s_77f2b8dfbc2e90::t_f6174fd35305e0 4,16,33,245-277,511-515,518,528-529,532,534-537,539,581-582
+backend/tests/unit/test_desktop_updates.py
+  s_77f2b8dfbc2e90::t_7bef0be2ca9661 16,18,90-95,277-300,364-367,555-610,875-924
+backend/tests/unit/test_llm_gateway_deploy_contract.py
+  s_77f2b8dfbc2e90::t_0c8ae969795b8f 229
+backend/tests/unit/test_prompt_cache_integration.py
+  s_77f2b8dfbc2e90::t_f094466ec24061 997-1096
+backend/tests/unit/test_subscription_restructure.py
+  s_77f2b8dfbc2e90::t_aaeca825c07389 442-443
+backend/tests/unit/test_sync_cloud_tasks.py
+  s_77f2b8dfbc2e90::t_89e4f049d83b23 1765-1810
+backend/tests/unit/test_sync_two_lane.py
+  s_77f2b8dfbc2e90::t_9f068516d5c654 267,273-274,285-290,302-309
+backend/tests/unit/test_verify_backend_release_vector.py
+  s_77f2b8dfbc2e90::t_67e388d9a804c2 56-62,72-77,363,507,539-554,609-622,658-670,676-723,835-837,839,860-1010,1024,1033-1034,1062-1063,1073-1081,1083-1084,1091-1092,1097,1107,1109,1111-1118,1120
+backend/tests/unit/test_verify_pusher_config_references.py
+  s_77f2b8dfbc2e90::t_582066a4484c7f 224-232,234,270,307,312-313,316-318,323
+backend/utils/chat.py
+  s_77f2b8dfbc2e90::t_95a43bb7442528 23,342-425,430,531,535-537,551,555-559
+backend/utils/llm/chat.py
+  s_77f2b8dfbc2e90::t_9af379b0862793 432-469,514,531-533,539,641,865
+backend/utils/retrieval/agentic.py
+  s_77f2b8dfbc2e90::t_75712cefdb2238 669,684
+backend/utils/retrieval/graph.py
+  s_77f2b8dfbc2e90::t_1beec096c92cab 278,306
+backend/utils/sync/pipeline.py
+  s_77f2b8dfbc2e90::t_50893fd333b562 136,397-412,530-564,749,1136-1141,1255-1256,1290-1291,1553,2108-2110
+codemagic.yaml
+  s_77f2b8dfbc2e90::t_cd6d1721ec2ea5 34-40,256-262,1887,2586,2597-2606,2884-2888,2891-2892
+config/deployment-setting-classification.json
+  s_77f2b8dfbc2e90::t_4829516ef43633 6-12
+desktop/macos/AGENTS.md
+  s_77f2b8dfbc2e90::t_0326171e77c7ad 57,59,67,80
+desktop/macos/CHANGELOG.json
+  s_77f2b8dfbc2e90::t_e34cda31129581 4-26
+desktop/macos/Desktop/Sources/AppleNotesReaderService.swift
+  s_77f2b8dfbc2e90::t_17e4a9817490e6 92-108
+desktop/macos/Desktop/Sources/ConferencingApps.swift
+  s_77f2b8dfbc2e90::t_3be1ce3f616134 149-205
+desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  s_77f2b8dfbc2e90::t_2ce511c0ba97ac 2037,2039
+desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveExternalCaptureYield.swift
+  s_77f2b8dfbc2e90::t_14aca05cf89400 1-84
+desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift
+  s_77f2b8dfbc2e90::t_0d552b46fc0305 81-86,88,498,699-701,703,705-706
+desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
+  s_77f2b8dfbc2e90::t_dd2f18a3f668b6 4,39-45
+desktop/macos/Desktop/Tests/APIClientRoutingTests.swift
+  s_77f2b8dfbc2e90::t_d21fbc78f47d2d 321
+desktop/macos/Desktop/Tests/AgentPillLifecycleTests.swift
+  s_77f2b8dfbc2e90::t_c4c0a70d5f510a 376-378,837-838,840,843-844,929-932
+desktop/macos/Desktop/Tests/AppleNotesReaderServiceTests.swift
+  s_77f2b8dfbc2e90::t_c16adf16511425 104-122
+desktop/macos/Desktop/Tests/FeedbackPayloadDryRunTests.swift
+  s_77f2b8dfbc2e90::t_f824361ef1fca8 93-104,132-139
+desktop/macos/Desktop/Tests/MeetingGatedSystemAudioTests.swift
+  s_77f2b8dfbc2e90::t_f792ea3df58ea2 51-99
+desktop/macos/Desktop/Tests/ProactiveAssistantOrchestrationPolicyTests.swift
+  s_77f2b8dfbc2e90::t_9a617f69148299 253-322
+desktop/macos/Desktop/Tests/RewindDatabaseCurrentUserIdConcurrencyTests.swift
+  s_77f2b8dfbc2e90::t_5d3d53ca57eac9 1-74
+desktop/macos/changelog/README.md
+  s_77f2b8dfbc2e90::t_f5d76f7c91e816 14
+desktop/macos/changelog/releases/0.12.93.json
+  s_77f2b8dfbc2e90::t_f34dd46e1dde4c 1-16
+desktop/macos/changelog/releases/0.12.94.json
+  s_77f2b8dfbc2e90::t_d582c52866a294 2-6
+desktop/macos/changelog/unreleased/20260721-pause-capture-during-screen-share.json
+  s_77f2b8dfbc2e90::t_f74564d94bb9eb 2
+desktop/macos/changelog/unreleased/20260721-rewind-currentuserid-race.json
+  s_77f2b8dfbc2e90::t_0e99d8612ff5b0 2
+desktop/macos/dmg-assets/dmgbuild_settings.py
+  s_77f2b8dfbc2e90::t_73cdeaa1d3fe71 46-48
+desktop/macos/docs/release.md
+  s_77f2b8dfbc2e90::t_f789a32ded83a2 1-9
+desktop/macos/e2e/flows/feedback-payload-dryrun.yaml
+  s_77f2b8dfbc2e90::t_a1d721f5be0718 14,20,26,30
+desktop/macos/e2e/flows/screen-recording-permission.yaml
+  s_77f2b8dfbc2e90::t_b42c4ae27d340a 22
+desktop/macos/scripts/prepare-agent-runtime.sh
+  s_77f2b8dfbc2e90::t_b12643d0312496 196,204-248,655-665
+desktop/macos/scripts/qualify-desktop-beta.sh
+  s_77f2b8dfbc2e90::t_b5a1cd5664bd77 23,26
+desktop/macos/scripts/smoke-signed-desktop-artifact.sh
+  s_77f2b8dfbc2e90::t_2ce0217eda2875 490-493,516-528
+desktop/windows/.gitignore
+  s_77f2b8dfbc2e90::t_11619f63e2c599 22-30,47-55,70-84
+desktop/windows/README.md
+  s_77f2b8dfbc2e90::t_e50398bc731721 46-71,87-102
+desktop/windows/changelog/README.md
+  s_77f2b8dfbc2e90::t_872fab820a9e48 1-33
+desktop/windows/changelog/unreleased/2026-07-phase-8-windows-redesign.json
+  s_77f2b8dfbc2e90::t_4480dbf0df89e1 2-6
+desktop/windows/dev-app-update.yml
+  s_77f2b8dfbc2e90::t_c64e62a815d587 1-7
+desktop/windows/docs/bar-gotchas.md
+  s_77f2b8dfbc2e90::t_0f1c6b7ba10539 1-98
+desktop/windows/docs/conversation-sync.md
+  s_77f2b8dfbc2e90::t_6b829dea419400 1-114
+desktop/windows/docs/mac-parity-audit/00-INDEX.md
+  s_77f2b8dfbc2e90::t_2687dba2f9bfa8 1-186
+desktop/windows/docs/mac-parity-audit/01-proactive-focus-insight.md
+  s_77f2b8dfbc2e90::t_6a2d1ff5191ec3 1-101
+desktop/windows/docs/mac-parity-audit/02-proactive-tasks-goals.md
+  s_77f2b8dfbc2e90::t_8e64c81d8d8479 1-203
+desktop/windows/docs/mac-parity-audit/03-memory-persona-profile.md
+  s_77f2b8dfbc2e90::t_470895500eb723 1-174
+desktop/windows/docs/mac-parity-audit/04-chat-agent-runtime.md
+  s_77f2b8dfbc2e90::t_177f6c58dcefe4 1-205
+desktop/windows/docs/mac-parity-audit/05-rewind.md
+  s_77f2b8dfbc2e90::t_a57924e307a271 1-189
+desktop/windows/docs/mac-parity-audit/06-floating-bar-ask-ptt.md
+  s_77f2b8dfbc2e90::t_b8eb5bfd5078b0 1-392
+desktop/windows/docs/mac-parity-audit/07-realtime-voice.md
+  s_77f2b8dfbc2e90::t_98ac380dd4c4d3 1-289
+desktop/windows/docs/mac-parity-audit/08-bluetooth-wearables.md
+  s_77f2b8dfbc2e90::t_d9b758146d66fc 1-244
+desktop/windows/docs/mac-parity-audit/09-wal-sync-offline.md
+  s_77f2b8dfbc2e90::t_138dd351ecee96 1-139
+desktop/windows/docs/mac-parity-audit/10-onboarding.md
+  s_77f2b8dfbc2e90::t_ba33d287bd8f48 1-316
+desktop/windows/docs/mac-parity-audit/11-fileindex-knowledge-graph.md
+  s_77f2b8dfbc2e90::t_e406883053a687 1-126
+desktop/windows/docs/mac-parity-audit/12-app-shell-pages-system.md
+  s_77f2b8dfbc2e90::t_4e24e2f20270be 1-160
+desktop/windows/docs/mac-parity-audit/13-ui-components-visual.md
+  s_77f2b8dfbc2e90::t_c738da0b5ce9bc 1-341
+desktop/windows/docs/mac-parity-audit/PARALLEL-PLAN.md
+  s_77f2b8dfbc2e90::t_0d6457700be13b 1-306
+desktop/windows/docs/mac-parity-audit/TRACK4-PLAN.md
+  s_77f2b8dfbc2e90::t_e3ceccbe42a82c 1-213
+desktop/windows/docs/mac-parity-audit/WIRING-AUDIT.md
+  s_77f2b8dfbc2e90::t_ca21101c8143a0 1-87
+desktop/windows/docs/mac-parity-audit/track2-execution-plan.md
+  s_77f2b8dfbc2e90::t_6435d9deb4a930 1-127
+desktop/windows/docs/mac-parity-audit/track2-groundtruth/01-tts-readaloud.md
+  s_77f2b8dfbc2e90::t_6fbcd5a42453d4 1-158
+desktop/windows/docs/mac-parity-audit/track2-groundtruth/02-warmhub-voiceturn-statemachine.md
+  s_77f2b8dfbc2e90::t_da97708f27b45b 1-644
+desktop/windows/docs/mac-parity-audit/track2-groundtruth/02b-a5-port-plan.md
+  s_77f2b8dfbc2e90::t_1941d224963665 1-762
+desktop/windows/docs/mac-parity-audit/track2-groundtruth/03-per-provider-bargein.md
+  s_77f2b8dfbc2e90::t_26cf26bdf195cb 1-144
+desktop/windows/docs/mac-parity-audit/track2-groundtruth/04-ptt-vocab-transcribe-contract.md
+  s_77f2b8dfbc2e90::t_b29a9e41ae165b 1-118
+desktop/windows/docs/mac-parity-audit/track2-groundtruth/05-language-id-system-audio-mute.md
+  s_77f2b8dfbc2e90::t_f3511031757682 1-129
+desktop/windows/docs/mac-parity-audit/track2-groundtruth/06-automodel-systeminstructions-aboutuser.md
+  s_77f2b8dfbc2e90::t_0cb384beed8ea6 1-266
+desktop/windows/docs/mac-parity-audit/track2-groundtruth/07-usage-limiter.md
+  s_77f2b8dfbc2e90::t_807a937aaa741d 1-372
+desktop/windows/docs/mac-parity-audit/track2-groundtruth/08-reconnect-devicechange-silentmic.md
+  s_77f2b8dfbc2e90::t_df9f1306c95f16 1-605
+desktop/windows/docs/mac-parity-audit/track2-groundtruth/09-phaseB-voiceturn-outbox-tools.md
+  s_77f2b8dfbc2e90::t_89d3c88cfbee07 1-375
+desktop/windows/docs/mac-parity-audit/track2-groundtruth/10-windows-inventory-schema.md
+  s_77f2b8dfbc2e90::t_4196857e698883 1-287
+desktop/windows/docs/mac-parity-audit/track3-ground-truth/_TRACK3-STATUS.md
+  s_77f2b8dfbc2e90::t_7dd9cbcbc5dde5 1-174
+desktop/windows/docs/mac-parity-audit/track3-ground-truth/gt-connectors.md
+  s_77f2b8dfbc2e90::t_376dca4412a687 1-227
+desktop/windows/docs/mac-parity-audit/track3-ground-truth/gt-coordinator.md
+  s_77f2b8dfbc2e90::t_d7bec9e4829e76 1-356
+desktop/windows/docs/mac-parity-audit/track3-ground-truth/gt-focus-glow.md
+  s_77f2b8dfbc2e90::t_f6b3a3ffbff8d3 1-416
+desktop/windows/docs/mac-parity-audit/track3-ground-truth/gt-glow-spec.md
+  s_77f2b8dfbc2e90::t_0fcb82af2daf64 1-239
+desktop/windows/docs/mac-parity-audit/track3-ground-truth/gt-goals.md
+  s_77f2b8dfbc2e90::t_abcd62b74579af 1-152
+desktop/windows/docs/mac-parity-audit/track3-ground-truth/gt-insight.md
+  s_77f2b8dfbc2e90::t_880b546a03f58a 1-85
+desktop/windows/docs/mac-parity-audit/track3-ground-truth/gt-memextract-embeddings.md
+  s_77f2b8dfbc2e90::t_ea56bc4090198b 1-191
+desktop/windows/docs/mac-parity-audit/track3-ground-truth/gt-pages-ui.md
+  s_77f2b8dfbc2e90::t_7a9d6ecae4f1c6 1-302
+desktop/windows/docs/mac-parity-audit/track3-ground-truth/gt-screenfeed.md
+  s_77f2b8dfbc2e90::t_6c8fe58d34ec10 1-208
+desktop/windows/docs/mac-parity-audit/track3-ground-truth/gt-tasks.md
+  s_77f2b8dfbc2e90::t_91076e8be05474 1-96
+desktop/windows/docs/mac-parity-audit/track3-ground-truth/gt-windows-inventory.md
+  s_77f2b8dfbc2e90::t_f31d1186f1df5b 1-191
+desktop/windows/docs/mac-parity-audit/track3-ground-truth/gt-windows-seams.md
+  s_77f2b8dfbc2e90::t_9ce0d189291beb 1-189
+desktop/windows/docs/multi-worktree-dev.md
+  s_77f2b8dfbc2e90::t_6d98fcede3e032 1-145
+desktop/windows/docs/perf-invisible-wins.md
+  s_77f2b8dfbc2e90::t_1fc2bb01f10926 1-179
+desktop/windows/docs/perf-startup-burst-2026-07-19.md
+  s_77f2b8dfbc2e90::t_8af0d145b5844e 1-88
+desktop/windows/docs/release-pipeline.md
+  s_77f2b8dfbc2e90::t_91bfb2b921c6d0 1-191
+desktop/windows/e2e/agents-easy-connect.spec.mjs
+  s_77f2b8dfbc2e90::t_71b6470b36f241 1-119
+desktop/windows/e2e/apps-staleness.spec.mjs
+  s_77f2b8dfbc2e90::t_67ce9af3e7c58d 1-184
+desktop/windows/e2e/attachment-rehydrate.spec.mjs
+  s_77f2b8dfbc2e90::t_82333c5e9a077d 1-168
+desktop/windows/e2e/bar.spec.mjs
+  s_77f2b8dfbc2e90::t_9829b3c11079fc 1-642
+desktop/windows/e2e/claude-signin.spec.mjs
+  s_77f2b8dfbc2e90::t_43185685804ef5 1-133
+desktop/windows/e2e/cold-start-cache.spec.mjs
+  s_77f2b8dfbc2e90::t_c119aabc08bd83 1-327
+desktop/windows/e2e/connections.spec.mjs
+  s_77f2b8dfbc2e90::t_51a27f5b0490ea 1-324
+desktop/windows/e2e/conversation-detail.spec.mjs
+  s_77f2b8dfbc2e90::t_577d853585a696 1-432
+desktop/windows/e2e/datasources.spec.mjs
+  s_77f2b8dfbc2e90::t_9ae4d881c58fbe 1-349
+desktop/windows/e2e/db-recovery.spec.mjs
+  s_77f2b8dfbc2e90::t_f0cb732d99f5fe 1-294
+desktop/windows/e2e/failure-ux.spec.mjs
+  s_77f2b8dfbc2e90::t_f1f2f69bd8623f 1-151
+desktop/windows/e2e/fixtures/brainmap-scale-graph.mjs
+  s_77f2b8dfbc2e90::t_3df2d5e2c66720 1-113
+desktop/windows/e2e/font-size.spec.mjs
+  s_77f2b8dfbc2e90::t_9ba8416c28ca97 1-136
+desktop/windows/e2e/general-cards.spec.mjs
+  s_77f2b8dfbc2e90::t_b66ffd68393ecf 1-123
+desktop/windows/e2e/gpu-fallback.spec.mjs
+  s_77f2b8dfbc2e90::t_89a4dd1695f125 1-364
+desktop/windows/e2e/hub-attachments.spec.mjs
+  s_77f2b8dfbc2e90::t_451e1d017e95b5 1-179
+desktop/windows/e2e/knowledge-graph-perf.spec.mjs
+  s_77f2b8dfbc2e90::t_ec1cabc650d38b 1-201
+desktop/windows/e2e/knowledge-graph.spec.mjs
+  s_77f2b8dfbc2e90::t_d8bda4b8490f41 1-212
+desktop/windows/e2e/lifecycle.spec.mjs
+  s_77f2b8dfbc2e90::t_be17e5c6738c19 1-252
+desktop/windows/e2e/meeting.spec.mjs
+  s_77f2b8dfbc2e90::t_54ae3b66cdf2fe 1-247
+desktop/windows/e2e/notifications-settings.spec.mjs
+  s_77f2b8dfbc2e90::t_a5499d47a7aa76 1-200
+desktop/windows/e2e/onboarding-layout.spec.mjs
+  s_77f2b8dfbc2e90::t_1247357f0fd553 1-365
+desktop/windows/e2e/onboarding-permission.spec.mjs
+  s_77f2b8dfbc2e90::t_7a68e5dee0372d 1-390
+desktop/windows/e2e/ptt-gesture.spec.mjs
+  s_77f2b8dfbc2e90::t_d2fb49c5255186 1-141
+desktop/windows/e2e/rewind-dayscope.spec.mjs
+  s_77f2b8dfbc2e90::t_bd0d7932b62299 1-330
+desktop/windows/e2e/rewind-semantic.spec.mjs
+  s_77f2b8dfbc2e90::t_857e0a1eba2ba6 1-375
+desktop/windows/e2e/rewind-timeline-scroll.spec.mjs
+  s_77f2b8dfbc2e90::t_48f21cbe1c88e1 1-229
+desktop/windows/e2e/settings-parity.spec.mjs
+  s_77f2b8dfbc2e90::t_d17746959dd4fe 1-164
+desktop/windows/e2e/shortcut-disable.spec.mjs
+  s_77f2b8dfbc2e90::t_c9e0f6022c277f 1-205
+desktop/windows/e2e/sidebar.spec.mjs
+  s_77f2b8dfbc2e90::t_ded871a2b89656 1-183
+desktop/windows/e2e/token-pull.spec.mjs
+  s_77f2b8dfbc2e90::t_6d1761fb2b33d9 1-116
+desktop/windows/electron-builder.config.mjs
+  s_77f2b8dfbc2e90::t_d6a28f2ce67886 1-164
+desktop/windows/electron.vite.config.ts
+  s_77f2b8dfbc2e90::t_e02c85f9803f43 4-18,23-45,53-92,97-106,108-134,136,144-159
+desktop/windows/eslint.config.mjs
+  s_77f2b8dfbc2e90::t_80449578b6be4b 9-19,52-61,66-81
+desktop/windows/orb-harness/index.html
+  s_77f2b8dfbc2e90::t_83d7923ee06534 1-11
+desktop/windows/orb-harness/main.ts
+  s_77f2b8dfbc2e90::t_a217668dc459e3 1-388
+desktop/windows/orb-harness/style.css
+  s_77f2b8dfbc2e90::t_f00163de54b1a6 1-16
+desktop/windows/package.json
+  s_77f2b8dfbc2e90::t_2db3c2c587c9b5 16-19,22-36,39-73,76-78,80-82,84-86,89,95,102,104,107,111-115,122,135,140-143
+desktop/windows/pnpm-lock.yaml
+  s_77f2b8dfbc2e90::t_af21db782e8302 19-27,30,33-51,58-60,76-81,84,100-102,106-108,115-117,127-132,136-138,142,145,151-154,178,184,187,190-193,196,199,202,205-217,232,238,241,248-257,262-454,548-587,595-612,877-885,1111-1137,1147-1152,1271-1341,1345-1362,1380-1438,1449-1464,1500-1508,1518-1526,1562-1574,1597-1618,1641-1649,1663-1675,1689-1714,1741-1753,1767-1779,1824-1832,1855-1863,1873-1881,1891-1899,1918-1926,1936-1944,1954-1962,1979-1981,2018-2020,2152-2229,2231-2236,2242-2284,2289-2307,2311-2313,2390-2392,2525-2528,2547-2554,2563-2565,2574-2577,2605-2607,2648-2651,2706-2708,2719-2722,2727-2729,2752-2754,2768-2771,2775-2778,2828-2831,2858-2860,2909-2920,2924-2931,2939-2942,2958-2961,2996-3003,3025-3027,3059-3066,3083-3086,3106-3108,3124-3129,3149-3151,3175-3178,3182-3185,3212-3214,3243-3245,3336-3347,3359-3371,3397-3402,3422-3425,3446-3449,3461-3463,3484-3491,3495-3498,3525-3529,3545-3552,3565-3568,3600-3603,3627-3634,3646-3648,3682-3684,3688-3691,3696-3703,3707-3710,3739-3742,3764-3767,3786-3793,3866-3868,3872-3874,3955-3957,3968-3976,3982-3984,3988-3991,3995-4000,4022-4027,4058-4064,4085-4088,4101-4104,4114-4118,4127-4137,4142-4145,4162-4165,4170-4173,4220-4222,4240-4243,4258-4262,4267-4270,4325-4328,4332-4369,4390-4393,4398-4407,4423-4429,4463-4479,4488-4495,4574-4577,4603-4606,4618-4621,4629-4636,4649-4651,4747-4750,4779-4782,4801-4804,4833-4836,4840-4842,4859-4863,4869-4872,4877-4880,4896-4898,4923-4926,4968-4970,4984-4987,5058-5060,5098-5102,5119-5121,5144-5150,5162-5173,5190-5192,5219-5225,5261-5266,5277-5280,5325-5328,5406-5413,5423-5426,5435-5442,5502-5505,5510-5512,5527-5531,5547-5551,5598-5610,5613-5922,5931,5936,5940,5944,5969,5971,5976,5978-5979,5981,6002,6004,6007,6009,6012,6014,6025,6033,6042-6069,6077-6142,6144-6151,6156,6159,6161,6167,6169,6175,6177,6191,6193,6199,6205,6207,6213,6219,6221,6227,6230,6234,6238,6241,6245,6249,6253,6257,6261,6264,6350,6352,6357,6360,6373,6376,6396-6397,6735-6766,6779-6782,6868,6870,6877-6922,6925-6958,6976-7051,7058-7068,7096-7101,7108-7113,7155-7167,7189-7205,7224-7230,7257-7279,7298-7325,7346-7354,7364-7372,7421-7427,7454-7459,7468-7475,7483-7489,7503-7508,7516-7522,7530-7536,7548-7549,7603-7606,7684-7772,7775-7829,7834-7854,7857-7858,7950-7951,7977,7980,7982-7983,7985,7993,7997,7999-8000,8005,8009,8023,8026-8029,8037,8039,8043,8052,8054,8057-8058,8075,8077-8079,8083,8095,8101,8131-8132,8136-8140,8147,8149,8155-8158,8170-8176,8183-8184,8194,8199-8204,8207-8208,8211-8212,8216-8217,8245-8248,8314-8315,8339,8341,8343,8366-8367,8380-8393,8397-8398,8426-8427,8440-8447,8449,8454,8459,8462,8464-8465,8475-8476,8531-8532,8557-8558,8602-8607,8610-8613,8619-8623,8642-8646,8675-8683,8702,8705-8706,8734-8737,8751-8752,8760,8762-8763,8789-8790,8805-8810,8815,8817-8819,8824,8826-8828,8831,8840,8843-8844,8855-8868,8870-8871,8876,8880,8883,8888,8892,8894,8896,8902-8903,8908-8909,8996-8997,9053-9054,9057,9059,9061,9063,9068,9070,9072,9074,9081,9083,9085,9093,9118,9120,9122,9125,9135,9181-9188,9195-9235,9237,9264-9267,9284-9288,9307-9317,9361-9362,9365,9379-9384,9387-9388,9424-9426,9443-9458,9465-9466,9507-9512,9543-9555,9574-9575,9604-9605,9608-9609,9614-9623,9626-9633,9636,9639,9648,9650-9651,9655,9658,9672-9675,9691-9696,9714-9717,9793-9794,9797-9798,9876-9877,9886-9911,9914-9917,9920-9924,9927-9930,9955-9965,10008-10011,10026-10027,10040-10041,10051-10052,10060-10065,10068-10069,10083-10084,10089-10092,10129-10130,10145-10146,10162-10163,10171-10176,10187,10238-10241,10246-10268,10294-10298,10303-10310,10319-10325,10344-10355,10367-10371,10387,10393,10443-10448,10479-10483,10493-10497,10502-10510,10525-10526,10578,10580,10622-10628,10659-10660,10708-10717,10751-10754,10757-10758,10768-10769,10772-10787,10793-10801,10826-10827,10862-10869,10910-10914,10924-10925,11009,11011,11025-11026,11033,11052,11102-11106,11127-11128,11144-11149,11160-11169,11188-11189,11217-11224,11258,11260-11264,11280-11282,11288-11289,11325-11326,11334,11337,11340,11355,11367,11369,11373,11380,11391-11392,11397,11412-11417,11424-11425,11434-11443,11514-11515,11518-11519,11528-11529,11549-11552
+desktop/windows/pnpm-workspace.yaml
+  s_77f2b8dfbc2e90::t_9899986a1410e0 19-46
+desktop/windows/scripts/agent-tool-gauntlet.mjs
+  s_77f2b8dfbc2e90::t_1e06e17a0df9d2 1-1143
+desktop/windows/scripts/agent-voice-gauntlet.mjs
+  s_77f2b8dfbc2e90::t_e0196c1dcb2577 1-718
+desktop/windows/scripts/agent-voice-tool-gauntlet.mjs
+  s_77f2b8dfbc2e90::t_1318a535511b2d 1-999
+desktop/windows/scripts/amp-live-probe.mjs
+  s_77f2b8dfbc2e90::t_b88c475059715f 1-453
+desktop/windows/scripts/bootstrap-worktree.ps1
+  s_77f2b8dfbc2e90::t_86945571914634 1-72
+desktop/windows/scripts/build-audio-helper.ps1
+  s_77f2b8dfbc2e90::t_baf0d0753b18c4 1-23
+desktop/windows/scripts/bundle-pimono-extension.mjs
+  s_77f2b8dfbc2e90::t_116d672378b5e0 1-89
+desktop/windows/scripts/capture-bar-expand.mjs
+  s_77f2b8dfbc2e90::t_4df99f8d0ca239 1-170
+desktop/windows/scripts/check-agent-deps.mjs
+  s_77f2b8dfbc2e90::t_e32578ae6e38ff 1-86
+desktop/windows/scripts/copy-vad-assets.mjs
+  s_77f2b8dfbc2e90::t_8643babe3f5f28 1-137
+desktop/windows/scripts/diag-listen-probe.mjs
+  s_77f2b8dfbc2e90::t_b448d30668e3a5 22,24,26,48,53,56-57
+desktop/windows/scripts/ensure-audio-helper.mjs
+  s_77f2b8dfbc2e90::t_b0aacc6b481655 1-53
+desktop/windows/scripts/ensure-automation-helper.mjs
+  s_77f2b8dfbc2e90::t_df8f3bc959a85c 1-32
+desktop/windows/scripts/ensure-env.mjs
+  s_77f2b8dfbc2e90::t_2d63a697cafd6f 1-25
+desktop/windows/scripts/ensure-ocr-helper.mjs
+  s_77f2b8dfbc2e90::t_4eb652aac09d8b 28-35
+desktop/windows/scripts/gen-app-icon.mjs
+  s_77f2b8dfbc2e90::t_ece0ae17470a92 1-147
+desktop/windows/scripts/gen-audio-fixtures.mjs
+  s_77f2b8dfbc2e90::t_15d3d993c44be7 1-213
+desktop/windows/scripts/gen-pimono-unpack.mjs
+  s_77f2b8dfbc2e90::t_5f767f2bbdb9a3 1-190
+desktop/windows/scripts/gen-tray-icons.mjs
+  s_77f2b8dfbc2e90::t_c9c6b6c3f18f43 1-108
+desktop/windows/scripts/gmail-session-smoke.mjs
+  s_77f2b8dfbc2e90::t_6d6d088b97f677 1-207
+desktop/windows/scripts/jitter-probe.mjs
+  s_77f2b8dfbc2e90::t_f17961e0cbc448 1-52
+desktop/windows/scripts/kgworker-native-closure.mjs
+  s_77f2b8dfbc2e90::t_0faabf6434c74e 1-39
+desktop/windows/scripts/kgworker-native-closure.test.mjs
+  s_77f2b8dfbc2e90::t_fd89ccd5800f0c 1-99
+desktop/windows/scripts/lib/dev-ports.mjs
+  s_77f2b8dfbc2e90::t_657536e75b4d5a 1-139
+desktop/windows/scripts/lib/icon-raster.mjs
+  s_77f2b8dfbc2e90::t_570d3e57894497 1-60
+desktop/windows/scripts/lib/omi-auth.mjs
+  s_77f2b8dfbc2e90::t_cf63b598dd81fc 1-44
+desktop/windows/scripts/meeting-native-probe.ts
+  s_77f2b8dfbc2e90::t_0caf985e05433f 1-143
+desktop/windows/scripts/orb-parked-probe.mjs
+  s_77f2b8dfbc2e90::t_b090f537b2a489 1-122
+desktop/windows/scripts/orb/check-invariants.mjs
+  s_77f2b8dfbc2e90::t_f5dc0db8f7947e 1-346
+desktop/windows/scripts/orb/check-motion.mjs
+  s_77f2b8dfbc2e90::t_e6260dc0954af2 1-127
+desktop/windows/scripts/orb/check-throttle.mjs
+  s_77f2b8dfbc2e90::t_e4ac1f516de722 1-62
+desktop/windows/scripts/orb/check-transitions.mjs
+  s_77f2b8dfbc2e90::t_dc2ea3b3b9efbe 1-336
+desktop/windows/scripts/orb/contact-sheet-transitions.mjs
+  s_77f2b8dfbc2e90::t_4e18072291ec59 1-156
+desktop/windows/scripts/orb/contact-sheet.mjs
+  s_77f2b8dfbc2e90::t_893dcbd574b80a 1-152
+desktop/windows/scripts/orb/exit-filmstrip.mjs
+  s_77f2b8dfbc2e90::t_ae9ab59e699b2e 1-113
+desktop/windows/scripts/orb/lib/harness.mjs
+  s_77f2b8dfbc2e90::t_44c2d270a36e62 1-105
+desktop/windows/scripts/orb/lib/pixels.mjs
+  s_77f2b8dfbc2e90::t_e28900b2b3e7ce 1-194
+desktop/windows/scripts/orb/measure-idle-cpu.mjs
+  s_77f2b8dfbc2e90::t_11a5c65cf3033f 1-85
+desktop/windows/scripts/orb/waveform-sheet.mjs
+  s_77f2b8dfbc2e90::t_cc0a8343374251 1-186
+desktop/windows/scripts/patch-bytecode-entry-forward.mjs
+  s_77f2b8dfbc2e90::t_be267d1f478a54 1-84
+desktop/windows/scripts/pimono-asar-unpack.generated.json
+  s_77f2b8dfbc2e90::t_93d96131a2bb12 1-108
+desktop/windows/scripts/print-instance.mjs
+  s_77f2b8dfbc2e90::t_eb4988cef388d2 1-14
+desktop/windows/scripts/realflow-bar.mjs
+  s_77f2b8dfbc2e90::t_28f550c80e977a 1-150
+desktop/windows/scripts/repro-listconvo.mjs
+  s_77f2b8dfbc2e90::t_1d4b9b7bb547ee 1-138
+desktop/windows/scripts/run-agent-e2e.mjs
+  s_77f2b8dfbc2e90::t_ae2cd5f1922140 1-23
+desktop/windows/scripts/run-bar-e2e.mjs
+  s_77f2b8dfbc2e90::t_4b7e5308f6c615 1-20
+desktop/windows/scripts/run-cold-start-e2e.mjs
+  s_77f2b8dfbc2e90::t_a962a950aeb557 1-21
+desktop/windows/scripts/run-conv-detail-e2e.mjs
+  s_77f2b8dfbc2e90::t_5a628590b72e58 1-20
+desktop/windows/scripts/run-db-recovery-e2e.mjs
+  s_77f2b8dfbc2e90::t_3214b1e173e162 1-18
+desktop/windows/scripts/run-failure-ux-e2e.mjs
+  s_77f2b8dfbc2e90::t_5610228cf3fd13 1-18
+desktop/windows/scripts/run-kg-perf-e2e.mjs
+  s_77f2b8dfbc2e90::t_9b22413f8fa216 1-20
+desktop/windows/scripts/run-kg-viewer-e2e.mjs
+  s_77f2b8dfbc2e90::t_fd497f9fdb8391 1-20
+desktop/windows/scripts/run-lifecycle-e2e.mjs
+  s_77f2b8dfbc2e90::t_a4d8af52b25854 1-21
+desktop/windows/scripts/run-live-e2e.mjs
+  s_77f2b8dfbc2e90::t_28aa94b89c07e7 1-27
+desktop/windows/scripts/run-livenotes-e2e.mjs
+  s_77f2b8dfbc2e90::t_4f1ec78d968c82 1-191
+desktop/windows/scripts/run-meeting-e2e.mjs
+  s_77f2b8dfbc2e90::t_878f57bf6924b1 1-19
+desktop/windows/scripts/run-meeting-live.mjs
+  s_77f2b8dfbc2e90::t_6cfbef9645d972 1-443
+desktop/windows/scripts/run-packaged-agent-smoke.mjs
+  s_77f2b8dfbc2e90::t_01694ae494d5e1 1-217
+desktop/windows/scripts/run-packaged-tool-sweep.mjs
+  s_77f2b8dfbc2e90::t_5d355c02b3bf50 1-356
+desktop/windows/scripts/run-ptt-gesture-e2e.mjs
+  s_77f2b8dfbc2e90::t_cb53c4253ebf26 1-19
+desktop/windows/scripts/run-rewind-dayscope-e2e.mjs
+  s_77f2b8dfbc2e90::t_6f070644ffd907 1-20
+desktop/windows/scripts/run-rewind-semantic-e2e.mjs
+  s_77f2b8dfbc2e90::t_44bbdffe23e78a 1-19
+desktop/windows/scripts/run-sidebar-e2e.mjs
+  s_77f2b8dfbc2e90::t_594163e4e088ac 1-21
+desktop/windows/scripts/run-soak.mjs
+  s_77f2b8dfbc2e90::t_9b2fe3d1add570 1-15,17,19-23,25-29,31-38,40-45,47-72,74-80
+desktop/windows/scripts/run-token-pull-e2e.mjs
+  s_77f2b8dfbc2e90::t_3a0d9d12a4e4f7 1-19
+desktop/windows/scripts/run-vad-playback.mjs
+  s_77f2b8dfbc2e90::t_4e8b2d8d22c5be 1-289
+desktop/windows/scripts/run-voice-loop-check.mjs
+  s_77f2b8dfbc2e90::t_b2c9d400326bdf 1-566
+desktop/windows/scripts/run-voice-smoke.mjs
+  s_77f2b8dfbc2e90::t_b041e6b1d6c273 1-151
+desktop/windows/scripts/seed-auth.mjs
+  s_77f2b8dfbc2e90::t_1f9a071d6d1b5f 1-173
+desktop/windows/scripts/soak-verify.mjs
+  s_77f2b8dfbc2e90::t_89a79ab7b4e95e 1-50
+desktop/windows/scripts/soakVerify.test.mjs
+  s_77f2b8dfbc2e90::t_677bae14b8f2c9 1-75
+desktop/windows/scripts/soakVerifyCore.mjs
+  s_77f2b8dfbc2e90::t_49fea22e695996 1-94
+desktop/windows/scripts/verify-bytecode.mjs
+  s_77f2b8dfbc2e90::t_2e3f8d4fad0ec3 1-97
+desktop/windows/scripts/verify-kgworker-packaged.mjs
+  s_77f2b8dfbc2e90::t_112b2f07ae5dae 1-141
+desktop/windows/scripts/verify-oauth-contract.mjs
+  s_77f2b8dfbc2e90::t_feb8fe1442d0aa 1-113
+desktop/windows/scripts/verify-oauth-flow.mjs
+  s_77f2b8dfbc2e90::t_356e1d17d834d3 1-131
+desktop/windows/scripts/verify-pimono-packaged-spawn.mjs
+  s_77f2b8dfbc2e90::t_20cd7392b45fbe 1-173
+desktop/windows/scripts/verify-pimono-unpack.mjs
+  s_77f2b8dfbc2e90::t_cef9f99775889c 1-89
+desktop/windows/scripts/voice-exclusion-probe.mjs
+  s_77f2b8dfbc2e90::t_680d9d472699d5 1-182
+desktop/windows/src/main/agentKernel/adapterRegistry.test.ts
+  s_77f2b8dfbc2e90::t_7d5852e1da372e 1-122
+desktop/windows/src/main/agentKernel/adapterRegistry.ts
+  s_77f2b8dfbc2e90::t_a1b34380016a8c 1-95
+desktop/windows/src/main/agentKernel/agentThreadCards.test.ts
+  s_77f2b8dfbc2e90::t_06ed74b52459a0 1-330
+desktop/windows/src/main/agentKernel/agentThreadCards.ts
+  s_77f2b8dfbc2e90::t_4126ec32a06dce 1-374
+desktop/windows/src/main/agentKernel/artifactFilters.ts
+  s_77f2b8dfbc2e90::t_a110ca64bcd087 1-19
+desktop/windows/src/main/agentKernel/artifactStorage.ts
+  s_77f2b8dfbc2e90::t_ded1f2e4e20339 1-313
+desktop/windows/src/main/agentKernel/backendTools.test.ts
+  s_77f2b8dfbc2e90::t_b7c6bdd4c45bb7 1-99
+desktop/windows/src/main/agentKernel/backendTools.ts
+  s_77f2b8dfbc2e90::t_97d886357e4026 1-139
+desktop/windows/src/main/agentKernel/byokEnroll.test.ts
+  s_77f2b8dfbc2e90::t_819e20f2602e05 1-140
+desktop/windows/src/main/agentKernel/byokEnroll.ts
+  s_77f2b8dfbc2e90::t_6d8b6258fda440 1-131
+desktop/windows/src/main/agentKernel/byokNoLogging.test.ts
+  s_77f2b8dfbc2e90::t_63d1189482fc91 1-102
+desktop/windows/src/main/agentKernel/byokStore.test.ts
+  s_77f2b8dfbc2e90::t_20bf437c211a0f 1-112
+desktop/windows/src/main/agentKernel/byokStore.ts
+  s_77f2b8dfbc2e90::t_abff3ccda64953 1-115
+desktop/windows/src/main/agentKernel/byokValidator.test.ts
+  s_77f2b8dfbc2e90::t_79ec1bd956d723 1-145
+desktop/windows/src/main/agentKernel/byokValidator.ts
+  s_77f2b8dfbc2e90::t_47cb58220d196f 1-112
+desktop/windows/src/main/agentKernel/captureScreenExecutor.test.ts
+  s_77f2b8dfbc2e90::t_b5671f609d55a3 1-63
+desktop/windows/src/main/agentKernel/captureScreenExecutor.ts
+  s_77f2b8dfbc2e90::t_2a4a7653bfe97a 1-64
+desktop/windows/src/main/agentKernel/controlMcpBridge.e2e.test.ts
+  s_77f2b8dfbc2e90::t_754d759f544651 1-143
+desktop/windows/src/main/agentKernel/controlMcpBridge.test.ts
+  s_77f2b8dfbc2e90::t_aba2455c0d4a1b 1-533
+desktop/windows/src/main/agentKernel/controlMcpBridge.ts
+  s_77f2b8dfbc2e90::t_046aa7d95ee6c1 1-335
+desktop/windows/src/main/agentKernel/controlPlane.pimono.test.ts
+  s_77f2b8dfbc2e90::t_7ecb698afd9d9b 1-183
+desktop/windows/src/main/agentKernel/controlPlane.spawnAdapter.test.ts
+  s_77f2b8dfbc2e90::t_8a49d6a007e7ae 1-54
+desktop/windows/src/main/agentKernel/controlPlane.ts
+  s_77f2b8dfbc2e90::t_09ce4a5072858d 1-350
+desktop/windows/src/main/agentKernel/controlToolManifest.ts
+  s_77f2b8dfbc2e90::t_ecd600f821ff1d 1-991
+desktop/windows/src/main/agentKernel/controlTools.test.ts
+  s_77f2b8dfbc2e90::t_29f2318a1fa6f6 1-1138
+desktop/windows/src/main/agentKernel/controlTools.ts
+  s_77f2b8dfbc2e90::t_4a5441727d912f 1-1423
+desktop/windows/src/main/agentKernel/conversationTurns.test.ts
+  s_77f2b8dfbc2e90::t_5e5324a99521cf 1-135
+desktop/windows/src/main/agentKernel/conversationTurns.ts
+  s_77f2b8dfbc2e90::t_904fed27fb33fe 1-351
+desktop/windows/src/main/agentKernel/desktopActionQueue.ts
+  s_77f2b8dfbc2e90::t_0d484302a03928 1-356
+desktop/windows/src/main/agentKernel/desktopChatPrompt.test.ts
+  s_77f2b8dfbc2e90::t_2608cd2ced6121 1-189
+desktop/windows/src/main/agentKernel/desktopChatPrompt.ts
+  s_77f2b8dfbc2e90::t_38a44cdd944980 1-252
+desktop/windows/src/main/agentKernel/desktopContextPacket.ts
+  s_77f2b8dfbc2e90::t_14df37562e13d8 1-221
+desktop/windows/src/main/agentKernel/desktopCoordinator.test.ts
+  s_77f2b8dfbc2e90::t_87788746352874 1-631
+desktop/windows/src/main/agentKernel/desktopIntentRouter.ts
+  s_77f2b8dfbc2e90::t_2bcee6086eb73c 1-150
+desktop/windows/src/main/agentKernel/desktopToolPolicy.test.ts
+  s_77f2b8dfbc2e90::t_97aab381377011 1-418
+desktop/windows/src/main/agentKernel/desktopToolPolicy.ts
+  s_77f2b8dfbc2e90::t_c3ee3a7b676013 1-412
+desktop/windows/src/main/agentKernel/executionPolicy.test.ts
+  s_77f2b8dfbc2e90::t_5128ea804de5a3 1-159
+desktop/windows/src/main/agentKernel/executionPolicy.ts
+  s_77f2b8dfbc2e90::t_ec8d1d4f87cae4 1-147
+desktop/windows/src/main/agentKernel/kernel.test.ts
+  s_77f2b8dfbc2e90::t_da165b6fae4fe7 1-1329
+desktop/windows/src/main/agentKernel/kernel.ts
+  s_77f2b8dfbc2e90::t_a511918b7bd8d1 1-329
+desktop/windows/src/main/agentKernel/kernelArtifacts.ts
+  s_77f2b8dfbc2e90::t_831d625d852fe2 1-175
+desktop/windows/src/main/agentKernel/kernelCore.ts
+  s_77f2b8dfbc2e90::t_d67ceacc1b0a72 1-2252
+desktop/windows/src/main/agentKernel/kernelCoreCwd.test.ts
+  s_77f2b8dfbc2e90::t_3564ed65368ac6 1-29
+desktop/windows/src/main/agentKernel/kernelRuns.ts
+  s_77f2b8dfbc2e90::t_e403a8c670beda 1-270
+desktop/windows/src/main/agentKernel/kernelSessions.ts
+  s_77f2b8dfbc2e90::t_e3974a8afdb2f2 1-452
+desktop/windows/src/main/agentKernel/kernelSupport.test.ts
+  s_77f2b8dfbc2e90::t_63b28fae026309 1-148
+desktop/windows/src/main/agentKernel/kernelSupport.ts
+  s_77f2b8dfbc2e90::t_d1288547efcc4f 1-822
+desktop/windows/src/main/agentKernel/kernelTypes.ts
+  s_77f2b8dfbc2e90::t_e7a69f776ac432 1-380
+desktop/windows/src/main/agentKernel/omi-mcp-entry.mjs
+  s_77f2b8dfbc2e90::t_3df9ba37ed127a 1-283
+desktop/windows/src/main/agentKernel/omiMcpEntry.test.ts
+  s_77f2b8dfbc2e90::t_1ccbac5a2763ad 1-159
+desktop/windows/src/main/agentKernel/omiToolManifest.test.ts
+  s_77f2b8dfbc2e90::t_c0f29b6021f13d 1-202
+desktop/windows/src/main/agentKernel/omiToolManifest.ts
+  s_77f2b8dfbc2e90::t_b4acc9d912ca37 1-1745
+desktop/windows/src/main/agentKernel/productToolExecutors.test.ts
+  s_77f2b8dfbc2e90::t_edaaa0ee069d04 1-528
+desktop/windows/src/main/agentKernel/productToolExecutors.ts
+  s_77f2b8dfbc2e90::t_ac619e6901b6e2 1-1156
+desktop/windows/src/main/agentKernel/productToolExecutorsTierB.test.ts
+  s_77f2b8dfbc2e90::t_66f247ac89dc09 1-517
+desktop/windows/src/main/agentKernel/screenCapture.test.ts
+  s_77f2b8dfbc2e90::t_7e7ef22a6c01c9 1-117
+desktop/windows/src/main/agentKernel/screenCapture.ts
+  s_77f2b8dfbc2e90::t_d14cfd590bdca4 1-134
+desktop/windows/src/main/agentKernel/startup.ts
+  s_77f2b8dfbc2e90::t_3e893ae8bf21d4 1-35
+desktop/windows/src/main/agentKernel/store.test.ts
+  s_77f2b8dfbc2e90::t_465a5042eb028b 1-1584
+desktop/windows/src/main/agentKernel/store.ts
+  s_77f2b8dfbc2e90::t_35a497a9ac473c 1-2657
+desktop/windows/src/main/agentKernel/surfaceSession.test.ts
+  s_77f2b8dfbc2e90::t_943401a44f3e89 1-212
+desktop/windows/src/main/agentKernel/surfaceSession.ts
+  s_77f2b8dfbc2e90::t_7edcaaf92aea15 1-463
+desktop/windows/src/main/agentKernel/toolInstructionCoverage.test.ts
+  s_77f2b8dfbc2e90::t_3dc1807c85961b 1-425
+desktop/windows/src/main/agentKernel/toolInstructionCoverage.ts
+  s_77f2b8dfbc2e90::t_3b379651899313 1-325
+desktop/windows/src/main/agentKernel/toolRelayBridge.test.ts
+  s_77f2b8dfbc2e90::t_d2826e5e99a9d1 1-714
+desktop/windows/src/main/agentKernel/toolRelayBridge.ts
+  s_77f2b8dfbc2e90::t_923cb3f32dd921 1-594
+desktop/windows/src/main/agentKernel/turnContext.ts
+  s_77f2b8dfbc2e90::t_0bab7937772a98 1-684
+desktop/windows/src/main/agentKernel/types.ts
+  s_77f2b8dfbc2e90::t_06da42d7d6467f 1-731
+desktop/windows/src/main/agentKernel/workerPool.test.ts
+  s_77f2b8dfbc2e90::t_8f5921858e8fb0 1-188
+desktop/windows/src/main/agentKernel/workerPool.ts
+  s_77f2b8dfbc2e90::t_9bd6c31039d22a 1-353
+desktop/windows/src/main/appMenu.test.ts
+  s_77f2b8dfbc2e90::t_eae955264e6bb0 1-18
+desktop/windows/src/main/appMenu.ts
+  s_77f2b8dfbc2e90::t_64446b36560f28 1-27
+desktop/windows/src/main/appSettings.test.ts
+  s_77f2b8dfbc2e90::t_44f54f8c0ba42c 1-323
+desktop/windows/src/main/appSettings.ts
+  s_77f2b8dfbc2e90::t_fce92f1e433bde 1-384
+desktop/windows/src/main/apps/checkAppSetup.test.ts
+  s_77f2b8dfbc2e90::t_00742f5652801a 1-81
+desktop/windows/src/main/apps/checkAppSetup.ts
+  s_77f2b8dfbc2e90::t_bae47913062c91 1-50
+desktop/windows/src/main/assistants/aiUserProfile/orchestrate.ts
+  s_77f2b8dfbc2e90::t_fa87a9c2c2d9e6 1-187
+desktop/windows/src/main/assistants/aiUserProfile/service.session.test.ts
+  s_77f2b8dfbc2e90::t_27bc5489e931ac 1-288
+desktop/windows/src/main/assistants/aiUserProfile/service.test.ts
+  s_77f2b8dfbc2e90::t_67635d6e1075fe 1-207
+desktop/windows/src/main/assistants/aiUserProfile/service.ts
+  s_77f2b8dfbc2e90::t_6a2ffdb92b355d 1-457
+desktop/windows/src/main/assistants/aiUserProfile/synthesis.test.ts
+  s_77f2b8dfbc2e90::t_d534af9d0c7b5a 1-140
+desktop/windows/src/main/assistants/aiUserProfile/synthesis.ts
+  s_77f2b8dfbc2e90::t_8a159d517bb897 1-187
+desktop/windows/src/main/assistants/core/contextDetection.test.ts
+  s_77f2b8dfbc2e90::t_9381e8611ec7f0 1-81
+desktop/windows/src/main/assistants/core/contextDetection.ts
+  s_77f2b8dfbc2e90::t_eb51dfa713db3e 1-48
+desktop/windows/src/main/assistants/core/coordinator.test.ts
+  s_77f2b8dfbc2e90::t_536d57a668f291 1-679
+desktop/windows/src/main/assistants/core/coordinator.ts
+  s_77f2b8dfbc2e90::t_b22a8e3f83bb1e 1-442
+desktop/windows/src/main/assistants/core/distributionGate.test.ts
+  s_77f2b8dfbc2e90::t_fe2036aa636b51 1-79
+desktop/windows/src/main/assistants/core/distributionGate.ts
+  s_77f2b8dfbc2e90::t_7cdf07176131a4 1-67
+desktop/windows/src/main/assistants/core/frameImage.ts
+  s_77f2b8dfbc2e90::t_c84fa635842ee7 1-19
+desktop/windows/src/main/assistants/core/notify.test.ts
+  s_77f2b8dfbc2e90::t_7a1ff261edf368 1-219
+desktop/windows/src/main/assistants/core/notify.ts
+  s_77f2b8dfbc2e90::t_1abe98c6bbcdf2 1-164
+desktop/windows/src/main/assistants/core/privacy.test.ts
+  s_77f2b8dfbc2e90::t_3393d24c5cdc7d 1-35
+desktop/windows/src/main/assistants/core/privacy.ts
+  s_77f2b8dfbc2e90::t_68029496717659 1-25
+desktop/windows/src/main/assistants/core/session.test.ts
+  s_77f2b8dfbc2e90::t_4136b6f4a37955 1-211
+desktop/windows/src/main/assistants/core/session.ts
+  s_77f2b8dfbc2e90::t_c6bdb37979c4d7 1-243
+desktop/windows/src/main/assistants/core/tokenPull.test.ts
+  s_77f2b8dfbc2e90::t_380e5ef331b533 1-99
+desktop/windows/src/main/assistants/core/tokenPull.ts
+  s_77f2b8dfbc2e90::t_d479d49f87d8cc 1-81
+desktop/windows/src/main/assistants/focus/context.ts
+  s_77f2b8dfbc2e90::t_c89b2f8cfdb265 1-125
+desktop/windows/src/main/assistants/focus/focusAssistant.test.ts
+  s_77f2b8dfbc2e90::t_72a6c0ff845c7f 1-298
+desktop/windows/src/main/assistants/focus/focusAssistant.ts
+  s_77f2b8dfbc2e90::t_08bbdd75cca427 1-311
+desktop/windows/src/main/assistants/focus/gating.test.ts
+  s_77f2b8dfbc2e90::t_cdc8ed75152eb9 1-170
+desktop/windows/src/main/assistants/focus/gating.ts
+  s_77f2b8dfbc2e90::t_d2f1e010b0978e 1-145
+desktop/windows/src/main/assistants/focus/gemini.test.ts
+  s_77f2b8dfbc2e90::t_265b6fbddce2b1 1-74
+desktop/windows/src/main/assistants/focus/gemini.ts
+  s_77f2b8dfbc2e90::t_92b7baab2e7199 1-186
+desktop/windows/src/main/assistants/focus/models.test.ts
+  s_77f2b8dfbc2e90::t_d03ac43d732dc0 1-70
+desktop/windows/src/main/assistants/focus/models.ts
+  s_77f2b8dfbc2e90::t_50d62f457f672a 1-68
+desktop/windows/src/main/assistants/focus/persist.test.ts
+  s_77f2b8dfbc2e90::t_18dff4251f8715 1-113
+desktop/windows/src/main/assistants/focus/persist.ts
+  s_77f2b8dfbc2e90::t_196339d05e9282 1-117
+desktop/windows/src/main/assistants/focus/prompt.test.ts
+  s_77f2b8dfbc2e90::t_7fdb9ef1587afb 1-139
+desktop/windows/src/main/assistants/focus/prompt.ts
+  s_77f2b8dfbc2e90::t_21e27a0225dbf0 1-144
+desktop/windows/src/main/assistants/focus/promptStore.ts
+  s_77f2b8dfbc2e90::t_bf2281e1533231 1-71
+desktop/windows/src/main/assistants/focus/register.ts
+  s_77f2b8dfbc2e90::t_e773fb79e49487 1-35
+desktop/windows/src/main/assistants/focus/stats.test.ts
+  s_77f2b8dfbc2e90::t_c2c77ba4dd22b8 1-104
+desktop/windows/src/main/assistants/focus/stats.ts
+  s_77f2b8dfbc2e90::t_8b3f904e255482 1-96
+desktop/windows/src/main/assistants/goals/context.test.ts
+  s_77f2b8dfbc2e90::t_55b84ae0b1781f 1-85
+desktop/windows/src/main/assistants/goals/context.ts
+  s_77f2b8dfbc2e90::t_6f5095c6fb3cf8 1-235
+desktop/windows/src/main/assistants/goals/generate.test.ts
+  s_77f2b8dfbc2e90::t_6ea28cca55b7ed 1-279
+desktop/windows/src/main/assistants/goals/generate.ts
+  s_77f2b8dfbc2e90::t_6cbc019e671c30 1-470
+desktop/windows/src/main/assistants/goals/prompt.test.ts
+  s_77f2b8dfbc2e90::t_f28d9aa38ca216 1-82
+desktop/windows/src/main/assistants/goals/prompt.ts
+  s_77f2b8dfbc2e90::t_29e0516398bf87 1-117
+desktop/windows/src/main/assistants/goals/register.ts
+  s_77f2b8dfbc2e90::t_3e5ac7416455b2 1-46
+desktop/windows/src/main/assistants/goals/schedule.test.ts
+  s_77f2b8dfbc2e90::t_81fd64957f6a0f 1-207
+desktop/windows/src/main/assistants/goals/schedule.ts
+  s_77f2b8dfbc2e90::t_83f7ea04026dd7 1-195
+desktop/windows/src/main/assistants/goals/staleCleanup.test.ts
+  s_77f2b8dfbc2e90::t_a15b4bd1db37f1 1-118
+desktop/windows/src/main/assistants/goals/staleCleanup.ts
+  s_77f2b8dfbc2e90::t_e84951a3c803d1 1-183
+desktop/windows/src/main/assistants/insight/context.test.ts
+  s_77f2b8dfbc2e90::t_4cb0de945958f8 1-58
+desktop/windows/src/main/assistants/insight/context.ts
+  s_77f2b8dfbc2e90::t_b45f855b70df8e 1-101
+desktop/windows/src/main/assistants/insight/gating.test.ts
+  s_77f2b8dfbc2e90::t_bab36b6035e13c 1-71
+desktop/windows/src/main/assistants/insight/gating.ts
+  s_77f2b8dfbc2e90::t_77eeaf0d1212fa 1-55
+desktop/windows/src/main/assistants/insight/gemini.test.ts
+  s_77f2b8dfbc2e90::t_e8f7201e875dd6 1-132
+desktop/windows/src/main/assistants/insight/gemini.ts
+  s_77f2b8dfbc2e90::t_100f61974a6477 1-400
+desktop/windows/src/main/assistants/insight/insightAssistant.test.ts
+  s_77f2b8dfbc2e90::t_e9eb55aa47a469 1-200
+desktop/windows/src/main/assistants/insight/insightAssistant.ts
+  s_77f2b8dfbc2e90::t_33845f518c8419 1-204
+desktop/windows/src/main/assistants/insight/models.test.ts
+  s_77f2b8dfbc2e90::t_3db27d6667504e 1-72
+desktop/windows/src/main/assistants/insight/models.ts
+  s_77f2b8dfbc2e90::t_3dbd64dac162b5 1-255
+desktop/windows/src/main/assistants/insight/persist.test.ts
+  s_77f2b8dfbc2e90::t_f2c6b777ba5b80 1-100
+desktop/windows/src/main/assistants/insight/persist.ts
+  s_77f2b8dfbc2e90::t_36e8c86bad3a3a 1-90
+desktop/windows/src/main/assistants/insight/prompt.ts
+  s_77f2b8dfbc2e90::t_574e7e2f7141ac 1-190
+desktop/windows/src/main/assistants/insight/promptStore.ts
+  s_77f2b8dfbc2e90::t_8c957dcf60fc1a 1-69
+desktop/windows/src/main/assistants/insight/register.ts
+  s_77f2b8dfbc2e90::t_483ea63551fbee 1-100
+desktop/windows/src/main/assistants/insight/sql.test.ts
+  s_77f2b8dfbc2e90::t_e953510e567ff7 1-620
+desktop/windows/src/main/assistants/insight/sql.ts
+  s_77f2b8dfbc2e90::t_94d5152abc6947 1-867
+desktop/windows/src/main/assistants/memory/gemini.test.ts
+  s_77f2b8dfbc2e90::t_89eb99bac6d9b5 1-107
+desktop/windows/src/main/assistants/memory/gemini.ts
+  s_77f2b8dfbc2e90::t_60f1e5f95c59a7 1-180
+desktop/windows/src/main/assistants/memory/memoryAssistant.test.ts
+  s_77f2b8dfbc2e90::t_d2a480a8759228 1-258
+desktop/windows/src/main/assistants/memory/memoryAssistant.ts
+  s_77f2b8dfbc2e90::t_ea745d14add0a6 1-220
+desktop/windows/src/main/assistants/memory/models.test.ts
+  s_77f2b8dfbc2e90::t_08c04e75a06750 1-126
+desktop/windows/src/main/assistants/memory/models.ts
+  s_77f2b8dfbc2e90::t_c70ca892d80fd9 1-104
+desktop/windows/src/main/assistants/memory/persist.test.ts
+  s_77f2b8dfbc2e90::t_22ac60c631cf0a 1-141
+desktop/windows/src/main/assistants/memory/persist.ts
+  s_77f2b8dfbc2e90::t_eb4b5cc864a9da 1-119
+desktop/windows/src/main/assistants/memory/prompt.ts
+  s_77f2b8dfbc2e90::t_c4c5766f8a4991 1-162
+desktop/windows/src/main/assistants/memory/register.ts
+  s_77f2b8dfbc2e90::t_94dbc30fdab956 1-43
+desktop/windows/src/main/assistants/tasks/appLists.test.ts
+  s_77f2b8dfbc2e90::t_bfd6b11c2014f0 1-104
+desktop/windows/src/main/assistants/tasks/appLists.ts
+  s_77f2b8dfbc2e90::t_61257fd53f32b2 1-161
+desktop/windows/src/main/assistants/tasks/context.test.ts
+  s_77f2b8dfbc2e90::t_b2965333403c3c 1-189
+desktop/windows/src/main/assistants/tasks/context.ts
+  s_77f2b8dfbc2e90::t_a8891e9c374595 1-225
+desktop/windows/src/main/assistants/tasks/create.test.ts
+  s_77f2b8dfbc2e90::t_c70b3e5b735d02 1-342
+desktop/windows/src/main/assistants/tasks/create.ts
+  s_77f2b8dfbc2e90::t_82e2f6e907d755 1-429
+desktop/windows/src/main/assistants/tasks/geminiWire.test.ts
+  s_77f2b8dfbc2e90::t_e8c351bdaf1664 1-193
+desktop/windows/src/main/assistants/tasks/geminiWire.ts
+  s_77f2b8dfbc2e90::t_6dfff82ef3da76 1-297
+desktop/windows/src/main/assistants/tasks/loop.test.ts
+  s_77f2b8dfbc2e90::t_12a324c0c47962 1-215
+desktop/windows/src/main/assistants/tasks/loop.ts
+  s_77f2b8dfbc2e90::t_a81e233b5f3acc 1-244
+desktop/windows/src/main/assistants/tasks/models.test.ts
+  s_77f2b8dfbc2e90::t_ce17d741e61c51 1-205
+desktop/windows/src/main/assistants/tasks/models.ts
+  s_77f2b8dfbc2e90::t_5ddc6dfe567e5a 1-206
+desktop/windows/src/main/assistants/tasks/promotionService.test.ts
+  s_77f2b8dfbc2e90::t_8876cb8f9c1968 1-316
+desktop/windows/src/main/assistants/tasks/promotionService.ts
+  s_77f2b8dfbc2e90::t_8f403b88f58bed 1-105
+desktop/windows/src/main/assistants/tasks/prompt.test.ts
+  s_77f2b8dfbc2e90::t_401e6e55f1bb14 1-60
+desktop/windows/src/main/assistants/tasks/prompt.ts
+  s_77f2b8dfbc2e90::t_a2ba76f9654da7 1-231
+desktop/windows/src/main/assistants/tasks/register.ts
+  s_77f2b8dfbc2e90::t_c9b3927e128617 1-92
+desktop/windows/src/main/assistants/tasks/taskAssistant.test.ts
+  s_77f2b8dfbc2e90::t_504b35edace38b 1-251
+desktop/windows/src/main/assistants/tasks/taskAssistant.ts
+  s_77f2b8dfbc2e90::t_df171b232fbd06 1-301
+desktop/windows/src/main/assistants/tasks/toolBackends.test.ts
+  s_77f2b8dfbc2e90::t_b4aeaba89e9608 1-330
+desktop/windows/src/main/assistants/tasks/toolBackends.ts
+  s_77f2b8dfbc2e90::t_8a5c03c5735d92 1-323
+desktop/windows/src/main/assistants/tasks/tools.test.ts
+  s_77f2b8dfbc2e90::t_ed1146284a2e53 1-144
+desktop/windows/src/main/assistants/tasks/tools.ts
+  s_77f2b8dfbc2e90::t_8e8546b97cab19 1-259
+desktop/windows/src/main/audio/helper/Program.cs
+  s_77f2b8dfbc2e90::t_d7c90de3eee229 1-336
+desktop/windows/src/main/audio/helper/win-audio-helper.csproj
+  s_77f2b8dfbc2e90::t_fd52851ba619bd 1-18
+desktop/windows/src/main/audio/protocol.ts
+  s_77f2b8dfbc2e90::t_60d2b91177a0d7 1-21
+desktop/windows/src/main/audio/resolveHelperPath.ts
+  s_77f2b8dfbc2e90::t_a81cb81dbde0a9 1-22
+desktop/windows/src/main/audio/systemAudioMute.test.ts
+  s_77f2b8dfbc2e90::t_64c35f5cc858d1 1-320
+desktop/windows/src/main/audio/systemAudioMute.ts
+  s_77f2b8dfbc2e90::t_3f363ea4b9db78 1-312
+desktop/windows/src/main/auth/firebaseIdToken.test.ts
+  s_77f2b8dfbc2e90::t_56270a618aeb8b 1-232
+desktop/windows/src/main/auth/firebaseIdToken.ts
+  s_77f2b8dfbc2e90::t_fec8a8ff3ddf82 1-142
+desktop/windows/src/main/auth/googleSignInFlow.test.ts
+  s_77f2b8dfbc2e90::t_d0649ed729ced0 1-295
+desktop/windows/src/main/auth/googleSignInFlow.ts
+  s_77f2b8dfbc2e90::t_db921dadb480a4 1-183
+desktop/windows/src/main/auth/omiAuth.test.ts
+  s_77f2b8dfbc2e90::t_aef0799a7ff4f3 1-244
+desktop/windows/src/main/auth/omiAuth.ts
+  s_77f2b8dfbc2e90::t_1a456d4f7c16f5 1-199
+desktop/windows/src/main/automation/bridge.test.ts
+  s_77f2b8dfbc2e90::t_d70a71039cb5e2 1,10-12,16-34,56-66
+desktop/windows/src/main/automation/bridge.ts
+  s_77f2b8dfbc2e90::t_4ff69932232455 26-30
+desktop/windows/src/main/bar/barContextMenu.ts
+  s_77f2b8dfbc2e90::t_c50cd94cbbfc45 1-7,10-19,21-44
+desktop/windows/src/main/bar/barContextMenuTemplate.test.ts
+  s_77f2b8dfbc2e90::t_dba2cb8eba35ea 1-108
+desktop/windows/src/main/bar/barContextMenuTemplate.ts
+  s_77f2b8dfbc2e90::t_afb24436074d0a 1-58
+desktop/windows/src/main/bar/gesture.test.ts
+  s_77f2b8dfbc2e90::t_52d77f3de579ad 1-374
+desktop/windows/src/main/bar/gesture.ts
+  s_77f2b8dfbc2e90::t_7df89a35e94adf 1-252
+desktop/windows/src/main/bar/keyState.ts
+  s_77f2b8dfbc2e90::t_96fc695af4357e 1-157
+desktop/windows/src/main/bar/placement.test.ts
+  s_77f2b8dfbc2e90::t_0e0b81aab64b7a 1-221
+desktop/windows/src/main/bar/placement.ts
+  s_77f2b8dfbc2e90::t_64d696192f0d42 1-172
+desktop/windows/src/main/bar/watchdog.test.ts
+  s_77f2b8dfbc2e90::t_5e76d3ee5a147a 1-207
+desktop/windows/src/main/bar/watchdog.ts
+  s_77f2b8dfbc2e90::t_76fb9183c17a1a 1-127
+desktop/windows/src/main/bar/window.ts
+  s_77f2b8dfbc2e90::t_d30abc8204b9b9 1-1051
+desktop/windows/src/main/billing/checkoutWindow.ts
+  s_77f2b8dfbc2e90::t_22d579366ab634 1-118
+desktop/windows/src/main/captureWindow.test.ts
+  s_77f2b8dfbc2e90::t_75fe6354eacb71 1-40
+desktop/windows/src/main/captureWindow.ts
+  s_77f2b8dfbc2e90::t_51942d4d33fe81 1-131
+desktop/windows/src/main/childProcessGone.test.ts
+  s_77f2b8dfbc2e90::t_a838010f98efaf 1-43
+desktop/windows/src/main/childProcessGone.ts
+  s_77f2b8dfbc2e90::t_bd1c490d4e2e4a 1-40
+desktop/windows/src/main/codingAgent/acp.e2e.test.ts
+  s_77f2b8dfbc2e90::t_5fef9274e15538 1-141
+desktop/windows/src/main/codingAgent/acp.integration.test.ts
+  s_77f2b8dfbc2e90::t_cdfcbf193e1133 1-50
+desktop/windows/src/main/codingAgent/acp.test.ts
+  s_77f2b8dfbc2e90::t_e8255ee6af24f4 1-555
+desktop/windows/src/main/codingAgent/acp.testkit.ts
+  s_77f2b8dfbc2e90::t_97f964a2c346fc 1-97
+desktop/windows/src/main/codingAgent/acp.ts
+  s_77f2b8dfbc2e90::t_aa524fe19845f8 1-1128
+desktop/windows/src/main/codingAgent/acpAuth.integration.test.ts
+  s_77f2b8dfbc2e90::t_7cb91829fdbde6 1-101
+desktop/windows/src/main/codingAgent/acpAuthClassifier.test.ts
+  s_77f2b8dfbc2e90::t_5ca723ec705289 1-90
+desktop/windows/src/main/codingAgent/adapterRegistry.test.ts
+  s_77f2b8dfbc2e90::t_584e0fe8ce005f 1-55
+desktop/windows/src/main/codingAgent/adapterRegistry.ts
+  s_77f2b8dfbc2e90::t_0c8e9f2431019a 1-149
+desktop/windows/src/main/codingAgent/agentConfigDir.test.ts
+  s_77f2b8dfbc2e90::t_3b1959f54a2e20 1-89
+desktop/windows/src/main/codingAgent/agentConfigDir.ts
+  s_77f2b8dfbc2e90::t_2a0e102b58534f 1-47
+desktop/windows/src/main/codingAgent/agentDetect.test.ts
+  s_77f2b8dfbc2e90::t_ce8ec397f9beed 1-85
+desktop/windows/src/main/codingAgent/agentDetect.ts
+  s_77f2b8dfbc2e90::t_076542da19530e 1-106
+desktop/windows/src/main/codingAgent/asarUnpackedPath.test.ts
+  s_77f2b8dfbc2e90::t_047ef8d1978d34 1-44
+desktop/windows/src/main/codingAgent/asarUnpackedPath.ts
+  s_77f2b8dfbc2e90::t_b04361d7f4a728 1-44
+desktop/windows/src/main/codingAgent/claude-acp-entry.mjs
+  s_77f2b8dfbc2e90::t_4db2f6f3fa61a1 1-26
+desktop/windows/src/main/codingAgent/claudeCode.test.ts
+  s_77f2b8dfbc2e90::t_31791cc75bc8bf 1-58
+desktop/windows/src/main/codingAgent/claudeCode.ts
+  s_77f2b8dfbc2e90::t_c10f5406458e16 1-40
+desktop/windows/src/main/codingAgent/claudeOAuth.test.ts
+  s_77f2b8dfbc2e90::t_3121428868763c 1-372
+desktop/windows/src/main/codingAgent/claudeOAuth.ts
+  s_77f2b8dfbc2e90::t_0bed395d41c0e9 1-490
+desktop/windows/src/main/codingAgent/codex.ts
+  s_77f2b8dfbc2e90::t_f66c4c52a09861 1-34
+desktop/windows/src/main/codingAgent/codexAuth.test.ts
+  s_77f2b8dfbc2e90::t_fb238817690ba6 1-101
+desktop/windows/src/main/codingAgent/codexAuth.ts
+  s_77f2b8dfbc2e90::t_f6862c845ef063 1-115
+desktop/windows/src/main/codingAgent/externalAdapters.test.ts
+  s_77f2b8dfbc2e90::t_e2947a857fc786 1-217
+desktop/windows/src/main/codingAgent/failures.test.ts
+  s_77f2b8dfbc2e90::t_2bb882680c7714 1-124
+desktop/windows/src/main/codingAgent/failures.ts
+  s_77f2b8dfbc2e90::t_107c80c2af13e3 1-238
+desktop/windows/src/main/codingAgent/fixtures/fakeAcpAuthSubprocess.mjs
+  s_77f2b8dfbc2e90::t_63397b5978bd1f 1-11,13-17,19,21-22,25-32,35-86,88
+desktop/windows/src/main/codingAgent/fixtures/fakeAcpSubprocess.mjs
+  s_77f2b8dfbc2e90::t_64e18289d7cdf8 1-86
+desktop/windows/src/main/codingAgent/hermes.ts
+  s_77f2b8dfbc2e90::t_52e2fc6f04576f 1-20
+desktop/windows/src/main/codingAgent/interface.test.ts
+  s_77f2b8dfbc2e90::t_05045dcea50c40 1-95
+desktop/windows/src/main/codingAgent/interface.ts
+  s_77f2b8dfbc2e90::t_b9defbaa3f8cb9 1-514
+desktop/windows/src/main/codingAgent/invariants.test.ts
+  s_77f2b8dfbc2e90::t_81b0fe0adda0eb 1-290
+desktop/windows/src/main/codingAgent/openclaw.ts
+  s_77f2b8dfbc2e90::t_640d73831d0b71 1-19
+desktop/windows/src/main/codingAgent/pi-mono-extension/index.test.ts
+  s_77f2b8dfbc2e90::t_0de362ac83405e 1-1214
+desktop/windows/src/main/codingAgent/pi-mono-extension/index.ts
+  s_77f2b8dfbc2e90::t_fe67f9d956ea2c 1-1176
+desktop/windows/src/main/codingAgent/pi-mono-extension/node-tools.ts
+  s_77f2b8dfbc2e90::t_9ba57fb9f601ee 1-69
+desktop/windows/src/main/codingAgent/pi-mono-extension/package.json
+  s_77f2b8dfbc2e90::t_2f74daed01ca0c 1-14
+desktop/windows/src/main/codingAgent/pi-mono-extension/relayWire.integration.test.ts
+  s_77f2b8dfbc2e90::t_66d64bff2e9ce3 1-142
+desktop/windows/src/main/codingAgent/piMono.test.ts
+  s_77f2b8dfbc2e90::t_eb2bd0a0180cf6 1-1159
+desktop/windows/src/main/codingAgent/piMono.ts
+  s_77f2b8dfbc2e90::t_2661e52aaa3084 1-1425
+desktop/windows/src/main/codingAgent/piMonoSession.test.ts
+  s_77f2b8dfbc2e90::t_b43816fa5e8497 1-214
+desktop/windows/src/main/codingAgent/piMonoSession.ts
+  s_77f2b8dfbc2e90::t_66a492c93fe6b6 1-144
+desktop/windows/src/main/codingAgent/taskRunner.test.ts
+  s_77f2b8dfbc2e90::t_9edf1a0b3e0f44 1-242
+desktop/windows/src/main/codingAgent/taskRunner.ts
+  s_77f2b8dfbc2e90::t_cb678279e534b0 1-234
+desktop/windows/src/main/codingAgent/toolPolicyStub.test.ts
+  s_77f2b8dfbc2e90::t_3b8cb3489b94dd 1-75
+desktop/windows/src/main/codingAgent/toolPolicyStub.ts
+  s_77f2b8dfbc2e90::t_dd28af846a50a7 1-121
+desktop/windows/src/main/contextMenu.test.ts
+  s_77f2b8dfbc2e90::t_9be66f87b29ab3 1-143
+desktop/windows/src/main/contextMenu.ts
+  s_77f2b8dfbc2e90::t_f3618478ba2f50 1-34
+desktop/windows/src/main/contextMenuTemplate.test.ts
+  s_77f2b8dfbc2e90::t_e8d1696184c7a2 1-258
+desktop/windows/src/main/contextMenuTemplate.ts
+  s_77f2b8dfbc2e90::t_72c6a7233c181f 1-176
+desktop/windows/src/main/crashSentinel.test.ts
+  s_77f2b8dfbc2e90::t_a2a1e3475d041a 1-168
+desktop/windows/src/main/crashSentinel.ts
+  s_77f2b8dfbc2e90::t_9a6f12abfd25d7 1-113
+desktop/windows/src/main/dev/bench.ts
+  s_77f2b8dfbc2e90::t_071463d94dca30 1-233
+desktop/windows/src/main/dev/startupProfiler.ts
+  s_77f2b8dfbc2e90::t_19e3de46a6e086 1-101
+desktop/windows/src/main/devInstance.parity.test.ts
+  s_77f2b8dfbc2e90::t_4df22df048bd06 1-68
+desktop/windows/src/main/devInstance.test.ts
+  s_77f2b8dfbc2e90::t_d2bb0636eeb585 1-207
+desktop/windows/src/main/devInstance.ts
+  s_77f2b8dfbc2e90::t_bf4d577ffbdf5d 1-189
+desktop/windows/src/main/env.d.ts
+  s_77f2b8dfbc2e90::t_c1fcce6db89110 6-14,36-38
+desktop/windows/src/main/externalUrl.test.ts
+  s_77f2b8dfbc2e90::t_31030cc3c8aa7e 1-23
+desktop/windows/src/main/externalUrl.ts
+  s_77f2b8dfbc2e90::t_1d37be33c1905d 1-16
+desktop/windows/src/main/fileIndex/indexer.ts
+  s_77f2b8dfbc2e90::t_59909036ec3f23 1-2,4-13,15-19,21-22,35-53,55-59,64-70,73-77,83-95,101-127
+desktop/windows/src/main/fileIndex/scanPlan.test.ts
+  s_77f2b8dfbc2e90::t_bfe2f44f660418 1-277
+desktop/windows/src/main/fileIndex/scanPlan.ts
+  s_77f2b8dfbc2e90::t_65c8bdeccf843b 1-166
+desktop/windows/src/main/fileIndex/scanRoots.ts
+  s_77f2b8dfbc2e90::t_8cf5103224f8f4 40-47
+desktop/windows/src/main/fileIndex/scanRules.test.ts
+  s_77f2b8dfbc2e90::t_18c21537772438 2-10,42-57,79-91,101-145
+desktop/windows/src/main/fileIndex/scanRules.ts
+  s_77f2b8dfbc2e90::t_04bf52e9a14032 3-10,32-40,44-52,55,58-59,63-93
+desktop/windows/src/main/glow/glowGeometry.test.ts
+  s_77f2b8dfbc2e90::t_074a82b948b41f 1-289
+desktop/windows/src/main/glow/glowGeometry.ts
+  s_77f2b8dfbc2e90::t_b49a1d228d65b3 1-295
+desktop/windows/src/main/glow/glowPresets.test.ts
+  s_77f2b8dfbc2e90::t_c71e85df4df580 1-73
+desktop/windows/src/main/glow/glowPresets.ts
+  s_77f2b8dfbc2e90::t_df10ed5486d365 1-45
+desktop/windows/src/main/glow/glowWindow.ts
+  s_77f2b8dfbc2e90::t_23805801b145ce 1-29,33-57,59-77,80,82-83,85-87,89,91-94,103-111,114-119,122,124-126,128-131,133,135,137,140-141,145-155,158-160,163-166,169-176,179-191,193-203,205-219,221,225-228,230-242,244,247-283,286-303,305-312,315-318,321-329,331-366,368-381,384-390
+desktop/windows/src/main/hotkeyNotice.test.ts
+  s_77f2b8dfbc2e90::t_d47cb5edb1e5be 1-57
+desktop/windows/src/main/hotkeyNotice.ts
+  s_77f2b8dfbc2e90::t_6e0229d7187eff 1-42
+desktop/windows/src/main/index.ts
+  s_77f2b8dfbc2e90::t_f573631bac25e5 1-10,14-15,18-29,31,34,36,42-55,59-63,70-74,76-83,85-99,106-122,126,128,131-180,182-183,185-219,255-267,290-367,374-412,421-440,443-454,457-465,468-471,474-510,512,517-521,529-533,541-568,572-578,585-589,613-615,617-639,654-660,670-690,698-714,747-763,776-821,823-831,836,838-852,858-861,872-892,907-978,980-1097,1104-1208,1212-1222,1225-1243,1246,1249-1323,1326-1333,1335-1438,1443,1447-1455,1457-1458,1461-1464,1466-1478,1483-1491
+desktop/windows/src/main/insight/toastWindow.ts
+  s_77f2b8dfbc2e90::t_c5152a12007961 6-12,16-17,22-26,29-33,37-64,97-99,103-104,114-117,119,121,123,130,134,136,143-147,155-193,197-198,214-215,218
+desktop/windows/src/main/integrations/gmailSession.ts
+  s_77f2b8dfbc2e90::t_73a6eb321c327b 1-212
+desktop/windows/src/main/integrations/gmailSessionParse.test.ts
+  s_77f2b8dfbc2e90::t_bf8093a1f93b6b 1-259
+desktop/windows/src/main/integrations/gmailSessionParse.ts
+  s_77f2b8dfbc2e90::t_90b7d51ed6278d 1-307
+desktop/windows/src/main/integrations/gmailSessionReader.test.ts
+  s_77f2b8dfbc2e90::t_061191471b1459 1-201
+desktop/windows/src/main/integrations/gmailSessionReader.ts
+  s_77f2b8dfbc2e90::t_90f38899bff7ac 1-207
+desktop/windows/src/main/integrations/xConnector.test.ts
+  s_77f2b8dfbc2e90::t_972319a21fbb19 1-108
+desktop/windows/src/main/integrations/xConnector.ts
+  s_77f2b8dfbc2e90::t_e91e40eaed1f4c 1-188
+desktop/windows/src/main/ipc/agentCards.ts
+  s_77f2b8dfbc2e90::t_661b158cc98e36 1-100
+desktop/windows/src/main/ipc/agentControl.test.ts
+  s_77f2b8dfbc2e90::t_59636bc5c5ce62 1-61
+desktop/windows/src/main/ipc/agentControl.ts
+  s_77f2b8dfbc2e90::t_1b4944e2769bed 1-49
+desktop/windows/src/main/ipc/aiUserProfile.ts
+  s_77f2b8dfbc2e90::t_1b955bda22a9ba 1-84
+desktop/windows/src/main/ipc/assistantSettings.test.ts
+  s_77f2b8dfbc2e90::t_12350ee6aeaf62 1-159
+desktop/windows/src/main/ipc/assistantSettings.ts
+  s_77f2b8dfbc2e90::t_90ff4c88626637 1-112
+desktop/windows/src/main/ipc/audioMute.ts
+  s_77f2b8dfbc2e90::t_ad39fa8913eda8 1-15
+desktop/windows/src/main/ipc/auth.ts
+  s_77f2b8dfbc2e90::t_c923c0f85bf84d 1-47
+desktop/windows/src/main/ipc/authStore.test.ts
+  s_77f2b8dfbc2e90::t_55d9dae84eefb1 1-103
+desktop/windows/src/main/ipc/authStore.ts
+  s_77f2b8dfbc2e90::t_76a2f17116a5cd 1-121
+desktop/windows/src/main/ipc/byok.ts
+  s_77f2b8dfbc2e90::t_25293b9ff20c88 1-75
+desktop/windows/src/main/ipc/captureBridge.test.ts
+  s_77f2b8dfbc2e90::t_eda2acd0ea3573 1-69
+desktop/windows/src/main/ipc/captureBridge.ts
+  s_77f2b8dfbc2e90::t_1d1b17f534982f 1-128
+desktop/windows/src/main/ipc/chatFiles.ts
+  s_77f2b8dfbc2e90::t_f0325ee308b028 1-104
+desktop/windows/src/main/ipc/chatPrivacy.ts
+  s_77f2b8dfbc2e90::t_915d0ce0658956 1-23
+desktop/windows/src/main/ipc/codingAgent.ts
+  s_77f2b8dfbc2e90::t_6228c93ef70462 1-143
+desktop/windows/src/main/ipc/conversationFolders.test.ts
+  s_77f2b8dfbc2e90::t_74cdcab1c6da00 1-157
+desktop/windows/src/main/ipc/conversationFolders.ts
+  s_77f2b8dfbc2e90::t_9c1cd746114d6f 1-129
+desktop/windows/src/main/ipc/db.ts
+  s_77f2b8dfbc2e90::t_12aea286d88526 2-3,6-114,116-127,130-132,139,146,148-151,154,171-173,182-184,190-310,313-388,394-402,406-415,512-570,572-647,649-655,657,659-669,679-712,725-748,760-769,774-775,778-813,815-833,835-836,838-865,869-909,914-917,924-927,933,937-940,944-964,966-967,972,974-975,977,979,982-1017,1021-1025,1042-1044,1049,1066-1069,1073-1074,1081-1082,1097-1099,1101,1105-1107,1110,1117,1127-1128,1132-1133,1138-1139,1162-1164,1176-1183,1193,1235-1237,1274,1301-1315,1318-1321,1324,1333-1335,1342,1365-1372,1399-1400,1405-1406,1431-1432,1441-1443,1445,1450-1456,1460-1483,1486-1495,1499-1506,1508-1514,1521-1524,1529-1556,1559-1567,1572-1573,1577-1581,1587-1590,1592-1598,1600-1732,1734-1736,1738-1745,1748-1801,1803-2302
+desktop/windows/src/main/ipc/dbMigrations.test.ts
+  s_77f2b8dfbc2e90::t_b05fee40270d7c 1-126
+desktop/windows/src/main/ipc/dbMigrations.ts
+  s_77f2b8dfbc2e90::t_abb2393bff48b7 1-124
+desktop/windows/src/main/ipc/dbRecovery.test.ts
+  s_77f2b8dfbc2e90::t_cd768a77941c4f 1-872
+desktop/windows/src/main/ipc/dbRecovery.ts
+  s_77f2b8dfbc2e90::t_22cc31ab06468d 1-1178
+desktop/windows/src/main/ipc/dbSchema.track4.test.ts
+  s_77f2b8dfbc2e90::t_49c404e7ef5837 1-239
+desktop/windows/src/main/ipc/dbTasks.test.ts
+  s_77f2b8dfbc2e90::t_83fb4af6b535f1 1-688
+desktop/windows/src/main/ipc/dbTrack3.test.ts
+  s_77f2b8dfbc2e90::t_704599cfd20412 1-265
+desktop/windows/src/main/ipc/dbWipe.test.ts
+  s_77f2b8dfbc2e90::t_9a06c97b12aa2d 1-116
+desktop/windows/src/main/ipc/dbWipe.ts
+  s_77f2b8dfbc2e90::t_0335b8cfafaa07 1-79
+desktop/windows/src/main/ipc/fileIndex.ts
+  s_77f2b8dfbc2e90::t_e2a456ac77e7a3 2,9-12
+desktop/windows/src/main/ipc/insight.ts
+  s_77f2b8dfbc2e90::t_d3c35662d63e69 11-17,21-24,38-43
+desktop/windows/src/main/ipc/insightStore.test.ts
+  s_77f2b8dfbc2e90::t_32480aed7c270d 1-137
+desktop/windows/src/main/ipc/insightStore.ts
+  s_77f2b8dfbc2e90::t_1fe2bd01ac1a48 1-98
+desktop/windows/src/main/ipc/integrations.ts
+  s_77f2b8dfbc2e90::t_e8ba5119d1eae7 5-12,20-26,32-34,96-137
+desktop/windows/src/main/ipc/liveNotesStore.test.ts
+  s_77f2b8dfbc2e90::t_5777f11575cd7d 1-171
+desktop/windows/src/main/ipc/liveNotesStore.ts
+  s_77f2b8dfbc2e90::t_e28c6b12288d12 1-164
+desktop/windows/src/main/ipc/localConversationIndex.test.ts
+  s_77f2b8dfbc2e90::t_f910203dad5b3f 1-58
+desktop/windows/src/main/ipc/localConversationSchema.ts
+  s_77f2b8dfbc2e90::t_eb9ef78a9fc140 1-17
+desktop/windows/src/main/ipc/mainChat.test.ts
+  s_77f2b8dfbc2e90::t_359c853bcc0af8 1-773
+desktop/windows/src/main/ipc/mainChat.ts
+  s_77f2b8dfbc2e90::t_c46ad8b17cf242 1-382
+desktop/windows/src/main/ipc/mainChatPersonalization.ts
+  s_77f2b8dfbc2e90::t_0034ffcbee25ef 1-101
+desktop/windows/src/main/ipc/mcpExports.ts
+  s_77f2b8dfbc2e90::t_8ef7c77841545c 1-211
+desktop/windows/src/main/ipc/meeting.ts
+  s_77f2b8dfbc2e90::t_7e54844c583531 1-24
+desktop/windows/src/main/ipc/micPermission.test.ts
+  s_77f2b8dfbc2e90::t_8e976bb195aeb5 1-80
+desktop/windows/src/main/ipc/micPermission.ts
+  s_77f2b8dfbc2e90::t_e037b38e36a567 1-84
+desktop/windows/src/main/ipc/omiListen.endpoint.test.ts
+  s_77f2b8dfbc2e90::t_e454a4795edaf0 1-119
+desktop/windows/src/main/ipc/omiListen.finalize.test.ts
+  s_77f2b8dfbc2e90::t_abb92d04f70660 1-148
+desktop/windows/src/main/ipc/omiListen.ts
+  s_77f2b8dfbc2e90::t_9bbd820c1bfdd9 3-9,11-13,15-81,84,90-142,150,152-168,173-175,184-241,249-274,278-293,296-306,308-310,312,315-326,328-329,332-359,364-367,377-378,382,394-396,408,410-413,418,423-449,452-469,472-482,484-485,487,493-506,508-513,524-526
+desktop/windows/src/main/ipc/pimono.test.ts
+  s_77f2b8dfbc2e90::t_a7848559ea7ecf 1-158
+desktop/windows/src/main/ipc/pimono.ts
+  s_77f2b8dfbc2e90::t_d3537bed0e61dd 1-43
+desktop/windows/src/main/ipc/pttTranscribe.e2e.test.ts
+  s_77f2b8dfbc2e90::t_bb18e094cd7114 1-352
+desktop/windows/src/main/ipc/rewind.ts
+  s_77f2b8dfbc2e90::t_3d260490f57390 7,9-13,16-17,23,25,29-61,63-71,73-87,90-109,111-121,142-144,146-149
+desktop/windows/src/main/ipc/rewindActivityDenylist.test.ts
+  s_77f2b8dfbc2e90::t_922316c196435f 1-102
+desktop/windows/src/main/ipc/rewindEmbeddingSchema.test.ts
+  s_77f2b8dfbc2e90::t_e011dee4933692 1-85
+desktop/windows/src/main/ipc/rewindEmbeddingSchema.ts
+  s_77f2b8dfbc2e90::t_0d94df8b7be6a4 1-83
+desktop/windows/src/main/ipc/rewindEmbeddingSql.ts
+  s_77f2b8dfbc2e90::t_e09318fe13ade0 1-98
+desktop/windows/src/main/ipc/rewindSampleSql.test.ts
+  s_77f2b8dfbc2e90::t_784ecc2b46be20 1-98
+desktop/windows/src/main/ipc/rewindSampleSql.ts
+  s_77f2b8dfbc2e90::t_430f31ccb0d1df 1-54
+desktop/windows/src/main/ipc/stmtCache.test.ts
+  s_77f2b8dfbc2e90::t_620a33d274cd3c 1-123
+desktop/windows/src/main/ipc/stmtCache.ts
+  s_77f2b8dfbc2e90::t_2ff11598933a7f 1-89
+desktop/windows/src/main/ipc/taskEmbeddingVector.ts
+  s_77f2b8dfbc2e90::t_481bd315564de2 1-26
+desktop/windows/src/main/ipc/taskStore.ts
+  s_77f2b8dfbc2e90::t_74cf4e7362c0e7 1-1263
+desktop/windows/src/main/ipc/tasks.ts
+  s_77f2b8dfbc2e90::t_7cf4489ee22dd2 1-134
+desktop/windows/src/main/ipc/voiceHub.test.ts
+  s_77f2b8dfbc2e90::t_aa1a0c9db89354 1-192
+desktop/windows/src/main/ipc/voiceHub.ts
+  s_77f2b8dfbc2e90::t_064641665c1eec 1-126
+desktop/windows/src/main/ipc/voiceTool.geminiSchema.test.ts
+  s_77f2b8dfbc2e90::t_462a9aea2ff336 1-110
+desktop/windows/src/main/ipc/voiceTool.test.ts
+  s_77f2b8dfbc2e90::t_110aa638322dc8 1-317
+desktop/windows/src/main/ipc/voiceTool.ts
+  s_77f2b8dfbc2e90::t_e946ab3f9b0f09 1-175
+desktop/windows/src/main/ipc/voiceTurnOutbox.test.ts
+  s_77f2b8dfbc2e90::t_9af6e87d3748ff 1-154
+desktop/windows/src/main/ipc/voiceTurnOutbox.ts
+  s_77f2b8dfbc2e90::t_c65af4ceee4d34 1-129
+desktop/windows/src/main/lifecycle.ts
+  s_77f2b8dfbc2e90::t_00a08bb2a5e8eb 1-28
+desktop/windows/src/main/mainLog.test.ts
+  s_77f2b8dfbc2e90::t_4d1fe921a977d0 1-180
+desktop/windows/src/main/mainLog.ts
+  s_77f2b8dfbc2e90::t_e22a9968018222 1-175
+desktop/windows/src/main/mcp/atomicWrite.test.ts
+  s_77f2b8dfbc2e90::t_a3df47785f3ea3 1-39
+desktop/windows/src/main/mcp/atomicWrite.ts
+  s_77f2b8dfbc2e90::t_4a5455be6dda4b 1-33
+desktop/windows/src/main/mcp/claudeConfig.test.ts
+  s_77f2b8dfbc2e90::t_a655bef1c643fd 1-198
+desktop/windows/src/main/mcp/claudeConfig.ts
+  s_77f2b8dfbc2e90::t_c3f5fd4fe0b6aa 1-203
+desktop/windows/src/main/mcp/cliConnectors.test.ts
+  s_77f2b8dfbc2e90::t_d70bfd6a0a820d 1-127
+desktop/windows/src/main/mcp/cliConnectors.ts
+  s_77f2b8dfbc2e90::t_9bf995840cbc72 1-255
+desktop/windows/src/main/mcp/cliPresence.ts
+  s_77f2b8dfbc2e90::t_86cbdd04f9dbc3 1-52
+desktop/windows/src/main/mcp/cloudConnectors.test.ts
+  s_77f2b8dfbc2e90::t_70c0e271f59834 1-36
+desktop/windows/src/main/mcp/cloudConnectors.ts
+  s_77f2b8dfbc2e90::t_51cca776708af4 1-65
+desktop/windows/src/main/mcp/mcpExportsService.test.ts
+  s_77f2b8dfbc2e90::t_0b7230ac450a11 1-109
+desktop/windows/src/main/mcp/mcpExportsService.ts
+  s_77f2b8dfbc2e90::t_18198fc4decc14 1-80
+desktop/windows/src/main/mcp/mcpKeyStore.test.ts
+  s_77f2b8dfbc2e90::t_f8248aed4b9301 1-99
+desktop/windows/src/main/mcp/mcpKeyStore.ts
+  s_77f2b8dfbc2e90::t_f6f18629a0fa85 1-126
+desktop/windows/src/main/mcp/mcpMintClient.test.ts
+  s_77f2b8dfbc2e90::t_b09ba846ab47e2 1-96
+desktop/windows/src/main/mcp/mcpMintClient.ts
+  s_77f2b8dfbc2e90::t_c280a0814c12a4 1-102
+desktop/windows/src/main/mcp/memoryPack.test.ts
+  s_77f2b8dfbc2e90::t_24bbddf34d0c5f 1-31
+desktop/windows/src/main/mcp/memoryPack.ts
+  s_77f2b8dfbc2e90::t_0a29c01ef6a9a5 1-38
+desktop/windows/src/main/meeting/detector.test.ts
+  s_77f2b8dfbc2e90::t_5f998c5558a5a2 1-198
+desktop/windows/src/main/meeting/detector.ts
+  s_77f2b8dfbc2e90::t_22d5fa810efad8 1-159
+desktop/windows/src/main/meeting/meetingMonitor.ts
+  s_77f2b8dfbc2e90::t_cfc3afa356165d 1-326
+desktop/windows/src/main/meeting/micConsentStore.ts
+  s_77f2b8dfbc2e90::t_68e0830ec5ebae 1-276
+desktop/windows/src/main/meeting/patterns.json
+  s_77f2b8dfbc2e90::t_8c6e21aaf546a1 1-38
+desktop/windows/src/main/meeting/patterns.test.ts
+  s_77f2b8dfbc2e90::t_0425822a947aee 1-124
+desktop/windows/src/main/meeting/patterns.ts
+  s_77f2b8dfbc2e90::t_5754a6fa0c8c95 1-181
+desktop/windows/src/main/meeting/processSnapshot.ts
+  s_77f2b8dfbc2e90::t_ab51820b560eac 1-85
+desktop/windows/src/main/memoryExport/notion.test.ts
+  s_77f2b8dfbc2e90::t_086b5f450a8679 1-100
+desktop/windows/src/main/memoryExport/notion.ts
+  s_77f2b8dfbc2e90::t_3ce9e04e7985d8 1-2,36-39,54
+desktop/windows/src/main/memoryImport/parse.test.ts
+  s_77f2b8dfbc2e90::t_c247d11e50bbfa 3-4,47-49,51,58-90
+desktop/windows/src/main/memoryImport/parse.ts
+  s_77f2b8dfbc2e90::t_619fd89a111979 20-23,45-53,59
+desktop/windows/src/main/navigationGuard.test.ts
+  s_77f2b8dfbc2e90::t_91555c9d8a396a 1-66
+desktop/windows/src/main/navigationGuard.ts
+  s_77f2b8dfbc2e90::t_9d8b0acbba0ac9 1-50
+desktop/windows/src/main/notify.ts
+  s_77f2b8dfbc2e90::t_2d4c4a8c34afde 1-14
+desktop/windows/src/main/observability/backendDegraded.test.ts
+  s_77f2b8dfbc2e90::t_31e39d3f1e54b3 1-90
+desktop/windows/src/main/observability/backendDegraded.ts
+  s_77f2b8dfbc2e90::t_d7ab75952f403d 1-106
+desktop/windows/src/main/observability/fallback.ts
+  s_77f2b8dfbc2e90::t_f652903b034dca 1-47
+desktop/windows/src/main/observability/rateLimitDegraded.test.ts
+  s_77f2b8dfbc2e90::t_a74938b5fad8e7 1-133
+desktop/windows/src/main/observability/rateLimitDegraded.ts
+  s_77f2b8dfbc2e90::t_037c9317589aac 1-111
+desktop/windows/src/main/ocr/helperProcess.test.ts
+  s_77f2b8dfbc2e90::t_15ec59d5f955ba 1-76
+desktop/windows/src/main/ocr/helperProcess.ts
+  s_77f2b8dfbc2e90::t_267f8ac621c4e0 35-39
+desktop/windows/src/main/overlay/ipc.test.ts
+  s_77f2b8dfbc2e90::t_63b42b676d1895 1-69
+desktop/windows/src/main/overlay/ipc.ts
+  s_77f2b8dfbc2e90::t_23e03c3a617911 1-5,7-8,12-13,17,20-21,24-25,27,33-37,40-45,52,60-72
+desktop/windows/src/main/overlay/shortcut.ts
+  s_77f2b8dfbc2e90::t_a9b1b3ab733e0a 1-6,9,11,15,18,21-22,31,37,42,47-54
+desktop/windows/src/main/portDerivation.test.ts
+  s_77f2b8dfbc2e90::t_b01f59d83d4462 1-80
+desktop/windows/src/main/portDerivation.ts
+  s_77f2b8dfbc2e90::t_5eea03aeaf88af 1-83
+desktop/windows/src/main/rendererServer.ts
+  s_77f2b8dfbc2e90::t_2ef9a411d60399 3-9,11-20,24-25,30-32,100-105,107,109,116-129
+desktop/windows/src/main/rewind/captureDecision.test.ts
+  s_77f2b8dfbc2e90::t_c53ae724433244 2,12-14,79,91-116
+desktop/windows/src/main/rewind/captureDecision.ts
+  s_77f2b8dfbc2e90::t_006a0a27938c47 7-14,28-31,68-73
+desktop/windows/src/main/rewind/captureDirective.test.ts
+  s_77f2b8dfbc2e90::t_3dedfe46b87532 1-94
+desktop/windows/src/main/rewind/captureDirective.ts
+  s_77f2b8dfbc2e90::t_03e8ff485c1423 1-177
+desktop/windows/src/main/rewind/captureService.ts
+  s_77f2b8dfbc2e90::t_f60ad49a2cb3b6 9-10,12-13,15,25-28,62-72,78-88,92-93,150,161-163,168,184-187,190-192,207-209,215-216
+desktop/windows/src/main/rewind/captureSignal.ts
+  s_77f2b8dfbc2e90::t_0a97dd6f0a48cb 1-22
+desktop/windows/src/main/rewind/embedQueue.test.ts
+  s_77f2b8dfbc2e90::t_b1526bb76f5545 1-155
+desktop/windows/src/main/rewind/embedQueue.ts
+  s_77f2b8dfbc2e90::t_f0a10b06f92356 1-166
+desktop/windows/src/main/rewind/embedVector.test.ts
+  s_77f2b8dfbc2e90::t_a99ce6635120ab 1-194
+desktop/windows/src/main/rewind/embedVector.ts
+  s_77f2b8dfbc2e90::t_c76f0844465a78 1-154
+desktop/windows/src/main/rewind/embeddingClient.ts
+  s_77f2b8dfbc2e90::t_00cb63a74ed9a1 1-138
+desktop/windows/src/main/rewind/embeddingService.test.ts
+  s_77f2b8dfbc2e90::t_7db17fa0430b72 1-388
+desktop/windows/src/main/rewind/embeddingService.ts
+  s_77f2b8dfbc2e90::t_2df2df311d641f 1-395
+desktop/windows/src/main/rewind/ocrPersist.test.ts
+  s_77f2b8dfbc2e90::t_9fd58e8abfba19 1-61
+desktop/windows/src/main/rewind/ocrPersist.ts
+  s_77f2b8dfbc2e90::t_f3982dd80ba3c3 1-43
+desktop/windows/src/main/rewind/ocrService.test.ts
+  s_77f2b8dfbc2e90::t_1ac14f2490ddac 1-72
+desktop/windows/src/main/rewind/ocrService.ts
+  s_77f2b8dfbc2e90::t_89391da7a2908a 3-4,11-24,27,29-31,34-36,39-42,47,51-58,66-67,71-79
+desktop/windows/src/main/rewind/orphanSelection.test.ts
+  s_77f2b8dfbc2e90::t_dc7f977240fdb4 1-155
+desktop/windows/src/main/rewind/orphanSelection.ts
+  s_77f2b8dfbc2e90::t_78157c31c50a97 1-66
+desktop/windows/src/main/rewind/orphanSweep.ts
+  s_77f2b8dfbc2e90::t_2f9fa85357e812 1-98
+desktop/windows/src/main/rewind/rebuildIndex.test.ts
+  s_77f2b8dfbc2e90::t_f8c191a8d4f18b 1-213
+desktop/windows/src/main/rewind/rebuildIndex.ts
+  s_77f2b8dfbc2e90::t_d4c1c7b2612003 1-141
+desktop/windows/src/main/rewind/rebuildSelection.test.ts
+  s_77f2b8dfbc2e90::t_8a8cd46ccc27b5 1-62
+desktop/windows/src/main/rewind/rebuildSelection.ts
+  s_77f2b8dfbc2e90::t_07c2f7d5a16554 1-46
+desktop/windows/src/main/rewind/rewindEmbeddingSql.test.ts
+  s_77f2b8dfbc2e90::t_a08724a72ecf09 1-312
+desktop/windows/src/main/rewind/rewindFtsSearch.test.ts
+  s_77f2b8dfbc2e90::t_d54df30fa63a55 1-125
+desktop/windows/src/main/rewind/rewindGrouping.test.ts
+  s_77f2b8dfbc2e90::t_cfe33a4be61bd8 30-33,42-44,48-106
+desktop/windows/src/main/rewind/rewindGrouping.ts
+  s_77f2b8dfbc2e90::t_64b2b474511259 2,7-31,34,40-52,54-78,87-96,105-106,127-129
+desktop/windows/src/main/rewind/rewindSearchOrdering.test.ts
+  s_77f2b8dfbc2e90::t_8d416c13546b88 1-92
+desktop/windows/src/main/rewind/rewindSearchQuery.test.ts
+  s_77f2b8dfbc2e90::t_a7ed3f6e7ecb8c 3-4,7-8,12-13,34,36-41,44-50,52-60,64-70,72-76,79-83
+desktop/windows/src/main/rewind/rewindSearchQuery.ts
+  s_77f2b8dfbc2e90::t_9b319884633fa2 1-7,12,22-46,49-52,54-57,59-100,102-112
+desktop/windows/src/main/rewind/vectorSearchMerge.test.ts
+  s_77f2b8dfbc2e90::t_6ccbd81c1b9956 1-62
+desktop/windows/src/main/rewind/vectorSearchMerge.ts
+  s_77f2b8dfbc2e90::t_39fee3c8a80c22 1-43
+desktop/windows/src/main/sentry.ts
+  s_77f2b8dfbc2e90::t_701e1bd55a1936 1-71
+desktop/windows/src/main/shortcuts.test.ts
+  s_77f2b8dfbc2e90::t_8d99259105a761 1-189
+desktop/windows/src/main/shortcuts.ts
+  s_77f2b8dfbc2e90::t_069f0ed7d0b64b 1-184
+desktop/windows/src/main/soak.ts
+  s_77f2b8dfbc2e90::t_e802a221c6ab1e 1-41
+desktop/windows/src/main/startupScheduler.test.ts
+  s_77f2b8dfbc2e90::t_39790ccd203e59 1-104
+desktop/windows/src/main/startupScheduler.ts
+  s_77f2b8dfbc2e90::t_083e0a9f60f946 1-61
+desktop/windows/src/main/tasks/taskEmbeddingService.test.ts
+  s_77f2b8dfbc2e90::t_00e76f7529a8d7 1-226
+desktop/windows/src/main/tasks/taskEmbeddingService.ts
+  s_77f2b8dfbc2e90::t_cddab903d02d44 1-289
+desktop/windows/src/main/tasks/taskSyncEngine.test.ts
+  s_77f2b8dfbc2e90::t_0e335f2d623f91 1-646
+desktop/windows/src/main/tasks/taskSyncEngine.ts
+  s_77f2b8dfbc2e90::t_5b168ff4c92c6c 1-886
+desktop/windows/src/main/tray.ts
+  s_77f2b8dfbc2e90::t_d94434a2ec872b 1-118
+desktop/windows/src/main/trayState.test.ts
+  s_77f2b8dfbc2e90::t_ef4210c6ab707a 1-140
+desktop/windows/src/main/trayState.ts
+  s_77f2b8dfbc2e90::t_c78bbd8baa537b 1-95
+desktop/windows/src/main/updater.test.ts
+  s_77f2b8dfbc2e90::t_eb53e43e0b02e5 1-76
+desktop/windows/src/main/updater.ts
+  s_77f2b8dfbc2e90::t_e48870ad7feba5 1-109
+desktop/windows/src/main/updaterChannel.test.ts
+  s_77f2b8dfbc2e90::t_12ddceff2750b9 1-24
+desktop/windows/src/main/updaterChannel.ts
+  s_77f2b8dfbc2e90::t_2cb0859734db79 1-30
+desktop/windows/src/main/usage/nativeForeground.ts
+  s_77f2b8dfbc2e90::t_6db110f06af507 13-30,39-76,85-94,126-231,351-390,438-471
+desktop/windows/src/main/voice/flightRecorder.test.ts
+  s_77f2b8dfbc2e90::t_a387cfa4e33553 1-91
+desktop/windows/src/main/voice/flightRecorder.ts
+  s_77f2b8dfbc2e90::t_3a9e48d6a21712 1-148
+desktop/windows/src/main/voice/invariants.test.ts
+  s_77f2b8dfbc2e90::t_ff2f9cd0ed0dfa 1-98
+desktop/windows/src/main/voice/invariants.ts
+  s_77f2b8dfbc2e90::t_f0073246e6f2e5 1-72
+desktop/windows/src/main/voice/voicePlaneIpc.ts
+  s_77f2b8dfbc2e90::t_4e563b5d64b0fa 1-89
+desktop/windows/src/main/whatsNew.test.ts
+  s_77f2b8dfbc2e90::t_5de67928834bff 1-56
+desktop/windows/src/main/whatsNew.ts
+  s_77f2b8dfbc2e90::t_e229132f438a7f 1-44
+desktop/windows/src/main/windowShortcuts.test.ts
+  s_77f2b8dfbc2e90::t_a8e314b56e3ece 1-42
+desktop/windows/src/main/windowShortcuts.ts
+  s_77f2b8dfbc2e90::t_3c41a69a5c145c 1-28
+desktop/windows/src/main/windowsVersion.test.ts
+  s_77f2b8dfbc2e90::t_1913164f76e9e5 1-26
+desktop/windows/src/main/windowsVersion.ts
+  s_77f2b8dfbc2e90::t_14ee9e34d0ce0a 1-20
+desktop/windows/src/preload/index.d.ts
+  s_77f2b8dfbc2e90::t_de502bd979f1e2 2,9-10
+desktop/windows/src/preload/index.ts
+  s_77f2b8dfbc2e90::t_a6cba02c5260af 6-14,16-17,21-22,30-31,33-34,36-62,64-71,84-110,116-120,126,132-154,166-172,179,187,195-329,343-344,346,348-359,361-362,366,370-476,487-499,504-506,517-534,537-544,549-551,569-572,578-681,726-731,740-819,825-826,837-840
+desktop/windows/src/renderer/capture.html
+  s_77f2b8dfbc2e90::t_7ff7cfd6a3a00b 1-49
+desktop/windows/src/renderer/glow.html
+  s_77f2b8dfbc2e90::t_4e66403e23aaac 1-47
+desktop/windows/src/renderer/index.html
+  s_77f2b8dfbc2e90::t_3cf8e0e282dae4 7-11,16,31-34,39
+desktop/windows/src/renderer/insight-toast.html
+  s_77f2b8dfbc2e90::t_a62ec22d158e73 1-48
+desktop/windows/src/renderer/src/App.tsx
+  s_77f2b8dfbc2e90::t_8539f3b7979505 2-3,6,8,10-12,26-31,33-35,37-57,62-70,90-92,100-114,116-123,125,131-165,170-183,201-202,206-215,234-296,300,310-313,316-341,350-354,356
+desktop/windows/src/renderer/src/capture/AudioSessionHost.ts
+  s_77f2b8dfbc2e90::t_48f65063bd5384 1-147
+desktop/windows/src/renderer/src/capture/CaptureApp.tsx
+  s_77f2b8dfbc2e90::t_ccf6efeddeb3be 1-61
+desktop/windows/src/renderer/src/capture/ContinuousSessionHost.tsx
+  s_77f2b8dfbc2e90::t_ee5aff50a36b66 1-57
+desktop/windows/src/renderer/src/capture/MeetingSessionHost.tsx
+  s_77f2b8dfbc2e90::t_822b127bdc7cac 1-64
+desktop/windows/src/renderer/src/capture/PttCaptureHost.ts
+  s_77f2b8dfbc2e90::t_846d103a9ed653 1-175
+desktop/windows/src/renderer/src/capture/ScreenSessionHost.tsx
+  s_77f2b8dfbc2e90::t_a2d5dec2706e7b 1-79
+desktop/windows/src/renderer/src/capture/assistantGate.test.ts
+  s_77f2b8dfbc2e90::t_3bee49df569897 1-61
+desktop/windows/src/renderer/src/capture/assistantGate.ts
+  s_77f2b8dfbc2e90::t_a8ded207cb6ea1 1-47
+desktop/windows/src/renderer/src/capture/e2eHooks.ts
+  s_77f2b8dfbc2e90::t_0222e1d9eca920 1-6,8-23
+desktop/windows/src/renderer/src/capture/liveMicSession.test.ts
+  s_77f2b8dfbc2e90::t_508577b3441ed1 1-200
+desktop/windows/src/renderer/src/capture/liveMicSession.ts
+  s_77f2b8dfbc2e90::t_bceedd88e23fdf 1-16,21-23,30-43,46-68,72,78-83,97-99,102,104,109-111,113-141,150,156-160,163,166-242,245-247,249-253,260-269,273,278,280,284-288,290
+desktop/windows/src/renderer/src/capture/liveRescue.test.ts
+  s_77f2b8dfbc2e90::t_e368c3a7a1baf7 1-153
+desktop/windows/src/renderer/src/capture/liveRescue.ts
+  s_77f2b8dfbc2e90::t_d08809afc7ef04 1-109
+desktop/windows/src/renderer/src/capture/liveStore.ts
+  s_77f2b8dfbc2e90::t_1df06d32cc1592 1-37
+desktop/windows/src/renderer/src/capture/meetingSession.test.ts
+  s_77f2b8dfbc2e90::t_4a060400048ce2 1-129
+desktop/windows/src/renderer/src/capture/meetingSession.ts
+  s_77f2b8dfbc2e90::t_65ed7594008d55 1-132
+desktop/windows/src/renderer/src/capture/pttGraph.rebuild.test.ts
+  s_77f2b8dfbc2e90::t_51de1f193fe2bf 1-409
+desktop/windows/src/renderer/src/capture/pttGraph.test.ts
+  s_77f2b8dfbc2e90::t_eacb380de2d3f8 1-60
+desktop/windows/src/renderer/src/capture/pttGraph.ts
+  s_77f2b8dfbc2e90::t_2f35d2afb677ec 1-562
+desktop/windows/src/renderer/src/captureEntry.tsx
+  s_77f2b8dfbc2e90::t_d5ac15d49141c7 1-42
+desktop/windows/src/renderer/src/components/Markdown.test.tsx
+  s_77f2b8dfbc2e90::t_08b09869a4437e 1-44
+desktop/windows/src/renderer/src/components/Markdown.tsx
+  s_77f2b8dfbc2e90::t_ae35ebdf5f98e3 1-3,23,58-93,108
+desktop/windows/src/renderer/src/components/apps/AddReviewDialog.tsx
+  s_77f2b8dfbc2e90::t_221d4374f9cc88 1-166
+desktop/windows/src/renderer/src/components/apps/AppDetailSheet.test.tsx
+  s_77f2b8dfbc2e90::t_fb845de6f5480f 1-414
+desktop/windows/src/renderer/src/components/apps/AppDetailSheet.tsx
+  s_77f2b8dfbc2e90::t_4edd5ee2222edc 1-558
+desktop/windows/src/renderer/src/components/bar/AgentPillView.tsx
+  s_77f2b8dfbc2e90::t_a8cbeaa7e2890c 1-146
+desktop/windows/src/renderer/src/components/bar/BarApp.test.tsx
+  s_77f2b8dfbc2e90::t_973a80b5e5fab0 1-231
+desktop/windows/src/renderer/src/components/bar/BarApp.tsx
+  s_77f2b8dfbc2e90::t_cafcc915b8a834 1-16,20-69,71,73-80,85-112,114-116,118,120-121,123,125-126,129-130,132-134,136-138,141-166,168-206,209-219,221-233,235-255,257-272,274-294,296-316,318-332,336-346,348-373,375-460,463-477,479-480,483-493,495-503,505-508,510,512-513,515,517-520,525,527-618,620-622,625-743
+desktop/windows/src/renderer/src/components/bar/BarChatSurface.test.tsx
+  s_77f2b8dfbc2e90::t_f2937c464083e6 1-429
+desktop/windows/src/renderer/src/components/bar/BarChatSurface.tsx
+  s_77f2b8dfbc2e90::t_0bcf84ce60f7fd 1-548
+desktop/windows/src/renderer/src/components/bar/BarHintStrip.test.tsx
+  s_77f2b8dfbc2e90::t_ca9dd8f19765d3 1-34
+desktop/windows/src/renderer/src/components/bar/BarHintStrip.tsx
+  s_77f2b8dfbc2e90::t_d389bf13822007 1-26
+desktop/windows/src/renderer/src/components/bar/agentPillTranscript.test.ts
+  s_77f2b8dfbc2e90::t_3887adebefcaf4 1-189
+desktop/windows/src/renderer/src/components/bar/agentPillTranscript.ts
+  s_77f2b8dfbc2e90::t_83444adaa0e3d4 1-147
+desktop/windows/src/renderer/src/components/bar/agentPills.test.ts
+  s_77f2b8dfbc2e90::t_425e76aa52bacb 1-452
+desktop/windows/src/renderer/src/components/bar/agentPills.ts
+  s_77f2b8dfbc2e90::t_228078897cacfe 1-376
+desktop/windows/src/renderer/src/components/bar/bar.css
+  s_77f2b8dfbc2e90::t_65d987e4e2d5cc 1-282
+desktop/windows/src/renderer/src/components/bar/bar.orb.test.ts
+  s_77f2b8dfbc2e90::t_edbfad2750b87d 1-36
+desktop/windows/src/renderer/src/components/bar/barDisplay.test.ts
+  s_77f2b8dfbc2e90::t_8a047817303827 1-290
+desktop/windows/src/renderer/src/components/bar/barDisplay.ts
+  s_77f2b8dfbc2e90::t_98f805473b625c 1-185
+desktop/windows/src/renderer/src/components/bar/barSend.test.ts
+  s_77f2b8dfbc2e90::t_e28891f257cb21 1-182
+desktop/windows/src/renderer/src/components/bar/barSend.ts
+  s_77f2b8dfbc2e90::t_028f1aabe8cf66 1-73
+desktop/windows/src/renderer/src/components/chat/AgentThreadCard.tsx
+  s_77f2b8dfbc2e90::t_c069ed5f70a239 1-73
+desktop/windows/src/renderer/src/components/chat/ChatAppPicker.test.tsx
+  s_77f2b8dfbc2e90::t_4a840a2b75f69e 1-94
+desktop/windows/src/renderer/src/components/chat/ChatAppPicker.tsx
+  s_77f2b8dfbc2e90::t_5bb8fd0a60e7f0 1-165
+desktop/windows/src/renderer/src/components/chat/ChatAttachmentStrip.test.tsx
+  s_77f2b8dfbc2e90::t_775563362d54a5 1-69
+desktop/windows/src/renderer/src/components/chat/ChatAttachmentStrip.tsx
+  s_77f2b8dfbc2e90::t_c6a8ba70de1840 1-132
+desktop/windows/src/renderer/src/components/chat/ChatBridgeHost.test.tsx
+  s_77f2b8dfbc2e90::t_70b55792fa3154 1-353
+desktop/windows/src/renderer/src/components/chat/ChatBridgeHost.tsx
+  s_77f2b8dfbc2e90::t_c03022a2060179 1-166
+desktop/windows/src/renderer/src/components/chat/ChatHistoryPopover.tsx
+  s_77f2b8dfbc2e90::t_c9800e4735ec30 1-131
+desktop/windows/src/renderer/src/components/chat/ChatMessages.perf.test.tsx
+  s_77f2b8dfbc2e90::t_20d8bc1899998d 1-157
+desktop/windows/src/renderer/src/components/chat/ChatMessages.test.tsx
+  s_77f2b8dfbc2e90::t_eaa02561b25972 1-249
+desktop/windows/src/renderer/src/components/chat/ChatMessages.tsx
+  s_77f2b8dfbc2e90::t_664f8585cb6a9d 1-2,4-8,12,14,17-18,20,26-166,183-191
+desktop/windows/src/renderer/src/components/chat/HistorySessionRow.tsx
+  s_77f2b8dfbc2e90::t_3316d210fb233f 1-187
+desktop/windows/src/renderer/src/components/chat/HubChatHeader.tsx
+  s_77f2b8dfbc2e90::t_b4b6ba7180498c 1-119
+desktop/windows/src/renderer/src/components/chat/OmiThinkingSpinner.tsx
+  s_77f2b8dfbc2e90::t_7c35c13d47be0a 1-41
+desktop/windows/src/renderer/src/components/chat/RevealMarkdown.test.tsx
+  s_77f2b8dfbc2e90::t_9e3f505a80192d 1-68
+desktop/windows/src/renderer/src/components/chat/RevealMarkdown.tsx
+  s_77f2b8dfbc2e90::t_773064c6847b88 1-43
+desktop/windows/src/renderer/src/components/chat/VoiceHubDriverHost.tsx
+  s_77f2b8dfbc2e90::t_687379d332f337 1-162
+desktop/windows/src/renderer/src/components/chat/chatPublishSchedule.ts
+  s_77f2b8dfbc2e90::t_2241ff91be093d 1-52
+desktop/windows/src/renderer/src/components/chat/chatSessionDelete.test.ts
+  s_77f2b8dfbc2e90::t_1704bdcf75084c 1-54
+desktop/windows/src/renderer/src/components/chat/chatSessionDelete.ts
+  s_77f2b8dfbc2e90::t_44aeccd6fbea10 1-28
+desktop/windows/src/renderer/src/components/consent/BackgroundConsentControls.tsx
+  s_77f2b8dfbc2e90::t_6b80bb791375f9 1-90
+desktop/windows/src/renderer/src/components/consent/BackgroundConsentInterstitial.test.tsx
+  s_77f2b8dfbc2e90::t_9caf4704e3ad28 1-110
+desktop/windows/src/renderer/src/components/consent/BackgroundConsentInterstitial.tsx
+  s_77f2b8dfbc2e90::t_92ca29f4e68b5e 1-61
+desktop/windows/src/renderer/src/components/conversations/ConversationListRow.test.tsx
+  s_77f2b8dfbc2e90::t_0e9b23dad0d42b 1-169
+desktop/windows/src/renderer/src/components/conversations/ConversationListRow.tsx
+  s_77f2b8dfbc2e90::t_95d2f97111dce1 1-292
+desktop/windows/src/renderer/src/components/conversations/ConversationRowContextMenu.tsx
+  s_77f2b8dfbc2e90::t_26082d0c300421 1-248
+desktop/windows/src/renderer/src/components/conversations/DateFilterButton.tsx
+  s_77f2b8dfbc2e90::t_b951e2365a5601 1-109
+desktop/windows/src/renderer/src/components/conversations/FolderDialog.tsx
+  s_77f2b8dfbc2e90::t_7d59de67af19bc 1-151
+desktop/windows/src/renderer/src/components/conversations/FolderPickerList.tsx
+  s_77f2b8dfbc2e90::t_baee8caedcf15b 1-62
+desktop/windows/src/renderer/src/components/conversations/FolderTabsStrip.tsx
+  s_77f2b8dfbc2e90::t_08f72ae8f1cee4 1-105
+desktop/windows/src/renderer/src/components/conversations/MergeConfirmDialog.tsx
+  s_77f2b8dfbc2e90::t_9a8cb7f19c9dff 1-53
+desktop/windows/src/renderer/src/components/conversations/ModalShell.test.tsx
+  s_77f2b8dfbc2e90::t_0a39aeaa617edd 1-70
+desktop/windows/src/renderer/src/components/conversations/ModalShell.tsx
+  s_77f2b8dfbc2e90::t_728e4f4f255bff 3-7,9-22,24-27,29,31-40,42-48,50-65,67-86,88-90,92,95-110
+desktop/windows/src/renderer/src/components/conversations/MoveToFolderMenu.test.tsx
+  s_77f2b8dfbc2e90::t_0db8fdc567c7c9 1-71
+desktop/windows/src/renderer/src/components/conversations/MoveToFolderMenu.tsx
+  s_77f2b8dfbc2e90::t_b8fff72fda2dd8 1-5,7-9,11-29,31-33,35-42,44-56,58-61,63-64,66,68-71,73-75,78,80-90,92,94-118,120-129
+desktop/windows/src/renderer/src/components/conversations/NameSpeakerModal.tsx
+  s_77f2b8dfbc2e90::t_784c83e3599e02 1-242
+desktop/windows/src/renderer/src/components/conversations/SelectionActionBar.test.tsx
+  s_77f2b8dfbc2e90::t_91cf5bc322d08b 1-37
+desktop/windows/src/renderer/src/components/conversations/SelectionActionBar.tsx
+  s_77f2b8dfbc2e90::t_95a915ccf17ac6 1-66
+desktop/windows/src/renderer/src/components/conversations/TranscriptDrawer.tsx
+  s_77f2b8dfbc2e90::t_dbf4601765df70 1-192
+desktop/windows/src/renderer/src/components/conversations/folderColors.ts
+  s_77f2b8dfbc2e90::t_493edda9ac3b64 1-17
+desktop/windows/src/renderer/src/components/glow/GlowWindow.tsx
+  s_77f2b8dfbc2e90::t_940fcf5b8204d5 1-66
+desktop/windows/src/renderer/src/components/glow/glow.css
+  s_77f2b8dfbc2e90::t_44908c8e32760c 1-179
+desktop/windows/src/renderer/src/components/goals/GoalCelebration.test.tsx
+  s_77f2b8dfbc2e90::t_e7c85ad5f7707f 1-47
+desktop/windows/src/renderer/src/components/goals/GoalCelebration.tsx
+  s_77f2b8dfbc2e90::t_f3ebe4eb82c25e 1-173
+desktop/windows/src/renderer/src/components/goals/GoalInsightPanel.test.tsx
+  s_77f2b8dfbc2e90::t_9425451803bac9 1-83
+desktop/windows/src/renderer/src/components/goals/GoalInsightPanel.tsx
+  s_77f2b8dfbc2e90::t_a448011fa609f4 1-215
+desktop/windows/src/renderer/src/components/graph/BrainGraph.fallback.test.tsx
+  s_77f2b8dfbc2e90::t_f2f720698b89ed 1-135
+desktop/windows/src/renderer/src/components/graph/BrainGraph.tsx
+  s_77f2b8dfbc2e90::t_5de12e6818338b 1,3,5-6,16-21,38-64,82-100,102,106-109,112,117-334,337-338,342,348-360,365,368,383-391,400-425,427-491,532-534,536-540,543-564,590-595,598-607,615-631,634,637-647,649-662,664-667,675-792,808-812,816-827,840-874,878-881,886-1000,1004-1035
+desktop/windows/src/renderer/src/components/graph/BrainGraphFallback.tsx
+  s_77f2b8dfbc2e90::t_57ec4aa3a351f0 1-77
+desktop/windows/src/renderer/src/components/graph/FirstContentFrame.test.tsx
+  s_77f2b8dfbc2e90::t_c53ad213a5c8e8 1-77
+desktop/windows/src/renderer/src/components/graph/FirstContentFrame.tsx
+  s_77f2b8dfbc2e90::t_57247a5be7f362 1-38
+desktop/windows/src/renderer/src/components/graph/KnowledgeGraphViewer.test.tsx
+  s_77f2b8dfbc2e90::t_10811455503ce0 1-158
+desktop/windows/src/renderer/src/components/graph/KnowledgeGraphViewer.tsx
+  s_77f2b8dfbc2e90::t_e08a6392db52cb 1-163
+desktop/windows/src/renderer/src/components/graph/LazyBrainGraph.tsx
+  s_77f2b8dfbc2e90::t_ac4fa2130b3483 4,10,12-18,21-32
+desktop/windows/src/renderer/src/components/graph/nodeColor.test.ts
+  s_77f2b8dfbc2e90::t_af9c8ba7540a3e 5,7,13-25
+desktop/windows/src/renderer/src/components/graph/nodeColor.ts
+  s_77f2b8dfbc2e90::t_6f08532032837a 1-4,11
+desktop/windows/src/renderer/src/components/graph/webglRendererThrows.test.ts
+  s_77f2b8dfbc2e90::t_19eb22371d444d 1-19
+desktop/windows/src/renderer/src/components/home/HomeCanvasBackground.tsx
+  s_77f2b8dfbc2e90::t_d0b9550793d44d 1-61
+desktop/windows/src/renderer/src/components/home/HomeGoalsChips.test.tsx
+  s_77f2b8dfbc2e90::t_a90bc3e50a3db6 1-110
+desktop/windows/src/renderer/src/components/home/HomeGoalsChips.tsx
+  s_77f2b8dfbc2e90::t_375fc8c0f8d204 1-176
+desktop/windows/src/renderer/src/components/home/QuickGoalsWidget.tsx
+  s_77f2b8dfbc2e90::t_65a207adb8ccfc 8-9,13-15,148-153,158-159
+desktop/windows/src/renderer/src/components/home/QuickTaskWidget.tsx
+  s_77f2b8dfbc2e90::t_9225eced991060 1-2,4,7-12,22-24,31,37-39,46,57-61,63-76,79,108-110
+desktop/windows/src/renderer/src/components/home/hub/AttachmentChip.test.tsx
+  s_77f2b8dfbc2e90::t_944e3f0438c907 1-31
+desktop/windows/src/renderer/src/components/home/hub/AttachmentChip.tsx
+  s_77f2b8dfbc2e90::t_0f35d2df9dba7f 1-57
+desktop/windows/src/renderer/src/components/home/hub/HomeHub.test.tsx
+  s_77f2b8dfbc2e90::t_e469fd2300454f 1-244
+desktop/windows/src/renderer/src/components/home/hub/HomeHub.tsx
+  s_77f2b8dfbc2e90::t_51d55cffec5b9f 1-320
+desktop/windows/src/renderer/src/components/home/hub/HubAskBar.test.tsx
+  s_77f2b8dfbc2e90::t_6ea153cf7fdf2d 1-192
+desktop/windows/src/renderer/src/components/home/hub/HubAskBar.tsx
+  s_77f2b8dfbc2e90::t_927a84ad7bf830 1-251
+desktop/windows/src/renderer/src/components/home/hub/HubChatPanel.tsx
+  s_77f2b8dfbc2e90::t_4a392a4f3721ef 1-75
+desktop/windows/src/renderer/src/components/home/hub/HubConnectPanel.test.tsx
+  s_77f2b8dfbc2e90::t_b664e801432ce1 1-95
+desktop/windows/src/renderer/src/components/home/hub/HubConnectPanel.tsx
+  s_77f2b8dfbc2e90::t_f1a13319e2f989 1-80
+desktop/windows/src/renderer/src/components/home/hub/HubHeader.tsx
+  s_77f2b8dfbc2e90::t_7eed9cea039818 1-166
+desktop/windows/src/renderer/src/components/home/hub/HubStatRibbon.tsx
+  s_77f2b8dfbc2e90::t_804d56a33ac49c 1-82
+desktop/windows/src/renderer/src/components/home/hub/HubSuggestions.tsx
+  s_77f2b8dfbc2e90::t_ee11c1a7ac8db1 1-36
+desktop/windows/src/renderer/src/components/home/hub/connections/CalendarConnector.tsx
+  s_77f2b8dfbc2e90::t_78b9624eeea4d1 1-104
+desktop/windows/src/renderer/src/components/home/hub/connections/ConnectTray.tsx
+  s_77f2b8dfbc2e90::t_a8f49e3e3c037f 1-195
+desktop/windows/src/renderer/src/components/home/hub/connections/ConnectionsPanel.test.tsx
+  s_77f2b8dfbc2e90::t_54b687a81a03e6 1-164
+desktop/windows/src/renderer/src/components/home/hub/connections/ConnectionsPanel.tsx
+  s_77f2b8dfbc2e90::t_399e44d3ebe60a 1-220
+desktop/windows/src/renderer/src/components/home/hub/connections/ConnectorBrandMark.test.tsx
+  s_77f2b8dfbc2e90::t_5686fbaa2ee6c0 1-56
+desktop/windows/src/renderer/src/components/home/hub/connections/ConnectorBrandMark.tsx
+  s_77f2b8dfbc2e90::t_04007739f2a49e 1-179
+desktop/windows/src/renderer/src/components/home/hub/connections/ConnectorRow.test.tsx
+  s_77f2b8dfbc2e90::t_64b736415cef07 1-31
+desktop/windows/src/renderer/src/components/home/hub/connections/ConnectorRow.tsx
+  s_77f2b8dfbc2e90::t_bf75ba60f1d8e2 1-95
+desktop/windows/src/renderer/src/components/home/hub/connections/ExportsConnector.tsx
+  s_77f2b8dfbc2e90::t_835210ab20bca7 1-129
+desktop/windows/src/renderer/src/components/home/hub/connections/GmailConnector.tsx
+  s_77f2b8dfbc2e90::t_747ffaa58a546c 1-56
+desktop/windows/src/renderer/src/components/home/hub/connections/McpCloudConnectorCard.tsx
+  s_77f2b8dfbc2e90::t_418ec752b20ddf 1-81
+desktop/windows/src/renderer/src/components/home/hub/connections/McpConfigConnectorRow.tsx
+  s_77f2b8dfbc2e90::t_ff8b8a25fb2612 1-155
+desktop/windows/src/renderer/src/components/home/hub/connections/McpCopyRow.tsx
+  s_77f2b8dfbc2e90::t_341d43e776152f 1-50
+desktop/windows/src/renderer/src/components/home/hub/connections/McpExportDetail.tsx
+  s_77f2b8dfbc2e90::t_7bb30c81340948 1-97
+desktop/windows/src/renderer/src/components/home/hub/connections/MemoryPackRow.tsx
+  s_77f2b8dfbc2e90::t_b89eb94768a879 1-66
+desktop/windows/src/renderer/src/components/home/hub/connections/MemoryPreviewList.tsx
+  s_77f2b8dfbc2e90::t_c3bca18695b760 1-29
+desktop/windows/src/renderer/src/components/home/hub/connections/PasteImportConnector.tsx
+  s_77f2b8dfbc2e90::t_cf87b359eb7c5b 1-117
+desktop/windows/src/renderer/src/components/home/hub/connections/StickyNotesConnector.tsx
+  s_77f2b8dfbc2e90::t_1005cade6ff018 1-78
+desktop/windows/src/renderer/src/components/home/hub/connections/TrayTile.tsx
+  s_77f2b8dfbc2e90::t_41f972bc67d925 1-54
+desktop/windows/src/renderer/src/components/home/hub/connections/XConnector.test.tsx
+  s_77f2b8dfbc2e90::t_b0b1a4ae4468c1 1-49
+desktop/windows/src/renderer/src/components/home/hub/connections/XConnector.tsx
+  s_77f2b8dfbc2e90::t_b9939828ae2eb2 1-130
+desktop/windows/src/renderer/src/components/home/hub/connections/register.ts
+  s_77f2b8dfbc2e90::t_c6113f6a6aaa03 1-23
+desktop/windows/src/renderer/src/components/home/hub/connections/xConnectorView.ts
+  s_77f2b8dfbc2e90::t_57ae0cff7fc6a1 1-45
+desktop/windows/src/renderer/src/components/home/hub/hubConnectSlot.ts
+  s_77f2b8dfbc2e90::t_ae4051dfcf32d3 1-72
+desktop/windows/src/renderer/src/components/home/hub/hubHomeWidgetsSlot.ts
+  s_77f2b8dfbc2e90::t_9e144cec20e44e 1-47
+desktop/windows/src/renderer/src/components/home/hub/hubPrompts.ts
+  s_77f2b8dfbc2e90::t_3a7d8b43cb40cb 1-8
+desktop/windows/src/renderer/src/components/home/hub/hubStage.test.ts
+  s_77f2b8dfbc2e90::t_1a2914bfae2e59 1-30
+desktop/windows/src/renderer/src/components/home/hub/hubStage.ts
+  s_77f2b8dfbc2e90::t_cb9566159e3846 1-37
+desktop/windows/src/renderer/src/components/home/hub/hubStatsCache.test.ts
+  s_77f2b8dfbc2e90::t_61c4d9cb122bc5 1-119
+desktop/windows/src/renderer/src/components/home/hub/hubStatsCache.ts
+  s_77f2b8dfbc2e90::t_6dae22af561952 1-148
+desktop/windows/src/renderer/src/components/home/hub/registerHomeWidgets.ts
+  s_77f2b8dfbc2e90::t_056c0b48ea5cc4 1-12
+desktop/windows/src/renderer/src/components/home/hub/useHubStats.test.tsx
+  s_77f2b8dfbc2e90::t_5a6ff20ce058d7 1-118
+desktop/windows/src/renderer/src/components/home/hub/useHubStats.ts
+  s_77f2b8dfbc2e90::t_5e18a8a422f112 1-152
+desktop/windows/src/renderer/src/components/hotkeys/RecordHotkeyHost.tsx
+  s_77f2b8dfbc2e90::t_99f0fe5af8294f 1-22
+desktop/windows/src/renderer/src/components/insight/InsightToast.tsx
+  s_77f2b8dfbc2e90::t_0a90bafcd54245 2-5,7,10-105,107,111-122,125-127,131-133,135
+desktop/windows/src/renderer/src/components/insight/insight-toast.css
+  s_77f2b8dfbc2e90::t_f46832eaaf7fc1 24-65
+desktop/windows/src/renderer/src/components/layout/AppChrome.test.tsx
+  s_77f2b8dfbc2e90::t_d9b76ecdf804c5 1-176
+desktop/windows/src/renderer/src/components/layout/AppChrome.tsx
+  s_77f2b8dfbc2e90::t_a377696fa26bf9 1-46
+desktop/windows/src/renderer/src/components/layout/MainViews.test.tsx
+  s_77f2b8dfbc2e90::t_e0f46e42b7562e 1-164
+desktop/windows/src/renderer/src/components/layout/MainViews.tsx
+  s_77f2b8dfbc2e90::t_5bfe003c19e371 1,3-5,7-10,13-19,25-34,41,43-45,48-57,60-62,66-83
+desktop/windows/src/renderer/src/components/layout/PageChromeBar.tsx
+  s_77f2b8dfbc2e90::t_975b0414d1630b 1-42
+desktop/windows/src/renderer/src/components/layout/PageHeader.test.tsx
+  s_77f2b8dfbc2e90::t_196276871f659c 1-25
+desktop/windows/src/renderer/src/components/layout/PageHeader.tsx
+  s_77f2b8dfbc2e90::t_0c4f70782cf93a 46-47
+desktop/windows/src/renderer/src/components/layout/Sidebar.tsx
+  s_77f2b8dfbc2e90::t_412845056b8e37 3,7-8,12-14,42-44,66,126-127,138,143-179,197,200-230,233,241,255
+desktop/windows/src/renderer/src/components/layout/TitleBar.tsx
+  s_77f2b8dfbc2e90::t_d30ccfc0ca1273 1-43
+desktop/windows/src/renderer/src/components/memories/MemoryCard.memo.test.tsx
+  s_77f2b8dfbc2e90::t_1583fbbd0093d2 1-83
+desktop/windows/src/renderer/src/components/memories/MemoryCard.tsx
+  s_77f2b8dfbc2e90::t_64dcb0efed150b 1-159
+desktop/windows/src/renderer/src/components/memories/MemoryDetailSheet.tsx
+  s_77f2b8dfbc2e90::t_79092ea8207a0d 1-233
+desktop/windows/src/renderer/src/components/memories/MemoryFilterBar.tsx
+  s_77f2b8dfbc2e90::t_bb153333ddd952 1-177
+desktop/windows/src/renderer/src/components/memories/NewBadge.tsx
+  s_77f2b8dfbc2e90::t_d93401745f0b90 1-10
+desktop/windows/src/renderer/src/components/memories/UndoDeleteToast.tsx
+  s_77f2b8dfbc2e90::t_b4d154dcec00c6 1-73
+desktop/windows/src/renderer/src/components/onboarding/AutoCreatedTasksStep.test.tsx
+  s_77f2b8dfbc2e90::t_68fa95c04e7e7c 1-19
+desktop/windows/src/renderer/src/components/onboarding/AutoCreatedTasksStep.tsx
+  s_77f2b8dfbc2e90::t_4a6142f6ae7781 58,62-64,103-109
+desktop/windows/src/renderer/src/components/onboarding/AutomationPermissionStep.tsx
+  s_77f2b8dfbc2e90::t_97b69f8ce6d05e 2,10,19,22-24,31-37,51-52,55,57-58,61,63
+desktop/windows/src/renderer/src/components/onboarding/BackgroundPrivacyStep.tsx
+  s_77f2b8dfbc2e90::t_3d7ee5859d66b8 1-5,7,11,14-21,24-32,36,39-57
+desktop/windows/src/renderer/src/components/onboarding/BuildProfileStep.test.tsx
+  s_77f2b8dfbc2e90::t_45a677f87dd459 1-111
+desktop/windows/src/renderer/src/components/onboarding/BuildProfileStep.tsx
+  s_77f2b8dfbc2e90::t_fd010936c7aaba 7,81,97-126
+desktop/windows/src/renderer/src/components/onboarding/DataSourcesStep.tsx
+  s_77f2b8dfbc2e90::t_957dcb6c1d41ed 1-439
+desktop/windows/src/renderer/src/components/onboarding/GoalStep.tsx
+  s_77f2b8dfbc2e90::t_573d83fa87d2ed 44
+desktop/windows/src/renderer/src/components/onboarding/HowDidYouHearStep.tsx
+  s_77f2b8dfbc2e90::t_13d45aea5eacf3 33,52
+desktop/windows/src/renderer/src/components/onboarding/LanguageStep.tsx
+  s_77f2b8dfbc2e90::t_d8860685c13563 18,34,43-45,55-57
+desktop/windows/src/renderer/src/components/onboarding/MicPermissionStep.test.tsx
+  s_77f2b8dfbc2e90::t_7ba8a9b21cd9c8 1-287
+desktop/windows/src/renderer/src/components/onboarding/MicPermissionStep.tsx
+  s_77f2b8dfbc2e90::t_d46b05a6a0acec 10,14-34,40,45-46,53,55-57,61-73,87-88,91,93-94,97-100,102
+desktop/windows/src/renderer/src/components/onboarding/OrbitScanner.tsx
+  s_77f2b8dfbc2e90::t_4cef70b8b27552 49-56,60-67
+desktop/windows/src/renderer/src/components/onboarding/PermissionStep.test.tsx
+  s_77f2b8dfbc2e90::t_69dbca9eade560 1-184
+desktop/windows/src/renderer/src/components/onboarding/PermissionStep.tsx
+  s_77f2b8dfbc2e90::t_f46a9832ae2431 1,4-17,28,32-36,38-60,62-63,70-74,88-92,94,98-151,154-155,158-162,164,167-209,219,227-230,238-251,255,258-262,267-285
+desktop/windows/src/renderer/src/components/onboarding/ScreenPermissionStep.test.tsx
+  s_77f2b8dfbc2e90::t_86c97e262cc3b8 1-126
+desktop/windows/src/renderer/src/components/onboarding/ScreenPermissionStep.tsx
+  s_77f2b8dfbc2e90::t_133e809045694d 9,18,21-26,33-35,39-63,69,71,73,75-78,81-84,86-87,89-90
+desktop/windows/src/renderer/src/components/onboarding/ShortcutSetupStep.tsx
+  s_77f2b8dfbc2e90::t_002d172ef8c9b6 4-5,53-70,74,103,105,115,137,140,145
+desktop/windows/src/renderer/src/components/onboarding/StepScaffold.tsx
+  s_77f2b8dfbc2e90::t_a06af73f634a0a 86-88,104-106,108-110,114
+desktop/windows/src/renderer/src/components/onboarding/TrustStep.tsx
+  s_77f2b8dfbc2e90::t_dc86b1f7984cc8 35-36,67-73
+desktop/windows/src/renderer/src/components/onboarding/VoiceIntroStep.test.tsx
+  s_77f2b8dfbc2e90::t_481b1e1cccb76e 1-189
+desktop/windows/src/renderer/src/components/onboarding/VoiceIntroStep.tsx
+  s_77f2b8dfbc2e90::t_16e6b42d681273 1,13-21,23-43,52-58,67-80,83-86,90-120,130,134-148,150-154,156-170
+desktop/windows/src/renderer/src/components/onboarding/brainMapModel.ts
+  s_77f2b8dfbc2e90::t_7757825ab274f7 20-22,25,29,37
+desktop/windows/src/renderer/src/components/orb/Orb.parked.test.tsx
+  s_77f2b8dfbc2e90::t_ac7321e310fb34 1-99
+desktop/windows/src/renderer/src/components/orb/Orb.test.tsx
+  s_77f2b8dfbc2e90::t_3e6d1cc3f6dc0b 1-128
+desktop/windows/src/renderer/src/components/orb/Orb.tsx
+  s_77f2b8dfbc2e90::t_96168fd1f022a3 1-278
+desktop/windows/src/renderer/src/components/recording/LiveMirrorHost.test.tsx
+  s_77f2b8dfbc2e90::t_4e5a36aa91025b 1-58
+desktop/windows/src/renderer/src/components/recording/LiveMirrorHost.tsx
+  s_77f2b8dfbc2e90::t_d56dde1dfd49bb 1-55
+desktop/windows/src/renderer/src/components/recording/LiveNotesHost.tsx
+  s_77f2b8dfbc2e90::t_7daa1ca6ab5c08 1-13
+desktop/windows/src/renderer/src/components/recording/LiveNotesPanel.tsx
+  s_77f2b8dfbc2e90::t_a7f030982a8449 1-189
+desktop/windows/src/renderer/src/components/rewind/RewindCaptureHost.tsx
+  s_77f2b8dfbc2e90::t_dafa747d8da55b 2,25-28,36-39,41-59,157
+desktop/windows/src/renderer/src/components/rewind/RewindDatePicker.tsx
+  s_77f2b8dfbc2e90::t_825453cde9dd69 1-189
+desktop/windows/src/renderer/src/components/rewind/RewindPlayer.loading.test.tsx
+  s_77f2b8dfbc2e90::t_13c7ae4fc98fe7 1-32
+desktop/windows/src/renderer/src/components/rewind/RewindPlayer.tsx
+  s_77f2b8dfbc2e90::t_4e05259b773cb9 1-2,10-22,26-28,32-36,40-44,68-103,106-109,116-121,127-130,138-155
+desktop/windows/src/renderer/src/components/rewind/RewindSearchBar.tsx
+  s_77f2b8dfbc2e90::t_21d31c4af367fd 17-18,22
+desktop/windows/src/renderer/src/components/rewind/RewindThumbnailStrip.test.tsx
+  s_77f2b8dfbc2e90::t_927abab5bc9583 1-33,35-89
+desktop/windows/src/renderer/src/components/rewind/RewindThumbnailStrip.tsx
+  s_77f2b8dfbc2e90::t_4d69ae39a729cc 56-60,68-70,93-95,104-111,204
+desktop/windows/src/renderer/src/components/rewind/RewindTimelineBar.test.tsx
+  s_77f2b8dfbc2e90::t_61825d9ebb60a5 1-149
+desktop/windows/src/renderer/src/components/rewind/RewindTimelineBar.tsx
+  s_77f2b8dfbc2e90::t_7012059cb9c6fa 4,7,10-12,22-25,27-40,51-54,59-60,66-67,81-89,92,94,97-104,106-116,120-121,123-127,149-178,180-181,190-191,195-203,206,209,213-215,218,223
+desktop/windows/src/renderer/src/components/rewind/SearchResultsFilmstrip.tsx
+  s_77f2b8dfbc2e90::t_38e92d350eff56 1-2,4-81,85-87,90-93,95-103,106-147
+desktop/windows/src/renderer/src/components/settings/FontSizeCard.tsx
+  s_77f2b8dfbc2e90::t_1f41dc9cc251df 1-104
+desktop/windows/src/renderer/src/components/settings/SettingRow.tsx
+  s_77f2b8dfbc2e90::t_c5d4f243c339e5 30-31,34,41-43,48
+desktop/windows/src/renderer/src/components/settings/SettingsTabPanel.tsx
+  s_77f2b8dfbc2e90::t_d832b2bf07e33f 1,22-35,38-44
+desktop/windows/src/renderer/src/components/settings/SettingsTabRail.test.tsx
+  s_77f2b8dfbc2e90::t_8194a95be80708 1-32
+desktop/windows/src/renderer/src/components/settings/SettingsTabRail.tsx
+  s_77f2b8dfbc2e90::t_bffb8896c7f953 7-12,40
+desktop/windows/src/renderer/src/components/settings/Toggle.tsx
+  s_77f2b8dfbc2e90::t_df9bce672deeb8 28-29
+desktop/windows/src/renderer/src/components/settings/billing/BillingCard.tsx
+  s_77f2b8dfbc2e90::t_1276603012176e 1-59
+desktop/windows/src/renderer/src/components/settings/billing/ChatUsageCard.tsx
+  s_77f2b8dfbc2e90::t_5cbf6e3ef0dc42 1-40
+desktop/windows/src/renderer/src/components/settings/billing/ClaudeAuthSheet.test.tsx
+  s_77f2b8dfbc2e90::t_b1b51dafeda672 1-75
+desktop/windows/src/renderer/src/components/settings/billing/ClaudeAuthSheet.tsx
+  s_77f2b8dfbc2e90::t_af19155c393dff 1-56
+desktop/windows/src/renderer/src/components/settings/billing/CurrentPlanCard.tsx
+  s_77f2b8dfbc2e90::t_213568a4908b53 1-58
+desktop/windows/src/renderer/src/components/settings/billing/OverageCard.tsx
+  s_77f2b8dfbc2e90::t_feb5a54b06e93b 1-79
+desktop/windows/src/renderer/src/components/settings/billing/PlanGrid.tsx
+  s_77f2b8dfbc2e90::t_1cc5ed427583f6 1-162
+desktop/windows/src/renderer/src/components/settings/billing/TrialCard.tsx
+  s_77f2b8dfbc2e90::t_6b973bfaf13871 1-95
+desktop/windows/src/renderer/src/components/settings/billing/UsageBar.tsx
+  s_77f2b8dfbc2e90::t_9246ebf9614fcf 1-21
+desktop/windows/src/renderer/src/components/settings/billing/UsageLimitPopup.tsx
+  s_77f2b8dfbc2e90::t_ed76836aacb78d 1-82
+desktop/windows/src/renderer/src/components/settings/billing/UsageLimitTriggerHost.tsx
+  s_77f2b8dfbc2e90::t_1655230eec68dc 1-30
+desktop/windows/src/renderer/src/components/settings/controls/Slider.tsx
+  s_77f2b8dfbc2e90::t_e65d6d4ca21380 1-177
+desktop/windows/src/renderer/src/components/settings/controls/sliderMath.test.ts
+  s_77f2b8dfbc2e90::t_0493cca2f23cfe 1-69
+desktop/windows/src/renderer/src/components/settings/controls/sliderMath.ts
+  s_77f2b8dfbc2e90::t_d58970277cde81 1-44
+desktop/windows/src/renderer/src/components/settings/tabs.ts
+  s_77f2b8dfbc2e90::t_25ea4265d3f6ac 8-13,17-29,34-35,37,40-43
+desktop/windows/src/renderer/src/components/settings/tabs/AboutTab.test.tsx
+  s_77f2b8dfbc2e90::t_d10d7478ebf14b 1-93
+desktop/windows/src/renderer/src/components/settings/tabs/AboutTab.tsx
+  s_77f2b8dfbc2e90::t_991de6a5b1bc6b 1-207
+desktop/windows/src/renderer/src/components/settings/tabs/AccountTab.tsx
+  s_77f2b8dfbc2e90::t_91a5f1cd287c5c 5,13-14,16,26-27,37
+desktop/windows/src/renderer/src/components/settings/tabs/AdvancedTab.test.tsx
+  s_77f2b8dfbc2e90::t_16f1355abf0528 1-119
+desktop/windows/src/renderer/src/components/settings/tabs/AdvancedTab.tsx
+  s_77f2b8dfbc2e90::t_1fdeeb23dba414 5-11,13-19,24-26,35-38,58-61,89-96,98,107,109-111,123-127,141-147,149-152,185-190,205-206,212-214,234-236,285-289,293-300,305-307,312-314,329-333,336-340,360-364,379-383,387-391,402-403,408-410,419-421,433-438,445-447,465-467,473-477
+desktop/windows/src/renderer/src/components/settings/tabs/AgentsTab.test.tsx
+  s_77f2b8dfbc2e90::t_2c054ac5c86802 1-157
+desktop/windows/src/renderer/src/components/settings/tabs/AgentsTab.tsx
+  s_77f2b8dfbc2e90::t_de3193f5e58c3d 1-502
+desktop/windows/src/renderer/src/components/settings/tabs/AiProfileCard.test.tsx
+  s_77f2b8dfbc2e90::t_6470289daa45d6 1-108
+desktop/windows/src/renderer/src/components/settings/tabs/AiProfileCard.tsx
+  s_77f2b8dfbc2e90::t_fdfef3e7c20cd1 1-202
+desktop/windows/src/renderer/src/components/settings/tabs/DeveloperKeysSection.tsx
+  s_77f2b8dfbc2e90::t_27f63ea064c70d 1-239
+desktop/windows/src/renderer/src/components/settings/tabs/GeneralTab.screenAnalysis.test.tsx
+  s_77f2b8dfbc2e90::t_54a077f234c103 1-88
+desktop/windows/src/renderer/src/components/settings/tabs/GeneralTab.tsx
+  s_77f2b8dfbc2e90::t_591f9d5e3baea0 1-13,15-16,21-188,191-223,226-228,231-232,234-238,245-290
+desktop/windows/src/renderer/src/components/settings/tabs/IntegrationsTab.tsx
+  s_77f2b8dfbc2e90::t_6184b76348245e 2,4-5,7-9,11,28-29,31-42,54,56-58,64-80,83-87,90-92,94-99,101,103,107-109,111-121,123,125,129-131,133-134,138,180-182,188,213-217,222-226,233-275
+desktop/windows/src/renderer/src/components/settings/tabs/NotificationsTab.test.tsx
+  s_77f2b8dfbc2e90::t_2184e770aa544e 1-142
+desktop/windows/src/renderer/src/components/settings/tabs/NotificationsTab.tsx
+  s_77f2b8dfbc2e90::t_fa2f3f0ac75e1c 1-163
+desktop/windows/src/renderer/src/components/settings/tabs/PlanUsageTab.test.tsx
+  s_77f2b8dfbc2e90::t_a2e5df01fc213b 1-64
+desktop/windows/src/renderer/src/components/settings/tabs/PlanUsageTab.tsx
+  s_77f2b8dfbc2e90::t_32a1f25e0fcb5a 1-262
+desktop/windows/src/renderer/src/components/settings/tabs/PrivacyTab.tsx
+  s_77f2b8dfbc2e90::t_5e87e8ad93ee40 2,19-22,40-69,125-154
+desktop/windows/src/renderer/src/components/settings/tabs/RewindTab.tsx
+  s_77f2b8dfbc2e90::t_5066e0c46c6e70 2-13,19,29-30,52,55-59,104,152-154,158-169,216-220,279-282,343-348,360-363,371-386
+desktop/windows/src/renderer/src/components/settings/tabs/ShortcutsTab.test.tsx
+  s_77f2b8dfbc2e90::t_9d5e7e7b04d868 1-148
+desktop/windows/src/renderer/src/components/settings/tabs/ShortcutsTab.tsx
+  s_77f2b8dfbc2e90::t_34c659635f855a 1-275
+desktop/windows/src/renderer/src/components/settings/tabs/TranscriptionTab.test.tsx
+  s_77f2b8dfbc2e90::t_891b09973a93d2 1-61
+desktop/windows/src/renderer/src/components/settings/tabs/TranscriptionTab.tsx
+  s_77f2b8dfbc2e90::t_b090a082c0e03f 1-161
+desktop/windows/src/renderer/src/components/tray/TrayStateHost.tsx
+  s_77f2b8dfbc2e90::t_201640bb53e67f 2,4,6-15,22,24-25,28-41
+desktop/windows/src/renderer/src/components/ui/AppCrashScreen.test.tsx
+  s_77f2b8dfbc2e90::t_d75012e843c83a 1-90
+desktop/windows/src/renderer/src/components/ui/AppCrashScreen.tsx
+  s_77f2b8dfbc2e90::t_7d732f75283f71 1-33
+desktop/windows/src/renderer/src/components/ui/Badge.test.tsx
+  s_77f2b8dfbc2e90::t_956d7179891e6e 1-20
+desktop/windows/src/renderer/src/components/ui/Badge.tsx
+  s_77f2b8dfbc2e90::t_04049b1bb5befa 1-49
+desktop/windows/src/renderer/src/components/ui/BrandImage.test.tsx
+  s_77f2b8dfbc2e90::t_21b2e38341c0e7 1-36
+desktop/windows/src/renderer/src/components/ui/BrandImage.tsx
+  s_77f2b8dfbc2e90::t_e175a28e438fc7 1-94
+desktop/windows/src/renderer/src/components/ui/Button.test.tsx
+  s_77f2b8dfbc2e90::t_cec9fcd33dda76 1-34
+desktop/windows/src/renderer/src/components/ui/Button.tsx
+  s_77f2b8dfbc2e90::t_184a4691160c47 1-80
+desktop/windows/src/renderer/src/components/ui/Card.test.tsx
+  s_77f2b8dfbc2e90::t_d2a9a1fdd5378f 1-20
+desktop/windows/src/renderer/src/components/ui/Card.tsx
+  s_77f2b8dfbc2e90::t_5a9d2175b39a2c 1-41
+desktop/windows/src/renderer/src/components/ui/DbRecoveryNotice.test.tsx
+  s_77f2b8dfbc2e90::t_3aa70307036d2f 1-244
+desktop/windows/src/renderer/src/components/ui/DbRecoveryNotice.tsx
+  s_77f2b8dfbc2e90::t_e9ea1927a81c5f 1-180
+desktop/windows/src/renderer/src/components/ui/DegradedModeNotice.test.tsx
+  s_77f2b8dfbc2e90::t_15e9b02f700948 1-4,6-8,10-11,13-30,33-36,39-43,45-50,52-83
+desktop/windows/src/renderer/src/components/ui/DegradedModeNotice.tsx
+  s_77f2b8dfbc2e90::t_9692802cb063e0 1-65
+desktop/windows/src/renderer/src/components/ui/ErrorBoundary.tsx
+  s_77f2b8dfbc2e90::t_e237b2fad445cf 10-12,27-32
+desktop/windows/src/renderer/src/components/ui/Modal.test.tsx
+  s_77f2b8dfbc2e90::t_36e3aaea972eb4 1-70
+desktop/windows/src/renderer/src/components/ui/Modal.tsx
+  s_77f2b8dfbc2e90::t_111aa8ada1832d 1-68
+desktop/windows/src/renderer/src/components/ui/PanelErrorFallback.tsx
+  s_77f2b8dfbc2e90::t_502bb9711eb9ab 1-25
+desktop/windows/src/renderer/src/components/ui/Pill.test.tsx
+  s_77f2b8dfbc2e90::t_b477dc9c325cdc 1-24
+desktop/windows/src/renderer/src/components/ui/Pill.tsx
+  s_77f2b8dfbc2e90::t_256369b0fbcd22 1-65
+desktop/windows/src/renderer/src/components/ui/Popover.tsx
+  s_77f2b8dfbc2e90::t_a8c33914fa2a41 1-49
+desktop/windows/src/renderer/src/components/ui/ToastHost.test.tsx
+  s_77f2b8dfbc2e90::t_b67409d04b79bf 1-34
+desktop/windows/src/renderer/src/components/ui/Toggle.test.tsx
+  s_77f2b8dfbc2e90::t_c254183d7aafb3 1-24
+desktop/windows/src/renderer/src/components/ui/Toggle.tsx
+  s_77f2b8dfbc2e90::t_bedaa9096f5a6e 1-47
+desktop/windows/src/renderer/src/components/ui/__gallery/PrimitivesGallery.tsx
+  s_77f2b8dfbc2e90::t_1aaeb388ab9777 1-222
+desktop/windows/src/renderer/src/components/voice/VoiceSessionSurface.tsx
+  s_77f2b8dfbc2e90::t_094b975b8770f6 1-178
+desktop/windows/src/renderer/src/glow.tsx
+  s_77f2b8dfbc2e90::t_da5c7c22bdb771 1-39
+desktop/windows/src/renderer/src/hooks/useAgentPills.test.tsx
+  s_77f2b8dfbc2e90::t_ca7b436ef0134f 1-217
+desktop/windows/src/renderer/src/hooks/useAgentPills.ts
+  s_77f2b8dfbc2e90::t_c42b493e1510b0 1-310
+desktop/windows/src/renderer/src/hooks/useAuth.ts
+  s_77f2b8dfbc2e90::t_8067df9b7011cb 3-6,10-16,19,21-29,32-34
+desktop/windows/src/renderer/src/hooks/useChat.dispatch.test.tsx
+  s_77f2b8dfbc2e90::t_c6b6ea9a575d92 1-207
+desktop/windows/src/renderer/src/hooks/useChat.persona.test.tsx
+  s_77f2b8dfbc2e90::t_f8876ca91f46f8 1-272
+desktop/windows/src/renderer/src/hooks/useChat.pimono.test.tsx
+  s_77f2b8dfbc2e90::t_d65c007536559c 1-1071
+desktop/windows/src/renderer/src/hooks/useChat.test.tsx
+  s_77f2b8dfbc2e90::t_2fdc53ee94ce16 1-1111
+desktop/windows/src/renderer/src/hooks/useChat.ts
+  s_77f2b8dfbc2e90::t_9b5db87f2dcaae 8-25,27,29-43,45-67,71-107,111-117,123-124,126-129,131-165,175,180-207,213-216,219,222,230-231,233-251,258-278,280-314,316,318-322,329,335-336,343-349,356-380,386-394,409,429-445,480-979,981-1028,1035-1044,1062-1063,1075-1076,1079-1091,1093-1109,1111,1115-1129,1131-1152,1170-1226,1234-1238,1240,1246-1250,1261-1264,1268,1270,1272,1275-1296,1303-1323,1325-1329,1331-1344,1346-1355,1360,1362-1380,1382-1385,1395-1678
+desktop/windows/src/renderer/src/hooks/useChatApps.ts
+  s_77f2b8dfbc2e90::t_46907f95da9636 1-28
+desktop/windows/src/renderer/src/hooks/useChatSessions.test.ts
+  s_77f2b8dfbc2e90::t_a7d6b4502f93f2 1-243
+desktop/windows/src/renderer/src/hooks/useChatSessions.ts
+  s_77f2b8dfbc2e90::t_015f907f38986a 1-262
+desktop/windows/src/renderer/src/hooks/useChordRecorder.ts
+  s_77f2b8dfbc2e90::t_d12ded32928a17 1-92
+desktop/windows/src/renderer/src/hooks/useCodingAgents.ts
+  s_77f2b8dfbc2e90::t_6be8aeabdee4c0 1-22
+desktop/windows/src/renderer/src/hooks/useElementWidth.ts
+  s_77f2b8dfbc2e90::t_509d676b5b9b64 2,16-21,23,26
+desktop/windows/src/renderer/src/hooks/useGoogleConnection.ts
+  s_77f2b8dfbc2e90::t_535209912c1272 1-166
+desktop/windows/src/renderer/src/hooks/useHubWarmLifecycle.test.tsx
+  s_77f2b8dfbc2e90::t_a713f946251d36 1-51
+desktop/windows/src/renderer/src/hooks/useHubWarmLifecycle.ts
+  s_77f2b8dfbc2e90::t_bfead15db02a89 1-23
+desktop/windows/src/renderer/src/hooks/useIsVisible.test.ts
+  s_77f2b8dfbc2e90::t_d8d33d65d42d38 1-67
+desktop/windows/src/renderer/src/hooks/useIsVisible.ts
+  s_77f2b8dfbc2e90::t_2063a14b3b325e 1-39
+desktop/windows/src/renderer/src/hooks/useKeyboardNav.ts
+  s_77f2b8dfbc2e90::t_abcb6d6d0f14f1 2-4,7-15,19-20,22,24-35,38-62,64,67
+desktop/windows/src/renderer/src/hooks/useKnowledgeGraph.rebuild.test.tsx
+  s_77f2b8dfbc2e90::t_c02a8ca596381c 1-197
+desktop/windows/src/renderer/src/hooks/useKnowledgeGraph.ts
+  s_77f2b8dfbc2e90::t_9e22084929f550 4,12-50,98-106,112-122,127
+desktop/windows/src/renderer/src/hooks/useMcpExports.ts
+  s_77f2b8dfbc2e90::t_9514c8b63720b9 1-48
+desktop/windows/src/renderer/src/hooks/useMemories.coldStart.test.ts
+  s_77f2b8dfbc2e90::t_6414f964145d38 1-118
+desktop/windows/src/renderer/src/hooks/useMemories.test.ts
+  s_77f2b8dfbc2e90::t_3974a0e55b3183 1-189
+desktop/windows/src/renderer/src/hooks/useMemories.ts
+  s_77f2b8dfbc2e90::t_e91adb7e87fe93 3-5,18-30,33-34,41-51,53-83,90-95,97-99,102,104-109,123,127-130,144-148,164,166-205,211-213,216-226
+desktop/windows/src/renderer/src/hooks/useMemoryGraph.ts
+  s_77f2b8dfbc2e90::t_02ec41b9fc7776 26-40,42,44,60-62,95
+desktop/windows/src/renderer/src/hooks/usePendingAttachments.ts
+  s_77f2b8dfbc2e90::t_b30e4a20b08de2 1-16
+desktop/windows/src/renderer/src/hooks/usePushToTalk.test.tsx
+  s_77f2b8dfbc2e90::t_77096f1796025b 1-775
+desktop/windows/src/renderer/src/hooks/usePushToTalk.ts
+  s_77f2b8dfbc2e90::t_35e0d0a2da8814 2-30,33-51,56-58,60-62,64,66,68-95,99,101-108,110-113,115,117-123,127-165,171-172,174-182,184-190,192-194,196-232,235-243,246-323,325-442,447-458,461-501,503-524,527-561,563-565,568,571-586,588-593,595-629,631-637,639-669,675-676,680,687,694-697,704-706,711,715-716,724,727-753,757-768,770-774,779-791
+desktop/windows/src/renderer/src/hooks/useRecorder.ts
+  s_77f2b8dfbc2e90::t_4540a18821429a 6-16,75-78,80-83,86-95,107-114,116-129,131-151,170-172,176-177,181-189,194-195,198-201,203,205,220-234,237-246,251-252
+desktop/windows/src/renderer/src/hooks/useRewind.test.ts
+  s_77f2b8dfbc2e90::t_c29c6556a5e62e 1-227
+desktop/windows/src/renderer/src/hooks/useRewind.ts
+  s_77f2b8dfbc2e90::t_c88640e6b6760f 3,5-8,13-24,33-48,50,54,56-86,88-96,100-113,115-119,121-138,143-157,160,176-177,179,183-194,198-202,208
+desktop/windows/src/renderer/src/hooks/useVoicePlaneSupervisor.test.tsx
+  s_77f2b8dfbc2e90::t_190bc7bc03e59a 1-257
+desktop/windows/src/renderer/src/hooks/useVoicePlaneSupervisor.ts
+  s_77f2b8dfbc2e90::t_b19d460a66fe68 1-207
+desktop/windows/src/renderer/src/insightToast.tsx
+  s_77f2b8dfbc2e90::t_87b164f6f33e58 1-43
+desktop/windows/src/renderer/src/lib/actionItems.ts
+  s_77f2b8dfbc2e90::t_32f30446a016e0 1-22
+desktop/windows/src/renderer/src/lib/agentTask.test.ts
+  s_77f2b8dfbc2e90::t_76cf108ef0993a 1-92
+desktop/windows/src/renderer/src/lib/agentTask.ts
+  s_77f2b8dfbc2e90::t_944f0130320c98 1-118
+desktop/windows/src/renderer/src/lib/aiProfileHost.test.ts
+  s_77f2b8dfbc2e90::t_5202dfd51583c0 1-260
+desktop/windows/src/renderer/src/lib/aiProfileHost.ts
+  s_77f2b8dfbc2e90::t_b91be1d8ff52af 1-127
+desktop/windows/src/renderer/src/lib/apiClient.test.ts
+  s_77f2b8dfbc2e90::t_eabe6b60d9fd07 1-149
+desktop/windows/src/renderer/src/lib/apiClient.ts
+  s_77f2b8dfbc2e90::t_b9d6371b34761b 1-5,7-8,12,18-119,127-130,136-141,147
+desktop/windows/src/renderer/src/lib/appCatalog.test.ts
+  s_77f2b8dfbc2e90::t_4730ff0ed7d1a7 1-241
+desktop/windows/src/renderer/src/lib/appCatalog.ts
+  s_77f2b8dfbc2e90::t_4aef7d299d9f30 1-128
+desktop/windows/src/renderer/src/lib/appInstall.test.ts
+  s_77f2b8dfbc2e90::t_f48fa8f81ff442 1-243
+desktop/windows/src/renderer/src/lib/appInstall.ts
+  s_77f2b8dfbc2e90::t_b894867538399f 1-129
+desktop/windows/src/renderer/src/lib/appLifetimeJobs.test.tsx
+  s_77f2b8dfbc2e90::t_03bcde4393f4e1 1-76
+desktop/windows/src/renderer/src/lib/appLifetimeJobs.ts
+  s_77f2b8dfbc2e90::t_870575925ba94f 1-29
+desktop/windows/src/renderer/src/lib/appMemories.test.ts
+  s_77f2b8dfbc2e90::t_f2778cf88ebc7c 1-2,5-7,10-11,38-74
+desktop/windows/src/renderer/src/lib/appMemories.ts
+  s_77f2b8dfbc2e90::t_c45f64a87afcc2 2,26-28,30-31
+desktop/windows/src/renderer/src/lib/appRanking.test.ts
+  s_77f2b8dfbc2e90::t_b62a72b72ca384 1-74
+desktop/windows/src/renderer/src/lib/appRanking.ts
+  s_77f2b8dfbc2e90::t_715c7d8cc20ac4 1-56
+desktop/windows/src/renderer/src/lib/audio.ts
+  s_77f2b8dfbc2e90::t_f7fff0be204914 1-79
+desktop/windows/src/renderer/src/lib/authSession.test.ts
+  s_77f2b8dfbc2e90::t_26a47e24509ec2 1-97
+desktop/windows/src/renderer/src/lib/authSession.ts
+  s_77f2b8dfbc2e90::t_e35b8fa7814160 1-84
+desktop/windows/src/renderer/src/lib/authTeardown.test.ts
+  s_77f2b8dfbc2e90::t_9f45ae4d738dd7 1-153
+desktop/windows/src/renderer/src/lib/authTeardown.ts
+  s_77f2b8dfbc2e90::t_6cae397048a344 1-126
+desktop/windows/src/renderer/src/lib/backgroundConsent.test.ts
+  s_77f2b8dfbc2e90::t_a1b401a25d21b8 1-50
+desktop/windows/src/renderer/src/lib/backgroundConsent.ts
+  s_77f2b8dfbc2e90::t_18311895cbc07e 1-39
+desktop/windows/src/renderer/src/lib/billing.test.ts
+  s_77f2b8dfbc2e90::t_8efdf05688ac38 1-504
+desktop/windows/src/renderer/src/lib/billing.ts
+  s_77f2b8dfbc2e90::t_ed31960ad3baac 1-561
+desktop/windows/src/renderer/src/lib/byokKeys.test.ts
+  s_77f2b8dfbc2e90::t_0c90b56403d148 1-69
+desktop/windows/src/renderer/src/lib/byokKeys.ts
+  s_77f2b8dfbc2e90::t_7dd27f7ba03437 1-57
+desktop/windows/src/renderer/src/lib/calendarConnect.test.ts
+  s_77f2b8dfbc2e90::t_9ee78588d6cd5c 1-59
+desktop/windows/src/renderer/src/lib/calendarConnect.ts
+  s_77f2b8dfbc2e90::t_025f68073f55f1 1-62
+desktop/windows/src/renderer/src/lib/capture/captureEngine.ts
+  s_77f2b8dfbc2e90::t_d03d1b81b10d68 1-146
+desktop/windows/src/renderer/src/lib/capture/loopbackClassifier.test.ts
+  s_77f2b8dfbc2e90::t_a5b9e65b574fc6 1-57
+desktop/windows/src/renderer/src/lib/capture/loopbackClassifier.ts
+  s_77f2b8dfbc2e90::t_a2f4b85c97309f 1-52
+desktop/windows/src/renderer/src/lib/capture/loopbackMusicFilter.ts
+  s_77f2b8dfbc2e90::t_d636f3e8fa0c0b 1-50
+desktop/windows/src/renderer/src/lib/capture/musicGate.test.ts
+  s_77f2b8dfbc2e90::t_4c2300bb38b7ba 1-84
+desktop/windows/src/renderer/src/lib/capture/musicGate.ts
+  s_77f2b8dfbc2e90::t_a05f4376443b21 1-70
+desktop/windows/src/renderer/src/lib/capture/pcmCore.test.ts
+  s_77f2b8dfbc2e90::t_cad0950cb05e54 1-76
+desktop/windows/src/renderer/src/lib/capture/pcmCore.ts
+  s_77f2b8dfbc2e90::t_203f306a7642ab 1-35
+desktop/windows/src/renderer/src/lib/capture/pcmPipeline.ts
+  s_77f2b8dfbc2e90::t_644e7a5873d3f7 1-113
+desktop/windows/src/renderer/src/lib/capture/pcmRing.test.ts
+  s_77f2b8dfbc2e90::t_e68379096feb31 1-73
+desktop/windows/src/renderer/src/lib/capture/pcmRing.ts
+  s_77f2b8dfbc2e90::t_e6cc0ab8566856 1-59
+desktop/windows/src/renderer/src/lib/capture/pcmWorklet.ts
+  s_77f2b8dfbc2e90::t_ee5dfd5b50e7d4 1-43
+desktop/windows/src/renderer/src/lib/capture/pcmWorkletCore.test.ts
+  s_77f2b8dfbc2e90::t_50cc64082663c9 1-175
+desktop/windows/src/renderer/src/lib/capture/pcmWorkletCore.ts
+  s_77f2b8dfbc2e90::t_78b27aa455e59f 1-109
+desktop/windows/src/renderer/src/lib/capture/pipelineHandle.test.ts
+  s_77f2b8dfbc2e90::t_b19db8730427a5 1-57
+desktop/windows/src/renderer/src/lib/capture/pipelineHandle.ts
+  s_77f2b8dfbc2e90::t_27fdffbafee509 1-50
+desktop/windows/src/renderer/src/lib/capture/speechTicker.test.ts
+  s_77f2b8dfbc2e90::t_f4a0721c85180a 1-91
+desktop/windows/src/renderer/src/lib/capture/speechTicker.ts
+  s_77f2b8dfbc2e90::t_e957614f6a6729 1-73
+desktop/windows/src/renderer/src/lib/capture/systemAudio.ts
+  s_77f2b8dfbc2e90::t_bd6f71c1c6126f 1-29
+desktop/windows/src/renderer/src/lib/capture/vadFallback.test.ts
+  s_77f2b8dfbc2e90::t_6504a8541e0099 2,4-12,15-22,25-27,30-31
+desktop/windows/src/renderer/src/lib/capture/vadFallback.ts
+  s_77f2b8dfbc2e90::t_ca7b6c78d77823 1-16
+desktop/windows/src/renderer/src/lib/capture/vadGate.test.ts
+  s_77f2b8dfbc2e90::t_ec16ddeedadf46 1-144
+desktop/windows/src/renderer/src/lib/capture/vadGate.ts
+  s_77f2b8dfbc2e90::t_7df9bfc34b9f09 1-110
+desktop/windows/src/renderer/src/lib/capture/vadModel.ts
+  s_77f2b8dfbc2e90::t_b080707c5418f0 1-106
+desktop/windows/src/renderer/src/lib/capture/yamnetClassifier.ts
+  s_77f2b8dfbc2e90::t_2f152658fb4c07 1-46
+desktop/windows/src/renderer/src/lib/chat/agentThreadCards.ts
+  s_77f2b8dfbc2e90::t_89616ecf65cf7e 1-30
+desktop/windows/src/renderer/src/lib/chat/chatErrorCopy.test.ts
+  s_77f2b8dfbc2e90::t_e80e65b9c0eae7 1-77
+desktop/windows/src/renderer/src/lib/chat/chatErrorCopy.ts
+  s_77f2b8dfbc2e90::t_7bc133f81d6d97 1-60
+desktop/windows/src/renderer/src/lib/chat/chatRetry.test.ts
+  s_77f2b8dfbc2e90::t_643cbaed122886 1-79
+desktop/windows/src/renderer/src/lib/chat/chatRetry.ts
+  s_77f2b8dfbc2e90::t_0ac5868ce05709 1-74
+desktop/windows/src/renderer/src/lib/chatApps.test.ts
+  s_77f2b8dfbc2e90::t_e716417c0b94c4 1-77
+desktop/windows/src/renderer/src/lib/chatApps.ts
+  s_77f2b8dfbc2e90::t_07f5aff93562fe 1-50
+desktop/windows/src/renderer/src/lib/chatAttachmentUpload.test.ts
+  s_77f2b8dfbc2e90::t_50f0ef93d66830 1-2,4-62
+desktop/windows/src/renderer/src/lib/chatAttachmentUpload.ts
+  s_77f2b8dfbc2e90::t_94073e7e153337 1-61
+desktop/windows/src/renderer/src/lib/chatAttachments.test.ts
+  s_77f2b8dfbc2e90::t_0e02c567c68a29 1-195
+desktop/windows/src/renderer/src/lib/chatAttachments.ts
+  s_77f2b8dfbc2e90::t_5dd9c2637d58c8 1-154
+desktop/windows/src/renderer/src/lib/chatDropFiles.test.ts
+  s_77f2b8dfbc2e90::t_58044bedd4ea96 1-39
+desktop/windows/src/renderer/src/lib/chatDropFiles.ts
+  s_77f2b8dfbc2e90::t_b9c07e69c558f2 1-28
+desktop/windows/src/renderer/src/lib/chatQuotaGate.test.ts
+  s_77f2b8dfbc2e90::t_f42050cf2c6a11 1-181
+desktop/windows/src/renderer/src/lib/chatQuotaGate.ts
+  s_77f2b8dfbc2e90::t_461db2e5f0ed24 1-145
+desktop/windows/src/renderer/src/lib/chatSessionsClient.test.ts
+  s_77f2b8dfbc2e90::t_79dff42e460d9f 1-239
+desktop/windows/src/renderer/src/lib/chatSessionsClient.ts
+  s_77f2b8dfbc2e90::t_70b4c6fd997406 1-216
+desktop/windows/src/renderer/src/lib/chatSessionsView.test.ts
+  s_77f2b8dfbc2e90::t_92d0f4303cf626 1-108
+desktop/windows/src/renderer/src/lib/chatSessionsView.ts
+  s_77f2b8dfbc2e90::t_5f5233f1a19f77 1-85
+desktop/windows/src/renderer/src/lib/chatStorageKeys.ts
+  s_77f2b8dfbc2e90::t_9fb7a600da3707 1-6
+desktop/windows/src/renderer/src/lib/claudeSignIn.test.ts
+  s_77f2b8dfbc2e90::t_1648f73895cf62 1-131
+desktop/windows/src/renderer/src/lib/claudeSignIn.ts
+  s_77f2b8dfbc2e90::t_7c4093f7cbb89e 1-105
+desktop/windows/src/renderer/src/lib/conversationId.test.ts
+  s_77f2b8dfbc2e90::t_1cef2e9b782fe8 1-34
+desktop/windows/src/renderer/src/lib/conversationId.ts
+  s_77f2b8dfbc2e90::t_6e6c92ab304eb0 1-30
+desktop/windows/src/renderer/src/lib/conversations/detailErrors.test.ts
+  s_77f2b8dfbc2e90::t_d92549741075dd 1-25
+desktop/windows/src/renderer/src/lib/conversations/detailErrors.ts
+  s_77f2b8dfbc2e90::t_fde70802aa482a 1-14
+desktop/windows/src/renderer/src/lib/conversations/detailFormat.test.ts
+  s_77f2b8dfbc2e90::t_d28c24c610ac36 1-55
+desktop/windows/src/renderer/src/lib/conversations/detailFormat.ts
+  s_77f2b8dfbc2e90::t_0b5ada9f2d661f 1-46
+desktop/windows/src/renderer/src/lib/conversations/detailPolling.test.ts
+  s_77f2b8dfbc2e90::t_d98c1de720c38e 1-42
+desktop/windows/src/renderer/src/lib/conversations/detailPolling.ts
+  s_77f2b8dfbc2e90::t_867f9b503e791b 1-41
+desktop/windows/src/renderer/src/lib/conversations/filtering.test.ts
+  s_77f2b8dfbc2e90::t_2c8537c7c6e8c0 1-195
+desktop/windows/src/renderer/src/lib/conversations/filtering.ts
+  s_77f2b8dfbc2e90::t_41b6f748582d07 1-182
+desktop/windows/src/renderer/src/lib/conversations/folders.test.ts
+  s_77f2b8dfbc2e90::t_a4a60d9830420d 1-49
+desktop/windows/src/renderer/src/lib/conversations/folders.ts
+  s_77f2b8dfbc2e90::t_e1da6264fdf978 1-65
+desktop/windows/src/renderer/src/lib/conversations/mutations.ts
+  s_77f2b8dfbc2e90::t_efa2af45edda9e 1-61
+desktop/windows/src/renderer/src/lib/conversations/optimistic.test.ts
+  s_77f2b8dfbc2e90::t_1c6132121d20d5 1-62
+desktop/windows/src/renderer/src/lib/conversations/optimistic.ts
+  s_77f2b8dfbc2e90::t_64d6baa8d62e94 1-13,16-36,38-42
+desktop/windows/src/renderer/src/lib/conversations/people.ts
+  s_77f2b8dfbc2e90::t_20531caa14b660 1-43
+desktop/windows/src/renderer/src/lib/conversations/speakers.test.ts
+  s_77f2b8dfbc2e90::t_0429b68b3d2c62 1-173
+desktop/windows/src/renderer/src/lib/conversations/speakers.ts
+  s_77f2b8dfbc2e90::t_9f77c0354f24bb 1-132
+desktop/windows/src/renderer/src/lib/conversations/transcript.ts
+  s_77f2b8dfbc2e90::t_d62fd2e1454c04 1-31
+desktop/windows/src/renderer/src/lib/desktopChatMessages.test.ts
+  s_77f2b8dfbc2e90::t_5d6849f4df182e 1-64
+desktop/windows/src/renderer/src/lib/desktopChatMessages.ts
+  s_77f2b8dfbc2e90::t_cd38330a41e5c6 1-44
+desktop/windows/src/renderer/src/lib/dev/benchAuth.ts
+  s_77f2b8dfbc2e90::t_3ebbaf06a3f5fa 1-24
+desktop/windows/src/renderer/src/lib/dev/e2eAuth.ts
+  s_77f2b8dfbc2e90::t_3a447132ceac4b 1-26
+desktop/windows/src/renderer/src/lib/encryptedAuthPersistence.test.ts
+  s_77f2b8dfbc2e90::t_b2767db110a40d 1-211
+desktop/windows/src/renderer/src/lib/encryptedAuthPersistence.ts
+  s_77f2b8dfbc2e90::t_5bd437ae106b01 1-192
+desktop/windows/src/renderer/src/lib/firebase.importable.test.ts
+  s_77f2b8dfbc2e90::t_c03cf15b098885 1-27
+desktop/windows/src/renderer/src/lib/firebase.ts
+  s_77f2b8dfbc2e90::t_3ffb9c920c3671 5,7,12-13,26,28-33,37,44-58,60-74,78-95
+desktop/windows/src/renderer/src/lib/fontScale.test.ts
+  s_77f2b8dfbc2e90::t_d24bc7b3e78797 1-150
+desktop/windows/src/renderer/src/lib/fontScale.ts
+  s_77f2b8dfbc2e90::t_e60346a696a50c 1-101
+desktop/windows/src/renderer/src/lib/gmailSessionFeatureFlag.ts
+  s_77f2b8dfbc2e90::t_6e363276c22b79 1-13
+desktop/windows/src/renderer/src/lib/goalEmoji.test.ts
+  s_77f2b8dfbc2e90::t_811d0a0437c5a7 1-67
+desktop/windows/src/renderer/src/lib/goalEmoji.ts
+  s_77f2b8dfbc2e90::t_9ff09fd32bd5d6 1-70
+desktop/windows/src/renderer/src/lib/goalVisuals.test.ts
+  s_77f2b8dfbc2e90::t_34c41dadac3c39 1-67
+desktop/windows/src/renderer/src/lib/goalVisuals.ts
+  s_77f2b8dfbc2e90::t_2dc028c5f82c1a 1-57
+desktop/windows/src/renderer/src/lib/goalsCache.coldStart.test.ts
+  s_77f2b8dfbc2e90::t_9da197aaf543f9 1-52
+desktop/windows/src/renderer/src/lib/goalsCache.ts
+  s_77f2b8dfbc2e90::t_80d556b018b1f5 1-49
+desktop/windows/src/renderer/src/lib/googleFeatureFlag.ts
+  s_77f2b8dfbc2e90::t_4419ea15359622 1-11
+desktop/windows/src/renderer/src/lib/graphDisplay.test.ts
+  s_77f2b8dfbc2e90::t_53bb0f9296a650 1-152
+desktop/windows/src/renderer/src/lib/graphDisplay.ts
+  s_77f2b8dfbc2e90::t_988f692c299d2d 1-115
+desktop/windows/src/renderer/src/lib/importToast.ts
+  s_77f2b8dfbc2e90::t_498aa8207592d7 1-12
+desktop/windows/src/renderer/src/lib/insightEngine.ts
+  s_77f2b8dfbc2e90::t_b2270890e25710 2-18,25-27
+desktop/windows/src/renderer/src/lib/liveConversation.test.ts
+  s_77f2b8dfbc2e90::t_43fea9fb836519 1-3,39-78
+desktop/windows/src/renderer/src/lib/liveConversation.ts
+  s_77f2b8dfbc2e90::t_67087a788e2ba8 1,5-9,96-121,152-157,159-165
+desktop/windows/src/renderer/src/lib/liveNotes/e2eHook.ts
+  s_77f2b8dfbc2e90::t_ae6874383f00a2 1-30
+desktop/windows/src/renderer/src/lib/liveNotes/liveNotesAccumulator.test.ts
+  s_77f2b8dfbc2e90::t_2b3e2651e3347c 1-83
+desktop/windows/src/renderer/src/lib/liveNotes/liveNotesAccumulator.ts
+  s_77f2b8dfbc2e90::t_916f1c028343cb 1-146
+desktop/windows/src/renderer/src/lib/liveNotes/liveNotesMonitor.test.ts
+  s_77f2b8dfbc2e90::t_495c50b60bfaa5 1-267
+desktop/windows/src/renderer/src/lib/liveNotes/liveNotesMonitor.ts
+  s_77f2b8dfbc2e90::t_d35e186469caa6 1-389
+desktop/windows/src/renderer/src/lib/localAgent.ts
+  s_77f2b8dfbc2e90::t_dccf5977ebede2 11,39-41,43-45,49,51,53-54,98-99,103-104,198-200,202-206
+desktop/windows/src/renderer/src/lib/localAgentMemoryCache.ts
+  s_77f2b8dfbc2e90::t_34705c70cbdc46 1-21
+desktop/windows/src/renderer/src/lib/macPalette.ts
+  s_77f2b8dfbc2e90::t_45c1759765d471 1-63
+desktop/windows/src/renderer/src/lib/mcpConnect.ts
+  s_77f2b8dfbc2e90::t_c865509985b256 1-92
+desktop/windows/src/renderer/src/lib/measure.test.ts
+  s_77f2b8dfbc2e90::t_b22f50a2ebb787 1-30
+desktop/windows/src/renderer/src/lib/measure.ts
+  s_77f2b8dfbc2e90::t_55fff157b46ed8 1-16
+desktop/windows/src/renderer/src/lib/memoriesBulk.test.ts
+  s_77f2b8dfbc2e90::t_50f63091399399 1-94
+desktop/windows/src/renderer/src/lib/memoriesBulk.ts
+  s_77f2b8dfbc2e90::t_309e9f758f3981 6-33,35-38,40,48-49,54-93,120-121,129-131
+desktop/windows/src/renderer/src/lib/memoriesCache.ts
+  s_77f2b8dfbc2e90::t_68a44e67ee5104 1-75
+desktop/windows/src/renderer/src/lib/memoryExport.test.ts
+  s_77f2b8dfbc2e90::t_8ac089161291aa 1-53
+desktop/windows/src/renderer/src/lib/memoryExport.ts
+  s_77f2b8dfbc2e90::t_2d9a73ba9a92c1 1-21
+desktop/windows/src/renderer/src/lib/memoryFilters.test.ts
+  s_77f2b8dfbc2e90::t_5ea5525f059ace 1-143
+desktop/windows/src/renderer/src/lib/memoryFilters.ts
+  s_77f2b8dfbc2e90::t_6a404da0477d5b 1-162
+desktop/windows/src/renderer/src/lib/messagesSse.test.ts
+  s_77f2b8dfbc2e90::t_5d14f6a56beaa9 2-4,14-17,26-73
+desktop/windows/src/renderer/src/lib/messagesSse.ts
+  s_77f2b8dfbc2e90::t_ea7340e506b7e2 3-6,11,18-89
+desktop/windows/src/renderer/src/lib/omiListenClient.test.ts
+  s_77f2b8dfbc2e90::t_73aaa373929589 1-181
+desktop/windows/src/renderer/src/lib/omiListenClient.ts
+  s_77f2b8dfbc2e90::t_1dcfec12be0e82 2,28-31,37-45,49-51,62,88-104,111-113,116-117,121-123,128-130,132-134
+desktop/windows/src/renderer/src/lib/onboardingGraph.test.ts
+  s_77f2b8dfbc2e90::t_bd53cb69392835 5,71-112
+desktop/windows/src/renderer/src/lib/onboardingGraph.ts
+  s_77f2b8dfbc2e90::t_0eb0cf22ffa286 3,29-57
+desktop/windows/src/renderer/src/lib/onboardingImportCounts.test.ts
+  s_77f2b8dfbc2e90::t_cbbc95d840f759 1-52
+desktop/windows/src/renderer/src/lib/onboardingImportCounts.ts
+  s_77f2b8dfbc2e90::t_d556c90e77bfd2 1-89
+desktop/windows/src/renderer/src/lib/onboardingProgress.test.ts
+  s_77f2b8dfbc2e90::t_5adaed4a3050fd 1-33
+desktop/windows/src/renderer/src/lib/onboardingProgress.ts
+  s_77f2b8dfbc2e90::t_9d6fed515167ce 1-18
+desktop/windows/src/renderer/src/lib/pageCache.coldStart.test.ts
+  s_77f2b8dfbc2e90::t_b9ff030b162182 1-64
+desktop/windows/src/renderer/src/lib/pageCache.ts
+  s_77f2b8dfbc2e90::t_4ee51b97bc60f6 1-2,15-18,22-27,37-84,101,168-174,188-190
+desktop/windows/src/renderer/src/lib/pasteImport.test.ts
+  s_77f2b8dfbc2e90::t_f39ec4d10a405b 1-92
+desktop/windows/src/renderer/src/lib/pasteImport.ts
+  s_77f2b8dfbc2e90::t_d18b48c132067a 1-87
+desktop/windows/src/renderer/src/lib/persistentCache.test.ts
+  s_77f2b8dfbc2e90::t_5d892c50b5d9e6 1-106
+desktop/windows/src/renderer/src/lib/persistentCache.ts
+  s_77f2b8dfbc2e90::t_214c01f28918e3 1-119
+desktop/windows/src/renderer/src/lib/piMonoAuthHost.test.ts
+  s_77f2b8dfbc2e90::t_f26f9757815556 1-148
+desktop/windows/src/renderer/src/lib/piMonoAuthHost.ts
+  s_77f2b8dfbc2e90::t_d62fbfdce264a9 1-70
+desktop/windows/src/renderer/src/lib/preferences.lostUpdate.test.tsx
+  s_77f2b8dfbc2e90::t_042f3229a71b0b 1-44
+desktop/windows/src/renderer/src/lib/preferences.storageSync.test.tsx
+  s_77f2b8dfbc2e90::t_82103e99734dd7 1-29
+desktop/windows/src/renderer/src/lib/preferences.test.ts
+  s_77f2b8dfbc2e90::t_0414c9a499bf30 1-52
+desktop/windows/src/renderer/src/lib/preferences.ts
+  s_77f2b8dfbc2e90::t_ed6a9136fb1078 5,9-28,36-42,47-59,83-143,154-161,169-171,180-193,199-206,224-240,259-261,268,270-271
+desktop/windows/src/renderer/src/lib/ptt/capture.ts
+  s_77f2b8dfbc2e90::t_07ba958e4b6112 1-160
+desktop/windows/src/renderer/src/lib/ptt/captureClient.test.ts
+  s_77f2b8dfbc2e90::t_60482c3f058e57 1-165
+desktop/windows/src/renderer/src/lib/ptt/constants.ts
+  s_77f2b8dfbc2e90::t_278229d85bfb13 1-162
+desktop/windows/src/renderer/src/lib/ptt/deadMicPolicy.test.ts
+  s_77f2b8dfbc2e90::t_734d96751d6438 1-137
+desktop/windows/src/renderer/src/lib/ptt/deadMicPolicy.ts
+  s_77f2b8dfbc2e90::t_b3598f873be03d 1-75
+desktop/windows/src/renderer/src/lib/ptt/gate.test.ts
+  s_77f2b8dfbc2e90::t_a2a081d3a56010 1-135
+desktop/windows/src/renderer/src/lib/ptt/gate.ts
+  s_77f2b8dfbc2e90::t_573cf6e9019fbf 1-64
+desktop/windows/src/renderer/src/lib/ptt/machine.test.ts
+  s_77f2b8dfbc2e90::t_6426f7b0828b49 1-391
+desktop/windows/src/renderer/src/lib/ptt/machine.ts
+  s_77f2b8dfbc2e90::t_04b8808e640698 1-332
+desktop/windows/src/renderer/src/lib/ptt/systemAudioMute.test.ts
+  s_77f2b8dfbc2e90::t_de1b9f1d9c27b1 1-189
+desktop/windows/src/renderer/src/lib/ptt/systemAudioMute.ts
+  s_77f2b8dfbc2e90::t_38ae70f3713e6f 1-71
+desktop/windows/src/renderer/src/lib/ptt/transport.test.ts
+  s_77f2b8dfbc2e90::t_b5833682e9e4a0 1-261
+desktop/windows/src/renderer/src/lib/ptt/transport.ts
+  s_77f2b8dfbc2e90::t_49dba030f44303 1-214
+desktop/windows/src/renderer/src/lib/ptt/userVocabulary.test.ts
+  s_77f2b8dfbc2e90::t_e20269a3d41843 1-108
+desktop/windows/src/renderer/src/lib/ptt/userVocabulary.ts
+  s_77f2b8dfbc2e90::t_e21aadc62ab000 1-97
+desktop/windows/src/renderer/src/lib/ptt/vocabulary.test.ts
+  s_77f2b8dfbc2e90::t_35c8bc07af57d4 1-187
+desktop/windows/src/renderer/src/lib/ptt/vocabulary.ts
+  s_77f2b8dfbc2e90::t_2e8ade598dcb97 1-305
+desktop/windows/src/renderer/src/lib/rewindEmbedHost.ts
+  s_77f2b8dfbc2e90::t_fa52f0d4e950f6 1-68
+desktop/windows/src/renderer/src/lib/rewindHighlight.test.ts
+  s_77f2b8dfbc2e90::t_eb773aade1b2f7 1-35
+desktop/windows/src/renderer/src/lib/rewindHighlight.ts
+  s_77f2b8dfbc2e90::t_d79a3cbe940301 1-38
+desktop/windows/src/renderer/src/lib/rewindOverlay.test.ts
+  s_77f2b8dfbc2e90::t_a656e8b77ec9fe 1-81
+desktop/windows/src/renderer/src/lib/rewindOverlay.ts
+  s_77f2b8dfbc2e90::t_9ca43a9dcc7670 1-54
+desktop/windows/src/renderer/src/lib/screenRedact.test.ts
+  s_77f2b8dfbc2e90::t_1b1a46ef3fde4c 3-10,41-67
+desktop/windows/src/renderer/src/lib/screenRedact.ts
+  s_77f2b8dfbc2e90::t_af6329a37fbabd 2-11,13-28
+desktop/windows/src/renderer/src/lib/settingsNav.test.ts
+  s_77f2b8dfbc2e90::t_6338c92fcdcdd2 1-44
+desktop/windows/src/renderer/src/lib/settingsNav.ts
+  s_77f2b8dfbc2e90::t_190559b1726802 1-30
+desktop/windows/src/renderer/src/lib/signal.test.ts
+  s_77f2b8dfbc2e90::t_1b5ef7ceaf859f 1-44
+desktop/windows/src/renderer/src/lib/signal.ts
+  s_77f2b8dfbc2e90::t_10a9e9fbcdec9b 1-33
+desktop/windows/src/renderer/src/lib/stickyNotesImport.test.ts
+  s_77f2b8dfbc2e90::t_c2745239a5fdc4 1-94
+desktop/windows/src/renderer/src/lib/stickyNotesImport.ts
+  s_77f2b8dfbc2e90::t_bf962676353d3e 1-76
+desktop/windows/src/renderer/src/lib/sync/backfill.test.ts
+  s_77f2b8dfbc2e90::t_b335cb6c1f7cc4 1-96
+desktop/windows/src/renderer/src/lib/sync/backfill.ts
+  s_77f2b8dfbc2e90::t_84a388513b13cc 1-178
+desktop/windows/src/renderer/src/lib/sync/backfillStorageKey.ts
+  s_77f2b8dfbc2e90::t_47373815cb7def 1-7
+desktop/windows/src/renderer/src/lib/sync/convSync.e2e.test.ts
+  s_77f2b8dfbc2e90::t_e8808a782791dd 1-276
+desktop/windows/src/renderer/src/lib/sync/conversationSync.test.ts
+  s_77f2b8dfbc2e90::t_92d922652bc003 1-117
+desktop/windows/src/renderer/src/lib/sync/conversationSync.ts
+  s_77f2b8dfbc2e90::t_a7ed77091652df 1-187
+desktop/windows/src/renderer/src/lib/sync/conversationsReconcile.test.ts
+  s_77f2b8dfbc2e90::t_35cfaa44325143 1-81
+desktop/windows/src/renderer/src/lib/sync/conversationsReconcile.ts
+  s_77f2b8dfbc2e90::t_a84d67c58ea466 1-65
+desktop/windows/src/renderer/src/lib/sync/mergeLanes.test.ts
+  s_77f2b8dfbc2e90::t_62290639daa895 1-65
+desktop/windows/src/renderer/src/lib/sync/mergeLanes.ts
+  s_77f2b8dfbc2e90::t_386a9f31cf19b7 1-43
+desktop/windows/src/renderer/src/lib/sync/outbox.test.ts
+  s_77f2b8dfbc2e90::t_3a13b3e9ec6b31 1-208
+desktop/windows/src/renderer/src/lib/sync/outbox.ts
+  s_77f2b8dfbc2e90::t_481d098983ee84 1-244
+desktop/windows/src/renderer/src/lib/sync/outboxSweep.test.ts
+  s_77f2b8dfbc2e90::t_ac350ad47b5a9b 1-57
+desktop/windows/src/renderer/src/lib/sync/outboxSweep.ts
+  s_77f2b8dfbc2e90::t_eb2e36932ca53b 1-39
+desktop/windows/src/renderer/src/lib/sync/segmentRetention.test.ts
+  s_77f2b8dfbc2e90::t_3ef5cc16df1578 1-84
+desktop/windows/src/renderer/src/lib/sync/segmentRetention.ts
+  s_77f2b8dfbc2e90::t_10f3eab309b85b 1-95
+desktop/windows/src/renderer/src/lib/transcriptionClient.ts
+  s_77f2b8dfbc2e90::t_83aa4432390022 3-8,10-15,33-36,41-42,69-75,99-101,118-123,125-149,151-173,176-185,187-190,218-230,234-236,240-248,269-275
+desktop/windows/src/renderer/src/lib/usageLimit.test.ts
+  s_77f2b8dfbc2e90::t_c91317075df2dd 1-132
+desktop/windows/src/renderer/src/lib/usageLimit.ts
+  s_77f2b8dfbc2e90::t_23922c2a9f3c5c 1-104
+desktop/windows/src/renderer/src/lib/useGraphSimulation.test.ts
+  s_77f2b8dfbc2e90::t_33f90b36352591 1-2,18-24,58-62,66-72,74-80,82-179
+desktop/windows/src/renderer/src/lib/useGraphSimulation.ts
+  s_77f2b8dfbc2e90::t_0e62f81db08935 64-71,73-100,121-135,177-190,209-212,216,219,267-334,336-351,358-359,361,363-367,369,382-384,392-395,429-431,505-510,512-525,544-545,549
+desktop/windows/src/renderer/src/lib/useWebglRecovery.test.ts
+  s_77f2b8dfbc2e90::t_b14e04bf767110 1-89
+desktop/windows/src/renderer/src/lib/useWebglRecovery.ts
+  s_77f2b8dfbc2e90::t_1ef7ee20716775 1-131
+desktop/windows/src/renderer/src/lib/voice/aboutUser.test.ts
+  s_77f2b8dfbc2e90::t_dd077e8447f240 1-208
+desktop/windows/src/renderer/src/lib/voice/aboutUser.ts
+  s_77f2b8dfbc2e90::t_38d6d0935be8e4 1-164
+desktop/windows/src/renderer/src/lib/voice/audibleOutputArbiter.test.ts
+  s_77f2b8dfbc2e90::t_080f06a505f24d 1-71
+desktop/windows/src/renderer/src/lib/voice/audibleOutputArbiter.ts
+  s_77f2b8dfbc2e90::t_3ac4aa473374b3 1-84
+desktop/windows/src/renderer/src/lib/voice/autoModelSelector.test.ts
+  s_77f2b8dfbc2e90::t_31109a3ae60e79 1-138
+desktop/windows/src/renderer/src/lib/voice/autoModelSelector.ts
+  s_77f2b8dfbc2e90::t_35ac09eec4dfeb 1-132
+desktop/windows/src/renderer/src/lib/voice/e2eHook.ts
+  s_77f2b8dfbc2e90::t_ae3964b482bf82 1-68
+desktop/windows/src/renderer/src/lib/voice/echoGate.test.ts
+  s_77f2b8dfbc2e90::t_e55adaf3576bc2 1-164
+desktop/windows/src/renderer/src/lib/voice/echoGate.ts
+  s_77f2b8dfbc2e90::t_b5474e643b087a 1-141
+desktop/windows/src/renderer/src/lib/voice/flightRecord.ts
+  s_77f2b8dfbc2e90::t_85c070dd9f0055 1-18
+desktop/windows/src/renderer/src/lib/voice/geminiSession.test.ts
+  s_77f2b8dfbc2e90::t_e3eb4a50d3c8ef 1-130
+desktop/windows/src/renderer/src/lib/voice/geminiSession.ts
+  s_77f2b8dfbc2e90::t_1b958218794911 1-198
+desktop/windows/src/renderer/src/lib/voice/hub/geminiHubSession.test.ts
+  s_77f2b8dfbc2e90::t_bcb0bbff6a253a 1-374
+desktop/windows/src/renderer/src/lib/voice/hub/geminiHubSession.ts
+  s_77f2b8dfbc2e90::t_6cb2ffd554f36d 1-227
+desktop/windows/src/renderer/src/lib/voice/hub/geminiToolSchema.ts
+  s_77f2b8dfbc2e90::t_09a0eb569e0fad 1-68
+desktop/windows/src/renderer/src/lib/voice/hub/hubClose.test.ts
+  s_77f2b8dfbc2e90::t_9123c3ec6d1cd2 1-82
+desktop/windows/src/renderer/src/lib/voice/hub/hubClose.ts
+  s_77f2b8dfbc2e90::t_b40903f16364de 1-72
+desktop/windows/src/renderer/src/lib/voice/hub/hubController.seed.test.ts
+  s_77f2b8dfbc2e90::t_615eaa72efca05 1-191
+desktop/windows/src/renderer/src/lib/voice/hub/hubController.test.ts
+  s_77f2b8dfbc2e90::t_e750fc3e95573a 1-1023
+desktop/windows/src/renderer/src/lib/voice/hub/hubController.ts
+  s_77f2b8dfbc2e90::t_abf47e5553f0e5 1-902
+desktop/windows/src/renderer/src/lib/voice/hub/hubSession.test.ts
+  s_77f2b8dfbc2e90::t_adfdd7158fddba 1-286
+desktop/windows/src/renderer/src/lib/voice/hub/hubSession.ts
+  s_77f2b8dfbc2e90::t_2c7fd96397edb6 1-584
+desktop/windows/src/renderer/src/lib/voice/hub/openaiHubSession.test.ts
+  s_77f2b8dfbc2e90::t_899e3398165dda 1-363
+desktop/windows/src/renderer/src/lib/voice/hub/openaiHubSession.ts
+  s_77f2b8dfbc2e90::t_d0655313c9fa81 1-296
+desktop/windows/src/renderer/src/lib/voice/injectedTranscript.test.ts
+  s_77f2b8dfbc2e90::t_d3ea0e3836d209 1-38
+desktop/windows/src/renderer/src/lib/voice/injectedTranscript.ts
+  s_77f2b8dfbc2e90::t_1d81d564c667d0 1-5,7,9,11-13,15-19,22-27,31-36,38-45
+desktop/windows/src/renderer/src/lib/voice/openaiSession.test.ts
+  s_77f2b8dfbc2e90::t_f7eeb9004ae5ae 1-29
+desktop/windows/src/renderer/src/lib/voice/openaiSession.ts
+  s_77f2b8dfbc2e90::t_dc8405ff120e07 1-189
+desktop/windows/src/renderer/src/lib/voice/pcmPlayer.ts
+  s_77f2b8dfbc2e90::t_1c63a119932375 1-124
+desktop/windows/src/renderer/src/lib/voice/playbackLevelBus.ts
+  s_77f2b8dfbc2e90::t_ff1f1f907ddd08 1-18
+desktop/windows/src/renderer/src/lib/voice/playerCore.test.ts
+  s_77f2b8dfbc2e90::t_ec00f8955c77ef 1-188
+desktop/windows/src/renderer/src/lib/voice/playerCore.ts
+  s_77f2b8dfbc2e90::t_ca2ecc1e5f3737 1-150
+desktop/windows/src/renderer/src/lib/voice/playerWorklet.ts
+  s_77f2b8dfbc2e90::t_0fdd6d123bea43 1-69
+desktop/windows/src/renderer/src/lib/voice/providerSession.ts
+  s_77f2b8dfbc2e90::t_9d6a531bbf6e86 1-38
+desktop/windows/src/renderer/src/lib/voice/sessionMachine.test.ts
+  s_77f2b8dfbc2e90::t_bca82118442398 2-7,9-11,13-20,23-29,32-34,37-44,47-53,56-62,65-85
+desktop/windows/src/renderer/src/lib/voice/sessionMachine.ts
+  s_77f2b8dfbc2e90::t_5606e58e97f530 1-77
+desktop/windows/src/renderer/src/lib/voice/supervisor/voicePlaneSupervisor.test.ts
+  s_77f2b8dfbc2e90::t_149361db0a4446 1-195
+desktop/windows/src/renderer/src/lib/voice/supervisor/voicePlaneSupervisor.ts
+  s_77f2b8dfbc2e90::t_1e4d05fd96b0fb 1-161
+desktop/windows/src/renderer/src/lib/voice/systemInstruction.test.ts
+  s_77f2b8dfbc2e90::t_71d4a966fa8b58 1-129
+desktop/windows/src/renderer/src/lib/voice/systemInstruction.ts
+  s_77f2b8dfbc2e90::t_101304ebcfae55 1-273
+desktop/windows/src/renderer/src/lib/voice/taskCounts.test.ts
+  s_77f2b8dfbc2e90::t_23d6cb9c6dc266 1-70
+desktop/windows/src/renderer/src/lib/voice/taskCounts.ts
+  s_77f2b8dfbc2e90::t_e2354a230cfa5f 1-50
+desktop/windows/src/renderer/src/lib/voice/tokenMint.test.ts
+  s_77f2b8dfbc2e90::t_1f7869fad718fd 1-71
+desktop/windows/src/renderer/src/lib/voice/tokenMint.ts
+  s_77f2b8dfbc2e90::t_38c054b8b83789 1-115
+desktop/windows/src/renderer/src/lib/voice/tts.ts
+  s_77f2b8dfbc2e90::t_cf369990b19cff 1-27
+desktop/windows/src/renderer/src/lib/voice/ttsChunker.test.ts
+  s_77f2b8dfbc2e90::t_8452cf8f9a0ea5 1-76
+desktop/windows/src/renderer/src/lib/voice/ttsChunker.ts
+  s_77f2b8dfbc2e90::t_be302c9b375e77 1-86
+desktop/windows/src/renderer/src/lib/voice/turn/voiceHubTurnDriver.test.ts
+  s_77f2b8dfbc2e90::t_0bbf60a9226ded 1-1168
+desktop/windows/src/renderer/src/lib/voice/turn/voiceHubTurnDriver.ts
+  s_77f2b8dfbc2e90::t_e30b3d3abc6960 1-1085
+desktop/windows/src/renderer/src/lib/voice/turn/voiceOutputCoordinator.test.ts
+  s_77f2b8dfbc2e90::t_5799f095f7fa0c 1-219
+desktop/windows/src/renderer/src/lib/voice/turn/voiceOutputCoordinator.ts
+  s_77f2b8dfbc2e90::t_7281a6670102fd 1-167
+desktop/windows/src/renderer/src/lib/voice/turn/voiceTurnCoordinator.test.ts
+  s_77f2b8dfbc2e90::t_ea2b091a640f28 1-652
+desktop/windows/src/renderer/src/lib/voice/turn/voiceTurnCoordinator.ts
+  s_77f2b8dfbc2e90::t_f9b310d511052a 1-481
+desktop/windows/src/renderer/src/lib/voice/turn/voiceTurnHost.test.ts
+  s_77f2b8dfbc2e90::t_4c3d31bfa66220 1-250
+desktop/windows/src/renderer/src/lib/voice/turn/voiceTurnHost.ts
+  s_77f2b8dfbc2e90::t_ed62b77258d385 1-248
+desktop/windows/src/renderer/src/lib/voice/turn/voiceTurnMachine.test.ts
+  s_77f2b8dfbc2e90::t_5a1a5d8beed2da 1-923
+desktop/windows/src/renderer/src/lib/voice/turn/voiceTurnMachine.ts
+  s_77f2b8dfbc2e90::t_308994bd79cbf8 1-1147
+desktop/windows/src/renderer/src/lib/voice/usageReport.test.ts
+  s_77f2b8dfbc2e90::t_0ba7e9f79262bd 1-110
+desktop/windows/src/renderer/src/lib/voice/usageReport.ts
+  s_77f2b8dfbc2e90::t_a180fbd6519af2 1-122
+desktop/windows/src/renderer/src/lib/voice/voiceController.instructions.test.ts
+  s_77f2b8dfbc2e90::t_b979cb3f229200 1-85
+desktop/windows/src/renderer/src/lib/voice/voiceController.pipeline.test.ts
+  s_77f2b8dfbc2e90::t_263d890b7dec97 1-238
+desktop/windows/src/renderer/src/lib/voice/voiceController.test.ts
+  s_77f2b8dfbc2e90::t_f0eb98e4f39a7a 1-92
+desktop/windows/src/renderer/src/lib/voice/voiceController.ts
+  s_77f2b8dfbc2e90::t_df77fa4c8a049e 1-722
+desktop/windows/src/renderer/src/lib/voice/voiceControllerExclusion.test.ts
+  s_77f2b8dfbc2e90::t_8dc2d42972366f 1-79
+desktop/windows/src/renderer/src/lib/windowRole.ts
+  s_77f2b8dfbc2e90::t_55f7a4413c6a29 1-15
+desktop/windows/src/renderer/src/lib/xSession.ts
+  s_77f2b8dfbc2e90::t_29feaeaf6653d4 1-13
+desktop/windows/src/renderer/src/main.tsx
+  s_77f2b8dfbc2e90::t_b161d6737a9c5b 1-19,21-29,33,36-57,63-67,71-83,91-95
+desktop/windows/src/renderer/src/orb/amplitudeMapper.test.ts
+  s_77f2b8dfbc2e90::t_314a6de6547e09 1-204
+desktop/windows/src/renderer/src/orb/amplitudeMapper.ts
+  s_77f2b8dfbc2e90::t_06c1fd56f89983 1-187
+desktop/windows/src/renderer/src/orb/choreography.test.ts
+  s_77f2b8dfbc2e90::t_4906d2fa80b437 1-948
+desktop/windows/src/renderer/src/orb/choreography.ts
+  s_77f2b8dfbc2e90::t_9dd8e28236e661 1-873
+desktop/windows/src/renderer/src/orb/orbAnimator.ts
+  s_77f2b8dfbc2e90::t_bc3267668142ef 1-421
+desktop/windows/src/renderer/src/orb/orbRenderer.ts
+  s_77f2b8dfbc2e90::t_29379f6877318e 1-171
+desktop/windows/src/renderer/src/orb/shader.test.ts
+  s_77f2b8dfbc2e90::t_c12880a1753f4f 1-40
+desktop/windows/src/renderer/src/orb/shader.ts
+  s_77f2b8dfbc2e90::t_0a450e10789cd0 1-225
+desktop/windows/src/renderer/src/orb/useBarParked.ts
+  s_77f2b8dfbc2e90::t_a831c5843abdb7 1-24
+desktop/windows/src/renderer/src/orb/waveform.test.ts
+  s_77f2b8dfbc2e90::t_e56355e76dc8c0 1-159
+desktop/windows/src/renderer/src/orb/waveform.ts
+  s_77f2b8dfbc2e90::t_c49cc1400c6fad 1-161
+desktop/windows/src/renderer/src/pages/Apps.cacheFirst.test.tsx
+  s_77f2b8dfbc2e90::t_1fa8a1948b9e64 1-82
+desktop/windows/src/renderer/src/pages/Apps.errorToast.test.tsx
+  s_77f2b8dfbc2e90::t_3b86b45e426bf1 1-129
+desktop/windows/src/renderer/src/pages/Apps.focusRefresh.test.tsx
+  s_77f2b8dfbc2e90::t_294910fa39fba4 1-106
+desktop/windows/src/renderer/src/pages/Apps.tsx
+  s_77f2b8dfbc2e90::t_67b70a7d70e574 1-15,19-69,81-98,100-111,117-120,133,136-139,143,145,150-154,157-161,166,168,175,180-213,217-242,249-253,256-264,267,269,271-282,285-311,317,320,322,324-346,352-399,419-462,468-487,489-494,496-558,561,563,574-581,583-586,588,590-614,616-628,630-634,640-642,699-722,724,824-873,876-877,880-903,905-918,920-921,926-936
+desktop/windows/src/renderer/src/pages/ConversationDetail.test.tsx
+  s_77f2b8dfbc2e90::t_ce2e2e9cc79469 1-177
+desktop/windows/src/renderer/src/pages/ConversationDetail.tsx
+  s_77f2b8dfbc2e90::t_2a957d63fd8aa1 1,3-16,18,21-28,30-54,56-70,77-82,85-95,98-102,104,109-194,197-208,211,214-218,220-230,232,234,236-271,274-287,289-292,294,296-298,300,302-306,308-311,313-314,316-319,321-323,325-339,342-347,349-351,353,358-362,364-365,368-369,374-375,377-381,383,387-401,404,406,414-510,512-524,528-564,566-574,579-590,592-618,620-623,625,627-668,670-679,681-721,723-758,760,764-766,772,775-776,784,789-862
+desktop/windows/src/renderer/src/pages/Conversations.tsx
+  s_77f2b8dfbc2e90::t_98726ff9d0bd69 1,9-10,18,21-22,25-60,63,66-80,89-96,118,125-130,137-140,142-146,149-152,156-161,163-183,185-204,206-229,231-307,310-313,315-332,343-345,348-351,354-356,359-360,364-366,373-395,398-413,415-449,451-455,457-459,461-464,467,470-472,474-479,482-491,494,497,507-510,514,517,519,523-537,539-564,566-568,571-594,599-601,614,616,631-645,648-649,655,665-672,675-679,683-702,704-705,710,713,715,720-724,733-765,769-782,786-787,797-813
+desktop/windows/src/renderer/src/pages/Goals.test.tsx
+  s_77f2b8dfbc2e90::t_c3e9ec380fb509 1-116
+desktop/windows/src/renderer/src/pages/Goals.tsx
+  s_77f2b8dfbc2e90::t_6e9271e09898cb 2-13,15,21-27,47,50-57,61-65,68-71,73-74,85-91,98-103,141-144,155,165-167,176-177,179,181-182,189,192,216,225,259-264,266-276,278,280-283,286,288,292-296,298-306,310,362,369-371,377-386,419-420,455-476,507,528,530,540,542-548,550,555-556,559,567-568,572,578,591,668-688,690,728-730
+desktop/windows/src/renderer/src/pages/Home.test.tsx
+  s_77f2b8dfbc2e90::t_a51e710d980b56 1-47
+desktop/windows/src/renderer/src/pages/Home.tsx
+  s_77f2b8dfbc2e90::t_935d3e9955f19b 1-13,15-16,18
+desktop/windows/src/renderer/src/pages/Insights.test.tsx
+  s_77f2b8dfbc2e90::t_81592d24fc8c0e 1-123
+desktop/windows/src/renderer/src/pages/Insights.tsx
+  s_77f2b8dfbc2e90::t_04ff1190f6b4c0 1-306
+desktop/windows/src/renderer/src/pages/KnowledgeGraph.tsx
+  s_77f2b8dfbc2e90::t_5b89ef847daaef 1-26
+desktop/windows/src/renderer/src/pages/LegacyHome.test.tsx
+  s_77f2b8dfbc2e90::t_7cfc6fd0be7b3e 1-203
+desktop/windows/src/renderer/src/pages/LegacyHome.tsx
+  s_77f2b8dfbc2e90::t_62f202bedcb02b 1-565
+desktop/windows/src/renderer/src/pages/LiveConversation.tsx
+  s_77f2b8dfbc2e90::t_fb261014e3798f 6,20-24,43-45,47-56,91-95,99-123
+desktop/windows/src/renderer/src/pages/Login.tsx
+  s_77f2b8dfbc2e90::t_6c9653fa3528a8 1,4,7-17,20-25,27-28,30,32-33,40,45,48-63,65,67-74
+desktop/windows/src/renderer/src/pages/Memories.editDelete.test.tsx
+  s_77f2b8dfbc2e90::t_e83c744a7bfd48 1-94,96-161
+desktop/windows/src/renderer/src/pages/Memories.focusRefresh.test.tsx
+  s_77f2b8dfbc2e90::t_87aa50fa03bf33 1-98
+desktop/windows/src/renderer/src/pages/Memories.graphPreview.test.tsx
+  s_77f2b8dfbc2e90::t_d89c680d153ee9 1-190
+desktop/windows/src/renderer/src/pages/Memories.loadingState.test.ts
+  s_77f2b8dfbc2e90::t_1feca2fc02edad 1-39
+desktop/windows/src/renderer/src/pages/Memories.tsx
+  s_77f2b8dfbc2e90::t_0fc736e13d4bcb 1-3,8,13-24,27-28,31-32,34-46,50-159,164-184,187,189,215-272,290,293-320,322-328,330-346,353-355,388-390,398,416-420,424-428,437-454,458-459,463-467,470-475,477-481,490-493,503-507,515-521,524,531-591,620-624,632,641-682,686,690-699,702-707,709-710,714-739
+desktop/windows/src/renderer/src/pages/Onboarding.tsx
+  s_77f2b8dfbc2e90::t_4f03c8e893e2a2 2-8,17,25,36,42,45-49,52-60,62-63,66-71,133,143,154,162,165-166,168-169,172,178-184,188-189,191-196,201-202,205,212-218,222-223,225-230,234-238,242,245-258,261,280-286,288-294,298-320,322,326,329-333
+desktop/windows/src/renderer/src/pages/Rewind.tsx
+  s_77f2b8dfbc2e90::t_31a3edd4f5b77c 1-2,4-5,9,11-17,20-89,92-117,120-121,123,130,132-137,146-172,177-206
+desktop/windows/src/renderer/src/pages/Settings.backNav.test.tsx
+  s_77f2b8dfbc2e90::t_22ca7e0485ab80 1-87
+desktop/windows/src/renderer/src/pages/Settings.tsx
+  s_77f2b8dfbc2e90::t_fb6b9ad2ecb5e0 1-3,11,15-19,27-28,30,33-36,43-71,83
+desktop/windows/src/renderer/src/pages/Tasks.test.tsx
+  s_77f2b8dfbc2e90::t_fd8fc62669911b 1-578
+desktop/windows/src/renderer/src/pages/Tasks.tsx
+  s_77f2b8dfbc2e90::t_cfddc6b26624ec 1,5,10-11,16-18,20,32-37,39-40,47,59-63,71,74,77-78,93,95-101,103-117,120,124,128-142,144,156,158-164,166-168,170-174,182-188,192-215,219-220,224,232-252,254,258,262-264,266,269-270,279-281,292,295-296,300-306,322,325,334-335,337,348-350,353-505,507-514,516,534,536,544-545,562,564-565,571,575,587-589,591-595,600,606,617-619,641,671,674,739-757,759
+desktop/windows/src/renderer/src/pages/homeScroll.test.ts
+  s_77f2b8dfbc2e90::t_cc8977d9d43242 1-41
+desktop/windows/src/renderer/src/pages/homeScroll.ts
+  s_77f2b8dfbc2e90::t_f9fb525c778f36 1-25
+desktop/windows/src/renderer/src/routes/manifest.test.ts
+  s_77f2b8dfbc2e90::t_99158c985f84c7 1-158
+desktop/windows/src/renderer/src/routes/manifest.ts
+  s_77f2b8dfbc2e90::t_eca4bd630b5f24 1-252
+desktop/windows/src/renderer/src/state/AppStateProvider.tsx
+  s_77f2b8dfbc2e90::t_e3fc18da832aa2 15
+desktop/windows/src/renderer/src/styles/globals.css
+  s_77f2b8dfbc2e90::t_fce0ec5b2e476a 38-86,88,90,95-165,173,176-181,186-200,219-222,225-226,229-241,290-302,322-330,371,375-382,389-450,471-480,482-485,488-490,492-508,564-565,567,574,578-610,613-636,639-644,666-672,674,723-732,734-735,741,743-749,752-757,771-841
+desktop/windows/src/shared/agentControlTools.ts
+  s_77f2b8dfbc2e90::t_a1f367c5ba9ff5 1-70
+desktop/windows/src/shared/byok.test.ts
+  s_77f2b8dfbc2e90::t_975feca3e5b1a5 3-17,20-35,37-39,42-46,49-58,62-64,67-70,73-74,77-78,81-83,87-94,97-101,103-104,107-123,126-129,131,134-137
+desktop/windows/src/shared/byok.ts
+  s_77f2b8dfbc2e90::t_22dbe18ca253e8 1-119
+desktop/windows/src/shared/byokFingerprint.ts
+  s_77f2b8dfbc2e90::t_5063bbb1a050f9 1-20
+desktop/windows/src/shared/chatContent.ts
+  s_77f2b8dfbc2e90::t_00ee70d135db3f 1-150
+desktop/windows/src/shared/chatSessions.ts
+  s_77f2b8dfbc2e90::t_1c2f8fb0e1ca6f 1-91
+desktop/windows/src/shared/chrome.ts
+  s_77f2b8dfbc2e90::t_58ff073c531801 1-22
+desktop/windows/src/shared/hotkeyDefaults.ts
+  s_77f2b8dfbc2e90::t_cdb8450ff95191 1-9
+desktop/windows/src/shared/mcpExports.ts
+  s_77f2b8dfbc2e90::t_6b0019487776b8 1-153
+desktop/windows/src/shared/screenPrivacy.ts
+  s_77f2b8dfbc2e90::t_51a19a1c04dd60 1-41
+desktop/windows/src/shared/sentryScrub.test.ts
+  s_77f2b8dfbc2e90::t_b3e26011fbef84 1-37
+desktop/windows/src/shared/sentryScrub.ts
+  s_77f2b8dfbc2e90::t_1e4881e21aa4a0 1-38
+desktop/windows/src/shared/timelineGeometry.test.ts
+  s_77f2b8dfbc2e90::t_f9dc06ba1bdd2e 3,6,10-13,18-25,49-189,191-204,206-209,211-213,242-285,321-346
+desktop/windows/src/shared/timelineGeometry.ts
+  s_77f2b8dfbc2e90::t_a22848a7c75411 6-16,19-37,40-46,107-242,248-249,264-279
+desktop/windows/src/shared/types.ts
+  s_77f2b8dfbc2e90::t_3f60b4b0a5b835 1-21,74-160,181-193,198-216,226-233,243-355,384-387,395-401,413-666,675-724,726-731,737-740,743-769,790-804,816-917,930-934,951-955,965-980,982-985,987-990,992-1005,1007-1009,1013-1016,1020-1023,1027-1034,1039-1044,1056-1080,1083-1089,1099-1100,1115-1120,1128-1225,1231-1661,1892-1900,1940-2007,2049-2052,2055-2059,2069-2144,2149-2189,2199-2200,2205-2582,2651-2699
+desktop/windows/tailwind.config.ts
+  s_77f2b8dfbc2e90::t_5c21c4009bc399 8,10-14,16,18-21,23-35,37-40,42-50,52-73,76-85,93,107-123,129-132
+desktop/windows/test/electronStub.ts
+  s_77f2b8dfbc2e90::t_6b9cf61d7a2e40 54-62
+desktop/windows/tests/visual/primitives.mjs
+  s_77f2b8dfbc2e90::t_8be7083ecab23b 1-107
+desktop/windows/vitest.config.ts
+  s_77f2b8dfbc2e90::t_5eb4c2bafa52df 1-25,28,37-53,55-56
+docs/doc/developer/backend/prod_hotfix_runbook.mdx
+  s_77f2b8dfbc2e90::t_bad7d440e3b5e9 21-22,62,68,91-101
+docs/doc/developer/backend/transcription.mdx
+  s_77f2b8dfbc2e90::t_2ac415105fa649 225,227-234,254-258
+docs/doc/developer/desktop-updates.mdx
+  s_77f2b8dfbc2e90::t_e00b28e326cdce 82
+docs/product/invariants/chat-continuity.md
+  s_77f2b8dfbc2e90::t_3919fdf31d47a6 130-136,150-155
+docs/product/invariants/data-plane-continuity.md
+  s_77f2b8dfbc2e90::t_75f55627de9e69 6-12,28,38-39,60-62
+docs/runbooks/backend-deploy-rollout-safety.md
+  s_77f2b8dfbc2e90::t_6785a5aaf8e96d 3-14,16
+scripts/pre-push
+  s_77f2b8dfbc2e90::t_bee7134f79268a 90
+scripts/test-make-setup.sh
+  s_77f2b8dfbc2e90::t_5b3a88c9e4c9bb 1-90
+.github/scripts/product_file_line_count_ratchet_baseline/backend-routers.json
+  s_77f2b8dfbc2e90::t_2db51d1cbd9cfc 4,7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "1e985e2c9f24396cadafe442e4b0372b884daa78",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_882b8f33fd02fa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9cfbb7d1-8d4d-4dd8-9026-6bbe8ee74af4",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
