@@ -5,13 +5,15 @@ from pathlib import Path
 
 WORKFLOW = Path(".github/workflows/desktop_promote_prod.yml")
 
+# The release-controller consolidation deliberately moved trusted qualification
+# selection and Stable CAS inputs from manual dispatch fields into workflow-owned
+# state. Keep this policy guard aligned with that safer contract.
 REQUIRED = (
     "on:\n  workflow_dispatch:",
     "confirm:",
     "promote-stable",
     "environment: prod",
     "Select and validate the exact trusted qualification",
-    "desktop_qualification_admission.py",
     "Fetch exact retained qualified manifest",
     '"https://api.omi.me/v2/desktop/releases/$RELEASE_TAG"',
     "manifest_sha256",
@@ -19,18 +21,17 @@ REQUIRED = (
     '"$BASE/macos-beta"',
     "EXPECTED_RELEASE_ID",
     "EXPECTED_GENERATION",
-    "expected_current_release_id",
-    "expected_generation",
-    "Publish immutable stable repair installer",
-    "Advance explicit stable pointer",
-    "https://api.omi.me/v2/desktop/channels/promote",
-    "Bridge stable for legacy desktop clients",
-    "Publish latest stable repair route",
     "desktop_update_channels/macos-stable",
     "desktop_release_manifests/$RELEASE_TAG",
+    "Publish immutable stable repair installer",
+    "Advance explicit stable pointer",
+    "Bridge stable for legacy desktop clients",
+    "Publish latest stable repair route",
     "Verify exact pointer, hashes, and stable feed",
+    "https://api.omi.me/v2/desktop/channels/promote",
     "appcast.xml?identity=stable",
     "verify_stable_appcast.py",
+    "desktop_qualification_admission.py",
     "--if-generation-match=0",
 )
 
@@ -55,9 +56,7 @@ def validate(text: str) -> list[str]:
         errors.append("stable pointer promotion must remain manual-only")
     order = [text.find(fragment) for fragment in ORDERED_STEPS]
     if -1 in order or order != sorted(order):
-        errors.append(
-            "stable promotion must select qualification, fetch and verify retained identity before pointer mutation, then bridge and verify"
-        )
+        errors.append("stable promotion must fetch and verify retained identity before pointer mutation, then bridge and verify")
     return errors
 
 
