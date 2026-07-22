@@ -11,6 +11,11 @@ class GlobalShortcutManager: @unchecked Sendable {
 
   private var hotKeyRefs: [HotKeyID: HotKeyReference] = [:]
   private var isRegistrationSuspended = false
+  /// Session event tap that intercepts ⌘O before the frontmost app's menu can
+  /// swallow it (⌘O is File ▸ Open everywhere, so a Carbon global hotkey registers
+  /// but never fires). See `installCommandOEventTap()`.
+  private var commandOEventTap: CFMachPort?
+  private var commandORunLoopSource: CFRunLoopSource?
   #if DEBUG
     private var askOmiRegistrationTrace: [HotKeyRegistrationOutcome] = []
   #endif
@@ -147,6 +152,81 @@ class GlobalShortcutManager: @unchecked Sendable {
     // Register Ask Omi shortcut from user settings
     registerAskOmi()
     registerCommandO()
+    installCommandOEventTap()
+  }
+
+  // MARK: - ⌘O session event tap
+
+  /// ⌘O is a universal menu key-equivalent (File ▸ Open), so the frontmost app's
+  /// menu swallows the key before Omi's Carbon global hotkey ever sees it — every
+  /// OTHER Omi hotkey fires, only ⌘O doesn't. Intercept it at the session
+  /// event-tap level, which sees the key before any app dispatches it, and consume
+  /// it so ⌘O reliably summons Omi and nothing else "Opens". Needs Accessibility;
+  /// when it isn't granted we silently keep the (best-effort) Carbon hotkey.
+  private func installCommandOEventTap() {
+    removeCommandOEventTap()
+    guard AXIsProcessTrusted() else {
+      logger("GlobalShortcutManager: ⌘O event tap needs Accessibility — keeping Carbon fallback")
+      return
+    }
+    let mask =
+      (1 << CGEventType.keyDown.rawValue)
+      | (1 << CGEventType.tapDisabledByTimeout.rawValue)
+      | (1 << CGEventType.tapDisabledByUserInput.rawValue)
+    let callback: CGEventTapCallBack = { _, type, event, _ in
+      let manager = GlobalShortcutManager.shared
+      // The system disables a tap if a callback is slow or on fast user input;
+      // re-enable so ⌘O keeps working for the rest of the session.
+      if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+        if let tap = manager.commandOEventTap { CGEvent.tapEnable(tap: tap, enable: true) }
+        return Unmanaged.passUnretained(event)
+      }
+      if type == .keyDown {
+        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+        let f = event.flags
+        // Match ⌘O exactly — command down, none of the other chord modifiers — so
+        // ⌘⇧O / ⌃⌘O etc. still pass through to the focused app untouched.
+        let isCommandOnly =
+          f.contains(.maskCommand) && !f.contains(.maskControl)
+          && !f.contains(.maskAlternate) && !f.contains(.maskShift)
+        if keyCode == Int64(kVK_ANSI_O), isCommandOnly {
+          manager.triggerCommandOSummon()
+          return nil  // consume — the frontmost app never sees ⌘O
+        }
+      }
+      return Unmanaged.passUnretained(event)
+    }
+    guard
+      let tap = CGEvent.tapCreate(
+        tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
+        eventsOfInterest: CGEventMask(mask), callback: callback, userInfo: nil)
+    else {
+      logger("GlobalShortcutManager: failed to create ⌘O event tap")
+      return
+    }
+    let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+    CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+    CGEvent.tapEnable(tap: tap, enable: true)
+    commandOEventTap = tap
+    commandORunLoopSource = source
+    logger("GlobalShortcutManager: Installed ⌘O event tap")
+  }
+
+  private func removeCommandOEventTap() {
+    if let source = commandORunLoopSource {
+      CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+      commandORunLoopSource = nil
+    }
+    if let tap = commandOEventTap {
+      CGEvent.tapEnable(tap: tap, enable: false)
+      commandOEventTap = nil
+    }
+  }
+
+  /// Bridges the ⌘O event tap's C callback to the summon action (fronts Omi +
+  /// opens chat). Runs on the main run loop; `openOmiFromShortcut` hops to main.
+  func triggerCommandOSummon() {
+    openOmiFromShortcut()
   }
 
   /// Registers ⌘O as a dedicated global Carbon hotkey that summons Omi (fronts
@@ -341,5 +421,6 @@ class GlobalShortcutManager: @unchecked Sendable {
       _ = unregisterHotKey(ref)
     }
     hotKeyRefs.removeAll()
+    removeCommandOEventTap()
   }
 }
