@@ -10,7 +10,7 @@ import {
   emptyRangeStatement,
   formatAppUsage,
   resolveRange,
-  topWindows, runSqlBatch } from "../data-tools.mjs";
+  topWindows, runSqlBatch, executeReadOnlyQuery, truncateToolResult } from "../data-tools.mjs";
 
 const dirs = [];
 afterEach(() => { while (dirs.length) rmSync(dirs.pop(), { recursive: true, force: true }); });
@@ -109,5 +109,70 @@ describe("runSqlBatch", () => {
     );
     expect(out).toContain('-- [2] SELECT BAD\n{"error":"no such table"}');
     expect(out).toContain("-- [3] SELECT good2\nok");
+  });
+});
+
+describe("executeReadOnlyQuery", () => {
+  it("allows CTE reads that the old prefix guard rejected", () => {
+    const db = seededDb();
+    const out = JSON.parse(
+      executeReadOnlyQuery(db, "WITH w AS (SELECT appName FROM screenshots) SELECT appName, COUNT(*) c FROM w GROUP BY appName"),
+    );
+    expect(out.error).toBeUndefined();
+    expect(out.rows.length).toBeGreaterThan(0);
+    db.close();
+  });
+
+  it("rejects writes even when wrapped in a CTE", () => {
+    const db = seededDb();
+    const out = JSON.parse(
+      executeReadOnlyQuery(db, "WITH w AS (SELECT 1) INSERT INTO screenshots (timestamp, appName) VALUES ('x','y')"),
+    );
+    expect(out.error).toContain("read-only");
+    db.close();
+  });
+
+  it("caps rows via iteration even when a subquery contains LIMIT", () => {
+    const db = seededDb();
+    db.exec("CREATE TABLE nums (n INT)");
+    const ins = db.prepare("INSERT INTO nums VALUES (?)");
+    for (let i = 0; i < 300; i++) ins.run(i);
+    const out = JSON.parse(
+      executeReadOnlyQuery(db, "SELECT * FROM nums WHERE n IN (SELECT n FROM nums LIMIT 300)", 200),
+    );
+    expect(out.count).toBe(200);
+    expect(out.truncated).toBe(true);
+    db.close();
+  });
+
+  it("does not false-positive on user data containing keyword-like words", () => {
+    const db = seededDb();
+    const out = JSON.parse(
+      executeReadOnlyQuery(db, "SELECT * FROM screenshots WHERE windowTitle LIKE '%create%' OR windowTitle LIKE '%alter%'"),
+    );
+    expect(out.error).toBeUndefined();
+    db.close();
+  });
+
+  it("rejects multi-statement strings via prepare", () => {
+    const db = seededDb();
+    const out = JSON.parse(executeReadOnlyQuery(db, "SELECT 1; SELECT 2"));
+    expect(out.error).toBeTruthy();
+    db.close();
+  });
+});
+
+describe("truncateToolResult", () => {
+  it("passes small results through untouched", () => {
+    const out = truncateToolResult("small", "execute_sql");
+    expect(out).toEqual({ text: "small", truncated: false });
+  });
+
+  it("truncates oversized results with a re-run marker", () => {
+    const out = truncateToolResult("x".repeat(50_000), "playwright_snapshot", 10_000);
+    expect(out.truncated).toBe(true);
+    expect(out.originalChars).toBe(50_000);
+    expect(out.text.length).toBeLessThanOrEqual(10_000);
+    expect(out.text).toContain("truncated: 50000 chars total");
   });
 });

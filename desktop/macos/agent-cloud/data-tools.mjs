@@ -174,3 +174,61 @@ export function runSqlBatch(runOne, queries) {
   });
   return parts.join("\n\n");
 }
+
+// G1 fix (tool-validation audit, 2026-07-22): replaces the string-prefix
+// read-only guard. `stmt.readonly` is the authoritative signal (measured:
+// true for SELECT and WITH…SELECT, false for WITH…INSERT), prepare() itself
+// rejects multi-statement strings, and the iterate-cap replaces LIMIT string
+// surgery (which missed subquery LIMITs and appended inside trailing
+// comments). Keeps the exact {rows, count} / {error} shape the model knows.
+export function executeReadOnlyQuery(db, sqlQuery, maxRows = 200) {
+  let stmt;
+  try {
+    stmt = db.prepare(sqlQuery);
+  } catch (err) {
+    return JSON.stringify({ error: err.message });
+  }
+  if (!stmt.readonly) {
+    return JSON.stringify({ error: "Database is in read-only mode (cloud copy): only read queries are allowed" });
+  }
+  if (!stmt.reader) {
+    return JSON.stringify({ error: "Query returns no rows; only row-returning read queries are supported" });
+  }
+  try {
+    const rows = [];
+    let truncated = false;
+    for (const row of stmt.iterate()) {
+      if (rows.length >= maxRows) {
+        truncated = true;
+        break;
+      }
+      rows.push(row);
+    }
+    const result = { rows, count: rows.length };
+    if (truncated) {
+      result.truncated = true;
+      result.note = `showing first ${maxRows} rows — narrow the query for the rest`;
+    }
+    return JSON.stringify(result);
+  } catch (err) {
+    return JSON.stringify({ error: err.message });
+  }
+}
+
+// Tool-result ceiling (context Tier-1, 2026-07-22): Playwright and backend
+// tool results are unbounded and a single 100K-char page dump eats the
+// context budget. Truncation is graceful — the marker tells the model how to
+// get the rest. SQL results are already row-capped and stay under this.
+export const MAX_TOOL_RESULT_CHARS = 10_000;
+
+export function truncateToolResult(content, toolName, maxChars = MAX_TOOL_RESULT_CHARS) {
+  const text = typeof content === "string" ? content : JSON.stringify(content);
+  if (text.length <= maxChars) return { text, truncated: false };
+  return {
+    text:
+      text.slice(0, maxChars - 120) +
+      `\n\n[${toolName} output truncated: ${text.length} chars total. Re-run with narrower filters for the rest.]`,
+    truncated: true,
+    originalChars: text.length,
+  };
+}
