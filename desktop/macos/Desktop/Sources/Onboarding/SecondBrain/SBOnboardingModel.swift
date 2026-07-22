@@ -4,12 +4,19 @@ import Foundation
 
 /// Drives the Second Brain conversational onboarding: a real chat with Omi that
 /// streams word-by-word, collects answers, and performs the SAME live side-effects
-/// as the legacy wizard (name → Firebase/backend, permissions incl. Full Disk
-/// Access, capture mode, completion). No fake steps — every widget does real work.
+/// as the legacy wizard (name/language → backend, every permission, the summon
+/// shortcut, a live screen+voice demo, agent + context connectors, capture,
+/// completion). No fake steps — every widget does real work.
+///
+/// Core state + lifecycle + copy live here. The heavier per-step behavior
+/// (permissions, shortcut, screen/voice demo, connectors) lives in
+/// `SBOnboardingModel+Steps.swift`.
 @MainActor
 final class SBOnboardingModel: ObservableObject {
   enum Step: Int, CaseIterable {
-    case promise, name, role, meet, perm, files, ptt, launch, calendar, capture
+    case promise, name, language, role
+    case mic, systemAudio, screen, files, accessibility, automation
+    case shortcut, screenDemo, agents, context, capture
   }
 
   struct Msg: Identifiable {
@@ -20,77 +27,108 @@ final class SBOnboardingModel: ObservableObject {
 
   enum PermState: Equatable { case ask, waiting, on }
 
-  @Published private(set) var step: Step = .promise
-  @Published private(set) var thread: [Msg] = []
+  @Published var step: Step = .promise
+  @Published var thread: [Msg] = []
   /// The current Omi message streaming in (nil once committed).
-  @Published private(set) var streamingText: String?
-  @Published private(set) var typing = false
-  @Published private(set) var showWidget = false
+  @Published var streamingText: String?
+  @Published var typing = false
+  @Published var showWidget = false
 
   // Per-step answers / state
   @Published var nameDraft = ""
+  @Published var languageDraft = ""
+  @Published var languageName: String?
   @Published var roleDraft = ""
-  @Published private(set) var role: String?
-  @Published private(set) var meet: String?  // "video" | "inperson" | "both"
-  @Published private(set) var micState: PermState = .ask
-  @Published private(set) var sysState: PermState = .ask
-  @Published private(set) var fdaState: PermState = .ask
-  @Published private(set) var accState: PermState = .ask  // accessibility, for the PTT shortcut
-  @Published var launchAtLogin: Bool = LaunchAtLoginManager.shared.isEnabled
-  @Published private(set) var calState: String = "idle"  // idle | connecting | on | needsSignIn
+  @Published var role: String?
 
-  private unowned let appState: AppState
-  private let chatProvider: ChatProvider
+  // Permissions
+  @Published var micState: PermState = .ask
+  @Published var sysState: PermState = .ask
+  @Published var scrState: PermState = .ask  // screen recording
+  @Published var fdaState: PermState = .ask  // full disk access (files)
+  @Published var accState: PermState = .ask  // accessibility
+  @Published var autoState: PermState = .ask  // automation / Apple Events
+
+  var launchAtLogin: Bool = LaunchAtLoginManager.shared.isEnabled
+
+  // Summon shortcut
+  @Published var shortcutTokens: [String] = []
+  @Published var shortcutPicked = false
+  @Published var shortcutPressed = false
+  /// The chosen shortcut + which mechanism it uses (key hotkey vs modifier-hold).
+  var chosenShortcut: ShortcutSettings.KeyboardShortcut?
+  var chosenShortcutIsPTT = false
+  var shortcutMonitors: [Any] = []
+  /// Main menu stashed while the shortcut step's key monitor is armed (menu key
+  /// equivalents like ⌘O would otherwise swallow the press before we see it).
+  var savedMainMenu: NSMenu?
+
+  // Screen + voice demo
+  @Published var screenThings: [String] = []
+  @Published var screenDemoLoading = false
+  @Published var voiceHeard = false
+  @Published var voiceAnswer: String?
+  var voiceCancellable: AnyCancellable?
+  var voiceTimeout: Task<Void, Never>?
+
+  // Connectors — keyed by a stable id ("openclaw", "calendar", …) → state string
+  // ("idle" | "connecting" | "on" | "unavailable" | "needsSignIn").
+  @Published var agentStates: [String: String] = [:]
+  @Published var contextStates: [String: String] = [:]
+
+  unowned let appState: AppState
+  let chatProvider: ChatProvider
   private let onComplete: (() -> Void)?
-  private var streamTask: Task<Void, Never>?
-  private var pollTask: Task<Void, Never>?
+  var streamTask: Task<Void, Never>?
+  var pollTask: Task<Void, Never>?
 
   init(appState: AppState, chatProvider: ChatProvider, onComplete: (() -> Void)?) {
     self.appState = appState
     self.chatProvider = chatProvider
     self.onComplete = onComplete
+    // Isolate any onboarding chat/voice turns to the throwaway `.onboarding()`
+    // journal surface so they never pollute the real Chat tab. Cleared on
+    // complete()/skip(), after which the Chat tab reloads the clean default surface.
+    chatProvider.isOnboarding = true
   }
 
-  // MARK: copy (verbatim from the design, + the new files step)
+  // MARK: copy
 
-  private func message(for step: Step) -> String {
+  func message(for step: Step) -> String {
     let name = displayName
     switch step {
     case .promise:
       return
-        "Hey — I'm Omi, your second brain. I listen to your conversations — rooms, calls, everyday life — remember everything, and do the follow-ups. Three things first:"
+        "Hey, I'm Omi, your second brain. I hear your conversations, remember everything, and handle the follow-ups. Three quick things:"
     case .name: return "What should I call you?"
+    case .language:
+      return "What language do you speak? I'll listen and reply in it."
     case .role:
       return
-        "Nice to meet you, \(name). What do your days look like? Pick the closest — or just tell me. It shapes what I produce: lecture notes, CRM updates, client recaps, standup summaries…"
-    case .meet: return "Where do your most important conversations happen?"
-    case .perm:
-      switch meet {
-      case "video":
-        return
-          "You picked video calls — so I need to hear them. macOS will ask once. Everything else I'll ask for only when you first need it."
-      case "inperson":
-        return
-          "For conversations in a room, I just need your microphone. Everything else I'll ask for only when you first need it."
-      default:
-        return
-          "Rooms and calls — so two things: your mic for the room, system audio for the calls."
-      }
+        "Nice to meet you, \(name). What do your days look like? Pick the closest, or tell me. It shapes what I make for you."
+    case .mic:
+      return "Let's give me senses. First, your microphone, so I hear your side of a conversation."
+    case .systemAudio:
+      return "Now system audio, so I hear the other side too: Zoom, Meet, calls."
+    case .screen:
+      return "Let me see your screen, so I can help with whatever you're looking at."
     case .files:
-      return
-        "One more thing that makes me sharper: let me read your files. Then my answers can cite your actual documents — the spec, the deck, the note. It's read-only and stays on this Mac."
-    case .ptt:
-      return
-        "The fastest way to reach me: hold fn and just talk — I answer out loud, hands-free, from anywhere. To catch that shortcut everywhere, macOS needs to grant me Accessibility."
-    case .launch:
-      return
-        "So I'm there the moment you need me — even after a restart or a quit — let me open at login. You can always turn this off later."
-    case .calendar:
-      return
-        "Now your calendar. Then I know when meetings start, prepare beforehand, and capture automatically."
+      return "Let me read your files, so I can point to your real documents. Read-only."
+    case .accessibility:
+      return "Turn on Accessibility, so I can use your shortcut and click and type for you."
+    case .automation:
+      return "Turn on Automation, so I can control your other apps and get things done."
+    case .shortcut:
+      return "How do you want to reach me? Pick a key. Hit it anywhere and I show up."
+    case .screenDemo:
+      return "Here's the fun part."
+    case .agents:
+      return "Want me to do things for you? Connect an agent and I'll put it to work."
+    case .context:
+      return "The more I can see, the more I can help. Connect anything you want me to know:"
     case .capture:
       return
-        "You're set, \(name). ⌘⇧O opens me anywhere; hold fn to talk. Last choice — I can listen all the time (pause anytime from the notch), or only when your calendar says you're in a meeting:"
+        "You're all set, \(name). \(summonHint) reaches me anytime. One last thing: should I listen all the time, or only during your meetings?"
     }
   }
 
@@ -102,6 +140,12 @@ final class SBOnboardingModel: ObservableObject {
     return "friend"
   }
 
+  /// Human hint for the chosen summon shortcut, used in the capture copy.
+  var summonHint: String {
+    if !shortcutTokens.isEmpty { return shortcutTokens.joined(separator: "") }
+    return "Your shortcut"
+  }
+
   // MARK: lifecycle
 
   func begin() {
@@ -109,7 +153,7 @@ final class SBOnboardingModel: ObservableObject {
     streamMessage(for: .promise)
   }
 
-  private func streamMessage(for step: Step) {
+  func streamMessage(for step: Step) {
     streamTask?.cancel()
     showWidget = false
     typing = true
@@ -136,18 +180,47 @@ final class SBOnboardingModel: ObservableObject {
       self.thread.append(Msg(isOmi: true, text: full))
       self.streamingText = nil
       self.showWidget = true
+      self.onStepShown(step)
     }
   }
 
-  private func advance(userAnswer: String?, to next: Step) {
+  /// Hook fired right after a step's message finishes streaming and its widget
+  /// appears — used to kick off per-step live work (screen capture, demo setup).
+  private func onStepShown(_ step: Step) {
+    switch step {
+    case .mic: precheckPerm("microphone")
+    case .systemAudio: precheckPerm("system_audio")
+    case .screen: precheckPerm("screen_recording")
+    case .files: precheckPerm("full_disk_access")
+    case .accessibility: precheckPerm("accessibility")
+    case .automation: precheckPerm("automation")
+    case .shortcut: armShortcutSummon()
+    case .screenDemo: startScreenDemo()
+    case .agents: refreshAgentStates()
+    case .context: refreshContextStates()
+    default: break
+    }
+  }
+
+  func advance(userAnswer: String?, to next: Step) {
     if let userAnswer, !userAnswer.isEmpty {
       thread.append(Msg(isOmi: false, text: userAnswer))
     }
+    teardownStep(step)
     step = next
     streamMessage(for: next)
   }
 
-  // MARK: step actions (all perform REAL work)
+  /// Tear down any live monitors/tasks a step installed before leaving it.
+  private func teardownStep(_ step: Step) {
+    switch step {
+    case .shortcut: disarmShortcutSummon()
+    case .screenDemo: teardownVoiceDemo()
+    default: break
+    }
+  }
+
+  // MARK: promise / name / language / role
 
   func answerPromise() { advance(userAnswer: "Set me up", to: .name) }
 
@@ -155,13 +228,30 @@ final class SBOnboardingModel: ObservableObject {
     let trimmed = nameDraft.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return }
     Task { await AuthService.shared.updateGivenName(trimmed) }
-    advance(userAnswer: trimmed, to: .role)
+    advance(userAnswer: trimmed, to: .language)
+  }
+
+  /// Set the user's spoken language locally + on the backend (mirrors the legacy
+  /// confirmLanguages, single-primary). Advances optimistically.
+  func pickLanguage(code: String, name: String) {
+    languageName = name
+    AssistantSettings.shared.voiceLanguages = [code]
+    Task { _ = try? await APIClient.shared.updateUserLanguage(code) }
+    advance(userAnswer: name, to: .role)
+  }
+
+  func answerLanguageText() {
+    let raw = languageDraft.trimmingCharacters(in: .whitespaces)
+    guard !raw.isEmpty else { return }
+    let code = AssistantSettings.normalizeTranscriptionLanguageCode(raw)
+    let name = AssistantSettings.supportedLanguages.first { $0.code == code }?.name ?? raw
+    pickLanguage(code: code, name: name)
   }
 
   func pickRole(_ r: String) {
     role = r
     UserDefaults.standard.set(r, forKey: "onboardingRole")
-    advance(userAnswer: r, to: .meet)
+    advance(userAnswer: r, to: .mic)
   }
 
   func answerRoleText() {
@@ -169,138 +259,6 @@ final class SBOnboardingModel: ObservableObject {
     guard !t.isEmpty else { return }
     pickRole(t)
   }
-
-  func pickMeet(_ key: String, label: String) {
-    meet = key
-    advance(userAnswer: label, to: .perm)
-  }
-
-  /// The permission rows shown at the perm step, matched to how they meet.
-  var permKeys: [String] {
-    switch meet {
-    case "video": return ["system_audio"]
-    case "inperson": return ["microphone"]
-    default: return ["microphone", "system_audio"]
-    }
-  }
-
-  func requestPerm(_ key: String) {
-    switch key {
-    case "microphone":
-      micState = .waiting
-      appState.requestMicrophonePermission()
-      pollPermission(key)
-    case "system_audio":
-      sysState = .waiting
-      appState.triggerSystemAudioPermission()
-      pollPermission(key)
-    default: break
-    }
-  }
-
-  func requestFullDiskAccess() {
-    fdaState = .waiting
-    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
-      NSWorkspace.shared.open(url)
-    }
-    pollPermission("full_disk_access")
-  }
-
-  private func pollPermission(_ key: String) {
-    pollTask?.cancel()
-    pollTask = Task { [weak self] in
-      for _ in 0..<40 {  // ~20s
-        try? await Task.sleep(nanoseconds: 500_000_000)
-        guard let self, !Task.isCancelled else { return }
-        self.appState.checkAllPermissions()
-        if key == "full_disk_access" { self.appState.checkFullDiskAccess() }
-        if self.isGranted(key) {
-          self.setPermOn(key)
-          return
-        }
-      }
-    }
-  }
-
-  private func isGranted(_ key: String) -> Bool {
-    switch key {
-    case "microphone": return appState.hasMicrophonePermission
-    case "system_audio": return appState.hasSystemAudioPermission
-    case "full_disk_access": return appState.hasFullDiskAccess
-    case "accessibility": return appState.hasAccessibilityPermission && !appState.isAccessibilityBroken
-    default: return false
-    }
-  }
-
-  private func setPermOn(_ key: String) {
-    switch key {
-    case "microphone": micState = .on
-    case "system_audio": sysState = .on
-    case "full_disk_access": fdaState = .on
-    case "accessibility": accState = .on
-    default: break
-    }
-  }
-
-  func state(for key: String) -> PermState {
-    switch key {
-    case "microphone": return micState
-    case "system_audio": return sysState
-    default: return .ask
-    }
-  }
-
-  var anyPermGranted: Bool {
-    permKeys.contains { isGranted($0) }
-  }
-
-  func answerPerms() {
-    advance(userAnswer: anyPermGranted ? "Granted" : "Maybe later", to: .files)
-  }
-
-  func answerFiles() {
-    advance(userAnswer: fdaState == .on ? "Files on" : "Skip for now", to: .ptt)
-  }
-
-  // MARK: push-to-talk (Accessibility permission for the global shortcut)
-
-  func requestAccessibility() {
-    accState = .waiting
-    appState.triggerAccessibilityPermission()
-    pollPermission("accessibility")
-  }
-
-  func answerPtt() {
-    advance(userAnswer: accState == .on ? "Accessibility on" : "Maybe later", to: .launch)
-  }
-
-  // MARK: launch at login (app reopens after a quit / restart)
-
-  func toggleLaunch(_ on: Bool) {
-    _ = LaunchAtLoginManager.shared.setEnabled(on)
-    launchAtLogin = LaunchAtLoginManager.shared.isEnabled
-  }
-
-  func answerLaunch() {
-    advance(userAnswer: launchAtLogin ? "Open at login" : "No auto-open", to: .calendar)
-  }
-
-  func connectCalendar() {
-    // Allow retry after a failed attempt: `needsSignIn` is a terminal-but-retryable
-    // state (nothing else resets it to `idle`), so block only while connecting/connected.
-    guard calState == "idle" || calState == "needsSignIn" else { return }
-    calState = "connecting"
-    Task { [weak self] in
-      let status = await CalendarReaderService.shared.verifyConnection()
-      guard let self else { return }
-      self.calState = status.isConnected ? "on" : "needsSignIn"
-      if status.isConnected {
-        self.advance(userAnswer: "Calendar connected", to: .capture)
-      }
-    }
-  }
-
-  func skipCalendar() { advance(userAnswer: "Skip for now", to: .capture) }
 
   // MARK: capture choice → completes onboarding
 
@@ -315,12 +273,10 @@ final class SBOnboardingModel: ObservableObject {
   }
 
   /// Skip the rest of onboarding: mark it complete and drop straight to the Chat
-  /// tab (with the personalized opener), without force-enabling capture,
-  /// launch-at-login, or screen analysis the user chose to bypass. They can turn
-  /// those on later from Settings / the notch.
+  /// tab (with the personalized opener), without force-enabling capture or screen
+  /// analysis the user chose to bypass. They can turn those on later.
   func skip() {
-    streamTask?.cancel()
-    pollTask?.cancel()
+    teardownAll()
     AnalyticsManager.shared.onboardingCompleted()
     chatProvider.stopAgent(owner: .mainChat)
     UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
@@ -330,13 +286,19 @@ final class SBOnboardingModel: ObservableObject {
     ChatDraftStore.shared.clear(.onboardingMain)
     ChatDraftStore.shared.clear(.onboardingFloating)
     onComplete?()
-    DispatchQueue.main.async { [appState] in appState.hasCompletedOnboarding = true }
+    // Wipe the default main-chat journal so the Chat tab opens clean (any stray
+    // demo turns lived on the .onboarding() surface; this clears the default
+    // surface the tab actually loads) before we reveal it.
+    Task { [weak self] in
+      guard let self else { return }
+      _ = await self.chatProvider.clearDefaultJournalForOnboardingReset()
+      self.appState.hasCompletedOnboarding = true
+    }
   }
 
   /// Replicates the essential real side-effects of the legacy handleOnboardingComplete().
   private func complete(startListening: Bool) {
-    streamTask?.cancel()
-    pollTask?.cancel()
+    teardownAll()
     AnalyticsManager.shared.onboardingCompleted()
     chatProvider.stopAgent(owner: .mainChat)
     UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
@@ -350,15 +312,18 @@ final class SBOnboardingModel: ObservableObject {
     ChatDraftStore.shared.clear(.onboardingFloating)
 
     onComplete?()
-    DispatchQueue.main.async { [appState] in appState.hasCompletedOnboarding = true }
+    // Wipe the default main-chat journal so the Chat tab opens clean before reveal.
+    Task { [weak self] in
+      guard let self else { return }
+      _ = await self.chatProvider.clearDefaultJournalForOnboardingReset()
+      self.appState.hasCompletedOnboarding = true
+    }
 
     Task {
       await AgentVMService.shared.startPipeline()
       await GoalGenerationService.shared.generateNow()
     }
-    // Preserve the user's launch-at-login choice from the `.launch` step instead of
-    // forcing it back on — declining "Open at login" must survive completion.
-    _ = LaunchAtLoginManager.shared.setEnabled(launchAtLogin)
+    _ = LaunchAtLoginManager.shared.setEnabled(true)
 
     if AppBuild.usesLazyDevPermissions {
       AssistantSettings.shared.screenAnalysisEnabled = false
@@ -368,9 +333,6 @@ final class SBOnboardingModel: ObservableObject {
         ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
       }
     }
-    // Always reconcile so the capture engine is armed to the chosen mode — meetings-only
-    // needs this too (otherwise meeting detection never arms); only continuous also
-    // starts transcription immediately.
     Task { [appState] in
       if startListening { appState.startTranscription() }
       await appState.reconcileCapture()
@@ -382,5 +344,14 @@ final class SBOnboardingModel: ObservableObject {
         _ = await TasksStore.shared.createTask(description: welcome, dueAt: Date(), priority: "low")
       }
     }
+  }
+
+  /// Cancel every live task/monitor this model owns. Safe to call repeatedly.
+  private func teardownAll() {
+    streamTask?.cancel()
+    pollTask?.cancel()
+    disarmShortcutSummon()
+    teardownVoiceDemo()
+    FloatingControlBarManager.shared.hide()
   }
 }
