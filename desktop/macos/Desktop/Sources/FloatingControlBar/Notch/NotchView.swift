@@ -215,7 +215,6 @@ struct NotchView: View {
       NotchVoiceView(
         text: barState.liveVoiceUserText,
         placeholder: "Listening…",
-        emphasized: true,
         onOpenApp: nil,
         followsTail: true,
         topReserve: voiceTopReserve,
@@ -232,7 +231,6 @@ struct NotchView: View {
       NotchVoiceView(
         text: respondingText,
         placeholder: "",
-        emphasized: false,
         onOpenApp: { MainWindowReveal.activate() },
         followsTail: barState.isVoiceResponseActive,
         topReserve: voiceTopReserve,
@@ -277,11 +275,10 @@ struct NotchView: View {
     vm.closedNotchSize.height + voiceOrbTopGap + voiceOrbHeight + 8
   }
 
-  /// The reply text while responding: the live stream, or the held reply while
-  /// it lingers after the turn.
-  private var respondingText: String {
-    barState.isVoiceResponseActive ? barState.liveVoiceAssistantText : vm.heldReply
-  }
+  /// The reply text while responding. Always the held reply (captured live via
+  /// noteReply), so the source never switches between streaming and linger —
+  /// the reveal just finishes in place with no reload.
+  private var respondingText: String { vm.heldReply }
 
   private var voiceOrbMode: NotchVoiceOrb.Mode {
     if barState.isVoiceListening { return .listening }

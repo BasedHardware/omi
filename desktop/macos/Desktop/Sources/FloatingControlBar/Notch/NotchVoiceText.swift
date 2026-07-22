@@ -61,19 +61,20 @@ struct JustifiedText: NSViewRepresentable {
 
 /// Reveals Omi's reply at a natural speaking cadence rather than as fast as the
 /// model streams tokens, so the words appear roughly in step with the spoken
-/// voice. Snaps to the full text once the turn stops streaming.
+/// voice. The reveal always paces toward the buffered text and simply *finishes*
+/// once the buffer stops growing — it never snaps, so the transition from
+/// streaming to the final reply is seamless (no reload).
 struct StreamingReplyText: View {
   let fullText: String
-  let streaming: Bool
   var size: CGFloat = 13
   var opacity: CGFloat = 0.9
 
   @State private var model = ReplyRevealModel()
 
   var body: some View {
-    TimelineView(.animation(paused: !streaming)) { timeline in
+    TimelineView(.animation) { timeline in
       JustifiedText(
-        text: model.revealed(at: timeline.date, full: fullText, streaming: streaming),
+        text: model.revealed(at: timeline.date, full: fullText),
         size: size, opacity: opacity)
     }
   }
@@ -89,13 +90,8 @@ final class ReplyRevealModel {
   private var lastTime: CFTimeInterval?
   private var lastFullCount = 0
 
-  func revealed(at date: Date, full: String, streaming: Bool) -> String {
+  func revealed(at date: Date, full: String) -> String {
     let count = full.count
-    guard streaming else {
-      revealed = Double(count)
-      lastFullCount = count
-      return full
-    }
     // A shorter buffer means a new turn started — restart the reveal.
     if count < lastFullCount { revealed = 0 }
     lastFullCount = count

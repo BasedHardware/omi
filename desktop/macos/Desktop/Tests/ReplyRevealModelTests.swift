@@ -4,20 +4,12 @@ import XCTest
 
 @MainActor
 final class ReplyRevealModelTests: XCTestCase {
-  func testSnapsToFullWhenNotStreaming() {
-    let model = ReplyRevealModel()
-    let shown = model.revealed(
-      at: Date(timeIntervalSinceReferenceDate: 0), full: "hello world", streaming: false)
-    XCTAssertEqual(shown, "hello world")
-  }
-
-  func testStreamingRevealsWholeWordsAndCompletes() {
+  func testRevealsWholeWordsAndCompletes() {
     let model = ReplyRevealModel()
     let full = "alpha beta gamma delta epsilon"
     var shown = ""
     for i in 0..<500 {
-      shown = model.revealed(
-        at: Date(timeIntervalSinceReferenceDate: Double(i) * 0.05), full: full, streaming: true)
+      shown = model.revealed(at: Date(timeIntervalSinceReferenceDate: Double(i) * 0.05), full: full)
       guard !shown.isEmpty, shown != full else { continue }
       // The tail must always land on a word boundary — never a half-typed word.
       let nextChar = full[full.index(full.startIndex, offsetBy: shown.count)]
@@ -28,10 +20,11 @@ final class ReplyRevealModelTests: XCTestCase {
 
   func testRestartsWhenTextShrinks() {
     let model = ReplyRevealModel()
-    _ = model.revealed(at: Date(timeIntervalSinceReferenceDate: 0), full: "one two three", streaming: false)
-    // A shorter buffer = a new turn; reveal restarts from empty.
-    let shown = model.revealed(
-      at: Date(timeIntervalSinceReferenceDate: 0.02), full: "hi", streaming: true)
+    // Reveal a long buffer partway, then hand it a shorter buffer (new turn).
+    for i in 0..<10 {
+      _ = model.revealed(at: Date(timeIntervalSinceReferenceDate: Double(i) * 0.05), full: "one two three four")
+    }
+    let shown = model.revealed(at: Date(timeIntervalSinceReferenceDate: 1), full: "hi")
     XCTAssertEqual(shown, "")
   }
 }
