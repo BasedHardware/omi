@@ -242,7 +242,6 @@ struct DashboardPage: View {
   @State private var isTogglingListening = false
   @State private var showingAllGoals = false
   @State private var showingGoalDetail = false
-  @State private var showingHomeHistory = false
   @AppStorage("dashboardWidgetsCollapsed") private var widgetsCollapsed = false
   @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
   @AppStorage("transcriptionEnabled") private var transcriptionEnabled = true
@@ -1134,7 +1133,7 @@ struct DashboardPage: View {
       onConnect: toggleHomeConnectPanel,
       // Tapping the bar begins a fresh chat and focuses it to type, staying on
       // the hero; only sending enters the chat surface (see sendFromHomeAskBar).
-      onActivate: { beginNewHomeChatFromAskBar() }
+      onActivate: { focusHomeAskBar() }
     )
   }
 
@@ -1253,16 +1252,10 @@ struct DashboardPage: View {
     reportHomeAutomationMode()
   }
 
-  /// Tapping the ask bar on the hero starts a new conversation rather than
-  /// appending to the last one, then focuses the field to type. The fresh
-  /// session is created only when the current chat still holds messages, so
-  /// repeated taps don't spawn empty sessions.
-  private func beginNewHomeChatFromAskBar() {
+  /// Omi is one continuous chat — tapping the ask bar just focuses it to type,
+  /// continuing the single thread (no new sessions, no history).
+  private func focusHomeAskBar() {
     homeAskFieldFocused = true
-    // Only start a fresh chat from the resting hero — never mid-conversation.
-    // Once you're in an open chat, tapping the bar just continues it.
-    guard homeMode == .hub, !chatProvider.messages.isEmpty else { return }
-    Task { _ = await chatProvider.createNewSession(skipGreeting: true) }
   }
 
   private func sendFromHomeAskBar() {
@@ -1470,49 +1463,10 @@ struct DashboardPage: View {
     )
   }
 
-  /// Leading-edge entry point to previous chats: opens the existing session
-  /// history (new chat, search, Recents grouped by date) as a popover, so the
-  /// thin rail stays uncluttered while chats remain one click away.
-  private var homeHistoryButton: some View {
-    Button {
-      showingHomeHistory.toggle()
-    } label: {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: "clock.arrow.circlepath")
-          .scaledFont(size: OmiType.body, weight: .semibold)
-        Text("History")
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-          .lineLimit(1)
-      }
-      .foregroundStyle(showingHomeHistory ? HomePalette.ink : HomePalette.muted)
-      .padding(.horizontal, OmiSpacing.md)
-      .frame(height: 34)
-      .background(
-        Capsule(style: .continuous)
-          .fill(showingHomeHistory ? HomePalette.tile.opacity(0.6) : Color.clear)
-      )
-      .contentShape(Capsule())
-    }
-    .buttonStyle(.plain)
-    .help("Chat history")
-    .accessibilityLabel("Chat history")
-    .popover(isPresented: $showingHomeHistory, arrowEdge: .bottom) {
-      ChatHistoryPopover(
-        chatProvider: chatProvider,
-        onSelect: {
-          showingHomeHistory = false
-          openHomeChat()
-        }
-      )
-    }
-  }
-
   private var homeHeader: some View {
     let transcriptionUnavailable = appState.transcriptionServiceError != nil
 
     return HStack {
-      homeHistoryButton
-
       Spacer()
       HStack(spacing: OmiSpacing.sm) {
         HomeStatusButton(
