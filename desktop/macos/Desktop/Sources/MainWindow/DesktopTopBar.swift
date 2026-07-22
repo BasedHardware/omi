@@ -48,13 +48,15 @@ struct DesktopTopBar: View {
       Spacer(minLength: OmiSpacing.md)
       CaptureListeningControls(appState: appState, onRewind: onRewind)
     }
-    .padding(.horizontal, OmiSpacing.xl)
-    .padding(.top, OmiSpacing.lg)
-    .padding(.bottom, OmiSpacing.xs)
+    .frame(height: 44)
+    .padding(.horizontal, OmiSpacing.lg)
+    .padding(.vertical, OmiSpacing.sm)
   }
 
   private var navPills: some View {
-    HStack(spacing: 2) {
+    // Flat, containerless nav so the bar blends with the chat page: unselected
+    // items are muted text; the selected item gets a subtle highlight only.
+    HStack(spacing: OmiSpacing.xs) {
       ForEach(navItems) { item in
         Button {
           OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = item.index }
@@ -70,7 +72,7 @@ struct DesktopTopBar: View {
           .padding(.vertical, 6)
           .background(
             Capsule(style: .continuous)
-              .fill(selectedIndex == item.index ? OmiColors.backgroundTertiary : Color.clear)
+              .fill(selectedIndex == item.index ? OmiColors.textPrimary.opacity(0.08) : Color.clear)
           )
           .contentShape(Capsule())
         }
@@ -78,8 +80,6 @@ struct DesktopTopBar: View {
         .help(item.title)
       }
     }
-    .padding(3)
-    .background(Capsule(style: .continuous).fill(OmiColors.backgroundSecondary))
   }
 
   @ViewBuilder private var countsPill: some View {
@@ -107,9 +107,6 @@ struct DesktopTopBar: View {
           }
         }
       }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, 5)
-      .background(Capsule(style: .continuous).fill(OmiColors.backgroundSecondary.opacity(0.6)))
       .help("New since Omi was last in front")
       .transition(.opacity)
     }
