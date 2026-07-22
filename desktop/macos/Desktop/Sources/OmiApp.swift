@@ -1073,12 +1073,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       let isRealAppWindow = window.frame.width > 300 && window.frame.height > 200
       let isMenuBarPopover = window.title.hasPrefix("Item-")
       if isRealAppWindow && !isMenuBarPopover {
-        // A summon can come from any Space/desktop, so the window must follow the
-        // user here — otherwise activating the app leaves the window stranded on
-        // its original Space and nothing appears. `.moveToActiveSpace` pulls it to
-        // the current desktop; also un-minimize and (belt-and-suspenders) nudge it
+        // A summon can come from any Space/desktop. `.moveToActiveSpace` only pulls
+        // the window over WHEN THE APP ACTIVATES — but macOS blocks a background app
+        // from self-activating on a hotkey, so that leaves the window stranded and
+        // nothing appears. `.canJoinAllSpaces` instead makes the window show on
+        // whatever desktop is current with no activation required (reverted shortly
+        // after in dropSummonWindowLevelSoon). Also un-minimize and nudge it
         // on-screen if it drifted off a disconnected display.
-        window.collectionBehavior.insert(.moveToActiveSpace)
+        window.collectionBehavior.insert(.canJoinAllSpaces)
         if window.isMiniaturized { window.deminiaturize(nil) }
         if let screen = NSScreen.main, !screen.visibleFrame.intersects(window.frame) {
           window.center()
@@ -1106,6 +1108,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // anyway; if not, it settles back into the normal window order.
     DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
       window.level = .normal
+      // Stop the window from showing on every Space once the summon has landed.
+      window.collectionBehavior.remove(.canJoinAllSpaces)
     }
   }
 
