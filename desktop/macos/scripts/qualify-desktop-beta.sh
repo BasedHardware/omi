@@ -130,6 +130,15 @@ python3 "$KEYVALUE_PY" preflight-release /tmp/desktop-qualification-release.json
 SHA=$(git -C "$REPO_ROOT" rev-list -n1 "$RELEASE_TAG")
 WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"
 
+# Provision the tag-pinned backend venv so the hermetic stack resolves the
+# exact locked Python dependencies. Machines without uv keep the legacy
+# global-python3 resolution (cache reuse may clean the venv between runs).
+if command -v uv >/dev/null 2>&1; then
+  (cd "$WORKTREE" && make setup-backend)
+else
+  echo "uv not found; dev-harness python resolves via global python3"
+fi
+
 LAUNCH_LOG="$WORKTREE/.qualification-desktop-launch.log"
 
 resolve_automation_port() {

@@ -419,16 +419,21 @@ for service in REQUIRED_SERVICES:
         missing_services.append(f"{service}:{exc}")
         continue
     if service == "typesense":
-        container = f"omi-dev-harness-{cfg.instance}-typesense"
-        container_running = subprocess.run(
-            ["docker", "ps", "--filter", f"name={container}", "--filter", "status=running", "-q"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            check=False,
-        ).stdout.strip()
-        if not container_running:
-            missing_services.append(f"{service}:container-not-running")
+        # Only the docker runtime has a container to cross-check; the native
+        # typesense-server runtime is covered by the owned-PID check above.
+        recorded_command = record.get("command") or []
+        uses_docker = bool(recorded_command) and str(recorded_command[0]).endswith("docker")
+        if uses_docker:
+            container = f"omi-dev-harness-{cfg.instance}-typesense"
+            container_running = subprocess.run(
+                ["docker", "ps", "--filter", f"name={container}", "--filter", "status=running", "-q"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                check=False,
+            ).stdout.strip()
+            if not container_running:
+                missing_services.append(f"{service}:container-not-running")
 
 if missing_services:
     ownership_failure(

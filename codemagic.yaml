@@ -2919,6 +2919,150 @@ workflows:
           success: true
           failure: true
 
+  # Primary beta-qualification executor: rebuilds the exact candidate tag and
+  # runs the hermetic T2 + fault suite on an ephemeral Codemagic Mac. It has no
+  # automatic trigger — .github/workflows/desktop_qualify_beta.yml starts it via
+  # the Codemagic API (OMI_QUALIFY_TAG) and publishes the immutable Actions
+  # evidence only after this build, its tag binding, and its result artifact all
+  # verify. Self-hosted qualification runners remain the fallback lane; at least
+  # one lane must pass for a candidate to qualify. Keep this control definition
+  # on main: candidate source is materialized from the immutable tag only after
+  # this trusted configuration has loaded (same posture as the preview lane).
+  omi-desktop-qualification:
+    name: Qualify OMI Desktop Beta (hermetic T2)
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    environment:
+      # Deliberately no credential groups (check-release-process-guards.py
+      # forbids normal release credentials outside the canonical release):
+      # qualification only reads public release data, authenticated with the
+      # short-lived Omi Bot app token the dispatching GitHub workflow passes as
+      # OMI_QUALIFY_GH_TOKEN. All immutable evidence publication stays in the
+      # trusted GitHub workflow.
+      vars:
+        GITHUB_REPO: "BasedHardware/omi"
+        TYPESENSE_VERSION: "27.1"
+        TYPESENSE_DARWIN_ARM64_SHA256: "ef478f0a932f38ded3de46de7919a4a90809cc480d344d16ed5a5c6a9ccb177e"
+      xcode: 16.4
+    cache:
+      cache_paths:
+        - ~/Library/Caches/org.swift.swiftpm
+    scripts:
+      - name: Resolve and pin the qualification tag
+        script: |
+          set -euo pipefail
+          : "${OMI_QUALIFY_TAG:?OMI_QUALIFY_TAG (v*-macos candidate tag) is required}"
+          if ! printf '%s\n' "$OMI_QUALIFY_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+-macos$'; then
+            echo "ERROR: invalid macOS release tag: $OMI_QUALIFY_TAG" >&2
+            exit 1
+          fi
+          git fetch --force origin \
+            "+refs/tags/${OMI_QUALIFY_TAG}:refs/tags/${OMI_QUALIFY_TAG}" \
+            '+refs/tags/v*-macos:refs/tags/v*-macos'
+          TARGET_SHA=$(git rev-parse "${OMI_QUALIFY_TAG}^{commit}")
+          echo "QUALIFY_TARGET_SHA=$TARGET_SHA" >> "$CM_ENV"
+          echo "Qualifying $OMI_QUALIFY_TAG at $TARGET_SHA (controls from $(git rev-parse --short HEAD))"
+
+      - name: Install hermetic stack prerequisites
+        script: |
+          set -euo pipefail
+          command -v gh >/dev/null 2>&1 || brew install gh
+          command -v redis-server >/dev/null 2>&1 || brew install redis
+          command -v uv >/dev/null 2>&1 || brew install uv
+          # /usr/bin/java is a stub without a runtime; probe java_home instead.
+          if ! /usr/libexec/java_home -v 17+ >/dev/null 2>&1; then
+            brew install --cask temurin@21
+          fi
+          if ! command -v cargo >/dev/null 2>&1 && [ ! -x "$HOME/.cargo/bin/cargo" ]; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88.0
+          fi
+          if [ -x "$HOME/.cargo/bin/cargo" ]; then
+            echo "PATH=$HOME/.cargo/bin:$PATH" >> "$CM_ENV"
+          fi
+          # Native pinned Typesense: ephemeral Codemagic Macs have no nested
+          # virtualization for Docker, so the harness runs the binary directly.
+          mkdir -p "$HOME/typesense"
+          curl -fsSL -o /tmp/typesense.tar.gz \
+            "https://dl.typesense.org/releases/${TYPESENSE_VERSION}/typesense-server-${TYPESENSE_VERSION}-darwin-arm64.tar.gz"
+          echo "${TYPESENSE_DARWIN_ARM64_SHA256}  /tmp/typesense.tar.gz" | shasum -a 256 -c -
+          tar -xzf /tmp/typesense.tar.gz -C "$HOME/typesense" typesense-server
+          chmod +x "$HOME/typesense/typesense-server"
+          echo "OMI_TYPESENSE_RUNTIME=native" >> "$CM_ENV"
+          echo "OMI_TYPESENSE_SERVER_BIN=$HOME/typesense/typesense-server" >> "$CM_ENV"
+
+      - name: Validate newest candidate evidence from the exact tag
+        script: |
+          set -euo pipefail
+          export GH_TOKEN="${OMI_QUALIFY_GH_TOKEN:?OMI_QUALIFY_GH_TOKEN (short-lived app token from the dispatching workflow) is required}"
+          LATEST_TAG=$(git for-each-ref --count=1 --sort=-v:refname \
+            --format='%(refname:strip=2)' 'refs/tags/v*-macos')
+          test -n "$LATEST_TAG"
+          rm -rf /tmp/desktop-beta-qualification /tmp/qualification-tag-src
+          mkdir -p /tmp/desktop-beta-qualification
+          # Validation controls come from the immutable tag itself, matching the
+          # self-hosted lane's tag checkout trust posture.
+          git worktree add --detach /tmp/qualification-tag-src "$QUALIFY_TARGET_SHA"
+          gh release view "$OMI_QUALIFY_TAG" --repo "$GITHUB_REPO" \
+            --json tagName,body,isDraft,isPrerelease,publishedAt,assets \
+            > /tmp/desktop-beta-qualification/release.json
+          gh release download "$OMI_QUALIFY_TAG" --repo "$GITHUB_REPO" \
+            --pattern 'desktop-smoke-result.json' \
+            --dir /tmp/desktop-beta-qualification
+          gh release download "$OMI_QUALIFY_TAG" --repo "$GITHUB_REPO" \
+            --pattern 'desktop-smoke-result-beta.json' \
+            --dir /tmp/desktop-beta-qualification 2>/dev/null || true
+          python3 /tmp/qualification-tag-src/.github/scripts/check-desktop-auto-beta-candidate.py \
+            --release-json /tmp/desktop-beta-qualification/release.json \
+            --smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result.json \
+            --beta-smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result-beta.json \
+            --release-tag "$OMI_QUALIFY_TAG" \
+            --latest-tag "$LATEST_TAG" \
+            --tag-sha "$QUALIFY_TARGET_SHA" \
+            --checkout-sha "$(git -C /tmp/qualification-tag-src rev-parse HEAD)" \
+            --output /tmp/desktop-beta-qualification/candidate-gate.json
+
+      - name: Qualify the exact candidate on the hermetic stack
+        script: |
+          set -euo pipefail
+          export GH_TOKEN="${OMI_QUALIFY_GH_TOKEN}"
+          desktop/macos/scripts/qualify-desktop-beta.sh \
+            --automatic \
+            --github-actions-artifact \
+            --signed-smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result.json \
+            --candidate-gate-result /tmp/desktop-beta-qualification/candidate-gate.json \
+            "$OMI_QUALIFY_TAG"
+
+      - name: Collect qualification result and harness evidence
+        script: |
+          set -euo pipefail
+          mkdir -p build/qualification
+          cp /tmp/desktop-beta-qualification/candidate-gate.json build/qualification/
+          WORKTREE="$HOME/Library/Caches/OmiDesktop/qualification-swiftpm-v2/$QUALIFY_TARGET_SHA/source"
+          for evidence in "$WORKTREE"/desktop/macos/.harness/desktop-core/*/manifest.json; do
+            [ -f "$evidence" ] || continue
+            stamp="$(basename "$(dirname "$evidence")")"
+            cp "$evidence" "build/qualification/harness-${stamp}.json"
+          done
+          python3 - <<'PY'
+          import json, os
+          json.dump(
+              {
+                  "ok": True,
+                  "release_tag": os.environ["OMI_QUALIFY_TAG"],
+                  "source_sha": os.environ["QUALIFY_TARGET_SHA"],
+                  "lane": "codemagic",
+                  "build_id": os.environ.get("CM_BUILD_ID", ""),
+              },
+              open("build/qualification/qualification-result.json", "w", encoding="utf-8"),
+              indent=2,
+              sort_keys=True,
+          )
+          PY
+          echo "Qualification result recorded for $OMI_QUALIFY_TAG"
+
+    artifacts:
+      - build/qualification/**
+
   # This workflow has no automatic trigger. It is started only by
   # .github/workflows/desktop_publish_preview.yml after the protected
   # desktop-preview-publish environment approves an immutable source SHA.
