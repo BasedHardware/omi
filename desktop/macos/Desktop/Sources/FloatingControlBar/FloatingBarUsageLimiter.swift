@@ -74,7 +74,16 @@ final class FloatingBarUsageLimiter: ObservableObject {
     UserDefaults.standard.removeObject(forKey: Self.cachedPlanKey)
   }
 
+  /// Non-production test override: when true the local usage preflight never
+  /// blocks, so PTT / chat can be exercised on a named bundle without hitting
+  /// the free-tier limit. Set via the `reset_usage_limit` bridge action.
+  var debugBypassLimit = false
+
   var isLimitReached: Bool {
+    // Test bypass (non-production named bundles only).
+    if debugBypassLimit {
+      return false
+    }
     // BYOK users pay their own LLM bill and are never limited. Honor local
     // BYOK state so a heartbeat-lagged server quota (allowed=false right
     // after activation) can't block chat for a fully-configured BYOK user.

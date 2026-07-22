@@ -1627,6 +1627,20 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "reset_usage_limit",
+      summary: "Bypass the free-tier usage limit on this named bundle so PTT/chat can be tested",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "reset_usage_limit is disabled on production bundles"]
+      }
+      return await MainActor.run { () -> [String: String] in
+        FloatingBarUsageLimiter.shared.debugBypassLimit = true
+        return ["bypassed": "true"]
+      }
+    }
+
+    register(
       name: "debug_reach_error",
       summary: "Show the actionable 'Couldn't reach Omi' card on the bar (Retry/Skip) for visual verification",
       params: []
