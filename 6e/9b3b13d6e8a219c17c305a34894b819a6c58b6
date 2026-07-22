@@ -1,0 +1,44 @@
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
+  s_ba6911a59cf527::t_f6adb55c96e149 509
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
+  s_ba6911a59cf527::t_83bcd45c7e076e 162-165,168-177
+  s_ba6911a59cf527::t_ee31b6f7d00f6c 237
+  s_ba6911a59cf527::t_3696aef23a9ca1 330,355
+  s_ba6911a59cf527::t_251769a687df89 133
+  s_ba6911a59cf527::t_b91e0eac820e86 131
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel+Steps.swift
+  s_ba6911a59cf527::t_c85e94ae19ab13 414
+  s_ba6911a59cf527::t_78e26c42827d5e 460-471
+  s_ba6911a59cf527::t_dbff74635258d3 242-248,250-273,275,472
+  s_ba6911a59cf527::t_84ea2e8ec2c8fd 178-181
+  s_ba6911a59cf527::t_14f48e31db40f1 481-482,487-488
+  s_ba6911a59cf527::t_ecbbcebcc097a0 375-380
+  s_62099ccfd5cc12::t_f26dcad95e42f7 473
+desktop/macos/changelog/unreleased/20260722-sb-onboarding-shortcut-connector-polish.json
+  s_ba6911a59cf527::t_5680d419808253 2
+  s_ba6911a59cf527::t_4778da509b3cb5 1,3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "6e9b3b13d6e8a219c17c305a34894b819a6c58b6",
+  "prompts": {},
+  "sessions": {
+    "s_62099ccfd5cc12": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bce3b3b3-c244-4ae8-bb2a-1ff7eccbcdbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_ba6911a59cf527": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "437ec1d8-1792-4aa9-a5ce-2846124cd673",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
