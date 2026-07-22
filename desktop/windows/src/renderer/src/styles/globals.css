@@ -35,23 +35,134 @@
 
 @layer base {
   :root {
+    /* ── Design tokens (ported from the macOS app's OmiColors/OmiChrome
+       structure — same ramp, neutral hues, NO purple family). ─────────── */
+
+    /* Background ramp (macOS: #0F0F0F → #252525). */
+    --bg-primary: #0f0f0f;
+    --bg-secondary: #1a1a1a;
+    --bg-tertiary: #252525;
+    --bg-quaternary: #343438;
+    --bg-raised: #1f1f22;
+
+    /* Hairlines. macOS draws #3A3940 at ~0.28 over dark panels; over this
+       ramp the equivalent finished strokes are: */
+    --border: rgba(255, 255, 255, 0.09);
+    --border-strong: rgba(255, 255, 255, 0.16);
+
+    /* Text hierarchy (4 tiers, macOS values). */
+    --text-primary: #ffffff;
+    --text-secondary: #e5e5e5;
+    --text-tertiary: #b0b0b0;
+    --text-quaternary: #888888;
+
+    /* Accent: white/neutral system (INV-UI-1 — never purple). Filled accent
+       surfaces (toggles-on, send button, lit keycaps) pair the white fill
+       with --accent-contrast content. */
+    --accent: #ffffff;
+    --accent-contrast: #0f0f0f;
+
+    /* Status (macOS values — hue-true, used sparingly). */
+    --success: #10b981;
+    --warning: #f59e0b;
+    --error: #ef4444;
+    --info: #3b82f6;
+
+    /* Radius scale (macOS OmiChrome: window/card/section/control/chip). */
+    --radius-window: 26px;
+    --radius-card: 24px;
+    --radius-section: 20px;
+    --radius-control: 16px;
+    --radius-chip: 14px;
+
+    /* Motion (ported feel: fast, well-damped; window-morphs ease-out). */
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-morph: cubic-bezier(0.3, 0.8, 0.3, 1);
+    --dur-fast: 120ms;
+    --dur-med: 180ms;
+    --dur-slow: 320ms;
+
+    /* Glass — reserved for floating surfaces (bar, toasts); content panels
+       are solid. */
     --glass-bg: rgba(0, 0, 0, 0.42);
-    --glass-bg-subtle: rgba(0, 0, 0, 0.30);
+    --glass-bg-subtle: rgba(0, 0, 0, 0.3);
     --glass-bg-strong: rgba(0, 0, 0, 0.52);
-    --glass-border: rgba(255, 255, 255, 0.10);
+    --glass-border: rgba(255, 255, 255, 0.1);
     --glass-border-strong: rgba(255, 255, 255, 0.18);
     --glass-highlight: rgba(255, 255, 255, 0.07);
     --glass-blur: 24px;
     --glass-blur-strong: 36px;
-    /* Accent color for the active nav item's icon. Change this one value to
-       re-theme the sidebar highlight. */
-    --accent: #5b02e0;
-    /* Neutral grey used for the selected/hovered sidebar row + the tab
-       background gradient's top-left corner (no accent tint). */
-    --nav-sel: #141414;
-    /* Surface tone for content panels (chat box, widgets) — darker than the
-       nav grey but not pure black. */
-    --surface: #0c0c0c;
+
+    /* Selected/hovered nav row fill (kept as a named token for the sidebar
+       and settings rail). */
+    --nav-sel: rgba(255, 255, 255, 0.07);
+    /* Surface tone for content panels (chat composer, widgets). */
+    --surface: var(--bg-secondary);
+
+    /* App typeface. Inter Variable (bundled via @fontsource, opsz axis) is
+       the SF Pro analog — deterministic rendering on every machine, closest
+       to the Mac app's feel. Segoe UI Variable stays as the fallback stack. */
+    --font-app:
+      'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', system-ui,
+      sans-serif;
+
+    /* Code/monospace face. JetBrains Mono Variable (bundled via @fontsource) is
+       the deterministic monospace for code blocks, transcripts, and agent
+       output — Cascadia Code / Consolas are the Windows fallbacks. Consumed by
+       the `font-mono` Tailwind utility (see tailwind.config.ts). */
+    --font-code: 'JetBrains Mono Variable', 'Cascadia Code', Consolas, 'Liberation Mono', monospace;
+
+    /* Serif accent. The Mac Hub sets a handful of things in the system serif (New
+       York): the stat-ribbon numerals, the Connect column headers, and the "Try
+       asking" headline. New York is Apple-only, so we bundle Newsreader Variable
+       (OFL) — a Times/New-York-class transitional serif — as the analog. It is an
+       ACCENT face only: body text stays --font-app. (The omi wordmark is NOT serif;
+       Mac renders it with design:.rounded.) */
+    --font-serif: 'Newsreader Variable', Georgia, 'Times New Roman', serif;
+
+    /* ── Mac-parity palette (INV-UI-1 Windows carve-out, ruling B 2026-07-14).
+       Purple ports as-is from macOS OmiColors; these are NEW named tokens for
+       Hub/chat/brain-graph surfaces. --accent stays neutral white (above). ── */
+    --purple-primary: #8b5cf6;
+    --purple-secondary: #a855f7;
+    --purple-accent: #7c3aed;
+    --purple-light: #d946ef;
+    --user-bubble: #43389f;
+    /* Transcript speaker-bubble backgrounds (6-color dark set) */
+    --speaker-1: #2d3748;
+    --speaker-2: #1e3a5f;
+    --speaker-3: #2d4a3e;
+    --speaker-4: #4a3728;
+    --speaker-5: #3d2e4a;
+    --speaker-6: #4a3a2d;
+    /* HomePalette — redesigned-Home (Hub) surface tokens (macOS DashboardPage).
+       Values are the Swift RGB floats rounded to 8-bit; four were off by one
+       (paper/panel/ink/hairline) and are corrected here against the source. */
+    --home-paper: #050505; /* rgb(0.018,0.019,0.021) */
+    --home-panel: #0b0c0d; /* rgb(0.045,0.046,0.052) */
+    --home-tile: #141416;
+    --home-tile-hover: #1d1a24; /* intentionally leans violet (R/G/B not equal) */
+    --home-ink: #f0ece3; /* warm off-white primary text; rgb(0.94,0.925,0.89) */
+    --home-secondary: #c7c3b9;
+    --home-muted: #7d786e;
+    --home-faint: #5c5954;
+    --home-hairline: #28282c; /* rgb(0.155,0.155,0.172) */
+    --home-green: #2bc761;
+    --home-stage-glow: #7a4df2; /* ambient violet glow (ruling B); rgb(0.48,0.30,0.95) */
+
+    /* Channel triplets for the two Home colors that are used at many alphas (the
+       canvas glows, the ask-bar focus ring/shadows, the vignette). Lets a call
+       site write rgb(var(--home-stage-glow-rgb) / 0.075) instead of re-typing the
+       hue as a literal rgba() — so the hue lives in exactly one place. */
+    --home-paper-rgb: 5 5 5;
+    --home-stage-glow-rgb: 122 77 242;
+  }
+
+  /* A/B hook used by the Phase 8 typography comparison harness (and an easy
+     escape hatch): data-font="segoe" renders the whole app in Segoe UI
+     Variable instead of Inter. */
+  html[data-font='segoe'] {
+    --font-app: 'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
   }
 
   html,
@@ -59,19 +170,32 @@
   #root {
     height: 100%;
     margin: 0;
-    background: #000000;
+    background: var(--bg-primary);
     background-attachment: fixed;
     color: rgba(255, 255, 255, 0.92);
-    font-family:
-      'SF Pro Display',
-      'SF Pro Text',
-      -apple-system,
-      BlinkMacSystemFont,
-      'Segoe UI Variable',
-      system-ui,
-      sans-serif;
+    font-family: var(--font-app);
+    font-optical-sizing: auto;
+    /* Never let Chromium synthesize a missing weight/style — when a glyph falls
+       through to the Segoe fallback, a faux-bold of a weight outside its axis
+       reads as smeared. Only use real font instances. */
+    font-synthesis: none;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+  }
+
+  /* Mica (Win11 22H2+): main sets data-mica on the root (App.useMicaChrome, main
+     window only) when the window has a system background material; the canvas
+     goes translucent so the desktop tint reads through — subtly. Base tone is
+     --bg-primary #0f0f0f at 82% (mirrors shared/chrome APP_BG_HEX, the WCO
+     caption color). `!important` is load-bearing: index.html hardcodes inline
+     `style="background: transparent"` on <body>/<#root> (that page is shared by
+     every window; the bar/toast/capture surfaces need it transparent), and only
+     `!important` outranks a non-important inline style. Secondary windows never
+     get data-mica, so they keep their transparent page. */
+  html[data-mica='true'],
+  html[data-mica='true'] body,
+  html[data-mica='true'] #root {
+    background: rgba(15, 15, 15, 0.82) !important;
   }
 
   ::selection {
@@ -92,22 +216,29 @@
     inset: 0;
     pointer-events: none;
     z-index: 0;
-    /* Full-screen gradient (same as the tabs) so there's no black gap behind the
-       sidebar while it slides in. */
-    background: linear-gradient(135deg, var(--nav-sel) 0%, #000000 70%);
+    /* Flat canvas (macOS backgroundPrimary) so there's no gap behind the
+       sidebar while it slides in. Under mica this stays transparent so the
+       material shows through. */
+    background: var(--bg-primary);
+  }
+
+  html[data-mica='true'] .app-canvas::before {
+    background: transparent;
   }
 
   @keyframes auraDrift {
-    0% { opacity: 0.6; transform: translate(0, 0) scale(1); }
-    50% { opacity: 1; transform: translate(10px, -10px) scale(1.05); }
-    100% { opacity: 0.6; transform: translate(-10px, 10px) scale(1); }
-  }
-
-  .panel-header {
-    @apply rounded-2xl border border-white/10 px-7 py-5;
-    background: rgba(255, 255, 255, 0.04);
-    -webkit-backdrop-filter: blur(12px) saturate(1.2);
-    backdrop-filter: blur(12px) saturate(1.2);
+    0% {
+      opacity: 0.6;
+      transform: translate(0, 0) scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: translate(10px, -10px) scale(1.05);
+    }
+    100% {
+      opacity: 0.6;
+      transform: translate(-10px, 10px) scale(1);
+    }
   }
 
   .page-outlet {
@@ -156,6 +287,19 @@
     @apply glass;
   }
 
+  /* Same look as .glass but WITHOUT backdrop-filter. Live backdrop-blur is the
+     most expensive property to composite, and a scroll container full of blurred
+     cards (e.g. the Apps grid) janks on every frame. Use this for many-of cards
+     where the blur is imperceptible over the app's static dark background. */
+  .surface-card-flat {
+    @apply rounded-2xl;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.18),
+      inset 0 1px 0 var(--glass-highlight);
+  }
+
   .surface-card-interactive {
     @apply glass transition-all duration-200 ease-out;
   }
@@ -173,6 +317,15 @@
 
   .section-label {
     @apply text-xs font-medium tracking-wide text-white/50;
+  }
+
+  /* Tabular lining numerals for timers, counters, and timestamps so digits
+     don't jitter as values tick. */
+  .tnum {
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings:
+      'tnum' 1,
+      'lnum' 1;
   }
 
   .btn-primary {
@@ -215,14 +368,84 @@
   }
 
   .input-field {
-    @apply w-full rounded-2xl border border-white/10 px-4 py-3 text-sm text-white transition-all duration-200 placeholder:text-white/40 focus:border-white/25 focus:outline-none focus:ring-1 focus:ring-white/10;
+    @apply w-full rounded-2xl border border-white/10 px-4 py-3 text-sm text-white transition-[border-color,background-color,box-shadow] duration-200 placeholder:text-white/40 focus:border-white/25 focus:outline-none focus:ring-1 focus:ring-white/10;
     background: rgba(0, 0, 0, 0.18);
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
+    /* Kill the first-focus white flash: with `transition-all`, focusing painted
+       the UA's default outline for one ~200ms frame before `focus:outline-none`
+       drove it to transparent. Fix both ends — declare the transparent outline
+       at rest (no color left to flash) AND narrow the transition to the props
+       that actually change on focus (border, background, ring) so `outline`
+       never animates. Focus stays visible via the ring + border above. */
+    outline: 2px solid transparent;
+    outline-offset: 2px;
   }
 
   .input-field:focus {
     background: rgba(0, 0, 0, 0.24);
+  }
+
+  /* Reusable focus-visible ring — the generalized form of the .input-field
+     no-flash fix above, for any future focusable control (buttons, custom
+     inputs, menu rows). The three rules that keep the white first-focus flash
+     from ever returning:
+       1. Declare a transparent 2px outline AT REST — no UA outline color is left
+          to paint for one frame before focus styling takes over.
+       2. Transition ONLY border-color + box-shadow. NEVER `transition: all` on a
+          focusable element — that animates `outline` and reintroduces the flash.
+       3. Key off `:focus-visible`, not `:focus`, so pointer clicks don't ring —
+          only keyboard/AT focus does.
+     Apply `.focus-ring` to a control that carries its own border (so border-color
+     has something to shift). The .input-field fix stays as-is (it also swaps a
+     background on focus, so it isn't a trivially-safe refactor onto this base). */
+  .focus-ring {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    transition:
+      border-color 200ms var(--ease-out),
+      box-shadow 200ms var(--ease-out);
+  }
+
+  .focus-ring:focus-visible {
+    border-color: rgba(255, 255, 255, 0.25);
+    /* Offset double-ring: a bg-primary spacer then a bright hairline, so the
+       indicator reads on ANY fill (white primary button, accent toggle track,
+       raised pill) and clears the ≥3:1 focus-contrast bar even on borderless
+       controls. Kept to box-shadow only (no layout/paint of `outline`). */
+    box-shadow:
+      0 0 0 2px var(--bg-primary),
+      0 0 0 4px rgba(255, 255, 255, 0.55);
+  }
+
+  /* Native <input type="date"> themed to match .input-field. The UA ships a
+     black-on-white calendar glyph and a low-contrast `yyyy-mm-dd` placeholder,
+     both of which looked foreign on the dark canvas. color-scheme: dark gives us
+     the dark picker panel; the rest tints the glyph and the empty-field text. */
+  .date-input {
+    @apply input-field;
+    color-scheme: dark;
+  }
+
+  .date-input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 4px;
+    opacity: 0.45;
+    filter: invert(1);
+    transition: opacity 150ms ease-out;
+  }
+
+  .date-input::-webkit-calendar-picker-indicator:hover {
+    opacity: 0.9;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  /* An empty date field renders its yyyy-mm-dd mask at full body contrast; dim it
+     so it reads as a placeholder. `data-empty` is set by the component (an empty
+     controlled input has no `value` *attribute* to select on). */
+  .date-input[data-empty='true']::-webkit-datetime-edit {
+    color: rgba(255, 255, 255, 0.4);
   }
 
   .skeleton {
@@ -245,17 +468,44 @@
     color: #fff !important;
   }
 
-  /* Dashboard widget surface (Home): black, slightly transparent so the tab
-     gradient shows through. Fixed height so cards never grow with their content
-     — sized to fit the header + 2 preview rows + a "+N more" line; shorter
-     content just leaves empty space at the bottom. */
+  /* Dashboard widget surface (Home): solid raised panel on the flat canvas.
+     Fixed height so cards never grow with their content — sized to fit the
+     header + 2 preview rows + a "+N more" line; shorter content just leaves
+     empty space at the bottom.
+
+     Elevation: --surface (#1a1a1a) sits only ~11 levels above the --bg-primary
+     (#0f0f0f) canvas, so with a 9%-white hairline and no shadow the card frame
+     nearly vanished into the dark ("sucked into the black"). Raise it to
+     --bg-tertiary (#252525, a real elevation step), strengthen the border, and
+     add a soft drop shadow so the panel reads as a distinct raised surface. */
   .widget-card {
-    @apply flex h-40 flex-col rounded-2xl border border-white/10 p-4 transition-colors duration-200;
-    background: var(--surface);
+    @apply flex h-40 flex-col rounded-section border p-4 transition-colors duration-200;
+    background: var(--bg-tertiary);
+    border-color: var(--border-strong);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   }
 
+  /* Hover lifts one step LIGHTER (--bg-quaternary #343438) — the old value
+     (--bg-raised #1f1f22) was darker than the new resting tone and read as a
+     dip, not a lift. */
   .widget-card:hover {
-    background: var(--nav-sel);
+    background: var(--bg-quaternary);
+    border-color: var(--border-strong);
+  }
+
+  /* Elevated page surface (Conversations/Tasks search bars, filter/select
+     controls, info + error banners). These previously used .glass-subtle
+     (black 30% + a 6%-white hairline), which on the flat #0f0f0f canvas sat
+     DARKER than the page and read as murky — the top-right surfaces looked
+     "sucked into the black". Lift them onto the same raised-panel family as
+     .widget-card (--bg-tertiary + --border-strong + a soft shadow) so they
+     read as distinct raised surfaces. Deliberately kept OFF the shared glass-*
+     tokens (owned by the bar) — this is a page-level surface. */
+  .surface-panel {
+    @apply rounded-2xl border;
+    background: var(--bg-tertiary);
+    border-color: var(--border-strong);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   }
 
   /* Sidebar entrance — slides in from the left. This is the first thing to
@@ -311,26 +561,87 @@
     }
   }
 
-  /* Chat bubble entrance — a gentle, slow rise + fade for a smooth feel. */
+  /* Chat message entrance — quick, well-damped rise + fade (macOS content
+     springs land in 220–350ms with minimal overshoot). */
   .bubble-in {
-    animation: bubbleIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: bubbleIn 0.38s var(--ease-out) both;
     will-change: transform, opacity;
   }
 
   @keyframes bubbleIn {
     from {
       opacity: 0;
-      transform: translateY(6px);
+      transform: translateY(8px) scale(0.985);
     }
     to {
       opacity: 1;
-      transform: translateY(0);
+      transform: translateY(0) scale(1);
     }
   }
 
-  /* When the user enables Reduce motion in Settings, every animation
-     resolved to a near-instant no-op. Existing transitions still snap to
-     their final state, so toggle UX, hover effects, etc. don't feel dead. */
+  /* Assistant "thinking" indicator — three quiet dots, staggered. */
+  .typing-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 1em;
+  }
+
+  .typing-dots > span {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--text-tertiary);
+    animation: typingDot 1.2s ease-in-out infinite;
+  }
+
+  .typing-dots > span:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+
+  .typing-dots > span:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+
+  @keyframes typingDot {
+    0%,
+    60%,
+    100% {
+      opacity: 0.35;
+      transform: translateY(0);
+    }
+    30% {
+      opacity: 1;
+      transform: translateY(-2px);
+    }
+  }
+
+  /* Bar chat "waiting for the reply" loader — the Omi dot-ring mark spun fast, so
+     a pending assistant turn reads as a live brand spinner (standalone, no bubble)
+     instead of a bubble of dots. The graded dot opacity (set inline on the SVG)
+     gives the ring a bright head + faded tail so the rotation is unmistakable
+     despite the mark's 8-fold symmetry. The in-app reduce-motion kill-switch below
+     stops it after one turn (a static mark); per charter 03 the OS-level
+     reduced-motion path leaves loops/spinners running, so this is NOT stripped
+     there. */
+  .omi-thinking-spin {
+    animation: omiThinkingSpin 0.4s linear infinite;
+    transform-origin: 50% 50%;
+    will-change: transform;
+  }
+
+  @keyframes omiThinkingSpin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* In-app "Reduce motion" toggle (Settings). This is the user's explicit
+     "make everything instant" preference and near-zeroes ALL durations — a
+     full kill-switch. It is deliberately DISTINCT from the OS-level
+     `@media (prefers-reduced-motion: reduce)` path at the end of this file,
+     which is the vestibular-safety charter path (keeps choreography/timing,
+     only strips large positional translate from entrances). Keep both. */
   html[data-reduce-motion='true'] *,
   html[data-reduce-motion='true'] *::before,
   html[data-reduce-motion='true'] *::after {
@@ -352,19 +663,23 @@
     }
   }
 
-  /* Page transition wrapper — every routed page fades + lifts in. */
+  /* Page transition — the active routed panel fades in on reveal, matching
+     macOS's 80ms easeOut pageNavigationAnimation (DesktopHomeView.swift). Applied
+     to the active panel in MainViews; the kept-mounted panels hide via
+     display:none, so the display:none→flex reveal restarts this on each switch.
+     Opacity-only (no positional travel) so a tab switch reads as a crisp
+     crossfade rather than a pop — and it stays vestibular-safe under
+     prefers-reduced-motion, so that block needs no override for it. */
   .page-enter {
-    animation: pageEnter 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: pageEnter 80ms ease-out both;
   }
 
   @keyframes pageEnter {
     0% {
       opacity: 0;
-      transform: translateY(8px);
     }
     100% {
       opacity: 1;
-      transform: none;
     }
   }
 
@@ -405,19 +720,41 @@
   }
 }
 
+/* Overlay scrollbars (charter 03 — macOS parity). The thumb rests fully
+   transparent and only paints while the pointer is over its scroll area. Two
+   reveal paths: `*:hover` shows the thumb of every hovered scrollable ancestor
+   (so any scroll container surfaces its bar when you point at it — no per-
+   container class needed, and no regression from the old always-visible bar),
+   and `.scroll-region` is the explicit opt-in wrapper that ALSO contains
+   overscroll (no rubber-band / scroll-chaining — the charter drops elastic
+   overscroll on Windows). Hovering the thumb itself brightens it further. The
+   2px transparent border + padding-box clip insets the visible thumb to ~6px.
+   `.no-scrollbar` below still fully hides bars where scroll is wheel/drag-driven. */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
+  background: transparent;
   border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 150ms ease-out;
+}
+*:hover::-webkit-scrollbar-thumb,
+.scroll-region:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.18);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.28);
+  background-color: rgba(255, 255, 255, 0.32);
+}
+/* Opt-in wrapper for nested scroll areas: stop overscroll from chaining to the
+   parent or triggering an elastic rubber-band (dropped on Windows). */
+.scroll-region {
+  overscroll-behavior: contain;
 }
 
 /* Hide the scrollbar while keeping scroll (the Rewind activity timeline is panned
@@ -430,4 +767,75 @@
   width: 0;
   height: 0;
   display: none;
+}
+
+/* OS-level reduced-motion (charter 03) — the vestibular-safety path, DISTINCT
+   from the in-app `html[data-reduce-motion='true']` kill-switch above (that
+   toggle near-zeroes everything by user choice). Per the charter we do NOT kill
+   animation or set durations to 0 here: motion sickness is triggered by large
+   positional TRAVEL, not by fades. So we keep each entrance's choreography and
+   duration and only redefine the translate-based entrance keyframes to be
+   opacity-only. Focus rings, hover/active states, loops (typing dots, spinners),
+   and the fades themselves stay untouched. Redefining a keyframe by name inside
+   the media query overrides the base definition only while reduced-motion is on.
+   The small (6px) Tailwind `fadeIn` is intentionally left as-is (small motion,
+   below the travel threshold that warrants stripping). */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes slideInLeft {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  /* Keep the logo at its FINAL position (top: 2rem, no scale) the whole time so
+     dropping the zoom/travel can't misplace it — only the opacity animates. */
+  @keyframes logoReveal {
+    0% {
+      top: 2rem;
+      opacity: 0;
+      transform: translateY(0) scale(1);
+    }
+    25% {
+      opacity: 1;
+    }
+    100% {
+      top: 2rem;
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  @keyframes widgetFade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes bubbleIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes fadeRise {
+    0% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+  @keyframes fadeDrop {
+    0% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
 }

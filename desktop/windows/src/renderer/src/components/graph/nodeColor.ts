@@ -1,13 +1,14 @@
-// Maps a knowledge-graph node type to a hex color, matching the Omi macOS
-// desktop app (KnowledgeGraphNodeType.nsColor). The fixed user/center node is
-// always white, like the macOS `isFixed` glow.
+// Maps a knowledge-graph node type to a hex color, following the Omi macOS
+// desktop app's scheme (KnowledgeGraphNodeType.nsColor) with one deviation:
+// "thing" is pink, not purple — purple is off-brand everywhere (INV-UI-1).
+// The fixed user/center node is always white, like the macOS `isFixed` glow.
 export function nodeColor(nodeType: string, isFixed: boolean): string {
   if (isFixed) return '#ffffff'
   switch (nodeType) {
     case 'person':
       return '#22d3d3' // cyan
     case 'thing':
-      return '#a855f7' // purple
+      return '#ff375f' // pink (systemPink — de-purpled per INV-UI-1)
     case 'place':
       return '#00ff9e' // mint
     case 'organization':

@@ -25,8 +25,14 @@ try {
   execSync('npm run build:ocr-helper', { stdio: 'inherit', cwd: root })
 } catch {
   console.warn(
-    '[ensure-ocr-helper] could NOT build the OCR helper (is the .NET SDK installed?). ' +
-      'The app still works; screen-reading stays disabled until you run `npm run build:ocr-helper`.'
+    '\n' +
+      '========================================================================\n' +
+      '[ensure-ocr-helper] WARNING: win-ocr-helper.exe was NOT built.\n' +
+      '  Feature DISABLED: screen OCR / screen-reading (the app will not read\n' +
+      '  on-screen text).\n' +
+      '  Likely cause: the .NET SDK is not installed on this machine.\n' +
+      '  To enable it: install the .NET SDK, then run: npm run build:ocr-helper\n' +
+      '========================================================================\n'
   )
 }
 process.exit(0)

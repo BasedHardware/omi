@@ -17,7 +17,10 @@ const SCAFFOLDING = [
   /^let me know\b/i,
   /^(?:and )?that'?s (?:all|everything)\b/i,
   /^is there anything\b/i,
-  /^i (?:currently )?(?:remember|have stored|don'?t have)\b.*(?:memor|the following|about you)/i
+  /^i (?:currently )?(?:remember|have stored|don'?t have)\b.*(?:memor|the following|about you)/i,
+  // Omi's own export stamp ("_Exported <date> · N memories_", italics already
+  // stripped) — so a user who exports and re-imports doesn't inject it as a memory.
+  /^exported\s+\d{4}-\d{2}-\d{2}\b/i
 ]
 
 // Remove a single leading list marker: -, *, common bullet/dash markers,
@@ -39,11 +42,21 @@ function isMarkdownFence(line: string): boolean {
   return /^\s*(?:```|~~~)/.test(line)
 }
 
+// A markdown heading line is structural, never a memory. The exporter renders
+// its title ("# Omi Memories") and every category ("## Personal") as headings,
+// and section headers in any pasted dump are labels, not memories. Detected on
+// the RAW line — before stripFormatting would turn "## Personal" into the bogus
+// memory "Personal".
+function isMarkdownHeading(line: string): boolean {
+  return /^\s*#{1,6}\s+/.test(line)
+}
+
 export function parseMemoryDump(dump: string): string[] {
   const out: string[] = []
   const seen = new Set<string>()
   for (const raw of dump.split(/\r?\n/)) {
     if (isMarkdownFence(raw)) continue
+    if (isMarkdownHeading(raw)) continue
     const stripped = stripFormatting(stripMarker(raw))
     if (stripped.length < 3) continue // blank lines, stray numbering/punctuation
     if (SCAFFOLDING.some((re) => re.test(stripped))) continue

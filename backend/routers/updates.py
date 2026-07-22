@@ -115,8 +115,11 @@ class DesktopPreviewDelistRequest(BaseModel):
 
 
 VALID_CHANNELS = {"beta", "stable"}
+# The +build component is optional: Windows releases (desktop_windows_release.yml)
+# tag v{major}.{minor}.{patch}-windows with no build number; macOS/Codemagic tags
+# always carry one.
 DESKTOP_RELEASE_TAG_PATTERN = re.compile(
-    r'^v?\d+\.\d+(?:\.\d+)?\+\d+-(?:desktop|macos|windows|linux)(?:-(?:cm|auto))?$',
+    r'^v?\d+\.\d+(?:\.\d+)?(?:\+\d+)?-(?:desktop|macos|windows|linux)(?:-(?:cm|auto))?$',
     re.IGNORECASE,
 )
 
@@ -133,25 +136,31 @@ def _parse_desktop_version(tag_name: str) -> Optional[Dict[str, str]]:
     Parse desktop version from tag name.
     Expected format: v1.0.77+464-desktop-cm or v1.0.77+464-macos-cm or v1.0.77+464-desktop-auto or v0.6.4+6004-macos
     The patch component is optional (newer tags use 2-component versions, e.g. v11.0+11000-macos);
-    it defaults to "0" when absent.
+    it defaults to "0" when absent. The +build component is optional for
+    Windows only (desktop_windows_release.yml tags v1.2.0-windows with no
+    build); every other platform's grammar still requires it.
     Returns dict with version info or None if invalid.
     """
-    # Match pattern: v{major}.{minor}[.{patch}]+{build}-{platform}[-{cm|auto}]
-    pattern = r'^v?(\d+)\.(\d+)(?:\.(\d+))?\+(\d+)-(?:desktop|macos|windows|linux)(?:-(?:cm|auto))?$'
+    # Match pattern: v{major}.{minor}[.{patch}][+{build}]-{platform}[-{cm|auto}]
+    pattern = r'^v?(\d+)\.(\d+)(?:\.(\d+))?(?:\+(\d+))?-(desktop|macos|windows|linux)(?:-(?:cm|auto))?$'
     match = re.match(pattern, tag_name, re.IGNORECASE)
 
     if not match:
         return None
 
-    major, minor, patch, build = match.groups()
+    major, minor, patch, build, tag_platform = match.groups()
+    if build is None and tag_platform.lower() != 'windows':
+        return None
     patch = patch if patch is not None else '0'
+    version = f"{major}.{minor}.{patch}" if build is None else f"{major}.{minor}.{patch}+{build}"
+    build = build if build is not None else '0'
 
     return {
         'major': major,
         'minor': minor,
         'patch': patch,
         'build': build,
-        'version': f"{major}.{minor}.{patch}+{build}",
+        'version': version,
         'tag_name': tag_name,
     }
 
@@ -247,6 +256,27 @@ def _get_dmg_download_url(release: Dict) -> Optional[str]:
     return None
 
 
+def _get_windows_installer_download_url(release: Dict) -> Optional[str]:
+    """Get only the canonical lowercase ``omi-setup.exe`` installer URL.
+
+    Mirrors the case-sensitive macOS ``omi.dmg`` contract: versioned or
+    otherwise-named ``*.exe`` assets are deliberately ignored.
+    desktop_windows_release.yml uploads this canonical copy next to the
+    versioned installer.
+    """
+    for asset in release.get("assets", []):
+        if asset.get("name") == "omi-setup.exe":
+            return asset.get("browser_download_url")
+    return None
+
+
+def _get_installer_download_url(release: Dict, platform: str) -> Optional[str]:
+    """Resolve the manual-download installer asset for one platform."""
+    if platform == "windows":
+        return _get_windows_installer_download_url(release)
+    return _get_dmg_download_url(release)
+
+
 async def _get_legacy_live_desktop_releases(platform: str) -> List[Dict]:
     """
     Fetch and filter live desktop releases for a given platform.
@@ -282,11 +312,20 @@ async def _get_legacy_live_desktop_releases(platform: str) -> List[Dict]:
             continue
 
         kv = extract_key_value_pairs(release.get("body", ""))
-        is_live = kv.get("isLive", "false").lower() == "true"
+        if platform == "windows" and "isLive" not in kv:
+            # Windows releases (desktop_windows_release.yml) carry no KEY_VALUE
+            # block; GitHub's own release state is the contract there: every
+            # published release is live, and the prerelease flag IS the channel
+            # (auto-cut = prerelease/beta; a human promotes to stable by
+            # clearing the flag). An explicit KEY_VALUE block still wins.
+            is_live = True
+            channel = "beta" if release.get("prerelease") else "stable"
+        else:
+            is_live = kv.get("isLive", "false").lower() == "true"
+            channel = kv.get("channel", "beta").lower()
         if not is_live:
             continue
 
-        channel = kv.get("channel", "beta").lower()
         if channel not in VALID_CHANNELS:
             channel = "beta"
 
@@ -440,16 +479,29 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
     return resolved
 
 
-def _download_landing_html(dmg_url: str, channel: str = "stable", version: str = "") -> str:
-    """Generate an HTML landing page that auto-triggers DMG download."""
+def _download_landing_html(dmg_url: str, channel: str = "stable", version: str = "", platform: str = "macos") -> str:
+    """Generate an HTML landing page that auto-triggers the installer download."""
     channel_label = "Beta " if channel == "beta" else ""
     version_display = f"v{version}" if version else ""
+    os_name = "Windows" if platform == "windows" else "macOS"
+    if platform == "windows":
+        install_steps = (
+            "1. Open the downloaded installer (omi-setup.exe)<br>"
+            "2. If Windows SmartScreen appears, click <b>More info</b> &rarr; <b>Run anyway</b><br>"
+            "3. Follow the setup wizard and launch Omi"
+        )
+    else:
+        install_steps = (
+            "1. Open the downloaded .dmg file<br>"
+            "2. Drag Omi to your Applications folder<br>"
+            "3. Launch Omi from Applications"
+        )
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Download Omi {channel_label}for macOS</title>
+    <title>Download Omi {channel_label}for {os_name}</title>
     <meta http-equiv="refresh" content="2;url={dmg_url}">
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -484,7 +536,7 @@ def _download_landing_html(dmg_url: str, channel: str = "stable", version: str =
 </head>
 <body>
     <div class="container">
-        <h1>Downloading Omi {channel_label}for macOS</h1>
+        <h1>Downloading Omi {channel_label}for {os_name}</h1>
         <p class="version">{version_display}</p>
         <p class="subtitle" id="status-text">Your download should start automatically&hellip;</p>
         <div class="status" id="status-icon">
@@ -500,9 +552,7 @@ def _download_landing_html(dmg_url: str, channel: str = "stable", version: str =
         </div>
         <div class="steps">
             <b>Installation steps:</b><br>
-            1. Open the downloaded .dmg file<br>
-            2. Drag Omi to your Applications folder<br>
-            3. Launch Omi from Applications
+            {install_steps}
         </div>
         <p class="discord">Need help? Join our <a href="https://discord.com/invite/8MP3b9ymvx">Discord community</a></p>
     </div>
@@ -731,12 +781,14 @@ async def download_latest_desktop_release(
     for entry in desktop_releases:
         if entry["channel"] != channel:
             continue
-        dmg_url = _get_dmg_download_url(entry["release"])
-        if dmg_url:
+        installer_url = _get_installer_download_url(entry["release"], platform)
+        if installer_url:
             version = entry["version_info"]["version"]
-            return HTMLResponse(content=_download_landing_html(dmg_url, channel=channel, version=version))
+            return HTMLResponse(
+                content=_download_landing_html(installer_url, channel=channel, version=version, platform=platform)
+            )
 
-    raise HTTPException(status_code=404, detail=f"No DMG installer found for channel: {channel}")
+    raise HTTPException(status_code=404, detail=f"No installer found for platform {platform}, channel: {channel}")
 
 
 @router.get("/v2/desktop/download/beta")
@@ -748,6 +800,17 @@ async def download_beta_desktop_release(
     Convenience endpoint for macos.omi.me/beta (URL map can't add query params).
     """
     return await download_latest_desktop_release(platform=platform, channel="beta")
+
+
+@router.get("/v2/desktop/download/windows")
+async def download_windows_desktop_release(
+    channel: str = Query(default="stable", pattern="^(beta|stable)$"),
+):
+    """
+    Redirect to the latest Windows desktop release installer.
+    Convenience endpoint for windows.omi.me (URL map can't add query params).
+    """
+    return await download_latest_desktop_release(platform="windows", channel=channel)
 
 
 def _preview_landing_response(result: Dict[str, Any]) -> HTMLResponse:

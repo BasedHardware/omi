@@ -122,7 +122,8 @@ Click at coordinates: `cliclick c:X,Y`. Mac screenshots: `screencapture -x /tmp/
 
 ## Deploys & Release Pipelines
 
-- Desktop (daily candidate → qualified beta → manual stable): `desktop/macos/AGENTS.md` → Release Pipeline.
+- Desktop macOS (daily candidate → qualified beta → manual stable): `desktop/macos/AGENTS.md` → Release Pipeline.
+- Desktop Windows (auto on `desktop/windows/**` merge → tag `v*-windows` → beta GitHub release): `.github/workflows/desktop_windows_release.yml`; setup and secrets: `desktop/windows/docs/release-pipeline.md`.
 - Backend: `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`. Runtime env contract: `backend/AGENTS.md` → Service Map.
 - Firmware (Omi CV1): `omi/firmware/AGENTS.md`.
 

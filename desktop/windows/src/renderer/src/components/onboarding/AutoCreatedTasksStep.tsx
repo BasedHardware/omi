@@ -55,12 +55,13 @@ function TaskRow({
   )
 }
 
-export function AutoCreatedTasksStep({
-  onFinish
-}: AutoCreatedTasksStepProps): React.JSX.Element {
+export function AutoCreatedTasksStep({ onFinish }: AutoCreatedTasksStepProps): React.JSX.Element {
   // Track which sample rows are checked off. Task 3 ("Getting started") starts
   // done; clicking any row toggles it.
   const [done, setDone] = useState<Set<number>>(new Set([2]))
+  // Terminal step: guard against a double-click firing completeOnboarding twice
+  // (idempotent, but the second run is pure noise) — disable on the first click.
+  const [finishing, setFinishing] = useState(false)
   const toggle = (i: number): void =>
     setDone((prev) => {
       const next = new Set(prev)
@@ -99,8 +100,13 @@ export function AutoCreatedTasksStep({
 
       <button
         type="button"
-        onClick={onFinish}
-        className="mt-8 rounded-xl bg-white px-8 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+        onClick={() => {
+          if (finishing) return
+          setFinishing(true)
+          onFinish()
+        }}
+        disabled={finishing}
+        className="mt-8 rounded-xl bg-white px-8 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
       >
         Take me to my tasks
       </button>
