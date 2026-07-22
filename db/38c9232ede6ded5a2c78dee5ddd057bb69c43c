@@ -1,0 +1,30 @@
+desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  s_ba6911a59cf527::t_4233da0ecc03ef 84-86
+  s_ba6911a59cf527::t_f4578555ee80f9 50-52
+desktop/macos/Desktop/Sources/MainWindow/OnboardingWalkthroughOverlay.swift
+  s_ba6911a59cf527::t_6ebd012fb6d2ee 11-13
+  s_ba6911a59cf527::t_007e9d72aa7cd1 67-70
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_ba6911a59cf527::t_425ba85be40c22 799-802
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_ba6911a59cf527::t_e81dfc4f19b07a 133-135,137
+  s_ba6911a59cf527::t_8edfcafa3c2b81 944-945,959-961
+desktop/macos/changelog/unreleased/20260722-sb-onboarding-walkthrough-and-firsttime-home.json
+  s_ba6911a59cf527::t_6ea383f0df5927 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "db38c9232ede6ded5a2c78dee5ddd057bb69c43c",
+  "prompts": {},
+  "sessions": {
+    "s_ba6911a59cf527": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "437ec1d8-1792-4aa9-a5ce-2846124cd673",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
