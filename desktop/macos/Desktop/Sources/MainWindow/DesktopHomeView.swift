@@ -46,8 +46,6 @@ struct DesktopHomeView: View {
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
   @State private var highlightedSettingId: String? = nil
   @State private var showTryAskingPopup = false
-  /// Post-onboarding coach-mark walkthrough: nil = inactive, else current step index.
-  @State private var walkthroughStep: Int? = nil
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
   @State private var lastActivationRefresh = Date.distantPast
@@ -129,13 +127,10 @@ struct DesktopHomeView: View {
             .onAppear {
               if UserDefaults.standard.bool(forKey: "onboardingJustCompleted") {
                 UserDefaults.standard.removeObject(forKey: "onboardingJustCompleted")
-                log("DesktopHomeView: Onboarding just completed — starting UI walkthrough")
-                // Land on Home; the top bar's nav pills (always visible) are what
-                // the coach-marks spotlight, so keep the chat-first layout with the
-                // old rail collapsed rather than expanding it.
+                log("DesktopHomeView: Onboarding just completed — landing on Home")
+                // Land on Home in the chat-first layout with the old rail collapsed.
                 selectedIndex = SidebarNavItem.dashboard.rawValue
                 isSidebarCollapsed = true
-                walkthroughStep = 0
               }
             }
           mainContent
@@ -166,9 +161,6 @@ struct DesktopHomeView: View {
                   }
                 )
               }
-            }
-            .overlayPreferenceValue(SidebarCoachAnchorKey.self) { anchors in
-              walkthroughOverlay(anchors)
             }
             .overlay(alignment: .top) {
               if let policy = updatePolicyManager.visiblePolicy, !policy.isRequired {
@@ -944,57 +936,6 @@ struct DesktopHomeView: View {
       index == SidebarNavItem.dashboard.rawValue || index == SidebarNavItem.tasks.rawValue
     viewModelContainer.memoriesViewModel.isActive =
       index == SidebarNavItem.memories.rawValue
-  }
-
-  // MARK: - Post-onboarding UI walkthrough (coach-marks)
-
-  // Anchored to the top bar's nav pills (Home, Memory, Tasks, Apps) + the
-  // Capture/Listening controls — see DesktopTopBar's `.anchorPreference`s.
-  private static let walkthroughSteps: [OnboardingCoachStep] = [
-    .init(
-      itemRawValue: SidebarNavItem.dashboard.rawValue, title: "Home",
-      body: "Your day at a glance, and where you talk to me."),
-    .init(
-      itemRawValue: SidebarNavItem.conversations.rawValue, title: "Memory",
-      body: "Everything I hear and remember, with a live transcript as you speak."),
-    .init(
-      itemRawValue: SidebarNavItem.tasks.rawValue, title: "Tasks",
-      body: "The to-dos I pull out of your day, all in one place."),
-    .init(
-      itemRawValue: SidebarNavItem.apps.rawValue, title: "Apps",
-      body: "Connect tools and extend what I can do."),
-    .init(
-      itemRawValue: SidebarCoachAnchorKey.captureAnchorID, title: "Capture",
-      body: "Start or pause listening here, and rewind to replay what I just heard."),
-  ]
-
-  @ViewBuilder private func walkthroughOverlay(_ anchors: [Int: Anchor<CGRect>]) -> some View {
-    if let step = walkthroughStep {
-      OnboardingWalkthroughOverlay(
-        steps: Self.walkthroughSteps,
-        index: step,
-        anchors: anchors,
-        onNext: { advanceWalkthrough() },
-        onSkip: { finishWalkthrough() }
-      )
-    }
-  }
-
-  private func advanceWalkthrough() {
-    guard let step = walkthroughStep else { return }
-    if step + 1 < Self.walkthroughSteps.count {
-      walkthroughStep = step + 1
-    } else {
-      finishWalkthrough()
-    }
-  }
-
-  private func finishWalkthrough() {
-    walkthroughStep = nil
-    isSidebarCollapsed = true
-    // Land in the normal chat-first Home (the regular chat the user uses day to
-    // day), not a separate Chat tab — onboarding shouldn't have its own chat UI.
-    selectedIndex = SidebarNavItem.dashboard.rawValue
   }
 
   private var mainContent: some View {
