@@ -123,7 +123,12 @@ extension SBOnboardingModel {
     case "microphone": micState = .on
     case "system_audio": sysState = .on
     case "screen_recording": scrState = .on
-    case "full_disk_access": fdaState = .on
+    case "full_disk_access":
+      fdaState = .on
+      // The Files connector row shares the FDA grant; reflect it here so the row
+      // flips to "on" when FDA is granted from the context step — its poll only
+      // drives fdaState, unlike every other connector that writes back its own state.
+      contextStates["files"] = "on"
     case "accessibility": accState = .on
     case "automation": autoState = .on
     default: break
