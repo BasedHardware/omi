@@ -4,7 +4,7 @@
     "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": 1678,
     "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4238,
     "desktop/macos/Desktop/Sources/MemoryExportService.swift": 1578,
-    "desktop/macos/Desktop/Sources/OmiApp.swift": 1692
+    "desktop/macos/Desktop/Sources/OmiApp.swift": 1686
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/AuthService.swift": "Apple first-auth name capture signals observers (authNameDidUpdate) and persists the name to Firebase so it survives reinstalls.",
