@@ -530,8 +530,12 @@ class TestRecvLoop(unittest.TestCase):
 
     def test_invalid_json_skipped(self):
         sock = self._run_recv(['not json', '{{bad'])
-        self.assertFalse(sock.is_connection_dead)
+        # Invalid frames are skipped (no segments, no crash). The socket is then
+        # latched dead only by the subsequent clean upstream close — not by the
+        # bad frames — which the clean-close death reason proves (#10028).
         self.assertEqual(self.segments, [])
+        self.assertTrue(sock.is_connection_dead)
+        self.assertIn('closed cleanly', sock.death_reason)
 
     def test_error_message_marks_dead(self):
         msg = json.dumps({'type': 'error', 'error': 'rate limit'})
