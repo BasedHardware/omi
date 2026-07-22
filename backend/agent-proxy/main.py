@@ -45,6 +45,11 @@ from resilience import circuit_open, classify_error  # noqa: E402
 HISTORY_LIMIT = 10
 GCE_PROJECT = "based-hardware"
 VM_KEEPALIVE_INTERVAL = 120  # seconds — ping VM every 2 min during active WS
+# Wait this long for the VM's session_state hello before deciding whether to seed
+# history on the first query. The VM sends it synchronously on connect, so this is a
+# tiny grace window; on timeout we seed history (a fresh amnesiac session is the worse
+# failure than a one-time duplicate).
+VM_HELLO_TIMEOUT = 3.0  # seconds
 
 # Encryption — optional; required for users with enhanced data protection.
 ENCRYPTION_SECRET = os.getenv('ENCRYPTION_SECRET', '').encode('utf-8')
@@ -487,6 +492,22 @@ def _build_prompt_with_history(prompt: str, history: List[Dict[str, Any]]) -> st
     return "\n".join(lines)
 
 
+async def _prepare_first_query_prompt(uid: str, chat_session_id: str, prompt: str, vm_session_active: bool) -> str:
+    """Prompt to send the VM for the first query of a connection.
+
+    The VM keeps its Claude session (and full conversation context) alive across
+    reconnects and announces it with a ``session_state`` hello on connect. When that
+    session is already active, re-injecting the last-N Firestore history duplicates
+    context the live session already holds (wasted tokens, muddled context) — so seed
+    history only for a fresh (inactive) session. Skipping the fetch too avoids a
+    needless Firestore read on every mobile reconnect.
+    """
+    if vm_session_active:
+        return prompt
+    history = await run_blocking(db_executor, _fetch_chat_history, uid, chat_session_id)
+    return _build_prompt_with_history(prompt, history)
+
+
 @app.websocket("/v1/agent/ws")
 async def agent_ws(websocket: WebSocket):
     # Validate Firebase token from Authorization header
@@ -621,6 +642,10 @@ async def agent_ws(websocket: WebSocket):
                         await asyncio.sleep(2)
 
             first_query_sent = False
+            # Captured from the VM's session_state hello (see vm_to_phone): whether the
+            # VM already has a live Claude session carrying this conversation's context.
+            vm_session_active = False
+            vm_hello_received = asyncio.Event()
 
             async def _save_ai_response(uid: str, text: str, session_id: str, protection_level: str) -> None:
                 """Fire-and-forget AI response save — never blocks event forwarding."""
@@ -639,13 +664,25 @@ async def agent_ws(websocket: WebSocket):
                             if data.get('type') == 'query':
                                 prompt = data.get('prompt', '')
                                 if not first_query_sent:
-                                    # First query: fetch history and inject into prompt
-                                    history = await run_blocking(db_executor, _fetch_chat_history, uid, chat_session_id)
-                                    data['prompt'] = _build_prompt_with_history(prompt, history)
-                                    msg = json.dumps(data)
                                     first_query_sent = True
+                                    # Seed history only when the VM has no live session. Wait
+                                    # briefly for its session_state hello (sent on connect); on
+                                    # timeout, seed anyway (amnesia is worse than a duplicate).
+                                    try:
+                                        await asyncio.wait_for(vm_hello_received.wait(), timeout=VM_HELLO_TIMEOUT)
+                                    except asyncio.TimeoutError:
+                                        logger.warning(
+                                            f"[agent-proxy] uid={uid} no session_state hello before first query; seeding history"
+                                        )
+                                    new_prompt = await _prepare_first_query_prompt(
+                                        uid, chat_session_id, prompt, vm_session_active
+                                    )
+                                    if new_prompt != prompt:
+                                        data['prompt'] = new_prompt
+                                        msg = json.dumps(data)
                                     logger.info(
-                                        f"[agent-proxy] uid={uid} first query with {len(history)} history messages"
+                                        f"[agent-proxy] uid={uid} first query (vm_session_active={vm_session_active}, "
+                                        f"history_seeded={new_prompt != prompt})"
                                     )
                                 else:
                                     # Subsequent queries: Claude session already has context
@@ -677,6 +714,7 @@ async def agent_ws(websocket: WebSocket):
                     logger.error(f"[agent-proxy] uid={uid} phone_to_vm pump died", exc_info=True)
 
             async def vm_to_phone():
+                nonlocal vm_session_active
                 response_text = ''
                 try:
                     async for msg in vm_ws:
@@ -687,7 +725,12 @@ async def agent_ws(websocket: WebSocket):
                             event = json.loads(text)
                             evt_type = event.get('type')
                             evt_text = event.get('text', '') or event.get('content', '') or ''
-                            if evt_type == 'text_delta':
+                            if evt_type == 'session_state':
+                                # The VM's connect hello — records whether it already has a
+                                # live session so the first query knows to skip history seeding.
+                                vm_session_active = bool(event.get('active'))
+                                vm_hello_received.set()
+                            elif evt_type == 'text_delta':
                                 response_text += evt_text
                             elif evt_type == 'result':
                                 # The terminal result is authoritative, including deltas

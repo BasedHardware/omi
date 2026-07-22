@@ -1,6 +1,7 @@
 import ast
 import asyncio
 import importlib.util
+import json
 import threading
 from pathlib import Path
 from types import ModuleType
@@ -89,6 +90,7 @@ class _VMProtocol:
         self.sent = []
         self.closed = False
         self.message_sent = asyncio.Event()
+        self.hello_sent = False
         self.events = iter(
             [
                 '{"type":"text_delta","text":"tail"}',
@@ -107,6 +109,12 @@ class _VMProtocol:
         return self
 
     async def __anext__(self):
+        # The real VM announces its session state on connect, before any query — the
+        # proxy waits for this hello to decide on history seeding. Emit it first so the
+        # proxy doesn't block on the hello-timeout grace window.
+        if not self.hello_sent:
+            self.hello_sent = True
+            return '{"type":"session_state","active":false}'
         await self.message_sent.wait()
         try:
             return next(self.events)
@@ -214,7 +222,10 @@ async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy
     await agent_proxy.drain_background_tasks(timeout=1.0)
 
     assert phone_ws.accepted is True
-    assert vm_ws.sent == ['{"type": "query", "prompt": "hello"}']
+    # Query forwarded to the VM (empty history → prompt passes through unchanged; assert
+    # on parsed content, not exact serialization whitespace).
+    assert len(vm_ws.sent) == 1
+    assert json.loads(vm_ws.sent[0]) == {"type": "query", "prompt": "hello"}
     assert vm_ws.closed is True
     assert _ProxyHTTPClient.post_calls == 2
     assert phone_ws.closed == [(1000, "Session ended")]
