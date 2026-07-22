@@ -224,7 +224,7 @@ struct DashboardPage: View {
   @ObservedObject private var homeSuggestionsStore = HomeSuggestionsStore.shared
   @StateObject private var intelligenceStore = DashboardIntelligenceStore()
   @State private var dismissedKnowsTaskIDs: Set<String> = []
-  @State private var didAutoOpenChatForHistory = false
+  @State private var homeHistoryAutoOpenPolicy = HomeStageHistoryAutoOpenPolicy()
   @Binding var selectedIndex: Int
   @State private var citedConversation: ServerConversation? = nil
   @State private var selectedCatalogApp: OmiApp?
@@ -1150,12 +1150,16 @@ struct DashboardPage: View {
   }
 
   /// Chat with history is the default Home surface: whenever prior messages
-  /// exist, the hub greeting yields to the chat panel. Runs once per page
-  /// visit so an explicit Esc back to the hub is respected afterwards.
+  /// exist, the hub greeting yields to the chat panel. Runs once per page;
+  /// an explicit automation hub close consumes the one-shot so a late async
+  /// history update cannot immediately undo that deterministic bridge action.
   private func autoOpenChatForExistingHistoryIfNeeded() {
-    guard !didAutoOpenChatForHistory else { return }
-    guard !useLegacyHomeDesign, homeMode == .hub, !chatProvider.messages.isEmpty else { return }
-    didAutoOpenChatForHistory = true
+    guard
+      homeHistoryAutoOpenPolicy.shouldAutoOpen(
+        isLegacy: useLegacyHomeDesign,
+        mode: homeMode,
+        hasMessages: !chatProvider.messages.isEmpty)
+    else { return }
     homeMode = .chat
     reportHomeAutomationMode()
   }
@@ -1208,6 +1212,7 @@ struct DashboardPage: View {
 
   private func closeHomeStagePanel() {
     homeAskFieldFocused = false
+    homeHistoryAutoOpenPolicy.suppressAutoOpenForExplicitHubClose()
     OmiMotion.withGated(Self.homeStageAnimation) {
       homeMode = .hub
     }
@@ -2123,7 +2128,7 @@ private enum HomeDestinationProminence {
   case quiet
 }
 
-private enum HomeStageMode: Equatable {
+enum HomeStageMode: Equatable {
   case hub
   case chat
   case connect
@@ -2134,6 +2139,20 @@ private enum HomeStageMode: Equatable {
     case .chat: return "chat"
     case .connect: return "connect"
     }
+  }
+}
+
+struct HomeStageHistoryAutoOpenPolicy: Equatable {
+  private var didAutoOpen = false
+
+  mutating func shouldAutoOpen(isLegacy: Bool, mode: HomeStageMode, hasMessages: Bool) -> Bool {
+    guard !didAutoOpen, !isLegacy, mode == .hub, hasMessages else { return false }
+    didAutoOpen = true
+    return true
+  }
+
+  mutating func suppressAutoOpenForExplicitHubClose() {
+    didAutoOpen = true
   }
 }
 
