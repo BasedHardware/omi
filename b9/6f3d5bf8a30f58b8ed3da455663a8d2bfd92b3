@@ -1,0 +1,20 @@
+desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  s_77f2b8dfbc2e90::t_9c4c6611cf1f56 57-59,75
+  s_77f2b8dfbc2e90::t_370ab74c2c5a85 51-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "b96f3d5bf8a30f58b8ed3da455663a8d2bfd92b3",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
