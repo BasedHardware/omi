@@ -1,0 +1,22 @@
+desktop/macos/Desktop/Tests/HomeKnowsComposerTests.swift
+  s_62099ccfd5cc12::t_7926942d8a2e8b 16,19-20,24-26
+  s_62099ccfd5cc12::t_f3a943f9db9c32 36,40-41,43
+  s_62099ccfd5cc12::t_52a52ad1d90756 46,50-53
+  s_62099ccfd5cc12::t_5f7cfe7e9d259c 56,59,61,63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "91506fbcc13fd3556146efaacf4548dda691c2f5",
+  "prompts": {},
+  "sessions": {
+    "s_62099ccfd5cc12": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bce3b3b3-c244-4ae8-bb2a-1ff7eccbcdbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
