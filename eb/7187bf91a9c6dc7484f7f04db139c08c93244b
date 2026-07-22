@@ -1,0 +1,21 @@
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_77f2b8dfbc2e90::t_4bd6881c6a867b 1250-1252,1262
+desktop/macos/changelog/unreleased/20260722-sb-review-fixes.json
+  s_77f2b8dfbc2e90::t_9d199301385ae4 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "eb7187bf91a9c6dc7484f7f04db139c08c93244b",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
