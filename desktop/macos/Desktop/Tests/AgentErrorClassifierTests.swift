@@ -75,4 +75,84 @@ final class AgentErrorClassifierTests: XCTestCase {
     let empty = AgentErrorClassifier.classify("")
     XCTAssertEqual(empty.userMessage, "Something went wrong. Please try again.")
   }
+
+  func testPlanLimitIsNotRetryable() {
+    // Live corpus, exact string (~79 events/30d across variants). Retrying just
+    // re-hits the cap — the retry-storm pathology the classifier exists to stop.
+    let classified = AgentErrorClassifier.classify(
+      "You've hit your Free plan limit (30 chat questions per month; 30 used). Upgrade in Settings → Plan and Usage, or wait until the next reset."
+    )
+    XCTAssertEqual(classified.code, .planLimitReached)
+    XCTAssertFalse(classified.retryable)
+    XCTAssertFalse(classified.userMessage.lowercased().contains("try again"))
+  }
+
+  func testProviderOrModeMisconfigIsNotRetryable() {
+    for raw in [
+      "Local Claude is available only when the User Claude mode is selected.",
+      "Managed Omi agents can only use Omi cloud routing.",
+      "Local provider mode is pinned to acp.",
+      "Hermes is not available. Make sure Hermes is installed first, then try again.",
+    ] {
+      let classified = AgentErrorClassifier.classify(raw)
+      XCTAssertEqual(classified.code, .agentModeUnavailable, raw)
+      XCTAssertFalse(classified.retryable, raw)
+    }
+  }
+
+  func testAuthRequiredAndByokRouteToAuth() {
+    for raw in ["Authentication required", "403 \"byok_validation_failed\""] {
+      XCTAssertEqual(AgentErrorClassifier.classify(raw).code, .providerAuthExpired, raw)
+    }
+  }
+
+  func testRemainingToolSchemaAndLocalDataStringsFromCorpus() {
+    XCTAssertEqual(AgentErrorClassifier.classify("400 tools: Tool names must be unique.").code, .toolSchemaRejected)
+    XCTAssertEqual(
+      AgentErrorClassifier.classify("table adapter_bindings has no column named last_delivered_turn_created_at_ms")
+        .code, .localDataError)
+  }
+
+  func testUserStopIsNotARetryableError() {
+    let classified = AgentErrorClassifier.classify("Response stopped.")
+    XCTAssertEqual(classified.code, .userInterrupted)
+    XCTAssertFalse(classified.retryable, "a user Stop is not a failure to retry")
+  }
+
+  /// Data-driven guard over the live 30-day chat_agent_error corpus (PostHog,
+  /// project 302298, pulled 2026-07-22). No production error string may land in
+  /// `.unknown` while also being marked retryable when retrying cannot help.
+  /// Each tuple: (raw string, mustNotBeUnknown, expectedRetryable).
+  func testLiveCorpusIsClassifiedAndRetryabilityIsHonest() {
+    let corpus: [(String, Bool, Bool)] = [
+      ("Response stopped.", true, false),
+      ("AI not available: bridge failed to start", false, true),  // bridge retry can help
+      ("AI service is temporarily unavailable. Please try again later.", false, true),
+      (
+        "You've hit your Free plan limit (30 chat questions per month; 32 used). Upgrade in Settings → Plan and Usage, or wait until the next reset.",
+        true, false
+      ),
+      ("Local Claude is available only when the User Claude mode is selected.", true, false),
+      ("Managed Omi agents can only use Omi cloud routing.", true, false),
+      ("Authentication required", true, false),
+      (
+        "400 tool_choice.name 'web_search' cannot be used because this tool only allows calls from ['code_execution_20260120'].",
+        true, false
+      ),
+      ("Local provider mode is pinned to acp.", true, false),
+      ("400 Your credit balance is too low to access the Anthropic API.", true, false),
+      ("400 tools: Tool names must be unique.", true, false),
+      ("pi-mono process exited (code 1)", true, true),
+      ("table adapter_bindings has no column named last_delivered_turn_created_at_ms", true, false),
+      ("403 \"byok_validation_failed\"", true, false),
+      ("Connection error.", true, true),
+    ]
+    for (raw, mustNotBeUnknown, expectedRetryable) in corpus {
+      let c = AgentErrorClassifier.classify(raw)
+      if mustNotBeUnknown {
+        XCTAssertNotEqual(c.code, .unknown, "should be classified: \(raw)")
+      }
+      XCTAssertEqual(c.retryable, expectedRetryable, "retryability wrong for: \(raw)")
+    }
+  }
 }

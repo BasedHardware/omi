@@ -20,6 +20,9 @@ enum AgentErrorCode: String, CaseIterable, Sendable {
   case providerOverloaded = "provider_overloaded"
   case localDataError = "local_data_error"
   case credentialLeakSuspected = "credential_leak_suspected"
+  case planLimitReached = "plan_limit_reached"
+  case agentModeUnavailable = "agent_mode_unavailable"
+  case userInterrupted = "user_interrupted"
   case unknown
 }
 
@@ -34,6 +37,40 @@ enum AgentErrorClassifier {
   // table beats ML until the corpus outgrows it. First match wins.
   static func classify(_ rawMessage: String) -> ClassifiedAgentError {
     let lower = rawMessage.lowercased()
+
+    // User pressed Stop — not a technical failure. Recognized so it is never
+    // mislabeled as a retryable error (the #1 string in the live corpus, 616
+    // events/30d); upstream telemetry should also split it from chat_agent_error.
+    if lower == "response stopped." || lower.hasPrefix("response stopped") {
+      return ClassifiedAgentError(
+        code: .userInterrupted,
+        userMessage: "Response stopped.",
+        retryable: false)
+    }
+    // Plan/usage cap — retrying just re-hits the cap (measured retry storms in
+    // the live corpus). Direct to upgrade/reset, never "try again".
+    if lower.contains("free plan limit") || lower.contains("plan and usage")
+      || (lower.contains("plan limit") && lower.contains("upgrade"))
+    {
+      return ClassifiedAgentError(
+        code: .planLimitReached,
+        userMessage:
+          "You've reached your plan's chat limit. Upgrade in Settings → Plan and Usage, or wait until the next reset.",
+        retryable: false)
+    }
+    // Provider/mode configuration mismatch — retrying the same query cannot
+    // help; the user must change the agent mode/provider in Settings.
+    if lower.contains("only when the user claude mode")
+      || lower.contains("can only use omi cloud routing")
+      || lower.contains("provider mode is pinned")
+      || (lower.contains("is not available") && lower.contains("make sure"))
+    {
+      return ClassifiedAgentError(
+        code: .agentModeUnavailable,
+        userMessage:
+          "This agent isn't available in your current setup. Open Settings → check your agent mode/provider, then try again.",
+        retryable: false)
+    }
 
     if lower.contains("credit balance is too low") {
       return ClassifiedAgentError(
@@ -58,6 +95,7 @@ enum AgentErrorClassifier {
     }
     if lower.contains("invalid_token") || lower.contains("authentication_error")
       || lower.contains("failed to authenticate") || lower.contains("unauthorized")
+      || lower.contains("authentication required") || lower.contains("byok_validation_failed")
       || lower.contains("api key") || lower.contains("api_key")
     {
       return ClassifiedAgentError(
@@ -88,7 +126,9 @@ enum AgentErrorClassifier {
         userMessage: "The AI engine restarted unexpectedly. Try sending your message again.",
         retryable: true)
     }
-    if lower.contains("input_schema does not support") || lower.contains("tool_choice") {
+    if lower.contains("input_schema does not support") || lower.contains("tool_choice")
+      || lower.contains("tool names must be unique") || lower.contains("tools must have unique names")
+    {
       return ClassifiedAgentError(
         code: .toolSchemaRejected,
         userMessage:
@@ -103,7 +143,8 @@ enum AgentErrorClassifier {
         userMessage: "AI service is busy. Please try again in a moment.",
         retryable: true)
     }
-    if lower.contains("overloaded") || lower.contains("service unavailable") || lower.contains("internal error")
+    if lower.contains("overloaded") || lower.contains("service unavailable")
+      || lower.contains("temporarily unavailable") || lower.contains("internal error")
       || lower.contains("529")
     {
       return ClassifiedAgentError(
@@ -112,7 +153,8 @@ enum AgentErrorClassifier {
         retryable: true)
     }
     if lower.contains("transaction within a transaction") || lower.contains("database disk image")
-      || lower.contains("database is locked")
+      || lower.contains("database is locked") || lower.contains("no column named")
+      || lower.contains("no such column") || lower.contains("no such table")
     {
       return ClassifiedAgentError(
         code: .localDataError,
