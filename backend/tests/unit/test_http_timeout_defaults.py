@@ -18,12 +18,17 @@ explicit ``timeout=``. If you have a legitimate unbounded call, set
 
 import ast
 import os
+import re
+import shutil
+import subprocess
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 UTILS_DIR = os.path.join(BACKEND_DIR, 'utils')
 
 _HTTPX_ONE_SHOT = {'get', 'post', 'put', 'delete', 'patch', 'request', 'head', 'options'}
 _LLM_CLIENT_CTORS = {'OpenAI', 'AsyncOpenAI'}
+_RELEVANT_CALL_REGEX = r'(?:httpx\s*\.\s*(?:get|post|put|delete|patch|request|head|options)|(?:Async)?OpenAI)\s*\('
+_RELEVANT_CALL_PATTERN = re.compile(_RELEVANT_CALL_REGEX.encode())
 
 
 def _has_timeout(node: ast.Call) -> bool:
@@ -31,8 +36,14 @@ def _has_timeout(node: ast.Call) -> bool:
 
 
 def _violations_in_file(filepath: str) -> list:
-    with open(filepath, encoding='utf-8') as f:
-        tree = ast.parse(f.read(), filename=filepath)
+    with open(filepath, 'rb') as f:
+        source_bytes = f.read()
+
+    if not _RELEVANT_CALL_PATTERN.search(source_bytes):
+        return []
+
+    source = source_bytes.decode('utf-8')
+    tree = ast.parse(source, filename=filepath)
 
     found = []
 
@@ -55,18 +66,32 @@ def _violations_in_file(filepath: str) -> list:
     return found
 
 
+def _candidate_files():
+    if shutil.which('rg'):
+        result = subprocess.run(
+            ['rg', '--files-with-matches', '--null', '--glob', '*.py', _RELEVANT_CALL_REGEX, UTILS_DIR],
+            check=False,
+            capture_output=True,
+        )
+        if result.returncode not in (0, 1):
+            raise RuntimeError(result.stderr.decode('utf-8', errors='replace'))
+        return [path.decode() for path in result.stdout.split(b'\0') if path]
+
+    return [
+        os.path.join(root, name)
+        for root, _dirs, files in os.walk(UTILS_DIR)
+        if '__pycache__' not in root
+        for name in files
+        if name.endswith('.py')
+    ]
+
+
 def test_utils_outbound_calls_pin_timeout():
     offenders = {}
-    for root, _dirs, files in os.walk(UTILS_DIR):
-        if '__pycache__' in root:
-            continue
-        for name in files:
-            if not name.endswith('.py'):
-                continue
-            path = os.path.join(root, name)
-            hits = _violations_in_file(path)
-            if hits:
-                offenders[os.path.relpath(path, BACKEND_DIR)] = hits
+    for path in _candidate_files():
+        hits = _violations_in_file(path)
+        if hits:
+            offenders[os.path.relpath(path, BACKEND_DIR)] = hits
 
     assert not offenders, (
         "Outbound calls missing an explicit timeout= (inherit a hang-prone provider "
