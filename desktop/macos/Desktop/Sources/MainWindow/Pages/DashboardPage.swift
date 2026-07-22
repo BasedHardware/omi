@@ -489,6 +489,10 @@ struct DashboardPage: View {
         }
         syncCaptureState()
         autoOpenChatForExistingHistoryIfNeeded()
+        // Post-onboarding, the resting hub is shown by default — open the chat
+        // surface so the personalized opener (set on onboarding completion) is
+        // actually visible instead of hidden behind the hub.
+        if chatProvider.onboardingOpener != nil { openHomeChat(focusInput: false) }
         reportHomeAutomationMode()
         intelligenceStore.setRecommendationActionHandler { recommendation in
           await openRecommendation(recommendation)
