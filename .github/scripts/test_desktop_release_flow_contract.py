@@ -152,6 +152,57 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             )
             self.assertTrue((output_directory / "runs.json").exists())
 
+    def _assert_attempt_job_query_execution(self, script: str, *, repository_variable: str, directory_variable: str) -> None:
+        """Execute the declared attempt-specific job query with a fake gh CLI."""
+        command = re.search(
+            rf'(gh api --paginate --slurp --method GET "repos/\${repository_variable}/actions/runs/\$run_id/'
+            rf'attempts/\$attempt/jobs" -F per_page=100 \\\n'
+            rf'\s+> "\${directory_variable}/jobs/\$run_id/\$attempt\.json")',
+            textwrap.dedent(script),
+        )
+        self.assertIsNotNone(command)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            fake_bin = work / "bin"
+            fake_bin.mkdir()
+            fake_gh = fake_bin / "gh"
+            fake_gh.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$GH_ARGS_FILE"\n', encoding="utf-8")
+            fake_gh.chmod(0o755)
+            output_directory = work / "query"
+            (output_directory / "jobs" / "123").mkdir(parents=True)
+            args_path = work / "gh-args.txt"
+            result = subprocess.run(
+                ["bash", "-c", command.group(1)],
+                cwd=work,
+                env={
+                    **os.environ,
+                    "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+                    repository_variable: "BasedHardware/omi",
+                    directory_variable: str(output_directory),
+                    "run_id": "123",
+                    "attempt": "2",
+                    "GH_ARGS_FILE": str(args_path),
+                },
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                args_path.read_text(encoding="utf-8").splitlines(),
+                [
+                    "api",
+                    "--paginate",
+                    "--slurp",
+                    "--method",
+                    "GET",
+                    "repos/BasedHardware/omi/actions/runs/123/attempts/2/jobs",
+                    "-F",
+                    "per_page=100",
+                ],
+            )
+            self.assertTrue((output_directory / "jobs" / "123" / "2.json").exists())
+
     def _assert_qualification_tag_identity(self, *, annotated: bool) -> None:
         target_expression, checkout_expression = self._qualification_identity_expressions()
         with tempfile.TemporaryDirectory() as directory:
@@ -310,7 +361,13 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             tag_variable="RELEASE_TAG",
             directory_variable="admission_dir",
         )
-        self.assertIn('actions/runs/$run_id/jobs', admission)
+        self._assert_attempt_job_query_execution(
+            admission, repository_variable="REPO", directory_variable="admission_dir"
+        )
+        self.assertNotIn('actions/runs/$run_id/jobs', admission)
+        self.assertIn('actions/runs/$run_id/attempts/$attempt/jobs', admission)
+        self.assertIn('run_attempt > 10', admission)
+        self.assertIn('attempt_authorities <= 30', admission)
         self.assertIn('--jobs-dir "$admission_dir/jobs"', admission)
         self.assertLess(qualification.index("Fail-closed exact-candidate admission"), qualification.index("Checkout qualification controls"))
         self.assertIn("needs: admit", qualification)
@@ -340,7 +397,13 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             tag_variable="CM_TAG",
             directory_variable="dispatch_dir",
         )
-        self.assertIn('actions/runs/$run_id/jobs', dispatch)
+        self._assert_attempt_job_query_execution(
+            dispatch, repository_variable="GITHUB_REPO", directory_variable="dispatch_dir"
+        )
+        self.assertNotIn('actions/runs/$run_id/jobs', dispatch)
+        self.assertIn('actions/runs/$run_id/attempts/$attempt/jobs', dispatch)
+        self.assertIn('run_attempt > 10', dispatch)
+        self.assertIn('attempt_authorities <= 30', dispatch)
         self.assertIn('--jobs-dir "$dispatch_dir/jobs"', dispatch)
         self.assertIn('gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO"', dispatch)
         self.assertIn('-f release_tag="$CM_TAG" --ref "$CM_TAG"', dispatch)

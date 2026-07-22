@@ -817,6 +817,9 @@ def check_desktop_qualification_runner() -> list[str]:
         "gh api --paginate --slurp",
         "branch=\"$RELEASE_TAG\"",
         "--current-run-id \"$CURRENT_RUN_ID\"",
+        "actions/runs/$run_id/attempts/$attempt/jobs",
+        "run_attempt > 10",
+        "attempt_authorities <= 30",
         "--jobs-dir \"$admission_dir/jobs\"",
         "needs: admit",
     ):

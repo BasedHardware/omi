@@ -17,9 +17,18 @@ def _ref() -> dict:
     return {"ref": f"refs/tags/{TAG}", "object": {"type": "commit", "sha": SHA}}
 
 
-def _run(*, run_id: int, status: str = "completed", conclusion: str | None = "failure", tag: str = TAG, sha: str = SHA) -> dict:
+def _run(
+    *,
+    run_id: int,
+    run_attempt: int = 1,
+    status: str = "completed",
+    conclusion: str | None = "failure",
+    tag: str = TAG,
+    sha: str = SHA,
+) -> dict:
     return {
         "id": run_id,
+        "run_attempt": run_attempt,
         "path": admission.QUALIFICATION_WORKFLOW,
         "event": "workflow_dispatch",
         "head_branch": tag,
@@ -46,9 +55,13 @@ def _qualification_jobs(*, conclusion: str = "failure", started: bool = True) ->
     }
 
 
-def _decide(runs: list[dict], *, jobs_by_run: dict[int, dict] | None = None, **kwargs: object) -> dict:
+def _decide(runs: list[dict], *, jobs_by_run: dict[int, dict[int, dict]] | None = None, **kwargs: object) -> dict:
     if jobs_by_run is None:
-        jobs_by_run = {run["id"]: _qualification_jobs() for run in runs}
+        jobs_by_run = {
+            run["id"]: {attempt: _qualification_jobs() for attempt in range(1, run["run_attempt"] + 1)}
+            for run in runs
+            if run["head_branch"] == TAG and run["head_sha"] == SHA
+        }
     return admission.decide(_ref(), _response(runs), release_tag=TAG, jobs_by_run=jobs_by_run, **kwargs)
 
 
@@ -114,7 +127,7 @@ class AdmissionTests(unittest.TestCase):
             {"total_count": 101, "workflow_runs": first_page},
             {"total_count": 101, "workflow_runs": second_page},
         ]
-        decision = admission.decide(_ref(), pages, release_tag=TAG, jobs_by_run={101: _qualification_jobs()})
+        decision = admission.decide(_ref(), pages, release_tag=TAG, jobs_by_run={101: {1: _qualification_jobs()}})
         self.assertFalse(decision["admitted"])
         self.assertIn("succeeded", decision["reason"])
 
@@ -175,7 +188,7 @@ class AdmissionTests(unittest.TestCase):
         }
         decision = _decide(
             runs,
-            jobs_by_run={1: admission_only, 2: admission_only, 3: _qualification_jobs()},
+            jobs_by_run={1: {1: admission_only}, 2: {1: admission_only}, 3: {1: _qualification_jobs()}},
         )
         self.assertTrue(decision["admitted"])
 
@@ -185,15 +198,123 @@ class AdmissionTests(unittest.TestCase):
             "total_count": 1,
             "jobs": [{"id": 1, "name": "admit", "status": "completed", "conclusion": "success"}],
         }
-        self.assertTrue(_decide([run], jobs_by_run={1: admission_only})["admitted"])
+        self.assertTrue(_decide([run], jobs_by_run={1: {1: admission_only}})["admitted"])
 
     def test_three_started_qualification_attempts_reach_the_bound(self) -> None:
         runs = [_run(run_id=index, conclusion="failure") for index in range(1, 4)]
-        decision = _decide(runs, jobs_by_run={run["id"]: _qualification_jobs() for run in runs})
+        decision = _decide(runs, jobs_by_run={run["id"]: {1: _qualification_jobs()} for run in runs})
         self.assertFalse(decision["admitted"])
 
+    def test_rerun_attempts_across_two_run_ids_reach_the_bound(self) -> None:
+        # Mirrors the live shape: one run was retried, so its two trusted
+        # starts plus another run's start must consume all three attempts.
+        runs = [_run(run_id=29949128798, run_attempt=2), _run(run_id=29946139071)]
+        decision = _decide(
+            runs,
+            jobs_by_run={
+                29949128798: {
+                    1: _qualification_jobs(conclusion="failure"),
+                    2: _qualification_jobs(conclusion="cancelled"),
+                },
+                29946139071: {1: _qualification_jobs(conclusion="failure")},
+            },
+        )
+        self.assertFalse(decision["admitted"])
+        self.assertIn("3-attempt", decision["reason"])
+
+    def test_one_run_with_three_started_attempts_reaches_the_bound(self) -> None:
+        run = _run(run_id=1, run_attempt=3)
+        decision = _decide(
+            [run],
+            jobs_by_run={1: {attempt: _qualification_jobs() for attempt in range(1, 4)}},
+        )
+        self.assertFalse(decision["admitted"])
+
+    def test_earlier_started_rerun_is_counted_when_latest_never_started(self) -> None:
+        run = _run(run_id=1, run_attempt=2, conclusion="cancelled")
+        pre_start_cancelled = _qualification_jobs(conclusion="cancelled", started=False)
+        decision = _decide(
+            [run],
+            jobs_by_run={1: {1: _qualification_jobs(conclusion="failure"), 2: pre_start_cancelled}},
+        )
+        self.assertTrue(decision["admitted"])
+
+    def test_missing_or_extra_historical_attempt_authority_fails_closed(self) -> None:
+        run = _run(run_id=1, run_attempt=2)
+        with self.subTest("missing"):
+            with self.assertRaisesRegex(ValueError, "attempt job authority is incomplete"):
+                _decide([run], jobs_by_run={1: {2: _qualification_jobs()}})
+        with self.subTest("extra"):
+            with self.assertRaisesRegex(ValueError, "attempt job authority is incomplete"):
+                _decide([run], jobs_by_run={1: {1: _qualification_jobs(), 2: _qualification_jobs(), 3: _qualification_jobs()}})
+
+    def test_attempt_specific_pagination_malformed_and_duplicate_fail_closed(self) -> None:
+        run = _run(run_id=1)
+        incomplete = {"total_count": 1, "jobs": []}
+        duplicate = {
+            "total_count": 2,
+            "jobs": [
+                {"id": 2, "name": "qualify", "status": "completed", "conclusion": "failure", "started_at": "x"},
+                {"id": 2, "name": "other", "status": "completed", "conclusion": "failure"},
+            ],
+        }
+        with self.subTest("incomplete"):
+            with self.assertRaisesRegex(ValueError, "attempt 1 jobs pagination is incomplete"):
+                _decide([run], jobs_by_run={1: {1: incomplete}})
+        with self.subTest("duplicate"):
+            with self.assertRaisesRegex(ValueError, "attempt 1 jobs response contains duplicate"):
+                _decide([run], jobs_by_run={1: {1: duplicate}})
+
+    def test_skipped_or_pre_start_cancelled_attempts_do_not_count(self) -> None:
+        runs = [_run(run_id=1, conclusion="cancelled"), _run(run_id=2, conclusion="cancelled")]
+        self.assertTrue(
+            _decide(
+                runs,
+                jobs_by_run={
+                    1: {1: _qualification_jobs(conclusion="skipped")},
+                    2: {1: _qualification_jobs(conclusion="cancelled", started=False)},
+                },
+            )["admitted"]
+        )
+
+    def test_started_cancelled_attempts_count(self) -> None:
+        run = _run(run_id=1, run_attempt=3, conclusion="cancelled")
+        decision = _decide(
+            [run],
+            jobs_by_run={1: {attempt: _qualification_jobs(conclusion="cancelled") for attempt in range(1, 4)}},
+        )
+        self.assertFalse(decision["admitted"])
+
+    def test_current_workflow_rerun_is_rejected_before_exclusion(self) -> None:
+        current = _run(run_id=42, run_attempt=2)
+        with self.assertRaisesRegex(ValueError, "workflow reruns are not admitted"):
+            _decide([current], jobs_by_run={}, current_run_id=42)
+
+    def test_fresh_dispatch_remains_admitted_below_real_start_bound(self) -> None:
+        prior = _run(run_id=1, run_attempt=2, conclusion="cancelled")
+        current = _run(run_id=42)
+        decision = _decide(
+            [prior, current],
+            jobs_by_run={
+                1: {
+                    1: _qualification_jobs(conclusion="failure"),
+                    2: _qualification_jobs(conclusion="cancelled", started=False),
+                }
+            },
+            current_run_id=42,
+        )
+        self.assertTrue(decision["admitted"])
+
+    def test_run_attempt_schema_and_bounded_authority_fail_closed(self) -> None:
+        with self.subTest("bool"):
+            with self.assertRaisesRegex(ValueError, "run_attempt must be a positive integer"):
+                _decide([_run(run_id=1, run_attempt=True)])
+        with self.subTest("excessive"):
+            with self.assertRaisesRegex(ValueError, "bounded admission limit"):
+                _decide([_run(run_id=1, run_attempt=admission.MAX_RUN_ATTEMPTS_TO_INSPECT + 1)])
+
     def test_missing_job_authority_fails_closed(self) -> None:
-        with self.assertRaisesRegex(ValueError, "missing GitHub job authority"):
+        with self.assertRaisesRegex(ValueError, "attempt job authority is incomplete"):
             _decide([_run(run_id=1, conclusion="failure")], jobs_by_run={})
 
 

@@ -21,6 +21,11 @@ QUALIFICATION_WORKFLOW = ".github/workflows/desktop_qualify_beta.yml"
 TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+-macos$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 MAX_EXACT_CANDIDATE_ATTEMPTS = 3
+# Attempt-specific job history is authoritative for a rerun. Keep retrieval
+# explicitly bounded so hostile/malformed run metadata cannot create unbounded
+# GitHub API work before the trusted runner is reached.
+MAX_RUN_ATTEMPTS_TO_INSPECT = 10
+MAX_ATTEMPT_AUTHORITIES_TO_INSPECT = 30
 # GitHub's REST workflow-run state machine. Nonterminal runs have no
 # conclusion; completed runs must carry one of these exact REST conclusions.
 NONTERMINAL_STATUSES = frozenset({"queued", "in_progress"})
@@ -99,6 +104,9 @@ def _workflow_runs(runs_response: Any) -> list[dict[str, Any]]:
             if run_id in seen_ids:
                 raise ValueError(f"GitHub workflow-runs response contains duplicate run id {run_id}")
             seen_ids.add(run_id)
+            run_attempt = _positive_id(run.get("run_attempt"), f"workflow run {absolute_index} run_attempt")
+            if run_attempt > MAX_RUN_ATTEMPTS_TO_INSPECT:
+                raise ValueError(f"workflow run {absolute_index} run_attempt exceeds the bounded admission limit")
             _validate_workflow_run_state(run, absolute_index)
             all_runs.append(run)
     if total_count != len(all_runs):
@@ -144,65 +152,76 @@ def _exact_runs(runs: list[dict[str, Any]], release_tag: str, source_sha: str) -
     return selected
 
 
-def _qualification_attempts(prior_runs: list[dict[str, Any]], jobs_by_run: dict[int, Any]) -> int:
-    """Count only runs whose trusted `qualify` job actually started."""
-    attempts = 0
-    for run in prior_runs:
-        run_id = run["id"]
-        if run_id not in jobs_by_run:
-            raise ValueError(f"workflow run {run_id} is missing GitHub job authority")
-        if _qualify_job_started(jobs_by_run[run_id], run_id):
-            attempts += 1
-    return attempts
+def _qualification_attempts(prior_runs: list[dict[str, Any]], jobs_by_run: dict[int, dict[int, Any]]) -> int:
+    """Count started trusted jobs across immutable GitHub run attempts."""
+    expected = {(run["id"], attempt) for run in prior_runs for attempt in range(1, run["run_attempt"] + 1)}
+    if len(expected) > MAX_ATTEMPT_AUTHORITIES_TO_INSPECT:
+        raise ValueError("exact candidate run attempts exceed the bounded admission limit")
+    actual: set[tuple[int, int]] = set()
+    for run_id, attempt_responses in jobs_by_run.items():
+        _positive_id(run_id, "workflow run id in attempt job authority")
+        if not isinstance(attempt_responses, dict):
+            raise ValueError(f"workflow run {run_id} attempt job authority is malformed")
+        for attempt in attempt_responses:
+            _positive_id(attempt, f"workflow run {run_id} attempt in job authority")
+            actual.add((run_id, attempt))
+    if actual != expected:
+        missing = sorted(expected.difference(actual))
+        extra = sorted(actual.difference(expected))
+        raise ValueError(f"GitHub attempt job authority is incomplete or inconsistent (missing={missing}, extra={extra})")
+    return sum(
+        _qualify_job_started(jobs_by_run[run_id][attempt], run_id, attempt)
+        for run_id, attempt in sorted(expected)
+    )
 
 
-def _qualify_job_started(jobs_response: Any, run_id: int) -> bool:
+def _qualify_job_started(jobs_response: Any, run_id: int, attempt: int) -> bool:
     pages = [jobs_response] if isinstance(jobs_response, dict) else jobs_response
     if not isinstance(pages, list) or not pages:
-        raise ValueError(f"workflow run {run_id} jobs response is malformed")
+        raise ValueError(f"workflow run {run_id} attempt {attempt} jobs response is malformed")
     total_count: int | None = None
     jobs: list[dict[str, Any]] = []
     seen_ids: set[int] = set()
     for page_index, page in enumerate(pages):
         if not isinstance(page, dict) or not isinstance(page.get("jobs"), list):
-            raise ValueError(f"workflow run {run_id} jobs page {page_index} is malformed")
+            raise ValueError(f"workflow run {run_id} attempt {attempt} jobs page {page_index} is malformed")
         page_total = page.get("total_count")
         if not isinstance(page_total, int) or isinstance(page_total, bool) or page_total < 0:
-            raise ValueError(f"workflow run {run_id} jobs page {page_index} total_count is malformed")
+            raise ValueError(f"workflow run {run_id} attempt {attempt} jobs page {page_index} total_count is malformed")
         if total_count is None:
             total_count = page_total
         elif page_total != total_count:
-            raise ValueError(f"workflow run {run_id} jobs pagination total_count changed during retrieval")
+            raise ValueError(f"workflow run {run_id} attempt {attempt} jobs pagination total_count changed during retrieval")
         for job in page["jobs"]:
             if not isinstance(job, dict):
-                raise ValueError(f"workflow run {run_id} jobs response contains a non-object entry")
-            job_id = _positive_id(job.get("id"), f"workflow run {run_id} job id")
+                raise ValueError(f"workflow run {run_id} attempt {attempt} jobs response contains a non-object entry")
+            job_id = _positive_id(job.get("id"), f"workflow run {run_id} attempt {attempt} job id")
             if job_id in seen_ids:
-                raise ValueError(f"workflow run {run_id} jobs response contains duplicate job id {job_id}")
+                raise ValueError(f"workflow run {run_id} attempt {attempt} jobs response contains duplicate job id {job_id}")
             seen_ids.add(job_id)
             jobs.append(job)
     if total_count != len(jobs):
-        raise ValueError(f"workflow run {run_id} jobs pagination is incomplete")
+        raise ValueError(f"workflow run {run_id} attempt {attempt} jobs pagination is incomplete")
     qualify_jobs = [job for job in jobs if job.get("name") == "qualify"]
     if len(qualify_jobs) > 1:
-        raise ValueError(f"workflow run {run_id} has multiple qualify jobs")
+        raise ValueError(f"workflow run {run_id} attempt {attempt} has multiple qualify jobs")
     if not qualify_jobs:
         # A cancelled workflow can be discarded by global concurrency before
         # it creates the trusted qualification job. It is not an attempt.
         return False
     qualify = qualify_jobs[0]
     if qualify.get("status") != "completed":
-        raise ValueError(f"workflow run {run_id} qualify job did not complete")
+        raise ValueError(f"workflow run {run_id} attempt {attempt} qualify job did not complete")
     conclusion = qualify.get("conclusion")
     if not isinstance(conclusion, str) or conclusion not in TERMINAL_CONCLUSIONS:
-        raise ValueError(f"workflow run {run_id} qualify job has invalid conclusion")
+        raise ValueError(f"workflow run {run_id} attempt {attempt} qualify job has invalid conclusion")
     if conclusion == "skipped":
         return False
     started_at = qualify.get("started_at")
     if started_at is None and conclusion == "cancelled":
         return False
     if not isinstance(started_at, str) or not started_at:
-        raise ValueError(f"workflow run {run_id} qualify job did not prove it started")
+        raise ValueError(f"workflow run {run_id} attempt {attempt} qualify job did not prove it started")
     return True
 
 
@@ -211,7 +230,7 @@ def decide(
     runs_response: Any,
     *,
     release_tag: str,
-    jobs_by_run: dict[int, Any],
+    jobs_by_run: dict[int, dict[int, Any]],
     current_run_id: int | None = None,
     annotated_tag: Any | None = None,
 ) -> dict[str, Any]:
@@ -231,6 +250,8 @@ def decide(
             and current.get("head_sha") == source_sha
         ):
             raise ValueError("current workflow run does not bind the requested immutable candidate")
+        if current["run_attempt"] != 1:
+            raise ValueError("workflow reruns are not admitted; dispatch a fresh immutable workflow run")
     prior_runs = [run for run in _exact_runs(runs, release_tag, source_sha) if run["id"] != current_run_id]
     active = next((run for run in prior_runs if run["status"] != "completed"), None)
     if active is not None:
@@ -278,13 +299,26 @@ def main() -> int:
     parser.add_argument("--require-admitted", action="store_true")
     args = parser.parse_args()
 
-    jobs_by_run: dict[int, Any] = {}
-    for path in args.jobs_dir.glob("*.json"):
+    jobs_by_run: dict[int, dict[int, Any]] = {}
+    for run_directory in args.jobs_dir.iterdir():
         try:
-            run_id = _positive_id(int(path.stem), "workflow run id from jobs filename")
+            if not run_directory.is_dir():
+                raise ValueError("attempt authority entry is not a directory")
+            run_id = _positive_id(int(run_directory.name), "workflow run id from jobs directory")
         except ValueError as exc:
-            raise ValueError(f"jobs directory has invalid filename {path.name!r}") from exc
-        jobs_by_run[run_id] = _load(path)
+            raise ValueError(f"jobs directory has invalid run entry {run_directory.name!r}") from exc
+        attempts: dict[int, Any] = {}
+        for path in run_directory.iterdir():
+            try:
+                if not path.is_file() or path.suffix != ".json":
+                    raise ValueError("attempt authority entry is not a JSON file")
+                attempt = _positive_id(int(path.stem), "workflow run attempt from jobs filename")
+            except ValueError as exc:
+                raise ValueError(f"jobs directory has invalid attempt entry {path.name!r}") from exc
+            if attempt in attempts:
+                raise ValueError(f"jobs directory has duplicate authority for workflow run {run_id} attempt {attempt}")
+            attempts[attempt] = _load(path)
+        jobs_by_run[run_id] = attempts
     decision = decide(
         _load(args.ref_json),
         _load(args.runs_json),
