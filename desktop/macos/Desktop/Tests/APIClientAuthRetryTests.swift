@@ -362,18 +362,22 @@ import XCTest
     }
 
     private func transitionOwnerForAuthTest(to ownerID: String?) async {
-      _ = await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
-        plannedNextOwner: { _, _ in ownerID },
-        quiesceVoice: { _, _ in },
-        retargetLocalStorage: { _, _ in },
-        ownerDidChange: {}
-      ) { defaults in
-        defaults.removeObject(forKey: .automationOwnerOverride)
-        if let ownerID {
-          defaults.set(ownerID, forKey: .authUserId)
-        } else {
-          defaults.removeObject(forKey: .authUserId)
+      do {
+        _ = try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+          plannedNextOwner: { _, _ in ownerID },
+          quiesceVoice: { _, _ in },
+          retargetLocalStorage: { _, _ in },
+          ownerDidChange: {}
+        ) { defaults in
+          defaults.removeObject(forKey: .automationOwnerOverride)
+          if let ownerID {
+            defaults.set(ownerID, forKey: .authUserId)
+          } else {
+            defaults.removeObject(forKey: .authUserId)
+          }
         }
+      } catch {
+        XCTFail("owner transition failed: \(error)")
       }
     }
 

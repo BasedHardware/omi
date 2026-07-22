@@ -1,4 +1,5 @@
 import Foundation
+import XCTest
 
 @testable import Omi_Computer
 
@@ -76,18 +77,22 @@ final class RuntimeOwnerAuthorityTestFixture: @unchecked Sendable {
     automationBackupID: String?
   ) async {
     let nextOwner = normalized(automationOverrideID) ?? normalized(authOwnerID)
-    await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
-      defaults: defaults.value,
-      allowAutomationOverride: true,
-      plannedNextOwner: { _, _ in nextOwner },
-      quiesceVoice: { _, _ in },
-      revokeKernelOwner: { _, _ in },
-      retargetLocalStorage: { _, _ in },
-      ownerDidChange: {}
-    ) { defaults in
-      set(authOwnerID, forKey: .authUserId, defaults: defaults)
-      set(automationOverrideID, forKey: .automationOwnerOverride, defaults: defaults)
-      set(automationBackupID, forKey: .automationOwnerABackup, defaults: defaults)
+    do {
+      try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+        defaults: defaults.value,
+        allowAutomationOverride: true,
+        plannedNextOwner: { _, _ in nextOwner },
+        quiesceVoice: { _, _ in },
+        revokeKernelOwner: { _, _ in },
+        retargetLocalStorage: { _, _ in },
+        ownerDidChange: {}
+      ) { defaults in
+        set(authOwnerID, forKey: .authUserId, defaults: defaults)
+        set(automationOverrideID, forKey: .automationOwnerOverride, defaults: defaults)
+        set(automationBackupID, forKey: .automationOwnerABackup, defaults: defaults)
+      }
+    } catch {
+      XCTFail("owner transition failed: \(error)")
     }
   }
 
