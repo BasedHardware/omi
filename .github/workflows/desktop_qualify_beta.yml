@@ -106,7 +106,6 @@ jobs:
             --release-json /tmp/desktop-beta-qualification/release.json \
             --smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result.json \
             --beta-smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result-beta.json \
-            --beta-smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result-beta.json \
             --release-tag "$RELEASE_TAG" \
             --latest-tag "$LATEST_TAG" \
             --tag-sha "$TARGET_SHA" \

@@ -372,6 +372,64 @@ def test_qualification_evidence_accepts_the_side_by_side_beta_artifact_pair():
             )
 
 
+def test_qualification_evidence_cli_accepts_the_beta_artifact_pair_end_to_end():
+    # Regression: the qualify workflow passes --asset Omi.Beta.zip=…/omi-beta.dmg=…;
+    # the CLI must accept them through the same shape the workflow uses.
+    import subprocess
+    import sys
+
+    body = _release()["body"].replace(
+        "edSignature: signature", "edSignature: signature\nbetaEdSignature: beta-signature"
+    )
+    release = _release(body=body)
+    release["assets"] = [
+        {"name": name, "url": f"https://example.com/{name}", "digest": ""}
+        for name in ("Omi.zip", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg")
+    ]
+    script = Path(__file__).parents[3] / ".github/scripts/desktop_qualification_evidence.py"
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        release_json = root / "release.json"
+        # gh release view uses tagName; the CLI reads the same shape.
+        release_json.write_text(json.dumps(release))
+        asset_args = []
+        for name, content in (
+            ("Omi.zip", b"stable zip"),
+            ("omi.dmg", b"stable dmg"),
+            ("Omi.Beta.zip", b"beta zip"),
+            ("omi-beta.dmg", b"beta dmg"),
+        ):
+            path = root / name
+            path.write_bytes(content)
+            asset_args += ["--asset", f"{name}={path}"]
+        gate = root / "gate.json"
+        gate.write_text(json.dumps({"passed": True, "release_tag": release["tagName"], "source_sha": "a" * 40}))
+        evidence_out = root / "evidence.json"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "build",
+                "--release-json",
+                str(release_json),
+                "--release-tag",
+                release["tagName"],
+                "--source-sha",
+                "a" * 40,
+                "--candidate-gate",
+                str(gate),
+                *asset_args,
+                "--evidence",
+                str(evidence_out),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr or result.stdout
+        written = json.loads(evidence_out.read_text())
+        assert set(written["artifacts"]) == {"Omi.zip", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg"}
+
+
 def test_qualification_evidence_rejects_candidate_gate_from_a_different_source():
     release = _release()
     with tempfile.TemporaryDirectory() as directory:
