@@ -113,9 +113,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       + notchAgentListBottomMargin
   }
   static func notchHoverMenuHeight(agentCount: Int) -> CGFloat {
-    notchAgentListRowHeight
-      + notchAgentListHeight(agentCount: agentCount)
-      + notchHoverMenuBottomMargin
+    guard NotchAgentMenuPresentation.shouldPresent(agentCount: agentCount) else { return 0 }
+    return notchAgentListHeight(agentCount: agentCount) + notchHoverMenuBottomMargin
   }
   static let expandedBarSize = NSSize(width: 210, height: 50)
   /// Center gap between the two chrome lobes on displays without a notch —
@@ -972,13 +971,18 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   func openNotchHoverMenuUntilExit() {
+    guard NotchAgentMenuPresentation.shouldPresent(agentCount: AgentPillsManager.shared.pills.count) else {
+      setNotchHoverMenuVisible(false)
+      return
+    }
     setNotchHoverMenuVisible(true)
   }
 
   private func updateNotchPointer(localPoint point: NSPoint) {
     guard notchModeEnabled,
       !state.showingAIConversation,
-      state.currentNotification == nil
+      state.currentNotification == nil,
+      NotchAgentMenuPresentation.shouldPresent(agentCount: AgentPillsManager.shared.pills.count)
     else {
       setNotchHoverMenuVisible(false)
       return
