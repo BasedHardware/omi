@@ -1,0 +1,23 @@
+desktop/macos/changelog/unreleased/20260722-restore-desktop-package-manifest.json
+  s_424d550d86fd05::t_369e7fe38bcad6 1-3
+desktop/macos/Desktop/Package.resolved
+  s_424d550d86fd05::t_ad0ecbace554a4 1-212
+desktop/macos/Desktop/Package.swift
+  s_424d550d86fd05::t_73c630f0610eb7 1-166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "cf5462c6ef126c687ca5bea41f9455dc0c1f2afa",
+  "prompts": {},
+  "sessions": {
+    "s_424d550d86fd05": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7d83f64d-8ce5-47f1-b308-b8839508880a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
