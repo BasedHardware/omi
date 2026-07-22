@@ -2582,6 +2582,18 @@ export interface PublicFairUseCaseStatusResponse {
   updated_at?: string | null;
 }
 
+export interface QuietHoursSettingsResponse {
+  enabled: boolean;
+  end_hour: number;
+  start_hour: number;
+}
+
+export interface QuietHoursSettingsUpdate {
+  enabled: boolean;
+  end_hour: number;
+  start_hour: number;
+}
+
 export interface RateMessageRequest {
   rating?: number | null;
 }
@@ -4049,6 +4061,8 @@ export interface OmiApiSchemas {
   "ProgressExtractResponse": ProgressExtractResponse;
   "ProgressExtractUpdateResponse": ProgressExtractUpdateResponse;
   "PublicFairUseCaseStatusResponse": PublicFairUseCaseStatusResponse;
+  "QuietHoursSettingsResponse": QuietHoursSettingsResponse;
+  "QuietHoursSettingsUpdate": QuietHoursSettingsUpdate;
   "RateMessageRequest": RateMessageRequest;
   "RebuildResponse": RebuildResponse;
   "Recommendation": Recommendation;
@@ -7442,6 +7456,24 @@ export interface OmiApiPaths {
       operationId: "get_user_profile_endpoint_v1_users_profile_get";
       responses: {
         "200": UserProfileResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/quiet-hours-settings": {
+    get: {
+      operationId: "get_quiet_hours_settings_v1_users_quiet_hours_settings_get";
+      responses: {
+        "200": QuietHoursSettingsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    patch: {
+      operationId: "update_quiet_hours_settings_v1_users_quiet_hours_settings_patch";
+      responses: {
+        "200": FcmTokenResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -14339,6 +14371,46 @@ export async function get_user_profile_endpoint_v1_users_profile_get(header: { a
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_quiet_hours_settings_v1_users_quiet_hours_settings_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<QuietHoursSettingsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/quiet-hours-settings`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function update_quiet_hours_settings_v1_users_quiet_hours_settings_patch(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: QuietHoursSettingsUpdate, init?: OmiApiClientInit): Promise<FcmTokenResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/quiet-hours-settings`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();

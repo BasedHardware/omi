@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional, Tuple, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from database.redis_db import get_enabled_apps, r as redis_client
 from database.chat import add_integration_chat_message
@@ -82,6 +83,46 @@ def save_token(
     token_data['device_key'] = device_key
 
     notification_db.save_token(uid, token_data)
+    return FcmTokenResponse(status='Ok')
+
+
+class QuietHoursSettingsResponse(BaseModel):
+    enabled: bool
+    start_hour: int
+    end_hour: int
+
+
+class QuietHoursSettingsUpdate(BaseModel):
+    enabled: bool
+    start_hour: int
+    end_hour: int
+
+
+@router.get('/v1/users/quiet-hours-settings', response_model=QuietHoursSettingsResponse)
+def get_quiet_hours_settings(uid: str = Depends(auth.get_current_user_uid)):
+    """Return the user's quiet-hours (do-not-disturb) window for proactive notifications."""
+    config = notification_db.get_quiet_hours(uid)
+    return QuietHoursSettingsResponse(
+        enabled=config['enabled'],
+        start_hour=config['start_hour'],
+        end_hour=config['end_hour'],
+    )
+
+
+@router.patch('/v1/users/quiet-hours-settings', response_model=FcmTokenResponse)
+def update_quiet_hours_settings(
+    data: QuietHoursSettingsUpdate,
+    uid: str = Depends(auth.get_current_user_uid),
+) -> FcmTokenResponse:
+    """Set the user's quiet-hours window for proactive notifications.
+
+    Hours are local (0-23); start_hour == end_hour means no active window. While the current
+    local time is inside the window, proactive mentor notifications are suppressed.
+    """
+    try:
+        notification_db.set_quiet_hours(uid, data.enabled, data.start_hour, data.end_hour)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return FcmTokenResponse(status='Ok')
 
 
