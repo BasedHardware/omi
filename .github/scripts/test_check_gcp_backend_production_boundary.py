@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mutation-sensitive contract for the canonical full-stack production boundary."""
+"""Mutation tests for the rollback-first Cloud Run-only production boundary."""
 
 from __future__ import annotations
 
@@ -17,45 +17,21 @@ SPEC.loader.exec_module(CHECKER)
 
 
 class GcpBackendProductionBoundaryTests(unittest.TestCase):
-    def test_current_workflow_preserves_the_canonical_full_stack_boundary(self) -> None:
+    def test_current_workflow_preserves_the_rollback_first_cloud_run_only_boundary(self) -> None:
         self.assertEqual(CHECKER.validate(ROOT), [])
 
-    def test_rejects_full_stack_boundary_and_canonical_audience_mutations(self) -> None:
+    def test_rejects_production_boundary_regressions(self) -> None:
         original = (ROOT / ".github/workflows/gcp_backend.yml").read_text(encoding="utf-8")
         mutations = {
-            "blocks_prod_all": (
-                '          fi\n\n  repair-traffic:',
-                '          fi\n'
-                '          if [[ "$DEPLOY_ENVIRONMENT" == "prod" && "$DEPLOY_TARGETS" == "all" ]]; then\n'
-                "            exit 1\n"
-                "          fi\n\n  repair-traffic:",
-            ),
-            "omits_full_stack_candidate_probe": (
-                "if: ${{ github.event.inputs.environment == 'prod' }}",
-                "if: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.deploy_targets == 'cloud-run-only' }}",
-            ),
-            "omits_candidate_tag": (
-                "${{ format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG) }}",
-                "",
-            ),
-            "candidate_as_audience": (
-                'identity_audience="$(gcloud run services describe "${{ env.SERVICE }}"',
-                'identity_audience="$candidate_url"\n          # gcloud run services describe "${{ env.SERVICE }}"',
-            ),
-            "environment_override": (
-                'identity_audience="$(gcloud run services describe "${{ env.SERVICE }}"',
-                'identity_audience="${{ vars.BACKEND_CLOUD_RUN_IAM_AUDIENCE }}"\n'
-                '          # gcloud run services describe "${{ env.SERVICE }}"',
-            ),
-            "missing_audience_distinction": (
-                '[[ "$identity_audience" != "$candidate_url" ]] || {\n'
-                "            echo 'ERROR: canonical Cloud Run IAM audience must differ from tagged candidate URL' >&2; exit 1;\n"
-                '          }',
-                'true',
-            ),
-            "candidate_target_replaced": (
-                '--candidate-url "${{ steps.transcription-candidate.outputs.url }}"',
-                '--candidate-url "${{ steps.transcription-candidate.outputs.identity_audience }}"',
+            "defaults_to_all": ("default: 'cloud-run-only'", "default: 'all'"),
+            "permits_prod_all": (CHECKER.PROD_ALL_REJECTION, "if false; then"),
+            "reintroduces_tagged_url": ("Production has no tagged candidate URL", "Production has no tagged candidate URL\n# resolve_cloud_run_tagged_url.py"),
+            "moves_smoke_before_serving_verification": (CHECKER.PROD_SMOKE, "Smoke production candidate API"),
+            "omits_route_presence_smoke": ("expected validation response", "unexpected response"),
+            "omits_smoke_rollback": (CHECKER.ROLLBACK_CONDITION, "false"),
+            "leaks_smoke_token_to_output": (
+                "trap 'rm -f \"$token_file\"' EXIT",
+                "trap 'rm -f \"$token_file\"' EXIT\n          echo firebase-production-serving-token >> \"$GITHUB_OUTPUT\"",
             ),
         }
         for name, (expected, replacement) in mutations.items():
