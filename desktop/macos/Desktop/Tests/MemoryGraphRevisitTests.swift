@@ -6,7 +6,6 @@ final class MemoryGraphRevisitTests: XCTestCase {
   func testHomeMemoriesUsePersistentGraphViewModel() throws {
     let graph = try source(at: "Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift")
     let home = try source(at: "Sources/MainWindow/DesktopHomeView.swift")
-    let memories = try source(at: "Sources/MainWindow/Pages/MemoriesPage.swift")
     let container = try source(at: "Sources/ViewModelContainer.swift")
 
     XCTAssertFalse(graph.contains("@StateObject private var viewModel = MemoryGraphViewModel()"))
@@ -14,7 +13,9 @@ final class MemoryGraphRevisitTests: XCTestCase {
     XCTAssertTrue(container.contains("let memoryGraphViewModel = MemoryGraphViewModel()"))
     XCTAssertTrue(container.contains("memoryGraphViewModel.resetSessionState()"))
     XCTAssertTrue(home.contains("graphViewModel: viewModelContainer.memoryGraphViewModel"))
-    XCTAssertTrue(memories.contains("MemoryGraphInlineCard(viewModel: graphViewModel)"))
+    // The Brain Map moved from an inline Memories card to its own hub tab, still
+    // driven by the persistent, container-owned view model.
+    XCTAssertTrue(home.contains("MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)"))
   }
 
   @MainActor
