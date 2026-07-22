@@ -54,7 +54,13 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: "{{ required "image.repository is required" .Values.image.repository }}:{{ required "image.tag is required" .Values.image.tag }}"
+          {{- $repository := required "image.repository is required" .Values.image.repository }}
+          {{- $digest := .Values.image.digest }}
+          {{- if $digest }}
+          {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" $digest) }}{{- fail (printf "image.digest must be sha256:<64 lowercase hex characters>, got %q" $digest) }}{{- end }}
+          {{- if .Values.image.tag }}{{- fail "image.tag must be empty when image.digest pins the release (digest is the content address)" }}{{- end }}
+          {{- end }}
+          image: "{{ if $digest }}{{ $repository }}@{{ $digest }}{{ else }}{{ $repository }}:{{ required "image.tag is required when image.digest is absent" .Values.image.tag }}{{ end }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.envFrom }}
           envFrom:

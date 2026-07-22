@@ -4,14 +4,15 @@ verified safe, plus a rollback CONTRACT (capture-and-print, never execute).
 
 This gate is intentionally read-only: it scans the chart and metrics source to
 confirm the rollout contract holds *before* any deploy.  It performs no deploy,
-no digest copy, and no rollback execution (SCA-40 owns digest promotion and
-rollback evidence).
+no rollback execution, and no cluster mutation.
 
 **preflight** checks (fail closed):
   1. capacity headroom: PDB minAvailable, HPA minReplicas, RollingUpdate
      maxUnavailable<=1 / maxSurge>=1, terminationGracePeriodSeconds >=
      BackendConfig drainingTimeoutSec.
-  2. image/config identity: assert no ``image.digest`` field (SCA-40 owns it).
+  2. image identity: tag mode delegates the tag to the deploy workflow; a digest
+     pin (build-once promotion) must be exact ``sha256:<hex>`` with the mutable
+     tag dropped and ``pullPolicy: IfNotPresent``.
   3. readiness/health split: readinessProbe → /ready, liveness/startup →
      /health, BackendConfig connectionDraining present.
   4. telemetry fail-closed: each rollout-blocking metric must be DEFINED in
@@ -50,6 +51,7 @@ ENVIRONMENTS = ("dev", "prod")
 # verifier drifts, this gate still catches the regression independently.
 
 MAPPING_ENTRY_PATTERN = re.compile(r"^(?P<indent> *)(?P<key>[^\s#][^:]*):(?:\s*(?P<value>.*))?$")
+DIGEST_RE = re.compile(r"^sha256:[a-f0-9]{64}$")
 
 
 class ContractError(ValueError):
@@ -237,9 +239,24 @@ def validate_capacity_headroom(root: Path) -> list[str]:
     return errors
 
 
-def validate_image_identity(root: Path) -> list[str]:
-    """Assert no image.digest field (SCA-40 owns it).  tag:'' is INFO, not failure."""
+def _optional_scalar(entries: list[MappingEntry], path: tuple[str, ...], source: Path) -> str | None:
+    """Return a scalar value, or None when the key is absent/empty."""
+    try:
+        return _mapping_value(entries, path, source)
+    except ContractError:
+        return None
 
+
+def validate_image_identity(root: Path) -> list[str]:
+    """Build-once promotion contract for image identity.
+
+    Tag mode (default): ``repository:tag``; the chart delegates the tag to the
+    deploy workflow (``tag: ""`` is INFO, not a failure).
+    Digest mode (promotion): ``repository@sha256:<hex>`` — the immutable content
+    address. A digest-pinned release must drop the mutable tag and pin
+    ``pullPolicy: IfNotPresent`` (a digest is already the content address, so an
+    ``Always`` round-trip is pointless). Malformed/ambiguous identity fails.
+    """
     errors: list[str] = []
     for env in ENVIRONMENTS:
         values = root / "backend" / "charts" / "pusher" / f"{env}_omi_pusher_values.yaml"
@@ -248,14 +265,25 @@ def validate_image_identity(root: Path) -> list[str]:
         except ContractError as exc:
             errors.append(str(exc))
             continue
-        try:
-            _mapping_value(entries, ("image", "digest"), values)
+        repository = _optional_scalar(entries, ("image", "repository"), values)
+        if repository is None:
+            errors.append(f"{values}: image/repository is required")
+            continue
+        digest = _optional_scalar(entries, ("image", "digest"), values)
+        if digest is None:
+            continue  # tag mode: the chart delegates the tag to the deploy workflow.
+        if not DIGEST_RE.fullmatch(digest):
             errors.append(
-                f"{values}: image/digest must not be present (SCA-40 owns digest promotion; "
-                "this gate will require a pinned digest once SCA-40 adds the field)"
+                f"{values}: image/digest must be sha256:<64 lowercase hex>; "
+                f"rejecting ambiguous/mutable identity {digest!r}"
             )
-        except ContractError:
-            pass  # Good — no digest field yet.
+        if _optional_scalar(entries, ("image", "tag"), values) is not None:
+            errors.append(f"{values}: image/tag must be empty when image/digest pins the release")
+        if _optional_scalar(entries, ("image", "pullPolicy"), values) != "IfNotPresent":
+            errors.append(
+                f"{values}: image/pullPolicy must be IfNotPresent for a digest-pinned release "
+                "(the digest is the content address; Always only adds a registry round-trip)"
+            )
     return errors
 
 
@@ -403,7 +431,7 @@ def rollback_contract(root: Path = ROOT, environment: str = "prod") -> RollbackC
 
     This NEVER mutates cluster, registry, or repo state.  It captures the
     procedure the operator must follow, including the prior-image-restore step
-    that SCA-40's evidence recorder will eventually automate.
+    captured at runtime (a future workflow may record it automatically).
     """
 
     chart_limit = _chart_revision_history_limit(root)
@@ -425,15 +453,17 @@ def rollback_contract(root: Path = ROOT, environment: str = "prod") -> RollbackC
         prior_restore=(
             "The prior image tag/digest to restore is the currently-deployed one. "
             "It must be captured at runtime by the operator BEFORE the rollout "
-            "(not by this static script). SCA-40 will automate this capture."
+            "(not by this static script)."
         ),
         capture_command=(
             f"kubectl get deployment {release} " f"-o jsonpath='{{.spec.template.spec.containers[0].image}}'"
         ),
         restore_command=(
             f"helm upgrade --install {release} ./backend/charts/pusher "
-            f"--set image.tag=<prior-immutable-tag> "
-            f"-f backend/charts/pusher/{environment}_omi_pusher_values.yaml"
+            f"-f backend/charts/pusher/{environment}_omi_pusher_values.yaml "
+            "--set image.tag=<prior-tag>   # tag mode\n"
+            "      # OR, for a digest-pinned release (build-once promotion):\n"
+            "      # --set image.digest=sha256:<prior-digest> --set image.tag= --set image.pullPolicy=IfNotPresent"
         ),
         traffic_rollback=(
             "Traffic/runtime rollback (Helm upgrade to the prior immutable tag) is SAFE and always available. "
