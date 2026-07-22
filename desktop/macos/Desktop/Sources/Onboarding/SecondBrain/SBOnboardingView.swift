@@ -484,7 +484,9 @@ struct SBOnboardingView: View {
     VStack(alignment: .leading, spacing: 12) {
       VStack(spacing: 0) {
         ForEach(Array(model.agentRows.enumerated()), id: \.element.id) { i, row in
-          connectRow(row.name, row.detail, state: model.agentStates[row.id] ?? "idle") { model.connectAgent(row.id) }
+          connectRow(id: row.id, row.name, row.detail, state: model.agentStates[row.id] ?? "idle") {
+            model.connectAgent(row.id)
+          }
           if i < model.agentRows.count - 1 { Divider().overlay(sb.ink(.w08)) }
         }
       }
@@ -499,7 +501,7 @@ struct SBOnboardingView: View {
     VStack(alignment: .leading, spacing: 12) {
       VStack(spacing: 0) {
         ForEach(Array(model.contextRows.enumerated()), id: \.element.id) { i, row in
-          connectRow(row.name, row.detail, state: model.contextStates[row.id] ?? "idle") {
+          connectRow(id: row.id, row.name, row.detail, state: model.contextStates[row.id] ?? "idle") {
             model.connectContext(row.id)
           }
           if i < model.contextRows.count - 1 { Divider().overlay(sb.ink(.w08)) }
@@ -512,14 +514,24 @@ struct SBOnboardingView: View {
     .frame(maxWidth: 380, alignment: .leading)
   }
 
-  private func connectRow(_ name: String, _ detail: String, state: String, action: @escaping () -> Void) -> some View {
-    HStack(spacing: 12) {
-      VStack(alignment: .leading, spacing: 1) {
-        Text(name).geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
-        Text(detail).geist(size: 12).foregroundStyle(sb.ink(.w4))
+  private func connectRow(id: String, _ name: String, _ detail: String, state: String, action: @escaping () -> Void)
+    -> some View
+  {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 12) {
+        ConnectorBrandIcon(brand: model.connectorBrand(id), size: 26, cornerRadius: 7)
+        VStack(alignment: .leading, spacing: 1) {
+          Text(name).geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
+          Text(detail).geist(size: 12).foregroundStyle(sb.ink(.w4))
+        }
+        Spacer(minLength: 8)
+        connectTrailing(state, action: action)
       }
-      Spacer(minLength: 8)
-      connectTrailing(state, action: action)
+      // Once Claude Code is connected, surface the restart prompt/button so its
+      // running sessions actually reload the new MCP config (#10205).
+      if id == "claudeCode", state == "on" {
+        ClaudeCodeRestartSubtitle()
+      }
     }
     .padding(.vertical, 10)
   }

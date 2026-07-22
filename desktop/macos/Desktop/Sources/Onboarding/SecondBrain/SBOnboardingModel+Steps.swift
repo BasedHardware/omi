@@ -39,6 +39,11 @@ extension SBOnboardingModel {
     fdaState = .waiting
     if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
       NSWorkspace.shared.open(url)
+      // Show the drag-to-grant helper card (drag the Omi icon into the FDA list),
+      // matching Screen Recording's flow. Full Disk Access has no in-place toggle,
+      // so the drag card is the fastest grant path (#9742). Both FDA entry points
+      // (the permission step and the Files connector) route through here.
+      Task { await PermissionDragGuidance.presentDragToGrantHelper() }
     }
     pollPermission("full_disk_access")
   }
@@ -374,6 +379,25 @@ extension SBOnboardingModel {
     case "claudeCode": return .claudeCode
     case "codex": return .codex
     default: return .openclaw
+    }
+  }
+
+  /// Brand mark for a connector row (agents + context), so every row shows its
+  /// real logo even when the app isn't installed (#10210). Brands without a
+  /// bundled logo (openclaw/hermes/files) fall back to the icon's default glyph.
+  func connectorBrand(_ id: String) -> ConnectorBrand {
+    switch id {
+    case "openclaw": return .openclaw
+    case "hermes": return .hermes
+    case "claudeCode": return .claudeCode
+    case "codex": return .codex
+    case "calendar": return .calendar
+    case "gmail": return .gmail
+    case "applenotes": return .appleNotes
+    case "files": return .localFiles
+    case "chatgpt": return .chatgpt
+    case "claude": return .claude
+    default: return .agents
     }
   }
 
