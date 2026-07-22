@@ -18,6 +18,8 @@ struct NotchVoiceView: View {
   let followsTail: Bool
   /// Vertical space reserved at the top for the camera housing + the orb.
   let topReserve: CGFloat
+  /// The panel's max height; auto-scroll only engages once content overflows it.
+  let maxBodyHeight: CGFloat
   let onHeightChange: (CGFloat) -> Void
 
   @State private var lastContentHeight: CGFloat = 0
@@ -43,8 +45,11 @@ struct NotchVoiceView: View {
             $0.size.height
           } action: { height in
             onHeightChange(topReserve + height + hintHeight)
-            // Follow the reveal: as content grows, keep the newest line in view.
-            if height > lastContentHeight + 1 {
+            // Only follow the newest line once content actually overflows the
+            // cap. Below the cap the panel grows to fit, so scrolling then would
+            // fight the grow animation and read as a flicker.
+            let overflowing = topReserve + height + hintHeight >= maxBodyHeight - 1
+            if overflowing, height > lastContentHeight + 1 {
               withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo("voiceBottom", anchor: .bottom) }
             }
             lastContentHeight = height
@@ -81,17 +86,14 @@ struct NotchVoiceView: View {
       StreamingReplyText(fullText: text, size: 13, opacity: 0.9)
         .shimmer()
     } else {
-      // Listening: caption + the live transcript beneath it, faded so it reads
-      // as a tentative "here's what we're hearing", distinct from the reply.
-      // No shimmer here — it must stay calm and clearly faded.
-      VStack(spacing: 4) {
-        Text(placeholder)
-          .font(.system(size: 11, weight: .medium))
-          .foregroundStyle(.white.opacity(0.5))
-        if !text.isEmpty {
-          JustifiedText(text: text, size: 12, weight: .regular, opacity: 0.5, alignment: .center)
-        }
-      }
+      // Listening: just the caption. The STT provider doesn't reliably emit
+      // partial transcripts during the hold, so rather than show it
+      // inconsistently we keep a clean "Listening…" and reveal the words in
+      // the response phase.
+      Text(placeholder)
+        .font(.system(size: 13, weight: .medium))
+        .foregroundStyle(.white.opacity(0.6))
+        .shimmer()
     }
   }
 

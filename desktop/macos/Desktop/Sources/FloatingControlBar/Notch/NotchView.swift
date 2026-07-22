@@ -218,6 +218,7 @@ struct NotchView: View {
         onOpenApp: nil,
         followsTail: true,
         topReserve: voiceTopReserve,
+        maxBodyHeight: vm.voiceMaxHeight,
         onHeightChange: updateVoiceBodyHeight
       )
       .transition(contentTransition)
@@ -234,6 +235,7 @@ struct NotchView: View {
         onOpenApp: { MainWindowReveal.activate() },
         followsTail: barState.isVoiceResponseActive,
         topReserve: voiceTopReserve,
+        maxBodyHeight: vm.voiceMaxHeight,
         onHeightChange: updateVoiceBodyHeight
       )
       .transition(contentTransition)

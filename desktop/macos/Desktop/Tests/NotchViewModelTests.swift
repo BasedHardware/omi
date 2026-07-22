@@ -193,16 +193,16 @@ final class NotchViewModelTests: XCTestCase {
     XCTAssertEqual(reborn.chatBodyHeight, 333)
   }
 
-  func testVoiceHeightClampsBetweenMinAndThirtyPercent() {
+  func testVoiceHeightClampsBetweenMinAndFortyPercent() {
     let model = makeModel()
     // No measurement yet -> the compact voice minimum.
     XCTAssertEqual(model.voiceExpandedSize.height, model.voiceMinHeight)
     model.voiceBodyHeight = 10
     XCTAssertEqual(model.voiceExpandedSize.height, model.voiceMinHeight)
     model.voiceBodyHeight = 10_000
-    // Voice caps at 30% of the screen (verbal — it must not dominate).
+    // Voice caps at 40% of the screen (verbal — it must not dominate).
     XCTAssertEqual(model.voiceExpandedSize.height, model.voiceMaxHeight)
-    XCTAssertEqual(model.voiceMaxHeight, 982 * 0.3, accuracy: 0.01)
+    XCTAssertEqual(model.voiceMaxHeight, 982 * 0.4, accuracy: 0.01)
   }
 
   func testVoiceHeightIsTransientAndNotPersisted() {
