@@ -83,21 +83,27 @@ struct NotchVoiceView: View {
       // orb carries it until words arrive.
       Color.clear.frame(height: 1)
     } else {
-      styledText
+      contentText
+        .frame(maxWidth: .infinity)
+        .shimmer()
+        .contentShape(Rectangle())
+        .onTapGesture { onOpenApp?() }
+        .accessibilityAddTraits(onOpenApp != nil ? .isButton : [])
     }
   }
 
-  private var styledText: some View {
-    Text(text.isEmpty ? placeholder : text)
-      .font(.system(size: 13, weight: emphasized ? .medium : .regular))
-      .foregroundStyle(.white.opacity(text.isEmpty ? 0.5 : 0.9))
-      .multilineTextAlignment(.center)
-      .frame(maxWidth: .infinity, alignment: .center)
-      .fixedSize(horizontal: false, vertical: true)
-      .shimmer()
-      .contentShape(Rectangle())
-      .onTapGesture { onOpenApp?() }
-      .accessibilityAddTraits(onOpenApp != nil ? .isButton : [])
+  @ViewBuilder
+  private var contentText: some View {
+    if onOpenApp != nil {
+      // Omi's reply: revealed at the speaking cadence, justified.
+      StreamingReplyText(fullText: text, streaming: followsTail, size: 13, opacity: 0.9)
+    } else {
+      // Live transcript / placeholder: justified.
+      JustifiedText(
+        text: text.isEmpty ? placeholder : text,
+        size: 13, weight: emphasized ? .medium : .regular,
+        opacity: text.isEmpty ? 0.5 : 0.9)
+    }
   }
 }
 
