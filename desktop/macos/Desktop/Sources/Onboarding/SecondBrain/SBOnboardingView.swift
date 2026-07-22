@@ -442,8 +442,6 @@ struct SBOnboardingView: View {
 
   private var screenDemoWidget: some View {
     VStack(alignment: .leading, spacing: 12) {
-      macLineup
-        .frame(maxWidth: 380)
       VStack(alignment: .leading, spacing: 6) {
         HStack(spacing: 5) {
           Text("Hold").geist(size: 14).foregroundStyle(sb.ink(.w85))
@@ -459,32 +457,13 @@ struct SBOnboardingView: View {
     .frame(maxWidth: 380, alignment: .leading)
   }
 
-  /// The Mac lineup illustration reused from the legacy floating-bar demo step.
-  private static let macLineupImage: NSImage? = {
-    guard let url = Bundle.resourceBundle.url(forResource: "onboarding_mac_lineup", withExtension: "png") else {
-      return nil
-    }
-    return NSImage(contentsOf: url)
-  }()
-
-  @ViewBuilder private var macLineup: some View {
-    if let img = Self.macLineupImage {
-      Image(nsImage: img)
-        .resizable()
-        .interpolation(.high)
-        .scaledToFit()
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(sb.ink(.w1), lineWidth: 1))
-    }
-  }
-
   // MARK: agents + context connectors
 
   private var agentsWidget: some View {
     VStack(alignment: .leading, spacing: 12) {
       VStack(spacing: 0) {
         ForEach(Array(model.agentRows.enumerated()), id: \.element.id) { i, row in
-          connectRow(row.id, row.name, row.detail, state: model.agentStates[row.id] ?? "idle") {
+          connectRow(id: row.id, row.name, row.detail, state: model.agentStates[row.id] ?? "idle") {
             model.connectAgent(row.id)
           }
           if i < model.agentRows.count - 1 { Divider().overlay(sb.ink(.w08)) }
@@ -501,7 +480,7 @@ struct SBOnboardingView: View {
     VStack(alignment: .leading, spacing: 12) {
       VStack(spacing: 0) {
         ForEach(Array(model.contextRows.enumerated()), id: \.element.id) { i, row in
-          connectRow(row.id, row.name, row.detail, state: model.contextStates[row.id] ?? "idle") {
+          connectRow(id: row.id, row.name, row.detail, state: model.contextStates[row.id] ?? "idle") {
             model.connectContext(row.id)
           }
           if i < model.contextRows.count - 1 { Divider().overlay(sb.ink(.w08)) }
@@ -514,38 +493,26 @@ struct SBOnboardingView: View {
     .frame(maxWidth: 380, alignment: .leading)
   }
 
-  private func connectRow(_ id: String, _ name: String, _ detail: String, state: String, action: @escaping () -> Void)
+  private func connectRow(id: String, _ name: String, _ detail: String, state: String, action: @escaping () -> Void)
     -> some View
   {
-    HStack(spacing: 12) {
-      ConnectorBrandIcon(brand: Self.connectorBrand(for: id), size: 32, cornerRadius: 8)
-      VStack(alignment: .leading, spacing: 1) {
-        Text(name).geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
-        Text(detail).geist(size: 12).foregroundStyle(sb.ink(.w4))
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 12) {
+        ConnectorBrandIcon(brand: model.connectorBrand(id), size: 26, cornerRadius: 7)
+        VStack(alignment: .leading, spacing: 1) {
+          Text(name).geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
+          Text(detail).geist(size: 12).foregroundStyle(sb.ink(.w4))
+        }
+        Spacer(minLength: 8)
+        connectTrailing(state, action: action)
       }
-      Spacer(minLength: 8)
-      connectTrailing(state, action: action)
+      // Once Claude Code is connected, surface the restart prompt/button so its
+      // running sessions actually reload the new MCP config (#10205).
+      if id == "claudeCode", state == "on" {
+        ClaudeCodeRestartSubtitle()
+      }
     }
     .padding(.vertical, 10)
-  }
-
-  /// Map an onboarding connector row id to its brand mark. Ids mirror
-  /// `SBOnboardingModel.agentRows`/`contextRows`; anything unmapped falls back to
-  /// the generic agents glyph rather than an empty tile.
-  private static func connectorBrand(for id: String) -> ConnectorBrand {
-    switch id {
-    case "openclaw": return .openclaw
-    case "hermes": return .hermes
-    case "claudeCode": return .claudeCode
-    case "codex": return .codex
-    case "calendar": return .calendar
-    case "gmail": return .gmail
-    case "applenotes": return .appleNotes
-    case "files": return .localFiles
-    case "chatgpt": return .chatgpt
-    case "claude": return .claude
-    default: return .agents
-    }
   }
 
   @ViewBuilder

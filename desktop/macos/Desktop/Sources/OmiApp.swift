@@ -446,11 +446,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       let options = FirebaseOptions(contentsOfFile: path)
     {
       FirebaseApp.configure(options: options)
-      Task { @MainActor in
-        await AuthService.shared.configure()
-      }
+      Task { @MainActor in await AuthService.shared.configure() }
     } else {
-      log("Firebase configure skipped (plistPath=\(plistPath ?? "nil"))")
+      // REST-backed token restoration does not require the Firebase SDK.
+      log("Firebase configure skipped (plistPath=\(plistPath ?? "nil")); using REST-backed auth")
+      Task { @MainActor in await AuthService.shared.configure() }
     }
 
     // Initialize analytics (PostHog)

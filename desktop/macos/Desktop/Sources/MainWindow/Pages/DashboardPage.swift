@@ -2189,7 +2189,7 @@ struct DashboardPage: View {
 
 // MARK: - Home Components
 
-private enum HomePalette {
+enum HomePalette {
   static let paper = Color(red: 0.018, green: 0.019, blue: 0.021)
   static let panel = Color(red: 0.045, green: 0.046, blue: 0.052)
   static let tile = Color(red: 0.078, green: 0.078, blue: 0.088)
@@ -2280,7 +2280,7 @@ extension AnyTransition {
 /// The persistent home ask bar: a pill-shaped chat input with attachments
 /// (paperclip + drag-drop, same limits as the chat page), a send/stop action,
 /// and the Connect toggle living inside the pill.
-private struct HomeAskBar: View {
+struct HomeAskBar: View {
   @Binding var text: String
   let isSending: Bool
   let isStopping: Bool
@@ -2492,7 +2492,7 @@ private enum HomeAskBarActionMode: Equatable {
   case none
 }
 
-private struct HomeAskBarConnectButton: View {
+struct HomeAskBarConnectButton: View {
   let isActive: Bool
   let action: () -> Void
 

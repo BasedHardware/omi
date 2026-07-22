@@ -59,6 +59,7 @@ def _render_probe_workflow_run(run: str) -> str:
         '${{ env.SERVICE }}': 'llm-gateway',
         '${{ steps.image-tag.outputs.short_sha }}': 'abc1234',
         '${{ steps.gateway-serving.outputs.gateway_url }}': 'http://10.0.0.5',
+        '${{ steps.combined-gateway-serving.outputs.gateway_url || steps.gateway-serving.outputs.gateway_url }}': 'http://10.0.0.5',
         '${{ vars.CLOUD_RUN_VPC_NETWORK }}': 'test-network',
         '${{ vars.CLOUD_RUN_VPC_SUBNET }}': 'test-subnet',
     }
@@ -175,6 +176,35 @@ def test_gateway_deploy_workflow_and_helper_allow_explicit_prod_launches():
     assert 'Probe LLM Gateway from the Cloud Run VPC' in workflow
     assert 'verify-llm-gateway-serving.py' in workflow
     assert 'probe-llm-gateway-from-cloud-run.sh' in workflow
+    assert 'workflow_dispatch:' in workflow
+    assert 'push:' not in workflow
+    assert 'workflow_run:' not in workflow
+    assert 'schedule:' not in workflow
+    assert '--update-traffic' not in workflow
+    assert 'gcloud run services update-traffic' not in workflow
+
+
+def test_gateway_dev_auto_trigger_is_main_scoped_relevant_source_and_uses_checked_out_sha():
+    workflow = (BACKEND_ROOT.parent / '.github/workflows/gcp_llm_gateway_auto_dev.yml').read_text(encoding='utf-8')
+
+    assert 'push:' in workflow
+    assert 'branches: [ "main" ]' in workflow
+    for relevant_path in (
+        "'backend/llm_gateway/**'",
+        "'backend/charts/llm-gateway/**'",
+        "'backend/scripts/deploy-llm-gateway.sh'",
+        "'backend/scripts/verify-llm-gateway-serving.py'",
+        "'.github/workflows/gcp_llm_gateway*.yml'",
+    ):
+        assert relevant_path in workflow
+    assert 'workflow_dispatch:' not in workflow
+    assert 'workflow_run:' not in workflow
+    assert 'schedule:' not in workflow
+    assert 'CHECKED_OUT_SHA="$(git rev-parse HEAD)"' in workflow
+    assert 'if [[ "$CHECKED_OUT_SHA" != "${GITHUB_SHA}" ]]; then' in workflow
+    assert 'short_sha=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")' in workflow
+    assert 'steps.image-tag.outputs.short_sha' in workflow
+    assert '${GITHUB_SHA::7}' not in workflow
 
 
 def test_backend_deploy_requires_serving_and_cloud_run_vpc_gates_before_gateway_promotion():
@@ -188,12 +218,54 @@ def test_backend_deploy_requires_serving_and_cloud_run_vpc_gates_before_gateway_
     assert (
         '--listener-values="backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml"' in workflow
     )
-    assert "steps.gateway-serving.outputs.gateway_url || 'http://127.0.0.1:9'" in workflow
+    intent_step = workflow[
+        workflow.index('      - name: Determine whether this deploy requests gateway-first serving') : workflow.index(
+            '      - name: Get GKE credentials for gateway serving gate'
+        )
+    ]
+    assert "github.event.inputs.deploy_targets == 'all'" not in intent_step
+    assert 'Reject an inert gateway endpoint when source-controlled gateway mode is requested' in workflow
+    assert 'Gateway mode requires a verified non-sentinel endpoint.' in workflow
+    assert (
+        'steps.combined-gateway-serving.outputs.gateway_url || steps.gateway-serving.outputs.gateway_url || \'http://127.0.0.1:9\''
+        in workflow
+    )
     assert 'Verify LLM gateway control plane before promotion' in auto_dev
     assert 'Probe LLM gateway from the Cloud Run VPC before promotion' in auto_dev
     assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in auto_dev
     assert '--lane omi:auto:public-shared-conversation-chat' in workflow
     assert '--lane omi:auto:public-shared-conversation-chat' in auto_dev
+
+
+def test_backend_can_compose_dev_gateway_with_immutable_backend_image_but_prod_stays_separate():
+    workflow = (BACKEND_ROOT.parent / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8')
+    standalone = (BACKEND_ROOT.parent / '.github/workflows/gcp_llm_gateway.yml').read_text(encoding='utf-8')
+
+    assert 'deploy_gateway:' in workflow
+    assert "default: false\n        type: boolean" in workflow
+    assert (
+        'environment=prod, deploy_gateway=true is unsupported; use the standalone manual LLM gateway workflow.'
+        in workflow
+    )
+    assert 'deploy_gateway=true requires deploy_targets=all.' in workflow
+    gateway_publish = workflow.index('      - name: Build, smoke, and push combined LLM Gateway image')
+    gateway_deploy = workflow.index('      - name: Deploy LLM Gateway with backend stack')
+    assert gateway_publish < gateway_deploy
+    combined_publish_step = workflow[gateway_publish:gateway_deploy]
+    assert (
+        'gateway_image="gcr.io/${{ vars.GCP_PROJECT_ID }}/llm-gateway:${{ steps.image-tag.outputs.short_sha }}"'
+        in combined_publish_step
+    )
+    assert 'runtime_image_contracts.py" smoke' in combined_publish_step
+    assert 'docker push "$gateway_image"' in combined_publish_step
+    assert 'Deploy LLM Gateway with backend stack' in workflow
+    assert (
+        'IMAGE_TAG="${{ steps.image-tag.outputs.short_sha }}" "$DEPLOY_CONTROL_SCRIPTS/deploy-llm-gateway.sh"'
+        in workflow
+    )
+    assert 'deploy-backend-stack-${{ github.event.inputs.environment }}' in workflow
+    assert 'deploy-backend-stack-${{ github.event.inputs.environment }}' in standalone
+    assert 'IMAGE_TAG=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")' in standalone
 
 
 def test_gateway_deploy_workflows_bind_identity_and_gate_serving_static_contract():

@@ -59,6 +59,11 @@ actor EffectiveOwnerTransitionFence {
       @Sendable (
         _ previousOwner: String?, _ plannedNextOwner: String?
       ) async -> Void,
+    prepareLocalStorageTransition:
+      @Sendable (
+        _ previousOwner: String?, _ plannedNextOwner: String?
+      ) async throws -> Void = { _, _ in },
+    finalizeLocalStorageTransition: @Sendable () async -> Void = {},
     transition: @Sendable () async throws -> T,
     retargetLocalStorage: @Sendable (_ previousOwner: String?, _ nextOwner: String?) async -> Void,
     ownerDidChange: @Sendable () async -> Void
@@ -76,6 +81,10 @@ actor EffectiveOwnerTransitionFence {
         beginAuthorizationRevocation(previousOwner)
         authorizationRevoked = true
         await quiescePreviousOwner(previousOwner, plannedOwner)
+        // Owner-bound physical storage must be safely released while defaults
+        // and the database still resolve to the previous owner. A failure here
+        // aborts before the transition closure can publish the next owner.
+        try await prepareLocalStorageTransition(previousOwner, plannedOwner)
       }
       let result = try await transition()
       let nextOwner = currentOwner()
@@ -93,12 +102,14 @@ actor EffectiveOwnerTransitionFence {
         endAuthorizationRevocation()
         authorizationRevoked = false
       }
+      await finalizeLocalStorageTransition()
       endTransition()
       return result
     } catch {
       if authorizationRevoked {
         endAuthorizationRevocation()
       }
+      await finalizeLocalStorageTransition()
       endTransition()
       throw error
     }

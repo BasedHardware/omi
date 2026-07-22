@@ -32,46 +32,44 @@ final class OnboardingOpenerComposerTests: XCTestCase {
     XCTAssertEqual(OnboardingOpenerComposer.timeOfDay(date(hour: 3), calendar: utcCalendar), "Evening")
   }
 
-  // MARK: greeting — no meetings
+  // MARK: greeting (short headline)
 
-  func testGreetingNoMeetingsAlways() {
-    let g = OnboardingOpenerComposer.greeting(
-      name: "Archit", mode: .always, meetings: [], now: date(hour: 8), calendar: utcCalendar)
-    XCTAssertEqual(g, "Morning, Archit. I'm set up and listening. Ask me anything to start:")
-  }
-
-  func testGreetingNoMeetingsMeetingsOnly() {
-    let g = OnboardingOpenerComposer.greeting(
-      name: "Archit", mode: .meetingsOnly, meetings: [], now: date(hour: 14), calendar: utcCalendar)
-    XCTAssertEqual(
-      g, "Afternoon, Archit. I'm set up and I'll listen during your meetings. Ask me anything to start:")
+  func testGreetingIsTimeOfDayPlusName() {
+    let g = OnboardingOpenerComposer.greeting(name: "Archit", now: date(hour: 8), calendar: utcCalendar)
+    XCTAssertEqual(g, "Morning, Archit")
   }
 
   func testGreetingEmptyNameDropsComma() {
-    let g = OnboardingOpenerComposer.greeting(
-      name: "   ", mode: .always, meetings: [], now: date(hour: 8), calendar: utcCalendar)
-    XCTAssertEqual(g, "Morning. I'm set up and listening. Ask me anything to start:")
+    let g = OnboardingOpenerComposer.greeting(name: "   ", now: date(hour: 8), calendar: utcCalendar)
+    XCTAssertEqual(g, "Morning")
   }
 
-  // MARK: greeting — with meetings
+  // MARK: subline — no meetings
 
-  func testGreetingSingleMeeting() {
-    let g = OnboardingOpenerComposer.greeting(
-      name: "Archit", mode: .always, meetings: [meeting("Design sync", "2:00 PM")],
-      now: date(hour: 8), calendar: utcCalendar)
-    XCTAssertEqual(
-      g, "Morning, Archit — 'Design sync' at 2:00 PM today. I'll be listening. Ask me anything to start:")
+  func testSublineNoMeetingsAlways() {
+    let s = OnboardingOpenerComposer.subline(mode: .always, meetings: [])
+    XCTAssertEqual(s, "I'm set up and listening. Ask me anything to start.")
   }
 
-  func testGreetingMultipleMeetingsUsesCountAndFirst() {
-    let g = OnboardingOpenerComposer.greeting(
-      name: "Archit", mode: .meetingsOnly,
-      meetings: [meeting("Design sync", "2:00 PM"), meeting("1:1", "4:00 PM"), meeting("Standup", "5:00 PM")],
-      now: date(hour: 8), calendar: utcCalendar)
+  func testSublineNoMeetingsMeetingsOnly() {
+    let s = OnboardingOpenerComposer.subline(mode: .meetingsOnly, meetings: [])
+    XCTAssertEqual(s, "I'm set up and I'll listen during your meetings. Ask me anything to start.")
+  }
+
+  // MARK: subline — with meetings
+
+  func testSublineSingleMeeting() {
+    let s = OnboardingOpenerComposer.subline(mode: .always, meetings: [meeting("Design sync", "2:00 PM")])
+    XCTAssertEqual(s, "'Design sync' at 2:00 PM today. I'll be listening.")
+  }
+
+  func testSublineMultipleMeetingsUsesCountAndFirst() {
+    let s = OnboardingOpenerComposer.subline(
+      mode: .meetingsOnly,
+      meetings: [meeting("Design sync", "2:00 PM"), meeting("1:1", "4:00 PM"), meeting("Standup", "5:00 PM")])
     XCTAssertEqual(
-      g,
-      "Morning, Archit — 3 meetings today, first is 'Design sync' at 2:00 PM. "
-        + "I'll listen during your meetings. Ask me anything to start:")
+      s,
+      "3 meetings today — first is 'Design sync' at 2:00 PM. I'll listen during your meetings.")
   }
 
   // MARK: starters
@@ -97,11 +95,12 @@ final class OnboardingOpenerComposerTests: XCTestCase {
     XCTAssertEqual(starters, ["What should I do today?", "Next step?"])
   }
 
-  func testComposeBundlesGreetingAndStarters() {
+  func testComposeBundlesGreetingSublineAndStarters() {
     let content = OnboardingOpenerComposer.compose(
       name: "Archit", mode: .always, meetings: [meeting("Design sync", "2:00 PM")],
       now: date(hour: 8), baseStarters: ["What should I do today?"], calendar: utcCalendar)
-    XCTAssertTrue(content.greeting.hasPrefix("Morning, Archit — 'Design sync'"))
+    XCTAssertEqual(content.greeting, "Morning, Archit")
+    XCTAssertTrue(content.subline.hasPrefix("'Design sync' at 2:00 PM today"))
     XCTAssertEqual(content.starters, ["Prep me for 'Design sync'", "What should I do today?"])
   }
 }
