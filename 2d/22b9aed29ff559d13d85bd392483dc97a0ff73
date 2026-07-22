@@ -1,0 +1,19 @@
+backend/tests/unit/test_migrate_memories_rekey.py
+  s_424d550d86fd05::t_ed4ef25636c3c6 13,17-18,24-27,47-51,74-75,77,82-83,86,89,92,99,103,106,110,113,115,119,123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "2d22b9aed29ff559d13d85bd392483dc97a0ff73",
+  "prompts": {},
+  "sessions": {
+    "s_424d550d86fd05": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7d83f64d-8ce5-47f1-b308-b8839508880a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
