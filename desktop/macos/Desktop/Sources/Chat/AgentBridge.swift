@@ -2190,20 +2190,9 @@ enum BridgeError: LocalizedError {
   }
 
   private static func userFacingAgentErrorMessage(_ msg: String) -> String {
-    guard !msg.isEmpty else { return "Something went wrong. Please try again." }
-    let lower = msg.lowercased()
-    if lower.contains("leaked") || lower.contains("api key") || lower.contains("api_key")
-      || lower.contains("unauthorized") || lower.contains("permission denied")
-      || lower.contains("invalid key") || lower.contains("forbidden")
-    {
-      return "AI service authentication error. Please update the app to the latest version."
-    }
-    if lower.contains("quota") || lower.contains("rate limit") || lower.contains("resource exhausted") {
-      return "AI service is busy. Please try again in a moment."
-    }
-    if lower.contains("overloaded") || lower.contains("service unavailable") || lower.contains("internal error") {
-      return "AI service is temporarily unavailable. Please try again later."
-    }
-    return msg
+    // Classification owns the copy so "please try again" is only ever said for
+    // errors where retrying can help (unretryable causes previously produced
+    // retry storms — e.g. exhausted provider credits).
+    AgentErrorClassifier.classify(msg).userMessage
   }
 }

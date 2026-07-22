@@ -18,6 +18,43 @@ final class ChatQueryTelemetryTests: XCTestCase {
     XCTAssertTrue(ChatProvider.shouldInterruptTimedOutAgentQuery(queryStarted: true))
   }
 
+  func testFailedPayloadCarriesBoundedErrorDetail() {
+    let detail = ChatQueryErrorDetail.from(
+      BridgeError.agentError("400 Your credit balance is too low to access the Anthropic API."))
+    let event = ChatQueryTelemetryEvent.failed(
+      ChatQueryTelemetryContext(attemptId: "attempt-detail", surface: "main_chat", harness: "acp"),
+      durationMs: 1200,
+      errorClass: .agentError,
+      partialResponse: false,
+      detail: detail
+    )
+    let properties = event.analyticsPayload.properties
+    XCTAssertEqual(properties["error_code"] as? String, "provider_billing_exhausted")
+    XCTAssertEqual(properties["retryable"] as? Bool, false)
+    // Bounded dimensions only: the raw provider text must never reach analytics.
+    XCTAssertFalse(
+      String(describing: properties).contains("credit balance"),
+      "raw exception text leaked into analytics properties")
+  }
+
+  func testRuntimeFailureDetailCarriesDaemonTaxonomy() {
+    let failure = AgentRuntimeFailure(
+      code: "adapter_execution_failed",
+      failureCode: .authentication,
+      userMessage: "Authentication required",
+      source: "adapter_execution",
+      adapterId: "openclaw",
+      provider: "anthropic",
+      retryable: false
+    )
+    let detail = ChatQueryErrorDetail.from(BridgeError.agentRuntimeFailure(failure))
+    XCTAssertEqual(detail?.errorCode, "authentication")
+    XCTAssertEqual(detail?.failureCode, "adapter_execution_failed")
+    XCTAssertEqual(detail?.failureSource, "adapter_execution")
+    XCTAssertEqual(detail?.adapterId, "openclaw")
+    XCTAssertEqual(detail?.retryable, false)
+  }
+
   func testAnalyticsPayloadUsesTypedAllowlist() {
     let event = ChatQueryTelemetryEvent.failed(
       ChatQueryTelemetryContext(
@@ -27,7 +64,8 @@ final class ChatQueryTelemetryTests: XCTestCase {
       ),
       durationMs: 900,
       errorClass: .timeout,
-      partialResponse: true
+      partialResponse: true,
+      detail: nil
     )
 
     let payload = event.analyticsPayload
@@ -533,7 +571,7 @@ final class ChatQueryTelemetryTests: XCTestCase {
       eventSink: { browserEvents.append($0) }
     )
     XCTAssertTrue(browserAttempt.finish(stopReason: .browserExtensionMissing))
-    guard case .failed(_, _, let errorClass, _) = browserEvents.last else {
+    guard case .failed(_, _, let errorClass, _, _) = browserEvents.last else {
       return XCTFail("expected browser precondition failure")
     }
     XCTAssertEqual(errorClass, .browserExtensionMissing)

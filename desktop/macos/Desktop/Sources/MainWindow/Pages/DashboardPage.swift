@@ -1152,8 +1152,9 @@ struct DashboardPage: View {
   /// Chat with history is the default Home surface. An explicit hub close consumes
   /// the one-shot so a late history update cannot immediately undo that action.
   private func autoOpenChatForExistingHistoryIfNeeded() {
-    guard homeHistoryAutoOpenPolicy.shouldAutoOpen(
-      isLegacy: useLegacyHomeDesign, mode: homeMode, hasMessages: !chatProvider.messages.isEmpty)
+    guard
+      homeHistoryAutoOpenPolicy.shouldAutoOpen(
+        isLegacy: useLegacyHomeDesign, mode: homeMode, hasMessages: !chatProvider.messages.isEmpty)
     else { return }
     homeMode = .chat
     reportHomeAutomationMode()
