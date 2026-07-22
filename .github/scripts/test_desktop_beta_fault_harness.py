@@ -406,18 +406,31 @@ def _planner_duplicate_tick():
 
 
 @register
-@scenario("planner: completed-failure build neither blocks nor retries (SCA-44 B1)")
-def _planner_failed_build_abandon():
-    # Documents the ranked blocker: a completed-FAILURE latest tag returns None
-    # (no block) yet the planner measures changes since it, so it never retries.
-    orig_sha, orig_chk = planner.tag_sha, planner.github_check_status
-    planner.tag_sha = lambda tag: "c" * 40
+@scenario("planner: completed-failure build retries stranded latest tag (SCA-44 B1)")
+def _planner_failed_build_retry():
+    # A completed-FAILURE latest tag must not block a duplicate tick, but it also
+    # must not strand the scheduler when no newer desktop paths changed.
+    tag = "v0.12.64+100000-macos"
+    sha = "c" * 40
+    orig_sha, orig_chk, orig_changes = (
+        planner.tag_sha,
+        planner.github_check_status,
+        planner.releasable_desktop_changes_since,
+    )
+    planner.tag_sha = lambda _tag: sha
     planner.github_check_status = lambda *a: ("completed", "failure", None)
+    planner.releasable_desktop_changes_since = lambda _ref: []
     try:
-        reason = planner.active_release_reason(REPOSITORY, "v0.12.64+100000-macos")
+        block_reason = planner.active_release_reason(REPOSITORY, tag)
+        retry_sha = planner.failed_latest_tag_retry_source(REPOSITORY, tag)
     finally:
-        planner.tag_sha, planner.github_check_status = orig_sha, orig_chk
-    assert reason is None, f"completed (even failed) build must not block; got {reason!r}"
+        planner.tag_sha, planner.github_check_status, planner.releasable_desktop_changes_since = (
+            orig_sha,
+            orig_chk,
+            orig_changes,
+        )
+    assert block_reason is None, f"failed build must not block active release; got {block_reason!r}"
+    assert retry_sha == sha, f"failed latest tag must retry its source SHA; got {retry_sha!r}"
 
 
 # === Qualification admission layer: real validate_qualification_run =========

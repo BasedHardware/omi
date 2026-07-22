@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import os
 import sys
 import tempfile
@@ -154,6 +155,36 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn(f"source_sha={SOURCE_SHA}", outputs)
         self.assertNotIn(f"source_sha={LATER_NON_DESKTOP_SHA}", outputs)
         self.assertIn("should_release=true", outputs)
+
+    def test_failed_latest_tag_without_new_changes_retries_the_tagged_source(self) -> None:
+        tag = "v0.0.1+1-macos"
+        tagged_sha = "c" * 40
+
+        def fake_codemagic(_repository: str, sha: str):
+            if sha == tagged_sha:
+                return "completed", "failure", None
+            return "completed", "success", None
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "github-output"
+            with (
+                patch.object(planner, "latest_desktop_tag", return_value=tag),
+                patch.object(planner, "releasable_desktop_changes_since", return_value=[]),
+                patch.object(planner, "tag_sha", return_value=tagged_sha),
+                patch.object(planner, "codemagic_check_status", side_effect=fake_codemagic),
+                patch.object(planner, "required_source_checks_reason", return_value=None),
+                patch.object(planner, "active_release_reason", return_value=None),
+                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY]),
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
+                patch("sys.stdout", new_callable=io.StringIO) as stdout,
+            ):
+                self.assertEqual(planner.main(), 0)
+            outputs = output_path.read_text(encoding="utf-8")
+            console = stdout.getvalue()
+
+        self.assertIn(f"source_sha={tagged_sha}", outputs)
+        self.assertIn("should_release=true", outputs)
+        self.assertIn("Retrying failed Codemagic build", console)
 
     def test_workflow_has_no_input_manual_trigger_and_tags_the_changelog_commit(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")

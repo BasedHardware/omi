@@ -183,6 +183,22 @@ def active_release_reason(repository: str, latest_tag: str | None) -> str | None
     return None
 
 
+def failed_latest_tag_retry_source(repository: str, latest_tag: str | None) -> str | None:
+    """Return the tagged source SHA when the latest desktop tag's Codemagic build failed."""
+    if latest_tag is None:
+        return None
+
+    sha = tag_sha(latest_tag)
+    if not sha:
+        return None
+
+    status, conclusion, error = codemagic_check_status(repository, sha)
+    if error or status != "completed" or conclusion != "failure":
+        return None
+
+    return sha
+
+
 def set_output(name: str, value: str) -> None:
     print(f"{name}={value}")
     output_path = os.environ.get("GITHUB_OUTPUT")
@@ -198,44 +214,49 @@ def main() -> int:
 
     latest_tag = latest_desktop_tag()
     changes = releasable_desktop_changes_since(latest_tag)
+    retry_source_sha = failed_latest_tag_retry_source(args.repository, latest_tag) if not changes else None
     set_output("latest_tag", latest_tag or "")
 
-    if not changes:
+    if not changes and retry_source_sha is None:
         set_output("source_sha", "")
         set_output("should_release", "false")
         set_output("reason", "No releasable desktop app changes since the latest desktop tag.")
         return 0
 
-    # Component CI is produced on the immutable commit that last changed the
-    # queued desktop paths. Later backend/docs-only main commits intentionally
-    # do not become desktop candidates because the producer skips its expensive
-    # release compile on those SHAs.
-    source_sha = latest_releasable_desktop_sha(changes)
-    set_output("source_sha", source_sha or "")
-    if source_sha is None:
-        set_output("should_release", "false")
-        set_output("reason", "Could not resolve the newest releasable desktop source SHA.")
-        return 0
+    if retry_source_sha:
+        source_sha = retry_source_sha
+        set_output("source_sha", source_sha)
+        print(f"Retrying failed Codemagic build for latest desktop tag {latest_tag} at {source_sha}.")
+    else:
+        # Component CI is produced on the immutable commit that last changed the
+        # queued desktop paths. Later backend/docs-only main commits intentionally
+        # do not become desktop candidates because the producer skips its expensive
+        # release compile on those SHAs.
+        source_sha = latest_releasable_desktop_sha(changes)
+        set_output("source_sha", source_sha or "")
+        if source_sha is None:
+            set_output("should_release", "false")
+            set_output("reason", "Could not resolve the newest releasable desktop source SHA.")
+            return 0
 
-    if changes:
         print("Releasable desktop app changes since latest tag:")
         for path in changes:
             print(f"  - {path}")
 
-    latest_change_age = latest_change_age_seconds(changes)
-    if latest_change_age is None:
-        set_output("should_release", "false")
-        set_output("reason", "Waiting for desktop release quiet window: could not determine latest releasable change age.")
-        return 0
-    if latest_change_age < AUTO_RELEASE_QUIET_SECONDS:
-        wait_seconds = AUTO_RELEASE_QUIET_SECONDS - latest_change_age
-        set_output("should_release", "false")
-        set_output(
-            "reason",
-            f"Waiting for desktop release quiet window: latest releasable change is "
-            f"{latest_change_age}s old; need {AUTO_RELEASE_QUIET_SECONDS}s ({wait_seconds}s remaining).",
-        )
-        return 0
+        latest_change_age = latest_change_age_seconds(changes)
+        if latest_change_age is None:
+            set_output("should_release", "false")
+            set_output("reason", "Waiting for desktop release quiet window: could not determine latest releasable change age.")
+            return 0
+        if latest_change_age < AUTO_RELEASE_QUIET_SECONDS:
+            wait_seconds = AUTO_RELEASE_QUIET_SECONDS - latest_change_age
+            set_output("should_release", "false")
+            set_output(
+                "reason",
+                f"Waiting for desktop release quiet window: latest releasable change is "
+                f"{latest_change_age}s old; need {AUTO_RELEASE_QUIET_SECONDS}s ({wait_seconds}s remaining).",
+            )
+            return 0
 
     source_check_reason = required_source_checks_reason(args.repository, source_sha)
     if source_check_reason:
@@ -250,7 +271,10 @@ def main() -> int:
         return 0
 
     set_output("should_release", "true")
-    set_output("reason", f"Ready to release {len(changes)} changed desktop app file(s).")
+    if retry_source_sha:
+        set_output("reason", f"Retrying failed Codemagic build for latest desktop tag {latest_tag}.")
+    else:
+        set_output("reason", f"Ready to release {len(changes)} changed desktop app file(s).")
     return 0
 
 

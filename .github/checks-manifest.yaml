@@ -276,7 +276,7 @@ checks:
     reason: "candidate tags require successful Release Eligibility and both Desktop Swift checks for the exact newest queued releasable desktop SHA"
   - id: desktop-beta-fault-harness
     command: ["python3", ".github/scripts/test_desktop_beta_fault_harness.py"]
-    triggers: [".github/scripts/test_desktop_beta_fault_harness.py", ".github/scripts/plan-desktop-release.py", ".github/scripts/desktop_qualification_admission.py", ".github/scripts/desktop_qualification_evidence.py", ".github/scripts/desktop_release_manifest.py", "backend/utils/qualified_beta_promotion.py", "backend/database/desktop_update_channels.py", "backend/desktop_qualification_admission.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/scripts/test_desktop_beta_fault_harness.py", ".github/scripts/plan-desktop-release.py", ".github/scripts/desktop_qualification_admission.py", ".github/scripts/desktop_qualification_evidence.py", ".github/scripts/desktop_release_manifest.py", "backend/utils/qualified_beta_promotion.py", "backend/database/desktop_update_channels.py", "backend/desktop_qualification_admission.py", "backend/desktop_release_manifest.py", "backend/desktop_qualification_evidence.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "nightly macOS Beta promotion decision logic must reject every fault class (canceled/failed CI, absent release, failed/retried qualification, tag/SHA mismatch, stale generation, concurrent promotion) with zero pointer mutation"
   - id: desktop-manifest-routes
