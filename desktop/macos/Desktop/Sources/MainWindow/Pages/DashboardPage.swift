@@ -466,7 +466,13 @@ struct DashboardPage: View {
       }
   }
 
+  // Split in two (`applyHomeLifecycle` → `applyHomeStageObservers`) so each
+  // modifier chain stays within the type-checker's budget.
   private func applyHomeLifecycle<Content: View>(to content: Content) -> some View {
+    applyHomeStageObservers(to: applyHomeLifecycleCore(to: content))
+  }
+
+  private func applyHomeLifecycleCore<Content: View>(to content: Content) -> some View {
     content
       .onAppear {
         if PostOnboardingPromptSuggestions.shouldShowPopup && !postOnboardingSuggestions.isEmpty {
@@ -478,6 +484,7 @@ struct DashboardPage: View {
         // surface so the personalized opener (set on onboarding completion) is
         // actually visible instead of hidden behind the hub.
         if chatProvider.onboardingOpener != nil { openHomeChat(focusInput: false) }
+        consumePendingMainChatOpenRequest()
         reportHomeAutomationMode()
         intelligenceStore.setRecommendationActionHandler { recommendation in
           await openRecommendation(recommendation)
@@ -524,6 +531,15 @@ struct DashboardPage: View {
       }
       .onReceive(NotificationCenter.default.publisher(for: .screenCaptureKitBroken)) { _ in
         syncCaptureState()
+      }
+  }
+
+  private func applyHomeStageObservers<Content: View>(to content: Content) -> some View {
+    content
+      // "Continue in Omi" while the dashboard is already mounted; the
+      // not-yet-mounted case is covered by the consume in onAppear.
+      .onReceive(NotificationCenter.default.publisher(for: .openMainChatRequested)) { _ in
+        consumePendingMainChatOpenRequest()
       }
       // Chat history is the home surface: as soon as the (async) history
       // load shows prior messages, land on the chat panel, not the greeting.
@@ -665,10 +681,12 @@ struct DashboardPage: View {
         HomeCanvasBackground()
 
         // Clicking anywhere outside the chat / connect panel collapses
-        // back to the hub (panels and the ask bar consume their own
-        // clicks above this catcher). When chat history exists, chat IS the
-        // resting Home surface, so no catcher is mounted over it.
-        if homeMode != homeRestingMode {
+        // back to the resting surface (panels and the ask bar consume their
+        // own clicks above this catcher). When chat history exists, chat IS
+        // the resting Home surface, so no catcher is mounted over it — and
+        // the hub is never an overlay, so no catcher is ever mounted over
+        // the hub either (a stray click must not throw the user into chat).
+        if HomeStageMode.collapseCatcherActive(mode: homeMode, resting: homeRestingMode) {
           Color.black.opacity(0.001)
             .ignoresSafeArea()
             .contentShape(Rectangle())
@@ -704,8 +722,10 @@ struct DashboardPage: View {
         // Esc collapses the connect tray (and, with no chat history, the
         // inline chat) back to the resting surface — but only while no modal
         // overlay owns the key. Chat with history is Home itself and cannot
-        // be escaped.
-        if homeMode != homeRestingMode && !isHomeModalPresented {
+        // be escaped; the hub is likewise never escaped *into* a panel.
+        if HomeStageMode.collapseCatcherActive(mode: homeMode, resting: homeRestingMode)
+          && !isHomeModalPresented
+        {
           OverlayModalEscapeCatcher {
             collapseHomeStagePanel()
           }
@@ -1274,6 +1294,14 @@ struct DashboardPage: View {
   /// greeting hero. Retained as a no-op so the page-lifecycle call sites stay
   /// stable; chats are entered explicitly instead.
   private func autoOpenChatForExistingHistoryIfNeeded() {}
+
+  /// Floating-bar "Continue in Omi": land directly on the chat panel instead
+  /// of whatever surface Home was resting on.
+  private func consumePendingMainChatOpenRequest() {
+    guard MainChatNavigationRequestStore.shared.consume() else { return }
+    guard !useLegacyHomeDesign else { return }
+    openHomeChat()
+  }
 
   private func openHomeChat(focusInput: Bool = true) {
     guard homeMode != .chat else { return }
@@ -2192,6 +2220,15 @@ enum HomeStageMode: Equatable {
   case hub
   case chat
   case connect
+
+  /// Whether the user-facing collapse catchers (click-outside + Esc) mount.
+  /// Only a panel that can collapse to a *different* resting surface gets a
+  /// catcher. The hub is the base surface, never an overlay: mounting a
+  /// catcher over hub-with-history would invert the gesture and make a stray
+  /// click or Esc *open* the chat.
+  static func collapseCatcherActive(mode: HomeStageMode, resting: HomeStageMode) -> Bool {
+    mode != resting && mode != .hub
+  }
 
   var automationLabel: String {
     switch self {

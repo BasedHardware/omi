@@ -69,7 +69,10 @@ runs:
         fi
 
         FILES=$(scripts/changed-files "$DIFF_BASE"...HEAD)
-        APP_COMPILE_FILES="$FILES"
+        # Translation-only changes cannot break the Android build: the ARBs and
+        # their generated localization classes still go through Dart Analyze and
+        # Flutter Tests, so the expensive Gradle APK build adds no signal.
+        APP_COMPILE_FILES=$(echo "$FILES" | grep -vE '^app/lib/l10n/app_[A-Za-z_]+\.arb$|^app/lib/l10n/app_localizations(_[A-Za-z_]+)?\.dart$' || true)
         echo "$FILES"
         echo "diff_base=$DIFF_BASE" >> "$GITHUB_OUTPUT"
 

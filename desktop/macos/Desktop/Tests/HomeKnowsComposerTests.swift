@@ -77,4 +77,21 @@ final class HomeKnowsComposerTests: XCTestCase {
   func testEverythingEmptyProducesNoRows() {
     XCTAssertTrue(HomeKnowsListComposer.compose(tasks: [], insights: [], questions: []).isEmpty)
   }
+
+  func testDuplicateQuestionsDoNotCollideAcrossQuestionRows() {
+    // Question rows derive their ForEach ID from the text, so a repeated
+    // suggestion must never surface twice. The redesign surfaces at most two
+    // question-kind rows (a composed tip in the second slot and a distinct ask
+    // in the last), so use a tip to exercise both and assert the repeat is
+    // dropped and the two IDs stay unique.
+    let rows = HomeKnowsListComposer.compose(
+      tasks: [], insights: [],
+      tip: "What should I do today?",
+      questions: ["What should I do today?", " What should I do today? ", "Second question?"])
+
+    XCTAssertEqual(rows.count, 2)
+    XCTAssertEqual(rows.map(\.kind), [.question, .question])
+    XCTAssertEqual(rows.map(\.text), ["What should I do today?", "Second question?"])
+    XCTAssertEqual(Set(rows.map(\.id)).count, rows.count)
+  }
 }

@@ -521,6 +521,11 @@ struct DesktopHomeView: View {
         }
       }
     }
+    // "Continue in Omi" from the floating bar: switch to the Home tab; the
+    // dashboard consumes the pending request and opens the chat panel.
+    .onReceive(NotificationCenter.default.publisher(for: .openMainChatRequested)) { _ in
+      selectedIndex = SidebarNavItem.dashboard.rawValue
+    }
   }
 
   private func enforceMainWindowMinimumSize() {

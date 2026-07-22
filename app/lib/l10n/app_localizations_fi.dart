@@ -9607,10 +9607,10 @@ class AppLocalizationsFi extends AppLocalizations {
       'Tietosi on oletuksena suojattu vahvalla salauksella, ja sinä hallitset, miten niitä säilytetään ja käytetään.';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => 'Tarkkuus';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => 'Perus';
 
   @override
   String get cloudTranscription => 'Pilvitranskriptio';
@@ -9619,52 +9619,52 @@ class AppLocalizationsFi extends AppLocalizations {
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => 'Poista malli';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'Haluatko varmasti poistaa tämän mallin?';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => 'Ladattu';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => 'Nopeampi';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => 'Automaattinen';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => 'Korkeampi';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => 'Suuri';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => 'Matalampi';
 
   @override
-  String get whisperModelSizeMedium => 'Medium';
+  String get whisperModelSizeMedium => 'Keskikokoinen';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => 'Malli poistettu';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => 'Mallin lataus epäonnistui';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc => 'Whisper-mallin lataaminen epäonnistui. Yritä uudelleen.';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => 'Malli ladattu';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper-malli ladattiin onnistuneesti';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => 'Mallin koko';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => 'Ei mitään';
 
   @override
   String get onDeviceTranscription => 'Laitteella tapahtuva transkriptio';
@@ -9673,10 +9673,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onDeviceTranscriptionDesc => 'Transkriptio käsitellään paikallisesti laitteellasi';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => 'Hitaampi';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => 'Pieni';
 
   @override
   String get sttProviderSoniox => 'Soniox';
@@ -9691,10 +9691,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => 'Nopeus';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => 'Pikkuruinen';
 
   @override
   String get transcriptionLanguage => 'Transkription kieli';
@@ -9709,51 +9709,52 @@ class AppLocalizationsFi extends AppLocalizations {
   String get whisperModelDesc => 'Valitse malli laitteella tapahtuvaan transkriptioon';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => 'Siirrytäänkö ilmaiseen tilaukseen?';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => 'Kohtaat nämä rajoitukset:';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => '7-kertainen akunkulutus';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => '30 % heikompi litterointilaatu';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => '5–7 sekunnin viive';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => 'Puhujia ei voi tunnistaa';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => 'Vaihda silti';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => 'Google Kalenteria ei ole yhdistetty';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt =>
+      'Yhdistä Google Kalenteri, niin voit linkittää keskusteluja kalenteritapahtumiin.';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return 'Linkitetty tapahtumaan ”$title”';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => 'Kalenteritapahtuman linkittäminen epäonnistui';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => 'Kiitos palautteestasi!';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => 'Kopioi viesti';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => 'Etsi asetuksista…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => 'Äänen lataaminen epäonnistui';
 
   @override
   String get rayBanMetaMicPickerTitle => 'Valitse Ray-Ban Meta -mikrofoni';

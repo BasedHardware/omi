@@ -1118,7 +1118,14 @@ def get_shared_conversation_by_id(conversation_id: str):
     if not visibility or visibility == ConversationVisibility.private:
         raise HTTPException(status_code=404, detail="Conversation is private")
     conversation = deserialize_conversation(conversation)
+    # This endpoint is public and unauthenticated. Strip fields that are internal
+    # to the owner and never part of the shared transcript/summary the user chose
+    # to publish: precise geolocation, the server-side encryption tier, and
+    # external_data (which carries merge provenance — other conversation ids — and
+    # integration metadata).
     conversation.geolocation = None
+    conversation.data_protection_level = None
+    conversation.external_data = None
 
     # Fetch people data for speaker names
     person_ids = conversation.get_person_ids()

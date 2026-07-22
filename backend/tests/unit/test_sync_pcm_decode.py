@@ -201,7 +201,7 @@ if not hasattr(sys.modules.setdefault('google.cloud', MagicMock()), 'tasks_v2'):
 
 _remove_python_multipart_stub = _install_python_multipart_stub()
 try:
-    from utils.sync.files import _is_pcm_codec, decode_pcm_file_to_wav, decode_files_to_wav
+    from utils.sync.files import _is_pcm_codec, decode_pcm_file_to_wav, decode_files_to_wav, get_wav_duration
 finally:
     if _remove_python_multipart_stub:
         sys.modules.pop('python_multipart', None)
@@ -280,7 +280,7 @@ class TestDecodePcmFileToWav:
             result = decode_pcm_file_to_wav(bin_path, wav_path)
             assert result is False
 
-    def test_truncated_frame_rejects_valid_prefix(self):
+    def test_truncated_frame_keeps_valid_prefix(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             bin_path = os.path.join(tmpdir, 'test.bin')
             wav_path = os.path.join(tmpdir, 'test.wav')
@@ -293,10 +293,10 @@ class TestDecodePcmFileToWav:
                 f.write(bytes([0] * 100))  # But only 100 bytes
 
             result = decode_pcm_file_to_wav(bin_path, wav_path)
-            assert result is False
-            assert not os.path.exists(wav_path)
+            assert result is True
+            assert get_wav_duration(wav_path) > 0
 
-    def test_suspicious_frame_length_rejects_valid_prefix(self):
+    def test_suspicious_frame_length_keeps_valid_prefix(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             bin_path = os.path.join(tmpdir, 'test.bin')
             wav_path = os.path.join(tmpdir, 'test.wav')
@@ -308,8 +308,8 @@ class TestDecodePcmFileToWav:
                 f.write(struct.pack('<I', 999999))  # Suspicious length > 65536
 
             result = decode_pcm_file_to_wav(bin_path, wav_path)
-            assert result is False
-            assert not os.path.exists(wav_path)
+            assert result is True
+            assert get_wav_duration(wav_path) > 0
 
     def test_frame_length_boundary_65536_accepted(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -327,7 +327,7 @@ class TestDecodePcmFileToWav:
             with wave.open(wav_path, 'rb') as wf:
                 assert wf.getnframes() == 65536 // 2  # 16-bit samples = 2 bytes each
 
-    def test_frame_length_boundary_65537_rejected(self):
+    def test_frame_length_boundary_65537_stops_before_read(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             bin_path = os.path.join(tmpdir, 'test.bin')
             wav_path = os.path.join(tmpdir, 'test.wav')
@@ -339,10 +339,10 @@ class TestDecodePcmFileToWav:
                 f.write(struct.pack('<I', 65537))  # Just over 65536 limit
 
             result = decode_pcm_file_to_wav(bin_path, wav_path)
-            assert result is False
-            assert not os.path.exists(wav_path)
+            assert result is True
+            assert get_wav_duration(wav_path) > 0
 
-    def test_zero_length_frame_stops(self):
+    def test_zero_length_frame_keeps_valid_prefix(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             bin_path = os.path.join(tmpdir, 'test.bin')
             wav_path = os.path.join(tmpdir, 'test.wav')
@@ -354,10 +354,10 @@ class TestDecodePcmFileToWav:
                 f.write(struct.pack('<I', 0))  # Zero-length frame
 
             result = decode_pcm_file_to_wav(bin_path, wav_path)
-            assert result is False
-            assert not os.path.exists(wav_path)
+            assert result is True
+            assert get_wav_duration(wav_path) > 0
 
-    def test_truncated_length_header_handled(self):
+    def test_truncated_length_header_keeps_valid_prefix(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             bin_path = os.path.join(tmpdir, 'test.bin')
             wav_path = os.path.join(tmpdir, 'test.wav')
@@ -369,8 +369,8 @@ class TestDecodePcmFileToWav:
                 f.write(bytes([0x40, 0x01]))  # Truncated length header
 
             result = decode_pcm_file_to_wav(bin_path, wav_path)
-            assert result is False
-            assert not os.path.exists(wav_path)
+            assert result is True
+            assert get_wav_duration(wav_path) > 0
 
     def test_nonexistent_file_returns_false(self):
         result = decode_pcm_file_to_wav('/nonexistent/path.bin', '/nonexistent/out.wav')

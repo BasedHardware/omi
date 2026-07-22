@@ -842,7 +842,11 @@ def run_flow_once(args: argparse.Namespace) -> tuple[int, Path, dict[str, typing
 
     step_results = []
     if not setup_errors:
-        step_results = [execute_step(ctx, index, step) for index, step in enumerate(flow.get("steps", []), 1)]
+        for index, step in enumerate(flow.get("steps", []), 1):
+            result = execute_step(ctx, index, step)
+            step_results.append(result)
+            if not result["ok"] and step.get("halt_on_failure") is True:
+                break
     logs = collect_logs(ctx)
     final_state = request_json(ctx.base_url, "GET", "/state")
     traces = recent_traces(ctx)

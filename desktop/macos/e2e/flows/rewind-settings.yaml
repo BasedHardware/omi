@@ -18,6 +18,9 @@ steps:
       activateApp: false
     wait:
       state.selectedSettingsSection: Rewind
+      state.snapshotStale: false
+    timeout_seconds: 30
+    halt_on_failure: true
 
   - id: S2
     name: Rewind settings snapshot

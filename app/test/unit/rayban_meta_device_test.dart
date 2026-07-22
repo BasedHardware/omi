@@ -263,6 +263,61 @@ void main() {
       expect(result.devices.single.locator?.extras[RayBanMetaDiscoverer.audioOnlyExtraKey], isTrue);
     });
 
+    test('recovers glasses stored under the legacy synthetic id', () async {
+      // Installs that paired during the audio-only fallback persisted the
+      // synthetic 'rayban-meta-audio' id. It can never match a real HFP UID, so
+      // treating it as a failed UID match hid the glasses permanently.
+      final legacy = BtDevice(
+        name: 'Ray-Ban Meta',
+        id: RayBanMetaDiscoverer.legacyAudioOnlyId,
+        type: DeviceType.raybanMeta,
+        rssi: 0,
+        locator: DeviceLocator.metaDat(extras: {RayBanMetaDiscoverer.audioOnlyExtraKey: true}),
+      );
+      SharedPreferences.setMockInitialValues({'btDevice': jsonEncode(legacy.toJson())});
+      await SharedPreferencesUtil.init();
+
+      setRayBanMetaHostApiHandler('getAvailabilityMode', (_) async => <Object?>['audio_only']);
+      setRayBanMetaHostApiHandler(
+        'getBluetoothHfpInputs',
+        (_) async => <Object?>[
+          <BluetoothHfpInput>[
+            BluetoothHfpInput(uid: 'other-headset', name: 'AirPods Pro'),
+            BluetoothHfpInput(uid: 'real-hfp-uid', name: 'Ray-Ban Meta'),
+          ],
+        ],
+      );
+
+      final result = await RayBanMetaDiscoverer().discover();
+
+      expect(result.devices, hasLength(1));
+      expect(result.devices.single.id, 'real-hfp-uid');
+      expect(result.devices.single.locator?.extras[RayBanMetaDiscoverer.audioOnlyExtraKey], isTrue);
+    });
+
+    test('a stored real UID that is absent is never substituted', () async {
+      // Guards the migration above from widening into "match anything by name":
+      // a genuine selection that is simply not connected must report nothing
+      // rather than bind to someone else's headset.
+      final stored = RayBanMetaDiscoverer.audioOnlyDeviceForInput(
+        BluetoothHfpInput(uid: 'stable-hfp-uid', name: 'Ray-Ban Meta'),
+      );
+      SharedPreferences.setMockInitialValues({'btDevice': jsonEncode(stored.toJson())});
+      await SharedPreferencesUtil.init();
+
+      setRayBanMetaHostApiHandler('getAvailabilityMode', (_) async => <Object?>['audio_only']);
+      setRayBanMetaHostApiHandler(
+        'getBluetoothHfpInputs',
+        (_) async => <Object?>[
+          <BluetoothHfpInput>[BluetoothHfpInput(uid: 'someone-elses-uid', name: 'Ray-Ban Meta')],
+        ],
+      );
+
+      final result = await RayBanMetaDiscoverer().discover();
+
+      expect(result.devices, isEmpty);
+    });
+
     test('uses a name match only as a first-selection convenience and keeps the real UID', () async {
       setRayBanMetaHostApiHandler('getAvailabilityMode', (_) async => <Object?>['audio_only']);
       setRayBanMetaHostApiHandler(

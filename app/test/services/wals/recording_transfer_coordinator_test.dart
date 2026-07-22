@@ -48,6 +48,42 @@ void main() {
       expect(harness.maximumConcurrentDrains, 1);
     });
 
+    test('a failing reconcile still drains pending recordings', () async {
+      // Reconcile only resolves jobs already on the server. When it threw, it
+      // aborted the pass before the drain, so brand-new recordings stopped
+      // uploading entirely for as long as the failure persisted.
+      final harness = _TransferHarness()..reconcileFails = true;
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.startup);
+
+      expect(harness.reconcilePasses, 1);
+      expect(harness.drainPasses, 1);
+      // Uploaded, not still waiting to be offered: the bytes left the device
+      // even though reconcile could not resolve the job yet.
+      expect(harness.walState, 'uploaded');
+      expect(harness.walState, isNot('miss'));
+    });
+
+    test('a failing reconcile is retried on cooldown', () async {
+      final harness = _TransferHarness()..reconcileFails = true;
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.startup);
+
+      expect(harness.scheduledCooldowns, hasLength(1));
+    });
+
+    test('a failing reconcile still drains when uploads are disabled', () async {
+      final harness = _TransferHarness(autoUploadEnabled: false)..reconcileFails = true;
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.startup);
+
+      expect(harness.discoveryPasses, 1);
+      expect(harness.scheduledCooldowns, hasLength(1));
+    });
+
     test('a retryable drain failure never presents synced and schedules cooldown', () async {
       final harness = _TransferHarness()..drainFails = true;
       addTearDown(harness.dispose);
@@ -197,6 +233,7 @@ class _TransferHarness {
   late final RecordingTransferCoordinator coordinator;
 
   Completer<void>? reconcileGate;
+  bool reconcileFails = false;
   bool drainFails = false;
   bool drainNeedsReconciliation = false;
   bool drainContended = false;
@@ -213,6 +250,9 @@ class _TransferHarness {
 
   Future<void> _reconcile() async {
     reconcilePasses++;
+    if (reconcileFails) {
+      throw StateError('reconcile pass failed');
+    }
     if (uploadedWalAwaitingReconcile) {
       uploadedWalAwaitingReconcile = false;
       reconciledUploadedWal = true;

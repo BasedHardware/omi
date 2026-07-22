@@ -66,10 +66,14 @@ enum HomeKnowsListComposer {
     }
     let trimmedTip = tip?.trimmingCharacters(in: .whitespacesAndNewlines)
     let cleanTip = (trimmedTip?.isEmpty == false) ? trimmedTip : nil
+
+    // Question rows are identified by their text, so a repeated suggestion
+    // would collide as a ForEach ID — keep only the first occurrence.
+    var seenQuestions = Set<String>()
     let cleanQuestionsRaw =
       questions
       .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-      .filter { !$0.isEmpty }
+      .filter { !$0.isEmpty && seenQuestions.insert($0).inserted }
 
     // Rotate each source so the hub cycles through fresh candidates over time
     // while the diverse task · tip · task · ask structure below stays fixed.

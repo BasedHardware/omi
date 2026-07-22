@@ -1740,7 +1740,7 @@ struct FloatingControlBarView: View {
       onEscape: onEscape,
       onOpenMainApp: {
         (window as? FloatingControlBarWindow)?.closeAIConversation()
-        (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
+        (NSApp.delegate as? AppDelegate)?.openMainAppChat()
       },
       onRate: onRate,
       onShareLink: onShareLink,
@@ -2344,7 +2344,7 @@ private struct AgentMainChatView: View {
     HStack(spacing: OmiSpacing.xs) {
       Button {
         onEscape()
-        (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
+        (NSApp.delegate as? AppDelegate)?.openMainAppChat()
       } label: {
         HStack(spacing: OmiSpacing.xs) {
           Text("Continue in Omi")
