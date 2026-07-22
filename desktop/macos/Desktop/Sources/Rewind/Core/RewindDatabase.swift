@@ -1,6 +1,7 @@
 import Foundation
 @preconcurrency import GRDB
 import OmiSupport
+import os
 
 /// Actor-based database manager for Rewind screenshots
 actor RewindDatabase {
@@ -35,8 +36,13 @@ actor RewindDatabase {
   /// on open does not break the in-flight-close detection in `initialize()`.
   private var poolEpoch: Int = 0
 
-  /// Static user ID for nonisolated markCleanShutdown (set by configure(userId:))
-  nonisolated(unsafe) static var currentUserId: String?
+  /// Lock-gated (`OSAllocatedUnfairLock`) so concurrent access from the actor,
+  /// `MainActor` (`AgentVMService`), and nonisolated shutdown is race-free (SCA-8).
+  private static let currentUserIdLock = OSAllocatedUnfairLock<String?>(initialState: nil)
+  static var currentUserId: String? {
+    get { currentUserIdLock.withLock { $0 } }
+    set { currentUserIdLock.withLock { $0 = newValue } }
+  }
 
   /// Runtime error tracking: consecutive SQLITE_IOERR/CORRUPT errors during normal queries.
   /// When this hits the threshold, we close the database so the next initialize() attempt
