@@ -1317,7 +1317,21 @@ private struct PageContentView: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
+  /// Tabs that float the persistent "Ask omi anything" bar over their content:
+  /// Memory hub, Memories, and Tasks. Home (Dashboard) already owns its bar.
+  private static let floatingAskBarTabs: Set<Int> = [1, 3, 4]
+
   var body: some View {
+    pages
+      .overlay(alignment: .bottom) {
+        if Self.floatingAskBarTabs.contains(selectedIndex) {
+          FloatingPageAskBar(chatProvider: viewModelContainer.chatProvider)
+        }
+      }
+  }
+
+  @ViewBuilder
+  private var pages: some View {
     Group {
       switch selectedIndex {
       case 0:
@@ -1385,6 +1399,52 @@ private struct PageContentView: View {
           selectedIndex: $selectedTabIndex)
       }
     }
+  }
+}
+
+/// Floating "Ask omi anything" bar pinned over the Memory and Tasks pages so
+/// chat is reachable from anywhere. Sending routes to the Home chat through
+/// MainChatNavigationRequestStore — the same flow the floating bar's
+/// "Continue in Omi" uses — so the answer lands in the one main timeline.
+/// A bottom black fade keeps page content readable as it scrolls beneath.
+private struct FloatingPageAskBar: View {
+  @ObservedObject var chatProvider: ChatProvider
+
+  var body: some View {
+    ChatInputView(
+      onSend: { text in
+        AnalyticsManager.shared.chatMessageSent(
+          messageLength: text.count,
+          hasSelectedAppContext: false,
+          source: "page_ask_bar"
+        )
+        MainChatNavigationRequestStore.shared.request()
+        Task { await chatProvider.sendMainDraft(text) }
+      },
+      onStop: { chatProvider.stopAgent(owner: .mainChat) },
+      isSending: chatProvider.isSending,
+      isStopping: chatProvider.isStopping,
+      placeholder: "Ask omi anything",
+      mode: $chatProvider.chatMode,
+      inputText: $chatProvider.draftText
+    )
+    .frame(maxWidth: 720)
+    .padding(.horizontal, OmiSpacing.section)
+    .padding(.bottom, OmiSpacing.lg)
+    .padding(.top, OmiSpacing.xxl)
+    .frame(maxWidth: .infinity)
+    .background(
+      LinearGradient(
+        colors: [
+          Color.black.opacity(0),
+          Color.black.opacity(0.55),
+          Color.black.opacity(0.85),
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+      )
+      .allowsHitTesting(false)
+    )
   }
 }
 
