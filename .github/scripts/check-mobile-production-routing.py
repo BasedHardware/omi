@@ -31,6 +31,7 @@ FORBIDDEN_ROUTING_TOKENS = (
     "OMI_BETA_RELEASE_RING",
     "api-beta.omi.me",
     "STAGING_API_URL",
+    "macos-prod-legacy-no-publish",
 )
 REQUIRED_PRODUCTION_FRAGMENTS = {
     "desktop/macos/Desktop/Sources/AppBuild.swift": (
