@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mutation-sensitive contract for the production Cloud Run-only boundary."""
+"""Mutation-sensitive contract for the canonical full-stack production boundary."""
 
 from __future__ import annotations
 
@@ -17,15 +17,26 @@ SPEC.loader.exec_module(CHECKER)
 
 
 class GcpBackendProductionBoundaryTests(unittest.TestCase):
-    def test_current_workflow_preserves_the_boundary(self) -> None:
+    def test_current_workflow_preserves_the_canonical_full_stack_boundary(self) -> None:
         self.assertEqual(CHECKER.validate(ROOT), [])
 
-    def test_rejects_exact_production_boundary_and_canonical_audience_mutations(self) -> None:
+    def test_rejects_full_stack_boundary_and_canonical_audience_mutations(self) -> None:
         original = (ROOT / ".github/workflows/gcp_backend.yml").read_text(encoding="utf-8")
         mutations = {
-            "allows_prod_all": (
-                'if [[ "$DEPLOY_ENVIRONMENT" == "prod" && "$DEPLOY_TARGETS" == "all" ]]; then',
-                'if [[ "$DEPLOY_ENVIRONMENT" == "prod" && "$DEPLOY_TARGETS" == "cloud-run-only" ]]; then',
+            "blocks_prod_all": (
+                '          fi\n\n  repair-traffic:',
+                '          fi\n'
+                '          if [[ "$DEPLOY_ENVIRONMENT" == "prod" && "$DEPLOY_TARGETS" == "all" ]]; then\n'
+                "            exit 1\n"
+                "          fi\n\n  repair-traffic:",
+            ),
+            "omits_full_stack_candidate_probe": (
+                "if: ${{ github.event.inputs.environment == 'prod' }}",
+                "if: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.deploy_targets == 'cloud-run-only' }}",
+            ),
+            "omits_candidate_tag": (
+                "${{ format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG) }}",
+                "",
             ),
             "candidate_as_audience": (
                 'identity_audience="$(gcloud run services describe "${{ env.SERVICE }}"',
