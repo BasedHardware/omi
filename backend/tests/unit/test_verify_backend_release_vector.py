@@ -678,6 +678,65 @@ def test_candidate_evaluation_accepts_ready_revision_before_traffic_promotion() 
     assert 'cloud_run/backend: expected revision does not receive 100% traffic' in serving_errors
 
 
+def test_candidate_evaluation_accepts_a_tagged_candidate_with_omitted_percent() -> None:
+    """Regression for run 29891331283: Cloud Run serializes a tagged, no-allocation
+    candidate revision with ``percent: null`` (effective 0%). The verifier must read
+    an omitted/null percent as zero, not as pre-promotion traffic. Mirrors the exact
+    failed-development shape: prior serving revision at 100% plus the Ready candidate
+    with an omitted percent.
+    """
+    expectation = _expectation()
+    documents = _documents(expectation)
+    for service, revision in expectation.revisions.items():
+        documents[f'cloud_run/{service}']['status'].update(
+            {
+                'latestCreatedRevisionName': revision,
+                'latestReadyRevisionName': f'{service}-old',
+                'traffic': [
+                    {'revisionName': f'{service}-old', 'percent': 100},
+                    {'revisionName': revision, 'tag': 'candidate', 'percent': None},
+                ],
+            }
+        )
+        documents[f'cloud_run_revision/{service}'] = _cloud_run_revision_document(
+            image=expectation.image,
+            ready='True',
+            reason='Retired',
+        )
+
+    errors = verifier.evaluate(expectation, documents, require_serving_traffic=False)
+
+    assert errors == []
+
+    # Strict serving verification still rejects the no-traffic candidate until it is promoted to 100%.
+    serving_errors = verifier.evaluate(expectation, documents)
+    assert 'cloud_run/backend: expected revision does not receive 100% traffic' in serving_errors
+
+
+@pytest.mark.parametrize(
+    ('percent', 'expected_error'),
+    (
+        (5, 'cloud_run/backend: expected revision carries traffic before promotion'),
+        (100, 'cloud_run/backend: expected revision carries traffic before promotion'),
+        ('0', 'cloud_run/backend: candidate traffic allocation is ambiguous'),
+        (True, 'cloud_run/backend: candidate traffic allocation is ambiguous'),
+        (-1, 'cloud_run/backend: candidate traffic allocation is ambiguous'),
+    ),
+)
+def test_candidate_evaluation_rejects_positive_or_ambiguous_candidate_traffic(percent, expected_error: str) -> None:
+    expectation = _expectation()
+    documents = _documents(expectation)
+    for service in expectation.revisions:
+        documents[f'cloud_run/{service}']['status']['traffic'] = [
+            {'revisionName': f'{service}-old', 'percent': 100},
+            {'revisionName': expectation.revisions[service], 'percent': percent},
+        ]
+
+    errors = verifier.evaluate(expectation, documents, require_serving_traffic=False)
+
+    assert expected_error in errors
+
+
 @pytest.mark.parametrize(
     ('mutate', 'expected_error'),
     (
