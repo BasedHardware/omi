@@ -1,0 +1,21 @@
+desktop/macos/Desktop/Sources/FloatingControlBar/ShortcutSettings.swift
+  s_77f2b8dfbc2e90::t_3faf2cb64066c9 577,582-588
+  s_77f2b8dfbc2e90::t_915583a99ed57b 573-576,589
+  s_77f2b8dfbc2e90::t_fba618541d4813 279-284,287-288
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "ce60d1ece33aee1b66d1d90d994a73f310e78140",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
