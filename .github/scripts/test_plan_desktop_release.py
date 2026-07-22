@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 SCRIPT = Path(__file__).with_name("plan-desktop-release.py")
 WORKFLOW = Path(__file__).parents[1] / "workflows" / "desktop_auto_release.yml"
+ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("plan_desktop_release", SCRIPT)
 assert SPEC and SPEC.loader
 planner = importlib.util.module_from_spec(SPEC)
@@ -101,6 +102,17 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
         self.assertLess(workflow.index('git commit -m "chore: consolidate changelog for v${VERSION}"'), workflow.index('git tag "$RELEASE_TAG"'))
+
+    def test_pre_tag_readiness_workflow_contract(self) -> None:
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        readiness_script = (ROOT / "desktop/macos/scripts/pre-tag-readiness.sh").read_text(encoding="utf-8")
+        upload_step = workflow.split("      - name: Upload readiness evidence", 1)[1]
+        upload_step = upload_step.split("\n      - name:", 1)[0]
+        self.assertIn("if-no-files-found: error", upload_step)
+        self.assertIn("+refs/heads/main:refs/remotes/origin/main", readiness_script)
+        self.assertNotIn("fetch --quiet --force origin main", readiness_script)
+        self.assertIn("pre-tag-readiness:", workflow)
+        self.assertIn("verify-pre-tag-readiness.py verify", workflow)
 
 
 if __name__ == "__main__":
