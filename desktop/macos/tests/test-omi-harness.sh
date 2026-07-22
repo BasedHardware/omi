@@ -42,6 +42,8 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+from pathlib import Path
+import re
 import sys
 
 path = sys.argv[1]
@@ -88,6 +90,43 @@ except RuntimeError:
     pass
 else:
     raise AssertionError("relative health log path must fail loudly")
+
+flow_path = Path(path).parent.parent / "e2e/flows/rewind-settings.yaml"
+flow_text = flow_path.read_text(encoding="utf-8")
+s1_block = flow_text.split("  - id: S1", 1)[1].split("  - id: S2", 1)[0]
+wait_expectations = {"state.selectedSettingsSection": "Rewind"}
+freshness_match = re.search(r"state\.snapshotStale:\s*(true|false)", s1_block)
+if freshness_match:
+    wait_expectations["state.snapshotStale"] = freshness_match.group(1) == "true"
+
+state_sequence = [
+    {"selectedSettingsSection": "Rewind", "snapshotStale": True},
+    {"selectedSettingsSection": "Rewind", "snapshotStale": False},
+]
+state_calls = []
+original_state_snapshot = module.state_snapshot
+wait_context = module.HarnessContext(
+    base_url="http://127.0.0.1:59999",
+    flow_path=flow_path,
+    run_dir=Path("runs"),
+    steps_dir=Path("runs/steps"),
+    lane="bridge",
+    log_path=Path("/private/tmp/omi/harness-test.log"),
+    log_start=0,
+    bundle_id=None,
+    process_match=None,
+)
+module.state_snapshot = lambda _ctx: state_calls.append(len(state_calls)) or state_sequence[min(len(state_calls) - 1, 1)]
+wait_ok, wait_state = module.wait_for_state(wait_context, wait_expectations, timeout=1.0)
+module.state_snapshot = original_state_snapshot
+assert wait_ok and wait_state["snapshotStale"] is False, (wait_ok, wait_state, wait_expectations, state_calls)
+assert len(state_calls) == 2, "rewind flow must not start its MainActor action from a stale cached state"
+assert "timeout_seconds: 30" in s1_block, "rewind freshness wait must remain bounded"
+
+module.state_snapshot = lambda _ctx: {"selectedSettingsSection": "Rewind", "snapshotStale": True}
+stale_ok, stale_state = module.wait_for_state(wait_context, wait_expectations, timeout=0.001)
+module.state_snapshot = original_state_snapshot
+assert not stale_ok and stale_state["snapshotStale"] is True, "persistent MainActor contention must still fail closed"
 
 
 class FakeResponse:
