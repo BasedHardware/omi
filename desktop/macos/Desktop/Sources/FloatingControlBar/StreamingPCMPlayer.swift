@@ -1,5 +1,6 @@
 @preconcurrency import AVFoundation
 import Foundation
+import QuartzCore
 
 /// `AVAudioPCMBuffer` is not Sendable; this box lets a scheduled-buffer
 /// completion carry the buffer across to the main-actor bookkeeping hop.
@@ -135,15 +136,31 @@ final class StreamingPCMPlayer: @unchecked Sendable {
     else { return false }
     buffer.frameLength = AVAudioFrameCount(sampleCount)
     let channel = buffer.floatChannelData![0]
+    var sumSquares: Float = 0
     data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
       let src = raw.bindMemory(to: Int16.self)
       for i in 0..<sampleCount {
-        channel[i] = max(-1.0, min(1.0, Float(src[i]) / 32768.0))
+        let sample = max(-1.0, min(1.0, Float(src[i]) / 32768.0))
+        channel[i] = sample
+        sumSquares += sample * sample
       }
     }
+    publishOutputLevel(rms: sqrt(sumSquares / Float(sampleCount)))
     guard ensureRunning() else { return false }
     schedule(buffer)
     return true
+  }
+
+  /// RMS of the just-enqueued chunk, throttled and normalized, pushed to the
+  /// shared level monitor so the notch orb's waveform reacts to Omi's voice.
+  private var lastLevelPushTime: CFTimeInterval = 0
+  private func publishOutputLevel(rms: Float) {
+    let now = CACurrentMediaTime()
+    guard now - lastLevelPushTime > 0.05 else { return }
+    lastLevelPushTime = now
+    // Speech RMS is small; scale into a usable 0...1 range for the visualizer.
+    let level = min(1.0, rms * 3.5)
+    Task { @MainActor in AudioLevelMonitor.shared.updatePlaybackLevel(level) }
   }
 
   private func schedule(_ buffer: AVAudioPCMBuffer) {
@@ -170,5 +187,6 @@ final class StreamingPCMPlayer: @unchecked Sendable {
     playbackQueue.clearForExplicitStop()
     player.stop()
     engine.stop()
+    Task { @MainActor in AudioLevelMonitor.shared.updatePlaybackLevel(0) }
   }
 }

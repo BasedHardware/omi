@@ -15,10 +15,15 @@ class AudioLevelMonitor: ObservableObject {
   /// System audio level (0.0 - 1.0)
   @Published private(set) var systemLevel: Float = 0.0
 
+  /// Voice-response (TTS) output level (0.0 - 1.0), fed from the streaming PCM
+  /// player as Omi speaks. Drives the notch orb's speaking waveform.
+  @Published private(set) var playbackLevel: Float = 0.0
+
   // Throttle: only publish at ~5 Hz (every ~200ms)
   private let updateInterval: Double = 1.0 / 5.0
   private var lastMicUpdate: Double = 0.0
   private var lastSysUpdate: Double = 0.0
+  private var lastPlaybackUpdate: Double = 0.0
   private var pendingMicLevel: Float = 0.0
   private var pendingSysLevel: Float = 0.0
 
@@ -46,10 +51,21 @@ class AudioLevelMonitor: ObservableObject {
     }
   }
 
-  /// Reset both levels to zero
+  /// Update the voice-response (TTS) playback level - called from the streaming
+  /// PCM player as chunks play. Throttled to ~5 Hz like the others.
+  func updatePlaybackLevel(_ level: Float) {
+    let now = CACurrentMediaTime()
+    if now - lastPlaybackUpdate >= updateInterval {
+      lastPlaybackUpdate = now
+      playbackLevel = level
+    }
+  }
+
+  /// Reset all levels to zero
   func reset() {
     microphoneLevel = 0.0
     systemLevel = 0.0
+    playbackLevel = 0.0
     pendingMicLevel = 0.0
     pendingSysLevel = 0.0
   }

@@ -22,7 +22,7 @@ struct NotchVoiceOrb: View {
         let level: CGFloat
         switch mode {
         case .listening: level = CGFloat(AudioLevelMonitor.shared.microphoneLevel)
-        case .speaking: level = CGFloat(AudioLevelMonitor.shared.systemLevel)
+        case .speaking: level = CGFloat(AudioLevelMonitor.shared.playbackLevel)
         case .thinking: level = 0
         }
         model.advance(to: timeline.date, level: level, mode: mode, reduceMotion: reduceMotion)
@@ -61,8 +61,9 @@ final class OrbModel {
 
     let bars = mode != .thinking
     let morphTarget: CGFloat = bars ? 1 : 0
-    // Ease the layout morph; snap when reduced motion is on.
-    morph += (morphTarget - morph) * CGFloat(reduceMotion ? 1 : min(1, dt * 7))
+    // Ease the layout morph so the logo ring visibly stretches into the
+    // waveform (and back); snap when reduced motion is on.
+    morph += (morphTarget - morph) * CGFloat(reduceMotion ? 1 : min(1, dt * 5))
     rotation += (mode == .thinking && !reduceMotion) ? dt * 2.4 : 0
 
     let lvl = Double(max(0, level))
