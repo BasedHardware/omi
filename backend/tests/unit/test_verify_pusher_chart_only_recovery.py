@@ -176,15 +176,13 @@ def test_recovery_profile_ignores_only_deployment_api_defaults(recovery: SimpleN
     ]
 
 
-def test_recovery_profile_ignores_helm_annotations_and_service_defaults(recovery: SimpleNamespace):
-    """Helm-managed annotations and cluster-added Service fields are absent from helm template."""
+def test_recovery_profile_ignores_deployment_and_service_defaults(recovery: SimpleNamespace):
+    """Only API/controller defaults absent from helm template are ignored."""
     live = deployment(
         "gcr.io/project/pusher:2ae7f78", {"secretKeyRef": {"name": "prod-omi-backend-secrets", "key": "REDIS_DB_HOST"}}
     )
     live["metadata"]["annotations"] = {
         "deployment.kubernetes.io/revision": "3",
-        "meta.helm.sh/release-name": "prod-omi-pusher",
-        "meta.helm.sh/release-namespace": "prod-omi-backend",
     }
     rendered = deployment(f"gcr.io/project/pusher@{DIGEST}")
     assert recovery.allowed_recovery_drift(live, rendered) == []
@@ -194,7 +192,6 @@ def test_recovery_profile_ignores_helm_annotations_and_service_defaults(recovery
         "kind": "Service",
         "metadata": {
             "name": "prod-omi-pusher",
-            "annotations": {"meta.helm.sh/release-name": "prod-omi-pusher"},
         },
         "spec": {
             "clusterIP": "10.0.0.1",
@@ -294,7 +291,7 @@ def test_chart_owned_resources_reject_unexpected_drift(recovery: SimpleNamespace
     ]
 
 
-def test_service_recovery_profile_ignores_helm_and_api_defaults_but_not_real_drift(recovery: SimpleNamespace):
+def test_service_recovery_profile_ignores_api_defaults_but_not_real_drift(recovery: SimpleNamespace):
     rendered = {
         "apiVersion": "v1",
         "kind": "Service",
@@ -305,9 +302,6 @@ def test_service_recovery_profile_ignores_helm_and_api_defaults_but_not_real_dri
         "spec": {"type": "ClusterIP", "ports": [{"name": "http", "port": 8080}], "selector": {"app": "pusher"}},
     }
     live = copy.deepcopy(rendered)
-    live["metadata"]["annotations"].update(
-        {"meta.helm.sh/release-name": "prod-omi-pusher", "meta.helm.sh/release-namespace": "prod-omi-backend"}
-    )
     live["spec"].update({"clusterIP": "10.0.0.7", "internalTrafficPolicy": "Cluster", "sessionAffinity": "None"})
 
     assert recovery.validate_chart_owned_resource_drift(live, rendered, "Service") == []
@@ -315,6 +309,20 @@ def test_service_recovery_profile_ignores_helm_and_api_defaults_but_not_real_dri
     annotation_drift = copy.deepcopy(live)
     annotation_drift["metadata"]["annotations"]["cloud.google.com/neg"] = '{"ingress": false}'
     assert recovery.validate_chart_owned_resource_drift(annotation_drift, rendered, "Service") == [
+        "recovery profile would change Service outside the allowlist"
+    ]
+
+    helm_annotation_drift = copy.deepcopy(live)
+    helm_annotation_drift["metadata"]["annotations"]["meta.helm.sh/release-name"] = "unexpected-release"
+    assert recovery.validate_chart_owned_resource_drift(helm_annotation_drift, rendered, "Service") == [
+        "recovery profile would change Service outside the allowlist"
+    ]
+
+    desired_annotation = copy.deepcopy(rendered)
+    desired_annotation["metadata"]["annotations"]["meta.helm.sh/release-name"] = "desired-release"
+    conflicting_annotation = copy.deepcopy(desired_annotation)
+    conflicting_annotation["metadata"]["annotations"]["meta.helm.sh/release-name"] = "live-release"
+    assert recovery.validate_chart_owned_resource_drift(conflicting_annotation, desired_annotation, "Service") == [
         "recovery profile would change Service outside the allowlist"
     ]
 

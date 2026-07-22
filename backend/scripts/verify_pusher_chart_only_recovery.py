@@ -31,11 +31,7 @@ VOLATILE_METADATA = {
 # Kubernetes API-server/controller-populated Deployment fields that are absent
 # from ``helm template`` output.  ``normalize()`` strips them so the drift
 # comparison does not spuriously fail on a healthy live Deployment.
-VOLATILE_DEPLOYMENT_ANNOTATIONS = {
-    "deployment.kubernetes.io/revision",
-    "meta.helm.sh/release-name",
-    "meta.helm.sh/release-namespace",
-}
+VOLATILE_DEPLOYMENT_ANNOTATIONS = {"deployment.kubernetes.io/revision"}
 VOLATILE_DEPLOYMENT_SPEC = {
     "revisionHistoryLimit",
 }
@@ -200,8 +196,9 @@ def normalize(obj: dict[str, Any]) -> dict[str, Any]:
         metadata.pop("namespace", None)
         annotations = metadata.get("annotations")
         if isinstance(annotations, dict):
-            for key in VOLATILE_DEPLOYMENT_ANNOTATIONS:
-                annotations.pop(key, None)
+            if result.get("kind") == "Deployment":
+                for key in VOLATILE_DEPLOYMENT_ANNOTATIONS:
+                    annotations.pop(key, None)
             for key in GKE_CONTROLLER_STATUS_ANNOTATIONS.get(result.get("kind"), set()):
                 annotations.pop(key, None)
             if not annotations:
