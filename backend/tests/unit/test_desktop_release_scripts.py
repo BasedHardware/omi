@@ -25,7 +25,6 @@ def _load(name: str, filename: str):
     return module
 
 
-mark_beta = _load("mark_desktop_release_beta", "mark-desktop-release-beta.py")
 prepare_beta = _load("prepare_desktop_beta_promotion", "prepare-desktop-beta-promotion.py")
 repair_installer = _load("desktop_repair_installer", "desktop_repair_installer.py")
 qualification_evidence = _load("desktop_qualification_evidence", "desktop_qualification_evidence.py")
@@ -93,13 +92,6 @@ def _prepare(release=None, *, allow_stable_channel=False):
         qualification_evidence_sha256="sha256:" + "d" * 64,
         allow_stable_channel=allow_stable_channel,
     )
-
-
-def test_mark_beta_changes_only_visibility_fields():
-    result = mark_beta.mark_beta(_release()["body"])
-    assert "isLive: true" in result
-    assert "channel: beta" in result
-    assert "qualifiedBetaSha: " + "a" * 40 in result
 
 
 def test_prepare_manifest_requires_exact_qualification_and_assets():
