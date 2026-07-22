@@ -348,267 +348,274 @@ final class AgentSyncBatchQueryTests: XCTestCase {
   }
 }
 
-/// These tests drive `syncTick` through the same table reads and HTTP paths as
-/// the loop. The DEBUG-only clock/hook seam avoids a scheduler or bridge fault
-/// protocol while preserving production ownership and recovery behavior.
-final class AgentSyncRecoveryTests: XCTestCase {
-  private var storageFixture: RewindStorageTestIsolation.Fixture?
-  private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot?
+#if DEBUG
+  // omi-release-compile: this suite drives AgentSyncService's DEBUG-only
+  // startForTesting/syncOnceForTesting seam; the release-mode notification
+  // regression step must compile the bundle without it.
 
-  override func setUp() async throws {
-    try await super.setUp()
-    let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "agent-sync-recovery")
-    storageFixture = fixture
-    authSnapshot = await MainActor.run { RewindStorageTestIsolation.captureAuthSnapshot() }
-    await MainActor.run { RewindStorageTestIsolation.signInForTests(userId: fixture.testUserId) }
-    try await insertSyncRows()
-  }
+  /// These tests drive `syncTick` through the same table reads and HTTP paths as
+  /// the loop. The DEBUG-only clock/hook seam avoids a scheduler or bridge fault
+  /// protocol while preserving production ownership and recovery behavior.
+  final class AgentSyncRecoveryTests: XCTestCase {
+    private var storageFixture: RewindStorageTestIsolation.Fixture?
+    private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot?
 
-  override func tearDown() async throws {
-    if let authSnapshot {
-      await MainActor.run { RewindStorageTestIsolation.restoreAuthSnapshot(authSnapshot) }
+    override func setUp() async throws {
+      try await super.setUp()
+      let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "agent-sync-recovery")
+      storageFixture = fixture
+      authSnapshot = await MainActor.run { RewindStorageTestIsolation.captureAuthSnapshot() }
+      await MainActor.run { RewindStorageTestIsolation.signInForTests(userId: fixture.testUserId) }
+      try await insertSyncRows()
     }
-    await RewindStorageTestIsolation.tearDown(userDir: storageFixture?.userDir)
-    try await super.tearDown()
-  }
 
-  func testMixedSuccessStillRecoversTheRepeatedRequiredTableFailure() async {
-    let probe = AgentSyncRecoveryProbe()
-    let service = makeService(probe: probe)
-    await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
-
-    await service.syncOnceForTesting()
-    await service.syncOnceForTesting()
-    await service.syncOnceForTesting()
-
-    let counts = await probe.counts()
-    XCTAssertTrue(
-      counts.syncedTables.contains("action_items"), "The control table must take the real /sync success path")
-    XCTAssertEqual(counts.syncedTables.filter { $0 == "transcription_sessions" }.count, 3)
-    XCTAssertEqual(counts.healthChecks, 1, "Three causal failures trigger one fail-closed /health check")
-    XCTAssertEqual(counts.uploads, 1, "The existing database-upload owner repairs the missing table exactly once")
-  }
-
-  func testTwoMissingRequiredTablesDoNotAlternateAwayTheSelectedRecovery() async {
-    let probe = AgentSyncRecoveryProbe()
-    await probe.setMissingTables(["transcription_sessions", "action_items"])
-    let service = makeService(probe: probe)
-    await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
-
-    for _ in 0..<3 { await service.syncOnceForTesting() }
-
-    let counts = await probe.counts()
-    XCTAssertEqual(counts.syncedTables.filter { $0 == "transcription_sessions" }.count, 3)
-    XCTAssertEqual(counts.syncedTables.filter { $0 == "action_items" }.count, 3)
-    XCTAssertTrue(
-      counts.syncedTables.contains("memories"),
-      "A successful required table must not suppress recovery for the selected missing table"
-    )
-    XCTAssertEqual(counts.healthChecks, 1, "Alternating missing tables must still reach the causal recovery threshold")
-    XCTAssertEqual(counts.uploads, 1, "One selected causal table produces one bounded repair")
-  }
-
-  func testMatchingTableSuccessClearsRecoveryButUnrelatedSuccessDoesNot() async throws {
-    let probe = AgentSyncRecoveryProbe()
-    let service = makeService(probe: probe)
-    await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
-
-    await service.syncOnceForTesting()
-    await service.syncOnceForTesting()
-    await probe.setMissingTable(nil)  // The previously failing table now succeeds.
-    await service.syncOnceForTesting()
-    await probe.setMissingTable("transcription_sessions")
-    try await touchTranscriptionSession()
-    await service.syncOnceForTesting()
-    await service.syncOnceForTesting()
-
-    var counts = await probe.counts()
-    XCTAssertEqual(counts.uploads, 0, "A matching success clears the earlier table's causal evidence")
-    await service.syncOnceForTesting()
-    counts = await probe.counts()
-    XCTAssertEqual(counts.uploads, 1, "Only three new failures of the same required table recover it")
-  }
-
-  func testMalformedAndNonSuccessHealthNeverUpload() async {
-    let probe = AgentSyncRecoveryProbe()
-    await probe.setHealthResponse(.malformed)
-    let service = makeService(probe: probe)
-    await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
-
-    for _ in 0..<3 { await service.syncOnceForTesting() }
-    var counts = await probe.counts()
-    XCTAssertEqual(counts.healthChecks, 1)
-    XCTAssertEqual(counts.uploads, 0)
-
-    await probe.setHealthResponse(.status(503))
-    await service.syncOnceForTesting()
-    counts = await probe.counts()
-    XCTAssertEqual(counts.uploads, 0, "Non-2xx health responses fail closed before upload")
-  }
-
-  func testSameOwnerRestartPreservesCooldownAndFailedUploadsStayBounded() async {
-    let probe = AgentSyncRecoveryProbe()
-    await probe.setUploadResults([false, false, false])
-    let clock = AgentSyncManualClock()
-    let service = makeService(probe: probe, clock: clock)
-    await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
-
-    for _ in 0..<3 { await service.syncOnceForTesting() }
-    var counts = await probe.counts()
-    XCTAssertEqual(counts.uploads, 1)
-
-    await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
-    await service.syncOnceForTesting()
-    counts = await probe.counts()
-    XCTAssertEqual(counts.uploads, 1, "Same-owner restart cannot mint a new cooldown allowance")
-
-    clock.advance(30 * 60 + 1)
-    await service.syncOnceForTesting()
-    counts = await probe.counts()
-    XCTAssertEqual(counts.uploads, 2)
-
-    clock.advance(30 * 60 + 1)
-    await service.syncOnceForTesting()
-    counts = await probe.counts()
-    XCTAssertEqual(counts.uploads, 2, "Failed recovery uploads stop at the existing bounded policy")
-  }
-
-  func testSameOwnerReplacementVMResetsOldRecoveryEvidenceCooldownAndBudget() async {
-    let probe = AgentSyncRecoveryProbe()
-    await probe.setUploadResults([false, false, false])
-    let clock = AgentSyncManualClock()
-    let service = makeService(probe: probe, clock: clock)
-    await service.startForTesting(vmIP: "old-vm", authToken: "test-token")
-
-    for _ in 0..<3 { await service.syncOnceForTesting() }
-    clock.advance(30 * 60 + 1)
-    await service.syncOnceForTesting()
-    var counts = await probe.counts()
-    XCTAssertEqual(counts.uploads, 2, "The old VM exhausts its bounded retry budget")
-
-    await service.startForTesting(vmIP: "replacement-vm", authToken: "test-token")
-    await service.syncOnceForTesting()
-    await service.syncOnceForTesting()
-    counts = await probe.counts()
-    XCTAssertEqual(counts.uploads, 2, "Replacement must not upload from stale old-VM evidence")
-
-    await service.syncOnceForTesting()
-    counts = await probe.counts()
-    XCTAssertEqual(counts.uploads, 3, "Replacement gets a fresh causal threshold and bounded retry budget")
-  }
-
-  func testDelayedOldVMSyncResponseCannotCreateReplacementRecoveryEvidence() async {
-    let gate = AgentSyncReplacementCallbackGate(suspending: .sync)
-    let service = makeService(gate: gate)
-    await service.startForTesting(vmIP: "old-vm", authToken: "test-token")
-    let oldTick = Task { await service.syncOnceForTesting() }
-    await gate.waitUntilStarted(.sync)
-
-    await service.startForTesting(vmIP: "replacement-vm", authToken: "test-token")
-    await gate.release(.sync)
-    await oldTick.value
-    for _ in 0..<3 { await service.syncOnceForTesting() }
-
-    let uploadVMs = await gate.uploadVMs()
-    XCTAssertEqual(uploadVMs, ["replacement-vm"])
-  }
-
-  func testDelayedOldVMHealthResponseCannotSpendReplacementRecoveryBudget() async {
-    let gate = AgentSyncReplacementCallbackGate(suspending: .health)
-    let service = makeService(gate: gate)
-    await service.startForTesting(vmIP: "old-vm", authToken: "test-token")
-    await service.syncOnceForTesting()
-    await service.syncOnceForTesting()
-    let oldTick = Task { await service.syncOnceForTesting() }
-    await gate.waitUntilStarted(.health)
-
-    await service.startForTesting(vmIP: "replacement-vm", authToken: "test-token")
-    await gate.release(.health)
-    await oldTick.value
-    for _ in 0..<3 { await service.syncOnceForTesting() }
-
-    let uploadVMs = await gate.uploadVMs()
-    XCTAssertEqual(uploadVMs, ["replacement-vm"])
-  }
-
-  func testDelayedOldVMUploadResponseCannotClearReplacementRecoveryEvidence() async {
-    let gate = AgentSyncReplacementCallbackGate(suspending: .upload)
-    let service = makeService(gate: gate)
-    await service.startForTesting(vmIP: "old-vm", authToken: "test-token")
-    await service.syncOnceForTesting()
-    await service.syncOnceForTesting()
-    let oldTick = Task { await service.syncOnceForTesting() }
-    await gate.waitUntilStarted(.upload)
-
-    await service.startForTesting(vmIP: "replacement-vm", authToken: "test-token")
-    await service.syncOnceForTesting()
-    await service.syncOnceForTesting()
-    await gate.release(.upload)
-    await oldTick.value
-    await service.syncOnceForTesting()
-
-    let uploadVMs = await gate.uploadVMs()
-    XCTAssertEqual(uploadVMs, ["old-vm", "replacement-vm"])
-  }
-
-  private func makeService(
-    probe: AgentSyncRecoveryProbe,
-    clock: AgentSyncManualClock = AgentSyncManualClock()
-  ) -> AgentSyncService {
-    AgentSyncService(
-      networkHooks: AgentSyncService.NetworkHooks(
-        fetchIDToken: { "test-firebase-token" },
-        dataForRequest: { request in try await probe.respond(to: request) },
-        reuploadDatabase: { _, _ in await probe.reupload() },
-        now: { clock.now() },
-        tableSyncEnabled: true))
-  }
-
-  private func makeService(gate: AgentSyncReplacementCallbackGate) -> AgentSyncService {
-    AgentSyncService(
-      networkHooks: AgentSyncService.NetworkHooks(
-        fetchIDToken: { "test-firebase-token" },
-        dataForRequest: { request in try await gate.respond(to: request) },
-        reuploadDatabase: { vmIP, _ in await gate.reupload(vmIP: vmIP) },
-        now: Date.init,
-        tableSyncEnabled: true))
-  }
-
-  private func insertSyncRows() async throws {
-    guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
-      return XCTFail("Rewind database should be initialized")
+    override func tearDown() async throws {
+      if let authSnapshot {
+        await MainActor.run { RewindStorageTestIsolation.restoreAuthSnapshot(authSnapshot) }
+      }
+      await RewindStorageTestIsolation.tearDown(userDir: storageFixture?.userDir)
+      try await super.tearDown()
     }
-    let now = Date(timeIntervalSince1970: 1_700_000_000)
-    try await dbQueue.write { db in
-      try db.execute(
-        sql: """
-          INSERT INTO transcription_sessions (startedAt, source, createdAt, updatedAt)
-          VALUES (?, ?, ?, ?)
-          """,
-        arguments: [now, "desktop", now, now])
-      try db.execute(
-        sql: """
-            INSERT INTO action_items (description, createdAt, updatedAt)
-            VALUES (?, ?, ?)
-          """,
-        arguments: ["mixed-success control", now, now])
-      try db.execute(
-        sql: """
-          INSERT INTO memories (content, category, createdAt, updatedAt)
-          VALUES (?, ?, ?, ?)
-          """,
-        arguments: ["mixed-success recovery control", "system", now, now])
-    }
-  }
 
-  private func touchTranscriptionSession() async throws {
-    guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
-      return XCTFail("Rewind database should be initialized")
+    func testMixedSuccessStillRecoversTheRepeatedRequiredTableFailure() async {
+      let probe = AgentSyncRecoveryProbe()
+      let service = makeService(probe: probe)
+      await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
+
+      await service.syncOnceForTesting()
+      await service.syncOnceForTesting()
+      await service.syncOnceForTesting()
+
+      let counts = await probe.counts()
+      XCTAssertTrue(
+        counts.syncedTables.contains("action_items"), "The control table must take the real /sync success path")
+      XCTAssertEqual(counts.syncedTables.filter { $0 == "transcription_sessions" }.count, 3)
+      XCTAssertEqual(counts.healthChecks, 1, "Three causal failures trigger one fail-closed /health check")
+      XCTAssertEqual(counts.uploads, 1, "The existing database-upload owner repairs the missing table exactly once")
     }
-    try await dbQueue.write { db in
-      try db.execute(
-        sql: "UPDATE transcription_sessions SET updatedAt = ? WHERE id = 1",
-        arguments: [Date(timeIntervalSince1970: 1_700_000_001)])
+
+    func testTwoMissingRequiredTablesDoNotAlternateAwayTheSelectedRecovery() async {
+      let probe = AgentSyncRecoveryProbe()
+      await probe.setMissingTables(["transcription_sessions", "action_items"])
+      let service = makeService(probe: probe)
+      await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
+
+      for _ in 0..<3 { await service.syncOnceForTesting() }
+
+      let counts = await probe.counts()
+      XCTAssertEqual(counts.syncedTables.filter { $0 == "transcription_sessions" }.count, 3)
+      XCTAssertEqual(counts.syncedTables.filter { $0 == "action_items" }.count, 3)
+      XCTAssertTrue(
+        counts.syncedTables.contains("memories"),
+        "A successful required table must not suppress recovery for the selected missing table"
+      )
+      XCTAssertEqual(
+        counts.healthChecks, 1, "Alternating missing tables must still reach the causal recovery threshold")
+      XCTAssertEqual(counts.uploads, 1, "One selected causal table produces one bounded repair")
+    }
+
+    func testMatchingTableSuccessClearsRecoveryButUnrelatedSuccessDoesNot() async throws {
+      let probe = AgentSyncRecoveryProbe()
+      let service = makeService(probe: probe)
+      await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
+
+      await service.syncOnceForTesting()
+      await service.syncOnceForTesting()
+      await probe.setMissingTable(nil)  // The previously failing table now succeeds.
+      await service.syncOnceForTesting()
+      await probe.setMissingTable("transcription_sessions")
+      try await touchTranscriptionSession()
+      await service.syncOnceForTesting()
+      await service.syncOnceForTesting()
+
+      var counts = await probe.counts()
+      XCTAssertEqual(counts.uploads, 0, "A matching success clears the earlier table's causal evidence")
+      await service.syncOnceForTesting()
+      counts = await probe.counts()
+      XCTAssertEqual(counts.uploads, 1, "Only three new failures of the same required table recover it")
+    }
+
+    func testMalformedAndNonSuccessHealthNeverUpload() async {
+      let probe = AgentSyncRecoveryProbe()
+      await probe.setHealthResponse(.malformed)
+      let service = makeService(probe: probe)
+      await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
+
+      for _ in 0..<3 { await service.syncOnceForTesting() }
+      var counts = await probe.counts()
+      XCTAssertEqual(counts.healthChecks, 1)
+      XCTAssertEqual(counts.uploads, 0)
+
+      await probe.setHealthResponse(.status(503))
+      await service.syncOnceForTesting()
+      counts = await probe.counts()
+      XCTAssertEqual(counts.uploads, 0, "Non-2xx health responses fail closed before upload")
+    }
+
+    func testSameOwnerRestartPreservesCooldownAndFailedUploadsStayBounded() async {
+      let probe = AgentSyncRecoveryProbe()
+      await probe.setUploadResults([false, false, false])
+      let clock = AgentSyncManualClock()
+      let service = makeService(probe: probe, clock: clock)
+      await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
+
+      for _ in 0..<3 { await service.syncOnceForTesting() }
+      var counts = await probe.counts()
+      XCTAssertEqual(counts.uploads, 1)
+
+      await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
+      await service.syncOnceForTesting()
+      counts = await probe.counts()
+      XCTAssertEqual(counts.uploads, 1, "Same-owner restart cannot mint a new cooldown allowance")
+
+      clock.advance(30 * 60 + 1)
+      await service.syncOnceForTesting()
+      counts = await probe.counts()
+      XCTAssertEqual(counts.uploads, 2)
+
+      clock.advance(30 * 60 + 1)
+      await service.syncOnceForTesting()
+      counts = await probe.counts()
+      XCTAssertEqual(counts.uploads, 2, "Failed recovery uploads stop at the existing bounded policy")
+    }
+
+    func testSameOwnerReplacementVMResetsOldRecoveryEvidenceCooldownAndBudget() async {
+      let probe = AgentSyncRecoveryProbe()
+      await probe.setUploadResults([false, false, false])
+      let clock = AgentSyncManualClock()
+      let service = makeService(probe: probe, clock: clock)
+      await service.startForTesting(vmIP: "old-vm", authToken: "test-token")
+
+      for _ in 0..<3 { await service.syncOnceForTesting() }
+      clock.advance(30 * 60 + 1)
+      await service.syncOnceForTesting()
+      var counts = await probe.counts()
+      XCTAssertEqual(counts.uploads, 2, "The old VM exhausts its bounded retry budget")
+
+      await service.startForTesting(vmIP: "replacement-vm", authToken: "test-token")
+      await service.syncOnceForTesting()
+      await service.syncOnceForTesting()
+      counts = await probe.counts()
+      XCTAssertEqual(counts.uploads, 2, "Replacement must not upload from stale old-VM evidence")
+
+      await service.syncOnceForTesting()
+      counts = await probe.counts()
+      XCTAssertEqual(counts.uploads, 3, "Replacement gets a fresh causal threshold and bounded retry budget")
+    }
+
+    func testDelayedOldVMSyncResponseCannotCreateReplacementRecoveryEvidence() async {
+      let gate = AgentSyncReplacementCallbackGate(suspending: .sync)
+      let service = makeService(gate: gate)
+      await service.startForTesting(vmIP: "old-vm", authToken: "test-token")
+      let oldTick = Task { await service.syncOnceForTesting() }
+      await gate.waitUntilStarted(.sync)
+
+      await service.startForTesting(vmIP: "replacement-vm", authToken: "test-token")
+      await gate.release(.sync)
+      await oldTick.value
+      for _ in 0..<3 { await service.syncOnceForTesting() }
+
+      let uploadVMs = await gate.uploadVMs()
+      XCTAssertEqual(uploadVMs, ["replacement-vm"])
+    }
+
+    func testDelayedOldVMHealthResponseCannotSpendReplacementRecoveryBudget() async {
+      let gate = AgentSyncReplacementCallbackGate(suspending: .health)
+      let service = makeService(gate: gate)
+      await service.startForTesting(vmIP: "old-vm", authToken: "test-token")
+      await service.syncOnceForTesting()
+      await service.syncOnceForTesting()
+      let oldTick = Task { await service.syncOnceForTesting() }
+      await gate.waitUntilStarted(.health)
+
+      await service.startForTesting(vmIP: "replacement-vm", authToken: "test-token")
+      await gate.release(.health)
+      await oldTick.value
+      for _ in 0..<3 { await service.syncOnceForTesting() }
+
+      let uploadVMs = await gate.uploadVMs()
+      XCTAssertEqual(uploadVMs, ["replacement-vm"])
+    }
+
+    func testDelayedOldVMUploadResponseCannotClearReplacementRecoveryEvidence() async {
+      let gate = AgentSyncReplacementCallbackGate(suspending: .upload)
+      let service = makeService(gate: gate)
+      await service.startForTesting(vmIP: "old-vm", authToken: "test-token")
+      await service.syncOnceForTesting()
+      await service.syncOnceForTesting()
+      let oldTick = Task { await service.syncOnceForTesting() }
+      await gate.waitUntilStarted(.upload)
+
+      await service.startForTesting(vmIP: "replacement-vm", authToken: "test-token")
+      await service.syncOnceForTesting()
+      await service.syncOnceForTesting()
+      await gate.release(.upload)
+      await oldTick.value
+      await service.syncOnceForTesting()
+
+      let uploadVMs = await gate.uploadVMs()
+      XCTAssertEqual(uploadVMs, ["old-vm", "replacement-vm"])
+    }
+
+    private func makeService(
+      probe: AgentSyncRecoveryProbe,
+      clock: AgentSyncManualClock = AgentSyncManualClock()
+    ) -> AgentSyncService {
+      AgentSyncService(
+        networkHooks: AgentSyncService.NetworkHooks(
+          fetchIDToken: { "test-firebase-token" },
+          dataForRequest: { request in try await probe.respond(to: request) },
+          reuploadDatabase: { _, _ in await probe.reupload() },
+          now: { clock.now() },
+          tableSyncEnabled: true))
+    }
+
+    private func makeService(gate: AgentSyncReplacementCallbackGate) -> AgentSyncService {
+      AgentSyncService(
+        networkHooks: AgentSyncService.NetworkHooks(
+          fetchIDToken: { "test-firebase-token" },
+          dataForRequest: { request in try await gate.respond(to: request) },
+          reuploadDatabase: { vmIP, _ in await gate.reupload(vmIP: vmIP) },
+          now: Date.init,
+          tableSyncEnabled: true))
+    }
+
+    private func insertSyncRows() async throws {
+      guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
+        return XCTFail("Rewind database should be initialized")
+      }
+      let now = Date(timeIntervalSince1970: 1_700_000_000)
+      try await dbQueue.write { db in
+        try db.execute(
+          sql: """
+            INSERT INTO transcription_sessions (startedAt, source, createdAt, updatedAt)
+            VALUES (?, ?, ?, ?)
+            """,
+          arguments: [now, "desktop", now, now])
+        try db.execute(
+          sql: """
+              INSERT INTO action_items (description, createdAt, updatedAt)
+              VALUES (?, ?, ?)
+            """,
+          arguments: ["mixed-success control", now, now])
+        try db.execute(
+          sql: """
+            INSERT INTO memories (content, category, createdAt, updatedAt)
+            VALUES (?, ?, ?, ?)
+            """,
+          arguments: ["mixed-success recovery control", "system", now, now])
+      }
+    }
+
+    private func touchTranscriptionSession() async throws {
+      guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
+        return XCTFail("Rewind database should be initialized")
+      }
+      try await dbQueue.write { db in
+        try db.execute(
+          sql: "UPDATE transcription_sessions SET updatedAt = ? WHERE id = 1",
+          arguments: [Date(timeIntervalSince1970: 1_700_000_001)])
+      }
     }
   }
-}
+#endif
