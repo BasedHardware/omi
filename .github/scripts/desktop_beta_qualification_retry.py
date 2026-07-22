@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -90,15 +90,20 @@ def _valid_candidate(release: Any, release_tag: str) -> tuple[bool, str]:
     return True, "newest candidate carries the canonical three assets"
 
 
-def _candidate_age_hours(release: Any) -> int | None:
+def _candidate_age(release: Any) -> tuple[timedelta | None, str | None]:
     published = release.get("publishedAt") if isinstance(release, dict) else None
     if not isinstance(published, str) or not published:
-        return None
+        return None, "candidate publication timestamp is missing"
     try:
         published_at = datetime.fromisoformat(published.replace("Z", "+00:00"))
     except ValueError:
-        return None
-    return max(0, int((datetime.now(timezone.utc) - published_at).total_seconds() // 3600))
+        return None, "candidate publication timestamp is malformed"
+    if published_at.tzinfo is None or published_at.utcoffset() is None:
+        return None, "candidate publication timestamp is malformed"
+    age = datetime.now(timezone.utc) - published_at.astimezone(timezone.utc)
+    if age < timedelta(0):
+        return None, "candidate publication timestamp is in the future"
+    return age, None
 
 
 def _runs_for_tag(runs: Any, release_tag: str, tag_sha: str) -> list[dict[str, Any]]:
@@ -127,12 +132,18 @@ def _newest(runs: list[dict[str, Any]]) -> dict[str, Any] | None:
     return max(runs, key=lambda r: r.get("updated_at") or r.get("created_at") or "")
 
 
-def _count_terminal(selected: list[dict[str, Any]]) -> int:
-    return sum(
-        1
-        for r in selected
-        if r.get("status") == "completed" and r.get("conclusion") in RETRYABLE_CONCLUSIONS
-    )
+def _count_attempts(selected: list[dict[str, Any]]) -> int:
+    """Count every unique exact-candidate qualification run as an attempt."""
+    identities: set[tuple[str, Any]] = set()
+    for index, run in enumerate(selected):
+        run_id = run.get("id")
+        if isinstance(run_id, int) and not isinstance(run_id, bool) and run_id > 0:
+            identities.add(("id", run_id))
+        else:
+            # GitHub run IDs are positive integers. A malformed/missing ID must
+            # not make the retry bound fail open by collapsing distinct records.
+            identities.add(("record", index))
+    return len(identities)
 
 
 def _decision(
@@ -165,19 +176,27 @@ def decide(
 ) -> dict[str, Any]:
     valid, candidate_reason = _valid_candidate(release, release_tag)
     selected = _runs_for_tag(runs, release_tag, tag_sha) if valid else []
-    attempts = _count_terminal(selected)
+    attempts = _count_attempts(selected)
 
     if not valid:
         return _decision(
             release_tag=release_tag, should_retry=False, reason=candidate_reason, attempts=attempts, newest=None
         )
 
-    age = _candidate_age_hours(release)
-    if age is not None and age > max_age_hours:
+    age, age_error = _candidate_age(release)
+    if age_error is not None:
         return _decision(
             release_tag=release_tag,
             should_retry=False,
-            reason=f"candidate age {age}h exceeds {max_age_hours}h bound",
+            reason=age_error,
+            attempts=attempts,
+            newest=_newest(selected),
+        )
+    if age is not None and age > timedelta(hours=max_age_hours):
+        return _decision(
+            release_tag=release_tag,
+            should_retry=False,
+            reason=f"candidate age exceeds exact {max_age_hours}h bound",
             attempts=attempts,
             newest=_newest(selected),
         )
@@ -192,24 +211,31 @@ def decide(
             newest=None,
         )
 
-    status = newest.get("status")
+    non_completed = next((run for run in selected if run.get("status") != "completed"), None)
+    if non_completed is not None:
+        return _decision(
+            release_tag=release_tag,
+            should_retry=False,
+            reason=(
+                f"qualification run {non_completed.get('id')} is {non_completed.get('status')}; "
+                "never retry while any exact-candidate run is in-progress"
+            ),
+            attempts=attempts,
+            newest=newest,
+        )
+    successful = next((run for run in selected if run.get("conclusion") == "success"), None)
+    if successful is not None:
+        return _decision(
+            release_tag=release_tag,
+            should_retry=False,
+            reason=(
+                f"qualification run {successful.get('id')} already succeeded; "
+                "promotion is a separate completed-success authority"
+            ),
+            attempts=attempts,
+            newest=newest,
+        )
     conclusion = newest.get("conclusion")
-    if status != "completed":
-        return _decision(
-            release_tag=release_tag,
-            should_retry=False,
-            reason=f"qualification is {status}; never retry an in-progress run",
-            attempts=attempts,
-            newest=newest,
-        )
-    if conclusion == "success":
-        return _decision(
-            release_tag=release_tag,
-            should_retry=False,
-            reason="qualification already succeeded; promotion is a separate completed-success authority",
-            attempts=attempts,
-            newest=newest,
-        )
     if attempts >= max_attempts:
         return _decision(
             release_tag=release_tag,

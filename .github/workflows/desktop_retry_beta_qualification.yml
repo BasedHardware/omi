@@ -46,6 +46,8 @@ jobs:
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+          permission-actions: write
+          permission-contents: read
 
       - name: Gather server-derived candidate and qualification state
         id: gather
