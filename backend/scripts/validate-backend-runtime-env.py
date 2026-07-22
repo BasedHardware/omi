@@ -87,6 +87,11 @@ def main() -> int:
         help='Validate checked-in Cloud Run workflow env_vars blocks against the manifest.',
     )
     parser.add_argument(
+        '--workflow-root',
+        type=Path,
+        help='Immutable source root for workflow YAML and local composite actions; defaults to the runtime root.',
+    )
+    parser.add_argument(
         '--check-rendered-cloud-run',
         action='store_true',
         help='Validate manifest Cloud Run env/secrets against an offline rendered revision shape.',
@@ -105,6 +110,7 @@ def main() -> int:
         check_live_cloud_run=args.check_live_cloud_run,
         check_rendered_cloud_run=args.check_rendered_cloud_run,
         check_workflows=args.check_workflows,
+        workflow_root=args.workflow_root,
         strict_provisional=args.strict_provisional,
     )
     for error in errors:
@@ -123,6 +129,7 @@ def validate_runtime_env(
     check_live_cloud_run: bool = False,
     check_rendered_cloud_run: bool = False,
     check_workflows: bool = False,
+    workflow_root: Path | None = None,
     strict_provisional: bool = False,
 ) -> list[ValidationError]:
     manifest = _load_yaml(manifest_path)
@@ -146,6 +153,7 @@ def validate_runtime_env(
                 strict_provisional=strict_provisional,
                 manifest_path=manifest_path,
                 manifest=manifest,
+                workflow_root=workflow_root,
             )
         )
 
@@ -806,6 +814,7 @@ def _validate_cloud_run_workflows(
     strict_provisional: bool,
     manifest_path: Path,
     manifest: ConfigDict | None = None,
+    workflow_root: Path | None = None,
 ) -> list[ValidationError]:
     errors: list[ValidationError] = []
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
@@ -818,14 +827,20 @@ def _validate_cloud_run_workflows(
     workflow_services: dict[str, ConfigDict] = {}
     workflow_jobs: dict[str, ConfigDict] = {}
     manifest = manifest if manifest is not None else _load_yaml(manifest_path)
+    workflow_root = workflow_root or ROOT
     for workflow_file in workflow_files:
         if not isinstance(workflow_file, str):
             errors.append(ValidationError('cloud_run/workflows', 'workflow file paths must be strings'))
             continue
-        workflow_path = ROOT / workflow_file
+        workflow_path = workflow_root / workflow_file
         workflow = _load_yaml(workflow_path)
         errors.extend(_validate_firestore_index_reconciliation_boundary(workflow_file, workflow))
-        extracted = _extract_workflow_cloud_run_targets(workflow, env=env, manifest=manifest)
+        extracted = _extract_workflow_cloud_run_targets(
+            workflow,
+            env=env,
+            manifest=manifest,
+            workflow_root=workflow_root,
+        )
         errors.extend(_validate_sync_backfill_co_deploy(workflow_file, extracted['services']))
         workflow_services.update(extracted['services'])
         workflow_jobs.update(extracted['jobs'])
@@ -1363,6 +1378,7 @@ def _extract_workflow_cloud_run_targets(
     *,
     env: str,
     manifest: ConfigDict,
+    workflow_root: Path,
 ) -> dict[str, dict[str, ConfigDict]]:
     workflow_env = _as_config_dict(workflow.get('env')) or {}
     rendered_runtime_env = _rendered_runtime_env_outputs(workflow, env=env, manifest=manifest)
@@ -1379,7 +1395,7 @@ def _extract_workflow_cloud_run_targets(
         if steps is None:
             continue
         for step in steps:
-            for deploy_step in _expand_cloud_run_deploy_steps(step):
+            for deploy_step in _expand_cloud_run_deploy_steps(step, workflow_root=workflow_root):
                 step_dict = _as_config_dict(deploy_step) or {}
                 step_with = _as_config_dict(step_dict.get('with')) or {}
                 env_vars = _parse_workflow_env_vars(
@@ -1421,7 +1437,7 @@ def _validate_sync_backfill_co_deploy(workflow_file: str, services: dict[str, Co
     ]
 
 
-def _expand_cloud_run_deploy_steps(step: object) -> list[ConfigDict]:
+def _expand_cloud_run_deploy_steps(step: object, *, workflow_root: Path) -> list[ConfigDict]:
     step_dict = _as_config_dict(step)
     if step_dict is None:
         return []
@@ -1430,7 +1446,7 @@ def _expand_cloud_run_deploy_steps(step: object) -> list[ConfigDict]:
     uses = step_dict.get('uses')
     if not isinstance(uses, str) or not uses.startswith('./'):
         return []
-    action = _load_local_composite_action(uses)
+    action = _load_local_composite_action(uses, workflow_root=workflow_root)
     if action is None:
         return []
     runs = _as_config_dict(action.get('runs')) or {}
@@ -1470,8 +1486,8 @@ def _composite_step_active_for_caller(nested_step: ConfigDict, caller_with: Conf
     return True
 
 
-def _load_local_composite_action(uses: str) -> ConfigDict | None:
-    action_dir = ROOT / uses[2:]
+def _load_local_composite_action(uses: str, *, workflow_root: Path) -> ConfigDict | None:
+    action_dir = workflow_root / uses[2:]
     for name in ('action.yml', 'action.yaml'):
         path = action_dir / name
         if path.is_file():
