@@ -116,6 +116,23 @@ class RetryDecisionTests(unittest.TestCase):
         self.assertFalse(d["should_retry"])
         self.assertIn("exceeds", d["reason"])
 
+    def test_candidate_24_hours_30_minutes_old_denies(self):
+        old = _utc_iso(_NOW - timedelta(hours=24, minutes=30))
+        d = _decide(_release(published=old), [_run(conclusion="failure")], max_age_hours=24)
+        self.assertFalse(d["should_retry"])
+        self.assertIn("exceeds", d["reason"])
+
+    def test_malformed_publication_timestamp_denies(self):
+        d = _decide(_release(published="not-a-timestamp"), [_run(conclusion="failure")])
+        self.assertFalse(d["should_retry"])
+        self.assertIn("malformed", d["reason"])
+
+    def test_future_publication_timestamp_denies(self):
+        future = _utc_iso(_NOW + timedelta(minutes=30))
+        d = _decide(_release(published=future), [_run(conclusion="failure")])
+        self.assertFalse(d["should_retry"])
+        self.assertIn("future", d["reason"])
+
     # --- run state (never retry in-progress / successful / unattempted) ---
 
     def test_no_prior_attempt_denies(self):
@@ -182,6 +199,23 @@ class RetryDecisionTests(unittest.TestCase):
         self.assertFalse(d["should_retry"])
         self.assertIn("bound", d["reason"])
 
+    def test_neutral_plus_two_failures_reaches_total_attempt_bound(self):
+        runs = [
+            _run(conclusion="neutral", run_id=1, updated=_utc_iso(_NOW - timedelta(minutes=2))),
+            _run(conclusion="failure", run_id=2, updated=_utc_iso(_NOW - timedelta(minutes=1))),
+            _run(conclusion="failure", run_id=3, updated=NOW_ISO),
+        ]
+        d = _decide(_release(), runs)
+        self.assertFalse(d["should_retry"])
+        self.assertEqual(d["attempts_so_far"], 3)
+        self.assertIn("bound", d["reason"])
+
+    def test_duplicate_run_records_count_as_one_attempt(self):
+        run = _run(conclusion="failure", run_id=7)
+        d = _decide(_release(), [run, copy.deepcopy(run)])
+        self.assertTrue(d["should_retry"])
+        self.assertEqual(d["attempts_so_far"], 1)
+
     # --- exact tag + SHA binding (ignore other candidates' runs) ---
 
     def test_runs_for_other_tags_are_ignored(self):
@@ -213,6 +247,25 @@ class RetryDecisionTests(unittest.TestCase):
         d = _decide(_release(), runs)
         self.assertFalse(d["should_retry"])
         self.assertIn("already succeeded", d["reason"])
+
+    def test_older_success_with_newer_failure_denies(self):
+        runs = [
+            _run(conclusion="success", run_id=1, updated=_utc_iso(_NOW - timedelta(hours=1))),
+            _run(conclusion="failure", run_id=2, updated=NOW_ISO),
+        ]
+        d = _decide(_release(), runs)
+        self.assertFalse(d["should_retry"])
+        self.assertIn("already succeeded", d["reason"])
+
+    def test_older_in_progress_with_newer_cancelled_denies(self):
+        runs = [
+            _run(status="in_progress", conclusion=None, run_id=1,
+                 updated=_utc_iso(_NOW - timedelta(hours=1))),
+            _run(conclusion="cancelled", run_id=2, updated=NOW_ISO),
+        ]
+        d = _decide(_release(), runs)
+        self.assertFalse(d["should_retry"])
+        self.assertIn("in-progress", d["reason"])
 
     def test_non_workflow_dispatch_runs_ignored(self):
         # Only workflow_dispatch qualification runs are authoritative.
@@ -261,6 +314,14 @@ class CliOutputContractTests(unittest.TestCase):
         finally:
             for p in (release_path, runs_path, out_path):
                 p.unlink(missing_ok=True)
+
+
+class WorkflowContractTests(unittest.TestCase):
+    def test_app_token_requests_only_required_permissions(self):
+        workflow = (Path(__file__).resolve().parents[1] / "workflows" /
+                    "desktop_retry_beta_qualification.yml").read_text(encoding="utf-8")
+        self.assertIn("          permission-actions: write\n", workflow)
+        self.assertIn("          permission-contents: read\n", workflow)
 
 
 if __name__ == "__main__":
