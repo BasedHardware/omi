@@ -39,6 +39,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBackgroundModifier.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceWaveformBars.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Tools.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift
 preconditions:
   - automation_bridge_ready
 
