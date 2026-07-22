@@ -38,6 +38,9 @@ struct DesktopHomeView: View {
   @AppStorage("onboardingFurthestStep") private var onboardingFurthestStep = 0
   @AppStorage("onboardingJustCompleted") private var onboardingJustCompleted = false
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
+  /// Reference instant for the top bar's "new since you were last here" counts —
+  /// updated to now whenever Omi resigns front (see the didResignActive handler).
+  @AppStorage("topBarNewSince") private var topBarNewSinceRaw: Double = 0
 
   // Settings sidebar state
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
@@ -492,9 +495,14 @@ struct DesktopHomeView: View {
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       enforceMainWindowMinimumSize()
       reportAutomationState()
+      // First-run seed so the counter doesn't count the entire backlog as "new".
+      if topBarNewSinceRaw == 0 { topBarNewSinceRaw = Date().timeIntervalSince1970 }
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
       reportAutomationState()
+      // Mark the moment Omi went to the background; anything created after this
+      // shows in the top bar's "new since you were last here" counter.
+      topBarNewSinceRaw = Date().timeIntervalSince1970
     }
     .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationNavigateRequested)) {
       notification in
@@ -630,18 +638,17 @@ struct DesktopHomeView: View {
     useLegacyHomeDesign && !hideSidebar
   }
 
-  /// The redesign's floating hover-expand nav rail shows on every non-settings
-  /// page (settings has its own sidebar).
-  private var showsAppNavRail: Bool {
-    !useLegacyHomeDesign && !isInSettings
+  /// The constant floating top bar (nav + new-item counts + Capture/Listening)
+  /// replaces the old left nav rail. It shows on every main content page;
+  /// settings/permissions/help are utility pages with their own chrome.
+  private var showsTopBar: Bool {
+    guard !useLegacyHomeDesign, let item = SidebarNavItem(rawValue: selectedIndex) else { return false }
+    return ![.settings, .permissions, .help].contains(item)
   }
 
-  /// The persistent Capture/Listening top bar shows on the main content pages.
-  /// Home renders its own column-aligned copy (DashboardPage.homeHeader), and
-  /// settings/permissions/help are utility pages that don't need it.
-  private var showsPersistentStatusControls: Bool {
-    guard showsAppNavRail, let item = SidebarNavItem(rawValue: selectedIndex) else { return false }
-    return ![.dashboard, .settings, .permissions, .help].contains(item)
+  /// Reference instant for the top bar's "new since you were last here" counts.
+  private var topBarSinceDate: Date {
+    topBarNewSinceRaw > 0 ? Date(timeIntervalSince1970: topBarNewSinceRaw) : Date()
   }
 
   private var currentAppStateLabel: String {
@@ -1043,28 +1050,24 @@ struct DesktopHomeView: View {
         // Extracted into a separate struct so that pages like TasksPage
         // are not re-rendered when AppState publishes unrelated changes.
         VStack(spacing: 0) {
-          // Persistent Capture/Listening top bar — constant across the content
-          // pages so the controls aren't home-only. Home keeps its own copy.
-          if showsPersistentStatusControls {
-            HStack(spacing: 0) {
-              Spacer(minLength: 0)
-              CaptureListeningControls(
-                appState: appState,
-                onRewind: {
-                  OmiMotion.withGated(Self.pageNavigationAnimation) {
-                    selectedIndex = SidebarNavItem.rewind.rawValue
-                  }
+          // Constant floating top bar — primary nav, new-item counts, and the
+          // Capture/Listening controls. Replaces the old left nav rail.
+          if showsTopBar {
+            DesktopTopBar(
+              selectedIndex: $selectedIndex,
+              appState: appState,
+              memoriesViewModel: viewModelContainer.memoriesViewModel,
+              tasksViewModel: viewModelContainer.tasksViewModel,
+              sinceDate: topBarSinceDate,
+              onRewind: {
+                OmiMotion.withGated(Self.pageNavigationAnimation) {
+                  selectedIndex = SidebarNavItem.rewind.rawValue
                 }
-              )
-            }
-            .padding(.horizontal, OmiSpacing.xl)
-            .padding(.top, OmiSpacing.lg)
-            .padding(.bottom, OmiSpacing.xs)
+              }
+            )
             .zIndex(1)
           }
 
-          // The persistent AppNavRail provides Home + cross-page navigation, so
-          // no per-page Home chrome bar is needed in the redesign.
           PageContentView(
             selectedIndex: selectedIndex,
             appState: appState,
@@ -1080,14 +1083,6 @@ struct DesktopHomeView: View {
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
       .padding(OmiSpacing.md)
-      // Reserve the rail's resting width so content doesn't sit under it; the
-      // rail floats on top (overlay below) and expands over content on hover.
-      .padding(.leading, showsAppNavRail ? AppNavRail.restWidth : 0)
-    }
-    .overlay(alignment: .leading) {
-      if showsAppNavRail {
-        AppNavRail(selectedIndex: $selectedIndex)
-      }
     }
     .overlay {
       // Goal completion celebration overlay

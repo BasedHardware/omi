@@ -657,7 +657,6 @@ struct DashboardPage: View {
 
   private var redesignedHome: some View {
     GeometryReader { proxy in
-      let sideInset = homeStageSideInset(for: proxy.size.width)
       let panelHeight = min(max(proxy.size.height - 132, CGFloat(440)), CGFloat(640))
       let panelTop = max(CGFloat(82), (proxy.size.height - panelHeight) / 2)
       let panelWidth = homeStageContentWidth(for: proxy.size.width)
@@ -685,15 +684,8 @@ struct DashboardPage: View {
           // Full Keyboard Access.
           .accessibilityHidden(isHomeModalPresented)
 
-        // Header hugs the same column as the chat/ask bar: its edges align
-        // with the 900px measure whenever the window is wide enough.
-        homeHeader
-          .padding(
-            .horizontal,
-            max(sideInset, (proxy.size.width - Self.homeChatColumnMaxWidth) / 2)
-          )
-          .padding(.top, OmiSpacing.xxl)
-          .accessibilityHidden(isHomeModalPresented)
+        // Capture/Listening now live in the shell's constant top bar (see
+        // DesktopTopBar), so the home no longer renders its own header copy.
 
         appsPopupOverlay(
           contentWidth: proxy.size.width,
