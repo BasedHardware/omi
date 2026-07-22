@@ -306,7 +306,7 @@ jobs:
 
       - name: Upload redacted chart-only recovery evidence
         if: always() && env.SERVICE == 'pusher' && env.CHART_ONLY == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pusher-chart-only-recovery-evidence-${{ github.run_id }}
           path: pusher-recovery-evidence.json
