@@ -1,0 +1,23 @@
+desktop/macos/Desktop/Tests/SBOnboardingLaunchAtLoginCompletionTests.swift
+  s_424d550d86fd05::t_cb3eb518d8687a 1-76
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
+  s_424d550d86fd05::t_b6f15b6ccd0787 379
+  s_424d550d86fd05::t_08ce0caa4dcf2c 402-410,412-416
+  s_424d550d86fd05::t_72b68cb4f04f67 411
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "fca04316b1e5244a973069682d3b286b270d4fa2",
+  "prompts": {},
+  "sessions": {
+    "s_424d550d86fd05": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7d83f64d-8ce5-47f1-b308-b8839508880a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
