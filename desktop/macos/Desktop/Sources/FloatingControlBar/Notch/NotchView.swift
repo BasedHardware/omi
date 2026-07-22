@@ -11,8 +11,6 @@ struct NotchView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   @State private var isHovering = false
-  /// The latest streamed reply, captured so it can linger after the turn ends.
-  @State private var lastReply = ""
   /// Esc key monitors, live only while a reply lingers (zero idle cost).
   @State private var lingerEscMonitors: [Any] = []
 
@@ -31,8 +29,10 @@ struct NotchView: View {
       hintText: barState.pttHintText.isEmpty ? barState.transientHintText : barState.pttHintText,
       notificationID: barState.currentNotification?.id
     )
-    // A finished reply lingers on screen for a few seconds after the turn ends.
-    if vm.responseLinger != nil {
+    // A finished reply lingers for a few seconds after the turn ends. heldReply
+    // is set while the response streams, so this is already true the instant
+    // the response goes inactive — the notch never collapses to idle first.
+    if vm.isLingeringReply {
       switch base {
       case .idle, .notification: return .responding
       default: return base
@@ -88,34 +88,33 @@ struct NotchView: View {
     .animation(morphAnimation, value: presentation)
     .animation(heightAnimation, value: vm.chatBodyHeight)
     .animation(heightAnimation, value: vm.voiceBodyHeight)
-    // Keep the latest streamed reply so it can linger after the turn ends.
+    // Capture the reply as it streams so the linger is ready the moment the
+    // response ends (prevents a one-frame collapse to idle).
     .onChange(of: barState.liveVoiceAssistantText) { _, reply in
-      if !reply.isEmpty { lastReply = reply }
+      vm.noteReply(reply)
     }
     // A new turn starts fresh: reset the measured height and drop any lingering
     // reply from the previous turn.
     .onChange(of: barState.isVoiceListening) { _, listening in
       if listening {
         vm.voiceBodyHeight = nil
-        vm.clearLinger()
-        lastReply = ""
+        vm.resetReply()
       }
     }
-    // Turn ended: hold the reply on screen for a few seconds (hovering pauses
-    // the dismiss). No captured reply -> just settle back to idle.
+    // Turn ended: start the linger dismissal countdown (hovering pauses it).
+    // No captured reply -> just settle back to idle.
     .onChange(of: barState.isVoicePresentationActive) { _, active in
       guard !active else { return }
-      if lastReply.isEmpty {
+      if vm.heldReply.isEmpty {
         vm.voiceBodyHeight = nil
       } else {
-        vm.beginResponseLinger(lastReply)
+        vm.beginReplyDismiss()
       }
-      lastReply = ""
     }
     // Esc dismisses a lingering reply. The notch is non-activating, so a
     // panel-key handler can't see Esc without stealing focus from your app;
     // instead watch for it while (and only while) a reply lingers.
-    .onChange(of: vm.responseLinger != nil) { _, lingering in
+    .onChange(of: vm.isLingeringReply) { _, lingering in
       if lingering { installLingerEscMonitors() } else { removeLingerEscMonitors() }
     }
     .onDisappear { removeLingerEscMonitors() }
@@ -125,12 +124,12 @@ struct NotchView: View {
     removeLingerEscMonitors()
     let local = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
       guard event.keyCode == 53 else { return event }
-      MainActor.assumeIsolated { vm.clearLinger() }
+      MainActor.assumeIsolated { vm.dismissReply() }
       return nil
     }
     let global = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
       guard event.keyCode == 53 else { return }
-      MainActor.assumeIsolated { vm.clearLinger() }
+      MainActor.assumeIsolated { vm.dismissReply() }
     }
     lingerEscMonitors = [local, global].compactMap { $0 }
   }
@@ -268,21 +267,20 @@ struct NotchView: View {
   /// Height reserved for the morphing orb below the camera housing.
   private var voiceOrbHeight: CGFloat { 30 }
   private var voiceOrbTopGap: CGFloat { 4 }
-  /// Space above the transcript: camera strip + gap + orb + a little breathing
-  /// room. Matches the orb overlay's top offset so the text sits right below it.
+  /// Space above the transcript: camera strip + gap + orb + breathing room
+  /// before the text. Matches the orb overlay's top offset.
   private var voiceTopReserve: CGFloat {
-    vm.closedNotchSize.height + voiceOrbTopGap + voiceOrbHeight + 8
+    vm.closedNotchSize.height + voiceOrbTopGap + voiceOrbHeight + 16
   }
   /// Thinking has no text — just the camera strip + orb.
   private var voiceThinkingReserve: CGFloat {
     vm.closedNotchSize.height + voiceOrbTopGap + voiceOrbHeight + 8
   }
 
-  /// The reply text while responding: the live stream, or the captured reply
-  /// while it lingers after the turn.
+  /// The reply text while responding: the live stream, or the held reply while
+  /// it lingers after the turn.
   private var respondingText: String {
-    barState.liveVoiceAssistantText.isEmpty
-      ? (vm.responseLinger ?? "") : barState.liveVoiceAssistantText
+    barState.isVoiceResponseActive ? barState.liveVoiceAssistantText : vm.heldReply
   }
 
   private var voiceOrbMode: NotchVoiceOrb.Mode {
@@ -294,7 +292,7 @@ struct NotchView: View {
 
   @ViewBuilder
   private var voiceOrbLayer: some View {
-    if barState.isVoicePresentationActive || vm.responseLinger != nil {
+    if barState.isVoicePresentationActive || vm.isLingeringReply {
       NotchVoiceOrb(mode: voiceOrbMode)
         .frame(width: 72, height: voiceOrbHeight)
         .padding(.top, vm.closedNotchSize.height + voiceOrbTopGap)
@@ -434,10 +432,10 @@ struct NotchView: View {
     if hovering {
       vm.hoverEntered()
       // Hovering a lingering reply pauses its dismissal so the user can read it.
-      vm.keepLinger()
+      vm.keepReply()
     } else {
       vm.hoverExited()
-      vm.resumeLinger()
+      vm.resumeReplyDismiss()
     }
   }
 

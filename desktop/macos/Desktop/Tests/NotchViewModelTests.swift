@@ -108,39 +108,53 @@ final class NotchViewModelTests: XCTestCase {
 
   // MARK: - Response linger
 
-  func testResponseLingerDismissesAfterHold() async {
+  func testHeldReplyLingersUntilDismissTimeout() async {
     let sleeper = ManualSleeper()
     let model = makeModel(sleep: { await sleeper.sleep($0) })
-    model.beginResponseLinger("You have three meetings today")
-    XCTAssertEqual(model.responseLinger, "You have three meetings today")
+    // Captured while streaming -> lingering the instant the turn ends.
+    model.noteReply("You have three meetings today")
+    XCTAssertTrue(model.isLingeringReply)
+    model.beginReplyDismiss()
     await waitUntil { sleeper.pendingCount == 1 }
+    XCTAssertTrue(model.isLingeringReply, "still lingering during the hold")
     sleeper.resumeAll()
-    await waitUntil { model.responseLinger == nil }
-    XCTAssertNil(model.responseLinger)
+    await waitUntil { !model.isLingeringReply }
+    XCTAssertFalse(model.isLingeringReply)
   }
 
-  func testHoverKeepsLingerUntilResumed() async {
+  func testHoverKeepsReplyUntilResumed() async {
     let sleeper = ManualSleeper()
     let model = makeModel(sleep: { await sleeper.sleep($0) })
-    model.beginResponseLinger("reply")
+    model.noteReply("reply")
+    model.beginReplyDismiss()
     await waitUntil { sleeper.pendingCount == 1 }
     // Hovering cancels the pending dismiss; the reply stays.
-    model.keepLinger()
+    model.keepReply()
     sleeper.resumeAll()
     for _ in 0..<50 { await Task.yield() }
-    XCTAssertEqual(model.responseLinger, "reply")
+    XCTAssertTrue(model.isLingeringReply)
     // Leaving reschedules the dismiss.
-    model.resumeLinger()
+    model.resumeReplyDismiss()
     await waitUntil { sleeper.pendingCount == 1 }
     sleeper.resumeAll()
-    await waitUntil { model.responseLinger == nil }
-    XCTAssertNil(model.responseLinger)
+    await waitUntil { !model.isLingeringReply }
+    XCTAssertFalse(model.isLingeringReply)
   }
 
   func testEmptyReplyNeverLingers() {
     let model = makeModel()
-    model.beginResponseLinger("")
-    XCTAssertNil(model.responseLinger)
+    model.noteReply("")
+    XCTAssertFalse(model.isLingeringReply)
+  }
+
+  func testEscDismissesAndNewTurnResets() {
+    let model = makeModel()
+    model.noteReply("reply")
+    model.dismissReply()
+    XCTAssertFalse(model.isLingeringReply, "Esc dismisses immediately")
+    model.resetReply()
+    model.noteReply("next reply")
+    XCTAssertTrue(model.isLingeringReply, "a new turn's reply lingers again")
   }
 
   // MARK: - Auto-close grace

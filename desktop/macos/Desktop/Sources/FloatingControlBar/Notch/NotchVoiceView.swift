@@ -34,8 +34,8 @@ struct NotchVoiceView: View {
         ScrollView(.vertical, showsIndicators: true) {
           VStack(spacing: 0) {
             transcript
-              .padding(.horizontal, 24)
-              .padding(.bottom, showsOpenHint ? 4 : 14)
+              .padding(.horizontal, 30)
+              .padding(.bottom, showsOpenHint ? 6 : 18)
               .id("voiceTop")
             Color.clear.frame(height: 1).id("voiceBottom")
           }

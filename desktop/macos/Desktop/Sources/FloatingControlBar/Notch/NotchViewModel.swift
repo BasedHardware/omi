@@ -31,10 +31,16 @@ final class NotchViewModel: ObservableObject {
   /// `chatBodyHeight` it is not persisted. Rides the same isolated height
   /// timeline as chat.
   @Published var voiceBodyHeight: CGFloat?
-  /// The finished voice reply, held on screen for a few seconds after the turn
-  /// ends so it doesn't vanish the instant Omi stops speaking. Nil = not
-  /// lingering. Hovering the notch pauses the dismiss (see keepLinger).
-  @Published var responseLinger: String?
+  /// The reply text, captured live during streaming and held after the turn
+  /// ends so the reply can linger on screen for a few seconds. Because it is
+  /// already set while the response streams, the linger condition
+  /// (`isLingeringReply`) is true the instant the response goes inactive — no
+  /// one-frame collapse to idle before the linger begins.
+  @Published var heldReply: String = ""
+  /// True once the linger has been dismissed (timeout, Esc, or a new turn).
+  @Published var replyDismissed: Bool = false
+  /// The reply is lingering when it exists and hasn't been dismissed.
+  var isLingeringReply: Bool { !heldReply.isEmpty && !replyDismissed }
   private var lingerTask: Task<Void, Never>?
   /// Agent drill-in within the agents tab (nil = the list).
   @Published var openAgentPillID: UUID?
@@ -282,37 +288,50 @@ final class NotchViewModel: ObservableObject {
 
   // MARK: - Response linger (hold the reply briefly after the turn ends)
 
-  /// Show `text` and schedule its dismissal after `hold` seconds.
-  func beginResponseLinger(_ text: String, hold: TimeInterval = 5) {
-    guard !text.isEmpty else { return }
-    responseLinger = text
-    scheduleLingerDismiss(after: hold)
+  /// Capture the reply as it streams so the linger is ready the instant the
+  /// response ends (no idle flash).
+  func noteReply(_ text: String) {
+    if !text.isEmpty { heldReply = text }
+  }
+
+  /// Start the dismissal countdown once the turn has ended.
+  func beginReplyDismiss(hold: TimeInterval = 5) {
+    guard isLingeringReply else { return }
+    scheduleReplyDismiss(after: hold)
   }
 
   /// Pause the dismiss while the pointer is on the notch.
-  func keepLinger() {
+  func keepReply() {
     lingerTask?.cancel()
   }
 
   /// Resume the dismiss after the pointer leaves (a shorter grace than the
   /// initial hold).
-  func resumeLinger(hold: TimeInterval = 2.5) {
-    guard responseLinger != nil else { return }
-    scheduleLingerDismiss(after: hold)
+  func resumeReplyDismiss(hold: TimeInterval = 2.5) {
+    guard isLingeringReply else { return }
+    scheduleReplyDismiss(after: hold)
   }
 
-  func clearLinger() {
+  /// Dismiss the lingering reply now (Esc).
+  func dismissReply() {
+    lingerTask?.cancel()
+    replyDismissed = true
+  }
+
+  /// Clear all reply state for a fresh turn.
+  func resetReply() {
     lingerTask?.cancel()
     lingerTask = nil
-    responseLinger = nil
+    heldReply = ""
+    replyDismissed = false
   }
 
-  private func scheduleLingerDismiss(after hold: TimeInterval) {
+  private func scheduleReplyDismiss(after hold: TimeInterval) {
     lingerTask?.cancel()
     lingerTask = Task { [weak self, sleep] in
       await sleep(hold)
       guard !Task.isCancelled else { return }
-      self?.responseLinger = nil
+      self?.replyDismissed = true
     }
   }
 
