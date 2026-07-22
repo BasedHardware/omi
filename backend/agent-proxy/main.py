@@ -690,8 +690,9 @@ async def agent_ws(websocket: WebSocket):
                             if evt_type == 'text_delta':
                                 response_text += evt_text
                             elif evt_type == 'result':
-                                # Use result text as fallback if no deltas were collected
-                                if evt_text and not response_text:
+                                # The terminal result is authoritative, including deltas
+                                # emitted while a reconnecting phone was detached.
+                                if evt_text:
                                     response_text = evt_text
                                 # Save per-query so each message gets its own history entry
                                 if response_text.strip():

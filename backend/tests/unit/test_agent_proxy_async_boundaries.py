@@ -89,6 +89,12 @@ class _VMProtocol:
         self.sent = []
         self.closed = False
         self.message_sent = asyncio.Event()
+        self.events = iter(
+            [
+                '{"type":"text_delta","text":"tail"}',
+                '{"type":"result","text":"full answer tail"}',
+            ]
+        )
 
     async def send(self, message):
         self.sent.append(message)
@@ -102,7 +108,10 @@ class _VMProtocol:
 
     async def __anext__(self):
         await self.message_sent.wait()
-        raise StopAsyncIteration
+        try:
+            return next(self.events)
+        except StopIteration:
+            raise StopAsyncIteration
 
 
 class _ProxyHTTPClient:
@@ -174,6 +183,7 @@ async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy
     vm_ws = _VMProtocol()
     _ProxyHTTPClient.post_calls = 0
     real_sleep = asyncio.sleep
+    saved_messages = []
 
     async def direct_run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
@@ -195,18 +205,20 @@ async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy
     )
     monkeypatch.setattr(agent_proxy, "_get_or_create_chat_session", lambda _uid: {"id": "session-1"})
     monkeypatch.setattr(agent_proxy, "_fetch_chat_history", lambda *_args: [])
-    monkeypatch.setattr(agent_proxy, "_save_message", lambda *_args: None)
+    monkeypatch.setattr(agent_proxy, "_save_message", lambda *args: saved_messages.append(args))
     monkeypatch.setattr(agent_proxy.httpx, "AsyncClient", _ProxyHTTPClient)
     monkeypatch.setattr(agent_proxy.websockets, "connect", connect)
     monkeypatch.setattr(agent_proxy.asyncio, "sleep", no_retry_sleep)
 
     await agent_proxy.agent_ws(phone_ws)
+    await agent_proxy.drain_background_tasks(timeout=1.0)
 
     assert phone_ws.accepted is True
     assert vm_ws.sent == ['{"type": "query", "prompt": "hello"}']
     assert vm_ws.closed is True
     assert _ProxyHTTPClient.post_calls == 2
     assert phone_ws.closed == [(1000, "Session ended")]
+    assert any(args[1:3] == ("full answer tail", "ai") for args in saved_messages)
 
 
 def test_firestore_client_is_initialized_lazily_and_cached(agent_proxy, monkeypatch):
