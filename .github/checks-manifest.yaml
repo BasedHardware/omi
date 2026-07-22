@@ -398,7 +398,7 @@ checks:
     reason: "#10163 mutation-sensitive Stable retry and default-channel feed fixtures"
   - id: desktop-release-one-path-contract
     command: ["python3", ".github/scripts/test_desktop_release_flow_contract.py"]
-    triggers: ["codemagic.yaml", ".github/workflows/desktop_auto_release.yml", ".github/workflows/desktop_qualify_beta.yml", ".github/workflows/desktop_promote_beta.yml", ".github/workflows/desktop_recover_beta.yml", ".github/workflows/desktop_rollback_beta.yml", ".github/workflows/desktop_breakglass_rollout_beta.yml", ".github/workflows/desktop_promote_prod.yml", ".github/workflows/gcp_backend.yml", "desktop/macos/scripts/qualify-desktop-beta.sh", ".github/scripts/test_desktop_release_flow_contract.py", ".github/checks-manifest.yaml"]
+    triggers: ["codemagic.yaml", ".github/workflows/desktop_auto_release.yml", ".github/workflows/desktop_qualify_beta.yml", ".github/workflows/desktop_promote_beta.yml", ".github/workflows/desktop_recover_beta.yml", ".github/workflows/desktop_rollback_beta.yml", ".github/workflows/desktop_breakglass_rollout_beta.yml", ".github/workflows/desktop_beta_admission_control.yml", ".github/workflows/desktop_promote_prod.yml", ".github/workflows/gcp_backend.yml", "desktop/macos/scripts/qualify-desktop-beta.sh", ".github/scripts/test_desktop_release_flow_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "SCA-17 prevents duplicate desktop promotion authorities and requires post-traffic production release-vector verification"
   - id: desktop-qualification-bootstrap-contract
