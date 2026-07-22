@@ -484,6 +484,11 @@ final class VoiceTurnCoordinator {
         log(
           "VoiceTurnCoordinator: terminal turn=\(terminal.turnID.description) "
             + "reason=\(terminal.reason.rawValue) route=\(Self.routeLabel(terminal.route))")
+        // End earcon, symmetric to the PTT start cue — only when the answer
+        // actually landed (not on cancel / barge-in / error).
+        if terminal.reason == .success {
+          PTTCue.end()
+        }
         effectHandler?(effect)
       case .staleEventDropped(let turnID, let event):
         DesktopDiagnosticsManager.shared.recordVoiceTurnAnomaly(
