@@ -1,0 +1,37 @@
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_77f2b8dfbc2e90::t_6aa07dac1c6aa5 8
+  s_77f2b8dfbc2e90::t_a8fae5db658d01 11
+  s_77f2b8dfbc2e90::t_b6e3f95800e606 16
+  s_77f2b8dfbc2e90::t_258ec0164324c3 3
+  s_77f2b8dfbc2e90::t_c05580ee680065 5
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-providers.json
+  s_77f2b8dfbc2e90::t_9a24f4ee41a321 3
+  s_77f2b8dfbc2e90::t_7bd023a25d5b7a 7
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-floatingcontrolbar.json
+  s_77f2b8dfbc2e90::t_9c455d04a90ddd 4-5
+  s_77f2b8dfbc2e90::t_da0e569fdd9206 12
+.github/scripts/product_file_line_count_ratchet_baseline/backend-routers.json
+  s_77f2b8dfbc2e90::t_4c0353f6dd9a32 4,7,12-13
+.github/scripts/product_file_line_count_ratchet_baseline/backend-utils.json
+  s_77f2b8dfbc2e90::t_fc80c9659cbbb3 8,13
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-proactiveassistants.json
+  s_77f2b8dfbc2e90::t_36f4d9e2c37488 4
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-root.json
+  s_77f2b8dfbc2e90::t_72362683f10066 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "8c06e0fc480131370db78223e9d1456c4228a103",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
