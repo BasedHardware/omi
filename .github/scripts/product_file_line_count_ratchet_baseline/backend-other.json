@@ -1,9 +1,9 @@
 {
   "files": {
-    "backend/scripts/validate-backend-runtime-env.py": 1825
+    "backend/scripts/validate-backend-runtime-env.py": 1859
   },
   "raise_justifications": {
-    "backend/scripts/validate-backend-runtime-env.py": "Serving STT retirement and shared forbidden-env guard keep provider/runtime validation in the authoritative deployment contract validator."
+    "backend/scripts/validate-backend-runtime-env.py": "Serving STT retirement, shared forbidden-env validation, and SCA-29/SCA-33 runtime-versus-workflow source boundaries remain one authoritative deployment contract."
   },
   "threshold": 1500
 }
