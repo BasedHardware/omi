@@ -1,0 +1,29 @@
+desktop/macos/Desktop/Sources/FloatingControlBar/GlobalShortcutManager.swift
+  s_424d550d86fd05::t_6453f6bc368707 328
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_424d550d86fd05::t_76df37a087ea0e 240-245,247
+  s_424d550d86fd05::t_785448684c3728 246
+  s_424d550d86fd05::t_8053ff34ba3ae7 1093-1097
+  s_424d550d86fd05::t_8acf9ece2c5378 234-239
+  s_424d550d86fd05::t_dd0cbfb98a709c 269-271
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  s_424d550d86fd05::t_aef6467af3ea8d 1743,2347
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  s_424d550d86fd05::t_dde3ebf54bce0a 2786,3398,3404
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "4349eb8522f8384084af88504b289efb13a8bc03",
+  "prompts": {},
+  "sessions": {
+    "s_424d550d86fd05": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7d83f64d-8ce5-47f1-b308-b8839508880a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
