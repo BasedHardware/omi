@@ -365,6 +365,9 @@ jobs:
               kubectl -n "$NAMESPACE" get ingress "$RELEASE" -o json > .pusher-recovery-snapshot/preapply-ingress.json
               kubectl -n "$NAMESPACE" get serviceaccount "$RELEASE" -o json > .pusher-recovery-snapshot/preapply-serviceaccount.json
               kubectl -n "$NAMESPACE" get backendconfig "${{ vars.ENV }}-pusher-backend-config" -o json > .pusher-recovery-snapshot/preapply-backendconfig.json
+              python3 backend/scripts/verify_pusher_config_references.py \
+                --environment "${{ vars.ENV }}" --namespace "$NAMESPACE" \
+                --rendered .pusher-recovery-snapshot/rendered.yaml
               python3 backend/scripts/verify_pusher_chart_only_recovery.py preflight \
                 --environment "${{ vars.ENV }}" --namespace "$NAMESPACE" --release "$RELEASE" --deployment "$RELEASE" \
                 --repository "${{ github.event.inputs.image_repository }}" --expected-repository "gcr.io/${{ vars.GCP_PROJECT_ID }}/pusher" \

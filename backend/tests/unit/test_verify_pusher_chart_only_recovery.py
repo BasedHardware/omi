@@ -381,6 +381,11 @@ def test_chart_only_preapply_gate_recaptures_all_chart_owned_resources():
         )
         assert f"--live-{kind} .pusher-recovery-snapshot/preapply-{snapshot}.json" in preapply
 
+    # The final mutation gate must re-check every rendered ConfigMap/Secret
+    # key reference, not only the Redis key covered by recovery preflight.
+    assert "verify_pusher_config_references.py" in preapply
+    assert "--rendered .pusher-recovery-snapshot/rendered.yaml" in preapply
+
 
 def test_chart_renders_exact_digest_and_rejects_ambiguous_or_mutated_repository():
     chart = SCRIPT.parents[1] / "charts" / "pusher"
