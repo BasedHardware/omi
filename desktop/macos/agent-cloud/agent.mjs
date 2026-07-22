@@ -591,9 +591,17 @@ function jsonSchemaToZod(schema) {
 
     if (prop.description) zodType = zodType.describe(prop.description);
 
+    // Pydantic Optional[X] emits anyOf [X, null]: accept explicit null too —
+    // models routinely pass null for "no filter", and rejecting it burned an
+    // error turn (measured in the eval corpus).
+    const acceptsNull = Array.isArray(prop.anyOf) && prop.anyOf.some((t) => t?.type === "null");
+    if (acceptsNull) zodType = zodType.nullable();
+
     if (!required.has(name)) {
       zodType = zodType.optional();
-      if (prop.default !== undefined) zodType = zodType.default(prop.default);
+      if (prop.default !== undefined && !(acceptsNull && prop.default === null)) {
+        zodType = zodType.default(prop.default);
+      }
     }
 
     shape[name] = zodType;
@@ -615,7 +623,9 @@ async function fetchAndRegisterBackendTools() {
       headers: { Authorization: `Bearer ${userFirebaseToken}` },
     });
     if (!resp.ok) {
-      console.log(`[backend-tools] Failed to fetch tools: HTTP ${resp.status}`);
+      logEvent("error", "backend_tools_unavailable", { status: resp.status });
+      const timer = setTimeout(() => { fetchAndRegisterBackendTools(); }, 30_000);
+      timer.unref?.();
       return;
     }
 
@@ -623,39 +633,69 @@ async function fetchAndRegisterBackendTools() {
     const toolDefs = data.tools || [];
     console.log(`[backend-tools] Fetched ${toolDefs.length} tools from Python backend`);
 
-    backendTools = toolDefs.map((def) => {
-      const zodShape = jsonSchemaToZod(def.parameters || {});
-      return tool(
-        def.name,
-        def.description || `Backend tool: ${def.name}`,
-        zodShape,
-        async (params) => {
-          try {
-            const execResp = await fetch(`${BACKEND_URL}/v1/agent/execute-tool`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${userFirebaseToken}`,
-              },
-              body: JSON.stringify({ tool_name: def.name, params }),
-            });
-            const result = await execResp.json();
-            if (result.error) {
-              return { content: [{ type: "text", text: `Error: ${result.error}` }] };
-            }
-            return { content: [{ type: "text", text: result.result || JSON.stringify(result) }] };
-          } catch (err) {
-            return { content: [{ type: "text", text: `Error calling ${def.name}: ${err.message}` }] };
-          }
+    // Per-def isolation: one bad schema must not throw away every backend
+    // tool (the API also rejects the WHOLE request over one invalid tool name,
+    // so names are validated here at fetch time). First name wins on dupes —
+    // the 4 local tools claim theirs first in rebuildMcpServer.
+    const seenNames = new Set();
+    backendTools = toolDefs.flatMap((def) => {
+      try {
+        if (!/^[a-zA-Z0-9_-]{1,100}$/.test(def.name ?? "")) {
+          logEvent("warn", "backend_tool_skipped", { name: String(def.name), reason: "invalid_name" });
+          return [];
         }
-      );
+        if (seenNames.has(def.name)) {
+          logEvent("warn", "backend_tool_skipped", { name: def.name, reason: "duplicate" });
+          return [];
+        }
+        seenNames.add(def.name);
+        const zodShape = jsonSchemaToZod(def.parameters || {});
+        return [tool(
+          def.name,
+          def.description || `Backend tool: ${def.name}`,
+          zodShape,
+          async (params) => {
+            try {
+              // User-blocking: retry transient failures with backoff.
+              const result = await withRetry(async () => {
+                const execResp = await fetch(`${BACKEND_URL}/v1/agent/execute-tool`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${userFirebaseToken}`,
+                  },
+                  body: JSON.stringify({ tool_name: def.name, params }),
+                });
+                if (!execResp.ok) {
+                  throw new Error(`execute-tool HTTP ${execResp.status}`);
+                }
+                return await execResp.json();
+              }, { attempts: 3 });
+              if (result.error) {
+                return { content: [{ type: "text", text: `Error: ${result.error}` }] };
+              }
+              const bounded = truncateToolResult(result.result || JSON.stringify(result), def.name);
+              return { content: [{ type: "text", text: bounded.text }] };
+            } catch (err) {
+              logEvent("error", "backend_tool_failed", { name: def.name, error: err });
+              return { content: [{ type: "text", text: `Error calling ${def.name}: ${classifyError(err).category}` }] };
+            }
+          }
+        )];
+      } catch (err) {
+        logEvent("warn", "backend_tool_skipped", { name: String(def?.name), reason: "schema_conversion", error: err });
+        return [];
+      }
     });
 
     // Rebuild MCP server with all tools
     rebuildMcpServer();
     console.log(`[backend-tools] Registered ${backendTools.length} backend tools`);
   } catch (err) {
-    console.log(`[backend-tools] Error fetching tools: ${err.message}`);
+    logEvent("error", "backend_tools_unavailable", { error: err });
+    // A boot-time blip must not lose calendar/gmail for the VM's lifetime.
+    const timer = setTimeout(() => { fetchAndRegisterBackendTools(); }, 30_000);
+    timer.unref?.();
   }
 }
 
