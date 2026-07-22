@@ -460,7 +460,7 @@ def main() -> int:
     parser.add_argument(
         '--cloud-run-only',
         action='store_true',
-        help='verify only the no-traffic Cloud Run candidate before GKE serving mutations',
+        help='verify only Cloud Run; candidate mode accepts no traffic and serving mode requires 100% traffic',
     )
     parser.add_argument('--evidence-path', type=Path)
     args = parser.parse_args()
@@ -475,8 +475,6 @@ def main() -> int:
             environment=args.environment,
             expected_image=args.expected_image,
         )
-        if args.cloud_run_only and not args.candidate:
-            raise ValueError('--cloud-run-only is valid only for a no-traffic candidate')
         commands = build_read_only_commands(
             expectation,
             include_listener=not args.cloud_run_only,

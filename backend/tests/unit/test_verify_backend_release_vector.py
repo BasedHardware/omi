@@ -360,7 +360,7 @@ def test_prod_deploy_invokes_legacy_binding_migration_before_deploy() -> None:
     workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml'
     text = workflow.read_text(encoding='utf-8')
 
-    assert 'backend/scripts/preflight-cloud-run-deploy.py' in text
+    assert 'preflight-cloud-run-deploy.py' in text
     assert text.count('--migrate-legacy-public-binding') == 4
     for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         assert f'--migrate-legacy-public-binding {service}' in text
@@ -504,7 +504,7 @@ def test_static_release_vector_verify_binds_the_workflow_short_sha() -> None:
         text = workflow.read_text(encoding='utf-8')
         assert 'verify_backend_release_vector.py' in text, f'{workflow.name} must invoke the release-vector verifier'
         # Count verify invocations and the --short-sha wiring; require a 1:1 match.
-        invocations = text.count('verify_backend_release_vector.py \\\n')
+        invocations = text.count('verify_backend_release_vector.py')
         wired = text.count('--short-sha "${{ steps.image-tag.outputs.short_sha }}"')
         assert invocations == wired, (
             f'{workflow.name}: {invocations} release-vector verify call(s) but '
@@ -857,6 +857,93 @@ def test_candidate_cloud_run_only_verification_does_not_require_listener_mutatio
     assert 'gke_listener' not in report
 
 
+def test_candidate_verification_accepts_a_ready_retired_zero_traffic_revision() -> None:
+    expectation = _expectation()
+    documents = _documents(expectation)
+    for service in expectation.revisions:
+        documents[f'cloud_run/{service}']['status']['traffic'] = [
+            {'revisionName': f'{service}-serving', 'percent': 100},
+            {'revisionName': expectation.revisions[service], 'percent': 0},
+        ]
+        documents[f'cloud_run_revision/{service}']['status']['conditions'][0]['reason'] = 'Retired'
+
+    cloud_run_only = {key: value for key, value in documents.items() if key.startswith('cloud_run')}
+
+    assert (
+        verifier.evaluate(
+            expectation,
+            cloud_run_only,
+            require_serving_traffic=False,
+            include_listener=False,
+        )
+        == []
+    )
+
+
+def test_serving_cloud_run_only_verification_is_allowed_and_requires_exact_traffic(monkeypatch) -> None:
+    expectation = _expectation()
+    documents = _documents(expectation)
+    monkeypatch.setattr(verifier, 'collect_documents', lambda _commands: documents)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            'verify_backend_release_vector.py',
+            '--commit-sha',
+            expectation.commit_sha,
+            '--deploy-run-id',
+            expectation.deploy_run_id,
+            '--deploy-run-attempt',
+            expectation.deploy_run_attempt,
+            '--project',
+            expectation.project,
+            '--environment',
+            expectation.environment,
+            '--cloud-run-only',
+        ],
+    )
+
+    assert verifier.main() == 0
+
+    documents['cloud_run/backend']['status']['traffic'] = [{'revisionName': 'backend-old', 'percent': 100}]
+    assert verifier.evaluate(expectation, documents, include_listener=False) == [
+        'cloud_run/backend: expected revision does not receive 100% traffic'
+    ]
+
+
+def test_deploy_stages_workflow_owned_control_scripts_before_release_checkout() -> None:
+    workflow = (BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8')
+    deploy = workflow.split('\n  deploy:\n', 1)[1]
+
+    control_checkout = 'Checkout workflow-owned deploy-control source'
+    staging = 'Stage workflow-owned deployment-control scripts'
+    release_checkout = 'Checkout admitted runtime source'
+    assert control_checkout in deploy
+    assert staging in deploy
+    assert release_checkout in deploy
+    assert deploy.index(control_checkout) < deploy.index(staging) < deploy.index(release_checkout)
+    checkout_step = deploy[
+        deploy.index(control_checkout) : deploy.index('\n      - name:', deploy.index(control_checkout) + 1)
+    ]
+    stage_step = deploy[deploy.index(staging) : deploy.index('\n      - name:', deploy.index(staging) + 1)]
+    assert 'ref: ${{ github.sha }}' in checkout_step
+    assert 'control_scripts="$RUNNER_TEMP/backend-deploy-control-scripts"' in stage_step
+    assert 'cp -a .workflow-source/backend/scripts "$control_scripts"' in stage_step
+    assert 'DEPLOY_CONTROL_SCRIPTS=%s' in stage_step
+    assert '>> "$GITHUB_ENV"' in stage_step
+    assert 'python3 backend/scripts/' not in deploy
+    assert 'bash backend/scripts/' not in deploy
+    assert 'run: backend/scripts/' not in deploy
+
+    for action in (
+        BACKEND_DIR.parent / '.github/actions/sync-backfill-lifecycle/action.yml',
+        BACKEND_DIR.parent / '.github/actions/transcription-release-candidate-probe/action.yml',
+    ):
+        action_text = action.read_text(encoding='utf-8')
+        assert 'DEPLOY_CONTROL_SCRIPTS' in action_text
+        assert 'python3 backend/scripts/' not in action_text
+
+
 def test_candidate_failure_status_report_uses_candidate_evidence_before_promotion() -> None:
     workflow = (BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8')
     candidate = workflow[
@@ -886,7 +973,7 @@ def test_full_backend_deploys_verify_the_serving_release_vector_after_promotion(
         verification = text.index('Verify serving backend release vector')
         assert promotion < verification
         release_vector_step = text[verification : text.index('\n      - name:', verification + 1)]
-        assert 'backend/scripts/verify_backend_release_vector.py' in release_vector_step
+        assert 'verify_backend_release_vector.py' in release_vector_step
         assert commit_marker in release_vector_step
         assert '--environment' in release_vector_step
 
@@ -924,7 +1011,8 @@ def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_sna
         assert candidate_acceptance < snapshot < promotion < serving_vector < restore, relative
 
         snapshot_step = text[snapshot : text.index('\n      - name:', snapshot + 1)]
-        assert 'backend/scripts/cloud_run_traffic_snapshot.py capture' in snapshot_step
+        assert 'cloud_run_traffic_snapshot.py' in snapshot_step
+        assert ' capture' in snapshot_step
         for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
             assert f'--service {service}' in snapshot_step
 
@@ -944,7 +1032,8 @@ def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_sna
                 "|| steps.smoke-promoted-production-serving-api.outcome == 'failure') }}"
             )
         assert expected_restore_condition in restore_step
-        assert 'backend/scripts/cloud_run_traffic_snapshot.py restore' in restore_step
+        assert 'cloud_run_traffic_snapshot.py' in restore_step
+        assert ' restore' in restore_step
 
         evidence_upload = text[text.index('Upload ') :]
         assert 'cloud-run-pre-promotion-traffic-snapshot.json' in evidence_upload
@@ -976,6 +1065,8 @@ def test_production_cloud_run_only_boundary_smokes_serving_after_promotion():
     assert 'https://api.omi.me/v2/desktop/beta/candidates/reserve' in workflow
     assert '--candidate-api-url https://api.omi.me' in workflow
     assert 'firebase-production-serving-token' in workflow
+    assert '--data \'{"tag":"macos-unauthenticated-smoke"}\'' in workflow
+    assert "--data '{}')" not in workflow
     assert "steps.smoke-promoted-production-serving-api.outcome == 'failure'" in workflow
     assert 'CLOUD_RUN_ONLY="--cloud-run-only"' in workflow
     assert 'probe-transcription-candidate-from-cloud-run.sh' not in workflow

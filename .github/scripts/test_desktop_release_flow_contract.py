@@ -59,7 +59,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertLess(shift, verify)
         self.assertLess(verify, status)
         evidence = backend[verify:status]
-        self.assertIn("backend/scripts/verify_backend_release_vector.py", evidence)
+        self.assertIn("$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py", evidence)
         self.assertIn("--deploy-run-id \"${{ github.run_id }}\"", evidence)
         self.assertIn("--deploy-run-attempt \"${{ github.run_attempt }}\"", evidence)
 
