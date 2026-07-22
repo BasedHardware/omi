@@ -1,0 +1,19 @@
+backend/tests/unit/test_smoke_what_matters_now.py
+  s_62099ccfd5cc12::t_163a82c51c283a 130-133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "87b4d2d1955e7d794056b6e7869833c8f13ecabf",
+  "prompts": {},
+  "sessions": {
+    "s_62099ccfd5cc12": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bce3b3b3-c244-4ae8-bb2a-1ff7eccbcdbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
