@@ -3881,7 +3881,7 @@ private struct HomeSectionHeader: View {
   }
 }
 
-private enum HomeStatusState {
+enum HomeStatusState {
   case active
   case inactive
   case blocked
@@ -3919,7 +3919,7 @@ private enum HomeStatusState {
   }
 }
 
-private struct HomeStatusButton: View {
+struct HomeStatusButton: View {
   let title: String
   let systemImage: String
   let status: HomeStatusState
@@ -3989,7 +3989,7 @@ private struct HomeStatusButton: View {
   }
 }
 
-private struct HomeListeningStatusButton: View {
+struct HomeListeningStatusButton: View {
   let title: String
   let systemImage: String
   let status: HomeStatusState

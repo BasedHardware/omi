@@ -636,6 +636,14 @@ struct DesktopHomeView: View {
     !useLegacyHomeDesign && !isInSettings
   }
 
+  /// The persistent Capture/Listening top bar shows on the main content pages.
+  /// Home renders its own column-aligned copy (DashboardPage.homeHeader), and
+  /// settings/permissions/help are utility pages that don't need it.
+  private var showsPersistentStatusControls: Bool {
+    guard showsAppNavRail, let item = SidebarNavItem(rawValue: selectedIndex) else { return false }
+    return ![.dashboard, .settings, .permissions, .help].contains(item)
+  }
+
   private var currentAppStateLabel: String {
     if authState.isRestoringAuth { return "restoring_auth" }
     if authState.sessionPhase == .recoveryRequired { return "auth_recovery" }
@@ -1033,6 +1041,26 @@ struct DesktopHomeView: View {
         // Extracted into a separate struct so that pages like TasksPage
         // are not re-rendered when AppState publishes unrelated changes.
         VStack(spacing: 0) {
+          // Persistent Capture/Listening top bar — constant across the content
+          // pages so the controls aren't home-only. Home keeps its own copy.
+          if showsPersistentStatusControls {
+            HStack(spacing: 0) {
+              Spacer(minLength: 0)
+              CaptureListeningControls(
+                appState: appState,
+                onRewind: {
+                  OmiMotion.withGated(Self.pageNavigationAnimation) {
+                    selectedIndex = SidebarNavItem.rewind.rawValue
+                  }
+                }
+              )
+            }
+            .padding(.horizontal, OmiSpacing.xl)
+            .padding(.top, OmiSpacing.lg)
+            .padding(.bottom, OmiSpacing.xs)
+            .zIndex(1)
+          }
+
           // The persistent AppNavRail provides Home + cross-page navigation, so
           // no per-page Home chrome bar is needed in the redesign.
           PageContentView(
@@ -1216,17 +1244,19 @@ private struct MemoryHubPage: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      HubSegmentedControl(segments: ["Conversations", "Memories"], selection: $segment)
+      // The "Memory" rail item lands here, so Memories is the default segment;
+      // Conversations (with its live transcript) is the second sub-tab.
+      HubSegmentedControl(segments: ["Memories", "Conversations"], selection: $segment)
         .padding(.top, 22)
         .padding(.horizontal, 28)
         .padding(.bottom, 4)
 
       if segment == 0 {
-        ConversationsPageHost(appState: appState)
-      } else {
         MemoriesPage(
           viewModel: viewModelContainer.memoriesViewModel,
           graphViewModel: viewModelContainer.memoryGraphViewModel)
+      } else {
+        ConversationsPageHost(appState: appState)
       }
     }
   }
