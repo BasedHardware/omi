@@ -9676,153 +9676,154 @@ class AppLocalizationsTa extends AppLocalizations {
       'உங்கள் தரவு இயல்பாகவே வலுவான குறியாக்கத்துடன் பாதுகாக்கப்படுகிறது, மேலும் அது எவ்வாறு சேமிக்கப்படுகிறது மற்றும் பயன்படுத்தப்படுகிறது என்பதை நீங்கள் கட்டுப்படுத்துகிறீர்கள்.';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => 'துல்லியம்';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => 'அடிப்படை';
 
   @override
-  String get cloudTranscription => 'Cloud Transcription';
+  String get cloudTranscription => 'கிளவுட் உரையாக்கம்';
 
   @override
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => 'மாதிரியை நீக்கு';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'இந்த மாதிரியை நீக்க விரும்புகிறீர்களா?';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => 'பதிவிறக்கப்பட்டது';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => 'வேகமானது';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => 'தானியங்கு';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => 'அதிகம்';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => 'பெரியது';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => 'குறைவு';
 
   @override
-  String get whisperModelSizeMedium => 'Medium';
+  String get whisperModelSizeMedium => 'நடுத்தரம்';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => 'மாதிரி நீக்கப்பட்டது';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => 'மாதிரி பதிவிறக்கம் தோல்வியடைந்தது';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc => 'Whisper மாதிரியைப் பதிவிறக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => 'மாதிரி பதிவிறக்கப்பட்டது';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper மாதிரி வெற்றிகரமாகப் பதிவிறக்கப்பட்டது';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => 'மாதிரி அளவு';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => 'எதுவும் இல்லை';
 
   @override
-  String get onDeviceTranscription => 'On-Device Transcription';
+  String get onDeviceTranscription => 'சாதனத்தில் உரையாக்கம்';
 
   @override
-  String get onDeviceTranscriptionDesc => 'Transcription is processed locally on your device';
+  String get onDeviceTranscriptionDesc => 'உரையாக்கம் உங்கள் சாதனத்திலேயே செயலாக்கப்படுகிறது';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => 'மெதுவானது';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => 'சிறியது';
 
   @override
   String get sttProviderSoniox => 'Soniox';
 
   @override
-  String get speechToTextProvider => 'Speech-to-Text Provider';
+  String get speechToTextProvider => 'பேச்சு-உரை வழங்குநர்';
 
   @override
-  String get speechToTextProviderDesc => 'Choose the service used for transcription';
+  String get speechToTextProviderDesc => 'உரையாக்கத்திற்குப் பயன்படுத்தப்படும் சேவையைத் தேர்ந்தெடுக்கவும்';
 
   @override
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => 'வேகம்';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => 'மிகச் சிறியது';
 
   @override
-  String get transcriptionLanguage => 'Transcription Language';
+  String get transcriptionLanguage => 'உரையாக்க மொழி';
 
   @override
-  String get transcriptionLanguageDesc => 'Choose the language for speech transcription';
+  String get transcriptionLanguageDesc => 'பேச்சு உரையாக்கத்திற்கான மொழியைத் தேர்ந்தெடுக்கவும்';
 
   @override
-  String get whisperModel => 'Whisper Model';
+  String get whisperModel => 'Whisper மாதிரி';
 
   @override
-  String get whisperModelDesc => 'Choose the model for on-device transcription';
+  String get whisperModelDesc => 'சாதனத்தில் உரையாக்கத்திற்கான மாதிரியைத் தேர்ந்தெடுக்கவும்';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => 'இலவசத் திட்டத்திற்கு மாறவா?';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => 'இந்த வரம்புகளை நீங்கள் சந்திப்பீர்கள்:';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => '7 மடங்கு அதிக பேட்டரி பயன்பாடு';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => '30% குறைவான உரையாக்கத் தரம்';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => '5-7 வினாடிகள் தாமதம்';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => 'பேசுபவர்களை அடையாளம் காண முடியாது';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => 'எப்படியும் தரமிறக்கு';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => 'Google நாட்காட்டி இணைக்கப்படவில்லை';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt =>
+      'உரையாடல்களை நாட்காட்டி நிகழ்வுகளுடன் இணைக்க உங்கள் Google நாட்காட்டியை இணைக்கவும்.';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return '“$title” உடன் இணைக்கப்பட்டது';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => 'நாட்காட்டி நிகழ்வை இணைக்க முடியவில்லை';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => 'உங்கள் கருத்துக்கு நன்றி!';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => 'செய்தியை நகலெடு';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => 'அமைப்புகளில் தேடு…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => 'ஆடியோவை ஏற்றுவதில் பிழை';
 
   @override
   String get rayBanMetaMicPickerTitle => 'உங்கள் Ray-Ban Meta மைக்ரோஃபோனைத் தேர்வுசெய்யவும்';

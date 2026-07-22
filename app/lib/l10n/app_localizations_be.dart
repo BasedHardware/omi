@@ -9637,153 +9637,153 @@ class AppLocalizationsBe extends AppLocalizations {
       'Вашы даныя па змаўчанні абаронены моцным шыфраваннем, і вы кантралюеце, як яны захоўваюцца і выкарыстоўваюцца.';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => 'Дакладнасць';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => 'Базавая';
 
   @override
-  String get cloudTranscription => 'Cloud Transcription';
+  String get cloudTranscription => 'Воблачная транскрыпцыя';
 
   @override
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => 'Выдаліць мадэль';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'Вы сапраўды хочаце выдаліць гэту мадэль?';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => 'Загружана';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => 'Хутчэй';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => 'Аўта';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => 'Вышэй';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => 'Вялікая';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => 'Ніжэй';
 
   @override
-  String get whisperModelSizeMedium => 'Medium';
+  String get whisperModelSizeMedium => 'Сярэдняя';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => 'Мадэль выдалена';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => 'Не ўдалося загрузіць мадэль';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc => 'Не ўдалося загрузіць мадэль Whisper. Паспрабуйце яшчэ раз.';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => 'Мадэль загружана';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'Мадэль Whisper паспяхова загружана';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => 'Памер мадэлі';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => 'Няма';
 
   @override
-  String get onDeviceTranscription => 'On-Device Transcription';
+  String get onDeviceTranscription => 'Транскрыпцыя на прыладзе';
 
   @override
-  String get onDeviceTranscriptionDesc => 'Transcription is processed locally on your device';
+  String get onDeviceTranscriptionDesc => 'Транскрыпцыя апрацоўваецца лакальна на вашай прыладзе';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => 'Павольней';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => 'Малая';
 
   @override
   String get sttProviderSoniox => 'Soniox';
 
   @override
-  String get speechToTextProvider => 'Speech-to-Text Provider';
+  String get speechToTextProvider => 'Пастаўшчык распазнавання маўлення';
 
   @override
-  String get speechToTextProviderDesc => 'Choose the service used for transcription';
+  String get speechToTextProviderDesc => 'Выберыце сэрвіс для транскрыпцыі';
 
   @override
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => 'Хуткасць';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => 'Мініяцюрная';
 
   @override
-  String get transcriptionLanguage => 'Transcription Language';
+  String get transcriptionLanguage => 'Мова транскрыпцыі';
 
   @override
-  String get transcriptionLanguageDesc => 'Choose the language for speech transcription';
+  String get transcriptionLanguageDesc => 'Выберыце мову для транскрыпцыі маўлення';
 
   @override
-  String get whisperModel => 'Whisper Model';
+  String get whisperModel => 'Мадэль Whisper';
 
   @override
-  String get whisperModelDesc => 'Choose the model for on-device transcription';
+  String get whisperModelDesc => 'Выберыце мадэль для транскрыпцыі на прыладзе';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => 'Перайсці на бясплатны план?';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => 'Вы сутыкнецеся з такімі абмежаваннямі:';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => 'У 7 разоў большы расход батарэі';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => 'На 30% горшая якасць транскрыпцыі';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => 'Затрымка 5–7 секунд';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => 'Немагчыма распазнаць дыктараў';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => 'Усё роўна перайсці';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => 'Google Calendar не падключаны';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt => 'Падключыце Google Calendar, каб звязваць размовы з падзеямі календара.';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return 'Звязана з «$title»';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => 'Не ўдалося звязаць падзею календара';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => 'Дзякуй за ваш водгук!';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => 'Капіяваць паведамленне';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => 'Пошук у параметрах…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => 'Памылка загрузкі аўдыя';
 
   @override
   String get rayBanMetaMicPickerTitle => 'Выберыце мікрафон Ray-Ban Meta';
