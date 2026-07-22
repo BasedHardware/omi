@@ -10,33 +10,40 @@ struct OnboardingOpenerView: View {
   let opener: OnboardingOpenerContent
   @ObservedObject var chatProvider: ChatProvider
 
+  /// Leading glyphs cycle task → insight → question, echoing the reference
+  /// composition; content strings stay untouched.
+  private static let starterIcons = ["circle", "lightbulb", "bubble.left"]
+
   var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-      HStack(alignment: .top, spacing: OmiSpacing.sm) {
+    VStack(spacing: OmiSpacing.xl) {
+      VStack(spacing: OmiSpacing.md) {
         if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
           let logoImage = NSImage(contentsOf: logoURL)
         {
           Image(nsImage: logoImage)
             .resizable()
             .scaledToFit()
-            .frame(width: 28, height: 28)
+            .frame(width: 44, height: 44)
         }
         Text(opener.greeting)
-          .scaledFont(size: OmiType.subheading, weight: .medium)
+          .font(.system(size: 22, weight: .medium, design: .serif))
           .foregroundColor(OmiColors.textPrimary)
+          .multilineTextAlignment(.center)
           .fixedSize(horizontal: false, vertical: true)
-        Spacer(minLength: 0)
       }
 
-      VStack(alignment: .leading, spacing: OmiSpacing.md) {
-        ForEach(opener.starters, id: \.self) { question in
-          OpenerStarterCard(question: question) {
+      VStack(spacing: OmiSpacing.sm) {
+        ForEach(Array(opener.starters.enumerated()), id: \.element) { index, question in
+          OpenerStarterCard(
+            question: question,
+            icon: Self.starterIcons[index % Self.starterIcons.count]
+          ) {
             startFromOpener(question)
           }
         }
       }
     }
-    .frame(maxWidth: 640, alignment: .leading)
+    .frame(maxWidth: 680)
     .padding(.horizontal, OmiSpacing.xxl)
     .padding(.vertical, 64)
   }
@@ -49,10 +56,11 @@ struct OnboardingOpenerView: View {
   }
 }
 
-/// One tappable starter. Filled surface + hover highlight so the three cards
-/// read as the obvious next click, not passive text rows.
+/// One tappable starter: slim full-width row — leading glyph, single-line
+/// question, trailing chevron — with a filled surface and hover highlight.
 private struct OpenerStarterCard: View {
   let question: String
+  let icon: String
   let action: () -> Void
 
   @State private var isHovering = false
@@ -60,29 +68,28 @@ private struct OpenerStarterCard: View {
   var body: some View {
     Button(action: action) {
       HStack(spacing: OmiSpacing.md) {
+        Image(systemName: icon)
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(OmiColors.textTertiary)
+          .frame(width: 18)
         Text(question)
-          .scaledFont(size: OmiType.subheading, weight: .medium)
+          .scaledFont(size: OmiType.subheading)
           .foregroundColor(OmiColors.textPrimary)
-          .multilineTextAlignment(.leading)
+          .lineLimit(1)
+          .truncationMode(.tail)
         Spacer(minLength: OmiSpacing.sm)
-        Image(systemName: "arrow.up.right")
-          .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(isHovering ? OmiColors.textPrimary : OmiColors.textTertiary)
+        Image(systemName: "chevron.right")
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundColor(isHovering ? OmiColors.textSecondary : OmiColors.textTertiary.opacity(0.6))
       }
       .padding(.horizontal, OmiSpacing.lg)
-      .padding(.vertical, OmiSpacing.md + 2)
+      .padding(.vertical, OmiSpacing.md)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .fill(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .fill(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundSecondary.opacity(0.55))
       )
-      .overlay(
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .stroke(OmiColors.border.opacity(isHovering ? 0.9 : 0.5), lineWidth: 1)
-      )
-      // The stroke leaves a transparent interior, so without an explicit
-      // hit shape only the text/icon were clickable — make the whole row tap.
-      .contentShape(.rect(cornerRadius: 14))
+      .contentShape(.rect(cornerRadius: 12))
     }
     .buttonStyle(.plain)
     .onHover { isHovering = $0 }
