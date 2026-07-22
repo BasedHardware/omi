@@ -116,8 +116,10 @@ VERSION="${VERSION%-macos}"
 BUNDLE="omi-qualification-${VERSION}"
 WORKTREE="$REPO_ROOT/.qualification-worktrees/$RELEASE_TAG"
 LAUNCH_LOG=""
+LAUNCH_SIGNAL_FILE=""
 DESKTOP_LAUNCH_PID=""
 QUALIFICATION_SUCCESS=0
+DESKTOP_PREPARE_WAIT_SECS=1800
 BRIDGE_WAIT_SECS=900
 
 gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,isPrerelease,publishedAt,assets,body \
@@ -210,6 +212,24 @@ terminate_qualification_desktop() {
   fi
 }
 
+wait_for_desktop_launch() {
+  local signal_file="$1"
+  local deadline=$((SECONDS + DESKTOP_PREPARE_WAIT_SECS))
+  while (( SECONDS < deadline )); do
+    if [[ -f "$signal_file" ]]; then
+      echo "desktop launch dispatched after bounded preparation"
+      return 0
+    fi
+    if [[ -n "$DESKTOP_LAUNCH_PID" ]] && ! kill -0 "$DESKTOP_LAUNCH_PID" 2>/dev/null; then
+      echo "qualification failed: desktop launch process exited during preparation" >&2
+      return 1
+    fi
+    sleep 5
+  done
+  echo "qualification failed: desktop launch not dispatched within ${DESKTOP_PREPARE_WAIT_SECS}s" >&2
+  return 1
+}
+
 wait_for_bridge() {
   local port="$1"
   local deadline=$((SECONDS + BRIDGE_WAIT_SECS))
@@ -265,14 +285,26 @@ trap cleanup EXIT
 
 terminate_qualification_desktop "$BUNDLE"
 "$SCRIPT_DIR/prepare-qualification-profile.sh" "$BUNDLE"
+LAUNCH_SIGNAL_FILE="$WORKTREE/.qualification-desktop-launched"
+rm -f "$LAUNCH_SIGNAL_FILE"
 
 (
   cd "$WORKTREE"
   PROVIDER_MODE=offline make dev-up
-  OMI_SKIP_SETTINGS_SEED=1 make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice
+  OMI_DESKTOP_LAUNCH_SIGNAL_FILE="$LAUNCH_SIGNAL_FILE" OMI_SKIP_SETTINGS_SEED=1 \
+    make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice
 ) >"$LAUNCH_LOG" 2>&1 &
 DESKTOP_LAUNCH_PID=$!
-# Build time must not consume the desktop-launch readiness allowance.
+
+if ! wait_for_desktop_launch "$LAUNCH_SIGNAL_FILE"; then
+  echo "--- last 80 lines of $LAUNCH_LOG ---" >&2
+  tail -n 80 "$LAUNCH_LOG" >&2 || true
+  exit 1
+fi
+
+# The bridge gets its complete post-launch readiness allowance; cold Rust,
+# agent-runtime, SwiftPM, packaging, and signing work consumed only the separate
+# bounded preparation phase above.
 SECONDS=0
 
 if ! wait_for_bridge "$AUTOMATION_PORT"; then
