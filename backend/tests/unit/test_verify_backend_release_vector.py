@@ -911,26 +911,53 @@ def test_serving_cloud_run_only_verification_is_allowed_and_requires_exact_traff
     ]
 
 
-def test_deploy_stages_workflow_owned_control_scripts_before_release_checkout() -> None:
+def test_deploy_stages_workflow_owned_control_scripts_inside_admitted_workspace(tmp_path: Path) -> None:
     workflow = (BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8')
     deploy = workflow.split('\n  deploy:\n', 1)[1]
 
     control_checkout = 'Checkout workflow-owned deploy-control source'
     staging = 'Stage workflow-owned deployment-control scripts'
     release_checkout = 'Checkout admitted runtime source'
+    install = 'Install workflow-owned deployment-control scripts in admitted workspace'
     assert control_checkout in deploy
     assert staging in deploy
     assert release_checkout in deploy
-    assert deploy.index(control_checkout) < deploy.index(staging) < deploy.index(release_checkout)
+    assert install in deploy
+    assert (
+        deploy.index(control_checkout) < deploy.index(staging) < deploy.index(release_checkout) < deploy.index(install)
+    )
     checkout_step = deploy[
         deploy.index(control_checkout) : deploy.index('\n      - name:', deploy.index(control_checkout) + 1)
     ]
     stage_step = deploy[deploy.index(staging) : deploy.index('\n      - name:', deploy.index(staging) + 1)]
+    install_step = deploy[deploy.index(install) : deploy.index('\n      - name:', deploy.index(install) + 1)]
     assert 'ref: ${{ github.sha }}' in checkout_step
     assert 'control_scripts="$RUNNER_TEMP/backend-deploy-control-scripts"' in stage_step
     assert 'cp -a .workflow-source/backend/scripts "$control_scripts"' in stage_step
-    assert 'DEPLOY_CONTROL_SCRIPTS=%s' in stage_step
-    assert '>> "$GITHUB_ENV"' in stage_step
+    assert 'control_scripts="$GITHUB_WORKSPACE/.deploy-control/scripts"' in install_step
+    assert 'cp -a "$RUNNER_TEMP/backend-deploy-control-scripts" "$control_scripts"' in install_step
+    assert 'DEPLOY_CONTROL_SCRIPTS=%s' in install_step
+    assert '>> "$GITHUB_ENV"' in install_step
+
+    workspace = tmp_path / 'workspace'
+    manifest = workspace / 'backend' / 'deploy' / 'runtime_env.yaml'
+    manifest.parent.mkdir(parents=True)
+    manifest.touch()
+    legacy_script = tmp_path / 'runner-temp' / 'backend-deploy-control-scripts' / 'preflight-cloud-run-deploy.py'
+    legacy_script.parent.mkdir(parents=True)
+    legacy_script.touch()
+    assert legacy_script.resolve().parents[2] != workspace
+    assert not (legacy_script.resolve().parents[2] / 'backend' / 'deploy' / 'runtime_env.yaml').exists()
+
+    control_script = workspace / '.deploy-control' / 'scripts' / 'preflight-cloud-run-deploy.py'
+    control_script.parent.mkdir(parents=True)
+    control_script.touch()
+    assert control_script.resolve().parents[2] == workspace
+    assert (control_script.resolve().parents[2] / 'backend' / 'deploy' / 'runtime_env.yaml') == manifest
+
+    dockerfile = (BACKEND_DIR / 'Dockerfile').read_text(encoding='utf-8')
+    assert 'COPY backend/ .' in dockerfile
+    assert '.deploy-control' not in dockerfile
     assert 'python3 backend/scripts/' not in deploy
     assert 'bash backend/scripts/' not in deploy
     assert 'run: backend/scripts/' not in deploy
