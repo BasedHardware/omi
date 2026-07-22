@@ -107,6 +107,7 @@ def validate_merge_compatibility(
 
     Rejection criteria (hard failures):
     - Less than 2 conversations
+    - Any conversation is a soft-deleted tombstone
     - Any conversation is locked
     - Any conversation is not completed (processing/merging/in_progress)
 
@@ -115,6 +116,17 @@ def validate_merge_compatibility(
     """
     if len(conversations) < 2:
         return False, "At least 2 conversations required to merge", None
+
+    # Check none are soft-deleted. A soft-deleted tombstone is invisible to the
+    # user, so merging it resurrects deleted content into a new visible
+    # conversation — the inverse of the tombstone contract the sync merge path
+    # already enforces (see conversations_db.eligible_merge_target, #10119).
+    # `get_conversation` returns tombstones unfiltered and the /merge endpoint
+    # only 404s on a missing (None) doc, so a deleted id passed by an API client
+    # or a delete-vs-merge race would otherwise flow straight through.
+    for conv in conversations:
+        if conv.get('deleted'):
+            return False, "Cannot merge a deleted conversation.", None
 
     # Check none are locked
     for conv in conversations:
