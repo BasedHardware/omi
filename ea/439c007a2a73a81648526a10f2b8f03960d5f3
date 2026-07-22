@@ -1,0 +1,20 @@
+desktop/macos/Desktop/Tests/AgentPillLifecycleTests.swift
+  s_62099ccfd5cc12::t_ba19365310d287 475-478,483-484
+  s_62099ccfd5cc12::t_22f057c10d5e4f 499-505
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "ea439c007a2a73a81648526a10f2b8f03960d5f3",
+  "prompts": {},
+  "sessions": {
+    "s_62099ccfd5cc12": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bce3b3b3-c244-4ae8-bb2a-1ff7eccbcdbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
