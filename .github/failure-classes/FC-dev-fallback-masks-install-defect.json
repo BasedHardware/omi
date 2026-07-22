@@ -3,7 +3,11 @@
   "id": "FC-dev-fallback-masks-install-defect",
   "violated_contract": "A packaged app must resolve every runtime resource from inside its own bundle; a development-only fallback path must never be the reason a launch check passes.",
   "canonical_prevention": "Resolve resources through the app's own Contents/Resources accessor (Bundle.resourceBundle) and verify launch on a machine or layout where no repo checkout or .build fallback exists; forbid the SwiftPM generated Bundle.module accessor in app sources via tripwire.",
-  "evidence_prs": [10342],
-  "scope_hints": ["desktop/macos/**"],
+  "evidence_prs": [
+    10350
+  ],
+  "scope_hints": [
+    "desktop/macos/**"
+  ],
   "status": "open"
 }
