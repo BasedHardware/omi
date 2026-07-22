@@ -1948,10 +1948,14 @@ actor AgentRuntimeProcess {
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
     expectedGeneration: Int? = nil,
+    deleteBackend: Bool = true,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> Int {
     var payload: [String: Any] = [:]
     if let expectedGeneration { payload["expectedGeneration"] = expectedGeneration }
+    // Only send the flag when it diverges from the daemon default (true) so a
+    // local-only reset never deletes the user's server-side chat history.
+    if !deleteBackend { payload["deleteBackend"] = false }
     return try await journalOperation(
       type: "journal_clear_turns",
       operation: "clear",

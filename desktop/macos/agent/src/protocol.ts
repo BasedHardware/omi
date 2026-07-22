@@ -363,6 +363,9 @@ export interface JournalClearTurnsMessage extends ProtocolEnvelope {
   externalRefKind: string;
   externalRefId: string;
   expectedGeneration: number;
+  // When false, purge the local journal only and leave server-side chat history
+  // intact (no backend delete). Defaults to true for the explicit user clear.
+  deleteBackend?: boolean;
 }
 
 export interface EnsureAgentSpawnJournalMessage extends ProtocolEnvelope {

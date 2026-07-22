@@ -5953,7 +5953,10 @@ class ChatProvider: ObservableObject {
   func clearDefaultJournalForOnboardingReset() async -> Bool {
     let surface = AgentSurfaceReference.mainChat(chatId: "default")
     AgentRuntimeStatusStore.shared.clear(surface: surface)
-    return await kernelTurnProjection.clear(surface: surface)
+    // Local-only: an onboarding re-walkthrough resets the local chat view but
+    // must never hard-delete the user's server-side chat history. The backend
+    // stays authoritative and rehydrates the thread via reconcile.
+    return await kernelTurnProjection.clear(surface: surface, deleteBackend: false)
   }
 
   /// Clear current session messages (delete and create new)
