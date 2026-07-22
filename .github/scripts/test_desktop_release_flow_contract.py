@@ -203,6 +203,45 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertNotIn("/v2/desktop/channels/promote", preflight)
         self.assertNotIn("stable", preflight.lower())
 
+    def test_beta_admission_control_is_manual_protected_and_beta_only(self) -> None:
+        admission = workflow("desktop_beta_admission_control.yml")
+        self.assertIn("workflow_dispatch:", admission)
+        for forbidden_trigger in ("\n  schedule:", "\n  push:", "\n  workflow_call:", "\n  workflow_run:"):
+            self.assertNotIn(forbidden_trigger, admission)
+        self.assertIn("permissions: {}", admission)
+        self.assertIn("environment: prod", admission)
+        self.assertIn("timeout-minutes: 5", admission)
+        self.assertIn("group: desktop-beta-promotion", admission)
+        self.assertIn("cancel-in-progress: false", admission)
+        self.assertIn("- enable", admission)
+        self.assertIn("- disable", admission)
+        self.assertIn("ENABLE BETA AUTOMATION", admission)
+        self.assertIn("DISABLE BETA AUTOMATION", admission)
+        validation = admission.index("      - name: Validate explicit Beta admission intent")
+        authentication = admission.index("      - name: Use the existing production Google identity")
+        mutation = admission.index("      - name: Change only the desktop Beta admission fence")
+        self.assertLess(validation, authentication)
+        self.assertLess(authentication, mutation)
+        self.assertIn("secrets.GCP_CREDENTIALS", admission)
+        self.assertIn("gcloud secrets versions access latest --secret=ADMIN_KEY", admission)
+        self.assertIn('[[ -n "$ADMIN_KEY" ]]', admission)
+        self.assertIn('echo "::add-mask::$ADMIN_KEY"', admission)
+        self.assertIn("unset ADMIN_KEY", admission)
+        self.assertEqual(admission.count("https://api.omi.me/v2/desktop/beta/admission"), 1)
+        self.assertIn("--request PUT", admission)
+        self.assertIn("'{promotion_enabled: $promotion_enabled}'", admission)
+        self.assertIn('keys == ["generation", "promotion_enabled"]', admission)
+        self.assertIn(".promotion_enabled == $expected", admission)
+        self.assertIn(".generation | type == \"number\"", admission)
+        for forbidden_authority in (
+            "BETA_PROMOTION_TOKEN",
+            "/v2/desktop/beta/breakglass",
+            "/v2/desktop/beta/promote-qualified",
+            "/v2/desktop/channels/promote",
+        ):
+            self.assertNotIn(forbidden_authority, admission)
+        self.assertNotIn("stable", admission.lower())
+
     def test_backend_release_vector_verifies_after_prod_traffic_shift(self) -> None:
         backend = workflow("gcp_backend.yml")
         shift = backend.index("      - name: Shift Cloud Run traffic to validated revisions")
