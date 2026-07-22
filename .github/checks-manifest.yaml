@@ -44,6 +44,11 @@ checks:
     triggers: [".github/schemas/desktop-release-evidence-v1.schema.json", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/scripts/test_desktop_release_doctor.py", ".github/workflows/desktop_release_doctor.yml"]
     lanes: ["local", "ci"]
     reason: "advisory desktop release evidence and drift report"
+  - id: agent-cloud-tests
+    command: ["bash", "desktop/macos/agent-cloud/scripts/run-tests.sh"]
+    triggers: ["desktop/macos/agent-cloud/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "agent-cloud researcher config and the WS streaming contract (delta streaming, subagent progress, no subagent text leak, interrupted partials) are guarded by hermetic vitest e2e against a scripted SDK"
   - id: desktop-beta-admission-firestore-contention
     command: ["bash", "backend/testing/desktop_beta_admission/run.sh"]
     triggers: ["backend/database/desktop_update_channels.py", "backend/testing/desktop_beta_admission/**", "package.json", "package-lock.json", ".github/checks-manifest.yaml"]

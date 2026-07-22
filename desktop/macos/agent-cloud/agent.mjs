@@ -1,6 +1,12 @@
 #!/usr/bin/env node
-import { query, tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
+// Controllable seam: the hermetic WS e2e substitutes a scripted SDK module
+// (tests/fixtures/fake-agent-sdk.mjs) so production stream handling is
+// exercised without a live model.
+const { query, tool, createSdkMcpServer } = await import(
+  process.env.OMI_AGENT_SDK_MODULE || "@anthropic-ai/claude-agent-sdk"
+);
 import { ALLOWED_TOOLS, buildAgentDefinitions } from "./query-config.mjs";
+import { subagentClientEvents } from "./stream-routing.mjs";
 import Database from "better-sqlite3";
 import { z } from "zod";
 import { dirname, join } from "path";
@@ -580,6 +586,7 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
     systemPrompt: systemPrompt || defaultSystemPrompt,
     allowedTools: ALLOWED_TOOLS,
     agents: agentDefinitions ?? undefined,
+    includePartialMessages: true,
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
     maxTurns: undefined,
@@ -602,6 +609,13 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
 
   for await (const message of q) {
     if (abortController.signal.aborted) break;
+
+    // Subagent-origin messages: surface tool starts as progress, never their text.
+    const subEvents = subagentClientEvents(message);
+    if (subEvents) {
+      for (const e of subEvents) send(e);
+      continue;
+    }
 
     switch (message.type) {
       case "system":
@@ -696,6 +710,7 @@ function startPersistentSession(send, log) {
     systemPrompt: defaultSystemPrompt,
     allowedTools: ALLOWED_TOOLS,
     agents: agentDefinitions ?? undefined,
+    includePartialMessages: true,
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
     maxTurns: undefined,
@@ -735,11 +750,19 @@ function startPersistentSession(send, log) {
   let isPrewarmTurn = true; // First turn is prewarm, suppress output
   let turnStartedAt = null; // timestamp when query was pushed
   let firstEventSent = false; // tracks if we've sent the first stream event for this turn
+  let interruptRequested = false; // set when a stop/preemption cuts the current turn short
 
   // Background message processing loop — runs for entire WS lifetime
   const loopPromise = (async () => {
     try {
       for await (const message of q) {
+        // Subagent-origin messages: surface tool starts as progress, never their text.
+        const subEvents = subagentClientEvents(message);
+        if (subEvents) {
+          if (!isPrewarmTurn) for (const e of subEvents) send(e);
+          continue;
+        }
+
         switch (message.type) {
           case "system":
             if ("session_id" in message) {
@@ -816,7 +839,9 @@ function startPersistentSession(send, log) {
               isPrewarmTurn = false;
               fullText = "";
               pendingTools = [];
-              turnActive = false;
+              // Do NOT reset turnActive here: prewarm never sets it, and a query
+              // arriving before the prewarm result has already set it for its own
+              // turn — clobbering it makes that turn's stop a silent no-op.
               log("Prewarm turn completed, session ready for queries");
               break;
             }
@@ -832,7 +857,9 @@ function startPersistentSession(send, log) {
                   fullText += remaining;
                 }
               }
-              send({ type: "result", text: fullText, sessionId, costUsd });
+              // interrupted: the turn was cut short by a stop/preemption — the
+              // text is a partial answer, and clients must be able to say so.
+              send({ type: "result", text: fullText, sessionId, costUsd, interrupted: interruptRequested });
             } else {
               send({ type: "error", message: `Agent error (${message.subtype}): ${(message.errors || []).join(", ")}` });
             }
@@ -842,6 +869,7 @@ function startPersistentSession(send, log) {
             turnActive = false;
             turnStartedAt = null;
             firstEventSent = false;
+            interruptRequested = false;
             break;
           }
         }
@@ -862,6 +890,7 @@ function startPersistentSession(send, log) {
     isTurnActive: () => turnActive,
     setTurnActive: (v) => { turnActive = v; },
     startTurnTimer: () => { turnStartedAt = Date.now(); firstEventSent = false; },
+    markInterrupted: () => { interruptRequested = true; },
   };
 }
 
@@ -1387,6 +1416,7 @@ function startServer() {
           // If a turn is still active, interrupt first
           if (session.isTurnActive()) {
             log("Interrupting active turn for new query");
+            session.markInterrupted();
             try { await session.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
           }
 
@@ -1407,6 +1437,7 @@ function startServer() {
         case "stop": {
           log("Stop requested");
           if (session?.isTurnActive()) {
+            session.markInterrupted();
             try { await session.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
           }
           break;
@@ -1451,8 +1482,10 @@ function startServer() {
 
   // Start hot-reload version checker
   const UPDATE_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
-  checkAndApplyUpdate(log);
-  setInterval(() => checkAndApplyUpdate(log), UPDATE_INTERVAL_MS);
+  if (process.env.OMI_AGENT_DISABLE_UPDATES !== "1") {
+    checkAndApplyUpdate(log);
+    setInterval(() => checkAndApplyUpdate(log), UPDATE_INTERVAL_MS);
+  }
 }
 
 // --- Main ---
