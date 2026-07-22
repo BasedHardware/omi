@@ -1,0 +1,20 @@
+desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
+  s_77f2b8dfbc2e90::t_acad95fbba110e 39-46
+  s_77f2b8dfbc2e90::t_13e56eb8ad9df1 240-245
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "b090fd59bceabb4035bc6459ea62a474424a3800",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
