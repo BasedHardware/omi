@@ -568,6 +568,22 @@ export class KernelRuns extends KernelCore {
       });
     }
 
+    // Cascade to delegated children only (delegations parent_run_id link).
+    // Background agents spawned via spawn_background_agent have no delegation
+    // row and are deliberately NOT cancelled here: they are user-visible
+    // floating-bar agents designed to outlive the parent turn. Delegation
+    // state stays untouched — executeDelegationAsync settles it to
+    // "cancelled" when the child's execution resolves. Recursion covers
+    // grandchildren (parent_run_id edges form a tree); terminal children hit
+    // the accepted:false early-return above, making the cascade idempotent.
+    for (const delegation of this.readParentDelegationsForRun(runId)) {
+      try {
+        await this.cancelRun(delegation.childRunId, input);
+      } catch {
+        // Best-effort per child; the parent's cancel result stands.
+      }
+    }
+
     return {
       accepted: true,
       dispatchAttempted,
