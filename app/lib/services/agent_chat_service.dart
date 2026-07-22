@@ -35,6 +35,9 @@ class AgentChatEvent {
   final String text;
 
   AgentChatEvent(this.type, this.text);
+
+  static String textFrom(Map<String, dynamic> message) =>
+      message['text'] as String? ?? message['content'] as String? ?? message['message'] as String? ?? '';
 }
 
 class AgentChatService {
@@ -92,7 +95,7 @@ class AgentChatService {
           try {
             final msg = jsonDecode(data as String) as Map<String, dynamic>;
             final type = msg['type'] as String?;
-            final text = msg['text'] as String? ?? msg['content'] as String? ?? '';
+            final text = AgentChatEvent.textFrom(msg);
             final elapsed = _queryStopwatch?.elapsedMilliseconds ?? 0;
             agentLog(
               '[TIMING] Event: type=$type +${elapsed}ms | text=${text.length > 80 ? '${text.substring(0, 80)}...' : text}',
