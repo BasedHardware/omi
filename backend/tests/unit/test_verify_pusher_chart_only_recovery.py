@@ -92,12 +92,37 @@ def test_recovery_profile_allows_only_exact_image_and_redis_transition(recovery:
     ]
 
 
+def test_recovery_profile_ignores_api_server_deployment_defaults(recovery: SimpleNamespace):
+    """Live Deployments include controller-populated fields absent from helm template output."""
+    live = deployment(
+        "gcr.io/project/pusher:2ae7f78", {"secretKeyRef": {"name": "prod-omi-backend-secrets", "key": "REDIS_DB_HOST"}}
+    )
+    # Simulate API-server/controller defaults present in kubectl get -o json but
+    # absent from helm template output.
+    live["metadata"]["annotations"] = {"deployment.kubernetes.io/revision": "3"}
+    live["spec"]["revisionHistoryLimit"] = 10
+    live["spec"]["template"]["spec"]["restartPolicy"] = "Always"
+    live["spec"]["template"]["spec"]["dnsPolicy"] = "ClusterFirst"
+    live["spec"]["template"]["spec"]["schedulerName"] = "default-scheduler"
+    live["spec"]["template"]["spec"]["containers"][0]["terminationMessagePath"] = "/dev/termination-log"
+    live["spec"]["template"]["spec"]["containers"][0]["terminationMessagePolicy"] = "File"
+
+    rendered = deployment(f"gcr.io/project/pusher@{DIGEST}")
+    assert recovery.allowed_recovery_drift(live, rendered) == []
+
+
 def test_redis_validation_rejects_secret_and_configmap_errors(recovery: SimpleNamespace):
     assert recovery.validate_redis_source(deployment("x").copy(), "prod-omi-backend-config") == []
     secret = deployment("x", {"secretKeyRef": {"name": "prod-omi-backend-secrets", "key": "REDIS_DB_HOST"}})
     assert recovery.validate_redis_source(secret, "prod-omi-backend-config") == [
         "REDIS_DB_HOST must use the selected backend ConfigMap key"
     ]
+
+
+def test_redis_validation_accepts_post_repair_env_without_secret_key(recovery: SimpleNamespace):
+    """After Helm applies secretKeyRef: null, Kubernetes stores the env without the key at all."""
+    repaired = deployment("x", {"configMapKeyRef": {"name": "prod-omi-backend-config", "key": "REDIS_DB_HOST"}})
+    assert recovery.validate_redis_source(repaired, "prod-omi-backend-config") == []
 
 
 def test_target_and_readiness_guards_fail_closed(recovery: SimpleNamespace):

@@ -29,6 +29,25 @@ VOLATILE_METADATA = {
     "uid",
 }
 
+# Kubernetes API-server/controller-populated Deployment fields that are absent
+# from ``helm template`` output.  ``normalize()`` strips them so the drift
+# comparison does not spuriously fail on a healthy live Deployment.
+VOLATILE_DEPLOYMENT_ANNOTATIONS = {
+    "deployment.kubernetes.io/revision",
+}
+VOLATILE_DEPLOYMENT_SPEC = {
+    "revisionHistoryLimit",
+}
+VOLATILE_POD_TEMPLATE_SPEC = {
+    "restartPolicy",
+    "dnsPolicy",
+    "schedulerName",
+}
+VOLATILE_CONTAINER_FIELDS = {
+    "terminationMessagePath",
+    "terminationMessagePolicy",
+}
+
 
 def load_object(path: str) -> dict[str, Any]:
     """Load exactly one Kubernetes object without ever serializing its data."""
@@ -101,7 +120,7 @@ def validate_redis_source(deployment: dict[str, Any], configmap: str) -> list[st
     expected = {"name": configmap, "key": "REDIS_DB_HOST"}
     if not isinstance(value_from, dict) or value_from.get("configMapKeyRef") != expected:
         return ["REDIS_DB_HOST must use the selected backend ConfigMap key"]
-    if value_from.get("secretKeyRef", object()) is not None:
+    if value_from.get("secretKeyRef") is not None:
         return ["REDIS_DB_HOST must not retain a Secret source"]
     return []
 
@@ -157,7 +176,33 @@ def normalize(obj: dict[str, Any]) -> dict[str, Any]:
             "sessionAffinityConfig",
         ):
             spec.pop(key, None)
+    if result.get("kind") == "Deployment":
+        _strip_deployment_defaults(result)
     return remove_nulls(result)
+
+
+def _strip_deployment_defaults(deployment: dict[str, Any]) -> None:
+    """Remove API-server/controller-populated fields absent from helm template."""
+    metadata = deployment.get("metadata", {})
+    annotations = metadata.get("annotations")
+    if isinstance(annotations, dict):
+        for key in VOLATILE_DEPLOYMENT_ANNOTATIONS:
+            annotations.pop(key, None)
+        if not annotations:
+            metadata.pop("annotations", None)
+
+    spec = deployment.get("spec", {})
+    for key in VOLATILE_DEPLOYMENT_SPEC:
+        spec.pop(key, None)
+
+    template = spec.get("template", {})
+    template_spec = template.get("spec", {})
+    for key in VOLATILE_POD_TEMPLATE_SPEC:
+        template_spec.pop(key, None)
+
+    for container in template_spec.get("containers", []):
+        for key in VOLATILE_CONTAINER_FIELDS:
+            container.pop(key, None)
 
 
 def remove_nulls(value: Any) -> Any:
