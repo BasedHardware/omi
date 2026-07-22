@@ -101,7 +101,6 @@ jobs:
           set -euo pipefail
           desktop/macos/scripts/qualify-desktop-beta.sh \
             --automatic \
-            --no-promote \
             --github-actions-artifact \
             --signed-smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result.json \
             --candidate-gate-result /tmp/desktop-beta-qualification/candidate-gate.json \

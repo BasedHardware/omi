@@ -516,3 +516,18 @@ async def build_qualified_beta_manifest(
         return validate_manifest(manifest)
     except ValueError as exc:
         raise QualifiedBetaAdmissionError("candidate manifest does not satisfy the canonical contract") from exc
+
+
+# Public read-only evidence helpers shared by the emergency Beta evidence
+# builder. These aliases keep all GitHub parsing, digest, freshness, and
+# fail-closed behavior owned by this module instead of duplicating it.
+candidate_asset = _asset
+candidate_asset_digest = _asset_digest
+candidate_asset_url = _asset_url
+candidate_current_time = _current_time
+candidate_fail = _fail
+candidate_github_object = _github_object
+candidate_is_fresh = _is_fresh
+candidate_read_github = _read_github
+candidate_release_assets = _release_assets
+candidate_timestamp = _timestamp

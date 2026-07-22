@@ -482,6 +482,10 @@ def test_qualification_is_serialized_by_tag_and_retried_without_release_body_sta
     assert "group: desktop-beta-qualification-${{ inputs.release_tag }}" in qualification
     assert "cancel-in-progress: false" in qualification
     assert "for attempt in 1 2 3" in dispatch
+    assert "ERROR: qualification dispatch was not confirmed after bounded retry" in dispatch
+    assert dispatch.index("ERROR: qualification dispatch was not confirmed after bounded retry") < dispatch.index(
+        "exit 1"
+    )
     assert "desktop_qualification_dispatch.py" not in qualification
     assert "steps.candidate.outcome == 'success' && steps.qualify.outcome == 'success'" in qualification
 

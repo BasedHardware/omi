@@ -122,6 +122,15 @@ def test_beta_promotion_token_is_registered_for_only_the_two_beta_admission_rout
     ]
 
 
+def test_beta_breakglass_routes_reuse_existing_admin_key_authority():
+    manifest = inventory.load_manifest(inventory.DEFAULT_MANIFEST_PATH)
+    routes = [route for route in manifest['routes'] if route.get('path') == '/v2/desktop/beta/breakglass']
+    assert [(route.get('method'), route.get('path')) for route in routes] == [
+        ('POST', '/v2/desktop/beta/breakglass'),
+    ]
+    assert all(route['policy']['auth']['mechanisms'] == ['admin_key'] for route in routes)
+
+
 def test_dependency_evidence_captures_nested_depends_and_security():
     app = FastAPI()
     api_key_header = APIKeyHeader(name='Authorization')

@@ -23,12 +23,14 @@ from database.desktop_update_channels import (
     reserve_beta_candidate,
     set_beta_admission_enabled,
 )
+from database.desktop_beta_breakglass import emergency_rollout_beta, rollback_beta
 from database.desktop_update_policy import default_desktop_update_policy, get_desktop_update_policy
 from database.redis_db import delete_generic_cache
 from utils.desktop_update_resolver import live_cache_key, resolve_pointer_release
 from utils.executors import db_executor, run_blocking
 from utils.github_releases import get_omi_github_releases, extract_key_value_pairs
 from utils.qualified_beta_promotion import QualifiedBetaAdmissionError, build_qualified_beta_manifest
+from utils.beta_breakglass_evidence import build_emergency_beta_manifest
 from utils.metrics import (
     DESKTOP_UPDATE_FEED_VALID,
     DESKTOP_UPDATE_POINTER_MISMATCH_TOTAL,
@@ -88,6 +90,26 @@ class BetaAdmissionControlRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     promotion_enabled: StrictBool
+
+
+class BetaBreakglassRequest(BaseModel):
+    """Bound incident evidence and CAS inputs for one macOS Beta emergency."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    operation: Literal["rollback", "rollout"]
+    current_release_id: str = Field(pattern=r"^v[0-9]+\.[0-9]+(?:\.[0-9]+)?\+[1-9][0-9]*-macos$")
+    target_release_id: str = Field(pattern=r"^v[0-9]+\.[0-9]+(?:\.[0-9]+)?\+[1-9][0-9]*-macos$")
+    expected_generation: int = Field(ge=0)
+    actor: str = Field(min_length=1, max_length=128)
+    reason: str = Field(min_length=1, max_length=1000)
+    incident_url: str = Field(
+        pattern=r"^https://github\.com/BasedHardware/omi/(?:issues|discussions)/[1-9][0-9]*(?:[/?#].*)?$"
+    )
+    request_id: str = Field(
+        pattern=r"^https://github\.com/BasedHardware/omi/actions/runs/[1-9][0-9]*/attempts/[1-9][0-9]*$"
+    )
+    normal_path_unavailable: Optional[str] = Field(default=None, min_length=1, max_length=1000)
 
 
 class DesktopPreviewPublishRequest(BaseModel):
@@ -987,6 +1009,41 @@ async def promote_qualified_beta(
         "release_id": receipt["manifest"]["release_id"],
         "generation": receipt["pointer"]["generation"],
         "idempotent": receipt["idempotent"],
+    }
+
+
+@router.post("/v2/desktop/beta/breakglass")
+async def mutate_broken_beta(
+    request: BetaBreakglassRequest,
+    secret_key: str = Header(...),
+):
+    """Rollback or emergency-roll-forward only the hard-coded macOS Beta pointer."""
+    if not secret_key or secret_key != os.getenv("ADMIN_KEY"):
+        raise HTTPException(status_code=403, detail="You are not authorized to perform this action")
+    try:
+        if request.operation == "rollback":
+            receipt = await run_blocking(db_executor, rollback_beta, request.model_dump())
+        else:
+            if not request.normal_path_unavailable:
+                raise HTTPException(
+                    status_code=422, detail="Why normal qualification cannot recover in time is required"
+                )
+            manifest = await build_emergency_beta_manifest(request.target_release_id)
+            receipt = await run_blocking(db_executor, emergency_rollout_beta, request.model_dump(), manifest)
+    except QualifiedBetaAdmissionError:
+        logger.info("beta_breakglass operation=rollout result=evidence_rejected")
+        raise HTTPException(status_code=422, detail="Emergency Beta candidate rejected") from None
+    except ValueError as exc:
+        logger.info("beta_breakglass operation=%s result=conflict", request.operation)
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
+    logger.warning(
+        "beta_breakglass operation=%s request_id=%s actor=%s", request.operation, request.request_id, request.actor
+    )
+    return {
+        "operation": request.operation,
+        "release_id": receipt["pointer"]["release_id"],
+        "generation": receipt["pointer"]["generation"],
     }
 
 

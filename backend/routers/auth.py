@@ -411,9 +411,9 @@ async def auth_callback_google(
     # The original ``redirect_uri`` was validated by ``_validate_redirect_uri`` at
     # ``/authorize`` time and cannot be overridden by the caller here.
     return templates.TemplateResponse(
+        request,
         "auth_callback.html",
         {
-            "request": request,
             "code": auth_code,
             "state": session_data['state'] or '',
             "redirect_uri": app_redirect_uri,
@@ -512,9 +512,9 @@ async def auth_callback_apple_post(
     # The original ``redirect_uri`` was validated by ``_validate_redirect_uri`` at
     # ``/authorize`` time and cannot be overridden by the caller here.
     return templates.TemplateResponse(
+        request,
         "auth_callback.html",
         {
-            "request": request,
             "code": auth_code,
             "state": session_data['state'] or '',
             "redirect_uri": app_redirect_uri,

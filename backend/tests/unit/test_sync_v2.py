@@ -1514,6 +1514,34 @@ class TestAsyncCoordinatorBehavioral:
         finally:
             self._cleanup(stubs['saved_modules'])
 
+    def test_merged_reprocess_fence_isolated_to_its_conversation(self, fenced_worker_module):
+        """One replaced merge target must not supersede its sibling conversations."""
+        _module, stubs = fenced_worker_module
+        pipeline = stubs['pipeline']
+
+        class ConversationPersistenceFenced(RuntimeError):
+            pass
+
+        pipeline.SyncConversationPersistenceFenced = ConversationPersistenceFenced
+        pipeline.logger = MagicMock()
+        pipeline._reprocess_conversation_after_update = MagicMock(
+            side_effect=[ConversationPersistenceFenced('conversation replaced'), None]
+        )
+        response = {'_merged': {'replaced-conversation': 'en', 'current-conversation': 'fr'}}
+
+        pipeline._reprocess_merged_conversations('uid', response)
+
+        assert response == {}
+        assert pipeline._reprocess_conversation_after_update.call_args_list == [
+            unittest.mock.call('uid', 'replaced-conversation', 'en'),
+            unittest.mock.call('uid', 'current-conversation', 'fr'),
+        ]
+        pipeline.logger.info.assert_called_once_with(
+            'event=sync_conversation_reprocess outcome=fenced conversation_id=%s',
+            'replaced-conversation',
+        )
+        pipeline.logger.error.assert_not_called()
+
     @pytest.mark.asyncio
     async def test_durable_completion_offloads_epoch_and_terminal_metric(self, fenced_worker_module):
         """Redis-backed fencing and telemetry never run on the async coordinator loop."""

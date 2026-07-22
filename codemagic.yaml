@@ -1982,7 +1982,7 @@ workflows:
               exit 1
             fi
             URL_SCHEME="omi-computer"
-            DMG_PATH="$BUILD_DIR/$APP_NAME.dmg"
+            DMG_PATH="$BUILD_DIR/omi.dmg"
             SPARKLE_ZIP_PATH="$BUILD_DIR/Omi.zip"
           fi
           echo "VERSION=$VERSION" >> $CM_ENV
@@ -2856,7 +2856,8 @@ workflows:
               sleep "$((attempt * 2))"
             fi
           done
-          echo "WARNING: qualification dispatch was not confirmed after bounded retry; candidate remains non-live."
+          echo "ERROR: qualification dispatch was not confirmed after bounded retry; candidate remains non-live." >&2
+          exit 1
 
     artifacts:
       - build/*.app

@@ -228,7 +228,7 @@ struct DashboardPage: View {
   /// knows-list alongside tasks and asks, not just on the Insights page.
   @ObservedObject private var insightStorage = InsightStorage.shared
   @State private var dismissedKnowsTaskIDs: Set<String> = []
-  @State private var didAutoOpenChatForHistory = false
+  @State private var homeHistoryAutoOpenPolicy = HomeStageHistoryAutoOpenPolicy()
   @Binding var selectedIndex: Int
   @State private var citedConversation: ServerConversation? = nil
   @State private var selectedCatalogApp: OmiApp?
@@ -1324,6 +1324,7 @@ struct DashboardPage: View {
 
   private func closeHomeStagePanel() {
     homeAskFieldFocused = false
+    homeHistoryAutoOpenPolicy.suppressAutoOpenForExplicitHubClose()
     OmiMotion.withGated(Self.homeStageAnimation) {
       homeMode = .hub
     }
@@ -2186,7 +2187,7 @@ private enum HomeDestinationProminence {
   case quiet
 }
 
-private enum HomeStageMode: Equatable {
+enum HomeStageMode: Equatable {
   case hub
   case chat
   case connect
