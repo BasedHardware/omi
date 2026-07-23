@@ -440,8 +440,15 @@ checks:
     triggers: [".github/workflows/desktop_retry_beta_qualification.yml", ".github/scripts/desktop_beta_qualification_retry.py", ".github/scripts/test_desktop_beta_qualification_retry.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "SCA-49 bounded automatic retry of transient failed/cancelled Beta qualification must stay tag-bound, exact-SHA, bounded, and never re-dispatch in-progress/successful runs"
+  - id: guardrail-pulse-tests
+    command: ["python3", ".github/scripts/test_guardrail_pulse.py"]
+    triggers: [".github/scripts/guardrail_pulse.py", ".github/scripts/test_guardrail_pulse.py", ".github/workflows/guardrail-baseline-pulse.yml", ".github/guardrail-pulse-history.jsonl", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#9454 weekly baseline health pulse parsing, JSONL record, and 30-day staleness detection"
 
 exempt:
+  - path: ".github/scripts/guardrail_pulse.py"
+    reason: "informational weekly baseline health pulse (#9454); unit tests gate via guardrail-pulse-tests, schedule owns --record"
   - path: ".github/scripts/check-desktop-auto-beta-candidate.py"
     reason: "release pipeline check requires published candidate artifacts and workflow inputs"
   - path: ".github/scripts/check-desktop-prod-promotion-policy.py"

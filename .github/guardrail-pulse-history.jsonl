@@ -1,0 +1,1 @@
+{"date": "2026-07-23", "metrics": {"brand_ui_purple": {"baseline": 1776, "count": 1776}, "deferred_work_markers": {"baseline": 837, "count": 837}, "lifecycle_unlabeled_scripts": {"baseline": 17, "count": 17}, "mapless_packages": {"baseline": 6, "count": 3}, "union_return_isinstance": {"baseline": 0, "count": 0}, "version_prefixed_files": {"baseline": 42, "count": 42}}}
