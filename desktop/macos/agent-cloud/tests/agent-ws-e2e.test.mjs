@@ -256,6 +256,49 @@ describe("agent-cloud WS contract (e2e)", () => {
     expect(result.text).toContain("what is my project"); // the raw prompt rides after the seed
   }, 30000);
 
+  it("acks a failed prewarm instead of hanging when the SDK dies before a session id", async () => {
+    // Own server: the SDK stream throws before emitting session_id. Before the
+    // fix, sessionIdReady never resolved, so the prewarm `.then()` never fired
+    // and no prewarm_ack was ever sent — the client hung. Now the loop catch
+    // resolves sessionIdReady, so prewarm acks failure within the timeout.
+    const localTemp = mkdtempSync(join(tmpdir(), "omi-agent-cloud-preid-"));
+    const dbPath = join(localTemp, "omi.db");
+    new Database(dbPath).close();
+    const p = await freePort();
+    const proc = spawn(process.execPath, [join(here, "../agent.mjs"), "--serve"], {
+      env: {
+        ...process.env,
+        PORT: String(p),
+        DB_PATH: dbPath,
+        AUTH_TOKEN: TOKEN,
+        OMI_AGENT_SDK_MODULE: join(here, "fixtures/fake-agent-sdk.mjs"),
+        OMI_AGENT_DISABLE_UPDATES: "1",
+        OMI_FAKE_SDK_CRASH_BEFORE_ID: "1",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    try {
+      await waitForServer(p);
+      const ws = new WebSocket(`ws://127.0.0.1:${p}/ws?token=${TOKEN}`);
+      await new Promise((resolve, reject) => {
+        ws.on("open", resolve);
+        ws.on("error", reject);
+      });
+      const ack = await new Promise((resolve) => {
+        ws.on("message", (data) => {
+          const msg = JSON.parse(data.toString());
+          if (msg.type === "prewarm_ack") resolve(msg);
+        });
+        ws.send(JSON.stringify({ type: "prewarm" }));
+      });
+      ws.close();
+      expect(ack.success).toBe(false);
+    } finally {
+      proc.kill();
+      rmSync(localTemp, { recursive: true, force: true });
+    }
+  }, 20000);
+
   it("emits a bounded string category for SDK failures", async () => {
     const ws = await connect();
     const done = collectUntilResult(ws);
