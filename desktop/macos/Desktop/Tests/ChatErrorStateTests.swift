@@ -238,6 +238,24 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertFalse(BridgeError.agentError("Anthropic provider unauthorized").isSessionAuthenticationFailure)
   }
 
+  // T4: provider auth_required must not present the Pro upgrade sheet.
+  func testAuthRequiredHandlerDoesNotWireProSheet() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+    let range = source.range(of: "func handleClaudeAuthRequired")
+    XCTAssertNotNil(range)
+    let snippet = String(source[range!.lowerBound...]).prefix(900)
+    XCTAssertFalse(snippet.contains("isClaudeAuthRequired = true"))
+    XCTAssertFalse(snippet.contains("startClaudeAuth()"))
+  }
+
+  func testStartClaudeAuthKeepsUserClaudeGuard() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+    let range = source.range(of: "func startClaudeAuth()")
+    XCTAssertNotNil(range)
+    let snippet = String(source[range!.lowerBound...]).prefix(300)
+    XCTAssertTrue(snippet.contains("guard isUserClaudeMode else { return }"))
+  }
+
   func testEnsureBridgeStartedMapsAuthMissingToAuthRequired() throws {
     let source = try sourceFile("Providers/ChatProvider.swift")
     XCTAssertTrue(source.contains("ChatErrorState.from(bridgeError)"))

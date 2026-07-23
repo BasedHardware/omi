@@ -21,7 +21,7 @@
  * 1. Create Unix socket server for omi-tools relay
  * 2. Spawn claude-code-acp as subprocess (JSON-RPC over stdio)
  * 3. Initialize ACP connection
- * 4. Handle auth if required (forward to Swift, wait for user action)
+ * 4. Handle auth if required (forward to Swift; never await OAuth inside a query/run)
  * 5. On query: reuse or create session, send prompt, translate notifications → JSON-lines
  * 6. On interrupt: cancel the session
  */
@@ -80,7 +80,7 @@ import {
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import { isProductionAdapterId, type PromptBlock, type RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
-import { AcpError, AcpRuntimeAdapter, isRecoverableAcpAuthError } from "./adapters/acp.js";
+import { AcpError, AcpRuntimeAdapter, isAcpProviderAuthFailure } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
 import { nextJournalPumpDelayMs } from "./runtime/journal-pump-backoff.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
@@ -157,6 +157,7 @@ import type {
   ConversationTurnOrigin,
   ConversationTurnStatus,
 } from "./runtime/types.js";
+import { createStdoutLineSender } from "./stdout-line-sender.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -174,12 +175,30 @@ const omiToolsStdioScript = join(__dirname, "omi-tools-stdio.js");
 
 // --- Helpers ---
 
-function send(msg: OutboundMessageDraft): void {
+function logErr(msg: string): void {
+  // Wrap to swallow EPIPE/ERR_STREAM_DESTROYED so a closed parent pipe
+  // doesn't bubble out as an uncaughtException and re-enter our handlers.
   try {
-    process.stdout.write(JSON.stringify(ensureOutboundProtocolVersion(msg)) + "\n");
-  } catch (err) {
+    process.stderr.write(`[agent] ${msg}\n`);
+  } catch {
+    // ignore — parent pipe is gone; we'll exit shortly anyway
+  }
+}
+
+// Queue stdout lines so a full parent pipe waits on `drain` instead of
+// blocking the event loop inside kernel subscribers / query completion.
+const writeStdoutLine = createStdoutLineSender(
+  (chunk) => process.stdout.write(chunk),
+  (listener) => {
+    process.stdout.once("drain", listener);
+  },
+  (err) => {
     logErr(`Failed to write to stdout: ${err}`);
   }
+);
+
+function send(msg: OutboundMessageDraft): void {
+  writeStdoutLine(JSON.stringify(ensureOutboundProtocolVersion(msg)) + "\n");
 }
 
 function runtimeErrorEnvelope(error: unknown): { message: string; failure: ReturnType<typeof failureFromError> } {
@@ -192,16 +211,6 @@ function runtimeErrorEnvelope(error: unknown): { message: string; failure: Retur
     userMessage: message,
   };
   return { message: failure.userMessage, failure };
-}
-
-function logErr(msg: string): void {
-  // Wrap to swallow EPIPE/ERR_STREAM_DESTROYED so a closed parent pipe
-  // doesn't bubble out as an uncaughtException and re-enter our handlers.
-  try {
-    process.stderr.write(`[agent] ${msg}\n`);
-  } catch {
-    // ignore — parent pipe is gone; we'll exit shortly anyway
-  }
 }
 
 function agentStateDir(): string {
@@ -943,6 +952,12 @@ async function restartAcpProcess(): Promise<void> {
  *
  * Idempotent: if a flow is already running, returns the same promise.
  */
+/** Notify Swift that provider auth is required without blocking the active turn. */
+function signalProviderAuthRequired(): void {
+  logErr("ACP provider auth required; signaling Swift without in-band OAuth");
+  send({ type: "auth_required", methods: authMethods });
+}
+
 async function startAuthFlow(): Promise<void> {
   if (activeAuthPromise) {
     logErr("Auth flow already in progress, waiting for it...");
@@ -1242,15 +1257,11 @@ async function main(): Promise<void> {
   logErr(`Omi artifact root: ${artifactStorage.rootDir}`);
   const recoverRunInput = (adapterId: string) => {
     if (adapterId !== "acp") return {};
-    let recoveries = 0;
     return {
-      maxAttempts: 3,
       recoverAfterError: async (error: unknown) => {
-        if (recoveries >= 2 || !isRecoverableAcpAuthError(error)) return false;
-        recoveries += 1;
-        logErr("ACP auth required during run; starting OAuth flow before retry");
-        await startAuthFlow();
-        return true;
+        if (!isAcpProviderAuthFailure(error)) return false;
+        signalProviderAuthRequired();
+        return false;
       },
     };
   };
@@ -1344,11 +1355,10 @@ async function main(): Promise<void> {
     log: logErr,
     defaultAdapterId,
     buildMcpServers,
-    isRecoverableError: (error, adapterId) => adapterId === "acp" && isRecoverableAcpAuthError(error),
+    isRecoverableError: (error, adapterId) => adapterId === "acp" && isAcpProviderAuthFailure(error),
     onRecoverableError: async (_error, adapterId) => {
       if (adapterId !== "acp") return;
-      logErr("ACP auth required during query; starting OAuth flow before retry");
-      await startAuthFlow();
+      signalProviderAuthRequired();
     },
     maxRecoverableRetries: 2,
     activeOwnerId: establishedOwnerId,

@@ -1,0 +1,4 @@
+{
+  "summary": "Prevent chat freezes when the agent stdout pipe backs up: Node queues JSONL lines on drain instead of blocking, and Swift keeps reading while the agent process is still alive.",
+  "release_note": true
+}

@@ -627,14 +627,13 @@ export class JsonlTransport {
     if (!this.isRecoverableError || !this.onRecoverableError || this.maxRecoverableRetries === 0) {
       return undefined;
     }
-    let recoveries = 0;
     return async (error) => {
-      if (recoveries >= this.maxRecoverableRetries || !this.isRecoverableError?.(error, adapterId)) {
+      if (!this.isRecoverableError?.(error, adapterId)) {
         return false;
       }
-      recoveries += 1;
       await this.onRecoverableError?.(error, adapterId);
-      return true;
+      // Provider auth is terminal for the active turn; OAuth must not block retries.
+      return false;
     };
   }
 }

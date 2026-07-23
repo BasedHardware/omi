@@ -2111,6 +2111,9 @@ enum BridgeError: LocalizedError {
     case .agentError(let message):
       return Self.isSessionAuthenticationFailureMessage(message)
     case .agentRuntimeFailure(let failure):
+      if failure.failureCode == .authentication {
+        return true
+      }
       return Self.isSessionAuthenticationFailureMessage(failure.displayMessage)
         || (failure.technicalMessage.map(Self.isSessionAuthenticationFailureMessage) ?? false)
     case .nodeNotFound, .bridgeScriptNotFound, .notRunning, .encodingError, .timeout,
