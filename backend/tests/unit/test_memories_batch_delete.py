@@ -328,3 +328,5 @@ class TestBatchDeleteRouteOrdering:
         delete_paths = [route.path for route in mem_mod.router.routes if 'DELETE' in getattr(route, 'methods', set())]
         assert '/v3/memories/batch' in delete_paths
         assert delete_paths.index('/v3/memories/batch') < delete_paths.index('/v3/memories/{memory_id}')
+
+# The atomic canonical regression above intentionally exercises read-before-write ordering.
