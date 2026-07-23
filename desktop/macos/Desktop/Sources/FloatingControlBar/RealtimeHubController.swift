@@ -671,27 +671,31 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Returns true if a failover was started. Only fires once per chain (primary →
   /// alternate); if the alternate also fails we stop and let PTT use the Claude cascade.
   @discardableResult
-  func failoverToAlternateProvider(reason: String = "other") -> Bool {
+  func failoverToAlternateProvider(reason: String = "other", mintAttemptId: String? = nil) -> Bool {
     guard fallbackProvider == nil else {
+      var exhaustedExtra: [String: Any] = ["user_visible": false]
+      if let mintAttemptId { exhaustedExtra["mint_attempt_id"] = mintAttemptId }
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "realtime_hub",
         from: effectiveProvider.rawValue,
         to: "cascade",
         reason: reason,
         outcome: .exhausted,
-        extra: ["user_visible": false])
+        extra: exhaustedExtra)
       return false  // already on the alternate → cascade
     }
     let primary = RealtimeHubSettings.shared.provider
     fallbackProvider = primary.alternate
     pendingFailoverReason = reason
+    var degradedExtra: [String: Any] = ["user_visible": false]
+    if let mintAttemptId { degradedExtra["mint_attempt_id"] = mintAttemptId }
     DesktopDiagnosticsManager.shared.recordFallback(
       area: "realtime_hub",
       from: primary.rawValue,
       to: primary.alternate.rawValue,
       reason: reason,
       outcome: .degraded,
-      extra: ["user_visible": false])
+      extra: degradedExtra)
     log(
       "RealtimeHub: \(primary.displayName) unavailable — failing over to \(primary.alternate.displayName)"
     )
@@ -714,7 +718,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   @discardableResult
   func failoverBargeInReplacement(
     from provider: RealtimeHubProvider,
-    reason: String
+    reason: String,
+    mintAttemptId: String? = nil
   ) -> Bool {
     guard fallbackProvider == nil,
       let pendingTurn = replacementAudioBuffer,
@@ -726,13 +731,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let alternate = provider.alternate
     fallbackProvider = alternate
     pendingFailoverReason = reason
+    var degradedExtra: [String: Any] = ["user_visible": false]
+    if let mintAttemptId { degradedExtra["mint_attempt_id"] = mintAttemptId }
     DesktopDiagnosticsManager.shared.recordFallback(
       area: "realtime_hub",
       from: provider.rawValue,
       to: alternate.rawValue,
       reason: reason,
       outcome: .degraded,
-      extra: ["user_visible": false])
+      extra: degradedExtra)
     log(
       "RealtimeHub: preserving barge-in turn while failing over "
         + "\(provider.displayName) → \(alternate.displayName)")
@@ -781,7 +788,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     _ error: RealtimeTokenMintError,
     provider providerParam: String,
     phase: String,
-    context: String
+    context: String,
+    mintAttemptId: String? = nil
   ) {
     CredentialHealthManager.shared.record(error.healthError, context: context)
     DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
@@ -792,7 +800,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       backendRoute: error.payload?.backendRoute,
       upstreamStatusCode: error.payload?.upstreamStatusCode,
       providerCode: error.payload?.code,
-      retryable: error.payload?.retryable)
+      retryable: error.payload?.retryable,
+      mintAttemptId: mintAttemptId)
   }
 
   /// PTT must distinguish a merely authenticated socket from a session that can

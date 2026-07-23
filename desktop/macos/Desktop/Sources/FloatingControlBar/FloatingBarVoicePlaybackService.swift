@@ -573,7 +573,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     outcome: DesktopFallbackOutcome
   ) {
     DesktopDiagnosticsManager.shared.recordFallback(
-      area: activePTTLease == nil ? "other" : "ptt_cascade",
+      area: activePTTLease == nil ? "tts_fallback" : "ptt_cascade",
       from: "openai_tts",
       to: to,
       reason: reason,
