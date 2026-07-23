@@ -566,13 +566,15 @@ final class ChatQueryTelemetryTests: XCTestCase {
     )
 
     XCTAssertTrue(attempt.fail(errorClass: .authentication))
-    guard case .failed(_, _, let errorClass, _, let watchdogFired) = events.last else {
+    guard let terminal = events.last,
+      case .failed(_, _, let errorClass, _, let watchdogFired) = terminal
+    else {
       return XCTFail("expected failed terminal event")
     }
     XCTAssertEqual(errorClass, .authentication)
     XCTAssertFalse(watchdogFired)
 
-    let payload = events.last!.analyticsPayload
+    let payload = terminal.analyticsPayload
     XCTAssertEqual(payload.properties["error_class"] as? String, "authentication")
     XCTAssertEqual(payload.properties["session_adapter_id"] as? String, "acp")
     XCTAssertEqual(payload.properties["harness"] as? String, "piMono")

@@ -241,18 +241,20 @@ final class ChatErrorStateTests: XCTestCase {
   // T4: provider auth_required must not present the Pro upgrade sheet.
   func testAuthRequiredHandlerDoesNotWireProSheet() throws {
     let source = try sourceFile("Providers/ChatProvider.swift")
-    let range = source.range(of: "func handleClaudeAuthRequired")
-    XCTAssertNotNil(range)
-    let snippet = String(source[range!.lowerBound...]).prefix(900)
+    guard let range = source.range(of: "func handleClaudeAuthRequired") else {
+      return XCTFail("missing handleClaudeAuthRequired")
+    }
+    let snippet = String(source[range.lowerBound...]).prefix(900)
     XCTAssertFalse(snippet.contains("isClaudeAuthRequired = true"))
     XCTAssertFalse(snippet.contains("startClaudeAuth()"))
   }
 
   func testStartClaudeAuthKeepsUserClaudeGuard() throws {
     let source = try sourceFile("Providers/ChatProvider.swift")
-    let range = source.range(of: "func startClaudeAuth()")
-    XCTAssertNotNil(range)
-    let snippet = String(source[range!.lowerBound...]).prefix(300)
+    guard let range = source.range(of: "func startClaudeAuth()") else {
+      return XCTFail("missing startClaudeAuth")
+    }
+    let snippet = String(source[range.lowerBound...]).prefix(300)
     XCTAssertTrue(snippet.contains("guard isUserClaudeMode else { return }"))
   }
 
