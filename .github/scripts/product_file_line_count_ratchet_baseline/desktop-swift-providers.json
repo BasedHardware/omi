@@ -1,6 +1,6 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6300,
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6280,
     "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 2861
   },
   "raise_justifications": {
