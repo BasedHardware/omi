@@ -360,9 +360,12 @@ def get_action_items(
         end_date=end_date,
         due_start_date=due_start_date,
         due_end_date=due_end_date,
-        limit=limit,
+        limit=limit + 1,
         offset=offset,
     )
+
+    has_more = len(action_items) > limit
+    action_items = action_items[:limit]
 
     for item in action_items:
         if item.get('is_locked', False):
@@ -370,21 +373,6 @@ def get_action_items(
             item['description'] = (description[:70] + '...') if len(description) > 70 else description
 
     response_items = _safe_action_item_responses(action_items, uid=uid)
-
-    has_more = len(action_items) == limit
-    if has_more:
-        next_batch = action_items_db.get_action_items(
-            uid=uid,
-            conversation_id=conversation_id,
-            completed=completed,
-            start_date=start_date,
-            end_date=end_date,
-            due_start_date=due_start_date,
-            due_end_date=due_end_date,
-            limit=1,
-            offset=offset + limit,
-        )
-        has_more = len(next_batch) > 0
 
     return {"action_items": response_items, "has_more": has_more}
 
