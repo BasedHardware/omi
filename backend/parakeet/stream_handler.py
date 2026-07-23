@@ -55,6 +55,7 @@ from transcribe import (
     _stream_model as _asr_model_raw,  # type: ignore[reportPrivateUsage,reportUnknownVariableType]
     INFERENCE_MODE as _INFERENCE_MODE,
     has_builtin_embedding,
+    report_gpu_inference_error,
     wav_bytes_to_waveform,
 )
 
@@ -141,7 +142,11 @@ def warmup_rnnt_decoder(sample_rate: int = 16000) -> None:
         decoder.decode_pcm(dummy_pcm, is_last_chunk=True)
         logger.info("RNNT warmup complete")
     except Exception as e:
-        logger.warning(f"RNNT warmup failed (non-fatal): {e}")
+        if report_gpu_inference_error(e):
+            logger.error("RNNT warmup hit a fatal CUDA error; GPU worker is unavailable")
+            raise
+        else:
+            logger.warning(f"RNNT warmup failed (non-fatal): {e}")
 
 
 class _NemoRNNTStreamingDecoder:
@@ -541,6 +546,9 @@ class StreamSession:
         try:
             await loop.run_in_executor(_asr_executor, self._drain_streaming_asr_sync, force, pad_partial)
         except Exception as e:
+            if report_gpu_inference_error(e):
+                logger.error("RNNT streaming decode hit a fatal CUDA error; closing the stream")
+                raise
             logger.warning(f"RNNT streaming decode failed, falling back to VAD utterance transcribe: {e}")
             self._streaming_decoder = None
             self._streaming_failed = True

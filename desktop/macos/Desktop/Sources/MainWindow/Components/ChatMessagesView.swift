@@ -138,6 +138,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Whether the initial history load for this conversation has been handled.
   /// Prevents repeated initial bottom settling on subsequent messages.count changes.
   @State private var initialRestoreHandled = false
+  /// The one deferred initial restore waits for the first transcript layout.
+  /// Geometry changes during that interval must not introduce additional
+  /// bottom-scroll commands, or saved history visibly flies through the view.
+  @State private var isInitialRestorePending = false
+  @State private var initialRestoreWorkItem: DispatchWorkItem?
 
   // MARK: - Prepend Preservation (Load Earlier Messages)
 
@@ -195,6 +200,13 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // MARK: - React to message count changes
     .onChange(of: messages.count) { oldCount, newCount in
       handleMessagesCountChange(oldCount: oldCount, newCount: newCount, proxy: proxy)
+    }
+    // A journal restore may be populated by background events while the
+    // loader is still collecting its canonical snapshot. Reveal it only after
+    // loading completes, then make one initial placement at the live edge.
+    .onChange(of: isLoadingInitial) { wasLoading, isLoading in
+      guard wasLoading, !isLoading, !messages.isEmpty else { return }
+      handleInitialRestore(proxy: proxy)
     }
     // MARK: - React to streaming text changes
     .onChange(of: messages.last?.text) { _, _ in
@@ -254,7 +266,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       }
     }
     .onAppear {
-      if !messages.isEmpty {
+      if !isLoadingInitial, !messages.isEmpty {
         handleInitialRestore(proxy: proxy)
       }
     }
@@ -272,6 +284,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// - New messages arriving while scrolled away (activity indicator)
   /// - Prepend detection (load earlier)
   private func handleMessagesCountChange(oldCount: Int, newCount: Int, proxy: ScrollViewProxy) {
+    // Saved journal rows are not live arrivals. The loading-complete observer
+    // above performs their one final placement after the snapshot is visible.
+    guard !isLoadingInitial else { return }
+
     if newCount > oldCount {
       // --- Initial restore: messages went from 0→N ---
       if oldCount == 0 && newCount > 0 {
@@ -295,6 +311,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   }
 
   private func handleLiveContentChange(proxy: ScrollViewProxy) {
+    guard !isLoadingInitial else { return }
+
     switch scrollMode {
     case .followingBottom:
       throttledScrollToBottom(proxy: proxy)
@@ -314,10 +332,18 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
     scrollMode = .followingBottom
     hasActivityBelow = false
-    scrollToBottom(proxy: proxy)
-    scheduleInitialScroll(proxy: proxy, delay: 0.05)
-    scheduleInitialScroll(proxy: proxy, delay: 0.18)
-    scheduleInitialScroll(proxy: proxy, delay: 0.45)
+    isInitialRestorePending = true
+
+    let work = DispatchWorkItem { [self] in
+      defer {
+        isInitialRestorePending = false
+        initialRestoreWorkItem = nil
+      }
+      guard scrollMode == .followingBottom, !userIsScrolling else { return }
+      scrollToBottom(proxy: proxy)
+    }
+    initialRestoreWorkItem = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
   }
 
   // MARK: - Local Send / Turn Anchoring
@@ -374,7 +400,15 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     guard size != lastScrollViewportSize else { return }
     lastScrollViewportSize = size
 
-    guard scrollMode == .followingBottom, !userIsScrolling, !messages.isEmpty else { return }
+    guard
+      !isLoadingInitial,
+      scrollMode == .followingBottom,
+      !userIsScrolling,
+      !isInitialRestorePending,
+      !messages.isEmpty
+    else {
+      return
+    }
     scrollToBottom(proxy: proxy)
     scheduleInitialScroll(proxy: proxy, delay: 0.08)
   }
@@ -415,6 +449,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     scrollThrottleWorkItem = nil
     userScrollEndWorkItem?.cancel()
     userScrollEndWorkItem = nil
+    initialRestoreWorkItem?.cancel()
+    initialRestoreWorkItem = nil
+    isInitialRestorePending = false
     for item in initialScrollWorkItems {
       item.cancel()
     }
@@ -449,7 +486,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
   @ViewBuilder
   private var messageContent: some View {
-    if isLoadingInitial && messages.isEmpty && sessionsLoadError == nil {
+    if isLoadingInitial && sessionsLoadError == nil {
       VStack(spacing: OmiSpacing.md) {
         ProgressView()
           .scaleEffect(0.8)

@@ -26,6 +26,13 @@ import 'package:omi/utils/wal_file_manager.dart';
 const _kBackendBusyErrorHint = 'background worker likely died';
 const _freshSyncCutoffSeconds = 6 * 60 * 60;
 
+/// Files per upload batch, the same for both lanes. The lanes exist to keep
+/// rate-limit domains separate — a backfill cooldown must not stall a freshly
+/// captured recording — not to throttle throughput. Draining a backlog a few
+/// files at a time made offline recovery needlessly slow; the backend caps part
+/// size (200 MB), not file count.
+const _syncUploadBatchLimit = 20;
+
 enum SyncJobTerminalPolicy { wait, acknowledge, retry }
 
 /// The shared WAL acknowledgement boundary for async sync jobs.
@@ -87,10 +94,9 @@ List<Wal> nextSyncUploadBatch(
   if (ordered.isEmpty) return const [];
   final lane = effectiveLane(ordered.first);
   final conversationId = ordered.first.conversationId;
-  final batchLimit = lane == SyncUploadLane.fresh ? 20 : 3;
   return ordered
       .where((wal) => effectiveLane(wal) == lane && wal.conversationId == conversationId)
-      .take(batchLimit)
+      .take(_syncUploadBatchLimit)
       .toList();
 }
 

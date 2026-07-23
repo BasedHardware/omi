@@ -1999,7 +1999,18 @@ class ChatProvider: ObservableObject {
 
     claudeAuthLaunchRequested = true
     log("ChatProvider: Opening validated Claude OAuth URL in browser")
+    AnalyticsManager.shared.claudeOAuthBrowserOpened(
+      harness: activeBridgeHarness,
+      bridgeMode: bridgeMode
+    )
     NSWorkspace.shared.open(url)
+  }
+
+  private static func providerAuthRequiredUserMessage(isUserClaudeMode: Bool) -> String {
+    if isUserClaudeMode {
+      return "Claude sign-in is required. Reconnect Claude, then try again."
+    }
+    return "This chat uses Claude and needs sign-in. Start a new chat with Omi AI or reconnect Claude in Settings."
   }
 
   private func handleClaudeAuthRequired(methods: [[String: Any]], authUrl: String?) {
@@ -2012,14 +2023,26 @@ class ChatProvider: ObservableObject {
     }
     claudeAuthMethods = methods
     claudeAuthUrl = authUrl
-    isClaudeAuthRequired = true
-    startClaudeAuth()
+    // Provider auth is distinct from the Pro upgrade sheet.
+    isClaudeAuthRequired = false
+
+    let sessionAdapterId = activeChatTelemetryAttempt?.attempt.resolvedSessionAdapterId
+    AnalyticsManager.shared.providerAuthRequired(
+      sessionAdapterId: sessionAdapterId,
+      harness: activeBridgeHarness,
+      bridgeMode: bridgeMode,
+      oauthUrlValid: Self.validatedClaudeOAuthURL(authUrl) != nil
+    )
   }
 
   private func handleClaudeAuthSuccess() {
     isClaudeAuthRequired = false
     claudeAuthLaunchRequested = false
     claudeAuthUrl = nil
+    AnalyticsManager.shared.claudeOAuthCallbackReceived(
+      harness: activeBridgeHarness,
+      bridgeMode: bridgeMode
+    )
     checkClaudeConnectionStatus()
   }
 
@@ -3320,52 +3343,6 @@ class ChatProvider: ObservableObject {
     return merged
   }
 
-  func projectJournalTurn(_ turn: KernelJournalTurn) {
-    let expected = mainChatSurfaceReference()
-    let voiceCompanion = expected.realtimeVoiceCompanion()
-    let isCanonicalChatSurface =
-      turn.surfaceKind == expected.surfaceKind
-      || turn.surfaceKind == voiceCompanion.surfaceKind
-    guard isCanonicalChatSurface,
-      turn.externalRefKind == expected.externalRefKind,
-      turn.externalRefId == expected.externalRefId
-    else { return }
-    let projected = turn.chatMessage()
-    for block in projected.contentBlocks {
-      guard case .agentSpawn(_, let projectedPillID, _, _, _, _, _) = block,
-        let pillID = projectedPillID
-      else { continue }
-      AgentPillsManager.shared.bindProducingJournalSurface(
-        pillID: pillID,
-        surface: expected
-      )
-    }
-    let isEmptyTerminalPlaceholder =
-      turn.status == .failed
-      && projected.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      && projected.contentBlocks.isEmpty
-      && projected.resources.isEmpty
-    if isEmptyTerminalPlaceholder {
-      messages.removeAll { $0.id == projected.id }
-      return
-    }
-    if let index = messages.firstIndex(where: { $0.id == projected.id }) {
-      messages[index] = Self.carryingLocalOnlyFields(projected, from: messages[index])
-    } else if let continuityKey = projected.clientTurnId,
-      let index = messages.firstIndex(where: {
-        $0.clientTurnId == continuityKey && $0.sender == projected.sender
-      })
-    {
-      messages[index] = Self.carryingLocalOnlyFields(projected, from: messages[index])
-    } else {
-      messages.append(projected)
-    }
-    messages.sort {
-      if $0.createdAt == $1.createdAt { return $0.id < $1.id }
-      return $0.createdAt < $1.createdAt
-    }
-  }
-
   func resetJournalProjection(surface: AgentSurfaceReference) {
     guard surface == mainChatSurfaceReference() else { return }
     messages = []
@@ -3812,6 +3789,8 @@ class ChatProvider: ObservableObject {
     let accountingPolicy = ChatRunAccountingPolicy(
       pinnedAdapterID: pinnedSession.profile.adapterId
     )
+    telemetryAttempt.bindSessionAdapter(pinnedSession.profile.adapterId)
+    telemetryAttempt.bindBridgeModePreference(bridgeMode)
     let turnUsesOmiAccount = accountingPolicy.usesOmiAccountQuota
     if turnUsesOmiAccount, usageLimiter.serverQuota == nil {
       await usageLimiter.syncQuota()
@@ -3949,7 +3928,11 @@ class ChatProvider: ObservableObject {
             if toolStallAbortFired {
               telemetryAttempt.fail(errorClass: .toolStall, partialResponse: partialResponse)
             } else if watchdogFired {
-              telemetryAttempt.fail(errorClass: .timeout, partialResponse: partialResponse)
+              telemetryAttempt.fail(
+                errorClass: .timeout,
+                partialResponse: partialResponse,
+                watchdogFired: true
+              )
             } else {
               telemetryAttempt.finish(
                 stopReason: turnLifecycle.stopReason ?? self.stopReason(for: sendGen),
@@ -4542,7 +4525,8 @@ class ChatProvider: ObservableObject {
           } else if watchdogFiredBeforeResult {
             telemetryAttempt.fail(
               errorClass: .timeout,
-              partialResponse: hadPartialResponse
+              partialResponse: hadPartialResponse,
+              watchdogFired: true
             )
           } else {
             telemetryAttempt.finish(
@@ -4793,7 +4777,8 @@ class ChatProvider: ObservableObject {
           } else if watchdogFired {
             telemetryAttempt.fail(
               errorClass: .timeout,
-              partialResponse: hadPartialResponse
+              partialResponse: hadPartialResponse,
+              watchdogFired: true
             )
           } else {
             telemetryAttempt.finish(
@@ -4884,7 +4869,12 @@ class ChatProvider: ObservableObject {
         )
         switch telemetryDisposition {
         case .failed(let errorClass):
-          telemetryAttempt.fail(errorClass: errorClass, partialResponse: hadPartialResponse, detail: .from(error))
+          telemetryAttempt.fail(
+            errorClass: errorClass,
+            partialResponse: hadPartialResponse,
+            detail: .from(error),
+            watchdogFired: watchdogFired
+          )
           logError(
             "Failed to get AI response attempt_id=\(telemetryAttempt.context.attemptId) error_class=\(errorClass.rawValue)",
             error: error
@@ -4974,6 +4964,13 @@ class ChatProvider: ObservableObject {
         lastFailedPrompt = nil
         currentError = nil
         errorMessage = nil
+      } else if let bridgeError = error as? BridgeError,
+        case .agentRuntimeFailure(let failure) = bridgeError,
+        failure.failureCode == .authentication
+      {
+        currentError = nil
+        errorMessage = Self.providerAuthRequiredUserMessage(isUserClaudeMode: isUserClaudeMode)
+        lastFailedPrompt = trimmedText
       } else if let bridgeError = error as? BridgeError,
         let card = ChatErrorState.from(bridgeError)
       {
@@ -5953,7 +5950,10 @@ class ChatProvider: ObservableObject {
   func clearDefaultJournalForOnboardingReset() async -> Bool {
     let surface = AgentSurfaceReference.mainChat(chatId: "default")
     AgentRuntimeStatusStore.shared.clear(surface: surface)
-    return await kernelTurnProjection.clear(surface: surface)
+    // Local-only: an onboarding re-walkthrough resets the local chat view but
+    // must never hard-delete the user's server-side chat history. The backend
+    // stays authoritative and rehydrates the thread via reconcile.
+    return await kernelTurnProjection.clear(surface: surface, deleteBackend: false)
   }
 
   /// Clear current session messages (delete and create new)

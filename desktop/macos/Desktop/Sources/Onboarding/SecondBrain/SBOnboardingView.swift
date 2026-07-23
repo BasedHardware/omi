@@ -2,6 +2,10 @@ import AppKit
 import OmiTheme
 import SwiftUI
 
+enum SBOnboardingRepository {
+  static let url = URL(string: "https://github.com/BasedHardware/omi")!
+}
+
 /// The Second Brain conversational onboarding — a chat with Omi that streams
 /// word-by-word and performs real side-effects. Replaces the legacy wizard.
 struct SBOnboardingView: View {
@@ -58,6 +62,11 @@ struct SBOnboardingView: View {
       .padding(.top, 20).padding(.trailing, 24)
     }
     .onAppear { model.begin() }
+    // ChatGPT/Claude OAuth finishes in the browser — re-check the grants when
+    // the user comes back so their chip actually flips to "✓ on".
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      if model.step == .context { model.refreshContextStates() }
+    }
     // Safety net: the `.shortcut` step suspends global hotkeys and nulls the main
     // menu (restored only via the advance/skip/complete buttons). If the view is
     // removed by any other path (e.g. auth flips to signed-out), restore them here
@@ -175,22 +184,29 @@ struct SBOnboardingView: View {
   private var promiseWidget: some View {
     VStack(alignment: .leading, spacing: 12) {
       VStack(spacing: 0) {
-        trustRow("OPEN", "Every line of me is on GitHub.")
+        trustRow("OPEN") {
+          HStack(spacing: 0) {
+            Text("Every line of me is on ")
+            Link("GitHub", destination: SBOnboardingRepository.url)
+              .underline()
+            Text(".")
+          }
+        }
         Divider().overlay(sb.ink(.w08))
-        trustRow("PRIVATE", "Your data is encrypted, and only yours.")
+        trustRow("PRIVATE") { Text("Your data is encrypted, and only yours.") }
         Divider().overlay(sb.ink(.w08))
-        trustRow("YOURS", "Pause me from the notch. Delete anything, forever.")
+        trustRow("YOURS") { Text("Pause me from the notch. Delete anything, forever.") }
       }
       .overlay(RoundedRectangle(cornerRadius: 13).stroke(sb.ink(.w1), lineWidth: 1))
       SBInkButton(title: "Set up Omi →") { model.answerPromise() }
     }
   }
 
-  private func trustRow(_ tag: String, _ text: String) -> some View {
+  private func trustRow<Content: View>(_ tag: String, @ViewBuilder content: () -> Content) -> some View {
     HStack(alignment: .top, spacing: 12) {
       Text(tag).geistMono(size: 11.5, weight: .medium).foregroundStyle(sb.ink(.w4)).frame(
         width: 52, alignment: .leading)
-      Text(text).geist(size: 14).foregroundStyle(sb.ink(.w85))
+      content().geist(size: 14).foregroundStyle(sb.ink(.w85))
       Spacer(minLength: 0)
     }
     .padding(.horizontal, 14).padding(.vertical, 12)
@@ -452,7 +468,21 @@ struct SBOnboardingView: View {
           .geist(size: 12.5).foregroundStyle(sb.ink(.w45))
           .fixedSize(horizontal: false, vertical: true)
       }
-      SBInkButton(title: "Continue") { model.answerScreenDemo() }
+      // Continue only appears once Omi has actually answered in the notch — before
+      // that, a quiet "Skip for now" so the user doesn't blow past the live demo.
+      Group {
+        if model.screenDemoDone {
+          SBInkButton(title: "Continue") { model.answerScreenDemo() }
+        } else {
+          Button {
+            model.answerScreenDemo()
+          } label: {
+            Text("Skip for now").geist(size: 13).foregroundStyle(sb.ink(.w35))
+          }
+          .buttonStyle(.plain)
+        }
+      }
+      .padding(.top, 6)
     }
     .frame(maxWidth: 380, alignment: .leading)
   }
@@ -538,6 +568,16 @@ struct SBOnboardingView: View {
 
   private var captureWidget: some View {
     VStack(spacing: 8) {
+      // The chosen open-Omi chord as keycap chips (e.g. ⌘ O), matching the ⌥ keycap
+      // on the demo step — instead of plain "⌘O" glyphs buried in the message copy.
+      if !model.summonTokens.isEmpty {
+        HStack(spacing: 5) {
+          ForEach(model.summonTokens, id: \.self) { tok in keycap(tok) }
+          Text("reaches me anytime").geist(size: 14).foregroundStyle(sb.ink(.w85))
+          Spacer(minLength: 0)
+        }
+        .padding(.bottom, 2)
+      }
       Button {
         model.captureContinuous()
       } label: {

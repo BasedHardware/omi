@@ -17,9 +17,9 @@ class MemoryManagementSheet extends StatelessWidget {
     return Consumer<MemoriesProvider>(
       builder: (context, provider, child) {
         return Container(
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             color: AppStyles.backgroundSecondary,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: SafeArea(
             child: Column(

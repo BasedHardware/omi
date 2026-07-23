@@ -4,6 +4,16 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: desktop-codemagic-qualification-lane-tests
+    command: ["python3", ".github/scripts/test_desktop_codemagic_qualification.py"]
+    triggers: [".github/scripts/desktop_codemagic_qualification.py", ".github/scripts/test_desktop_codemagic_qualification.py", ".github/workflows/desktop_qualify_beta.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the Codemagic qualification lane must only qualify a candidate whose result artifact binds to the exact requested tag and SHA (Jul 22 2026 single-runner qualification outage)"
+  - id: dev-harness-unit-tests
+    command: ["bash", "scripts/dev-harness/run-tests.sh"]
+    triggers: ["scripts/dev-harness/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the hermetic dev-harness stack backs release qualification; the Jul 22 2026 beta qualification outage added a docker/native typesense runtime that must stay behaviorally covered"
   - id: pre-push-final-pr-diff
     command: ["bash", "scripts/test-pre-push-diff-base.sh"]
     triggers: ["scripts/pre-push", "scripts/pre-push-diff-base", "scripts/test-pre-push-diff-base.sh", ".github/checks-manifest.yaml"]
@@ -73,9 +83,14 @@ checks:
     reason: "#9717: changelog tooling must preserve UTF-8 I/O and exempt only internal desktop release controls"
   - id: agents-md-lean
     command: ["python3", ".github/scripts/check_agents_md_lean.py"]
-    triggers: ["AGENTS.md", ".github/scripts/check_agents_md_lean.py"]
+    triggers: ["AGENTS.md", "**/AGENTS.md", ".github/scripts/check_agents_md_lean.py"]
     lanes: ["local", "ci"]
-    reason: "root AGENTS.md stays a lean index; detail lives in component guides"
+    reason: "every AGENTS.md is loaded into agent context; budgets ratchet down, never up"
+  - id: agent-doc-references
+    command: ["python3", ".github/scripts/check_agent_doc_references.py"]
+    triggers: ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "PRODUCT.md", "docs/agents/**", ".github/scripts/check_agent_doc_references.py"]
+    lanes: ["local", "ci"]
+    reason: "agents cannot tell a stale pointer from a live one; CLAUDE.md and the desktop/app guides had shipped dead paths"
   - id: diff-hygiene
     command: ["python3", ".github/scripts/check_diff_hygiene.py", "--changed-files", "{changed_files}", "--base", "{base}", "--head", "{head}"]
     triggers: ["all"]

@@ -97,7 +97,11 @@ def test_make_harness_targets_run_resolved_python_from_checkout_with_spaces(tmp_
     python.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$HARNESS_PYTHON_CALLS"\n', encoding="utf-8")
     python.chmod(python.stat().st_mode | stat.S_IXUSR)
 
-    env = os.environ | {"HARNESS_PYTHON_CALLS": str(calls)}
+    # Exercise the resolver's backend/.venv fallback, so clear any inherited
+    # PYTHON (e.g. `make preflight` exports it) exactly like the sibling tests.
+    env = os.environ.copy()
+    env.pop("PYTHON", None)
+    env["HARNESS_PYTHON_CALLS"] = str(calls)
     targets = (
         ("list-memory-scenarios", []),
         ("seed-memory-scenario", ["SCENARIO=sample"]),

@@ -453,6 +453,48 @@ import XCTest
         "success")
     }
 
+    @MainActor
+    func testPTTAttemptLifecycleSnapshotIsBoundedInDiagnosticsAttachment() throws {
+      // End-to-end: the recorder's default emit routes through the diagnostics
+      // manager, so the lifecycle event must land in the Sentry attachment with
+      // its bounded causal keys and no raw device identity.
+      let recorder = PTTAttemptLifecycleRecorder()
+      recorder.beginAttempt(mode: "hold", hubActive: true, micPermissionGranted: true)
+      recorder.captureStartRequested()
+      recorder.captureStartResolved(outcome: .failed, statusClass: .engineStartFailed)
+      recorder.noteInputRoute(class: .bluetooth, source: .override)
+      recorder.terminate(
+        disposition: .silentRejected,
+        source: "hub",
+        peak: 0,
+        rms: 0,
+        turnAudioSeconds: 1.2,
+        voicedAudioSeconds: nil,
+        isNearZero: true,
+        judgeable: true)
+
+      let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+      defer { try? FileManager.default.removeItem(at: url) }
+
+      let data = try Data(contentsOf: url)
+      let json = String(data: data, encoding: .utf8) ?? ""
+      let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+      let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+      let snapshot = try XCTUnwrap(
+        snapshots.first(where: { $0["event"] as? String == "ptt_audio_capture_lifecycle" }))
+
+      XCTAssertEqual(snapshot["failure_class"] as? String, "capture_never_operational")
+      XCTAssertEqual(snapshot["capture_start_outcome"] as? String, "failed")
+      XCTAssertEqual(snapshot["capture_start_status_class"] as? String, "engine_start_failed")
+      XCTAssertEqual(snapshot["input_route_class"] as? String, "bluetooth")
+      XCTAssertEqual(snapshot["input_route_source"] as? String, "override")
+      XCTAssertEqual(snapshot["turn_disposition"] as? String, "silent_rejected")
+      XCTAssertNotNil(snapshot["attempt_id"])
+      // Privacy: no raw device identity, hardware id, or error string leaks.
+      XCTAssertFalse(json.contains("engineStartFailed") || json.contains("OSStatus"))
+      XCTAssertNil(snapshot["device_description"])
+    }
+
     private func assertLatestHealthSnapshot(
       event: DesktopHealthEventName,
       contains expected: [String: Any] = [:],

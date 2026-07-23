@@ -302,7 +302,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         centerTitle: true,
         elevation: 0,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => Navigator.of(context).pop()),
-        actions: [IconButton(icon: FaIcon(FontAwesomeIcons.solidShareFromSquare), onPressed: _shareUsage)],
+        actions: [IconButton(icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare), onPressed: _shareUsage)],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.deepPurple,

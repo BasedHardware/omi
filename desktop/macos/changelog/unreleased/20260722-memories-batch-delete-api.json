@@ -1,0 +1,3 @@
+{
+  "change": "API client: memories now expose a batch delete endpoint (up to 100 ids per request); added to the generated desktop API client, not yet wired into desktop UI"
+}

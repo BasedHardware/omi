@@ -46,9 +46,11 @@ Swift desktop client
 - `context-snapshot.ts` owns versioned context source selection, admission, and
   rendering. Surface policy and tool capability fingerprints are distinct from
   the shared base-content version.
-- `conversation-journal.ts` is the sole durable conversation writer. Backend
-  synchronization and deletion use its owner-scoped outboxes; Swift performs
-  physical HTTP only and returns exact claim receipts. Clear advances the
+- `conversation-journal.ts` is the sole durable conversation writer.
+  `backend-turn-projection.ts` is the shared canonical backend payload/hash
+  projection used by normal writes and startup repair. Backend synchronization
+  and deletion use owner-scoped outboxes; Swift performs physical HTTP only and
+  returns exact claim receipts. Clear advances the
   journal generation, invalidates remote reconciliation, preserves only the
   identity of already-delivering POST claims, and gates both remote reads and
   new-generation POSTs until the backend DELETE is acknowledged.

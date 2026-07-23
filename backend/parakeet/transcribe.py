@@ -69,6 +69,15 @@ def set_gpu_worker(worker: Any) -> None:
     _gpu_worker = worker
 
 
+def report_gpu_inference_error(error: BaseException) -> bool:
+    if _gpu_worker is None:
+        return False
+    reporter: Any = getattr(_gpu_worker, "report_inference_error", None)
+    if reporter is None:
+        return False
+    return bool(reporter(error))
+
+
 def _load_nemo_model(model_name: str) -> Any:
     if nemo_asr is None:
         raise RuntimeError("nemo_toolkit[asr] is not installed")

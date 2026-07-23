@@ -11,7 +11,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 GITLINK_RELATIVE = Path("omiGlass/firmware/.pio/libdeps/seeed_xiao_esp32s3/libopus")
 PRECLEAN_NAME = "Remove stale uninitialized PlatformIO gitlink"
@@ -27,28 +26,67 @@ def codemagic() -> str:
 
 
 class DesktopReleaseFlowContractTests(unittest.TestCase):
+    def _qualification_jobs(self) -> dict[str, str]:
+        """Slice the qualification workflow into per-job text regions.
+
+        The workflow runs the same qualification contract in two lanes
+        (codemagic-lane orchestration plus the self-hosted qualify fallback),
+        so single-occurrence full-document searches are ambiguous.
+        """
+        qualification = workflow("desktop_qualify_beta.yml")
+        jobs_document = qualification.split("\njobs:\n", 1)[1]
+        headers = list(re.finditer(r"^  ([a-z][a-z0-9-]*):\n", jobs_document, re.MULTILINE))
+        self.assertTrue(headers)
+        jobs: dict[str, str] = {}
+        for index, match in enumerate(headers):
+            end = headers[index + 1].start() if index + 1 < len(headers) else len(jobs_document)
+            jobs[match.group(1)] = jobs_document[match.start() : end]
+        return jobs
+
+    FALLBACK_JOB_IDS = ("qualify-m1-studio", "qualify-m4-mini")
+
+    def _qualification_lane_jobs(self) -> tuple[str, ...]:
+        jobs = self._qualification_jobs()
+        self.assertIn("codemagic-lane", jobs)
+        for fallback in self.FALLBACK_JOB_IDS:
+            self.assertIn(fallback, jobs)
+        return (jobs["codemagic-lane"], *(jobs[fallback] for fallback in self.FALLBACK_JOB_IDS))
+
+    def _fallback_jobs(self) -> tuple[str, ...]:
+        return self._qualification_lane_jobs()[1:]
+
     def _qualification_identity_expressions(self) -> tuple[str, str]:
-        qualification = workflow("desktop_qualify_beta.yml")
-        candidate_step = qualification.split("      - name: Download and validate newest candidate evidence", 1)[1]
-        candidate_step = candidate_step.split("\n      - name:", 1)[0]
-        target = re.search(r"^\s*TARGET_SHA=\$\((.+)\)$", candidate_step, re.MULTILINE)
-        checkout = re.search(r"^\s*CHECKOUT_SHA=\$\((.+)\)$", candidate_step, re.MULTILINE)
-        self.assertIsNotNone(target)
-        self.assertIsNotNone(checkout)
-        return target.group(1), checkout.group(1)
+        expressions: list[tuple[str, str]] = []
+        for lane in self._qualification_lane_jobs():
+            candidate_step = lane.split("      - name: Download and validate newest candidate evidence", 1)[1]
+            candidate_step = candidate_step.split("\n      - name:", 1)[0]
+            target = re.search(r"^\s*TARGET_SHA=\$\((.+)\)$", candidate_step, re.MULTILINE)
+            checkout = re.search(r"^\s*CHECKOUT_SHA=\$\((.+)\)$", candidate_step, re.MULTILINE)
+            self.assertIsNotNone(target)
+            self.assertIsNotNone(checkout)
+            expressions.append((target.group(1), checkout.group(1)))
+        # Every lane must bind candidate identity with the exact same expressions.
+        for lane_expressions in expressions[1:]:
+            self.assertEqual(expressions[0], lane_expressions)
+        return expressions[0]
 
-    def _qualification_step(self, name: str) -> str:
-        qualification = workflow("desktop_qualify_beta.yml")
+    def _qualification_step(self, name: str, job: str | None = None) -> str:
+        qualify_job = self._fallback_jobs()[0] if job is None else job
         marker = f"      - name: {name}"
-        self.assertEqual(qualification.count(marker), 1)
-        return qualification.split(marker, 1)[1].split("\n      - name:", 1)[0]
+        self.assertEqual(qualify_job.count(marker), 1)
+        return qualify_job.split(marker, 1)[1].split("\n      - name:", 1)[0]
 
-    def _gitlink_cleanup_script(self, name: str) -> str:
-        script = self._qualification_step(name).split("        run: |\n", 1)[1]
-        return "\n".join(line[10:] if line.startswith("          ") else line for line in script.splitlines())
+    def _gitlink_cleanup_script(self, name: str, job: str | None = None) -> str:
+        script = self._qualification_step(name, job).split("        run: |\n", 1)[1]
+        dedented = "\n".join(line[10:] if line.startswith("          ") else line for line in script.splitlines())
+        return dedented.rstrip("\n")
 
     def _gitlink_cleanup_scripts(self) -> tuple[tuple[str, str], ...]:
-        return tuple((name, self._gitlink_cleanup_script(name)) for name in (PRECLEAN_NAME, POSTCLEAN_NAME))
+        return tuple(
+            (f"{job_id}:{name}", self._gitlink_cleanup_script(name, job))
+            for job_id, job in zip(self.FALLBACK_JOB_IDS, self._fallback_jobs())
+            for name in (PRECLEAN_NAME, POSTCLEAN_NAME)
+        )
 
     def _run_gitlink_cleanup(self, workspace: Path, script: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -113,7 +151,18 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         qualification = workflow("desktop_qualify_beta.yml")
         beta = workflow("desktop_promote_beta.yml")
         self.assertIn("schedule:", candidate)
-        self.assertIn("workflow_dispatch:\n  schedule:", candidate)
+        self.assertIn("workflow_dispatch:", candidate)
+        # Continuous deployment: auto-release fires on every macOS-affecting merge
+        # to main (push), with the schedule as a backstop. This stays a single
+        # candidate authority: every trigger runs the same fenced planner
+        # (quiet-window + one-active-release), and beta promotion keys off the
+        # qualification's workflow_dispatch event below, not this workflow's
+        # trigger. Chained triggers that could form a second authority remain
+        # forbidden.
+        self.assertIn("push:", candidate)
+        self.assertIn("branches: [main]", candidate)
+        self.assertNotIn("workflow_run:", candidate)
+        self.assertNotIn("workflow_call:", candidate)
         self.assertNotIn("uses: ./.github/workflows/desktop_promote_beta.yml", qualification)
         self.assertNotIn("promote-qualified-beta:", qualification)
         self.assertIn('workflows: ["Qualify Desktop Beta Candidate"]', beta)
@@ -129,37 +178,32 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertEqual(beta.count("/v2/desktop/beta/promote-qualified"), 1)
 
     def test_beta_qualification_workflow_uses_supported_exact_cli(self) -> None:
-        qualification = workflow("desktop_qualify_beta.yml")
-        qualification_script = (ROOT / "desktop/macos/scripts/qualify-desktop-beta.sh").read_text(
-            encoding="utf-8"
-        )
-        qualify_step_name = "      - name: Qualify exact candidate on hermetic stack"
-        qualify_step = qualification.split(qualify_step_name, 1)[1]
-        qualify_step = qualify_step.split("\n      - name:", 1)[0]
-        invoked_options = tuple(
-            re.findall(r"^\s+(--[a-z0-9-]+)(?:\s+[^\\]+)? \\$", qualify_step, re.MULTILINE)
-        )
+        qualification_script = (ROOT / "desktop/macos/scripts/qualify-desktop-beta.sh").read_text(encoding="utf-8")
         supported_options = set(re.findall(r"^    (--[a-z0-9-]+)\)$", qualification_script, re.MULTILINE))
-
-        self.assertEqual(
-            invoked_options,
-            (
-                "--automatic",
-                "--github-actions-artifact",
-                "--signed-smoke-result",
-                "--candidate-gate-result",
-            ),
-        )
-        self.assertTrue(set(invoked_options).issubset(supported_options))
-        self.assertNotIn("--no-promote", qualify_step)
+        for job_id, job in zip(self.FALLBACK_JOB_IDS, self._fallback_jobs()):
+            with self.subTest(job=job_id):
+                qualify_step = self._qualification_step("Qualify exact candidate on hermetic stack", job)
+                invoked_options = tuple(re.findall(r"^\s+(--[a-z0-9-]+)(?:\s+[^\\]+)? \\$", qualify_step, re.MULTILINE))
+                self.assertEqual(
+                    invoked_options,
+                    (
+                        "--automatic",
+                        "--github-actions-artifact",
+                        "--signed-smoke-result",
+                        "--candidate-gate-result",
+                    ),
+                )
+                self.assertTrue(set(invoked_options).issubset(supported_options))
+                self.assertNotIn("--no-promote", qualify_step)
 
     def test_beta_qualification_peels_every_compared_identity_to_a_commit(self) -> None:
         target_expression, checkout_expression = self._qualification_identity_expressions()
         self.assertEqual(target_expression, 'git rev-parse "$RELEASE_TAG^{commit}"')
         self.assertEqual(checkout_expression, 'git rev-parse "HEAD^{commit}"')
+        # Candidate validation plus evidence creation in each of the three lanes.
         self.assertEqual(
             workflow("desktop_qualify_beta.yml").count('TARGET_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")'),
-            2,
+            6,
         )
 
     def test_beta_qualification_accepts_annotated_tag_at_exact_checkout_commit(self) -> None:
@@ -169,27 +213,101 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self._assert_qualification_tag_identity(annotated=False)
 
     def test_beta_qualification_bounds_checkout_with_identical_exact_cleanup(self) -> None:
-        qualification = workflow("desktop_qualify_beta.yml")
-        checkout_name = "Checkout qualification controls"
-        attach_name = "Attach immutable qualification evidence to the candidate release"
-        self.assertLess(qualification.index(PRECLEAN_NAME), qualification.index(checkout_name))
-        self.assertLess(qualification.index(checkout_name), qualification.index(POSTCLEAN_NAME))
-        self.assertLess(qualification.index(attach_name), qualification.index(POSTCLEAN_NAME))
-        self.assertEqual(re.findall(r"^      - name: (.+)$", qualification, re.MULTILINE)[-1], POSTCLEAN_NAME)
+        for job_id, qualify_job in zip(self.FALLBACK_JOB_IDS, self._fallback_jobs()):
+            with self.subTest(job=job_id):
+                checkout_name = "Checkout qualification controls"
+                attach_name = "Attach immutable qualification evidence to the candidate release"
+                self.assertLess(qualify_job.index(PRECLEAN_NAME), qualify_job.index(checkout_name))
+                self.assertLess(qualify_job.index(checkout_name), qualify_job.index(POSTCLEAN_NAME))
+                self.assertLess(qualify_job.index(attach_name), qualify_job.index(POSTCLEAN_NAME))
+                self.assertEqual(re.findall(r"^      - name: (.+)$", qualify_job, re.MULTILINE)[-1], POSTCLEAN_NAME)
 
-        preclean_step = self._qualification_step(PRECLEAN_NAME)
-        postclean_step = self._qualification_step(POSTCLEAN_NAME)
-        self.assertNotIn("        if: always()", preclean_step)
-        self.assertIn("        if: always()", postclean_step)
-        self.assertNotIn("continue-on-error:", preclean_step + postclean_step)
+                preclean_step = self._qualification_step(PRECLEAN_NAME, qualify_job)
+                postclean_step = self._qualification_step(POSTCLEAN_NAME, qualify_job)
+                self.assertNotIn("        if: always()", preclean_step)
+                self.assertIn("        if: always()", postclean_step)
+                self.assertNotIn("continue-on-error:", preclean_step + postclean_step)
 
-        preclean_script = self._gitlink_cleanup_script(PRECLEAN_NAME)
-        postclean_script = self._gitlink_cleanup_script(POSTCLEAN_NAME)
-        self.assertEqual(preclean_script, postclean_script)
-        self.assertEqual(preclean_script.count(str(GITLINK_RELATIVE)), 1)
-        self.assertEqual(preclean_script.count('rmdir "$stale_gitlink"'), 1)
-        self.assertNotIn("rm -rf", preclean_script)
-        self.assertNotIn(".gitmodules", preclean_script)
+                preclean_script = self._gitlink_cleanup_script(PRECLEAN_NAME, qualify_job)
+                postclean_script = self._gitlink_cleanup_script(POSTCLEAN_NAME, qualify_job)
+                self.assertEqual(preclean_script, postclean_script)
+                self.assertEqual(preclean_script.count(str(GITLINK_RELATIVE)), 1)
+                self.assertEqual(preclean_script.count('rmdir "$stale_gitlink"'), 1)
+                self.assertNotIn("rm -rf", preclean_script)
+                self.assertNotIn(".gitmodules", preclean_script)
+
+    def test_beta_qualification_fallback_lanes_are_independent_machines_with_identical_steps(self) -> None:
+        jobs = self._qualification_jobs()
+        m1_job, m4_job = (jobs[job_id] for job_id in self.FALLBACK_JOB_IDS)
+
+        # Each fallback lane pins its own machine label on top of the shared
+        # qualification labels, so one sick-but-online machine cannot absorb
+        # the only fallback attempt.
+        self.assertIn("runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m1-studio]", m1_job)
+        self.assertIn("runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m4-mini]", m4_job)
+
+        # Lanes are serialized and each runs only when no earlier lane
+        # qualified. Runner gating fails OPEN: a lane is skipped only when the
+        # planner explicitly reported the runner offline ('!= false'), so a
+        # plan-fallbacks failure (e.g. token generation) cannot skip every
+        # self-hosted lane and re-create the single-point-of-failure outage.
+        self.assertIn("needs.codemagic-lane.outputs.qualified != 'true'", m1_job)
+        self.assertIn("needs.plan-fallbacks.outputs.m1_online != 'false'", m1_job)
+        self.assertNotIn("needs.plan-fallbacks.outputs.m1_online == 'true'", m1_job)
+        self.assertIn("needs.codemagic-lane.outputs.qualified != 'true'", m4_job)
+        self.assertIn("needs.qualify-m1-studio.outputs.qualified != 'true'", m4_job)
+        self.assertIn("needs.plan-fallbacks.outputs.m4_online != 'false'", m4_job)
+        self.assertNotIn("needs.plan-fallbacks.outputs.m4_online == 'true'", m4_job)
+
+        # Only the verdict job may fail the workflow run.
+        self.assertIn("continue-on-error: true", jobs["codemagic-lane"])
+        self.assertIn("continue-on-error: true", m1_job)
+        self.assertIn("continue-on-error: true", m4_job)
+        self.assertIn("verdict", jobs)
+        self.assertNotIn("continue-on-error:", jobs["verdict"])
+        self.assertIn("needs: [codemagic-lane, qualify-m1-studio, qualify-m4-mini]", jobs["verdict"])
+        for qualified_output in ("CM_QUALIFIED", "M1_QUALIFIED", "M4_QUALIFIED"):
+            self.assertIn(qualified_output, jobs["verdict"])
+
+        # The two machine lanes must stay byte-identical after their job
+        # headers: only labels, gating, and comments above `steps:` differ.
+        m1_steps = m1_job.split("    steps:\n", 1)[1].rstrip("\n")
+        m4_steps = m4_job.split("    steps:\n", 1)[1].rstrip("\n")
+        self.assertEqual(m1_steps, m4_steps)
+
+    def test_codemagic_lane_exports_only_a_read_scoped_token_to_external_ci(self) -> None:
+        """External Codemagic must never receive a release-write-capable token.
+
+        The codemagic-lane also uploads the immutable evidence with
+        `gh release upload`, so it holds a write-scoped token — but that token
+        must stay inside GitHub Actions. Every value handed to Codemagic
+        (QUALIFY_GH_TOKEN) must resolve to the read-scoped app token.
+        """
+        codemagic_job = self._qualification_jobs()["codemagic-lane"]
+
+        # Two distinct app tokens: read for downloads + external export, write
+        # only for the in-Actions release upload.
+        self.assertIn("id: app-token-read", codemagic_job)
+        self.assertIn("id: app-token-write", codemagic_job)
+        read_block = codemagic_job.split("id: app-token-read", 1)[1].split("\n      - name:", 1)[0]
+        write_block = codemagic_job.split("id: app-token-write", 1)[1].split("\n      - name:", 1)[0]
+        self.assertIn("permission-contents: read", read_block)
+        self.assertIn("permission-contents: write", write_block)
+
+        # Every token exported to Codemagic must be the read-scoped one, and the
+        # write-scoped token must never appear on a QUALIFY_GH_TOKEN line.
+        qualify_token_lines = [
+            line for line in codemagic_job.splitlines() if "QUALIFY_GH_TOKEN:" in line
+        ]
+        self.assertTrue(qualify_token_lines, "codemagic-lane must export QUALIFY_GH_TOKEN to Codemagic")
+        for line in qualify_token_lines:
+            self.assertIn("steps.app-token-read.outputs.token", line)
+            self.assertNotIn("app-token-write", line)
+
+        # The write token is used only immediately before a release upload.
+        self.assertIn("GH_TOKEN: ${{ steps.app-token-write.outputs.token }}", codemagic_job)
+        write_usage = codemagic_job.split("GH_TOKEN: ${{ steps.app-token-write.outputs.token }}", 1)[1]
+        self.assertIn("gh release upload", write_usage.split("\n      - name:", 1)[0])
 
     def test_beta_qualification_cleanup_accepts_missing_gitlink(self) -> None:
         for name, script in self._gitlink_cleanup_scripts():
@@ -298,7 +416,15 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             self.assertNotIn("beta-breakglass", hatch)
             self.assertIn("/v2/desktop/beta/breakglass", hatch)
             self.assertIn(operation, hatch)
-            for required in ("incident_url", "reason", "current_release_id", "target_release_id", "expected_generation", "github.run_id", "github.actor"):
+            for required in (
+                "incident_url",
+                "reason",
+                "current_release_id",
+                "target_release_id",
+                "expected_generation",
+                "github.run_id",
+                "github.actor",
+            ):
                 self.assertIn(required, hatch)
             self.assertNotIn("stable", hatch.lower().replace("macos-beta", ""))
         self.assertIn("normal_path_unavailable", rollout)

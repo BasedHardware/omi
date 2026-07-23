@@ -71,19 +71,21 @@ require_text 'python3 "$KEYVALUE_PY" update-qualified-beta'
 require_text 'derive_omi_app_config "$BUNDLE"' "$CORE_HARNESS"
 require_text 'wrong bundle on port' "$CORE_HARNESS"
 
-# Static timing contract: cold preparation has its own bounded 3600-second phase
-# and run.sh explicitly signals successful launch dispatch before the separate
-# 900-second bridge readiness phase starts. The combined bound remains 4500
-# seconds. This guards https://github.com/BasedHardware/omi/actions/runs/29904736566,
-# where Swift was still compiling at 1107/1182 units when the 1800-second
-# preparation phase expired.
-require_text 'DESKTOP_PREPARE_WAIT_SECS=3600'
+# Static timing contract: cold preparation has its own bounded phase (env-
+# overridable via OMI_QUALIFY_PREPARE_WAIT_SECS) and run.sh explicitly signals
+# successful launch dispatch before the separate 900-second bridge readiness
+# phase starts. Default preparation budget 5400s; combined bound 6300s.
+# History: 1800s (compiling stalled at 1107/1182, run 29904736566) → 3600s,
+# which STILL expired at 1139/1190 on a cold M1 self-hosted build (run
+# 29965341760), timing out every fresh tag (v0.12.99–v0.12.113) and leaving no
+# reusable .build for the warm retry. 5400s covers the observed ~75-min cold path.
+require_text 'DESKTOP_PREPARE_WAIT_SECS="${OMI_QUALIFY_PREPARE_WAIT_SECS:-5400}"'
 require_text 'BRIDGE_WAIT_SECS=900'
-prepare_wait_secs="$(sed -n 's/^DESKTOP_PREPARE_WAIT_SECS=//p' "$QUALIFIER")"
+prepare_wait_secs="$(sed -n 's/.*OMI_QUALIFY_PREPARE_WAIT_SECS:-\([0-9]*\)}.*/\1/p' "$QUALIFIER")"
 bridge_wait_secs="$(sed -n 's/^BRIDGE_WAIT_SECS=//p' "$QUALIFIER")"
-if [[ "$prepare_wait_secs" -ne 3600 || "$bridge_wait_secs" -ne 900 \
-  || $((prepare_wait_secs + bridge_wait_secs)) -ne 4500 ]]; then
-  echo "FAIL: qualification timing bounds must remain 3600s preparation + 900s bridge = 4500s total" >&2
+if [[ "$prepare_wait_secs" -ne 5400 || "$bridge_wait_secs" -ne 900 \
+  || $((prepare_wait_secs + bridge_wait_secs)) -ne 6300 ]]; then
+  echo "FAIL: qualification timing bounds must remain 5400s preparation + 900s bridge = 6300s total" >&2
   exit 1
 fi
 require_text 'OMI_DESKTOP_LAUNCH_SIGNAL_FILE="$LAUNCH_SIGNAL_FILE"'

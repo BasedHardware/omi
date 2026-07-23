@@ -638,7 +638,7 @@ class _SyncPageState extends State<SyncPage> {
       ),
       child: Row(
         children: [
-          FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.redAccent, size: 16),
+          const FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.redAccent, size: 16),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -853,7 +853,7 @@ class _SyncPageState extends State<SyncPage> {
               backgroundColor: const Color(0xFF0D0D0D),
               elevation: 0,
               leading: IconButton(
-                icon: Padding(
+                icon: const Padding(
                   padding: EdgeInsets.only(left: 2, top: 1),
                   child: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
                 ),

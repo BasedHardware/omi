@@ -453,6 +453,18 @@ export async function deleteMemory(id: string): Promise<void> {
 }
 
 /**
+ * Delete multiple memories in a single batch request (up to 100 per call).
+ * Replaces N concurrent DELETE /v3/memories/{id} calls that triggered 429 rate limits.
+ */
+export async function deleteMemoriesBatch(ids: string[]): Promise<void> {
+  await fetchWithAuth(`/v3/memories/batch`, {
+    method: 'DELETE',
+    body: JSON.stringify({ memory_ids: ids }),
+  });
+  invalidateCache(invalidationPatterns.memories);
+}
+
+/**
  * Review a memory (accept or reject)
  */
 export async function reviewMemory(id: string, accept: boolean): Promise<void> {

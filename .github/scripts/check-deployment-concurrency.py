@@ -60,7 +60,6 @@ LOCK_CONTRACTS = {
         "deploy-cloud-run-frontend-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
     "gcp_llm_gateway.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
-    "gcp_llm_gateway_auto_dev.yml": LockContract("deploy-backend-stack-development"),
     "gcp_memory_maintenance_job.yml": LockContract(
         "deploy-cloud-run-memory-maintenance-job-${{ github.event.inputs.environment }}"
     ),
@@ -493,6 +492,32 @@ def development_group(name: str, group: str) -> str:
     return DEVELOPMENT_GROUP_OVERRIDES.get(name, resolve_environment(group, "development"))
 
 
+def validate_automatic_backend_stack_lifecycle(workflow_text: dict[str, str]) -> list[str]:
+    """Keep the shared dev backend lock owned by one automatic lifecycle.
+
+    GitHub Actions retains only one pending run per concurrency group. A second
+    automatic writer can therefore evict the exact Release Eligibility SHA
+    admitted by gcp_backend_auto_dev.yml before either workflow has a job.
+    """
+
+    automatic_writers: list[str] = []
+    for name, text in workflow_text.items():
+        trigger = text.split("\njobs:", 1)[0]
+        if "group: deploy-backend-stack-development" not in trigger:
+            continue
+        if "workflow_run:" in trigger or "\n  push:" in trigger:
+            automatic_writers.append(name)
+    expected = ["gcp_backend_auto_dev.yml"]
+    return (
+        []
+        if sorted(automatic_writers) == expected
+        else [
+            "automatic development backend-stack deployment must be owned only by "
+            f"gcp_backend_auto_dev.yml, found {sorted(automatic_writers)!r}"
+        ]
+    )
+
+
 def validate_shared_families(groups: dict[str, str]) -> list[str]:
     errors: list[str] = []
 
@@ -500,7 +525,6 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         ("gcp_backend.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_firestore_indexes.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_backend_listen_helm.yml", "gcp_backend_auto_dev.yml"),
-        ("gcp_llm_gateway.yml", "gcp_llm_gateway_auto_dev.yml"),
         ("gcp_llm_gateway.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_memory_maintenance_job.yml", "gcp_memory_maintenance_job_auto_dev.yml"),
         ("gcp_backend_agent_proxy.yml", "gcp_backend_agent_proxy_auto_deploy.yml"),
@@ -542,6 +566,7 @@ def check_repository() -> list[str]:
         for path in WORKFLOWS.glob(pattern)
     }
     errors.extend(validate_firestore_schema_writers(workflow_text))
+    errors.extend(validate_automatic_backend_stack_lifecycle(workflow_text))
 
     detected = {name for name, text in workflow_text.items() if is_persistent_writer(text)}
     expected = set(LOCK_CONTRACTS) | set(RUN_SCOPED_EXEMPTIONS) | set(READ_ONLY_WORKFLOW_EXEMPTIONS)

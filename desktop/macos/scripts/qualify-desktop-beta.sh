@@ -119,7 +119,17 @@ LAUNCH_LOG=""
 LAUNCH_SIGNAL_FILE=""
 DESKTOP_LAUNCH_PID=""
 QUALIFICATION_SUCCESS=0
-DESKTOP_PREPARE_WAIT_SECS=3600
+# Cold, from-scratch rebuild of the exact tag compiles ~1190 SwiftPM modules
+# (FluidAudio, MarkdownUI, Firebase, ONNX, …) before the named bundle is even
+# packaged/signed/launched. On a self-hosted M1 that first cold build alone runs
+# ~65 min and, with packaging + install, dispatches the desktop launch at ~75 min
+# — past the old 3600s budget, so every fresh tag timed out at [~1139/1190]
+# compiling and left no reusable .build for the warm retry, stalling Beta
+# (v0.12.99–v0.12.113 all failed, self-hosted lane, `not dispatched within 3600s`).
+# 5400s (90 min) covers the observed cold path with headroom while staying within
+# the self-hosted job cap; warm same-SHA retry/prewarm still completes in a
+# fraction of this. Overridable per runner via OMI_QUALIFY_PREPARE_WAIT_SECS.
+DESKTOP_PREPARE_WAIT_SECS="${OMI_QUALIFY_PREPARE_WAIT_SECS:-5400}"
 BRIDGE_WAIT_SECS=900
 
 gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,isPrerelease,publishedAt,assets,body \
@@ -129,6 +139,44 @@ python3 "$KEYVALUE_PY" preflight-release /tmp/desktop-qualification-release.json
 
 SHA=$(git -C "$REPO_ROOT" rev-list -n1 "$RELEASE_TAG")
 WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"
+
+# Provision the tag-pinned backend venv so the hermetic stack resolves the
+# locked Python dependencies. The ephemeral Codemagic Mac has no backend venv
+# and no global python3 with backend deps, so this must succeed there — but a
+# freshly installed uv may not carry the exact pinned patch
+# (python-build-standalone lags), so fall back to the pinned minor version and
+# still sync the exact platform lock. Machines without uv keep the legacy
+# global-python3 resolution.
+provision_backend_venv() {
+  local worktree="$1"
+  local backend="$worktree/backend"
+  [[ -f "$backend/.python-version" ]] || { echo "no backend/.python-version; skipping venv provisioning"; return 0; }
+  local pinned minor lock
+  pinned="$(tr -d '[:space:]' < "$backend/.python-version")"
+  minor="${pinned%.*}"
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64 | Darwin-aarch64) lock="pylock.macos.toml" ;;
+    Darwin-x86_64 | Darwin-amd64) lock="pylock.macos-x86_64.toml" ;;
+    *) lock="pylock.toml" ;;
+  esac
+  # Preferred path: exact-patch parity with CI via the shared script.
+  if (cd "$worktree" && make setup-backend); then
+    return 0
+  fi
+  echo "make setup-backend failed (likely exact patch $pinned unavailable to this uv); falling back to minor $minor"
+  [[ -f "$backend/$lock" ]] || { echo "no $lock for this platform; cannot provision backend venv" >&2; return 1; }
+  (
+    cd "$backend"
+    uv venv --allow-existing --python "$minor" .venv
+    uv pip sync "$lock" --python .venv/bin/python
+  )
+}
+
+if command -v uv >/dev/null 2>&1; then
+  provision_backend_venv "$WORKTREE"
+else
+  echo "uv not found; dev-harness python resolves via global python3"
+fi
 
 LAUNCH_LOG="$WORKTREE/.qualification-desktop-launch.log"
 

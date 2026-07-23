@@ -572,7 +572,7 @@ class AnalyticsManager {
     }
     let diagnosticKeys = [
       "duration_ms", "error_class", "cancel_reason", "partial_response",
-      "surface", "harness", "runtime_surface",
+      "surface", "harness", "runtime_surface", "session_adapter_id", "watchdog_fired",
     ]
     let diagnostics = diagnosticKeys.compactMap { key -> String? in
       guard let value = payload.properties[key] else { return nil }
@@ -580,6 +580,57 @@ class AnalyticsManager {
     }.joined(separator: " ")
     log(
       "Chat telemetry event=\(payload.eventName) attempt_id=\(payload.properties["attempt_id"] ?? "missing") \(diagnostics)"
+    )
+  }
+
+  func providerAuthRequired(
+    sessionAdapterId: String?,
+    harness: String,
+    bridgeMode: String,
+    oauthUrlValid: Bool
+  ) {
+    guard !Self.isDevBuild else { return }
+    var props: [String: Any] = [
+      "harness": boundedAnalyticsIdentifier(harness),
+      "bridge_mode": boundedAnalyticsIdentifier(bridgeMode),
+      "oauth_url_valid": oauthUrlValid,
+    ]
+    if let sessionAdapterId {
+      props["session_adapter_id"] = boundedAnalyticsIdentifier(sessionAdapterId)
+    }
+    PostHogManager.shared.track("provider_auth_required", properties: props)
+  }
+
+  func claudeOAuthBrowserOpened(harness: String, bridgeMode: String) {
+    guard !Self.isDevBuild else { return }
+    PostHogManager.shared.track(
+      "claude_oauth_browser_opened",
+      properties: [
+        "harness": boundedAnalyticsIdentifier(harness),
+        "bridge_mode": boundedAnalyticsIdentifier(bridgeMode),
+      ]
+    )
+  }
+
+  func claudeOAuthCallbackTimeout(harness: String, bridgeMode: String) {
+    guard !Self.isDevBuild else { return }
+    PostHogManager.shared.track(
+      "claude_oauth_callback_timeout",
+      properties: [
+        "harness": boundedAnalyticsIdentifier(harness),
+        "bridge_mode": boundedAnalyticsIdentifier(bridgeMode),
+      ]
+    )
+  }
+
+  func claudeOAuthCallbackReceived(harness: String, bridgeMode: String) {
+    guard !Self.isDevBuild else { return }
+    PostHogManager.shared.track(
+      "claude_oauth_callback_received",
+      properties: [
+        "harness": boundedAnalyticsIdentifier(harness),
+        "bridge_mode": boundedAnalyticsIdentifier(bridgeMode),
+      ]
     )
   }
 
