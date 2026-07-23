@@ -519,6 +519,91 @@ import XCTest
       XCTAssertNil(snapshot["device_description"])
     }
 
+    // MARK: - Release-health telemetry contract (#10425)
+
+    @MainActor
+    func testPTTCommittedLifecycleRecordsSuccessDenominator() throws {
+      // Success (`failure_class = committed`) is part of the remote funnel so a
+      // release-health query has a success denominator, not only classified failures.
+      let snapshot = PTTAttemptLifecycleRecorder.Snapshot(
+        attemptId: "1", failureClass: .committed, captureStartOutcome: .accepted,
+        captureStartStatusClass: .ok, msToFirstAudioBucket: .lt100,
+        msToFirstUsableFrameBucket: .lt200, firstChunksEnergyBucket: .audible,
+        turnDisposition: .committed, inputRouteClass: .builtIn, inputRouteSource: .default,
+        routeChangedDuringAttempt: false, recoveryTriggered: false, recoveryAction: .none,
+        recoveryAttemptId: nil, recoveryOutcomeOfNextTurn: .none, mode: "hold", source: "hub",
+        hubActive: true, micPermissionGranted: true, turnAudioSeconds: 2.0,
+        voicedAudioSeconds: 1.5, peak: 1200, rms: 300, isNearZero: false, judgeable: true,
+        telemetrySchemaVersion: 2)
+      DesktopDiagnosticsManager.shared.recordPTTAttemptLifecycle(snapshot)
+      try assertLatestHealthSnapshot(
+        event: .pttAudioCaptureLifecycle,
+        contains: ["failure_class": "committed", "turn_disposition": "committed", "telemetry_schema_version": 2])
+    }
+
+    func testRealtimeMintPhaseBucketedAndCarriesOutcomeAndMintAttemptId() throws {
+      DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
+        provider: "openai", reason: "backend_transient", phase: "warm",
+        outcome: .degraded, mintAttemptId: "42")
+      try assertLatestHealthSnapshot(
+        event: .realtimeTokenMintFailed,
+        contains: ["provider": "openai", "phase": "warm", "outcome": "degraded", "mint_attempt_id": "42"])
+
+      // An unknown phase collapses to the closed set's `other` (warm-vs-active is bounded).
+      DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
+        provider: "gemini", reason: "provider_5xx", phase: "totally-new-thing")
+      try assertLatestHealthSnapshot(event: .realtimeTokenMintFailed, contains: ["phase": "other"])
+    }
+
+    func testRealtimeProviderCloseMarksExpectedLifecycle() throws {
+      DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
+        provider: "gemini",
+        category: RealtimeHubCloseCategory.expectedIdleTeardown.rawValue,
+        aliveFor: 180, activeTurn: false, authMode: .managed, failureClass: nil)
+      try assertLatestHealthSnapshot(
+        event: .realtimeProviderExpectedIdleTeardown,
+        contains: ["expected": true, "lifecycle_class": "expected"])
+
+      DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
+        provider: "openai", category: nil, aliveFor: 7, activeTurn: true,
+        authMode: .managed, failureClass: nil)
+      try assertLatestHealthSnapshot(
+        event: .realtimeProviderSessionError,
+        contains: ["expected": false, "lifecycle_class": "error"])
+    }
+
+    func testFallbackNamedAreasAreNotCollapsedToOther() throws {
+      for area in ["screen_capture", "memory_scope", "desktop_update", "tts_fallback", "task_workflow", "auth_storage"] {
+        DesktopDiagnosticsManager.shared.resetForTests()
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: area, from: "a", to: "b", reason: "capability_mismatch", outcome: .degraded)
+        try assertLatestHealthSnapshot(
+          event: .fallbackTriggered, contains: ["area": area, "outcome": "degraded"])
+      }
+    }
+
+    func testHealthEventsStripContentBearingKeysButKeepBoundedCousins() throws {
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "realtime_hub", from: "openai", to: "gemini", reason: "other", outcome: .recovered,
+        extra: [
+          "transcript": "the user said a secret",
+          "prompt": "secret prompt",
+          "audio": "base64-audio",
+          "response": "secret response",
+          "message": "free-form local error detail",
+          "transcript_length": 42,
+        ])
+      let snapshot = try latestSnapshot()
+      XCTAssertEqual(snapshot["event"] as? String, "fallback_triggered")
+      // Content-bearing keys are stripped at the single emit chokepoint (#10425 privacy).
+      XCTAssertNil(snapshot["transcript"])
+      XCTAssertNil(snapshot["prompt"])
+      XCTAssertNil(snapshot["audio"])
+      XCTAssertNil(snapshot["response"])
+      XCTAssertNil(snapshot["message"])
+      // The bounded cousin (a length, not content) survives.
+      XCTAssertEqual(snapshot["transcript_length"] as? Int, 42)
+    }
     private func assertLatestHealthSnapshot(
       event: DesktopHealthEventName,
       contains expected: [String: Any] = [:],
