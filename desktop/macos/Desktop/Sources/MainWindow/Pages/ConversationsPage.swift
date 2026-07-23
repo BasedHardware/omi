@@ -70,6 +70,9 @@ struct ConversationsPage: View {
   @State private var isMerging: Bool = false
   @State private var mergeError: String? = nil
 
+  // Full-screen live transcript overlay
+  @State private var isLiveTranscriptExpanded: Bool = false
+
   var body: some View {
     Group {
       if let selected = selectedConversation {
@@ -164,6 +167,7 @@ struct ConversationsPage: View {
       showMergeConfirmation = false
       isMerging = false
       mergeError = nil
+      isLiveTranscriptExpanded = false
     }
     .dismissableSheet(isPresented: $showCreateFolderSheet) {
       FolderFormSheet(folder: nil, onDismiss: { showCreateFolderSheet = false })
@@ -223,7 +227,8 @@ struct ConversationsPage: View {
 
   private var mainConversationsView: some View {
     VStack(spacing: 0) {
-      // Conversations header
+      // Fixed page header — title + actions stay pinned; everything below it
+      // (live transcript, search, filters, list) scrolls together as one.
       HStack {
         Text("Conversations")
           .scaledFont(size: OmiType.heading, weight: .semibold)
@@ -250,15 +255,96 @@ struct ConversationsPage: View {
       .padding(.top, OmiSpacing.lg)
       .padding(.bottom, OmiSpacing.md)
 
-      // Live transcript while recording — updates as it's spoken.
+      // The whole page below the header scrolls together. Floating action bars
+      // (load-more, merge) stay pinned to the bottom via the ZStack overlay.
+      ZStack(alignment: .bottom) {
+        scrollingBody
+        floatingActionBars
+      }
+    }
+    .overlay {
+      if isLiveTranscriptExpanded {
+        ConversationsLiveTranscriptFullScreen(
+          onCollapse: {
+            OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+              isLiveTranscriptExpanded = false
+            }
+          }
+        )
+        .transition(.opacity)
+      }
+    }
+    // Collapse the full-screen transcript if transcription stops while it's open.
+    .onChange(of: appState.isTranscribing) { _, isTranscribing in
+      if !isTranscribing {
+        isLiveTranscriptExpanded = false
+      }
+    }
+  }
+
+  /// Everything below the fixed header, rendered inside a single scroll so the
+  /// live transcript, search bar, filters and conversation list all scroll
+  /// together. When `embedded`, the parent owns the scroll and this renders bare.
+  @ViewBuilder private var scrollingBody: some View {
+    let content = VStack(spacing: 0) {
+      // Live transcript while recording — updates as it's spoken. Click to
+      // expand it full screen.
       if appState.isTranscribing {
-        ConversationsLiveTranscript()
-          .padding(.horizontal, OmiSpacing.xxl)
-          .padding(.bottom, OmiSpacing.md)
+        ConversationsLiveTranscript(
+          onExpand: {
+            OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+              isLiveTranscriptExpanded = true
+            }
+          }
+        )
+        .padding(.horizontal, OmiSpacing.xxl)
+        .padding(.top, OmiSpacing.md)
+        .padding(.bottom, OmiSpacing.md)
       }
 
-      // Conversation list
       conversationListSection
+    }
+
+    if embedded {
+      content
+    } else {
+      // minHeight = viewport keeps short/empty/loading states filling the
+      // window (so their `maxHeight: .infinity` centering still works) while
+      // taller content scrolls normally.
+      GeometryReader { geo in
+        ScrollView {
+          content
+            .frame(maxWidth: .infinity, minHeight: geo.size.height, alignment: .top)
+        }
+        .refreshable {
+          await appState.refreshConversations()
+        }
+      }
+    }
+  }
+
+  /// Bottom-pinned floating controls that overlay the scroll (they must not
+  /// scroll with the content). Load-more only applies to the main list; the
+  /// merge bar applies to both list and search results.
+  @ViewBuilder private var floatingActionBars: some View {
+    if !embedded {
+      if searchQuery.isEmpty && appState.canLoadMoreConversations
+        && !(isMultiSelectMode && !selectedConversationIds.isEmpty)
+      {
+        Button("Load older conversations") {
+          Task {
+            await appState.loadMoreConversations()
+          }
+        }
+        .buttonStyle(.bordered)
+        .padding(.bottom, OmiSpacing.md)
+        .accessibilityIdentifier("conversations-load-more")
+      }
+
+      if isMultiSelectMode && !selectedConversationIds.isEmpty {
+        mergeActionBar
+          .transition(.move(edge: .bottom).combined(with: .opacity))
+      }
     }
   }
 
@@ -378,61 +464,45 @@ struct ConversationsPage: View {
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.bottom, OmiSpacing.md)
 
-      // List - show search results or regular conversations
+      // List - show search results or regular conversations. Both render
+      // embedded (no inner ScrollView); the page's outer ScrollView (see
+      // `scrollingBody`) owns scrolling so the whole page scrolls together.
+      // Floating load-more / merge bars live in `floatingActionBars`.
       if !searchQuery.isEmpty {
         // Search results view
         searchResultsView
       } else {
         // Regular conversation list
-        ZStack(alignment: .bottom) {
-          ConversationListView(
-            conversations: appState.conversations,
-            isLoading: appState.isLoadingConversations,
-            error: appState.conversationsError,
-            folders: appState.folders,
-            isCompactView: isCompactView,
-            onSelect: { conversation in
-              AnalyticsManager.shared.memoryListItemClicked(conversationId: conversation.id)
-              selectedConversation = conversation
-            },
-            onRefresh: {
-              Task {
-                await appState.refreshConversations()
-              }
-            },
-            onMoveToFolder: { conversationId, folderId in
-              await appState.moveConversationToFolder(conversationId, folderId: folderId)
-            },
-            isMultiSelectMode: isMultiSelectMode,
-            selectedIds: selectedConversationIds,
-            onToggleSelection: { conversationId in
-              if selectedConversationIds.contains(conversationId) {
-                selectedConversationIds.remove(conversationId)
-              } else {
-                selectedConversationIds.insert(conversationId)
-              }
-            },
-            embedded: embedded,
-            appState: appState
-          )
-
-          if appState.canLoadMoreConversations && !(isMultiSelectMode && !selectedConversationIds.isEmpty) {
-            Button("Load older conversations") {
-              Task {
-                await appState.loadMoreConversations()
-              }
+        ConversationListView(
+          conversations: appState.conversations,
+          isLoading: appState.isLoadingConversations,
+          error: appState.conversationsError,
+          folders: appState.folders,
+          isCompactView: isCompactView,
+          onSelect: { conversation in
+            AnalyticsManager.shared.memoryListItemClicked(conversationId: conversation.id)
+            selectedConversation = conversation
+          },
+          onRefresh: {
+            Task {
+              await appState.refreshConversations()
             }
-            .buttonStyle(.bordered)
-            .padding(.bottom, OmiSpacing.md)
-            .accessibilityIdentifier("conversations-load-more")
-          }
-
-          // Floating merge action bar
-          if isMultiSelectMode && !selectedConversationIds.isEmpty {
-            mergeActionBar
-              .transition(.move(edge: .bottom).combined(with: .opacity))
-          }
-        }
+          },
+          onMoveToFolder: { conversationId, folderId in
+            await appState.moveConversationToFolder(conversationId, folderId: folderId)
+          },
+          isMultiSelectMode: isMultiSelectMode,
+          selectedIds: selectedConversationIds,
+          onToggleSelection: { conversationId in
+            if selectedConversationIds.contains(conversationId) {
+              selectedConversationIds.remove(conversationId)
+            } else {
+              selectedConversationIds.insert(conversationId)
+            }
+          },
+          embedded: true,
+          appState: appState
+        )
       }
     }
   }
@@ -475,22 +545,16 @@ struct ConversationsPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
-        ZStack(alignment: .bottom) {
-          searchResultsContent
-
-          // Floating merge action bar (also show in search results)
-          if isMultiSelectMode && !selectedConversationIds.isEmpty {
-            mergeActionBar
-              .transition(.move(edge: .bottom).combined(with: .opacity))
-          }
-        }
+        // Renders bare — the page's outer ScrollView owns scrolling and the
+        // merge bar floats via `floatingActionBars`.
+        searchResultsContent
       }
     }
   }
 
   @ViewBuilder
   private var searchResultsContent: some View {
-    let content = LazyVStack(spacing: OmiSpacing.sm) {
+    LazyVStack(spacing: OmiSpacing.sm) {
       ForEach(searchResults) { conversation in
         ConversationRowView(
           conversation: conversation,
@@ -518,14 +582,6 @@ struct ConversationsPage: View {
     }
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.bottom, isMultiSelectMode && !selectedConversationIds.isEmpty ? 80 : OmiSpacing.lg)
-
-    if embedded {
-      content
-    } else {
-      ScrollView {
-        content
-      }
-    }
   }
 
   // MARK: - Search

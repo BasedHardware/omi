@@ -18,7 +18,7 @@ Check errors in the latest (or specific) release using the **sentry-release skil
 ./scripts/sentry-release.sh --all        # include carryover issues
 ./scripts/sentry-release.sh --quota      # billing/quota status
 ```
-See `.claude/skills/sentry-release/SKILL.md` for full documentation.
+Run the script with `--help` for the full option list.
 
 ### User Issue Investigation
 When debugging issues for a specific user, check Sentry dashboard for crashes and PostHog for events.
@@ -54,16 +54,18 @@ Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.
 
 ## Release Pipeline
 
-Merging `desktop/macos/**` changes queues them for the next hourly candidate retry. A candidate advances to beta automatically only after every qualification gate passes:
+Beta candidates are cut **on every macOS-affecting merge to `main`** (`push` trigger on the releasable desktop paths, plus a 15-min `schedule` backstop). Each run tags the newest releasable `desktop/macos/**`/`codemagic.yaml` change since the last tag, binding the immutable tag to the Codemagic config that builds it. A candidate reaches beta only after qualification passes:
 
-1. **GitHub Actions** (`desktop_auto_release.yml`) — batches mainline changes, auto-increments the version, and pushes a `v*-macos` build-candidate tag. It is schedule-only and fails closed before changelog or tag mutation unless `Release Eligibility`, `Desktop Swift Build & Tests`, and `Desktop Swift Release Compile` all completed successfully for the exact newest queued releasable desktop SHA. Later backend/docs-only commits do not replace that immutable source with a SHA where desktop CI was skipped; the tag includes the newly consolidated release notes.
-2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — triggered by the tag, runs on Mac mini M2:
+1. **GitHub Actions** (`desktop_auto_release.yml`) — on that `push` (plus the 15-min `schedule` backstop and manual `workflow_dispatch`) it auto-increments the version and pushes a `v*-macos` tag. A ~60s quiet window (`AUTO_RELEASE_QUIET_SECONDS`) coalesces near-simultaneous merges; the one-active-release fence (Codemagic build status on the latest tag) admits one candidate at a time. Fails closed unless `Release Eligibility`, `Desktop Swift Build & Tests`, and `Desktop Swift Release Compile` all succeeded for the exact newest releasable SHA — so a candidate cuts once that SHA's CI is green (the push fires too early; the backstop catches it after CI settles).
+2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — triggered by the tag, runs on Mac mini M4:
    - Builds universal binary (arm64 + x86_64)
    - Signs with Developer ID, notarizes with Apple
    - Creates DMG + Sparkle ZIP
-   - Runs `scripts/smoke-signed-desktop-artifact.sh` on the signed app, Sparkle ZIP, and DMG before publishing, including a mandatory in-app synthetic Keychain write/read/delete canary
+   - Runs `scripts/smoke-signed-desktop-artifact.sh` (signed app, Sparkle ZIP, DMG) before publishing, with a mandatory in-app Keychain write/read/delete canary
    - Publishes an immutable non-live GitHub candidate with smoke evidence
-3. **Trusted macOS qualification runner** (`desktop_qualify_beta.yml`) — dispatched by Codemagic after candidate publication and restricted to the `self-hosted`, `macos`, `omi-desktop-qualification` runner. It verifies published asset digests against signed-smoke evidence, runs the static release checks, rebuilds the exact tag, runs hermetic T2 plus the fault-injection suite, and writes canonical `qualifiedBeta*` evidence metadata. The exact-SHA source clone and its direct SwiftPM `.build` path live together outside the Actions checkout, so checkout cleanup cannot delete them and retries/prewarms use identical absolute source and output paths. Reuse is fail-closed on SHA, `Package.swift`/`Package.resolved`, Xcode, Swift, macOS, architecture, symlinks, collisions, incomplete entries, or tracked source changes; only untrusted untracked residue outside `.build` is cleaned. SwiftPM still validates/rebuilds every requested product, and this cache is never release evidence. The runner must be an administrator-managed Mac with Docker Desktop; it must never execute pull-request or arbitrary-ref workflows.
+3. **Qualification** (`desktop_qualify_beta.yml`) — dispatched by Codemagic after candidate publication. A Codemagic primary lane plus independent per-machine self-hosted fallback lanes, fail-closed with an at-least-one-passes verdict (a single self-hosted machine proved to be a release-blocking single point of failure in the Jul 22 2026 outage — failure class `FC-single-machine-release-gate`):
+   - **Codemagic lane (primary)** — the orchestrating job validates the candidate on GitHub-hosted ubuntu, starts the `omi-desktop-qualification` Codemagic workflow (config trusted from `main`; candidate source materialized from the immutable tag; hermetic stack runs Typesense natively via `OMI_TYPESENSE_RUNTIME=native` because ephemeral Codemagic Macs lack nested virtualization), passes only a short-lived Omi Bot token for read-only gh calls, and publishes the immutable qualification evidence itself only after the build, its tag binding, and its `qualification-result.json` artifact all verify. Codemagic already builds and signs the candidate, so executing qualification there extends it no new trust.
+   - **Per-machine self-hosted fallback lanes** — `qualify-m1-studio` (label `omi-qual-m1-studio`) then `qualify-m4-mini` (label `omi-qual-m4-mini`), each pinned to its own physical machine so a sick-but-online runner cannot absorb the only fallback attempt. A `plan-fallbacks` job reads runner online-status and skips an offline lane (a job targeting an offline self-hosted runner queues up to 24h); the mini lane runs only when the M1 lane did not publish evidence. Each lane verifies published asset digests against signed-smoke evidence, runs the static release checks, rebuilds the exact tag, runs hermetic T2 plus the fault-injection suite, and writes canonical `qualifiedBeta*` evidence metadata. The exact-SHA source clone and its direct SwiftPM `.build` path live together outside the Actions checkout, so checkout cleanup cannot delete them and retries/prewarms use identical absolute source and output paths. Reuse is fail-closed on SHA, `Package.swift`/`Package.resolved`, Xcode, Swift, macOS, architecture, symlinks, collisions, incomplete entries, or tracked source changes; only untrusted untracked residue outside `.build` is cleaned. SwiftPM still validates/rebuilds every requested product, and this cache is never release evidence. A qualification runner must be an administrator-managed Mac with a healthy Docker daemon (Docker Desktop or Colima) **or** a native `typesense-server` 27.1 on PATH, plus full Xcode, node, a Java runtime, `redis-server`, rustup, and `uv` (the qualify script provisions the backend venv, falling back to the pinned minor Python when uv lacks the exact patch); it must never execute pull-request or arbitrary-ref workflows. Registered runners: David's M1 Mac Studio and Nik's M4 Mac mini. The `verdict` job is the only job that can fail the run, so promotion sees success iff at least one lane published evidence.
 4. **Automatic beta promotion** (`desktop_promote_beta.yml`) — a separate `workflow_run` starts only after successful qualification, derives and validates the immutable `v*-macos` tag against the qualification SHA, then invokes the same internal-only backend admission authority. The backend captures the server-owned Beta admission generation before validating digest-matched evidence, then atomically verifies that the reservation and pause state are unchanged while registering the immutable manifest and advancing the explicit beta pointer. If that handoff fails after qualification, use only `desktop_recover_beta.yml` with the exact tag, `confirm=recover-beta`, and a reason.
 
 The shared Python backend must contain the manifest/pointer endpoints before the first beta promotion. Deploy it separately with `gcp_backend.yml`; merging desktop code does not deploy the prod backend. Static GCS/CDN feed ownership remains follow-up work and is not the channel source of truth.
@@ -88,7 +90,7 @@ Stable is manual:
 Promotion from beta to stable is handled by `desktop_promote_prod.yml`, not Codemagic.
 
 ## Firebase Connection
-Use `/firebase` command or see `.claude/skills/firebase/SKILL.md`
+Use the `/firebase` command if your agent provides it.
 
 Quick connect:
 ```bash
@@ -234,7 +236,8 @@ do not hand-edit those paths to match a specific machine.
 - Local: `http://localhost:8080`
 
 ## Credentials
-See `.claude/settings.json` for connection details.
+Connection details come from your local agent configuration; they are deliberately not
+checked in. Ask the user for anything you are missing rather than guessing an endpoint.
 
 ## Development Workflow
 
@@ -250,7 +253,7 @@ See `.claude/settings.json` for connection details.
 - **Release builds**: Handled entirely by Codemagic CI (no local release script needed)
 - **DO NOT** use bare `swift build` — it will fail with SDK version mismatch
 - **DO NOT** use `xcodebuild` — there is no `.xcodeproj`
-- **DO NOT** launch the app directly from `build/` — always use `./run.sh` or `./reset-and-run.sh`. These scripts install to `/Applications/Omi Dev.app` and launch from there, which is required for macOS "Quit & Reopen" (after granting permissions) to find the correct binary. Launching from `build/` causes stale binaries to run after permission restarts.
+- **DO NOT** launch the app directly from `build/` — always use `./run.sh`. These scripts install to `/Applications/Omi Dev.app` and launch from there, which is required for macOS "Quit & Reopen" (after granting permissions) to find the correct binary. Launching from `build/` causes stale binaries to run after permission restarts.
 - **DO NOT** manually copy binaries into app bundles and launch them — this bypasses signing, `/Applications/` installation, and LaunchServices registration
 
 - **DO NOT** kill, delete, or interfere with running "Omi", "omi", or "Omi Beta" app bundles — these are production/release installs the user relies on

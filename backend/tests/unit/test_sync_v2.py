@@ -400,8 +400,8 @@ class TestSyncJobsRedis:
         mock_redis.get.return_value = None
         assert mod.get_sync_job('nonexistent') is None
 
-    def test_get_sync_job_is_pure_for_stale_processing_job(self):
-        """Polling reads cannot publish a terminal state without a run lease."""
+    def test_get_sync_job_self_heals_stale_processing_job(self):
+        """A dead worker's job is finalized to failed on read so the client re-uploads."""
         mod, mock_redis = self._load_sync_jobs_module()
         stale_job = {
             'job_id': 'stale-1',
@@ -413,9 +413,9 @@ class TestSyncJobsRedis:
         mock_redis.get.return_value = json.dumps(stale_job).encode()
 
         result = mod.get_sync_job('stale-1')
-        assert result['status'] == 'processing'
-        assert mod.is_sync_job_stale(result) is True
-        mock_redis.set.assert_not_called()
+        assert result['status'] == 'failed'
+        assert result['error']
+        mock_redis.set.assert_called()
 
     def test_get_sync_job_does_not_mark_fresh_as_stale(self):
         """Processing jobs within threshold should not be marked failed."""
@@ -807,8 +807,8 @@ class TestSyncJobsRedisBoundary:
         result = mod.get_sync_job('j')
         assert result['status'] == 'processing'
 
-    def test_stale_just_over_threshold_is_reported_without_mutating_read(self):
-        """The owner-safe route finalizer, not the database read, owns failure."""
+    def test_stale_just_over_threshold_self_heals(self):
+        """A job one second past the stale bound is finalized to failed on read."""
         mod, mock_redis = self._load_sync_jobs_module()
         job = {
             'job_id': 'j',
@@ -818,11 +818,10 @@ class TestSyncJobsRedisBoundary:
         }
         mock_redis.get.return_value = json.dumps(job).encode()
         result = mod.get_sync_job('j')
-        assert result['status'] == 'processing'
-        assert mod.is_sync_job_stale(result) is True
+        assert result['status'] == 'failed'
 
-    def test_stale_read_never_persists_to_redis(self):
-        """A stale read alone cannot strand the content claim or telemetry."""
+    def test_stale_read_persists_failure(self):
+        """The self-heal is durable — the failed status is written back, not just returned."""
         mod, mock_redis = self._load_sync_jobs_module()
         job = {
             'job_id': 'j',
@@ -832,8 +831,8 @@ class TestSyncJobsRedisBoundary:
         }
         mock_redis.get.return_value = json.dumps(job).encode()
         result = mod.get_sync_job('j')
-        assert mod.is_sync_job_stale(result) is True
-        mock_redis.set.assert_not_called()
+        assert result['status'] == 'failed'
+        mock_redis.set.assert_called()
 
     def test_completed_job_not_stale_checked(self):
         """Terminal jobs must not be re-evaluated for staleness."""

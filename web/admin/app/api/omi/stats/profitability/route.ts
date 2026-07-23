@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
+import { withRowLimit } from "@/lib/posthog";
 import { getOptionalStripe } from "@/lib/stripe";
 import { getAdminAuth, getDb } from "@/lib/firebase/admin";
 import { getPayload, setPayload } from "@/lib/payload-cache";
@@ -184,7 +185,9 @@ async function fetchDesktopUidsFromPostHog(days: number): Promise<Set<string> | 
     const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
+      // Own fetch (bypasses lib/posthog's posthogFetch); apply the shared
+      // row-limit guard directly so this can't silently truncate (#10190).
+      body: JSON.stringify({ query: { kind: "HogQLQuery", query: withRowLimit(query) } }),
     });
     if (!response.ok) {
       console.error("PostHog desktop uids failed:", response.status, await response.text());
@@ -218,7 +221,9 @@ async function fetchDesktopActivePerDay(days: number): Promise<Record<string, nu
     const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
+      // Own fetch (bypasses lib/posthog's posthogFetch); apply the shared
+      // row-limit guard directly so this can't silently truncate (#10190).
+      body: JSON.stringify({ query: { kind: "HogQLQuery", query: withRowLimit(query) } }),
     });
     if (!response.ok) return null;
     const raw = await response.json();

@@ -1,8 +1,33 @@
 'use client';
 
-import { useState, useCallback, useMemo, useTransition, useEffect, useDeferredValue, lazy, Suspense } from 'react';
+import {
+  useState,
+  useCallback,
+  useMemo,
+  useTransition,
+  useEffect,
+  useDeferredValue,
+  lazy,
+  Suspense,
+} from 'react';
 import { motion } from 'framer-motion';
-import { List, Network, Search, RefreshCw, Loader2, Tag, Flame, TrendingUp, Plus, ArrowUpDown, ChevronDown, CheckSquare, Square, Brain, Sparkles } from 'lucide-react';
+import {
+  List,
+  Network,
+  Search,
+  RefreshCw,
+  Loader2,
+  Tag,
+  Flame,
+  TrendingUp,
+  Plus,
+  ArrowUpDown,
+  ChevronDown,
+  CheckSquare,
+  Square,
+  Brain,
+  Sparkles,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMemories } from '@/hooks/useMemories';
 import { MemoryList, MemoryListSkeleton } from './MemoryList';
@@ -17,8 +42,12 @@ import { copyMemoriesToClipboard, downloadMemories } from '@/lib/memoryExport';
 import { useChat as useChatContext } from '@/components/chat/ChatContext';
 
 // Lazy load heavy components for better performance
-const KnowledgeGraph = lazy(() => import('./KnowledgeGraph').then(m => ({ default: m.KnowledgeGraph })));
-const InsightsDashboard = lazy(() => import('./InsightsDashboard').then(m => ({ default: m.InsightsDashboard })));
+const KnowledgeGraph = lazy(() =>
+  import('./KnowledgeGraph').then((m) => ({ default: m.KnowledgeGraph })),
+);
+const InsightsDashboard = lazy(() =>
+  import('./InsightsDashboard').then((m) => ({ default: m.InsightsDashboard })),
+);
 
 type ViewMode = 'list' | 'graph' | 'tags';
 type SortOption = 'score' | 'created_desc' | 'created_asc' | 'updated_desc';
@@ -53,6 +82,7 @@ export function MemoriesPage() {
     addMemory,
     editMemory,
     removeMemory,
+    removeMemories,
     toggleVisibility,
     acceptMemory,
     rejectMemory,
@@ -68,8 +98,8 @@ export function MemoriesPage() {
 
   // Create memoized lookup map for O(1) memory access
   const memoriesById = useMemo(() => {
-    const map = new Map<string, typeof memories[0]>();
-    memories.forEach(m => map.set(m.id, m));
+    const map = new Map<string, (typeof memories)[0]>();
+    memories.forEach((m) => map.set(m.id, m));
     return map;
   }, [memories]);
 
@@ -82,7 +112,8 @@ export function MemoriesPage() {
         setContext({
           type: 'memory',
           id: memory.id,
-          title: memory.content.substring(0, 50) + (memory.content.length > 50 ? '...' : ''),
+          title:
+            memory.content.substring(0, 50) + (memory.content.length > 50 ? '...' : ''),
           summary: memory.content,
         });
       } else {
@@ -209,13 +240,19 @@ export function MemoriesPage() {
 
       switch (sortBy) {
         case 'created_desc':
-          result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          result.sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+          );
           break;
         case 'created_asc':
-          result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+          result.sort(
+            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+          );
           break;
         case 'updated_desc':
-          result.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+          result.sort(
+            (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+          );
           break;
       }
     }
@@ -258,8 +295,8 @@ export function MemoriesPage() {
   const handleToggleSelect = useCallback((memoryId: string) => {
     setSelectedIds((prev) =>
       prev.includes(memoryId)
-        ? prev.filter(id => id !== memoryId)
-        : [...prev, memoryId]
+        ? prev.filter((id) => id !== memoryId)
+        : [...prev, memoryId],
     );
   }, []);
 
@@ -299,28 +336,41 @@ export function MemoriesPage() {
   const executeBulkDelete = useCallback(async () => {
     setIsDeleting(true);
     try {
-      // Delete each selected memory
-      const deletePromises = selectedIds.map((id) => removeMemory(id));
-      await Promise.all(deletePromises);
-      setSelectedIds([]);
-      setIsSelectMode(false);
-      setShowDeleteConfirm(false);
+      // Single batched request (chunked internally by removeMemories) instead of N
+      // concurrent DELETEs that triggered 429s. On full success the selection clears;
+      // on partial failure only the not-yet-deleted ids stay selected, so a retry never
+      // re-sends ids the server already removed (which the all-or-nothing endpoint
+      // would 404 on).
+      const { success, deletedIds } = await removeMemories(selectedIds);
+      if (success) {
+        setSelectedIds([]);
+        setIsSelectMode(false);
+        setShowDeleteConfirm(false);
+      } else if (deletedIds.length > 0) {
+        // Drop ids already deleted by earlier successful chunks; keep only the failed /
+        // un-attempted ids selected and retryable.
+        const deleted = new Set(deletedIds);
+        setSelectedIds((prev) => prev.filter((id) => !deleted.has(id)));
+      }
     } finally {
       setIsDeleting(false);
     }
-  }, [selectedIds, removeMemory]);
+  }, [selectedIds, removeMemories]);
 
   // Handle copy to clipboard
   const handleCopy = useCallback(async () => {
-    const selected = memories.filter(m => selectedIds.includes(m.id));
+    const selected = memories.filter((m) => selectedIds.includes(m.id));
     await copyMemoriesToClipboard(selected);
   }, [memories, selectedIds]);
 
   // Handle export
-  const handleExport = useCallback((format: 'csv' | 'json' | 'markdown') => {
-    const selected = memories.filter(m => selectedIds.includes(m.id));
-    downloadMemories(selected, format);
-  }, [memories, selectedIds]);
+  const handleExport = useCallback(
+    (format: 'csv' | 'json' | 'markdown') => {
+      const selected = memories.filter((m) => selectedIds.includes(m.id));
+      downloadMemories(selected, format);
+    },
+    [memories, selectedIds],
+  );
 
   // Clear selection
   const clearSelection = useCallback(() => {
@@ -350,7 +400,7 @@ export function MemoriesPage() {
                     'transition-all duration-150',
                     viewMode === 'list'
                       ? 'bg-purple-primary text-white'
-                      : 'text-text-tertiary hover:text-text-primary'
+                      : 'text-text-tertiary hover:text-text-primary',
                   )}
                 >
                   <List className="w-4 h-4" />
@@ -363,7 +413,7 @@ export function MemoriesPage() {
                     'transition-all duration-150',
                     viewMode === 'graph'
                       ? 'bg-purple-primary text-white'
-                      : 'text-text-tertiary hover:text-text-primary'
+                      : 'text-text-tertiary hover:text-text-primary',
                   )}
                 >
                   <Network className="w-4 h-4" />
@@ -376,7 +426,7 @@ export function MemoriesPage() {
                     'transition-all duration-150',
                     viewMode === 'tags'
                       ? 'bg-purple-primary text-white'
-                      : 'text-text-tertiary hover:text-text-primary'
+                      : 'text-text-tertiary hover:text-text-primary',
                   )}
                 >
                   <Sparkles className="w-4 h-4" />
@@ -393,7 +443,7 @@ export function MemoriesPage() {
                     'transition-colors',
                     isSelectMode
                       ? 'bg-purple-primary/10 text-purple-primary'
-                      : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'
+                      : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary',
                   )}
                 >
                   {isSelectMode ? (
@@ -419,12 +469,19 @@ export function MemoriesPage() {
                       'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg',
                       'bg-bg-tertiary border border-bg-quaternary',
                       'text-sm text-text-secondary hover:text-text-primary',
-                      'transition-colors'
+                      'transition-colors',
                     )}
                   >
                     <ArrowUpDown className="w-4 h-4" />
-                    <span className="hidden sm:inline">{SORT_OPTIONS.find(o => o.value === sortBy)?.label}</span>
-                    <ChevronDown className={cn('w-3 h-3 transition-transform', showSortMenu && 'rotate-180')} />
+                    <span className="hidden sm:inline">
+                      {SORT_OPTIONS.find((o) => o.value === sortBy)?.label}
+                    </span>
+                    <ChevronDown
+                      className={cn(
+                        'w-3 h-3 transition-transform',
+                        showSortMenu && 'rotate-180',
+                      )}
+                    />
                   </button>
                   {showSortMenu && (
                     <>
@@ -445,7 +502,7 @@ export function MemoriesPage() {
                               'hover:bg-bg-tertiary transition-colors',
                               sortBy === option.value
                                 ? 'text-purple-primary'
-                                : 'text-text-secondary'
+                                : 'text-text-secondary',
                             )}
                           >
                             {option.label}
@@ -480,7 +537,7 @@ export function MemoriesPage() {
                     'bg-bg-tertiary border border-bg-quaternary',
                     'text-sm text-text-primary',
                     'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
-                    'placeholder:text-text-quaternary'
+                    'placeholder:text-text-quaternary',
                   )}
                 />
               </div>
@@ -495,7 +552,7 @@ export function MemoriesPage() {
                   'p-2 rounded-lg',
                   'text-text-tertiary hover:text-text-primary',
                   'hover:bg-bg-tertiary transition-colors',
-                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
                 title="Refresh memories"
               >
@@ -531,7 +588,10 @@ export function MemoriesPage() {
                     onExport={handleExport}
                     onSelectAll={handleSelectAll}
                     onDone={toggleSelectMode}
-                    allSelected={selectedIds.length === filteredMemories.length && filteredMemories.length > 0}
+                    allSelected={
+                      selectedIds.length === filteredMemories.length &&
+                      filteredMemories.length > 0
+                    }
                     totalCount={filteredMemories.length}
                     hideComplete
                     hideSnooze
@@ -579,7 +639,9 @@ export function MemoriesPage() {
                     selectedIds={isSelectMode ? selectedIds : undefined}
                     onToggleSelect={isSelectMode ? handleToggleSelect : undefined}
                     // Pass onEnterSelectionMode when NOT in select mode (for double-click)
-                    onEnterSelectionMode={!isSelectMode ? enterSelectionModeWithId : undefined}
+                    onEnterSelectionMode={
+                      !isSelectMode ? enterSelectionModeWithId : undefined
+                    }
                   />
                 )}
               </>
@@ -635,7 +697,9 @@ export function MemoriesPage() {
 
                     {/* Total memories */}
                     <div className="mb-3">
-                      <div className="text-2xl font-bold text-purple-primary">{memories.length}</div>
+                      <div className="text-2xl font-bold text-purple-primary">
+                        {memories.length}
+                      </div>
                       <div className="text-sm text-text-secondary">Total Memories</div>
                       {recentMemoriesCount > 0 && (
                         <div className="text-xs text-green-400 mt-1">
@@ -659,7 +723,9 @@ export function MemoriesPage() {
                     {/* Activity Chart (30 days) */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-text-quaternary">Activity (30 days)</span>
+                        <span className="text-xs text-text-quaternary">
+                          Activity (30 days)
+                        </span>
                         <span className="text-xs text-text-quaternary">
                           {recentMemoriesCount} memories
                         </span>
@@ -680,7 +746,7 @@ export function MemoriesPage() {
                   </div>
 
                   {/* Life Balance Radar */}
-                  {lifeBalance.length > 0 && lifeBalance.some(d => d.rawCount > 0) && (
+                  {lifeBalance.length > 0 && lifeBalance.some((d) => d.rawCount > 0) && (
                     <div className="rounded-xl bg-bg-secondary border border-bg-tertiary p-4">
                       <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider mb-2 flex items-center gap-2">
                         <Sparkles className="w-4 h-4 text-purple-primary" />
@@ -717,7 +783,7 @@ export function MemoriesPage() {
                           onClick={() => setViewMode('tags')}
                           className={cn(
                             'p-1.5 rounded-md transition-colors',
-                            'text-text-quaternary hover:text-purple-primary hover:bg-purple-primary/10'
+                            'text-text-quaternary hover:text-purple-primary hover:bg-purple-primary/10',
                           )}
                           title="View all tags"
                         >
@@ -734,14 +800,17 @@ export function MemoriesPage() {
                               onClick={() => handleTagClick(tag)}
                               className={cn(
                                 'w-full text-left group p-1 -m-1 rounded-md',
-                                selectedTag === tag && 'ring-1 ring-purple-primary bg-purple-primary/5'
+                                selectedTag === tag &&
+                                  'ring-1 ring-purple-primary bg-purple-primary/5',
                               )}
                             >
                               <div className="flex items-center justify-between mb-1">
                                 <span className="text-sm text-text-primary group-hover:text-purple-primary transition-colors">
                                   {tag}
                                 </span>
-                                <span className="text-xs text-text-quaternary">{count}</span>
+                                <span className="text-xs text-text-quaternary">
+                                  {count}
+                                </span>
                               </div>
                               <div className="h-1 bg-bg-quaternary rounded-full overflow-hidden">
                                 <div

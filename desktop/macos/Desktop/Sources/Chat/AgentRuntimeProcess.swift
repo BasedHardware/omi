@@ -1948,10 +1948,14 @@ actor AgentRuntimeProcess {
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
     expectedGeneration: Int? = nil,
+    deleteBackend: Bool = true,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> Int {
     var payload: [String: Any] = [:]
     if let expectedGeneration { payload["expectedGeneration"] = expectedGeneration }
+    // Only send the flag when it diverges from the daemon default (true) so a
+    // local-only reset never deletes the user's server-side chat history.
+    if !deleteBackend { payload["deleteBackend"] = false }
     return try await journalOperation(
       type: "journal_clear_turns",
       operation: "clear",
@@ -3061,7 +3065,15 @@ actor AgentRuntimeProcess {
     handle.readabilityHandler = { [weak self] handle in
       let chunk = chunkReader.read(from: handle)
       guard !chunk.data.isEmpty else {
-        handle.readabilityHandler = nil
+        // Empty availableData usually means EOF. Only detach once the child
+        // has exited — clearing the handler while the agent is still alive
+        // stops Swift from draining stdout and can deadlock Node's writes.
+        Task { [weak self] in
+          let stillRunning = await self?.isAgentProcessRunning(generation: expectedGeneration) ?? false
+          if !stillRunning {
+            handle.readabilityHandler = nil
+          }
+        }
         return
       }
       Task { [weak self] in
@@ -3072,6 +3084,10 @@ actor AgentRuntimeProcess {
         )
       }
     }
+  }
+
+  private func isAgentProcessRunning(generation: UInt64) -> Bool {
+    generation == processGeneration && process?.isRunning == true
   }
 
   private func processStdoutData(_ data: Data, sequence: UInt64, generation: UInt64) {

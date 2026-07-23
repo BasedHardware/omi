@@ -107,7 +107,8 @@ class PopularAppsSection extends StatelessWidget {
                       child: Container(
                         width: 60,
                         height: 60,
-                        decoration: BoxDecoration(color: Color(0xFF35343B), borderRadius: BorderRadius.circular(12)),
+                        decoration:
+                            BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(12)),
                         child: CachedNetworkImage(
                           imageUrl: app.getImageUrl(),
                           httpHeaders: const {
@@ -156,7 +157,7 @@ class PopularAppsSection extends StatelessWidget {
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                Icon(Icons.star_rounded, color: Color(0xFF8B5CF6), size: 14),
+                                const Icon(Icons.star_rounded, color: Color(0xFF8B5CF6), size: 14),
                                 const SizedBox(width: 4),
                                 Text(
                                   app.getRatingAvg()!,
@@ -185,7 +186,7 @@ class PopularAppsSection extends StatelessWidget {
                       width: 72,
                       height: 32,
                       decoration: BoxDecoration(
-                        color: app.enabled ? Colors.grey.shade700 : Color(0xFF8B5CF6),
+                        color: app.enabled ? Colors.grey.shade700 : const Color(0xFF8B5CF6),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Center(

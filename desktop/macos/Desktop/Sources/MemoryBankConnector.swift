@@ -29,6 +29,35 @@ enum MemoryBankConnector {
     }
   }
 
+  /// Whether the local tool for `destination` is actually installed on this Mac,
+  /// using the SAME evidence the matching `connect…` path requires. Onboarding's
+  /// upfront probe must agree with the connect outcome, otherwise a row offers
+  /// "Connect" and then fails to "not installed" only after the click (e.g. a
+  /// stray `~/.codex` dir with no `codex` on PATH). May shell out (`command -v`),
+  /// so call it off the main thread.
+  static func isInstalled(_ destination: MemoryExportDestination) -> Bool {
+    let fm = FileManager.default
+    switch destination {
+    case .claudeCode:
+      return fm.fileExists(atPath: home.appendingPathComponent(".claude.json").path)
+        || fm.fileExists(atPath: home.appendingPathComponent(".claude/settings.json").path)
+        || executablePath(named: "claude", override: claudeCLIPathOverrideForTesting) != nil
+    case .codex:
+      return executablePath(named: "codex", override: codexCLIPathOverrideForTesting) != nil
+    case .openclaw:
+      let config = home.appendingPathComponent(".openclaw/openclaw.json")
+      guard fm.fileExists(atPath: config.path), let cliPath = openClawCLIPath() else { return false }
+      let workspace =
+        openClawConfiguredWorkspace(configURL: config, cliPath: cliPath)
+        ?? home.appendingPathComponent(".openclaw/workspace")
+      return fm.fileExists(atPath: workspace.path)
+    case .hermes:
+      return hermesInstallIsPresent(hermesDir: home.appendingPathComponent(".hermes"), fileManager: fm)
+    default:
+      return false
+    }
+  }
+
   /// Performs the write. Returns a short user-facing success line. Throws
   /// `ConnectError.notInstalled` when the framework isn't found locally.
   @discardableResult

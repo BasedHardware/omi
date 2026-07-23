@@ -14,7 +14,7 @@ Inherits all rules from the root [`../AGENTS.md`](../AGENTS.md). This file adds 
 |-----------|--------|--------|---------|
 | envied | `lib/env/dev_env.dart`, `lib/env/prod_env.dart` | `*.g.dart` (obfuscated secrets) | `flutter pub run build_runner build` |
 | json_serializable | `@JsonSerializable` models | `*.g.dart` (fromJson/toJson) | `flutter pub run build_runner build` |
-| pigeon | `lib/watch_interface.dart` | `lib/gen/flutter_communicator.g.dart` + iOS/Android stubs | `flutter pub run build_runner build` |
+| pigeon | `lib/pigeon_interfaces.dart` | `lib/gen/pigeon_communicator.g.dart` + iOS/Android stubs | `flutter pub run build_runner build` |
 | flutter_gen | `pubspec.yaml` assets/fonts | `lib/gen/assets.gen.dart`, `lib/gen/fonts.gen.dart` | `flutter pub run build_runner build` |
 | flutter_localizations | `lib/l10n/*.arb` | `lib/gen_l10n/app_localizations*.dart` | `flutter gen-l10n` |
 
@@ -32,16 +32,18 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 ## Native Bridge
 
 ### Pigeon Interface (bidirectional, iOS ↔ Dart)
-- Contract: `lib/watch_interface.dart` — 13 methods (recording, audio, battery, permissions)
-- Dart side: `lib/gen/flutter_communicator.g.dart`
-- iOS side: `ios/Runner/FlutterCommunicator.g.swift`
+- Contract: `lib/pigeon_interfaces.dart` — paired host/Flutter APIs for the watch recorder, BLE, and Ray-Ban Meta
+- Dart side: `lib/gen/pigeon_communicator.g.dart`
+- iOS side: `ios/Runner/PigeonCommunicator.g.swift`
+- Android side: `android/app/src/main/kotlin/com/friend/ios/PigeonCommunicator.g.kt`
 - Implementation: `ios/Runner/RecorderHostApiImpl.swift`
-- After editing `watch_interface.dart`, regenerate: `flutter pub run build_runner build`
+- After editing the contract, regenerate: `flutter pub run build_runner build`
 
 ### MethodChannel (Phone Calls)
 - Channel: `com.omi/phone_calls` + EventChannel `com.omi/phone_calls/events`
 - Dart: `lib/services/phone_call_service.dart`
-- iOS: `ios/Runner/PhoneCallsPlugin.swift`
+- iOS: `ios/Runner/PhoneCalls/OmiPhoneCallsPlugin.swift`
+- Android: `android/app/src/main/kotlin/com/friend/ios/phonecalls/PhoneCallsPlugin.kt`
 - Methods: initialize, makeCall, endCall, toggleMute, toggleSpeaker
 
 ### Pigeon (Phone Mic — conversation capture)

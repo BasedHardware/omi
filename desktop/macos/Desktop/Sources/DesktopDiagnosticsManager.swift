@@ -12,6 +12,7 @@ enum DesktopHealthEventName: String {
   case pttAudioCaptureWatchdogTriggered = "ptt_audio_capture_watchdog_triggered"
   case pttAudioCaptureDeviceRouteChanged = "ptt_audio_capture_device_route_changed"
   case pttCommitted = "ptt_committed"
+  case pttAudioCaptureLifecycle = "ptt_audio_capture_lifecycle"
   case voiceTurnStarted = "voice_turn_started"
   case voiceTurnTerminal = "voice_turn_terminal"
   case voiceToolLatency = "voice_tool_latency"
@@ -367,6 +368,20 @@ final class DesktopDiagnosticsManager {
       ],
       trackRemotely: false)
   }
+  /// Record one bounded PTT attempt lifecycle snapshot (see
+  /// `PTTAttemptLifecycleRecorder`). Routes through the shared ring buffer + Sentry
+  /// attachment path; the event is remote (PostHog) only for non-committed
+  /// terminations so successful turns stay local-only (matching
+  /// `recordPTTStarted` / `recordPTTCommitted`). This is the causal-correlation
+  /// complement to the late `recordPTTSilentTurn` snapshot: same attempt context,
+  /// but with the capture-start / first-audio / first-usable-frame / recovery
+  /// boundaries that the silent-turn snapshot cannot see.
+  func recordPTTAttemptLifecycle(_ snapshot: PTTAttemptLifecycleRecorder.Snapshot) {
+    record(
+      .pttAudioCaptureLifecycle,
+      properties: snapshot.properties,
+      trackRemotely: snapshot.failureClass != .committed)
+  }
 
   /// Records a typed chat failure as a fleet-health metric. The existing bounded
   /// `logError` path owns the matching Sentry incident to avoid duplicate capture.
@@ -661,6 +676,7 @@ final class DesktopDiagnosticsManager {
     let includesTypedIncidentContext =
       snapshot.event == .userVisibleIssue
       || snapshot.event == .pttAudioCaptureWatchdogTriggered
+      || snapshot.event == .pttAudioCaptureLifecycle
       || (includeBetaDiagnostics && snapshot.event == .betaDiagnosticTrail)
     guard includesTypedIncidentContext else {
       return result
@@ -681,6 +697,13 @@ final class DesktopDiagnosticsManager {
     "input_device_class", "recovery_action", "recovery_result", "threshold",
     "component", "operation", "outcome", "error_domain", "error_code",
     "osstatus", "keycode", "modifiers",
+    // PTT attempt lifecycle correlation (PTTAttemptLifecycleRecorder).
+    "attempt_id", "capture_start_outcome", "capture_start_status_class",
+    "ms_to_first_audio_bucket", "ms_to_first_usable_frame_bucket",
+    "first_chunks_energy_bucket", "turn_disposition",
+    "input_route_class", "input_route_source", "route_changed_during_attempt",
+    "recovery_triggered", "recovery_attempt_id", "recovery_outcome_of_next_turn",
+    "judgeable", "telemetry_schema_version",
   ]
 
   func writeDiagnosticsAttachment() -> URL? {

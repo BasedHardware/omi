@@ -96,3 +96,43 @@ chmod +x "$TMPDIR/sync/bin/uv"
 )
 
 echo "backend dependency sync rerun test passed."
+
+# Regression: when `git rev-parse --show-toplevel` cannot resolve a work tree
+# (a linked worktree whose git context resolves to a git dir exits 128 here with
+# "this operation must be run in a work tree"), the Makefile previously expanded
+# the repo root to an empty prefix and broke every target with
+# `/scripts/dev-harness/_resolve_python.sh: No such file`. The root now falls
+# back to the working directory make runs in, so the resolver must still be found
+# and PYTHON must resolve. A bare GIT_DIR reproduces the exact condition:
+# show-toplevel exits 128 while `--git-path hooks` still resolves.
+FB_ROOT="$TMPDIR/fallback"
+mkdir -p "$FB_ROOT/scripts/dev-harness" "$FB_ROOT/backend/.venv/bin"
+cp "$ROOT/Makefile" "$FB_ROOT/Makefile"
+cat >"$FB_ROOT/scripts/dev-harness/_resolve_python.sh" <<'EOF'
+dev_harness_python() {
+  local repo_root candidate
+  repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  candidate="$repo_root/backend/.venv/bin/python"
+  if [ -x "$candidate" ]; then
+    printf '%s\n' "$candidate"
+    return
+  fi
+  printf '%s\n' python3
+}
+EOF
+: >"$FB_ROOT/backend/.venv/bin/python"
+chmod +x "$FB_ROOT/backend/.venv/bin/python"
+cat >>"$FB_ROOT/Makefile" <<'EOF'
+
+print-resolved-python:
+	@printf 'PYTHON=%s\n' "$(PYTHON)"
+EOF
+git init -q --bare "$TMPDIR/fallback-bare.git"
+out="$(cd "$FB_ROOT" && env -u PYTHON GIT_DIR="$TMPDIR/fallback-bare.git" make print-resolved-python 2>/dev/null)"
+expected="PYTHON=$(cd "$FB_ROOT" && pwd)/backend/.venv/bin/python"
+if [ "$out" != "$expected" ]; then
+  echo "FAIL: Makefile repo-root resolution collapsed when show-toplevel could not resolve a work tree." >&2
+  printf 'Expected: %s\nGot:      %s\n' "$expected" "$out" >&2
+  exit 1
+fi
+echo "linked-worktree repo-root fallback test passed."

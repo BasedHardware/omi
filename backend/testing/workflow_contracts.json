@@ -529,7 +529,6 @@
         ".github/actions/transcription-release-candidate-probe/**",
         ".github/workflows/gcp_backend*.yml",
         ".github/workflows/gcp_llm_gateway.yml",
-        ".github/workflows/gcp_llm_gateway_auto_dev.yml",
         ".github/workflows/gcp_memory_maintenance_job.yml",
         ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
         ".github/workflows/gcp_notifications_job.yml",

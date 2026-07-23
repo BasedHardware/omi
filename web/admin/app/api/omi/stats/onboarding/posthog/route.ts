@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
 import { getPayload, setPayload } from '@/lib/payload-cache';
+import { withRowLimit } from '@/lib/posthog';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 3600;
 
@@ -117,7 +118,8 @@ export async function computeOnboarding(days: number) {
     const body = {
       query: {
         kind: 'HogQLQuery',
-        query: `
+        // Own fetch (bypasses posthogFetch); guard directly (#10190).
+        query: withRowLimit(`
           WITH entrant_actors AS (
             SELECT actor_id
             FROM (
@@ -142,7 +144,7 @@ export async function computeOnboarding(days: number) {
             AND COALESCE(person_id, distinct_id) IN (SELECT actor_id FROM entrant_actors)
           GROUP BY actor_id, event
           LIMIT 10000
-        `,
+        `),
       },
     };
 
