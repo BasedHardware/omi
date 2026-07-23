@@ -51,6 +51,20 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     }
   }
 
+  /// Client IDs that count as "authorized" when scanning OAuth grants — NOT the
+  /// same as `cloudOAuthClientID` (the setup form's per-backend value). The
+  /// ChatGPT directory is one global plugin that always grants under
+  /// `omi-chatgpt-prod`, even on a dev-backend build, so verification must accept
+  /// it or ChatGPT never connects on Beta. Mirrors backend `PUBLIC_CHATGPT_CLIENT_IDS`.
+  var cloudOAuthGrantClientIDs: Set<String> {
+    switch self {
+    case .chatgpt: return ["omi-chatgpt-prod", "omi-chatgpt-dev"]
+    case .claude: return ["omi-claude-prod"]
+    case .notion, .obsidian, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes:
+      return []
+    }
+  }
+
   var cloudOAuthClientSecret: String? {
     switch self {
     case .chatgpt, .claude:
@@ -870,11 +884,12 @@ actor MemoryExportService {
   /// grant list knows the truth. Network failures intentionally retain the last
   /// known state rather than presenting an authorization as revoked.
   func refreshCloudGrantConnectionStatus(for destination: MemoryExportDestination) async -> MemoryExportStatus {
-    guard let clientID = destination.cloudOAuthClientID else { return status(for: destination) }
+    let clientIDs = destination.cloudOAuthGrantClientIDs
+    guard !clientIDs.isEmpty else { return status(for: destination) }
     do {
       let response: OAuthGrantsResponse = try await APIClient.shared.get(
         "v1/mcp/oauth/grants", includeBYOK: false)
-      let isAuthorized = response.grants.contains { $0.clientID == clientID && $0.isActive }
+      let isAuthorized = response.grants.contains { clientIDs.contains($0.clientID) && $0.isActive }
 
       if isAuthorized {
         defaults.set(Date().timeIntervalSince1970, forKey: destination.connectedAtKey)
