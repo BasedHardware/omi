@@ -1,0 +1,131 @@
+// Scripted stand-in for @anthropic-ai/claude-agent-sdk, selected via
+// OMI_AGENT_SDK_MODULE. Emits a fixed message sequence per turn so the WS e2e
+// can assert the production stream-handling contract without a live model:
+//   - main text arrives as stream_event deltas ("Part one. " / "Part two.")
+//   - a subagent tool start + a leak canary ("SECRET-INTERNAL") arrive with
+//     parent_tool_use_id set
+//   - a prompt containing "SLOW" holds (no timers) until interrupt() fires,
+//     then terminalizes with only the partial text
+export { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
+
+export function query({ prompt }) {
+  // Per-turn hold: each SLOW turn gets a fresh deferred, so multiple
+  // interruptible turns work within one session (supersede + stop tests).
+  let currentHold = null;
+  let turnCount = 0; // survives across turns — a "COUNT" prompt reveals it, proving session continuity
+
+  function streamText(text) {
+    return { type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text } } };
+  }
+  function resultMsg(text) {
+    return { type: "result", subtype: "success", result: text, total_cost_usd: 0.001 };
+  }
+
+  async function* turnFor(text) {
+    if (text === "ready") {
+      // Prewarm turn — persistent sessions suppress its output.
+      yield resultMsg("ok");
+      return;
+    }
+    // Death-recovery test hooks (additive):
+    //  - "CRASH" throws inside the loop → session marked dead
+    //  - a reseeded session's first prompt carries the condenser's seed header;
+    //    echo it back so the test can prove context survived the restart
+    if (text.includes("Conversation so far (condensed)")) {
+      yield resultMsg(`RESEEDED:${text.match(/User: (.+)$/)?.[1] ?? ""}`);
+      return;
+    }
+    if (text.includes("CRASH")) {
+      throw new Error("simulated session crash");
+    }
+    if (text.includes("AUTH_FAIL")) {
+      yield { type: "result", subtype: "error_during_execution", errors: ["401 unauthorized"] };
+      return;
+    }
+    turnCount += 1;
+    if (text.includes("COUNT")) {
+      yield { type: "stream_event", event: { type: "content_block_start", content_block: { type: "text" } } };
+      yield streamText(`turn:${turnCount}`);
+      yield resultMsg(`turn:${turnCount}`);
+      return;
+    }
+    if (text.includes("MAINTOOL")) {
+      // A single main-level tool_use surfaced by BOTH the stream_event and the
+      // assistant message, as the real SDK does. The server must emit exactly
+      // one started/completed pair, not one per source.
+      yield {
+        type: "stream_event",
+        event: {
+          type: "content_block_start",
+          content_block: { type: "tool_use", name: "mcp__omi-tools__execute_sql" },
+        },
+      };
+      yield {
+        type: "assistant",
+        message: { content: [{ type: "tool_use", name: "mcp__omi-tools__execute_sql", input: {} }] },
+      };
+      yield streamText("done"); // a text_delta flushes pendingTools → completed
+      yield resultMsg("done");
+      return;
+    }
+    yield { type: "stream_event", event: { type: "content_block_start", content_block: { type: "text" } } };
+    yield streamText("Part one. ");
+    yield {
+      type: "stream_event",
+      parent_tool_use_id: "toolu_sub_1",
+      event: { type: "content_block_start", content_block: { type: "tool_use", name: "mcp__omi-tools__execute_sql" } },
+    };
+    yield {
+      type: "stream_event",
+      parent_tool_use_id: "toolu_sub_1",
+      event: { type: "content_block_delta", delta: { type: "text_delta", text: "SECRET-INTERNAL" } },
+    };
+    yield {
+      type: "assistant",
+      parent_tool_use_id: "toolu_sub_1",
+      message: { content: [{ type: "text", text: "SECRET-INTERNAL" }] },
+    };
+    if (text.includes("SLOW")) {
+      console.error("[fake-sdk] holding for interrupt");
+      let release;
+      currentHold = new Promise((resolve) => { release = resolve; });
+      currentHold._release = release;
+      await currentHold; // deterministic hold — released only by interrupt()
+      currentHold = null;
+      console.error("[fake-sdk] resumed after interrupt");
+      // The real SDK terminalizes an interrupted turn with a non-success
+      // subtype (observed live) — the server must map it to an interrupted
+      // partial result, not an error.
+      yield { type: "result", subtype: "error_during_execution", errors: [], total_cost_usd: 0.001 };
+      return;
+    }
+    yield streamText("Part two.");
+    yield { type: "assistant", message: { content: [{ type: "text", text: "Part one. Part two." }] } };
+    yield resultMsg("Part one. Part two.");
+  }
+
+  const iterator = (async function* () {
+    // Regression hook: die before emitting a session_id, reproducing an SDK
+    // stream that throws during startup. Exercises that sessionIdReady is still
+    // resolved from the loop catch so awaiters/prewarm don't hang forever.
+    if (process.env.OMI_FAKE_SDK_CRASH_BEFORE_ID) {
+      throw new Error("simulated pre-session-id crash");
+    }
+    yield { type: "system", session_id: "fake-session-1" };
+    if (prompt && typeof prompt[Symbol.asyncIterator] === "function") {
+      for await (const userMsg of prompt) {
+        const content = userMsg?.message?.content;
+        yield* turnFor(typeof content === "string" ? content : "");
+      }
+    } else {
+      yield* turnFor(String(prompt));
+    }
+  })();
+
+  iterator.interrupt = async () => {
+    console.error("[fake-sdk] interrupt() called");
+    currentHold?._release?.();
+  };
+  iterator.close = async () => { currentHold?._release?.(); };
+  return iterator;
+}

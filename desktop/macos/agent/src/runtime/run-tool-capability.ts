@@ -275,6 +275,10 @@ export class RunToolCapabilityBroker {
     const allowedToolNames = toolsForAdapter(adapterProjection, projectionContext)
       .filter((tool) => executionRoleAllowsTool(persisted.profile.executionRole, tool.name))
       .map((tool) => tool.name)
+      .filter(
+        (name) =>
+          persisted.toolPolicyAllowedToolNames === null || persisted.toolPolicyAllowedToolNames.includes(name),
+      )
       .sort();
     const capability: RunToolCapability = Object.freeze({
       capabilityRef: `cap_${randomUUID().replaceAll("-", "")}`,
@@ -673,6 +677,8 @@ export class RunToolCapabilityBroker {
     runMode: RunMode;
     chatMode: string | null;
     screenContext: boolean;
+    /** Spawn-time child tool restriction; null = no policy, [] = no tools (fail closed). */
+    toolPolicyAllowedToolNames: string[] | null;
   } {
     const row = this.store.getRow(
       `SELECT s.*, r.session_id AS authoritative_session_id, r.status AS authoritative_run_status,
@@ -720,6 +726,7 @@ export class RunToolCapabilityBroker {
       runMode: text(row.mode) === "act" ? "act" : "ask",
       chatMode: typeof metadata.chatMode === "string" ? metadata.chatMode : null,
       screenContext: admittedScreenContext(runInput),
+      toolPolicyAllowedToolNames: admittedToolPolicyAllowedToolNames(metadata),
     };
   }
 
@@ -743,6 +750,23 @@ export class RunToolCapabilityBroker {
       inputHash: invocation.inputHash,
     };
   }
+}
+
+function admittedToolPolicyAllowedToolNames(metadata: Record<string, unknown>): string[] | null {
+  const rawToolPolicy = metadata.toolPolicy;
+  if (rawToolPolicy === undefined) return null;
+  // Present-but-malformed policy fails closed to an empty allowlist.
+  if (
+    rawToolPolicy === null
+    || typeof rawToolPolicy !== "object"
+    || Array.isArray(rawToolPolicy)
+    || !Array.isArray((rawToolPolicy as Record<string, unknown>).allowedToolNames)
+  ) {
+    return [];
+  }
+  return ((rawToolPolicy as Record<string, unknown>).allowedToolNames as unknown[]).filter(
+    (name): name is string => typeof name === "string",
+  );
 }
 
 function admittedScreenContext(runInput: Record<string, unknown>): boolean {

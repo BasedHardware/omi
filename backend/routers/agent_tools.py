@@ -28,6 +28,8 @@ from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_res
 from utils.retrieval.tools.app_tools import load_app_tools
 from utils.log_sanitizer import sanitize
 
+from utils.observability.fallback import record_fallback
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -268,12 +270,29 @@ def list_tools(uid: str = Depends(get_current_user_uid)):
     for t in CORE_TOOLS:
         tools.append(_tool_schema(t))
 
+    degraded = False
     try:
         app_tools = load_app_tools(uid)
-        for t in app_tools:
+    except Exception:
+        # Whole app-tool lane unavailable — core tools still serve.
+        logger.error("⚠️ Error loading app tools for agent_tools", exc_info=True)
+        app_tools = []
+        degraded = True
+    for t in app_tools:
+        try:
             tools.append(_tool_schema(t))
-    except Exception as e:
-        logger.error(f"⚠️ Error loading app tools for agent_tools: {e}")
+        except Exception:
+            # One malformed schema must not drop the remaining app tools.
+            logger.error(f"⚠️ Skipping app tool with malformed schema: {getattr(t, 'name', '?')}", exc_info=True)
+            degraded = True
+    if degraded:
+        record_fallback(
+            component='agent_tools',
+            from_mode='full_toolset',
+            to_mode='partial_toolset',
+            reason='malformed_doc',
+            outcome='degraded',
+        )
 
     return {"tools": tools}
 
@@ -305,10 +324,16 @@ async def execute_tool(
     # Find the tool
     all_tools = list(CORE_TOOLS)
     try:
-        app_tools = load_app_tools(uid)
-        all_tools.extend(app_tools)
-    except Exception as e:
-        logger.error(f"⚠️ Error loading app tools: {e}")
+        all_tools.extend(load_app_tools(uid))
+    except Exception:
+        logger.error("⚠️ Error loading app tools", exc_info=True)
+        record_fallback(
+            component='agent_tools',
+            from_mode='full_toolset',
+            to_mode='partial_toolset',
+            reason='other',
+            outcome='degraded',
+        )
 
     target = None
     for t in all_tools:
@@ -332,5 +357,5 @@ async def execute_tool(
         result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))
         return {"result": result}
     except Exception as e:
-        logger.error(f"❌ Error executing tool {body.tool_name}: {e}")
+        logger.error(f"❌ Error executing tool {body.tool_name}", exc_info=True)
         return {"error": str(e)}

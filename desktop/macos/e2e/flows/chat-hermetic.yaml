@@ -8,6 +8,7 @@ covers:
   - desktop/macos/Desktop/Sources/Auth/AuthSessionAttemptFence.swift
   - desktop/macos/Desktop/Sources/Chat/APIClient+KernelJournal.swift
   - desktop/macos/Desktop/Sources/Chat/AgentArtifactProjection.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentErrorClassifier.swift
   - desktop/macos/Desktop/Sources/Chat/AgentFailureTranscriptFormatter.swift
   - desktop/macos/Desktop/Sources/Chat/AgentLifecycleDisplayProjection.swift
   - desktop/macos/Desktop/Sources/Chat/AgentLifecycleTranscriptProjection.swift

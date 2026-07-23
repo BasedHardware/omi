@@ -74,6 +74,7 @@ def _install_route_stubs(monkeypatch):
 
     fastapi_mod.HTTPException = _HTTPException
     fastapi_mod.BackgroundTasks = object
+    fastapi_mod.Response = MagicMock()
     monkeypatch.setitem(sys.modules, 'fastapi', fastapi_mod)
 
     vector_db_mod = types.ModuleType('database.vector_db')

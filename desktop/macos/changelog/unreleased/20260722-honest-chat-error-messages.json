@@ -1,0 +1,3 @@
+{
+  "change": "Chat errors now say what actually went wrong (out of credits, expired sign-in, connection lost, oversized attachment) instead of a generic \"Something went wrong\" — and only suggest retrying when a retry can help"
+}

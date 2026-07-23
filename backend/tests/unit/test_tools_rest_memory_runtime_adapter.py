@@ -167,6 +167,12 @@ def test_tools_rest_search_memories_text_requests_legacy_safe_memory_vector_deci
 
     monkeypatch.setattr(memory_services, 'memory_db', _UnexpectedLegacyMemoryDb())
     monkeypatch.setattr(memory_services, 'vector_db', _UnexpectedLegacyVectorDb())
+    monkeypatch.setattr(memory_services.notification_db, 'get_user_time_zone', lambda _uid: 'UTC')
+    monkeypatch.setattr(
+        memory_services,
+        'pin_memory_system',
+        lambda *_args, **_kwargs: memory_services.MemorySystem.LEGACY,
+    )
     monkeypatch.setattr(
         memory_services, 'search_memory_default_chat_memories_vector_decision_text', fake_search_adapter
     )
@@ -193,6 +199,12 @@ def test_tools_rest_search_memories_text_preserves_adapter_denied_or_empty_memor
     memory_services = _load_memory_services()
     monkeypatch.setattr(memory_services, 'memory_db', _UnexpectedLegacyMemoryDb())
     monkeypatch.setattr(memory_services, 'vector_db', _UnexpectedLegacyVectorDb())
+    monkeypatch.setattr(memory_services.notification_db, 'get_user_time_zone', lambda _uid: 'UTC')
+    monkeypatch.setattr(
+        memory_services,
+        'pin_memory_system',
+        lambda *_args, **_kwargs: memory_services.MemorySystem.LEGACY,
+    )
 
     monkeypatch.setattr(
         memory_services,

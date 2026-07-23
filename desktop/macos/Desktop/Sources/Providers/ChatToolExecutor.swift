@@ -390,9 +390,6 @@ class ChatToolExecutor {
       if toolCall.name == "get_local_status" {
         return await executeLocalStatus(expectedOwnerID: expectedOwnerID)
       }
-      if toolCall.name == "get_file_scan_results" || toolCall.name == "start_file_scan" {
-        return await executeScanFiles(toolCall.arguments, expectedOwnerID: expectedOwnerID)
-      }
       return "Unknown tool: \(toolCall.name)"
     }
   }
@@ -1014,6 +1011,30 @@ class ChatToolExecutor {
     return true
   }
 
+  /// Backend tools that write the user's tasks to the server. Unlike the local
+  /// `execute_sql` write path (handled above), the `create_action_item` /
+  /// `update_action_item` backend tools had no post-write refresh — so an
+  /// agent-created task was persisted on the server but never pulled into the
+  /// local TasksStore, leaving it invisible in the task list until a manual
+  /// reload (while the "+" button, which writes through TasksStore, showed up
+  /// immediately). Returns false when the expected owner is no longer current.
+  static func backendToolWritesTasks(_ toolName: String) -> Bool {
+    toolName == "create_action_item" || toolName == "update_action_item"
+  }
+
+  static func executeBackendTaskWritePostEffects(
+    toolName: String,
+    expectedOwnerID: String?,
+    ownerIsCurrent: (String?) -> Bool = { isExpectedOwnerCurrent($0) },
+    refreshTasksFromServer: () async -> Void
+  ) async -> Bool {
+    guard backendToolWritesTasks(toolName) else { return true }
+    guard ownerIsCurrent(expectedOwnerID) else { return false }
+    log("Tool \(toolName): backend task write, refreshing TasksStore from server")
+    await refreshTasksFromServer()
+    return ownerIsCurrent(expectedOwnerID)
+  }
+
   // MARK: - Local Status
 
   private static func executeLocalStatus(expectedOwnerID: String?) async -> String {
@@ -1429,6 +1450,16 @@ class ChatToolExecutor {
   /// helper without hopping the actor.
   nonisolated static func rowInt(_ value: Any?) -> Int? {
     (value as? Int64).map(Int.init) ?? (value as? Int)
+  }
+
+  /// Resolve the action-item id from `update_action_item` args across surfaces.
+  /// Realtime-voice advertises the param as `id` (schemaOverride in
+  /// omi-tool-manifest.ts); chat/pi-mono/stdio advertise `action_item_id`.
+  /// Accept either so a voice update doesn't hard-fail on its own schema.
+  /// Returns nil for missing/empty/non-string, which the caller maps to an error.
+  nonisolated static func resolveActionItemID(_ args: [String: Any]) -> String? {
+    guard let id = (args["action_item_id"] ?? args["id"]) as? String, !id.isEmpty else { return nil }
+    return id
   }
 
   // MARK: - Task Search
@@ -2798,10 +2829,20 @@ class ChatToolExecutor {
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
+        guard
+          await executeBackendTaskWritePostEffects(
+            toolName: "create_action_item",
+            expectedOwnerID: expectedOwnerID,
+            refreshTasksFromServer: {
+              await TasksStore.shared.refreshDashboardTasksFromServer(
+                expectedOwnerID: expectedOwnerID,
+                authorizationSnapshot: currentOwnerAuthorizationSnapshot)
+            })
+        else { return authorizedOwnerChangedResult() }
         return resp.resultText
 
       case "update_action_item":
-        guard let itemId = args["action_item_id"] as? String, !itemId.isEmpty else {
+        guard let itemId = resolveActionItemID(args) else {
           return "Error: action_item_id is required"
         }
         var validatedUpdateDueAt: String? = nil
@@ -2818,6 +2859,16 @@ class ChatToolExecutor {
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
+        guard
+          await executeBackendTaskWritePostEffects(
+            toolName: "update_action_item",
+            expectedOwnerID: expectedOwnerID,
+            refreshTasksFromServer: {
+              await TasksStore.shared.refreshDashboardTasksFromServer(
+                expectedOwnerID: expectedOwnerID,
+                authorizationSnapshot: currentOwnerAuthorizationSnapshot)
+            })
+        else { return authorizedOwnerChangedResult() }
         return resp.resultText
 
       case "create_calendar_event":

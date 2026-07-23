@@ -206,6 +206,43 @@ struct ChatQueryCompletionMetrics: Equatable, Sendable {
   }
 }
 
+/// Bounded failure detail attached to `chat_agent_error`. All values are
+/// closed vocabularies (enum raw values / daemon taxonomy codes) — never raw
+/// exception text, per the analytics integrity contract.
+struct ChatQueryErrorDetail: Equatable, Sendable {
+  let errorCode: String
+  let retryable: Bool?
+  let failureCode: String?
+  let failureSource: String?
+  let adapterId: String?
+  let provider: String?
+
+  static func from(_ error: Error?) -> ChatQueryErrorDetail? {
+    guard let bridgeError = error as? BridgeError else { return nil }
+    switch bridgeError {
+    case .agentError(let message):
+      let classified = AgentErrorClassifier.classify(message)
+      return ChatQueryErrorDetail(
+        errorCode: classified.code.rawValue,
+        retryable: classified.retryable,
+        failureCode: nil,
+        failureSource: nil,
+        adapterId: nil,
+        provider: nil)
+    case .agentRuntimeFailure(let failure):
+      return ChatQueryErrorDetail(
+        errorCode: failure.failureCode.rawValue,
+        retryable: failure.retryable,
+        failureCode: failure.code,
+        failureSource: failure.source,
+        adapterId: failure.adapterId,
+        provider: failure.provider)
+    default:
+      return nil
+    }
+  }
+}
+
 enum ChatQueryTelemetryEvent: Equatable, Sendable {
   case started(ChatQueryTelemetryContext)
   case completed(ChatQueryTelemetryContext, durationMs: Int, metrics: ChatQueryCompletionMetrics)
@@ -214,6 +251,7 @@ enum ChatQueryTelemetryEvent: Equatable, Sendable {
     durationMs: Int,
     errorClass: ChatQueryErrorClass,
     partialResponse: Bool,
+    detail: ChatQueryErrorDetail?,
     watchdogFired: Bool = false
   )
   case cancelled(
@@ -262,7 +300,7 @@ extension ChatQueryTelemetryEvent {
       if let runtimeAttemptId = metrics.runtimeAttemptId {
         properties["runtime_attempt_id"] = runtimeAttemptId
       }
-    case .failed(let eventContext, let durationMs, let errorClass, let partialResponse, let watchdogFired):
+    case .failed(let eventContext, let durationMs, let errorClass, let partialResponse, let detail, let watchdogFired):
       eventName = "chat_agent_error"
       context = eventContext
       properties = [
@@ -271,6 +309,14 @@ extension ChatQueryTelemetryEvent {
         "partial_response": partialResponse,
         "watchdog_fired": watchdogFired,
       ]
+      if let detail {
+        properties["error_code"] = detail.errorCode
+        if let retryable = detail.retryable { properties["retryable"] = retryable }
+        if let failureCode = detail.failureCode { properties["failure_code"] = failureCode }
+        if let failureSource = detail.failureSource { properties["failure_source"] = failureSource }
+        if let adapterId = detail.adapterId { properties["adapter_id"] = adapterId }
+        if let provider = detail.provider { properties["provider"] = provider }
+      }
     case .cancelled(let eventContext, let durationMs, let reason, let partialResponse):
       eventName = "chat_agent_query_cancelled"
       context = eventContext
@@ -305,7 +351,7 @@ extension ChatQueryTelemetryEvent {
       properties["runtime_surface"] = runtimeSurface
     }
     properties["telemetry_schema_version"] = 2
-    if case .failed(_, _, let errorClass, _, _) = self {
+    if case .failed(_, _, let errorClass, _, _, _) = self {
       // One-release compatibility alias for existing PostHog breakdowns.
       // It is bounded and contains the same value as `error_class`, never the
       // raw exception. Remove after LXEMscAj and Hermes exports migrate to v2.
@@ -460,6 +506,7 @@ final class ChatQueryTelemetryAttempt {
   func fail(
     errorClass: ChatQueryErrorClass,
     partialResponse: Bool = false,
+    detail: ChatQueryErrorDetail? = nil,
     watchdogFired: Bool = false
   ) -> Bool {
     guard beginTerminalEvent() else { return false }
@@ -469,6 +516,7 @@ final class ChatQueryTelemetryAttempt {
         durationMs: durationMs(),
         errorClass: errorClass,
         partialResponse: partialResponse,
+        detail: detail,
         watchdogFired: watchdogFired
       )
     )

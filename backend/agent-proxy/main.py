@@ -29,7 +29,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from firebase_admin import auth, credentials, firestore
 from google.cloud.firestore import ArrayUnion
-from google.cloud.firestore_v1 import Query
+from google.cloud.firestore_v1 import Increment, Query
 from utils.executors import (
     critical_executor,
     db_executor,
@@ -40,9 +40,16 @@ from utils.executors import (
 
 logger = logging.getLogger(__name__)
 
+from resilience import circuit_open, classify_error  # noqa: E402
+
 HISTORY_LIMIT = 10
 GCE_PROJECT = "based-hardware"
 VM_KEEPALIVE_INTERVAL = 120  # seconds — ping VM every 2 min during active WS
+# Wait this long for the VM's session_state hello before deciding whether to seed
+# history on the first query. The VM sends it synchronously on connect, so this is a
+# tiny grace window; on timeout we seed history (a fresh amnesiac session is the worse
+# failure than a one-time duplicate).
+VM_HELLO_TIMEOUT = 3.0  # seconds
 
 # Encryption — optional; required for users with enhanced data protection.
 ENCRYPTION_SECRET = os.getenv('ENCRYPTION_SECRET', '').encode('utf-8')
@@ -215,11 +222,18 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
         return ip
 
 
-def _update_firestore_vm(uid: str, ip: str | None, status: str) -> None:
-    """Update the user's agentVm fields in Firestore."""
-    update = {"agentVm.status": status}
+def _update_firestore_vm(
+    uid: str, ip: str | None, status: str, *, restart_failed: bool = False, restart_succeeded: bool = False
+) -> None:
+    """Update the user's agentVm fields in Firestore (incl. circuit-breaker state)."""
+    update: Dict[str, Any] = {"agentVm.status": status}
     if ip:
         update["agentVm.ip"] = ip
+    if restart_failed:
+        update["agentVm.restartFailures"] = Increment(1)
+        update["agentVm.lastRestartFailureAt"] = time.time()
+    if restart_succeeded:
+        update["agentVm.restartFailures"] = 0
     _get_firestore_db().collection('users').document(uid).update(update)
 
 
@@ -248,11 +262,37 @@ async def _reset_vm(vm_name: str, zone: str) -> None:
                     break
 
 
+def _vm_unavailable_event(uid: str) -> Dict[str, Any]:
+    """Honest user-plane copy: circuit-open gets the cooldown message instead of
+    an infinite provisioning spinner."""
+    try:
+        doc = _get_firestore_db().collection('users').document(uid).get()
+        vm = (doc.to_dict() or {}).get('agentVm', {}) if doc.exists else {}
+        if circuit_open(vm, time.time()):
+            return {
+                "type": "error",
+                "code": "agent_unavailable",
+                "message": "Your agent is having trouble starting. We're looking into it — try again in about 30 minutes.",
+            }
+    except Exception:
+        logger.warning("[agent-proxy] could not read breaker state for copy", exc_info=True)
+    return {"type": "error", "code": "unavailable", "message": "Failed to start your agent. Please try again."}
+
+
 async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool = False) -> Optional[Dict[str, Any]]:
     """If VM is stopped, restart it and return updated VM info. Returns None on failure."""
     vm_name = cast(str, vm.get("vmName"))
     zone = cast(str, vm.get("zone", "us-central1-a"))
     fs_status = cast(str, vm.get("status", ""))
+
+    if circuit_open(vm, time.time()):
+        # 3 consecutive restart failures within the cooldown: stop hammering
+        # GCE and give the user an honest error instead of an infinite spinner.
+        logger.error(
+            f"[agent-proxy] restart circuit OPEN for uid={uid} vm={vm_name} "
+            f"failures={vm.get('restartFailures')} last={vm.get('lastRestartFailureAt')}"
+        )
+        return None
 
     if fs_status == "ready":
         # Verify it's actually running
@@ -268,11 +308,15 @@ async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool =
                 await run_blocking(db_executor, _update_firestore_vm, uid, None, "provisioning")
                 try:
                     await _reset_vm(vm_name, zone)
-                    await run_blocking(db_executor, _update_firestore_vm, uid, vm.get("ip"), "ready")
+                    await run_blocking(
+                        db_executor, lambda: _update_firestore_vm(uid, vm.get("ip"), "ready", restart_succeeded=True)
+                    )
                     return await run_blocking(db_executor, _refresh_vm, uid)
-                except Exception as e:
-                    logger.error(f"[agent-proxy] Failed to reset VM {vm_name}: {e}")
-                    await run_blocking(db_executor, _update_firestore_vm, uid, None, "error")
+                except Exception:
+                    logger.error(f"[agent-proxy] Failed to reset VM {vm_name}", exc_info=True)
+                    await run_blocking(
+                        db_executor, lambda: _update_firestore_vm(uid, None, "error", restart_failed=True)
+                    )
                     return None
             return vm
         if gce_status not in ("TERMINATED", "STOPPED"):
@@ -284,12 +328,12 @@ async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool =
 
     try:
         ip = await _start_vm_and_wait(vm_name, zone)
-        await run_blocking(db_executor, _update_firestore_vm, uid, ip, "ready")
+        await run_blocking(db_executor, lambda: _update_firestore_vm(uid, ip, "ready", restart_succeeded=True))
         logger.info(f"[agent-proxy] VM {vm_name} restarted, ip={ip}")
         return await run_blocking(db_executor, _refresh_vm, uid)
-    except Exception as e:
-        logger.error(f"[agent-proxy] Failed to restart VM {vm_name}: {e}")
-        await run_blocking(db_executor, _update_firestore_vm, uid, None, "error")
+    except Exception:
+        logger.error(f"[agent-proxy] Failed to restart VM {vm_name}", exc_info=True)
+        await run_blocking(db_executor, lambda: _update_firestore_vm(uid, None, "error", restart_failed=True))
         return None
 
 
@@ -448,6 +492,22 @@ def _build_prompt_with_history(prompt: str, history: List[Dict[str, Any]]) -> st
     return "\n".join(lines)
 
 
+async def _prepare_first_query_prompt(uid: str, chat_session_id: str, prompt: str, vm_session_active: bool) -> str:
+    """Prompt to send the VM for the first query of a connection.
+
+    The VM keeps its Claude session (and full conversation context) alive across
+    reconnects and announces it with a ``session_state`` hello on connect. When that
+    session is already active, re-injecting the last-N Firestore history duplicates
+    context the live session already holds (wasted tokens, muddled context) — so seed
+    history only for a fresh (inactive) session. Skipping the fetch too avoids a
+    needless Firestore read on every mobile reconnect.
+    """
+    if vm_session_active:
+        return prompt
+    history = await run_blocking(db_executor, _fetch_chat_history, uid, chat_session_id)
+    return _build_prompt_with_history(prompt, history)
+
+
 @app.websocket("/v1/agent/ws")
 async def agent_ws(websocket: WebSocket):
     # Validate Firebase token from Authorization header
@@ -493,7 +553,7 @@ async def agent_ws(websocket: WebSocket):
             await websocket.send_text(json.dumps({"type": "status", "message": "Starting your agent VM..."}))
             vm = await _ensure_vm_running(uid, vm, health_failed=True)
             if not vm or vm.get("status") != "ready" or not vm.get("ip"):
-                await websocket.send_text(json.dumps({"type": "error", "message": "Failed to start agent VM"}))
+                await websocket.send_text(json.dumps(await run_blocking(db_executor, _vm_unavailable_event, uid)))
                 await websocket.close(code=4002, reason="VM startup failed")
                 return
             vm_ip = vm["ip"]
@@ -509,7 +569,7 @@ async def agent_ws(websocket: WebSocket):
         await websocket.send_text(json.dumps({"type": "status", "message": "Starting your agent VM..."}))
         vm = await _ensure_vm_running(uid, vm)
         if not vm or vm.get("status") != "ready" or not vm.get("ip"):
-            await websocket.send_text(json.dumps({"type": "error", "message": "Failed to start agent VM"}))
+            await websocket.send_text(json.dumps(await run_blocking(db_executor, _vm_unavailable_event, uid)))
             await websocket.close(code=4002, reason="VM startup failed")
             return
         vm_ip = vm["ip"]
@@ -528,22 +588,64 @@ async def agent_ws(websocket: WebSocket):
 
     logger.info(f"[agent-proxy] uid={uid} connecting to vm={vm_ip}")
 
+    async def _connect_vm_with_retry() -> Any:
+        """User-blocking connect: retry transient failures with progress events."""
+        for attempt in range(1, 4):
+            try:
+                return await websockets.connect(vm_uri, ping_interval=600, ping_timeout=600)
+            except Exception as e:
+                if classify_error(e) != "transient" or attempt == 3:
+                    raise
+                logger.warning(f"[agent-proxy] uid={uid} vm connect attempt {attempt} failed, retrying", exc_info=True)
+                try:
+                    await websocket.send_text(json.dumps({"type": "status", "message": "Connecting to your agent…"}))
+                except Exception:
+                    pass
+                await asyncio.sleep(attempt)
+
+    @asynccontextmanager
+    async def _connected_vm() -> AsyncIterator[Any]:
+        vm_ws = await _connect_vm_with_retry()
+        try:
+            yield vm_ws
+        finally:
+            await vm_ws.close()
+
     try:
-        async with websockets.connect(vm_uri, ping_interval=600, ping_timeout=600) as vm_ws:
+        async with _connected_vm() as vm_ws:
             logger.info(f"[agent-proxy] uid={uid} connected")
 
             # Send Firebase token to VM so it can fetch backend tools (calendar, gmail, etc.)
-            try:
-                async with httpx.AsyncClient(timeout=10) as client:
-                    await client.post(
-                        f"http://{vm_ip}:8080/auth?token={vm_token}",
-                        json={"firebaseToken": token},
-                    )
-                    logger.info(f"[agent-proxy] uid={uid} sent Firebase token to VM")
-            except Exception as e:
-                logger.warning(f"[agent-proxy] uid={uid} failed to send Firebase token: {e}")
+            for auth_attempt in (1, 2):
+                try:
+                    async with httpx.AsyncClient(timeout=10) as client:
+                        response = await client.post(
+                            f"http://{vm_ip}:8080/auth?token={vm_token}",
+                            json={"firebaseToken": token},
+                        )
+                        response.raise_for_status()
+                        logger.info(f"[agent-proxy] uid={uid} sent Firebase token to VM")
+                    break
+                except Exception:
+                    if auth_attempt == 2:
+                        # Mode change: session proceeds without backend tools.
+                        logger.error(f"[agent-proxy] uid={uid} failed to send Firebase token", exc_info=True)
+                        try:
+                            await websocket.send_text(
+                                json.dumps(
+                                    {"type": "status", "message": "Some connected tools are unavailable right now."}
+                                )
+                            )
+                        except Exception:
+                            pass
+                    else:
+                        await asyncio.sleep(2)
 
             first_query_sent = False
+            # Captured from the VM's session_state hello (see vm_to_phone): whether the
+            # VM already has a live Claude session carrying this conversation's context.
+            vm_session_active = False
+            vm_hello_received = asyncio.Event()
 
             async def _save_ai_response(uid: str, text: str, session_id: str, protection_level: str) -> None:
                 """Fire-and-forget AI response save — never blocks event forwarding."""
@@ -562,13 +664,25 @@ async def agent_ws(websocket: WebSocket):
                             if data.get('type') == 'query':
                                 prompt = data.get('prompt', '')
                                 if not first_query_sent:
-                                    # First query: fetch history and inject into prompt
-                                    history = await run_blocking(db_executor, _fetch_chat_history, uid, chat_session_id)
-                                    data['prompt'] = _build_prompt_with_history(prompt, history)
-                                    msg = json.dumps(data)
                                     first_query_sent = True
+                                    # Seed history only when the VM has no live session. Wait
+                                    # briefly for its session_state hello (sent on connect); on
+                                    # timeout, seed anyway (amnesia is worse than a duplicate).
+                                    try:
+                                        await asyncio.wait_for(vm_hello_received.wait(), timeout=VM_HELLO_TIMEOUT)
+                                    except asyncio.TimeoutError:
+                                        logger.warning(
+                                            f"[agent-proxy] uid={uid} no session_state hello before first query; seeding history"
+                                        )
+                                    new_prompt = await _prepare_first_query_prompt(
+                                        uid, chat_session_id, prompt, vm_session_active
+                                    )
+                                    if new_prompt != prompt:
+                                        data['prompt'] = new_prompt
+                                        msg = json.dumps(data)
                                     logger.info(
-                                        f"[agent-proxy] uid={uid} first query with {len(history)} history messages"
+                                        f"[agent-proxy] uid={uid} first query (vm_session_active={vm_session_active}, "
+                                        f"history_seeded={new_prompt != prompt})"
                                     )
                                 else:
                                     # Subsequent queries: Claude session already has context
@@ -586,13 +700,21 @@ async def agent_ws(websocket: WebSocket):
                                     ),
                                     name=f"agent-proxy:{uid}:save-human-message",
                                 )
-                        except (json.JSONDecodeError, Exception) as e:
-                            logger.warning(f"[agent-proxy] failed to process message: {e}")
+                        except json.JSONDecodeError:
+                            logger.debug(f"[agent-proxy] uid={uid} non-JSON phone message forwarded raw")
+                        except Exception:
+                            # History injection or save enqueue failed — the raw
+                            # message still forwards, but this is a silent mode
+                            # change worth full internal detail.
+                            logger.error(f"[agent-proxy] uid={uid} failed to process phone message", exc_info=True)
                         await vm_ws.send(msg)
-                except (WebSocketDisconnect, Exception):
-                    pass
+                except WebSocketDisconnect:
+                    logger.debug(f"[agent-proxy] uid={uid} phone disconnected")
+                except Exception:
+                    logger.error(f"[agent-proxy] uid={uid} phone_to_vm pump died", exc_info=True)
 
             async def vm_to_phone():
+                nonlocal vm_session_active
                 response_text = ''
                 try:
                     async for msg in vm_ws:
@@ -603,11 +725,17 @@ async def agent_ws(websocket: WebSocket):
                             event = json.loads(text)
                             evt_type = event.get('type')
                             evt_text = event.get('text', '') or event.get('content', '') or ''
-                            if evt_type == 'text_delta':
+                            if evt_type == 'session_state':
+                                # The VM's connect hello — records whether it already has a
+                                # live session so the first query knows to skip history seeding.
+                                vm_session_active = bool(event.get('active'))
+                                vm_hello_received.set()
+                            elif evt_type == 'text_delta':
                                 response_text += evt_text
                             elif evt_type == 'result':
-                                # Use result text as fallback if no deltas were collected
-                                if evt_text and not response_text:
+                                # The terminal result is authoritative, including deltas
+                                # emitted while a reconnecting phone was detached.
+                                if evt_text:
                                     response_text = evt_text
                                 # Save per-query so each message gets its own history entry
                                 if response_text.strip():
@@ -620,7 +748,7 @@ async def agent_ws(websocket: WebSocket):
                         except json.JSONDecodeError:
                             pass
                 except Exception:
-                    pass
+                    logger.error(f"[agent-proxy] uid={uid} vm_to_phone pump died", exc_info=True)
                 finally:
                     # Save any unsaved partial response (connection dropped mid-query)
                     if response_text.strip():
@@ -629,13 +757,20 @@ async def agent_ws(websocket: WebSocket):
 
             async def keepalive_pinger():
                 """Periodically ping the VM to prevent idle auto-stop during active WS."""
+                ping_failures = 0
                 async with httpx.AsyncClient(timeout=5) as client:
                     while True:
                         await asyncio.sleep(VM_KEEPALIVE_INTERVAL)
                         try:
-                            await client.post(f"http://{vm_ip}:8080/ping?token={vm_token}")
+                            response = await client.post(f"http://{vm_ip}:8080/ping?token={vm_token}")
+                            response.raise_for_status()
+                            ping_failures = 0
                         except Exception:
-                            pass
+                            ping_failures += 1
+                            if ping_failures == 3:
+                                logger.warning(
+                                    f"[agent-proxy] uid={uid} keepalive failed 3x consecutively", exc_info=True
+                                )
 
             t1 = asyncio.create_task(phone_to_vm(), name=f"ws:{uid}:phone_to_vm")
             t2 = asyncio.create_task(vm_to_phone(), name=f"ws:{uid}:vm_to_phone")
@@ -646,7 +781,20 @@ async def agent_ws(websocket: WebSocket):
             await asyncio.gather(*pending, return_exceptions=True)
 
     except Exception as e:
-        logger.error(f"[agent-proxy] uid={uid} vm_connect failed: {e}")
+        category = classify_error(e)
+        logger.error(f"[agent-proxy] uid={uid} vm session failed category={category}", exc_info=True)
+        try:
+            await websocket.send_text(
+                json.dumps(
+                    {
+                        "type": "error",
+                        "code": "unavailable" if category in ("transient", "unavailable") else category,
+                        "message": "Couldn't reach your agent. Please try again.",
+                    }
+                )
+            )
+        except Exception:
+            pass
     finally:
         try:
             await websocket.close(code=1000, reason="Session ended")

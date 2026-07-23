@@ -1061,6 +1061,13 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     runtimePreconditions: ["Requires authenticated backend access."],
     adapters: piAndStdio(),
   },
+  // capture_screen returns file PATHS, not image bytes. The model only sees the
+  // pixels by calling the built-in `Read` tool on those paths — supplied by the
+  // ACP `claude_code` tool preset and auto-approved under the desktop_high_trust
+  // policy. There is no omi-owned image-injection fallback: if the kernel ever
+  // passes `_meta.disableBuiltInTools: true` (which strips Read — see
+  // node_modules/@zed-industries/claude-agent-acp acp-agent.js), this tool and
+  // its detail-tile design silently degrade to unreadable paths. Keep Read enabled.
   {
     name: "capture_screen",
     label: "Capture Screen",

@@ -289,6 +289,7 @@ enum GeneratedToolCapabilities {
       "Use visible=false for parent-linked background work that should not appear as a pill.",
       "The primary coordinator decides in its model loop whether to call spawn_agent. When the current user explicitly asks OpenClaw or Hermes to do work, call spawn_agent in that same turn with that provider; do not delegate that instruction to another agent, use a text-pattern handoff, or narrate that only another chat surface can do it.",
       "Pass provider='openclaw' or provider='hermes' only when the current user explicitly names that provider; otherwise omit provider so Omi starts its regular managed agent.",
+      "Pass toolPolicy.allowedToolNames to restrict which Omi tools the child agent may call; it can only narrow, never widen, the child's tool set.",
       "Inspect progress with list_agent_sessions or get_agent_run."
     ]
     ),

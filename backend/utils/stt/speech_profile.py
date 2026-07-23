@@ -66,6 +66,7 @@ def get_speech_profile_matching_predictions(
             _get_speech_profile_api_url() + f'?uid={uid}',
             data={'segments': json.dumps(segments)},
             files=files,
+            timeout=120.0,
         )
 
     if response.status_code != 200:

@@ -4852,6 +4852,7 @@ class ChatProvider: ObservableObject {
           telemetryAttempt.fail(
             errorClass: errorClass,
             partialResponse: hadPartialResponse,
+            detail: .from(error),
             watchdogFired: watchdogFired
           )
           logError(

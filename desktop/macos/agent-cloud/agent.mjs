@@ -1,5 +1,28 @@
 #!/usr/bin/env node
-import { query, tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
+// Controllable seam: the hermetic WS e2e substitutes a scripted SDK module
+// (tests/fixtures/fake-agent-sdk.mjs) so production stream handling is
+// exercised without a live model.
+const { query, tool, createSdkMcpServer } = await import(
+  process.env.OMI_AGENT_SDK_MODULE || "@anthropic-ai/claude-agent-sdk"
+);
+import { ALLOWED_TOOLS, buildAgentDefinitions } from "./query-config.mjs";
+import { USER_MESSAGES, classifyError, isExpectedAbort, logEvent, markOwnedAbort, withRetry } from "./errors.mjs";
+import { createSubagentRouter } from "./stream-routing.mjs";
+import { buildCondensedSeed } from "./conversation-condenser.mjs";
+import {
+  activityCounts,
+  runSqlBatch,
+  executeReadOnlyQuery,
+  truncateToolResult,
+  appUsageMatrix,
+  emptyRangeStatement,
+  formatAppUsage,
+  formatHourlyTimeline,
+  formatTopWindows,
+  hourlyTimeline,
+  resolveRange,
+  topWindows,
+} from "./data-tools.mjs";
 import Database from "better-sqlite3";
 import { z } from "zod";
 import { dirname, join } from "path";
@@ -11,26 +34,33 @@ import { createInflateRaw, createGunzip } from "zlib";
 import { homedir } from "os";
 
 // --- Global error handlers: prevent SDK abort errors from crashing the process ---
+// Owned-abort policy: only aborts within the grace window after OUR OWN
+// interrupt()/abort() calls are expected; any other abort-shaped error is an
+// unknown error and must surface at full detail (previously every message
+// containing "aborted" was silently swallowed forever).
 process.on('unhandledRejection', (err) => {
-  // Claude Agent SDK throws "Operation aborted" when we abort a query (e.g. client disconnect).
-  // This surfaces as an unhandled rejection from internal async paths. Safe to ignore.
-  const msg = err?.message || String(err);
-  if (msg.includes('Operation aborted') || msg.includes('aborted')) {
-    console.log(`[server] Suppressed abort error: ${msg}`);
+  if (isExpectedAbort(err)) {
+    logEvent('debug', 'abort_suppressed', { error: err });
     return;
   }
-  console.error(`[server] Unhandled rejection:`, err);
+  logEvent('error', 'unhandled_rejection', { category: classifyError(err).category, error: err });
 });
 
 process.on('uncaughtException', (err) => {
-  const msg = err?.message || String(err);
-  if (msg.includes('Operation aborted') || msg.includes('aborted')) {
-    console.log(`[server] Suppressed uncaught abort error: ${msg}`);
+  if (isExpectedAbort(err)) {
+    logEvent('debug', 'abort_suppressed', { error: err });
     return;
   }
-  console.error(`[server] Uncaught exception:`, err);
-  // For non-abort errors, exit so systemd can restart us
-  process.exit(1);
+  // Maximum-detail post-mortem, synchronously flushed — console.log can lose
+  // the line across process.exit.
+  const record = {
+    ts: new Date().toISOString(), level: 'error', event: 'uncaught_exception',
+    category: classifyError(err).category,
+    error: { name: err?.name, message: err?.message, stack: err?.stack },
+    memory: process.memoryUsage(), uptime_s: Math.round(process.uptime()),
+  };
+  try { writeFileSync(1, JSON.stringify(record) + "\n"); } catch { console.error(record); }
+  process.exit(1); // systemd restarts us; its restart backoff is the loop guard
 });
 
 // --- Async message queue for persistent session streaming input ---
@@ -75,6 +105,13 @@ const PORT = parseInt(process.env.PORT || "8080", 10);
 const EMBEDDING_DIM = 3072;
 // Max upload size: 10GB
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
+// Cap buffered JSON bodies for /auth and /sync so a large POST can't OOM the VM.
+const MAX_JSON_BODY_BYTES = 64 * 1024 * 1024;
+// Brute-force vector search loads embedded rows into JS to score them; cap the
+// scan so a heavy screenshot history can't materialize unbounded rows +
+// embeddings. ponytail: most-recent-N scan; raise if recall on very old
+// screens matters more than the memory ceiling.
+const SEMANTIC_SCAN_CAP = 5000;
 
 // --- Idle auto-stop ---
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000;   // 30 minutes
@@ -100,6 +137,7 @@ let backendTools = [];
 // --- Database Setup (lazy — opened on first use or after upload) ---
 let db = null;
 let defaultSystemPrompt = null;
+let agentDefinitions = null;
 let omiServer = null;
 
 function openDatabase() {
@@ -113,12 +151,11 @@ function openDatabase() {
   db = Database(DB_PATH);  // writable for /sync inserts; agent tool still blocks non-SELECT
   db.pragma("journal_mode = WAL");
 
-  // Ensure performance indexes exist (incremental sync doesn't transfer indexes)
-  try {
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_screenshots_date_local ON screenshots(date(timestamp, 'localtime'))`);
-  } catch (e) {
-    console.log(`[db] Index creation skipped: ${e.message}`);
-  }
+  // No extra indexes needed: E6 scale bench (600K rows, 2026-07-22) showed the
+  // covering idx_screenshots_timestamp serves every range-comparison query the
+  // tools issue (worst tool call 126ms p50). The old date(timestamp,'localtime')
+  // index attempt failed on every open (non-deterministic date()) and date()-
+  // wrapped WHEREs full-scan anyway — range comparisons are the supported shape.
 
   // Rebuild schema + system prompt + MCP server
   const schema = getSchema();
@@ -131,7 +168,8 @@ ${schema}
 TOOLS:
 - **execute_sql**: Run SQL queries on the database. SELECT auto-limits to 200 rows. Supports FTS5 MATCH for keyword search. Use for structured queries (app usage, time ranges, task management, aggregations).
 - **semantic_search**: Vector similarity search on screenshot OCR text. Use for fuzzy/conceptual queries where exact keywords won't work.
-- **get_daily_recap**: Pre-formatted activity recap (apps, conversations, tasks) for a given time range. Use for "what did I do today/yesterday/this week" — single tool call, much faster than multiple SQL queries.
+- **get_daily_recap**: Pre-formatted activity recap (apps, conversations, tasks, hourly timeline) for any date or range (start_date/end_date or days_ago). Use for "what did I do <day/range>" — single tool call, much faster than multiple SQL queries. If it reports no activity, that is authoritative — do not re-verify with SQL.
+- **get_app_usage**: Day-by-app screen activity matrix for any range in one call. Use for "what did I spend time on", day comparisons, and usage patterns instead of per-day GROUP BY queries.
 - **Playwright browser tools**: You can navigate websites, click elements, fill forms, take screenshots, etc. Use when the user asks you to do something on the web.
 - **Backend tools** (calendar, gmail, health, conversations, memories, action items, web search, etc.): Use these when the user asks about their calendar events, emails, health data, past conversations, or wants to search the web. These tools connect to the user's real accounts.
 
@@ -142,10 +180,15 @@ GUIDELINES:
 - Key tables: screenshots (timestamp, appName, windowTitle, ocrText — 600K+ rows, always filter by timestamp), action_items (description, completed, priority, category, dueAt), memories (content, category, source), transcription_sessions (title, overview, startedAt, finishedAt), transcription_segments (sessionId, speaker, text), focus_sessions (status, appOrSite, durationSeconds), observations (appName, contextSummary, currentActivity), goals (title, goalType, targetValue, currentValue), staged_tasks (description, priority), indexed_files (path, filename, fileType, folder), live_notes (sessionId, text), ai_user_profiles (profileText, generatedAt)
 - FTS tables for keyword search: screenshots_fts(ocrText, windowTitle, appName), action_items_fts(description), staged_tasks_fts(description), task_chat_messages_fts(messageText)
 - For task queries, use action_items table (or FTS: action_items_fts MATCH 'keyword')
+- Task extraction creates near-duplicate entries: for "how many tasks" report COUNT(DISTINCT description), and GROUP BY description when listing so duplicates collapse
 - For conversation queries, use transcription_sessions + transcription_segments
 - For personal facts/preferences, query the memories table first
 - For calendar, email, health data — use the backend tools (get_calendar_events_tool, get_gmail_messages_tool, etc.)
+- For ROW-HEAVY work — searching through many screenshots/tasks/transcripts (content recall, task triage, multi-day pattern analysis) — delegate to the researcher subagent via the Task tool; it reads the rows in its own context and returns distilled findings. Answer directly when one or two aggregate queries (or a single get_daily_recap call) suffice.
+- CONNECTING INTEGRATIONS: if a connector/tool reports it is "not connected", or the user asks how to connect calendar/gmail/etc., call get_connect_link with that capability (e.g. "gmail") and give the user the exact link it returns, verbatim. NEVER invent setup steps, mention external MCP servers/skills, or describe manual settings flows — only use get_connect_link.
 - Be concise and helpful. Format results clearly.`;
+
+  agentDefinitions = buildAgentDefinitions(schema);
 
   rebuildMcpServer();
 
@@ -176,37 +219,11 @@ function getSchema() {
 }
 
 // --- SQL Execution Logic ---
-const BLOCKED_KEYWORDS = ["DROP", "ALTER", "CREATE", "PRAGMA", "ATTACH", "DETACH", "VACUUM"];
-
 function executeSqlQuery(sqlQuery) {
   if (!db) return JSON.stringify({ error: "Database not loaded. Upload omi.db first." });
-  const upper = sqlQuery.toUpperCase();
-  for (const kw of BLOCKED_KEYWORDS) {
-    if (new RegExp(`\\b${kw}\\b`).test(upper)) {
-      return JSON.stringify({ error: `Blocked: ${kw} statements not allowed` });
-    }
-  }
-  if (/;\s*\S/.test(sqlQuery)) {
-    return JSON.stringify({ error: "Multi-statement queries not allowed" });
-  }
-  const trimmed = upper.trim();
-  if ((trimmed.startsWith("UPDATE") || trimmed.startsWith("DELETE")) && !upper.includes("WHERE")) {
-    return JSON.stringify({ error: "UPDATE/DELETE require a WHERE clause" });
-  }
-  try {
-    if (trimmed.startsWith("SELECT")) {
-      let execQuery = sqlQuery;
-      if (!/\bLIMIT\b/i.test(sqlQuery)) {
-        execQuery = sqlQuery.replace(/;?\s*$/, " LIMIT 200");
-      }
-      const rows = db.prepare(execQuery).all();
-      return JSON.stringify({ rows, count: rows.length });
-    } else {
-      return JSON.stringify({ error: "Database is in read-only mode (cloud copy)" });
-    }
-  } catch (err) {
-    return JSON.stringify({ error: err.message });
-  }
+  // stmt.readonly-based guard (data-tools): allows CTE reads the old prefix
+  // guard rejected, caps rows by iteration, no keyword false-positives.
+  return executeReadOnlyQuery(db, sqlQuery);
 }
 
 // --- Semantic Search Logic ---
@@ -255,7 +272,8 @@ async function performSemanticSearch(searchQuery, days = 7, appFilter = null) {
     sql += " AND appName = ?";
     params.push(appFilter);
   }
-  sql += " ORDER BY timestamp DESC";
+  sql += " ORDER BY timestamp DESC LIMIT ?";
+  params.push(SEMANTIC_SCAN_CAP);
 
   const rows = db.prepare(sql).all(...params);
   const results = [];
@@ -306,10 +324,28 @@ Don't use when (if those tools are available):
 Note: Database is read-only (SELECT only). SELECT queries auto-limit to 200 rows.
 Supports FTS5 MATCH queries for keyword search (e.g., WHERE screenshots_fts MATCH 'keyword').
 
+BATCHING: when you need several independent queries (comparisons, multiple
+tables, multiple time ranges), pass them ALL in the "queries" array in ONE
+call — results come back labeled per query. Never issue sequential
+execute_sql calls for queries that don't depend on each other's results.
+
 Key tables: screenshots (appName, windowTitle, ocrText, timestamp), transcription_sessions (title, overview, startedAt, finishedAt), transcription_segments (sessionId, speaker, text, startTime), action_items (description, completed, priority, dueAt, category), memories (content, category, source), staged_tasks (description, priority, source), focus_sessions (status, appOrSite, durationSeconds), observations (appName, contextSummary, currentActivity), goals (title, goalType, targetValue, currentValue), indexed_files (path, filename, fileType, folder), live_notes (sessionId, text, timestamp), ai_user_profiles (profileText, generatedAt).`,
-  { query: z.string().describe("SQL query to execute against omi.db") },
-  async ({ query }) => {
-    const result = executeSqlQuery(query);
+  {
+    query: z.string().optional().describe("Single SQL query to execute against omi.db"),
+    queries: z
+      .array(z.string())
+      .min(1)
+      .max(8)
+      .optional()
+      .describe("Batch of independent SQL queries executed in one call; results return labeled in order"),
+  },
+  async ({ query, queries }) => {
+    const batch = queries ?? (query !== undefined ? [query] : []);
+    if (batch.length === 0) {
+      return { content: [{ type: "text", text: JSON.stringify({ error: "Provide query or queries" }) }] };
+    }
+    console.log(`[sql] calls=1 statements=${batch.length}`);
+    const result = batch.length === 1 ? executeSqlQuery(batch[0]) : runSqlBatch(executeSqlQuery, batch);
     return { content: [{ type: "text", text: result }] };
   }
 );
@@ -347,6 +383,8 @@ const getDailyRecapTool = tool(
   "get_daily_recap",
   `Get a pre-formatted daily activity recap combining app usage, conversations, and tasks.
 
+ONE call covers any date range — pass the full range instead of calling once per day.
+
 Use when:
 - User asks "what did I do today/yesterday/this week?"
 - Broad activity summaries or daily reviews
@@ -358,55 +396,59 @@ Don't use when:
 - User wants structured data or counts (use execute_sql)
 
 This tool runs three queries in one call (apps, conversations, tasks) — much faster than multiple execute_sql calls.
+ONE call covers any date range. If the range has no data, the response says so authoritatively — do not re-verify with SQL.
 
 Parameter guidance:
-- days_ago=0: today's activity so far
-- days_ago=1: yesterday (default, most common)
-- days_ago=7: past week overview`,
+- start_date/end_date (YYYY-MM-DD): a specific day or range, e.g. "what did I do on July 15" → start_date=2026-07-15
+- days_ago=0: today so far; days_ago=1: yesterday (default); days_ago=7: past week`,
   {
-    days_ago: z.number().optional().default(1).describe("0=today, 1=yesterday, 7=past week. Default 1"),
+    days_ago: z.number().optional().default(1).describe("0=today, 1=yesterday, 7=past week. Ignored when start_date is set"),
+    start_date: z.string().optional().describe("Range start, YYYY-MM-DD. Use for specific dates"),
+    end_date: z.string().optional().describe("Range end (inclusive), YYYY-MM-DD. Defaults to start_date"),
   },
-  async ({ days_ago }) => {
+  async ({ days_ago, start_date, end_date }) => {
     if (!db) return { content: [{ type: "text", text: "Database not loaded." }] };
 
-    const n = Math.max(0, Math.floor(days_ago));
-    const dateLabel = n === 0 ? "Today" : n === 1 ? "Yesterday" : `Past ${n} days`;
-    // For today (n=0), upper bound is now; for past days, upper bound is start of today
-    const upperBound = n === 0
-      ? "datetime('now', 'localtime')"
-      : "datetime('now', 'start of day', 'localtime')";
+    let range;
+    try {
+      range = resolveRange({ days_ago, start_date, end_date });
+    } catch (e) {
+      return { content: [{ type: "text", text: `Error: ${e.message}` }] };
+    }
+
+    const counts = activityCounts(db, range);
+    const empty = emptyRangeStatement(range, counts);
+    if (empty) return { content: [{ type: "text", text: empty }] };
 
     // App usage
     const apps = db.prepare(`
       SELECT appName, COUNT(*) as screenshots, ROUND(COUNT(*) * 10.0 / 60, 1) as minutes,
-        MIN(time(timestamp, 'localtime')) as first_seen, MAX(time(timestamp, 'localtime')) as last_seen
+        MIN(time(timestamp)) as first_seen, MAX(time(timestamp)) as last_seen
       FROM screenshots
-      WHERE timestamp >= datetime('now', 'start of day', '-${n} day', 'localtime')
-        AND timestamp < ${upperBound}
+      WHERE timestamp >= ? AND timestamp < ?
         AND appName IS NOT NULL AND appName != ''
       GROUP BY appName ORDER BY screenshots DESC
-    `).all();
+    `).all(range.start, range.endExclusive);
 
     // Conversations
     const convos = db.prepare(`
       SELECT title, overview, emoji, category, startedAt, finishedAt,
         ROUND((julianday(finishedAt) - julianday(startedAt)) * 1440, 1) as duration_min
       FROM transcription_sessions
-      WHERE startedAt >= datetime('now', 'start of day', '-${n} day', 'localtime')
-        AND startedAt < ${upperBound}
+      WHERE startedAt >= ? AND startedAt < ?
         AND deleted = 0 AND discarded = 0
       ORDER BY startedAt DESC
-    `).all();
+    `).all(range.start, range.endExclusive);
 
     // Action items
     const tasks = db.prepare(`
       SELECT description, completed, priority, createdAt FROM action_items
-      WHERE createdAt >= datetime('now', 'start of day', '-${n} day', 'localtime')
-        AND createdAt < ${upperBound}
+      WHERE createdAt >= ? AND createdAt < ?
         AND deleted = 0
       ORDER BY createdAt DESC
-    `).all();
+    `).all(range.start, range.endExclusive);
 
+    const dateLabel = range.label;
     // Format compact markdown
     let out = `# ${dateLabel} Recap\n\n`;
 
@@ -442,7 +484,86 @@ Parameter guidance:
       }
     }
 
+    // Short ranges get an hourly timeline + top window titles so one call
+    // answers "what was I doing" without follow-up SQL.
+    if (range.spanDays <= 2) {
+      out += formatHourlyTimeline(hourlyTimeline(db, range));
+      out += formatTopWindows(topWindows(db, range));
+    }
+
     return { content: [{ type: "text", text: out }] };
+  }
+);
+
+const getAppUsageTool = tool(
+  "get_app_usage",
+  `Day-by-app screen activity matrix for any date range in ONE call.
+Returns per-app totals plus a per-day breakdown (top apps per day).
+Use for "what did I spend time on", day-vs-day comparisons, and usage patterns —
+instead of hand-writing GROUP BY queries per day. Captures are ~10s apart.`,
+  {
+    start_date: z.string().describe("Range start, YYYY-MM-DD"),
+    end_date: z.string().optional().describe("Range end (inclusive), YYYY-MM-DD. Defaults to start_date"),
+  },
+  async ({ start_date, end_date }) => {
+    if (!db) return { content: [{ type: "text", text: "Database not loaded." }] };
+    let range;
+    try {
+      range = resolveRange({ start_date, end_date });
+    } catch (e) {
+      return { content: [{ type: "text", text: `Error: ${e.message}` }] };
+    }
+    return { content: [{ type: "text", text: formatAppUsage(range, appUsageMatrix(db, range)) }] };
+  }
+);
+
+// Real one-click connect link. When a connector reports "not connected", the
+// agent should hand the user a real OAuth URL to click — not invent setup
+// steps. This calls the backend's existing /v1/integrations/{app_key}/oauth-url
+// (verified live) with the user's token and returns the real Google consent URL.
+const getConnectLinkTool = tool(
+  "get_connect_link",
+  `Get a one-click link the user clicks to connect an integration to Omi.
+Call this WHENEVER a connector/tool reports it is "not connected" (e.g. calendar,
+gmail), or the user asks how to connect one. Return the real link to the user and
+tell them to click it and sign in — NEVER describe manual setup steps or invent
+other methods. integration is the requested capability, e.g. "gmail" or "calendar".`,
+  { integration: z.string().describe('Integration capability, e.g. "gmail" or "calendar"') },
+  async ({ integration }) => {
+    if (!userFirebaseToken) {
+      return { content: [{ type: "text", text: "The user must be signed in to Omi before connecting integrations." }] };
+    }
+    try {
+      const resp = await fetch(`${BACKEND_URL}/v1/integrations/${encodeURIComponent(integration)}/oauth-url`, {
+        headers: { Authorization: `Bearer ${userFirebaseToken}` },
+      });
+      if (!resp.ok) {
+        const body = await resp.text();
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `No one-click connect link is available for "${integration}" (HTTP ${resp.status}). ` +
+                `Tell the user this integration must be connected from Omi Settings → Apps & Integrations. Detail: ${body.slice(0, 200)}`,
+            },
+          ],
+        };
+      }
+      const data = await resp.json();
+      const url = data.auth_url || data.url;
+      if (!url) return { content: [{ type: "text", text: `No link returned for "${integration}".` }] };
+      return {
+        content: [
+          {
+            type: "text",
+            text: `CONNECT LINK for ${integration}: ${url}\nGive this link to the user verbatim and tell them to click it and finish connecting; once done, ask them to try again.`,
+          },
+        ],
+      };
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error getting connect link for ${integration}: ${err.message}` }] };
+    }
   }
 );
 
@@ -477,9 +598,17 @@ function jsonSchemaToZod(schema) {
 
     if (prop.description) zodType = zodType.describe(prop.description);
 
+    // Pydantic Optional[X] emits anyOf [X, null]: accept explicit null too —
+    // models routinely pass null for "no filter", and rejecting it burned an
+    // error turn (measured in the eval corpus).
+    const acceptsNull = Array.isArray(prop.anyOf) && prop.anyOf.some((t) => t?.type === "null");
+    if (acceptsNull) zodType = zodType.nullable();
+
     if (!required.has(name)) {
       zodType = zodType.optional();
-      if (prop.default !== undefined) zodType = zodType.default(prop.default);
+      if (prop.default !== undefined && !(acceptsNull && prop.default === null)) {
+        zodType = zodType.default(prop.default);
+      }
     }
 
     shape[name] = zodType;
@@ -501,7 +630,9 @@ async function fetchAndRegisterBackendTools() {
       headers: { Authorization: `Bearer ${userFirebaseToken}` },
     });
     if (!resp.ok) {
-      console.log(`[backend-tools] Failed to fetch tools: HTTP ${resp.status}`);
+      logEvent("error", "backend_tools_unavailable", { status: resp.status });
+      const timer = setTimeout(() => { fetchAndRegisterBackendTools(); }, 30_000);
+      timer.unref?.();
       return;
     }
 
@@ -509,44 +640,81 @@ async function fetchAndRegisterBackendTools() {
     const toolDefs = data.tools || [];
     console.log(`[backend-tools] Fetched ${toolDefs.length} tools from Python backend`);
 
-    backendTools = toolDefs.map((def) => {
-      const zodShape = jsonSchemaToZod(def.parameters || {});
-      return tool(
-        def.name,
-        def.description || `Backend tool: ${def.name}`,
-        zodShape,
-        async (params) => {
-          try {
-            const execResp = await fetch(`${BACKEND_URL}/v1/agent/execute-tool`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${userFirebaseToken}`,
-              },
-              body: JSON.stringify({ tool_name: def.name, params }),
-            });
-            const result = await execResp.json();
-            if (result.error) {
-              return { content: [{ type: "text", text: `Error: ${result.error}` }] };
-            }
-            return { content: [{ type: "text", text: result.result || JSON.stringify(result) }] };
-          } catch (err) {
-            return { content: [{ type: "text", text: `Error calling ${def.name}: ${err.message}` }] };
-          }
+    // Per-def isolation: one bad schema must not throw away every backend
+    // tool (the API also rejects the WHOLE request over one invalid tool name,
+    // so names are validated here at fetch time). First name wins on dupes —
+    // the 4 local tools claim theirs first in rebuildMcpServer.
+    const seenNames = new Set();
+    backendTools = toolDefs.flatMap((def) => {
+      try {
+        if (!/^[a-zA-Z0-9_-]{1,100}$/.test(def.name ?? "")) {
+          logEvent("warn", "backend_tool_skipped", { name: String(def.name), reason: "invalid_name" });
+          return [];
         }
-      );
+        if (seenNames.has(def.name)) {
+          logEvent("warn", "backend_tool_skipped", { name: def.name, reason: "duplicate" });
+          return [];
+        }
+        seenNames.add(def.name);
+        const zodShape = jsonSchemaToZod(def.parameters || {});
+        return [tool(
+          def.name,
+          def.description || `Backend tool: ${def.name}`,
+          zodShape,
+          async (params) => {
+            try {
+              // User-blocking: retry transient failures with backoff.
+              const result = await withRetry(async () => {
+                const execResp = await fetch(`${BACKEND_URL}/v1/agent/execute-tool`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${userFirebaseToken}`,
+                  },
+                  body: JSON.stringify({ tool_name: def.name, params }),
+                });
+                if (!execResp.ok) {
+                  throw new Error(`execute-tool HTTP ${execResp.status}`);
+                }
+                return await execResp.json();
+              }, { attempts: 3 });
+              if (result.error) {
+                return { content: [{ type: "text", text: `Error: ${result.error}` }] };
+              }
+              const bounded = truncateToolResult(result.result || JSON.stringify(result), def.name);
+              return { content: [{ type: "text", text: bounded.text }] };
+            } catch (err) {
+              logEvent("error", "backend_tool_failed", { name: def.name, error: err });
+              return { content: [{ type: "text", text: `Error calling ${def.name}: ${classifyError(err).category}` }] };
+            }
+          }
+        )];
+      } catch (err) {
+        logEvent("warn", "backend_tool_skipped", { name: String(def?.name), reason: "schema_conversion", error: err });
+        return [];
+      }
     });
 
     // Rebuild MCP server with all tools
     rebuildMcpServer();
     console.log(`[backend-tools] Registered ${backendTools.length} backend tools`);
   } catch (err) {
-    console.log(`[backend-tools] Error fetching tools: ${err.message}`);
+    logEvent("error", "backend_tools_unavailable", { error: err });
+    // A boot-time blip must not lose calendar/gmail for the VM's lifetime.
+    const timer = setTimeout(() => { fetchAndRegisterBackendTools(); }, 30_000);
+    timer.unref?.();
   }
 }
 
 function rebuildMcpServer() {
-  const allTools = [executeSqlTool, semanticSearchTool, getDailyRecapTool, ...backendTools];
+  const allTools = [
+    executeSqlTool,
+    semanticSearchTool,
+    getDailyRecapTool,
+    getAppUsageTool,
+    getConnectLinkTool,
+    ...backendTools,
+  ];
   omiServer = createSdkMcpServer({
     name: "omi-tools",
     tools: allTools,
@@ -571,19 +739,12 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
     model: "claude-opus-4-6",
     abortController,
     systemPrompt: systemPrompt || defaultSystemPrompt,
-    allowedTools: [
-      "Read",
-      "Write",
-      "Edit",
-      "Bash",
-      "Glob",
-      "Grep",
-      "WebSearch",
-      "WebFetch",
-    ],
+    allowedTools: ALLOWED_TOOLS,
+    agents: agentDefinitions ?? undefined,
+    includePartialMessages: true,
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
-    maxTurns: undefined,
+    maxTurns: 10,
     cwd: cwd || process.env.HOME || "/",
     mcpServers: {
       "omi-tools": omiServer,
@@ -600,9 +761,18 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
   };
 
   const q = query({ prompt, options });
+  const routeSubagent = createSubagentRouter();
 
   for await (const message of q) {
     if (abortController.signal.aborted) break;
+
+    // Subagent-origin messages: tool starts + throttled text snippets as
+    // progress; their text never enters the answer stream.
+    const subEvents = routeSubagent(message);
+    if (subEvents) {
+      for (const e of subEvents) send(e);
+      continue;
+    }
 
     switch (message.type) {
       case "system":
@@ -671,7 +841,11 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
           }
         } else {
           const errors = message.errors || [];
-          send({ type: "error", message: `Agent error (${message.subtype}): ${errors.join(", ")}` });
+          {
+            const { category } = classifyError(new Error((message.errors || []).join(", ") || message.subtype));
+            logEvent("error", "agent_turn_error", { category, subtype: message.subtype, errors: message.errors });
+            send({ type: "error", code: category, message: USER_MESSAGES[category] ?? USER_MESSAGES.internal });
+          }
         }
         break;
       }
@@ -683,11 +857,49 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
 
 // --- Persistent Session (streaming input mode) ---
 
-function startPersistentSession(send, log) {
+function startPersistentSession(initialSink, log, seedTurns = []) {
   if (!isDatabaseReady()) {
     log("Cannot start persistent session: database not ready");
     return null;
   }
+
+  // Turn history for non-destructive restart. When the SDK session dies (prompt
+  // too long / maxTurns), the recreated session was previously total amnesia;
+  // now the caller passes the prior turns and we seed the first prompt with a
+  // condensed view (recent turns verbatim) so context survives the restart.
+  const turns = [];
+  // Cap in-session history. It is only read as a condensation seed if the
+  // session dies, where recent turns dominate; without a cap a long-lived
+  // single-user VM session accumulates every full answer unboundedly.
+  const MAX_SESSION_TURNS = 50;
+  let currentUser = null; // raw user prompt of the in-flight turn
+  let seedPending = seedTurns.length ? seedTurns : null;
+
+  // The session outlives any single WebSocket connection (single-user VM):
+  // the client sink is swappable so a reconnect reattaches to the live
+  // session and its context instead of starting from amnesia. Events emitted
+  // while detached are dropped; the turn keeps running and its full text
+  // still arrives in the result after reattach.
+  let currentSink = initialSink;
+  let lastSentAt = Date.now();
+  const send = (msg) => {
+    lastSentAt = Date.now();
+    if (currentSink) currentSink(msg);
+  };
+
+  // Heartbeat: bound the client-visible silent gap during active turns.
+  // Measured (2026-07-22): with streaming on, light turns gap <3s but heavy
+  // delegated turns still go 40-64s silent while the subagent generates text
+  // we deliberately swallow. A periodic status caps the gap regardless of
+  // where the silence comes from.
+  const heartbeatMs = parseInt(process.env.OMI_TURN_HEARTBEAT_MS || "10000", 10);
+  const heartbeatTimer = setInterval(() => {
+    if (!turnActive || isPrewarmTurn) return;
+    if (Date.now() - lastSentAt < heartbeatMs) return;
+    const elapsedS = turnStartedAt ? Math.round((Date.now() - turnStartedAt) / 1000) : 0;
+    send({ type: "status", message: `Still working… (${elapsedS}s)` });
+  }, Math.max(50, Math.floor(heartbeatMs / 2)));
+  heartbeatTimer.unref?.();
 
   const sessionAbort = new AbortController();
 
@@ -695,10 +907,12 @@ function startPersistentSession(send, log) {
     model: "claude-sonnet-4-6",
     abortController: sessionAbort,
     systemPrompt: defaultSystemPrompt,
-    allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"],
+    allowedTools: ALLOWED_TOOLS,
+    agents: agentDefinitions ?? undefined,
+    includePartialMessages: true,
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
-    maxTurns: undefined,
+    maxTurns: 10,
     cwd: process.env.HOME || "/",
     mcpServers: {
       "omi-tools": omiServer,
@@ -735,11 +949,49 @@ function startPersistentSession(send, log) {
   let isPrewarmTurn = true; // First turn is prewarm, suppress output
   let turnStartedAt = null; // timestamp when query was pushed
   let firstEventSent = false; // tracks if we've sent the first stream event for this turn
+  let interruptRequested = false; // set when a stop/preemption cuts the current turn short
+  let dead = false; // set when the session loop dies — callers must start a fresh session
+  let pendingPrompt = null; // queue-of-1: a query arriving mid-turn supersedes any earlier pending one
+
+  function beginTurn(prompt, sid) {
+    turnActive = true;
+    turnStartedAt = Date.now();
+    firstEventSent = false;
+    currentUser = prompt;
+    let content = prompt;
+    // First turn of a reseeded session: prepend the condensed prior context so
+    // the restart is not amnesia. The user's raw prompt is still what we track.
+    if (seedPending) {
+      const summary = seedPending
+        .slice(0, Math.max(0, seedPending.length - 3))
+        .map((t) => `- ${t.user.slice(0, 100)} → ${(t.assistant || "").slice(0, 100)}`)
+        .join("\n") || "(no older turns)";
+      content = `${buildCondensedSeed(summary, seedPending.slice(-3))}\n\n---\nUser: ${prompt}`;
+      log(`Reseeded session with ${seedPending.length} prior turns (condensed)`);
+      seedPending = null;
+    }
+    send({ type: "status", message: "Processing..." });
+    messageQueue.push({
+      type: "user",
+      message: { role: "user", content },
+      parent_tool_use_id: null,
+      session_id: sid,
+    });
+  }
 
   // Background message processing loop — runs for entire WS lifetime
+  const routeSubagent = createSubagentRouter();
   const loopPromise = (async () => {
     try {
       for await (const message of q) {
+        // Subagent-origin messages: tool starts + throttled text snippets as
+        // progress; their text never enters the answer stream.
+        const subEvents = routeSubagent(message);
+        if (subEvents) {
+          if (!isPrewarmTurn) for (const e of subEvents) send(e);
+          continue;
+        }
+
         switch (message.type) {
           case "system":
             if ("session_id" in message) {
@@ -788,10 +1040,12 @@ function startPersistentSession(send, log) {
             if (Array.isArray(content)) {
               for (const block of content) {
                 if (block.type === "tool_use") {
+                  // Diagnostics only. The started/completed tool_activity events
+                  // are emitted from the stream_event handler (includePartialMessages
+                  // is on); emitting them here too sent duplicate events and
+                  // double-counted pendingTools (→ duplicate completed events).
                   const inputStr = JSON.stringify(block.input);
                   log(`[TOOL_CALL] ${block.name} input=${inputStr.length > 500 ? inputStr.slice(0, 500) + '...' : inputStr}`);
-                  send({ type: "tool_activity", name: block.name, status: "started" });
-                  pendingTools.push(block.name);
                 }
                 // Text is already streamed via stream_event handler — don't send again here
               }
@@ -816,7 +1070,9 @@ function startPersistentSession(send, log) {
               isPrewarmTurn = false;
               fullText = "";
               pendingTools = [];
-              turnActive = false;
+              // Do NOT reset turnActive here: prewarm never sets it, and a query
+              // arriving before the prewarm result has already set it for its own
+              // turn — clobbering it makes that turn's stop a silent no-op.
               log("Prewarm turn completed, session ready for queries");
               break;
             }
@@ -832,9 +1088,26 @@ function startPersistentSession(send, log) {
                   fullText += remaining;
                 }
               }
-              send({ type: "result", text: fullText, sessionId, costUsd });
+              // interrupted: the turn was cut short by a stop/preemption — the
+              // text is a partial answer, and clients must be able to say so.
+              send({ type: "result", text: fullText, sessionId, costUsd, interrupted: interruptRequested });
+            } else if (interruptRequested) {
+              // A user stop terminalizes with a non-success subtype in the real
+              // SDK — that is a partial answer, not an error (measured: the
+              // stop path previously surfaced an error to the client).
+              send({ type: "result", text: fullText, sessionId, costUsd: message.total_cost_usd || 0, interrupted: true });
             } else {
-              send({ type: "error", message: `Agent error (${message.subtype}): ${(message.errors || []).join(", ")}` });
+              {
+              const { category } = classifyError(new Error((message.errors || []).join(", ") || message.subtype));
+              logEvent("error", "agent_turn_error", { category, subtype: message.subtype, errors: message.errors });
+              send({ type: "error", code: category, message: USER_MESSAGES[category] ?? USER_MESSAGES.internal });
+            }
+            }
+            // Record the completed exchange for non-destructive restart.
+            if (currentUser) {
+              turns.push({ user: currentUser, assistant: fullText });
+              currentUser = null;
+              if (turns.length > MAX_SESSION_TURNS) turns.splice(0, turns.length - MAX_SESSION_TURNS);
             }
             // Reset per-turn state
             fullText = "";
@@ -842,12 +1115,34 @@ function startPersistentSession(send, log) {
             turnActive = false;
             turnStartedAt = null;
             firstEventSent = false;
+            interruptRequested = false;
+            if (pendingPrompt) {
+              // Superseding query queued mid-turn: start it only now, at the
+              // turn boundary, so two turns' events never interleave.
+              const next = pendingPrompt;
+              pendingPrompt = null;
+              beginTurn(next.prompt, next.sid);
+            }
             break;
           }
         }
       }
     } catch (err) {
-      log(`Persistent session loop error: ${err.message}`);
+      // The session loop is the only consumer of the SDK stream — if it dies,
+      // the shared session is unusable. Tell the client honestly, log at full
+      // detail, and mark the session dead so the next query starts fresh
+      // instead of hanging on a promise that will never resolve.
+      const category = classifyError(err).category;
+      logEvent("error", "session_loop_died", { category, error: err });
+      dead = true;
+      // If the stream died before emitting session_id, unblock anyone awaiting
+      // sessionIdReady — the id will never arrive. Awaiters re-check isDead()/
+      // getSessionId() and restart a fresh session instead of hanging forever.
+      sessionIdResolve?.();
+      sessionIdResolve = null;
+      try {
+        send({ type: "error", code: category, message: USER_MESSAGES[category] ?? USER_MESSAGES.internal });
+      } catch {}
     }
     log("Persistent session ended");
   })();
@@ -862,6 +1157,19 @@ function startPersistentSession(send, log) {
     isTurnActive: () => turnActive,
     setTurnActive: (v) => { turnActive = v; },
     startTurnTimer: () => { turnStartedAt = Date.now(); firstEventSent = false; },
+    markInterrupted: () => { interruptRequested = true; },
+    isDead: () => dead,
+    getTurns: () => turns,
+    beginTurn,
+    setPending: (prompt, sid) => {
+      const replaced = pendingPrompt !== null;
+      pendingPrompt = { prompt, sid };
+      return replaced;
+    },
+    setSink: (sink) => { currentSink = sink; },
+    // A stale socket's close event can fire after a newer socket attached —
+    // only clear the sink if it is still ours.
+    detachSink: (sink) => { if (currentSink === sink) currentSink = null; },
   };
 }
 
@@ -871,6 +1179,14 @@ async function runCli(userMessage) {
   if (!openDatabase()) {
     console.error(`ERROR: Database not found at ${DB_PATH}`);
     process.exit(1);
+  }
+
+  // Real-connector hook: with a real Firebase token set, load the user's actual
+  // backend connectors (calendar/gmail/health/…) the same way the WS /auth path
+  // does, so connector interaction can be exercised against live api.omi.me.
+  if (process.env.OMI_FIREBASE_TOKEN) {
+    userFirebaseToken = process.env.OMI_FIREBASE_TOKEN;
+    await fetchAndRegisterBackendTools();
   }
 
   console.log(`\n${"=".repeat(60)}`);
@@ -1175,8 +1491,19 @@ function startServer() {
       }
 
       let body = "";
-      req.on("data", (chunk) => { body += chunk.toString(); });
+      let bodyTooLarge = false;
+      req.on("data", (chunk) => {
+        if (bodyTooLarge) return;
+        body += chunk.toString();
+        if (body.length > MAX_JSON_BODY_BYTES) {
+          bodyTooLarge = true;
+          res.writeHead(413, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Request body too large" }));
+          req.destroy();
+        }
+      });
       req.on("end", async () => {
+        if (bodyTooLarge) return;
         try {
           const payload = JSON.parse(body);
           const { firebaseToken } = payload;
@@ -1235,8 +1562,19 @@ function startServer() {
       }
 
       let body = "";
-      req.on("data", (chunk) => { body += chunk.toString(); });
+      let bodyTooLarge = false;
+      req.on("data", (chunk) => {
+        if (bodyTooLarge) return;
+        body += chunk.toString();
+        if (body.length > MAX_JSON_BODY_BYTES) {
+          bodyTooLarge = true;
+          res.writeHead(413, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Request body too large" }));
+          req.destroy();
+        }
+      });
       req.on("end", () => {
+        if (bodyTooLarge) return;
         try {
           const payload = JSON.parse(body);
           const { table, rows } = payload;
@@ -1252,6 +1590,15 @@ function startServer() {
           }
 
           const cols = Object.keys(rows[0]);
+          // Column names are interpolated into ALTER TABLE / INSERT identifiers;
+          // the table is whitelisted but cols are client-supplied. Reject anything
+          // that is not a plain SQL identifier so a stray quote cannot break out.
+          const badCol = cols.find((c) => !/^[A-Za-z0-9_]+$/.test(c));
+          if (badCol) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: `Invalid column name: ${badCol}` }));
+            return;
+          }
 
           // Auto-add any columns missing from the table (handles schema migrations
           // where the VM has an older database than the desktop app).
@@ -1319,15 +1666,26 @@ function startServer() {
     },
   });
 
+  // Single persistent session per VM (single user); survives WS reconnects.
+  let sharedSession = null;
+
   wss.on("connection", (ws) => {
     log("Client connected");
-    let session = null; // persistent session for this WS connection
 
     const send = (msg) => {
       if (ws.readyState === ws.OPEN) {
         ws.send(JSON.stringify(msg));
       }
     };
+
+    // Reattach to the shared sharedSession (single-user VM) so a reconnect keeps
+    // the conversation context instead of starting from amnesia.
+    if (sharedSession) {
+      sharedSession.setSink(send);
+      send({ type: "session_state", active: true, sessionId: sharedSession.getSessionId() ?? "" });
+    } else {
+      send({ type: "session_state", active: false });
+    }
 
     ws.on("message", async (data) => {
       let msg;
@@ -1340,20 +1698,26 @@ function startServer() {
 
       switch (msg.type) {
         case "prewarm": {
-          if (session) {
-            log("Prewarm: session already active");
+          if (sharedSession) {
+            log("Prewarm: sharedSession already active");
             send({ type: "prewarm_ack", success: true });
             break;
           }
-          log("Prewarm: starting persistent session...");
-          session = startPersistentSession(send, log);
-          if (!session) {
+          log("Prewarm: starting persistent sharedSession...");
+          sharedSession = startPersistentSession(send, log);
+          if (!sharedSession) {
             send({ type: "prewarm_ack", success: false });
             break;
           }
-          session.sessionIdReady.then(() => {
+          sharedSession.sessionIdReady.then(() => {
+            // sessionIdReady also resolves when the loop dies before an id —
+            // treat a dead/idless session as a failed prewarm, not a success.
+            if (sharedSession.isDead?.() || !sharedSession.getSessionId()) {
+              send({ type: "prewarm_ack", success: false });
+              return;
+            }
             send({ type: "prewarm_ack", success: true });
-            log("Prewarm: session ready");
+            log("Prewarm: sharedSession ready");
           }).catch(() => {
             send({ type: "prewarm_ack", success: false });
           });
@@ -1365,49 +1729,63 @@ function startServer() {
           const prompt = msg.prompt;
           log(`Query: ${prompt?.slice(0, 100)}`);
 
-          // Start session if not started yet
-          if (!session) {
-            log("No active session, starting on first query...");
-            session = startPersistentSession(send, log);
-            if (!session) {
+          let recoverySeed = [];
+          if (sharedSession?.isDead?.()) {
+            // Non-destructive restart: carry the prior turns forward (condensed)
+            // instead of losing all context when the session died.
+            const prior = sharedSession.getTurns?.() || [];
+            // beginTurn condenses the seed on the restarted session's first turn
+            // (summarizes all but the last few, keeps those full), so the prior
+            // turns pass straight through. The old planCondensation call was a
+            // no-op here: [...summarize, ...keep] just reconstructed prior.
+            recoverySeed = prior;
+            logEvent("warn", "session_recreated_after_death", { priorTurns: prior.length });
+            sharedSession = null;
+          }
+          // Start sharedSession if not started yet
+          if (!sharedSession) {
+            log("No active sharedSession, starting on first query...");
+            sharedSession = startPersistentSession(send, log, recoverySeed);
+            if (!sharedSession) {
               send({ type: "error", message: "Database not available" });
               break;
             }
           }
 
-          // Wait for session_id
-          await session.sessionIdReady;
-          const sid = session.getSessionId();
-          if (!sid) {
+          // Wait for session_id. This also resolves if the loop died before an
+          // id arrived (sessionIdResolve is called from the loop catch), so a
+          // dead session no longer hangs here — re-check before proceeding.
+          await sharedSession.sessionIdReady;
+          const sid = sharedSession.getSessionId();
+          if (sharedSession.isDead?.() || !sid) {
             send({ type: "error", message: "Session failed to initialize" });
-            session = null;
+            sharedSession = null;
             break;
           }
 
-          // If a turn is still active, interrupt first
-          if (session.isTurnActive()) {
-            log("Interrupting active turn for new query");
-            try { await session.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
+          if (sharedSession.isTurnActive()) {
+            // Supersede: park the new prompt in the queue-of-1 and interrupt.
+            // It starts at the turn boundary (result reset), never mid-stream —
+            // a rapid double-tap can no longer interleave two turns' events.
+            const replaced = sharedSession.setPending(prompt, sid);
+            if (replaced) send({ type: "status", message: "Answering your latest question instead." });
+            log("Interrupting active turn for superseding query");
+            sharedSession.markInterrupted();
+            markOwnedAbort();
+            try { await sharedSession.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
+            break;
           }
 
-          session.setTurnActive(true);
-          session.startTurnTimer();
-          send({ type: "status", message: "Processing..." });
-
-          // Push user message into the persistent session via streamInput
-          session.messageQueue.push({
-            type: "user",
-            message: { role: "user", content: prompt },
-            parent_tool_use_id: null,
-            session_id: sid,
-          });
+          sharedSession.beginTurn(prompt, sid);
           break;
         }
 
         case "stop": {
           log("Stop requested");
-          if (session?.isTurnActive()) {
-            try { await session.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
+          if (sharedSession?.isTurnActive()) {
+            sharedSession.markInterrupted();
+            markOwnedAbort();
+            try { await sharedSession.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
           }
           break;
         }
@@ -1419,12 +1797,9 @@ function startServer() {
 
     ws.on("close", () => {
       log("Client disconnected");
-      if (session) {
-        session.messageQueue.end();
-        session.query.close();
-        session.sessionAbort.abort();
-        session = null;
-      }
+      // Detach only — the session (and any in-flight turn) survives so a
+      // reconnect resumes with full context instead of amnesia.
+      sharedSession?.detachSink(send);
     });
 
     ws.on("error", (err) => {
@@ -1451,8 +1826,10 @@ function startServer() {
 
   // Start hot-reload version checker
   const UPDATE_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
-  checkAndApplyUpdate(log);
-  setInterval(() => checkAndApplyUpdate(log), UPDATE_INTERVAL_MS);
+  if (process.env.OMI_AGENT_DISABLE_UPDATES !== "1") {
+    checkAndApplyUpdate(log);
+    setInterval(() => checkAndApplyUpdate(log), UPDATE_INTERVAL_MS);
+  }
 }
 
 // --- Main ---
