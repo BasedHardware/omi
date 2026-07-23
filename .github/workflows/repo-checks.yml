@@ -50,6 +50,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          # Preflight can select manifest checks that import pyyaml
+          # (e.g. desktop-candidate-source-gate), matching the Hygiene job below.
+          pip install -q pyyaml
           scripts/pr-preflight \
             --base "${{ github.event.pull_request.base.sha }}" \
             --repository "${{ github.repository }}" \
