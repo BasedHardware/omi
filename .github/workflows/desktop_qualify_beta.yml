@@ -45,14 +45,6 @@ jobs:
       contents: write
     outputs:
       qualified: ${{ steps.publish.outputs.qualified }}
-      # Lane self-classification for the fail-open verdict:
-      #   'qualified'   — ran qualification and published immutable evidence.
-      #   'failed'      — the qualification step RAN and returned failure (the
-      #                   build genuinely failed the gate) → blocks promotion.
-      #   'unavailable' — the qualification step never ran (runner offline,
-      #                   skipped, or a setup failure before it), so infra could
-      #                   not produce a verdict → must NOT block the release.
-      lane_verdict: ${{ steps.publish.outputs.qualified == 'true' && 'qualified' || (steps.codemagic.outcome == 'failure' && 'failed' || 'unavailable') }}
     env:
       CODEMAGIC_APP_ID: 66c95e6ec76853c447b8bcbb
     steps:
@@ -278,10 +270,6 @@ jobs:
       contents: write
     outputs:
       qualified: ${{ steps.publish.outputs.qualified }}
-      # See codemagic-lane for the lane_verdict contract (qualified/failed/unavailable).
-      # 'failed' only when the qualification step itself RAN and failed; a runner
-      # that was offline/skipped or died before qualifying reports 'unavailable'.
-      lane_verdict: ${{ steps.publish.outputs.qualified == 'true' && 'qualified' || (steps.qualify.outcome == 'failure' && 'failed' || 'unavailable') }}
     steps:
       - name: Remove stale uninitialized PlatformIO gitlink
         shell: bash
@@ -466,10 +454,6 @@ jobs:
       contents: write
     outputs:
       qualified: ${{ steps.publish.outputs.qualified }}
-      # See codemagic-lane for the lane_verdict contract (qualified/failed/unavailable).
-      # 'failed' only when the qualification step itself RAN and failed; a runner
-      # that was offline/skipped or died before qualifying reports 'unavailable'.
-      lane_verdict: ${{ steps.publish.outputs.qualified == 'true' && 'qualified' || (steps.qualify.outcome == 'failure' && 'failed' || 'unavailable') }}
     steps:
       - name: Remove stale uninitialized PlatformIO gitlink
         shell: bash
@@ -644,36 +628,25 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Fail open on infra unavailability; block only a genuine failure
+      - name: Require at least one qualified lane
         env:
-          # Empty (skipped/never-ran lane) is treated as 'unavailable'.
-          CM_V: ${{ needs.codemagic-lane.outputs.lane_verdict }}
-          M1_V: ${{ needs.qualify-m1-studio.outputs.lane_verdict }}
-          M4_V: ${{ needs.qualify-m4-mini.outputs.lane_verdict }}
+          CM_QUALIFIED: ${{ needs.codemagic-lane.outputs.qualified }}
+          M1_QUALIFIED: ${{ needs.qualify-m1-studio.outputs.qualified }}
+          M4_QUALIFIED: ${{ needs.qualify-m4-mini.outputs.qualified }}
+          M1_RESULT: ${{ needs.qualify-m1-studio.result }}
+          M4_RESULT: ${{ needs.qualify-m4-mini.result }}
         run: |
           set -euo pipefail
-          cm="${CM_V:-unavailable}"; m1="${M1_V:-unavailable}"; m4="${M4_V:-unavailable}"
           {
-            echo "### Desktop beta qualification verdict"
+            echo "### Desktop beta qualification lanes"
             echo
-            echo "- codemagic-lane: $cm"
-            echo "- qualify-m1-studio: $m1"
-            echo "- qualify-m4-mini: $m4"
+            echo "- codemagic-lane qualified: ${CM_QUALIFIED:-false}"
+            echo "- qualify-m1-studio qualified: ${M1_QUALIFIED:-false} (result: $M1_RESULT)"
+            echo "- qualify-m4-mini qualified: ${M4_QUALIFIED:-false} (result: $M4_RESULT)"
           } >> "$GITHUB_STEP_SUMMARY"
-          # Policy (fail-open on infra, fail-closed on genuine failure):
-          #   1. A lane that RAN qualification and the build genuinely FAILED
-          #      blocks promotion — a bad build must never reach Beta.
-          #   2. Otherwise, a lane that qualified promotes.
-          #   3. Otherwise (no genuine failure and nothing qualified — every lane
-          #      was offline/unresponsive/broke before qualifying) we FAIL OPEN:
-          #      unreachable infra must not prevent the update from shipping.
-          if [ "$cm" = "failed" ] || [ "$m1" = "failed" ] || [ "$m4" = "failed" ]; then
-            echo "A qualification lane ran and the build genuinely failed the gate; blocking promotion." >&2
-            exit 1
-          fi
-          if [ "$cm" = "qualified" ] || [ "$m1" = "qualified" ] || [ "$m4" = "qualified" ]; then
+          if [ "$CM_QUALIFIED" = "true" ] || [ "$M1_QUALIFIED" = "true" ] || [ "$M4_QUALIFIED" = "true" ]; then
             echo "Candidate qualified by at least one lane."
             exit 0
           fi
-          echo "No lane genuinely failed the build and none could run qualification (all unavailable/infra); failing open so unreachable machines do not block the release."
-          exit 0
+          echo "No qualification lane qualified the candidate." >&2
+          exit 1
