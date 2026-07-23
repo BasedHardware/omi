@@ -64,6 +64,16 @@ fn web_search_tool_def() -> AnthropicToolDef {
         "type": WEB_SEARCH_TOOL_TYPE,
         "name": "web_search",
         "max_uses": WEB_SEARCH_MAX_USES,
+        // Force direct execution. As of web_search_20260209, `allowed_callers`
+        // defaults to ["code_execution_20260120"]: on a programmatic-tool-calling
+        // model (sonnet-4-6 / opus-4-6, the only models we route web search to)
+        // Anthropic runs the search *inside* code execution and returns
+        // `code_execution_tool_result` blocks. Our AnthropicContentBlock enum has
+        // no variant (and no serde(other)) for those, so `receive_anthropic_response`
+        // fails to deserialize and 502s the whole turn. "direct" keeps the search a
+        // plain server tool that returns the `server_tool_use` + `web_search_tool_result`
+        // blocks the parser already handles.
+        "allowed_callers": ["direct"],
     }))
 }
 
