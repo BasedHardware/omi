@@ -1,0 +1,20 @@
+desktop/macos/Desktop/Tests/RewindDatabaseLifecycleTests.swift
+  s_77f2b8dfbc2e90::t_c2d6d53c8e3ded 81-85
+  s_77f2b8dfbc2e90::t_f2429c85b12ae9 119-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "707761cc86d7941d530e3931aa001bfb79645d6b",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": null
+    }
+  }
+}
