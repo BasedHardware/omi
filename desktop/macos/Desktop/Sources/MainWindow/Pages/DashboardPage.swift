@@ -2319,34 +2319,48 @@ struct HomeAskBar: View {
         .padding(.horizontal, OmiSpacing.md)
       }
 
-      HStack(spacing: OmiSpacing.sm) {
+      HStack(alignment: .bottom, spacing: OmiSpacing.sm) {
         Button(action: pickFiles) {
           Image(systemName: "paperclip")
             .scaledFont(size: OmiType.subheading, weight: .medium)
             .foregroundStyle(isFocused ? HomePalette.secondary : HomePalette.muted)
-            .frame(width: 24, height: 24)
+            .frame(width: 24, height: 34)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(attachments.count >= kMaxChatAttachments)
         .help("Attach files")
 
+        // Auto-growing input: `axis: .vertical` + `lineLimit(1...6)` grow the pill
+        // as text wraps (scrolls past six lines). Return submits, Shift+Return
+        // newlines — via onKeyPress, since a vertical field would otherwise insert
+        // a newline on Return and never fire onSubmit.
         TextField(
           "",
           text: $text,
-          prompt: Text("Ask omi anything").foregroundColor(HomePalette.muted)
+          prompt: Text("Ask omi anything").foregroundColor(HomePalette.muted),
+          axis: .vertical
         )
         .textFieldStyle(.plain)
         .font(.system(size: 15))
         .foregroundStyle(HomePalette.ink)
+        .lineLimit(1...6)
         .focused(focus)
-        .onSubmit(handleSubmit)
+        .padding(.vertical, 7)
+        .onKeyPress(phases: .down) { press in
+          guard press.key == .return else { return .ignored }
+          // Shift+Return falls through to the field's newline handling.
+          if press.modifiers.contains(.shift) { return .ignored }
+          handleSubmit()
+          return .handled
+        }
 
         actionButton
       }
       .padding(.leading, OmiSpacing.lg)
       .padding(.trailing, OmiSpacing.sm)
-      .frame(height: 58)
+      .padding(.vertical, 12)
+      .frame(minHeight: 58)
     }
     .background(
       RoundedRectangle(cornerRadius: 29, style: .continuous)
