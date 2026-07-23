@@ -15,6 +15,7 @@ enum DesktopHealthEventName: String {
   case pttAudioCaptureLifecycle = "ptt_audio_capture_lifecycle"
   case voiceTurnStarted = "voice_turn_started"
   case voiceTurnTerminal = "voice_turn_terminal"
+  case voiceToolLatency = "voice_tool_latency"
   case realtimeTokenMintFailed = "realtime_token_mint_failed"
   case realtimeProviderExpectedIdleTeardown = "realtime_provider_expected_idle_teardown"
   case realtimeProviderExpectedSessionRotation = "realtime_provider_expected_session_rotation"
@@ -65,6 +66,10 @@ final class DesktopDiagnosticsManager {
   private var snapshots: [DesktopHealthSnapshot] = []
   private var betaTrailSnapshots: [DesktopHealthSnapshot] = []
   private let snapshotLimit = 150
+  /// Wall-clock start of each in-flight realtime voice tool call, keyed by the
+  /// hub's transport key. A start/stop timer for `voice_tool_latency`; cleared
+  /// on turn reset so it can't grow unbounded.
+  private var voiceToolStarts: [String: Date] = [:]
   private let betaTrailSnapshotLimit = 50
   private var consecutiveNearZeroPTTTurns = 0
   private var lastPTTWatchdogIncidentAt: Date?
@@ -283,6 +288,53 @@ final class DesktopDiagnosticsManager {
         "tcc_microphone_granted": micPermissionGranted,
       ],
       trackRemotely: false)
+  }
+
+  /// Per-tool wall time on a realtime voice turn: from the provider's tool
+  /// request to the result being returned — i.e. the "dead air" the user hears
+  /// while a tool runs. Instruments where voice latency actually goes (fast
+  /// local reads vs. slow backend/RAG round-trips) so optimization targets the
+  /// real cost instead of a guess. Bounded dimensions only: `tool_name` and
+  /// `provider` are a fixed low-cardinality set; no arguments or output content.
+  func recordVoiceToolLatency(toolName: String, provider: String, durationMs: Double, resultBytes: Int) {
+    record(
+      .voiceToolLatency,
+      properties: [
+        "tool_name": toolName,
+        "provider": provider,
+        "duration_ms": rounded(durationMs),
+        "result_bytes": resultBytes,
+      ])
+  }
+
+  /// Start a `voice_tool_latency` timer for a realtime tool call (the hub's
+  /// transport key). Kept here rather than on the hub so the 1500-line
+  /// RealtimeHubController does not grow.
+  func markVoiceToolStart(key: String) {
+    lock.lock()
+    voiceToolStarts[key] = Date()
+    lock.unlock()
+  }
+
+  /// Stop the timer for `key` and emit `voice_tool_latency`. No-op if no start
+  /// was recorded (stale/dropped result).
+  func finishVoiceToolLatency(key: String, toolName: String, provider: String, resultBytes: Int) {
+    lock.lock()
+    let start = voiceToolStarts.removeValue(forKey: key)
+    lock.unlock()
+    guard let start else { return }
+    recordVoiceToolLatency(
+      toolName: toolName,
+      provider: provider,
+      durationMs: Date().timeIntervalSince(start) * 1000,
+      resultBytes: resultBytes)
+  }
+
+  /// Drop any in-flight voice tool timers — called on realtime turn reset.
+  func clearVoiceToolStarts() {
+    lock.lock()
+    voiceToolStarts.removeAll()
+    lock.unlock()
   }
 
   func recordPTTSilentTurn(
