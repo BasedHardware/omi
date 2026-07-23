@@ -27,25 +27,53 @@ def codemagic() -> str:
 
 
 class DesktopReleaseFlowContractTests(unittest.TestCase):
-    def _qualification_identity_expressions(self) -> tuple[str, str]:
+    def _qualification_jobs(self) -> dict[str, str]:
+        """Slice the qualification workflow into per-job text regions.
+
+        The workflow runs the same qualification contract in two lanes
+        (codemagic-lane orchestration plus the self-hosted qualify fallback),
+        so single-occurrence full-document searches are ambiguous.
+        """
         qualification = workflow("desktop_qualify_beta.yml")
-        candidate_step = qualification.split("      - name: Download and validate newest candidate evidence", 1)[1]
-        candidate_step = candidate_step.split("\n      - name:", 1)[0]
-        target = re.search(r"^\s*TARGET_SHA=\$\((.+)\)$", candidate_step, re.MULTILINE)
-        checkout = re.search(r"^\s*CHECKOUT_SHA=\$\((.+)\)$", candidate_step, re.MULTILINE)
-        self.assertIsNotNone(target)
-        self.assertIsNotNone(checkout)
-        return target.group(1), checkout.group(1)
+        jobs_document = qualification.split("\njobs:\n", 1)[1]
+        headers = list(re.finditer(r"^  ([a-z][a-z0-9-]*):\n", jobs_document, re.MULTILINE))
+        self.assertTrue(headers)
+        jobs: dict[str, str] = {}
+        for index, match in enumerate(headers):
+            end = headers[index + 1].start() if index + 1 < len(headers) else len(jobs_document)
+            jobs[match.group(1)] = jobs_document[match.start() : end]
+        return jobs
+
+    def _qualification_lane_jobs(self) -> tuple[str, str]:
+        jobs = self._qualification_jobs()
+        self.assertIn("codemagic-lane", jobs)
+        self.assertIn("qualify", jobs)
+        return jobs["codemagic-lane"], jobs["qualify"]
+
+    def _qualification_identity_expressions(self) -> tuple[str, str]:
+        expressions: list[tuple[str, str]] = []
+        for lane in self._qualification_lane_jobs():
+            candidate_step = lane.split("      - name: Download and validate newest candidate evidence", 1)[1]
+            candidate_step = candidate_step.split("\n      - name:", 1)[0]
+            target = re.search(r"^\s*TARGET_SHA=\$\((.+)\)$", candidate_step, re.MULTILINE)
+            checkout = re.search(r"^\s*CHECKOUT_SHA=\$\((.+)\)$", candidate_step, re.MULTILINE)
+            self.assertIsNotNone(target)
+            self.assertIsNotNone(checkout)
+            expressions.append((target.group(1), checkout.group(1)))
+        # Both lanes must bind candidate identity with the exact same expressions.
+        self.assertEqual(expressions[0], expressions[1])
+        return expressions[0]
 
     def _qualification_step(self, name: str) -> str:
-        qualification = workflow("desktop_qualify_beta.yml")
+        _, qualify_job = self._qualification_lane_jobs()
         marker = f"      - name: {name}"
-        self.assertEqual(qualification.count(marker), 1)
-        return qualification.split(marker, 1)[1].split("\n      - name:", 1)[0]
+        self.assertEqual(qualify_job.count(marker), 1)
+        return qualify_job.split(marker, 1)[1].split("\n      - name:", 1)[0]
 
     def _gitlink_cleanup_script(self, name: str) -> str:
         script = self._qualification_step(name).split("        run: |\n", 1)[1]
-        return "\n".join(line[10:] if line.startswith("          ") else line for line in script.splitlines())
+        dedented = "\n".join(line[10:] if line.startswith("          ") else line for line in script.splitlines())
+        return dedented.rstrip("\n")
 
     def _gitlink_cleanup_scripts(self) -> tuple[tuple[str, str], ...]:
         return tuple((name, self._gitlink_cleanup_script(name)) for name in (PRECLEAN_NAME, POSTCLEAN_NAME))
@@ -113,7 +141,17 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         qualification = workflow("desktop_qualify_beta.yml")
         beta = workflow("desktop_promote_beta.yml")
         self.assertIn("schedule:", candidate)
-        self.assertIn("workflow_dispatch:\n  schedule:", candidate)
+        self.assertIn("workflow_dispatch:", candidate)
+        # Auto-release also fires on macOS-affecting merges to main so a candidate
+        # is planned within minutes of a merge. This stays a single candidate
+        # authority: every trigger runs the same fenced planner (quiet-window +
+        # one-active-release), and beta promotion keys off the qualification's
+        # workflow_dispatch event below, not this workflow's trigger. Chained
+        # triggers that could form a second authority remain forbidden.
+        self.assertIn("push:", candidate)
+        self.assertIn("branches: [main]", candidate)
+        self.assertNotIn("workflow_run:", candidate)
+        self.assertNotIn("workflow_call:", candidate)
         self.assertNotIn("uses: ./.github/workflows/desktop_promote_beta.yml", qualification)
         self.assertNotIn("promote-qualified-beta:", qualification)
         self.assertIn('workflows: ["Qualify Desktop Beta Candidate"]', beta)
@@ -157,9 +195,10 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         target_expression, checkout_expression = self._qualification_identity_expressions()
         self.assertEqual(target_expression, 'git rev-parse "$RELEASE_TAG^{commit}"')
         self.assertEqual(checkout_expression, 'git rev-parse "HEAD^{commit}"')
+        # Candidate validation plus evidence creation in each of the two lanes.
         self.assertEqual(
             workflow("desktop_qualify_beta.yml").count('TARGET_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")'),
-            2,
+            4,
         )
 
     def test_beta_qualification_accepts_annotated_tag_at_exact_checkout_commit(self) -> None:
@@ -169,13 +208,13 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self._assert_qualification_tag_identity(annotated=False)
 
     def test_beta_qualification_bounds_checkout_with_identical_exact_cleanup(self) -> None:
-        qualification = workflow("desktop_qualify_beta.yml")
+        _, qualify_job = self._qualification_lane_jobs()
         checkout_name = "Checkout qualification controls"
         attach_name = "Attach immutable qualification evidence to the candidate release"
-        self.assertLess(qualification.index(PRECLEAN_NAME), qualification.index(checkout_name))
-        self.assertLess(qualification.index(checkout_name), qualification.index(POSTCLEAN_NAME))
-        self.assertLess(qualification.index(attach_name), qualification.index(POSTCLEAN_NAME))
-        self.assertEqual(re.findall(r"^      - name: (.+)$", qualification, re.MULTILINE)[-1], POSTCLEAN_NAME)
+        self.assertLess(qualify_job.index(PRECLEAN_NAME), qualify_job.index(checkout_name))
+        self.assertLess(qualify_job.index(checkout_name), qualify_job.index(POSTCLEAN_NAME))
+        self.assertLess(qualify_job.index(attach_name), qualify_job.index(POSTCLEAN_NAME))
+        self.assertEqual(re.findall(r"^      - name: (.+)$", qualify_job, re.MULTILINE)[-1], POSTCLEAN_NAME)
 
         preclean_step = self._qualification_step(PRECLEAN_NAME)
         postclean_step = self._qualification_step(POSTCLEAN_NAME)

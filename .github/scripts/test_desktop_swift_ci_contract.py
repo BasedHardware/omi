@@ -99,6 +99,19 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         release_job = self.jobs["desktop-swift-release-compile"]
         self.assertIn("fetch-depth: 1", release_job)
 
+    def test_release_control_inputs_produce_exact_sha_checks(self):
+        """Candidate-building config must run the checks consumed by the release planner."""
+        changes = self.jobs["changes"]
+
+        for path in (
+            "codemagic.yaml",
+            ".github/scripts/plan-desktop-release.py",
+            ".github/workflows/desktop_auto_release.yml",
+            ".github/workflows/desktop-swift-ci.yml",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, changes)
+
     def test_macos_jobs_have_a_bounded_runner_budget(self):
         """A stuck Swift invocation must not consume hosted macOS capacity forever."""
         for job_id in MACOS_JOBS:

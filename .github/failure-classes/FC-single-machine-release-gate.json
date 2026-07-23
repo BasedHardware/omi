@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-single-machine-release-gate",
+  "violated_contract": "A release-blocking automated gate must not depend on exactly one machine: every mandatory pipeline stage needs at least two independently healthy executors (an always-available primary lane plus at least one fallback), with the gate passing when any lane produces valid evidence and failing only on the candidate itself.",
+  "canonical_prevention": "Desktop beta qualification runs a Codemagic primary lane plus a pool of interchangeable self-hosted runners behind an at-least-one-passes verdict; machine-specific prerequisites (global backend python, Docker-only Typesense) are eliminated so any admin Mac or ephemeral CI Mac can execute the lane.",
+  "evidence_prs": [10354],
+  "scope_hints": [
+    ".github/workflows/desktop_qualify_beta.yml",
+    ".github/scripts/desktop_codemagic_qualification.py",
+    "codemagic.yaml",
+    "desktop/macos/scripts/qualify-desktop-beta.sh",
+    "scripts/dev-harness/dev_harness/cli.py"
+  ],
+  "status": "open"
+}

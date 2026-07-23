@@ -27,6 +27,26 @@ RELEASABLE_PATH = "desktop/macos/Desktop/Sources/AppDelegate.swift"
 
 
 class DesktopCandidateSourceCheckTests(unittest.TestCase):
+    def test_codemagic_config_is_a_releasable_desktop_input(self) -> None:
+        expected_args = [
+            "diff",
+            "--name-only",
+            "--diff-filter=ACDMR",
+            f"{LATEST_TAG}..HEAD",
+            "--",
+            "desktop/macos",
+            "codemagic.yaml",
+            ".github/scripts/plan-desktop-release.py",
+            ".github/workflows/desktop_auto_release.yml",
+            ".github/workflows/desktop-swift-ci.yml",
+        ]
+
+        with patch.object(planner, "git", return_value="codemagic.yaml\ndesktop/macos/AGENTS.md") as git:
+            changes = planner.releasable_desktop_changes_since(LATEST_TAG)
+
+        git.assert_called_once_with(expected_args)
+        self.assertEqual(changes, ["codemagic.yaml"])
+
     def test_exact_source_sha_success_for_every_required_check_passes_the_gate(self) -> None:
         checked: list[tuple[str, str]] = []
 
@@ -96,12 +116,37 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
 
     def test_workflow_has_no_input_manual_trigger_and_tags_the_changelog_commit(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("workflow_dispatch:\n  schedule:", workflow)
+        # workflow_dispatch stays bare (no manual inputs). Auto-release now also
+        # fires on macOS-affecting merges to main (push) so a candidate is planned
+        # within minutes; the schedule remains as a backstop for merges that land
+        # inside the quiet window. No `inputs:` may appear in the trigger block.
+        self.assertIn("  workflow_dispatch:\n", workflow)
+        self.assertNotIn("inputs:", workflow.split("\njobs:", 1)[0])
+        self.assertIn("  push:\n    branches: [main]", workflow)
         self.assertIn("- cron: '17 * * * *'", workflow)
         self.assertNotIn("break_glass", workflow)
         self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
         self.assertLess(workflow.index('git commit -m "chore: consolidate changelog for v${VERSION}"'), workflow.index('git tag "$RELEASE_TAG"'))
+
+    def test_push_paths_cover_releasable_desktop_paths(self) -> None:
+        # Every releasable desktop input the planner recognizes must also be in
+        # the workflow's push filter, or a merge touching only that input would be
+        # releasable yet never get the immediate push trigger (only the hourly
+        # cron would catch it). A directory entry maps to '<dir>/**'.
+        import yaml
+
+        on = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))[True]
+        push_paths = set(on["push"]["paths"])
+        self.assertEqual(on["push"]["branches"], ["main"])
+        for path in planner.DESKTOP_RELEASE_PATHS:
+            expected = f"{path}/**" if (ROOT / path).is_dir() else path
+            self.assertIn(
+                expected,
+                push_paths,
+                f"releasable desktop path {path!r} (expected push filter {expected!r}) "
+                "is missing from desktop_auto_release.yml push.paths",
+            )
 
     def test_pre_tag_readiness_workflow_contract(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")

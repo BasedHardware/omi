@@ -4,6 +4,16 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: desktop-codemagic-qualification-lane-tests
+    command: ["python3", ".github/scripts/test_desktop_codemagic_qualification.py"]
+    triggers: [".github/scripts/desktop_codemagic_qualification.py", ".github/scripts/test_desktop_codemagic_qualification.py", ".github/workflows/desktop_qualify_beta.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the Codemagic qualification lane must only qualify a candidate whose result artifact binds to the exact requested tag and SHA (Jul 22 2026 single-runner qualification outage)"
+  - id: dev-harness-unit-tests
+    command: ["bash", "scripts/dev-harness/run-tests.sh"]
+    triggers: ["scripts/dev-harness/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the hermetic dev-harness stack backs release qualification; the Jul 22 2026 beta qualification outage added a docker/native typesense runtime that must stay behaviorally covered"
   - id: pre-push-final-pr-diff
     command: ["bash", "scripts/test-pre-push-diff-base.sh"]
     triggers: ["scripts/pre-push", "scripts/pre-push-diff-base", "scripts/test-pre-push-diff-base.sh", ".github/checks-manifest.yaml"]
