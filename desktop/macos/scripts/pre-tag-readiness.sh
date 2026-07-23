@@ -202,7 +202,12 @@ KEEP_FLAG=()
 [[ "$KEEP_STACK" -eq 1 ]] && KEEP_FLAG=(--keep-stack)
 (
   cd "$WORKTREE/desktop/macos"
-  OMI_READINESS_LANE="$LANE" ./scripts/desktop-core-harness.sh --readiness "${KEEP_FLAG[@]}"
+  # `${arr[@]+"${arr[@]}"}` — NOT plain `"${arr[@]}"`. Under `set -u`, expanding
+  # an EMPTY array as `"${arr[@]}"` traps "unbound variable" on the trusted M1's
+  # macOS bash 3.2, which fails this gate on every release where KEEP_STACK != 1
+  # (the normal path) and silently blocks every auto-tag. The `[@]+` form is
+  # bash-3.2-safe for both empty and populated arrays.
+  OMI_READINESS_LANE="$LANE" ./scripts/desktop-core-harness.sh --readiness ${KEEP_FLAG[@]+"${KEEP_FLAG[@]}"}
 )
 
 # 5. Locate and validate the harness readiness manifest. Re-check passed,
