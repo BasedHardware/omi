@@ -85,9 +85,13 @@ enum AgentErrorClassifier {
         userMessage: "Sign-in timed out. Open Settings and reconnect your account.",
         retryable: false)
     }
-    if lower.contains("leaked") || lower.contains("invalid key") || lower.contains("permission denied")
-      || lower.contains("forbidden")
-    {
+    // Only high-signal leak tokens belong here — providers say "leaked",
+    // "invalid key", or "has been disabled" when a key is compromised. Generic
+    // "forbidden"/"permission denied" are ordinary 403 authorization failures,
+    // not leaks; classing them here both mislabels the user copy and gets the
+    // event dropped by SentryBeforeSendPolicy (it filters "ai service
+    // authentication error"), hiding real forbidden-class bugs from triage.
+    if lower.contains("leaked") || lower.contains("invalid key") || lower.contains("has been disabled") {
       return ClassifiedAgentError(
         code: .credentialLeakSuspected,
         userMessage: "AI service authentication error. Please update the app to the latest version.",
@@ -96,6 +100,7 @@ enum AgentErrorClassifier {
     if lower.contains("invalid_token") || lower.contains("authentication_error")
       || lower.contains("failed to authenticate") || lower.contains("unauthorized")
       || lower.contains("authentication required") || lower.contains("byok_validation_failed")
+      || lower.contains("forbidden") || lower.contains("permission denied")
       || lower.contains("api key") || lower.contains("api_key")
     {
       return ClassifiedAgentError(
