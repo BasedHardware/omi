@@ -356,7 +356,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
         backgroundColor: const Color(0xFF0D0D0D),
         elevation: 0,
         leading: IconButton(
-          icon: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+          icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
