@@ -4,14 +4,14 @@
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": 2853,
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": 4842,
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": 2423,
-    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": 1647
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": 1686
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": "Agent completion presentation now follows the canonical terminal lifecycle used by PTT and chat.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": "Onboarding bar glow, the reach-error card (Retry/Skip), and the notch hover/voice surface-state boundary render on the shared bar surface.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": "Reach-error state lives with the owning manager; savePreChatCenterIfNeeded snaps to the full stored restore frame so the pill no longer drifts per re-open cycle.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
-    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": "sendBackgroundAgentContext is a non-buffering delivery variant (returns false instead of buffering) so voice completion acks only after confirmed provider send; it lives beside the sendTextInput path it deliberately diverges from."
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": "sendBackgroundAgentContext now confirms the provider send before returning true (exactly-once: no ack before delivery) and the session emits hubDidOpenInputWindow so a warm-idle completion is retried; both must live beside the file-private send/turn machinery."
   },
   "threshold": 1500
 }

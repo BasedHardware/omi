@@ -65,6 +65,16 @@ protocol RealtimeHubSessionDelegate: AnyObject {
     identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
   func hubDidFinishTurn(identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
   func hubDidError(_ message: String, source: RealtimeHubSession)
+  /// The session became able to accept injected (non-PTT) context — a warm
+  /// Gemini activity window just opened. The capability signal that retries a
+  /// background-agent completion left unadvanced while the session was idle.
+  func hubDidOpenInputWindow(source: RealtimeHubSession)
+}
+
+extension RealtimeHubSessionDelegate {
+  /// Default no-op: only the controller that owns background-completion delivery
+  /// needs the "ready for injected context" signal.
+  func hubDidOpenInputWindow(source: RealtimeHubSession) {}
 }
 
 struct RealtimeHubEventIdentity: Equatable, Sendable {
@@ -170,6 +180,13 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     private var testingResponseCreateCount = 0
     private var testingLastResponseToolChoice: String?
     private var testingLastResponseInstruction: String?
+    /// When set, the testing transport reports this error from `send`, so a
+    /// confirmed-delivery caller can be tested against a failed provider send.
+    private var testingForcedSendError: Error?
+
+    func setTestingForcedSendError(_ error: Error?) {
+      q.async { [weak self] in self?.testingForcedSendError = error }
+    }
   #endif
   private var activeEventIdentity: RealtimeHubEventIdentity?
   private var completedGeminiEventIdentity: RealtimeHubEventIdentity?
@@ -502,26 +519,34 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     await sendTextInput(text, logLabel: "test text input")
   }
 
-  /// Silently appends completed background-agent context to the conversation
-  /// without requesting a response — the model uses it on its next turn.
+  /// True when the session can accept injected (non-PTT) context *right now*.
+  /// Evaluated on `q`. OpenAI accepts on any open socket; Gemini needs an open
+  /// speech-activity window (opened per turn by `beginInputTurn`).
+  private var canAcceptInjectedContext: Bool {
+    isOpen && (provider == .openai || activityOpen)
+  }
+
+  /// Silently appends completed background-agent context to the conversation.
+  /// No response is requested — the model uses it on its next turn.
   ///
-  /// Unlike `sendTextInput`, this deliberately does NOT buffer: it returns
-  /// `true` only when the text is written to the live provider this call, and
-  /// `false` when the session cannot accept it right now (socket closed, or
-  /// Gemini has no open activity window). Buffering would let the completion be
-  /// dropped by `stop()`/`close()` (which clears `pendingTextInputs`) after the
-  /// caller already advanced its exactly-once checkpoint. Returning `false`
-  /// keeps the checkpoint unadvanced so the caller retries on the next terminal
-  /// transition or session connect.
+  /// Unlike ordinary PTT text input this does NOT buffer: the caller advances an
+  /// exactly-once kernel checkpoint on a `true` return, so `true` must mean
+  /// "confirmed delivered," never "buffered" (a buffered item is dropped by
+  /// `stopOnQueue`/`abandonInputTurn` — an acked-but-lost completion). When the
+  /// session can't accept context yet it returns `false` and the checkpoint
+  /// stays unadvanced; the delivery service retries when the session next
+  /// becomes ready (`hubDidOpenInputWindow`). When it can, `true` follows the
+  /// provider send's completion, not a fire-and-forget enqueue.
   func sendBackgroundAgentContext(_ text: String) async -> Bool {
     await withCheckedContinuation { continuation in
       q.async { [weak self] in
-        guard let self, self.isOpen, self.provider == .openai || self.activityOpen else {
+        guard let self, self.canAcceptInjectedContext else {
           continuation.resume(returning: false)
           return
         }
-        self.sendTextInputNow(text, logLabel: "background agent completion context")
-        continuation.resume(returning: true)
+        self.send(json: self.textInputWire(text)) { error in
+          continuation.resume(returning: error == nil)
+        }
       }
     }
   }
@@ -647,20 +672,27 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     }
   }
 
-  private func sendTextInputNow(_ text: String, logLabel: String) {
+  /// Per-provider wire form of a user text-input message. Shared by the buffered
+  /// PTT path (`sendTextInputNow`) and the confirmed, non-buffering background
+  /// path (`sendBackgroundAgentContext`).
+  private func textInputWire(_ text: String) -> [String: Any] {
     switch provider {
     case .gemini:
-      send(json: ["realtimeInput": ["text": text]])
+      return ["realtimeInput": ["text": text]]
     case .openai:
-      send(json: [
+      return [
         "type": "conversation.item.create",
         "item": [
           "type": "message",
           "role": "user",
           "content": [["type": "input_text", "text": text]],
         ],
-      ])
+      ]
     }
+  }
+
+  private func sendTextInputNow(_ text: String, logLabel: String) {
+    send(json: textInputWire(text))
     log("\(tag): \(logLabel) sent (\(text.count) chars)")
   }
 
@@ -697,6 +729,11 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         self.flushPendingAudioIfReady()
         self.flushPendingTextInputs()
         log("\(self.tag): turn begin (activityStart\(interrupting ? ", interrupting in-flight reply" : ""))")
+        // The activity window is open — the session can now accept injected
+        // context. Signal delivery so a background completion left unadvanced
+        // while warm-idle is retried at this natural turn boundary.
+        let delegate = self.delegate
+        Task { @MainActor in delegate?.hubDidOpenInputWindow(source: self) }
         if self.pendingCommit {
           self.pendingCommit = false
           self.commitInputTurnNow()
@@ -1565,7 +1602,9 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
           testingLastResponseToolChoice = (json["response"] as? [String: Any])?["tool_choice"] as? String
           testingLastResponseInstruction = (json["response"] as? [String: Any])?["instructions"] as? String
         }
-        completion?(nil)
+        // Lets tests exercise a failed send so callers that gate on delivery
+        // (sendBackgroundAgentContext → exactly-once checkpoint) can be verified.
+        completion?(testingForcedSendError)
         return
       }
     #endif

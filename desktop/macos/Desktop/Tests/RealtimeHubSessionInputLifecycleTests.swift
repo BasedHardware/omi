@@ -403,6 +403,40 @@ import XCTest
       XCTAssertEqual(completed.inputIdentityCount, 0)
     }
 
+    func testBackgroundAgentContextRefusesGeminiWhileWarmIdleThenSendsWhenWindowOpens() async {
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .gemini, delegate: delegate)
+      session.markReadyForTesting()
+
+      // Warm but idle (no activity window): must REFUSE — return false, never
+      // buffer-and-report-success. A buffered completion is dropped by
+      // stopOnQueue/abandonInputTurn, so reporting success would advance the
+      // exactly-once checkpoint on a completion that is then lost.
+      let refusedWhileIdle = await session.sendBackgroundAgentContext("agent finished")
+      XCTAssertFalse(refusedWhileIdle)
+
+      // A turn opens the activity window — now the session can accept context.
+      session.beginInputTurn()
+      let sentAfterWindow = await session.sendBackgroundAgentContext("agent finished")
+      XCTAssertTrue(sentAfterWindow)
+    }
+
+    func testBackgroundAgentContextReturnsFalseWhenTheConfirmedSendFails() async {
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .openai, delegate: delegate)
+      session.markReadyForTesting()
+
+      // The checkpoint advances on this `true`, so `true` must mean confirmed
+      // delivery: a failed provider send must report false, not fire-and-forget.
+      session.setTestingForcedSendError(RealtimeHubSessionTestError.forced)
+      let failedSend = await session.sendBackgroundAgentContext("agent finished")
+      XCTAssertFalse(failedSend)
+
+      session.setTestingForcedSendError(nil)
+      let confirmedSend = await session.sendBackgroundAgentContext("agent finished")
+      XCTAssertTrue(confirmedSend)
+    }
+
     private func makeSession(
       provider: RealtimeHubProvider,
       delegate: RealtimeHubSessionDelegate
@@ -423,6 +457,8 @@ import XCTest
       }
     }
   }
+
+  private enum RealtimeHubSessionTestError: Error { case forced }
 
   @MainActor
   private final class RealtimeHubSessionDelegateSpy: RealtimeHubSessionDelegate {
