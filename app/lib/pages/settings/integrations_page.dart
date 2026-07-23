@@ -8,6 +8,7 @@ import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/pages/settings/apple_health_detail_page.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/services/integrations/apple_health_service.dart';
+import 'package:omi/services/integrations/gmail_service.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -24,6 +25,18 @@ extension IntegrationAppExtension on IntegrationApp {
         return 'Gmail';
       case IntegrationApp.appleHealth:
         return 'Apple Health';
+    }
+  }
+
+  /// Name shown in the disconnect confirmation. Gmail and Google Calendar share a
+  /// single Google grant, so disconnecting either one drops both.
+  String get disconnectDisplayName {
+    switch (this) {
+      case IntegrationApp.gmail:
+      case IntegrationApp.googleCalendar:
+        return 'Gmail and Google Calendar';
+      case IntegrationApp.appleHealth:
+        return displayName;
     }
   }
 
@@ -75,11 +88,7 @@ extension IntegrationAppExtension on IntegrationApp {
   }
 
   bool get isAvailable {
-    if (this == IntegrationApp.gmail) return false;
-    // Apple Health is only available on iOS/macOS
-    if (this == IntegrationApp.appleHealth) {
-      return true; // Will check platform availability at runtime in the service
-    }
+    // Apple Health checks platform availability at runtime in the service.
     return true;
   }
 
@@ -135,6 +144,12 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
     if (app == IntegrationApp.googleCalendar) {
       final service = GoogleCalendarService();
+      final handled = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
+      if (handled) return;
+    }
+
+    if (app == IntegrationApp.gmail) {
+      final service = GmailService();
       final handled = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
       if (handled) return;
     }
@@ -204,9 +219,12 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         return AlertDialog(
           backgroundColor: const Color(0xFF1C1C1E),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(context.l10n.disconnectAppTitle(app.displayName), style: const TextStyle(color: Colors.white)),
+          title: Text(
+            context.l10n.disconnectAppTitle(app.disconnectDisplayName),
+            style: const TextStyle(color: Colors.white),
+          ),
           content: Text(
-            context.l10n.disconnectAppMessage(app.displayName),
+            context.l10n.disconnectAppMessage(app.disconnectDisplayName),
             style: const TextStyle(color: Color(0xFF8E8E93)),
           ),
           actions: [
@@ -226,6 +244,9 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     if (confirmed == true) {
       if (app == IntegrationApp.googleCalendar) {
         final service = GoogleCalendarService();
+        await _handleDisconnect(app, service.disconnect);
+      } else if (app == IntegrationApp.gmail) {
+        final service = GmailService();
         await _handleDisconnect(app, service.disconnect);
       } else if (app == IntegrationApp.appleHealth) {
         // Capture instances before async operation to avoid use_build_context_synchronously
@@ -267,8 +288,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     final success = await disconnect();
     if (success) {
       PlatformManager.instance.analytics.integrationDisconnected(integrationName: app.displayName);
+      // Re-read every row: Gmail and Google Calendar share one grant, so dropping
+      // either one also disconnects the other.
       if (mounted) {
-        await integrationProvider.deleteConnection(app.key);
+        await integrationProvider.loadFromBackend();
       }
       if (mounted) {
         scaffoldMessenger.showSnackBar(
