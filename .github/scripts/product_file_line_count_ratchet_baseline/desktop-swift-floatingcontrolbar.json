@@ -4,7 +4,6 @@
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": 2639,
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": 4849,
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": 2584,
-    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": 1500,
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": 1603
   },
   "raise_justifications": {
@@ -12,7 +11,6 @@
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": "The Second Brain onboarding, reach-error, and notch-moment UI keeps the hover menu agent-only and routes idle notch taps through main chat.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": "Second Brain continuous-chat routing shares window geometry with agent-only hover sizing and canonical idle-notch chat ownership.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": "The owning turn manager carries privacy-bounded push-to-talk capture-lifecycle diagnostics wiring alongside strict concurrency, response-critical batch STT, and parallel screen-context capture.",
-    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": "Adds an owner-scope guard so the persistence-fence retry loop stops instead of busy-looping agent-bridge startup when signed out; the decision logic lives in RealtimeHubSessionPolicies.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": "URLSession is invalidated on transport teardown via an explicit backing optional to break the delegate retain cycle and stop per-reconnect session leaks; strict-concurrency annotations remain."
   },
   "threshold": 1500
