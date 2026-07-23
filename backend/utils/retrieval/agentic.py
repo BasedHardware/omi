@@ -51,8 +51,9 @@ from utils.retrieval.tools import (
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
+from utils.retrieval.input_guard import fit_within_budget, INPUT_TOO_LONG_MESSAGE
 from utils.llm.byok_errors import handle_llm_error_async
-from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL
+from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, num_tokens_from_string
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
 from utils.executors import run_blocking, db_executor
 from utils.other.endpoints import timeit
@@ -672,6 +673,22 @@ async def execute_agentic_chat_stream(
 
     Yields formatted chunks with "data: " or "think: " prefixes.
     """
+    # Guard against oversized input before any setup or model call. An extremely long message (or
+    # a long history) would exceed the chat model's context window; the Anthropic call then raises
+    # input-too-long, the agent loop swallows it, and the client is left without a finalized reply
+    # ("no response"). Trim the oldest turns to fit the budget; if the newest message alone is too
+    # large, return a clear, persisted reply through the normal done: contract instead of calling
+    # the model with input that cannot fit.
+    messages, input_too_long = fit_within_budget(messages, lambda m: m.text or "", num_tokens_from_string)
+    if input_too_long:
+        logger.warning('Chat input exceeds token budget uid=%s; returning too-long reply', uid)
+        if callback_data is not None:
+            callback_data['answer'] = INPUT_TOO_LONG_MESSAGE
+            callback_data['memories_found'] = []
+            callback_data['ask_for_nps'] = False
+        yield None
+        return
+
     first_event_deadline = asyncio.get_running_loop().time() + AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS
     try:
         # Resolve the user's timezone once and reuse it for both the system prompt and the
