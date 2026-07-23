@@ -98,10 +98,7 @@ struct FolderTabsStrip: View {
             .scaledFont(size: OmiType.caption, weight: .semibold)
             .foregroundColor(OmiColors.textSecondary)
             .frame(width: 26, height: 26)
-            .background(
-              RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-                .fill(OmiColors.backgroundTertiary.opacity(0.6))
-            )
+            .background(Circle().fill(OmiColors.backgroundTertiary.opacity(0.6)))
         }
         .buttonStyle(.plain)
       }
@@ -131,11 +128,11 @@ struct FolderTabsStrip: View {
       .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, OmiSpacing.xs)
       .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+        Capsule(style: .continuous)
           .fill(isSelected ? OmiColors.textPrimary.opacity(0.12) : OmiColors.backgroundTertiary.opacity(0.6))
       )
       .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+        Capsule(style: .continuous)
           .stroke(isSelected ? OmiColors.textPrimary.opacity(0.3) : Color.clear, lineWidth: 1)
       )
     }

@@ -1678,7 +1678,7 @@ struct MemoriesPage: View {
         formatDate: formatDate,
         onDismiss: { viewModel.selectedMemory = nil }
       )
-      .frame(width: 450, height: 600)
+      .fittedModal(width: 450, maxHeight: 600)
     }
     .overlay(alignment: .bottom) {
       undoDeleteToast
@@ -1784,10 +1784,7 @@ struct MemoriesPage: View {
           .buttonStyle(.plain)
         }
       }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.md)
-      .frame(minHeight: 46)
-      .omiControlSurface(fill: OmiColors.backgroundTertiary, radius: 18)
+      .omiSearchFieldChrome()
 
       if viewModel.canonicalLifecycleExposed {
         // Layer filter dropdown. Default is product default access: Short-term + Long-term.
@@ -1820,7 +1817,7 @@ struct MemoriesPage: View {
           )
           .padding(.horizontal, OmiSpacing.md)
           .padding(.vertical, OmiSpacing.md)
-          .frame(minHeight: 46)
+          .frame(minHeight: 36)
           .omiControlSurface(
             fill: viewModel.selectedLayerFilter == .defaultAccess
               ? OmiColors.backgroundTertiary : OmiColors.backgroundRaised,
@@ -1847,7 +1844,7 @@ struct MemoriesPage: View {
         )
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.md)
-        .frame(minHeight: 46)
+        .frame(minHeight: 36)
         .omiControlSurface(
           fill: viewModel.filterThisDeviceOnly
             ? OmiColors.backgroundRaised : OmiColors.backgroundTertiary,
@@ -1877,7 +1874,7 @@ struct MemoriesPage: View {
         )
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.md)
-        .frame(minHeight: 46)
+        .frame(minHeight: 36)
         .omiControlSurface(
           fill: viewModel.selectedTags.isEmpty
             ? OmiColors.backgroundTertiary : OmiColors.backgroundRaised,
@@ -1896,10 +1893,10 @@ struct MemoriesPage: View {
       } label: {
         Image(systemName: "plus")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(.black)
-          .frame(width: 42, height: 42)
-          .background(OmiColors.textPrimary)
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
+          .foregroundColor(OmiColors.textPrimary)
+          .frame(width: 36, height: 36)
+          .omiControlSurface(
+            fill: OmiColors.backgroundTertiary, radius: 18, stroke: OmiColors.border.opacity(0.6))
       }
       .buttonStyle(.plain)
       .help("Add Memory")
@@ -1910,10 +1907,10 @@ struct MemoriesPage: View {
       } label: {
         Image(systemName: "chevron.down")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(.black)
-          .frame(width: 42, height: 42)
-          .background(OmiColors.textPrimary)
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
+          .foregroundColor(OmiColors.textPrimary)
+          .frame(width: 36, height: 36)
+          .omiControlSurface(
+            fill: OmiColors.backgroundTertiary, radius: 18, stroke: OmiColors.border.opacity(0.6))
       }
       .buttonStyle(.plain)
       .popover(isPresented: $showManagementMenu, arrowEdge: .bottom) {

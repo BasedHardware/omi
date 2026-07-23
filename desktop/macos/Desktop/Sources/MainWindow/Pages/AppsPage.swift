@@ -301,7 +301,7 @@ struct AppsPage: View {
     }
     .dismissableSheet(item: $selectedApp) { app in
       AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { selectedApp = nil })
-        .frame(width: 500, height: 650)
+        .fittedModal(width: 500, maxHeight: 650)
         .onAppear {
           AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
         }
@@ -315,7 +315,7 @@ struct AppsPage: View {
           selectedConnector = nil
         }
       )
-      .frame(width: 520, height: 620)
+      .fittedModal(width: 520, maxHeight: 620)
       .onAppear {
         automationPresentationDidAppear(.importConnector(connector.id))
       }
@@ -331,7 +331,7 @@ struct AppsPage: View {
           selectedExportDestination = nil
         }
       )
-      .frame(width: 520, height: 620)
+      .fittedModal(width: 520, maxHeight: 620)
       .onAppear {
         automationPresentationDidAppear(.exportDestination(destination.rawValue))
       }
@@ -513,9 +513,7 @@ struct AppsPage: View {
         .buttonStyle(.plain)
       }
     }
-    .padding(OmiSpacing.sm)
-    .background(OmiColors.backgroundSecondary)
-    .cornerRadius(OmiChrome.smallControlRadius)
+    .omiSearchFieldChrome()
   }
 
   private var filterControls: some View {
@@ -577,12 +575,19 @@ struct AppsPage: View {
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .background(OmiColors.backgroundSecondary)
       .foregroundColor(OmiColors.textPrimary)
-      .cornerRadius(OmiChrome.elementRadius)
+      .background(
+        Capsule(style: .continuous)
+          .fill(
+            appProvider.selectedCategory != nil
+              ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
+      )
       .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(appProvider.selectedCategory != nil ? OmiColors.border : Color.clear, lineWidth: 1)
+        Capsule(style: .continuous)
+          .stroke(
+            appProvider.selectedCategory != nil
+              ? Color.white.opacity(0.18) : Color.white.opacity(0.07),
+            lineWidth: 1)
       )
     }
     .menuStyle(.borderlessButton)
@@ -1831,6 +1836,8 @@ struct FilterToggle: View {
   let isActive: Bool
   let action: () -> Void
 
+  @State private var isHovering = false
+
   var body: some View {
     Button(action: action) {
       HStack(spacing: OmiSpacing.xs) {
@@ -1842,16 +1849,27 @@ struct FilterToggle: View {
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .background(isActive ? Color.white : OmiColors.backgroundSecondary)
-      .foregroundColor(isActive ? Color.black : OmiColors.textSecondary)
-      .cornerRadius(OmiChrome.elementRadius)
+      .foregroundColor(
+        isActive ? Color.black : (isHovering ? OmiColors.textPrimary : OmiColors.textSecondary)
+      )
+      .background(
+        Capsule(style: .continuous)
+          .fill(
+            isActive
+              ? Color.white
+              : (isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary))
+      )
       .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(isActive ? OmiColors.border : Color.clear, lineWidth: 1)
+        Capsule(style: .continuous)
+          .stroke(isActive ? Color.clear : Color.white.opacity(0.07), lineWidth: 1)
       )
       .fixedSize(horizontal: true, vertical: false)
     }
     .buttonStyle(.plain)
+    .onHover { hovering in
+      OmiMotion.withGated(.easeOut(duration: 0.12)) { isHovering = hovering }
+    }
+    .omiAnimation(.easeOut(duration: 0.15), value: isActive)
   }
 }
 
@@ -1869,21 +1887,26 @@ struct SmallHeaderButton: View {
     Button(action: action) {
       HStack(spacing: OmiSpacing.xs) {
         Image(systemName: icon)
-          .scaledFont(size: OmiType.caption)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
           .foregroundColor(color)
         Text(label)
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundColor(isHovering ? OmiColors.textPrimary : OmiColors.textSecondary)
           .lineLimit(1)
       }
-      .padding(.horizontal, OmiSpacing.sm)
-      .padding(.vertical, OmiSpacing.xs)
-      .background(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
-      .cornerRadius(OmiChrome.badgeRadius)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
+      .background(
+        Capsule(style: .continuous)
+          .fill(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
+      )
+      .overlay(Capsule(style: .continuous).stroke(Color.white.opacity(0.07), lineWidth: 1))
       .fixedSize(horizontal: true, vertical: false)
     }
     .buttonStyle(.plain)
-    .onHover { isHovering = $0 }
+    .onHover { hovering in
+      OmiMotion.withGated(.easeOut(duration: 0.12)) { isHovering = hovering }
+    }
   }
 }
 
@@ -3532,54 +3555,33 @@ extension View {
 }
 
 /// Item-based version of DismissableSheetModifier for optional item bindings.
+/// The modal is hoisted to the shell (`ModalPresentationState`) so one uniform
+/// frosted backdrop covers the whole window and the card renders sharp on top —
+/// this modifier just mirrors the page's selection state up.
 struct DismissableSheetItemModifier<Item: Identifiable, SheetContent: View>: ViewModifier {
   @Binding var item: Item?
   let sheetContent: (Item) -> SheetContent
 
+  @State private var token = UUID()
+
   func body(content: Content) -> some View {
     content
-      // The overlay is modal: while it is up, the content underneath must
-      // not be reachable by VoiceOver / Full Keyboard Access.
-      .accessibilityHidden(item != nil)
-      .overlay {
-        ZStack {
-          if let presentedItem = item {
-            // Dimmed background that dismisses on tap.
-            Color.black.opacity(0.3)
-              .ignoresSafeArea()
-              .contentShape(Rectangle())
-              .onTapGesture {
-                log("DISMISSABLE_SHEET: Background tapped, dismissing item")
-                OmiMotion.withGated(.easeOut(duration: 0.2)) {
-                  item = nil
-                }
-              }
-              .transition(.opacity)
-              .zIndex(0)
+      .onChange(of: item?.id) { _, _ in sync() }
+      .onAppear { if item != nil { sync() } }
+      .onDisappear { ModalPresentationState.shared.clear(token: token) }
+  }
 
-            // Force the sheet into a centered full-size overlay so it
-            // does not end up clipped or visually hidden behind the scrim.
-            sheetContent(presentedItem)
-              .background(OmiColors.backgroundPrimary)
-              .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
-              .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
-              .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-              .transition(.scale(scale: 0.95).combined(with: .opacity))
-              .accessibilityAddTraits(.isModal)
-              .zIndex(1)
-
-            OverlayModalEscapeCatcher {
-              log("DISMISSABLE_SHEET: Escape pressed, dismissing item")
-              OmiMotion.withGated(.easeOut(duration: 0.2)) {
-                item = nil
-              }
-            }
-            .zIndex(2)
-          }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+  private func sync() {
+    if let presentedItem = item {
+      ModalPresentationState.shared.present(
+        token: token,
+        dismiss: { OmiMotion.withGated(.easeOut(duration: 0.2)) { item = nil } }
+      ) {
+        sheetContent(presentedItem)
       }
-      .omiAnimation(.easeOut(duration: 0.2), value: item?.id != nil)
+    } else {
+      ModalPresentationState.shared.clear(token: token)
+    }
   }
 }
 
