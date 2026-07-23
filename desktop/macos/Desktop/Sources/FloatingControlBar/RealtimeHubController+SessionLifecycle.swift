@@ -54,7 +54,7 @@ extension RealtimeHubController {
     let contextRequirement = voiceSessionContext(for: ownerScope)
     guard RealtimeWarmSessionStartPolicy.canStart(requirementIsResolved: contextRequirement.isResolved) else {
       log("RealtimeHub: waiting for resolved voice context before warming session")
-      if voiceContextPrefetchTask == nil {
+      if !voiceContextSingleFlight.isRunning {
         prefetchVoiceContextSnapshotIfNeeded()
       }
       return
@@ -379,7 +379,7 @@ extension RealtimeHubController {
     let topLevelContext = voiceSessionContext(for: ownerScope)
     guard RealtimeWarmSessionStartPolicy.canStart(requirementIsResolved: topLevelContext.isResolved) else {
       log("RealtimeHub: session start deferred until voice context resolves")
-      if voiceContextPrefetchTask == nil {
+      if !voiceContextSingleFlight.isRunning {
         prefetchVoiceContextSnapshotIfNeeded()
       }
       return
@@ -465,90 +465,54 @@ extension RealtimeHubController {
   }
 
   /// Prefetch the typed kernel snapshot on PTT key-down before `beginTurn`.
-  func prefetchVoiceContextSnapshotIfNeeded() {
-    voiceContextPrefetchTask?.cancel()
-    voiceContextRefreshGeneration &+= 1
-    let refreshGeneration = voiceContextRefreshGeneration
+  @discardableResult
+  func prefetchVoiceContextSnapshotIfNeeded(forceRefresh: Bool = false) -> Task<Bool, Never> {
     let ownerScope = currentOwnerScope
-    voiceContextPrefetchTask = Task { [weak self] in
-      defer {
-        Task { @MainActor [weak self] in
-          guard let self, self.voiceContextRefreshGeneration == refreshGeneration else { return }
-          self.voiceContextPrefetchTask = nil
-        }
-      }
-      await self?.importLegacyVoiceJournalIfNeeded()
-      guard let self, self.isOwnerScopeCurrent(ownerScope) else { return }
+    let operation: @MainActor @Sendable () async -> Bool = { @MainActor [weak self] in
+      guard let self else { return false }
+      await self.importLegacyVoiceJournalIfNeeded()
+      guard !Task.isCancelled, self.isOwnerScopeCurrent(ownerScope) else { return false }
       let resolvedSnapshot: KernelVoiceContextSnapshot
       do {
         resolvedSnapshot = try await FloatingControlBarManager.shared.kernelVoiceContextSnapshot()
       } catch is CancellationError {
-        // Expected only for a speculative key-down prefetch superseded by the
-        // hard refresh. This task owns the suppression.
-        return
+        return false
       } catch {
-        return
+        return false
       }
       let registeredProviders = await AgentRuntimeProcess.shared.registeredDirectedProviderIDs()
-      await MainActor.run {
-        guard !Task.isCancelled,
-          self.voiceContextRefreshGeneration == refreshGeneration,
-          self.isOwnerScopeCurrent(ownerScope),
-          resolvedSnapshot.isResolved
-        else { return }
-        self.prefetchedVoiceContext = resolvedSnapshot.context
-        self.prefetchedVoiceContextSessionID = resolvedSnapshot.sessionId
-        self.prefetchedVoiceContextFreshnessIdentity = resolvedSnapshot.freshnessIdentity
-        self.prefetchedVoiceContextPlanID = resolvedSnapshot.contextPlanID
-        self.prefetchedVoiceStableCacheIdentity = resolvedSnapshot.stableCacheIdentity
-        self.prefetchedVoiceDynamicContextIdentity = resolvedSnapshot.dynamicContextIdentity
-        self.prefetchedVoiceSemanticGuidance = resolvedSnapshot.semanticGuidance
-        self.updateRegisteredDirectedProviders(registeredProviders)
-        self.prefetchedVoiceContextTurnIDs = resolvedSnapshot.turnIDs
-        self.prefetchedVoiceContextOwnerScope = ownerScope
-        self.reconcileWarmSessionForCurrentRequirement()
-      }
+      guard !Task.isCancelled,
+        self.isOwnerScopeCurrent(ownerScope),
+        resolvedSnapshot.isResolved
+      else { return false }
+      self.prefetchedVoiceContext = resolvedSnapshot.context
+      self.prefetchedVoiceContextSessionID = resolvedSnapshot.sessionId
+      self.prefetchedVoiceContextFreshnessIdentity = resolvedSnapshot.freshnessIdentity
+      self.prefetchedVoiceContextPlanID = resolvedSnapshot.contextPlanID
+      self.prefetchedVoiceStableCacheIdentity = resolvedSnapshot.stableCacheIdentity
+      self.prefetchedVoiceDynamicContextIdentity = resolvedSnapshot.dynamicContextIdentity
+      self.prefetchedVoiceSemanticGuidance = resolvedSnapshot.semanticGuidance
+      self.updateRegisteredDirectedProviders(registeredProviders)
+      self.prefetchedVoiceContextTurnIDs = resolvedSnapshot.turnIDs
+      self.prefetchedVoiceContextOwnerScope = ownerScope
+      self.reconcileWarmSessionForCurrentRequirement()
+      return true
     }
+    return forceRefresh
+      ? voiceContextSingleFlight.restart(operation)
+      : voiceContextSingleFlight.joinOrStart(operation)
+  }
+
+  @discardableResult
+  func awaitVoiceContextReadiness() async -> Bool {
+    guard !Task.isCancelled else { return false }
+    return await prefetchVoiceContextSnapshotIfNeeded().value
   }
 
   @discardableResult
   func refreshVoiceContextSnapshot() async -> Bool {
     guard !Task.isCancelled else { return false }
-    let ownerScope = currentOwnerScope
-    await importLegacyVoiceJournalIfNeeded()
-    guard !Task.isCancelled, isOwnerScopeCurrent(ownerScope) else { return false }
-    voiceContextPrefetchTask?.cancel()
-    voiceContextPrefetchTask = nil
-    voiceContextRefreshGeneration &+= 1
-    let refreshGeneration = voiceContextRefreshGeneration
-    let resolvedSnapshot: KernelVoiceContextSnapshot
-    do {
-      resolvedSnapshot = try await FloatingControlBarManager.shared.kernelVoiceContextSnapshot()
-    } catch {
-      return false
-    }
-    let registeredProviders = await AgentRuntimeProcess.shared.registeredDirectedProviderIDs()
-    guard resolvedSnapshot.isResolved else {
-      log("RealtimeHub: retaining the last voice context after an unresolved kernel snapshot")
-      return false
-    }
-    guard !Task.isCancelled, voiceContextRefreshGeneration == refreshGeneration,
-      isOwnerScopeCurrent(ownerScope)
-    else {
-      return false
-    }
-    prefetchedVoiceContext = resolvedSnapshot.context
-    prefetchedVoiceContextSessionID = resolvedSnapshot.sessionId
-    prefetchedVoiceContextFreshnessIdentity = resolvedSnapshot.freshnessIdentity
-    prefetchedVoiceContextPlanID = resolvedSnapshot.contextPlanID
-    prefetchedVoiceStableCacheIdentity = resolvedSnapshot.stableCacheIdentity
-    prefetchedVoiceDynamicContextIdentity = resolvedSnapshot.dynamicContextIdentity
-    prefetchedVoiceSemanticGuidance = resolvedSnapshot.semanticGuidance
-    updateRegisteredDirectedProviders(registeredProviders)
-    prefetchedVoiceContextTurnIDs = resolvedSnapshot.turnIDs
-    prefetchedVoiceContextOwnerScope = ownerScope
-    reconcileWarmSessionForCurrentRequirement()
-    return true
+    return await prefetchVoiceContextSnapshotIfNeeded(forceRefresh: true).value
   }
 
   func updateRegisteredDirectedProviders(_ providers: [String]) {

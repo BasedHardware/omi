@@ -86,8 +86,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   var lastScreenEvidenceProtocolCompletion: RealtimeScreenEvidenceProtocolCompletion = .notRun
   var authorizedRealtimeScreenshotImages: [String: RealtimeScreenEvidenceAttachment] = [:]
   var screenFailurePresented = false
-  var voiceContextPrefetchTask: Task<Void, Never>?
-  var voiceContextRefreshGeneration: UInt64 = 0
+  let voiceContextSingleFlight = RealtimeVoiceContextSingleFlight()
   var turnPreparationTask: Task<Void, Never>?
   /// (b) Genuinely local: in-flight write Tasks + optional completion receipts.
   /// Receipts shadow kernel acceptance only until consumed; on relaunch they are
@@ -388,7 +387,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       }
     }
     ownerBoundaryGeneration &+= 1
-    voiceContextRefreshGeneration &+= 1
     turnPersistenceLedger.cancelAll()
     turnEpoch &+= 1
     realtimePlaybackEpoch &+= 1
@@ -396,8 +394,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     minting = false
     mintOwnerScope = nil
 
-    voiceContextPrefetchTask?.cancel()
-    voiceContextPrefetchTask = nil
+    voiceContextSingleFlight.cancel()
     turnPreparationTask?.cancel()
     turnPreparationTask = nil
     legacyVoiceJournalImportTask?.cancel()
@@ -607,7 +604,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         prefetchedContextIsEmpty: prefetchedVoiceContext.isEmpty,
         hasPendingOwnerWork: pendingSessionRefreshReason != nil
           || !turnPersistenceLedger.pendingContinuityKeys.isEmpty
-          || voiceContextPrefetchTask != nil
+          || voiceContextSingleFlight.isRunning
           || turnPreparationTask != nil
           || !detachedSessionsAwaitingDrain.isEmpty
           || externalRunAuthorityState != nil

@@ -5,6 +5,7 @@ description: Redesigned Home stage transitions (hub/chat/connect) via automation
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/HomeStagePresentation.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeSuggestionsStore.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeKnowsComposer.swift
   - desktop/macos/Desktop/Sources/MainWindow/MainChatNavigationRequest.swift
@@ -13,6 +14,13 @@ preconditions:
   - automation_bridge_ready
 
 steps:
+  - id: S0
+    name: Reset main chat for flow isolation
+    bridge.action:
+      name: reset_main_chat
+    expect:
+      result.detail.reset: "true"
+
   - id: S1
     name: Navigate to Dashboard
     bridge.navigate:
@@ -22,7 +30,7 @@ steps:
       state.selectedTabIndex: 0
 
   - id: S2
-    name: Collapse to hub baseline (chat auto-opens when history exists)
+    name: Collapse to the empty-history resting hub
     bridge.action:
       name: home_close_panel
     wait:
@@ -54,11 +62,11 @@ steps:
       state.homeMode: connect
 
   - id: S6
-    name: Collapse back to hub
+    name: Collapse back to loaded-history chat
     bridge.action:
       name: home_close_panel
     wait:
-      state.homeMode: hub
+      state.homeMode: chat
 
   - id: S7
     name: Logs clean
