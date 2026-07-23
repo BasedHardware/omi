@@ -44,6 +44,7 @@ def _patch_db(monkeypatch, fetched):
     monkeypatch.setattr(mem_mod, 'delete_memory_vectors_batch', vectors_mock)
     return get_mock, delete_mock, vectors_mock
 
+
 def _force_canonical(monkeypatch, *, existing_ids):
     """Force the canonical cohort and stub its read-only preflight.
 
