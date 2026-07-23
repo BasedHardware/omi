@@ -1,17 +1,19 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart' show MethodChannel;
 
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/models/stt_result.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
+import 'package:omi/services/sockets/on_device_transcript_quality_gate.dart';
 import 'package:omi/services/sockets/pure_polling.dart';
 
 class OnDeviceAppleProvider implements ISttProvider {
   final String language;
   static const MethodChannel _channel = MethodChannel('com.omi.ios/speech');
+  final OnDeviceTranscriptQualityGate _qualityGate = OnDeviceTranscriptQualityGate();
 
   OnDeviceAppleProvider({this.language = 'en'});
 
@@ -43,18 +45,26 @@ class OnDeviceAppleProvider implements ISttProvider {
           return null;
         }
 
-        // Calculate duration: 16kHz * 2 bytes/sample * 1 channel = 32000 bytes/sec
         final duration = audioData.lengthInBytes / 32000.0;
+        final filteredText = _qualityGate.filter(
+          result,
+          audioData: audioData,
+        );
+        if (filteredText == null) {
+          CustomSttLogService.instance.warning('OnDeviceApple', 'Dropped low-quality local transcript: $result');
+          return null;
+        }
+
         CustomSttLogService.instance.info(
           'OnDeviceApple',
-          'Transcribed ${duration.toStringAsFixed(1)}s in ${sw.elapsedMilliseconds}ms. Text: $result',
+          'Transcribed ${duration.toStringAsFixed(1)}s in ${sw.elapsedMilliseconds}ms. Text: $filteredText',
         );
 
         return SttTranscriptionResult(
           segments: [
-            SttSegment(text: result, start: audioOffsetSeconds, end: audioOffsetSeconds + duration, speakerId: 0),
+            SttSegment(text: filteredText, start: audioOffsetSeconds, end: audioOffsetSeconds + duration, speakerId: 0),
           ],
-          rawText: result,
+          rawText: filteredText,
         );
       } finally {
         if (await tempFile.exists()) {
