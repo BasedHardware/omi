@@ -1455,6 +1455,16 @@ class ChatToolExecutor {
     (value as? Int64).map(Int.init) ?? (value as? Int)
   }
 
+  /// Resolve the action-item id from `update_action_item` args across surfaces.
+  /// Realtime-voice advertises the param as `id` (schemaOverride in
+  /// omi-tool-manifest.ts); chat/pi-mono/stdio advertise `action_item_id`.
+  /// Accept either so a voice update doesn't hard-fail on its own schema.
+  /// Returns nil for missing/empty/non-string, which the caller maps to an error.
+  nonisolated static func resolveActionItemID(_ args: [String: Any]) -> String? {
+    guard let id = (args["action_item_id"] ?? args["id"]) as? String, !id.isEmpty else { return nil }
+    return id
+  }
+
   // MARK: - Task Search
 
   /// Vector similarity search on action_items + staged_tasks using EmbeddingService
@@ -2835,7 +2845,7 @@ class ChatToolExecutor {
         return resp.resultText
 
       case "update_action_item":
-        guard let itemId = args["action_item_id"] as? String, !itemId.isEmpty else {
+        guard let itemId = resolveActionItemID(args) else {
           return "Error: action_item_id is required"
         }
         var validatedUpdateDueAt: String? = nil
