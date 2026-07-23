@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 
 @testable import Omi_Computer
@@ -370,6 +371,55 @@ import XCTest
 
       XCTAssertEqual(provider.messages.map(\.id), ["owner-b-turn"])
       XCTAssertEqual(provider.messages.map(\.text), ["Owner B history"])
+    }
+
+    func testInitialHistoryReplayPublishesOneCompleteTranscriptSnapshot() async throws {
+      let provider = ChatProvider()
+      let surface = provider.mainChatSurfaceReference()
+      let first = try turn(surface: surface, turnId: "saved-1", turnSeq: 1, content: "First saved reply")
+      let second = try turn(surface: surface, turnId: "saved-2", turnSeq: 2, content: "Second saved reply")
+      let third = try turn(surface: surface, turnId: "saved-3", turnSeq: 3, content: "Latest saved reply")
+      var publishedSnapshots: [[String]] = []
+      let observation = provider.$messages.dropFirst().sink { messages in
+        guard !messages.isEmpty else { return }
+        publishedSnapshots.append(messages.map(\.id))
+      }
+      defer { observation.cancel() }
+
+      let projection = KernelTurnProjection(
+        host: provider,
+        client: AgentClient.Session(harnessMode: "piMono"),
+        ownerIDProvider: { "history-owner" },
+        journalListOperation: { _, _, _, afterTurnSeq, _ in
+          if afterTurnSeq == 0 {
+            return AgentRuntimeProcess.JournalOperationResult(
+              operation: "list",
+              conversationId: "history-conversation",
+              turn: nil,
+              turns: [first, second],
+              clearedCount: 0,
+              highWaterTurnSeq: 3,
+              conversationGeneration: 1,
+              generationBaseTurnSeq: 0
+            )
+          }
+          return AgentRuntimeProcess.JournalOperationResult(
+            operation: "list",
+            conversationId: "history-conversation",
+            turn: nil,
+            turns: [third],
+            clearedCount: 0,
+            highWaterTurnSeq: 3,
+            conversationGeneration: 1,
+            generationBaseTurnSeq: 0
+          )
+        }
+      )
+
+      await projection.refresh(surface: surface)
+
+      XCTAssertEqual(provider.messages.map(\.id), ["saved-1", "saved-2", "saved-3"])
+      XCTAssertEqual(publishedSnapshots, [["saved-1", "saved-2", "saved-3"]])
     }
 
     func testClearBootstrapsExactGenerationAfterOwnerProjectionInvalidation() async {

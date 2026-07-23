@@ -242,9 +242,9 @@ final class KernelTurnProjection {
         await self.refresh(surface: surface)
       }
     }
-    if let surface = host?.mainChatSurfaceReference() {
-      await refresh(surface: surface, lease: lease)
-    }
+    // The visible-chat loader owns the first replay so it can keep the
+    // transcript in its loading state until the complete snapshot is ready.
+    // Event notifications above still refresh an already-mounted surface.
   }
 
   /// Attach the owner-bound client for a non-production journal control action
@@ -289,6 +289,14 @@ final class KernelTurnProjection {
       }
     }
 
+    // A restored conversation is not live streaming. Collect all contiguous
+    // turns fetched by this refresh, then publish one coherent transcript
+    // snapshot after the journal range is settled. Publishing each durable row
+    // independently makes first launch look like the user is watching old
+    // history arrive in real time, and causes the chat viewport to chase it.
+    var pendingProjectionTurns: [KernelJournalTurn] = []
+    var shouldResetProjection = false
+
     repeat {
       guard isCurrent(lease) else { return }
       if refreshRequestedSurfaceEpochs[surfaceKey] == lease.epoch {
@@ -323,7 +331,10 @@ final class KernelTurnProjection {
             highWaterByConversation[checkpointKey] = page.generationBaseTurnSeq
             generationByConversation[checkpointKey] = page.conversationGeneration
             guard isCurrent(lease) else { return }
-            host?.resetJournalProjection(surface: surface)
+            // A newer generation invalidates every accumulated row from the
+            // prior one. Keep the reset and its replacement snapshot atomic.
+            pendingProjectionTurns.removeAll()
+            shouldResetProjection = true
           }
           generationByConversation[checkpointKey] = page.conversationGeneration
           var contiguous = highWaterByConversation[checkpointKey] ?? 0
@@ -333,7 +344,7 @@ final class KernelTurnProjection {
           )
           for turn in contiguousPage {
             guard isCurrent(lease) else { return }
-            host?.projectJournalTurn(turn)
+            pendingProjectionTurns.append(turn)
             contiguous = turn.turnSeq
             highWaterByConversation[checkpointKey] = contiguous
           }
@@ -361,6 +372,12 @@ final class KernelTurnProjection {
         }
       }
     } while isCurrent(lease) && refreshRequestedSurfaceEpochs[surfaceKey] == lease.epoch
+
+    guard isCurrent(lease) else { return }
+    if shouldResetProjection {
+      host?.resetJournalProjection(surface: surface)
+    }
+    host?.projectJournalTurns(pendingProjectionTurns)
   }
 
   func reload(surface: AgentSurfaceReference) async {

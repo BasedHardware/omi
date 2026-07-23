@@ -3320,52 +3320,6 @@ class ChatProvider: ObservableObject {
     return merged
   }
 
-  func projectJournalTurn(_ turn: KernelJournalTurn) {
-    let expected = mainChatSurfaceReference()
-    let voiceCompanion = expected.realtimeVoiceCompanion()
-    let isCanonicalChatSurface =
-      turn.surfaceKind == expected.surfaceKind
-      || turn.surfaceKind == voiceCompanion.surfaceKind
-    guard isCanonicalChatSurface,
-      turn.externalRefKind == expected.externalRefKind,
-      turn.externalRefId == expected.externalRefId
-    else { return }
-    let projected = turn.chatMessage()
-    for block in projected.contentBlocks {
-      guard case .agentSpawn(_, let projectedPillID, _, _, _, _, _) = block,
-        let pillID = projectedPillID
-      else { continue }
-      AgentPillsManager.shared.bindProducingJournalSurface(
-        pillID: pillID,
-        surface: expected
-      )
-    }
-    let isEmptyTerminalPlaceholder =
-      turn.status == .failed
-      && projected.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      && projected.contentBlocks.isEmpty
-      && projected.resources.isEmpty
-    if isEmptyTerminalPlaceholder {
-      messages.removeAll { $0.id == projected.id }
-      return
-    }
-    if let index = messages.firstIndex(where: { $0.id == projected.id }) {
-      messages[index] = Self.carryingLocalOnlyFields(projected, from: messages[index])
-    } else if let continuityKey = projected.clientTurnId,
-      let index = messages.firstIndex(where: {
-        $0.clientTurnId == continuityKey && $0.sender == projected.sender
-      })
-    {
-      messages[index] = Self.carryingLocalOnlyFields(projected, from: messages[index])
-    } else {
-      messages.append(projected)
-    }
-    messages.sort {
-      if $0.createdAt == $1.createdAt { return $0.id < $1.id }
-      return $0.createdAt < $1.createdAt
-    }
-  }
-
   func resetJournalProjection(surface: AgentSurfaceReference) {
     guard surface == mainChatSurfaceReference() else { return }
     messages = []
