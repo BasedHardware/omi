@@ -428,6 +428,45 @@ import XCTest
       XCTAssertEqual(snapshot["telemetry_schema_version"] as? Int, 1)
     }
 
+    func testVoiceToolLatencyRecordsBoundedPerToolDuration() throws {
+      DesktopDiagnosticsManager.shared.recordVoiceToolLatency(
+        toolName: "search_conversations",
+        provider: "gemini",
+        durationMs: 4_213.6,
+        resultBytes: 1_842)
+
+      let snapshot = try latestSnapshot()
+      XCTAssertEqual(snapshot["event"] as? String, "voice_tool_latency")
+      XCTAssertEqual(snapshot["tool_name"] as? String, "search_conversations")
+      XCTAssertEqual(snapshot["provider"] as? String, "gemini")
+      XCTAssertEqual(snapshot["result_bytes"] as? Int, 1_842)
+      XCTAssertEqual((snapshot["duration_ms"] as? Double) ?? -1, 4_213.6, accuracy: 0.01)
+    }
+
+    func testVoiceToolLatencyTimerEmitsOnlyForAMatchedStart() throws {
+      // Finish without a start is a no-op (stale/dropped result).
+      DesktopDiagnosticsManager.shared.finishVoiceToolLatency(
+        key: "no-start", toolName: "get_tasks", provider: "openai", resultBytes: 10)
+      // Matched start → finish emits exactly one voice_tool_latency event.
+      DesktopDiagnosticsManager.shared.markVoiceToolStart(key: "call-1")
+      DesktopDiagnosticsManager.shared.finishVoiceToolLatency(
+        key: "call-1", toolName: "get_tasks", provider: "openai", resultBytes: 42)
+
+      let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+      defer { try? FileManager.default.removeItem(at: url) }
+      let root = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+      let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+      let latencyEvents = snapshots.filter { $0["event"] as? String == "voice_tool_latency" }
+
+      XCTAssertEqual(latencyEvents.count, 1)
+      let snapshot = try XCTUnwrap(latencyEvents.last)
+      XCTAssertEqual(snapshot["tool_name"] as? String, "get_tasks")
+      XCTAssertEqual(snapshot["provider"] as? String, "openai")
+      XCTAssertEqual(snapshot["result_bytes"] as? Int, 42)
+      XCTAssertGreaterThanOrEqual((snapshot["duration_ms"] as? Double) ?? -1, 0)
+    }
+
     func testVoiceTurnOutcomeExcludesUserControlledEnds() {
       XCTAssertEqual(DesktopDiagnosticsManager.voiceTurnOutcome(for: "success"), "success")
       XCTAssertEqual(DesktopDiagnosticsManager.voiceTurnOutcome(for: "cancelled"), "excluded")
