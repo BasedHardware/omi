@@ -8,6 +8,7 @@ import {
   updateMemoryContent,
   updateMemoryVisibility,
   deleteMemory,
+  deleteMemoriesBatch,
   reviewMemory,
 } from '@/lib/api';
 import {
@@ -26,6 +27,14 @@ export interface UseMemoriesOptions {
   limit?: number;
 }
 
+/** Outcome of a chunked bulk delete. */
+export interface RemoveMemoriesResult {
+  /** Whether every chunk succeeded. */
+  success: boolean;
+  /** IDs confirmed deleted across successful chunks (empty unless chunks ran). */
+  deletedIds: string[];
+}
+
 export interface UseMemoriesReturn {
   memories: Memory[];
   loading: boolean;
@@ -36,6 +45,7 @@ export interface UseMemoriesReturn {
   addMemory: (content: string, visibility?: MemoryVisibility) => Promise<Memory | null>;
   editMemory: (id: string, content: string) => Promise<boolean>;
   removeMemory: (id: string) => Promise<boolean>;
+  removeMemories: (ids: string[]) => Promise<RemoveMemoriesResult>;
   toggleVisibility: (id: string, visibility: MemoryVisibility) => Promise<boolean>;
   acceptMemory: (id: string) => Promise<boolean>;
   rejectMemory: (id: string) => Promise<boolean>;
@@ -396,6 +406,39 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     }
   }, [activeCategories]);
 
+
+  // Remove multiple memories via the batch API. IDs are sent in chunks of 100 (the
+  // server's per-request cap) and each successful chunk is applied to the UI
+  // immediately, so a later chunk failure can never leave already-deleted items
+  // visible. Returns success only when every chunk succeeded; on partial failure the
+  // confirmed-deleted IDs are surfaced via deletedIds so callers can drop them from
+  // any selection they keep for retry (otherwise a retry would re-send IDs the server
+  // already removed and trip the all-or-nothing 404).
+  const removeMemories = useCallback(
+    async (ids: string[]): Promise<RemoveMemoriesResult> => {
+      if (ids.length === 0) return { success: true, deletedIds: [] };
+      const key = getCacheKey(activeCategories);
+      const CHUNK_SIZE = 100;
+      const deletedIds: string[] = [];
+      try {
+        for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+          const chunk = ids.slice(i, i + CHUNK_SIZE);
+          await deleteMemoriesBatch(chunk);
+          deletedIds.push(...chunk);
+          const removed = new Set(chunk);
+          const updater = (prev: Memory[]) => prev.filter((m) => !removed.has(m.id));
+          setMemories(updater);
+          updateCacheMemories(key, updater);
+        }
+        return { success: true, deletedIds };
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to delete memories');
+        return { success: false, deletedIds };
+      }
+    },
+    [activeCategories],
+  );
+
   // Toggle visibility
   const toggleVisibility = useCallback(async (
     id: string,
@@ -466,6 +509,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     addMemory,
     editMemory,
     removeMemory,
+    removeMemories,
     toggleVisibility,
     acceptMemory,
     rejectMemory,
