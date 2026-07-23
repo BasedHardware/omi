@@ -172,6 +172,20 @@ def test_network_recorder_fails_even_when_blocked_attempt_is_swallowed():
     assert attempts == ["getaddrinfo: 'example.com'"]
 
 
+def test_network_recorder_handles_windows_without_af_unix(monkeypatch):
+    monkeypatch.delattr(socket, 'AF_UNIX', raising=False)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    with export_openapi.record_and_block_outbound_network() as attempts:
+        try:
+            with pytest.raises(export_openapi.OpenAPIContractError, match='blocked outbound network connection'):
+                sock.connect(('example.com', 443))
+        finally:
+            sock.close()
+
+    assert attempts == ["connect: ('example.com', 443)"]
+
+
 def test_hermetic_environment_restore_pattern():
     before = dict(os.environ)
     export_openapi.configure_hermetic_environment()
