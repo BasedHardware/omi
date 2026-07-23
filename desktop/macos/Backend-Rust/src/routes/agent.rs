@@ -16,6 +16,19 @@ fn local_harness_agent_disabled() -> bool {
     std::env::var("ENVIRONMENT").as_deref() == Ok("local-dev-harness")
 }
 
+/// Read the public NAT IP from a GCE instance response.
+///
+/// Phase 1 keeps ONE_TO_ONE_NAT: agent-proxy (omi-prod-vpc-1) and desktop clients
+/// still reach VMs on the `default` VPC via the public IP. Private-only VMs are
+/// deferred until desktop upload/sync is proxied and cross-VPC reachability exists.
+fn extract_agent_vm_ip(instance: &serde_json::Value) -> Result<String, String> {
+    instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
+        .as_str()
+        .filter(|ip| !ip.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "GCE instance response missing public natIP".to_string())
+}
+
 /// POST /v2/agent/provision
 /// Idempotent — if user already has a VM, returns existing info.
 /// Creates a GCE VM from the omi-agent image family for this user.
@@ -317,11 +330,17 @@ async fn get_agent_status(
                             {
                                 if let Ok(resp) = resp.send().await {
                                     if let Ok(instance) = resp.json::<serde_json::Value>().await {
-                                        let ip = instance["networkInterfaces"][0]["accessConfigs"]
-                                            [0]["natIP"]
-                                            .as_str()
-                                            .unwrap_or("unknown")
-                                            .to_string();
+                                        let ip = match extract_agent_vm_ip(&instance) {
+                                            Ok(ip) => ip,
+                                            Err(e) => {
+                                                tracing::warn!(
+                                                    "Could not recover public IP for VM {}: {}",
+                                                    vm_name,
+                                                    e
+                                                );
+                                                return;
+                                            }
+                                        };
                                         let now = chrono::Utc::now().to_rfc3339();
                                         let _ = firestore
                                             .set_agent_vm(
@@ -448,7 +467,8 @@ async fn start_stopped_vm(
         }
     }
 
-    // Get the VM's (possibly new) external IP
+    // Get the VM's (possibly new) public NAT IP. Phase 1 keeps public NAT so
+    // agent-proxy and desktop can reach VMs across VPCs.
     let instance_url = format!(
         "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
         project, zone, vm_name
@@ -461,37 +481,32 @@ async fn start_stopped_vm(
         .await?;
 
     let instance: serde_json::Value = instance_resp.json().await?;
-    let ip = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
-        .as_str()
-        .unwrap_or("unknown")
-        .to_string();
+    let ip = extract_agent_vm_ip(&instance)?;
 
     Ok(ip)
 }
 
-/// Create a GCE VM from the omi-agent image family.
-/// Returns the external IP of the created VM.
-async fn create_gce_vm(
-    firestore: &crate::services::FirestoreService,
+/// Build the GCE instances.insert request body for a new agent VM.
+///
+/// Phase 1 keeps ONE_TO_ONE_NAT (public IP) and tags VMs `omi-agent-vm` so a
+/// later source-restricted / private-network cutover can target them. Do not
+/// remove accessConfigs until desktop upload/sync is proxied and proxy↔VM
+/// private reachability exists (VPC peering or shared VPC).
+fn build_gce_vm_insert_body(
     vm_name: &str,
     auth_token: &str,
-    project: &str,
     source_image: &str,
     gcs_bucket: &str,
-) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let zone = "us-central1-a";
-
+    zone: &str,
+) -> serde_json::Value {
     // Startup script: pull the real startup.sh from GCS and run it.
     // All logic lives in GCS so it can be updated without reprovisioning VMs.
-    let startup_script = format!("#!/bin/bash\ncurl -sf https://storage.googleapis.com/{}/startup.sh -o /tmp/omi-startup.sh \\\n  && bash /tmp/omi-startup.sh\n", gcs_bucket);
-
-    // GCE instances.insert REST API
-    let url = format!(
-        "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances",
-        project, zone
+    let startup_script = format!(
+        "#!/bin/bash\ncurl -sf https://storage.googleapis.com/{}/startup.sh -o /tmp/omi-startup.sh \\\n  && bash /tmp/omi-startup.sh\n",
+        gcs_bucket
     );
 
-    let body = serde_json::json!({
+    serde_json::json!({
         "name": vm_name,
         "machineType": format!("zones/{}/machineTypes/e2-small", zone),
         "disks": [{
@@ -522,7 +537,28 @@ async fn create_gce_vm(
                 "value": auth_token
             }]
         }
-    });
+    })
+}
+
+/// Create a GCE VM from the omi-agent image family.
+/// Returns the public NAT IP of the created VM.
+async fn create_gce_vm(
+    firestore: &crate::services::FirestoreService,
+    vm_name: &str,
+    auth_token: &str,
+    project: &str,
+    source_image: &str,
+    gcs_bucket: &str,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let zone = "us-central1-a";
+
+    // GCE instances.insert REST API
+    let url = format!(
+        "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances",
+        project, zone
+    );
+
+    let body = build_gce_vm_insert_body(vm_name, auth_token, source_image, gcs_bucket, zone);
 
     // Use Firestore's authenticated request builder (same service account)
     let response = firestore
@@ -567,7 +603,7 @@ async fn create_gce_vm(
         }
     }
 
-    // Get the VM's external IP
+    // Get the VM's public NAT IP (phase 1 connectivity model).
     let instance_url = format!(
         "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
         project, zone, vm_name
@@ -580,10 +616,7 @@ async fn create_gce_vm(
         .await?;
 
     let instance: serde_json::Value = instance_resp.json().await?;
-    let ip = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
-        .as_str()
-        .unwrap_or("unknown")
-        .to_string();
+    let ip = extract_agent_vm_ip(&instance)?;
 
     Ok(ip)
 }
@@ -596,4 +629,58 @@ pub fn agent_routes() -> Router<AppState> {
     Router::new()
         .route("/v2/agent/provision", post(provision_agent_vm))
         .route("/v2/agent/status", get(get_agent_status))
+}
+
+#[cfg(test)]
+mod contract_tests {
+    use super::{build_gce_vm_insert_body, extract_agent_vm_ip};
+
+    #[test]
+    fn contract_create_gce_vm_provision_json_keeps_public_nat_and_firewall_tag() {
+        let body = build_gce_vm_insert_body(
+            "omi-agent-contract",
+            "omi-test-token",
+            "projects/test/global/images/family/omi-agent",
+            "omi-agent-artifacts",
+            "us-central1-a",
+        );
+
+        let network = &body["networkInterfaces"][0];
+        assert_eq!(network["network"], "global/networks/default");
+        assert_eq!(
+            network["accessConfigs"][0]["type"], "ONE_TO_ONE_NAT",
+            "phase 1 must keep public NAT until private cutover prerequisites land"
+        );
+        assert_eq!(network["accessConfigs"][0]["name"], "External NAT");
+
+        let tags = body["tags"]["items"]
+            .as_array()
+            .expect("provision body must include network tags");
+        assert!(
+            tags.iter().any(|tag| tag == "omi-agent-vm"),
+            "provision body must tag VMs for omi-agent-vm firewall policy"
+        );
+    }
+
+    #[test]
+    fn contract_agent_vm_ip_uses_public_nat_ip() {
+        let instance = serde_json::json!({
+            "networkInterfaces": [{
+                "networkIP": "10.128.0.42",
+                "accessConfigs": [{"natIP": "203.0.113.10"}]
+            }]
+        });
+
+        assert_eq!(extract_agent_vm_ip(&instance).unwrap(), "203.0.113.10");
+
+        let private_only = serde_json::json!({
+            "networkInterfaces": [{
+                "networkIP": "10.128.0.42"
+            }]
+        });
+        assert!(
+            extract_agent_vm_ip(&private_only).is_err(),
+            "phase 1 readiness must require public natIP (not private-only)"
+        );
+    }
 }
