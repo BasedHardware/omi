@@ -107,6 +107,11 @@ const EMBEDDING_DIM = 3072;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
 // Cap buffered JSON bodies for /auth and /sync so a large POST can't OOM the VM.
 const MAX_JSON_BODY_BYTES = 64 * 1024 * 1024;
+// Brute-force vector search loads embedded rows into JS to score them; cap the
+// scan so a heavy screenshot history can't materialize unbounded rows +
+// embeddings. ponytail: most-recent-N scan; raise if recall on very old
+// screens matters more than the memory ceiling.
+const SEMANTIC_SCAN_CAP = 5000;
 
 // --- Idle auto-stop ---
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000;   // 30 minutes
@@ -267,7 +272,8 @@ async function performSemanticSearch(searchQuery, days = 7, appFilter = null) {
     sql += " AND appName = ?";
     params.push(appFilter);
   }
-  sql += " ORDER BY timestamp DESC";
+  sql += " ORDER BY timestamp DESC LIMIT ?";
+  params.push(SEMANTIC_SCAN_CAP);
 
   const rows = db.prepare(sql).all(...params);
   const results = [];
