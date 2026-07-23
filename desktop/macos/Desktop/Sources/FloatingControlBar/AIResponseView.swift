@@ -397,12 +397,13 @@ struct AIResponseView: View {
         .padding(.horizontal, OmiSpacing.xxs)
         .padding(.bottom, OmiSpacing.xs)
         .contextMenu {
+          let finalOutput = message.copyableText
           Button("Copy") {
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(message.text, forType: .string)
+            NSPasteboard.general.setString(finalOutput, forType: .string)
           }
           Button("Copy Question & Answer") {
-            let combined = "Q: \(userInput)\n\nA: \(message.text)"
+            let combined = "Q: \(userInput)\n\nA: \(finalOutput)"
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(combined, forType: .string)
           }
@@ -571,7 +572,7 @@ struct MessageHoverOverlay<Content: View>: View {
     // Capture the message's value-type fields once per body evaluation so every
     // button action operates on the exact message the user sees — not whatever
     // `self.message` happens to point to when the click is dispatched.
-    let messageText = message.text
+    let finalOutput = message.copyableText
     let currentRating = message.rating
     return HStack(alignment: .top, spacing: OmiSpacing.xs) {
       Spacer(minLength: 0)
@@ -616,10 +617,10 @@ struct MessageHoverOverlay<Content: View>: View {
             lastSubmittedRating = newValue
           }
 
-          // Copy — captures `messageText` explicitly so we always copy the
+          // Copy — captures `finalOutput` explicitly so we always copy the
           // message this button was drawn for, even if SwiftUI reuses the
           // overlay view across re-renders.
-          Button(action: { [messageText] in copyText(messageText) }) {
+          Button(action: { [finalOutput] in copyText(finalOutput) }) {
             Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
               .scaledFont(size: OmiType.caption)
               .foregroundColor(showCopied ? .green : .secondary)
