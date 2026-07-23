@@ -49,6 +49,9 @@ extern bool is_connected;
 #ifdef CONFIG_OMI_ENABLE_BATTERY
 extern bool is_charging;
 #endif
+#ifdef CONFIG_OMI_ENABLE_CAPTURE_LED
+extern bool is_capturing;
+#endif
 static atomic_t pusher_stop_flag;
 
 struct bt_conn *current_connection = NULL;
@@ -217,6 +220,80 @@ static ssize_t settings_sleep_cmd_write_handler(struct bt_conn *conn,
 }
 #endif
 
+#ifdef CONFIG_OMI_ENABLE_CAPTURE_LED
+static struct bt_uuid_128 settings_capture_state_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10015, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+static ssize_t settings_capture_state_write_handler(struct bt_conn *conn,
+                                                    const struct bt_gatt_attr *attr,
+                                                    const void *buf,
+                                                    uint16_t len,
+                                                    uint16_t offset,
+                                                    uint8_t flags)
+{
+    if (len != 1) {
+        LOG_WRN("Invalid length for capture state write: %u", len);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    is_capturing = ((uint8_t *) buf)[0] != 0;
+    LOG_INF("Capture state set to %u", is_capturing);
+    return len;
+}
+
+static ssize_t settings_capture_state_read_handler(struct bt_conn *conn,
+                                                   const struct bt_gatt_attr *attr,
+                                                   void *buf,
+                                                   uint16_t len,
+                                                   uint16_t offset)
+{
+    uint8_t value = is_capturing ? 1U : 0U;
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &value, sizeof(value));
+}
+#endif
+
+#ifdef CONFIG_OMI_ENABLE_DEVICE_NAME_RW
+static struct bt_uuid_128 settings_device_name_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10016, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+static ssize_t settings_device_name_write_handler(struct bt_conn *conn,
+                                                  const struct bt_gatt_attr *attr,
+                                                  const void *buf,
+                                                  uint16_t len,
+                                                  uint16_t offset,
+                                                  uint8_t flags)
+{
+    if (len == 0 || len > CONFIG_BT_DEVICE_NAME_MAX) {
+        LOG_WRN("Invalid length for device name write: %u", len);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    char new_name[CONFIG_BT_DEVICE_NAME_MAX + 1];
+    memcpy(new_name, buf, len);
+    new_name[len] = '\0';
+
+    int err = bt_set_name(new_name);
+    if (err) {
+        LOG_ERR("Failed to set device name (err %d)", err);
+        return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+    }
+
+    (void) app_settings_save_device_name(new_name, len);
+    LOG_INF("Device name set to: %s", new_name);
+    return len;
+}
+
+static ssize_t settings_device_name_read_handler(struct bt_conn *conn,
+                                                 const struct bt_gatt_attr *attr,
+                                                 void *buf,
+                                                 uint16_t len,
+                                                 uint16_t offset)
+{
+    const char *name = bt_get_name();
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, name, strlen(name));
+}
+#endif
+
 static struct bt_gatt_attr settings_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&settings_service_uuid),
     BT_GATT_CHARACTERISTIC(&settings_dim_ratio_characteristic_uuid.uuid,
@@ -244,6 +321,22 @@ static struct bt_gatt_attr settings_service_attr[] = {
                            BT_GATT_PERM_WRITE,
                            NULL,
                            settings_sleep_cmd_write_handler,
+                           NULL),
+#endif
+#ifdef CONFIG_OMI_ENABLE_CAPTURE_LED
+    BT_GATT_CHARACTERISTIC(&settings_capture_state_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           settings_capture_state_read_handler,
+                           settings_capture_state_write_handler,
+                           NULL),
+#endif
+#ifdef CONFIG_OMI_ENABLE_DEVICE_NAME_RW
+    BT_GATT_CHARACTERISTIC(&settings_device_name_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           settings_device_name_read_handler,
+                           settings_device_name_write_handler,
                            NULL),
 #endif
 };
@@ -357,8 +450,14 @@ static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
 {
     if (value == BT_GATT_CCC_NOTIFY) {
         LOG_INF("Client subscribed for notifications");
+#ifdef CONFIG_OMI_ENABLE_CAPTURE_LED
+        is_capturing = true;
+#endif
     } else if (value == 0) {
         LOG_INF("Client unsubscribed from notifications");
+#ifdef CONFIG_OMI_ENABLE_CAPTURE_LED
+        is_capturing = false;
+#endif
     } else {
         LOG_INF("Invalid CCC value: %u", value);
     }
@@ -1383,6 +1482,20 @@ int transport_start()
     if (err) {
         LOG_WRN("Continuing without confirmed BLE identity (err %d)", err);
     }
+
+#ifdef CONFIG_OMI_ENABLE_DEVICE_NAME_RW
+    {
+        const char *stored_name = app_settings_get_device_name();
+        if (stored_name != NULL && stored_name[0] != '\0') {
+            int nerr = bt_set_name(stored_name);
+            if (nerr) {
+                LOG_WRN("Failed to apply stored device name (err %d)", nerr);
+            } else {
+                LOG_INF("Applied stored device name: %s", stored_name);
+            }
+        }
+    }
+#endif
 
     // Production-line helper: emit local BLE addresses on UART for fixture parsing.
     log_local_ble_addresses();
