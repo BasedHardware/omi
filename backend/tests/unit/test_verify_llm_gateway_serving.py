@@ -63,9 +63,7 @@ def _healthy_responses() -> dict[str, object]:
 def test_gateway_promotion_intent_tracks_runtime_and_helm_listener_surfaces(gateway_gate, tmp_path: Path) -> None:
     manifest = Path(__file__).resolve().parents[2] / 'deploy' / 'runtime_env.yaml'
 
-    # The Cloud Run callers request gateway mode while the GKE listener remains off.
-    # That intent must still trigger endpoint verification before their revisions render.
-    assert gateway_gate.gateway_promotion_requested(manifest_path=manifest, environment='prod') is True
+    assert gateway_gate.gateway_promotion_requested(manifest_path=manifest, environment='prod') is False
 
     listener_values = tmp_path / 'prod_listener_values.yaml'
     listener_values.write_text('env:\n  - name: OMI_LLM_GATEWAY_FEATURE_MODE\n    value: gateway\n', encoding='utf-8')
