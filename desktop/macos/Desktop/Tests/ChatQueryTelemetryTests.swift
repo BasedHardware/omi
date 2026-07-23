@@ -571,7 +571,7 @@ final class ChatQueryTelemetryTests: XCTestCase {
       eventSink: { browserEvents.append($0) }
     )
     XCTAssertTrue(browserAttempt.finish(stopReason: .browserExtensionMissing))
-    guard case .failed(_, _, let errorClass, _, _) = browserEvents.last else {
+    guard case .failed(_, _, let errorClass, _, _, _) = browserEvents.last else {
       return XCTFail("expected browser precondition failure")
     }
     XCTAssertEqual(errorClass, .browserExtensionMissing)
@@ -605,7 +605,7 @@ final class ChatQueryTelemetryTests: XCTestCase {
 
     XCTAssertTrue(attempt.fail(errorClass: .authentication))
     guard let terminal = events.last,
-      case .failed(_, _, let errorClass, _, let watchdogFired) = terminal
+      case .failed(_, _, let errorClass, _, _, let watchdogFired) = terminal
     else {
       return XCTFail("expected failed terminal event")
     }

@@ -351,7 +351,7 @@ extension ChatQueryTelemetryEvent {
       properties["runtime_surface"] = runtimeSurface
     }
     properties["telemetry_schema_version"] = 2
-    if case .failed(_, _, let errorClass, _, _) = self {
+    if case .failed(_, _, let errorClass, _, _, _) = self {
       // One-release compatibility alias for existing PostHog breakdowns.
       // It is bounded and contains the same value as `error_class`, never the
       // raw exception. Remove after LXEMscAj and Hermes exports migrate to v2.
