@@ -4,8 +4,8 @@ import type { ChatMsg } from '../../hooks/useChat'
 import { RevealMarkdown } from './RevealMarkdown'
 import { ChatAttachmentStrip } from './ChatAttachmentStrip'
 import { OmiThinkingSpinner } from './OmiThinkingSpinner'
-import { AgentThreadCard } from './AgentThreadCard'
-import type { AgentThreadCardBlock } from '../../../../shared/types'
+import { ChatBlock } from './ChatBlock'
+import { ChatCitations } from './ChatCitations'
 
 const BUBBLE: Record<'main' | 'overlay', { user: string; assistant: string }> = {
   main: {
@@ -100,23 +100,20 @@ const MessageRow = memo(function MessageRow({
 }): React.JSX.Element | null {
   const cls = BUBBLE[variant]
   const compact = variant === 'overlay'
-  // Shared-thread agent cards (B4, INV-CHAT-1): an assistant message that
-  // carries spawn/completion blocks renders as card(s), not a text bubble.
-  // Handled before the spinner/copy logic so a card that lands as the last
-  // message mid-turn never shows the streaming placeholder or a copy button.
+  // An assistant message assembled from typed content blocks. Agent
+  // spawn/completion cards flow today (B4, INV-CHAT-1); tool-call, thinking, and
+  // discovery blocks render here too as the runtime starts producing them. Each
+  // block renders in order via the shared dispatcher, not as a text bubble.
+  // Handled before the spinner/copy logic so a block message that lands as the
+  // last message mid-turn never shows the streaming placeholder or a copy button.
   if (m.blocks?.length) {
-    const cards = m.blocks.filter(
-      (b): b is AgentThreadCardBlock => b.type === 'agentSpawn' || b.type === 'agentCompletion'
+    return (
+      <div className="flex flex-col gap-1.5">
+        {m.blocks.map((block) => (
+          <ChatBlock key={block.id} block={block} compact={compact} />
+        ))}
+      </div>
     )
-    if (cards.length) {
-      return (
-        <div className="flex flex-col gap-1.5">
-          {cards.map((block) => (
-            <AgentThreadCard key={block.id} block={block} compact={compact} />
-          ))}
-        </div>
-      )
-    }
   }
   // Bar chat (overlay): while Omi's reply is still pending — the last
   // assistant turn exists as an empty placeholder — show a standalone
@@ -158,6 +155,22 @@ const MessageRow = memo(function MessageRow({
       <div className="flex flex-col items-end gap-1.5">
         <ChatAttachmentStrip attachments={m.attachments} compact={compact} align="end" />
         {filesOnly ? null : <div className={bubbleClass}>{bubbleChildren}</div>}
+      </div>
+    )
+  }
+
+  // "Sources" strip beneath a settled assistant reply (main window only — the
+  // overlay bar has no room for it). Citations arrive on the terminal done frame,
+  // so a still-streaming reply never has them.
+  const citations =
+    variant === 'main' && m.role === 'assistant' && !streaming && m.citations?.length
+      ? m.citations
+      : null
+  if (citations) {
+    return (
+      <div className="flex flex-col">
+        <div className={bubbleClass}>{bubbleChildren}</div>
+        <ChatCitations citations={citations} />
       </div>
     )
   }
