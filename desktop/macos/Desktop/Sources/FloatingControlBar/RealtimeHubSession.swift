@@ -1,26 +1,5 @@
 import Foundation
-import Network
 import VoiceTurnDomain
-
-/// Boxes a non-Sendable value so the session's serial-queue (`q`) and main-actor
-/// closures can capture it. All access is serialized on `q` (or the main actor),
-/// so sharing the reference is race-free — the same model the `@unchecked
-/// Sendable` class relies on.
-private struct SessionCallbackBox<T>: @unchecked Sendable {
-  let value: T
-  init(_ value: T) { self.value = value }
-}
-
-/// A provider continuation is recovery work for one already-owned physical turn. Expose why it
-/// did not start so the controller can distinguish a healthy in-flight cycle from a terminal
-/// transport/exhaustion failure instead of waiting blindly for the ordinary response deadline.
-enum RealtimePostToolContinuationStartResult: Equatable {
-  case started
-  case alreadyInFlight
-  case stale
-  case exhausted
-  case transportUnavailable
-}
 
 // MARK: - Realtime Hub Session
 //
@@ -47,141 +26,6 @@ enum RealtimePostToolContinuationStartResult: Equatable {
 //
 // Normalized events: transcript_in (input STT) / audio_out (OpenAI) |
 // text_out (Gemini) / tool_call / turn.done.
-
-@MainActor
-protocol RealtimeHubSessionDelegate: AnyObject {
-  func hubDidConnect(source: RealtimeHubSession)
-  func hubDidReceiveInputTranscript(
-    _ text: String, isFinal: Bool, identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
-  /// OpenAI native spoken audio (PCM16 mono 24 kHz).
-  func hubDidReceiveAudio(
-    _ pcm24k: Data, identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
-  /// Assistant text to display / speak. Gemini emits its whole reply here;
-  /// OpenAI emits its spoken transcript here (for the on-screen bubble).
-  func hubDidEmitText(
-    _ text: String, isFinal: Bool, identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
-  func hubDidRequestTool(
-    name: String, callId: String, argumentsJSON: String,
-    identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
-  func hubDidFinishTurn(identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
-  func hubDidError(_ failure: RealtimeHubTransportFailure, source: RealtimeHubSession)
-}
-
-enum RealtimeHubTransportFailureKind: String, Equatable, Sendable {
-  case localAddressUnavailable = "local_address_unavailable"
-  case providerClose = "provider_close"
-  case providerError = "provider_error"
-  case configuration
-  case connect
-  case handshake
-  case receive
-  case send
-  case protocolViolation = "protocol_violation"
-  case unknown
-}
-
-struct RealtimeHubTransportFailure: Equatable, Sendable {
-  let kind: RealtimeHubTransportFailureKind
-  let message: String
-  let systemDomain: String?
-  let systemCode: Int?
-
-  static func rawWebSocket(_ failure: RealtimeRawWebSocketFailure) -> Self {
-    if let underlyingError = failure.underlyingError,
-      isLocalAddressUnavailable(underlyingError)
-    {
-      return Self(
-        kind: .localAddressUnavailable,
-        message: failure.message,
-        systemDomain: "posix",
-        systemCode: Int(POSIXErrorCode.EADDRNOTAVAIL.rawValue))
-    }
-    return Self(
-      kind: kind(for: failure.phase),
-      message: failure.message,
-      systemDomain: boundedSystemDomain(failure.underlyingError),
-      systemCode: failure.underlyingError.map { ($0 as NSError).code })
-  }
-
-  static func providerClose(code: Int, reason: String) -> Self {
-    Self(
-      kind: .providerClose,
-      message: "WebSocket closed (\(code)) \(reason)",
-      systemDomain: nil,
-      systemCode: code)
-  }
-
-  static func providerError(_ message: String) -> Self {
-    Self(kind: .providerError, message: message, systemDomain: nil, systemCode: nil)
-  }
-
-  static func system(_ error: Error, phase: RealtimeHubTransportFailureKind) -> Self {
-    if isLocalAddressUnavailable(error) {
-      return Self(
-        kind: .localAddressUnavailable,
-        message: error.localizedDescription,
-        systemDomain: "posix",
-        systemCode: Int(POSIXErrorCode.EADDRNOTAVAIL.rawValue))
-    }
-    return Self(
-      kind: phase,
-      message: error.localizedDescription,
-      systemDomain: boundedSystemDomain(error),
-      systemCode: (error as NSError).code)
-  }
-
-  private static func kind(
-    for phase: RealtimeRawWebSocketFailurePhase
-  ) -> RealtimeHubTransportFailureKind {
-    switch phase {
-    case .configuration: return .configuration
-    case .connect: return .connect
-    case .handshake: return .handshake
-    case .receive: return .receive
-    case .send: return .send
-    case .protocolViolation: return .protocolViolation
-    }
-  }
-
-  private static func isLocalAddressUnavailable(_ error: Error) -> Bool {
-    if let networkError = error as? NWError,
-      case .posix(let code) = networkError
-    {
-      return code == .EADDRNOTAVAIL
-    }
-    let nsError = error as NSError
-    return nsError.domain == NSPOSIXErrorDomain
-      && nsError.code == Int(POSIXErrorCode.EADDRNOTAVAIL.rawValue)
-  }
-
-  private static func boundedSystemDomain(_ error: Error?) -> String? {
-    guard let error else { return nil }
-    if error is NWError { return "network" }
-    let domain = (error as NSError).domain
-    if domain == NSPOSIXErrorDomain { return "posix" }
-    if domain == NSURLErrorDomain { return "url" }
-    return "other"
-  }
-}
-
-struct RealtimeHubEventIdentity: Equatable, Sendable {
-  let turnID: VoiceTurnID
-  let responseID: VoiceResponseID
-}
-
-enum GeminiRealtimeEventOwnership {
-  /// Gemini input-transcription messages do not include a provider item ID. Once
-  /// A has completed, receiving an event while B is active on the same socket is
-  /// ambiguous and must be dropped instead of mutating B's transcript.
-  static func inputIdentity(
-    active: RealtimeHubEventIdentity?,
-    completed: RealtimeHubEventIdentity?
-  ) -> RealtimeHubEventIdentity? {
-    guard let completed else { return active }
-    guard active == nil || active == completed else { return nil }
-    return completed
-  }
-}
 
 private struct PendingOpenAIResponseIdentity {
   let identity: RealtimeHubEventIdentity
@@ -247,15 +91,15 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
 
   // All socket + state access is serialized here (audio arrives on the capture
   // thread; receives on the URLSession/NW queue). Delegate calls hop to main.
-  private let q = DispatchQueue(label: "omi.realtime-hub.session")
+  let q = DispatchQueue(label: "omi.realtime-hub.session")
 
-  private var task: URLSessionWebSocketTask?
-  private var completedURLTaskIDs = Set<Int>()
-  private var urlTaskTerminalWaiters: [Int: [CheckedContinuation<Void, Never>]] = [:]
+  var task: URLSessionWebSocketTask?
+  var completedURLTaskIDs = Set<Int>()
+  var urlTaskTerminalWaiters: [Int: [CheckedContinuation<Void, Never>]] = [:]
   private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
   // Gemini's Live endpoint rejects both of Apple's WebSocket stacks, so it uses a
   // hand-rolled RFC 6455 client (RawWebSocket). OpenAI uses URLSession.
-  private var rawWS: RealtimeRawWebSocketTransport?
+  var rawWS: RealtimeRawWebSocketTransport?
   private let rawWebSocketFactory: (URL, DispatchQueue) -> RealtimeRawWebSocketTransport
   private var usesRawWS: Bool { provider == .gemini }
 
@@ -412,63 +256,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     }
   }
 
-  /// Close the transport and await the underlying stack's terminal acknowledgement.
-  /// Owner replacement awaits this before the replacement owner becomes visible.
-  func stopAndWait() async {
-    let handles: (URLSessionWebSocketTask?, RealtimeRawWebSocketTransport?) = await withCheckedContinuation {
-      continuation in
-      q.async { [weak self] in
-        guard let self else {
-          continuation.resume(returning: (nil, nil))
-          return
-        }
-        let handles = (self.task, self.rawWS)
-        self.beginStopOnQueue()
-        continuation.resume(returning: handles)
-      }
-    }
-    await waitForRawTransportTerminal(handles.1)
-    await waitForURLTaskTerminal(handles.0)
-    let handlesBox = SessionCallbackBox(handles)
-    await withCheckedContinuation { continuation in
-      q.async { [weak self] in
-        let handles = handlesBox.value
-        if let urlTask = handles.0, self?.task === urlTask {
-          self?.task = nil
-        }
-        if let rawTransport = handles.1, self?.rawWS === rawTransport {
-          self?.rawWS = nil
-        }
-        continuation.resume()
-      }
-    }
-  }
-
-  private func waitForRawTransportTerminal(_ transport: RealtimeRawWebSocketTransport?) async {
-    guard let transport else { return }
-    await transport.closeAndWait()
-  }
-
-  private func waitForURLTaskTerminal(_ urlTask: URLSessionWebSocketTask?) async {
-    guard let urlTask else { return }
-    await withCheckedContinuation { continuation in
-      q.async { [weak self] in
-        guard let self else {
-          continuation.resume()
-          return
-        }
-        let taskID = urlTask.taskIdentifier
-        if self.completedURLTaskIDs.contains(taskID) || urlTask.state == .completed {
-          continuation.resume()
-          return
-        }
-        self.urlTaskTerminalWaiters[taskID, default: []].append(continuation)
-        urlTask.cancel(with: .goingAway, reason: nil)
-      }
-    }
-  }
-
-  private func beginStopOnQueue() {
+  func beginStopOnQueue() {
     beginTransportTerminationOnQueue()
     isOpen = false
     pendingAudio.removeAll()

@@ -795,32 +795,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       retryable: error.payload?.retryable)
   }
 
-  /// True only when a physical provider socket is authenticated. This is a
-  /// latency hint, never authority to open input; every turn still obtains a
-  /// context-bound admission before audio leaves its buffer.
-  var isTransportReady: Bool {
-    // Drive a turn only when the hub is actually CONNECTED + authenticated for the
-    // selected provider OR the failover provider we switched to. A turn never enters hub
-    // mode on a key/token that can't connect (stale/revoked key, failed mint, mid-
-    // reconnect, or a just-switched provider): PTT transparently uses the legacy cascade
-    // instead, so a broken hub never costs the user a turn. The hub re-warms in the
-    // background and flips this true once it connects.
-    guard
-      RealtimeHubOwnerFence.canReuseWarmSession(
-        sessionOwner: sessionOwnerScope,
-        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
-    else {
-      if session != nil {
-        log("RealtimeHub: refusing warm socket owned by a previous authenticated user")
-        discardSessionAfterOwnerChange()
-      }
-      return false
-    }
-    return hubConnected
-      && (sessionProvider == RealtimeHubSettings.shared.provider
-        || sessionProvider == fallbackProvider)
-  }
-
   /// PTT must distinguish a merely authenticated socket from a session that can
   /// accept this turn's canonical context. Callers always begin capture; this
   /// answer only chooses direct ingress versus bounded controller-owned buffering.

@@ -1031,8 +1031,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
   /// Listen for distributed notifications from CLI to trigger test runs
   private func setupTestNotificationListeners() {
-    // The selector target is deliberately nonisolated. Distributed notifications
-    // may arrive on the posting thread, so entering a selector on this
+    // Distributed notifications may arrive on the posting thread, so entering a selector on this
     // MainActor-isolated plugin can trap before a Task-based actor hop executes.
     let observers = [
       ProactiveTestNotificationObserver(name: NSNotification.Name("com.omi.test.insight")) {
