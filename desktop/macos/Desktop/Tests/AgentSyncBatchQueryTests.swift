@@ -179,6 +179,8 @@ private actor AgentSyncRecoveryProbe {
   private var healthChecks = 0
   private var uploads = 0
   private var syncedTables: [String] = []
+  private var lastHealthAuthorization: String?
+  private var lastHealthTokenQuery: String?
 
   init(missingTable: String? = "transcription_sessions") {
     missingTables = missingTable.map { [$0] } ?? []
@@ -200,6 +202,12 @@ private actor AgentSyncRecoveryProbe {
       return (Data(), response(url, status: 200))
     case "/health":
       healthChecks += 1
+      lastHealthAuthorization = request.value(forHTTPHeaderField: "Authorization")
+      lastHealthTokenQuery =
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?
+        .queryItems?
+        .first(where: { $0.name == "token" })?
+        .value
       switch healthResponse {
       case .ready:
         return (try JSONSerialization.data(withJSONObject: ["databaseReady": true]), response(url, status: 200))
@@ -236,6 +244,10 @@ private actor AgentSyncRecoveryProbe {
 
   func counts() -> (healthChecks: Int, uploads: Int, syncedTables: [String]) {
     (healthChecks, uploads, syncedTables)
+  }
+
+  func lastHealthAuth() -> (authorization: String?, tokenQuery: String?) {
+    (lastHealthAuthorization, lastHealthTokenQuery)
   }
 
   private func response(_ url: URL, status: Int) -> URLResponse {
@@ -387,6 +399,9 @@ final class AgentSyncRecoveryTests: XCTestCase {
     XCTAssertEqual(counts.syncedTables.filter { $0 == "transcription_sessions" }.count, 3)
     XCTAssertEqual(counts.healthChecks, 1, "Three causal failures trigger one fail-closed /health check")
     XCTAssertEqual(counts.uploads, 1, "The existing database-upload owner repairs the missing table exactly once")
+    let healthAuth = await probe.lastHealthAuth()
+    XCTAssertEqual(healthAuth.authorization, "Bearer test-token")
+    XCTAssertEqual(healthAuth.tokenQuery, "test-token")
   }
 
   func testTwoMissingRequiredTablesDoNotAlternateAwayTheSelectedRecovery() async {

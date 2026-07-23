@@ -139,8 +139,9 @@ actor AgentVMService {
 
   /// Check if the VM needs a database upload by hitting its /health endpoint.
   private func checkVMNeedsDatabase(vmIP: String, authToken: String) async -> Bool {
-    guard let healthURL = URL(string: "http://\(vmIP):8080/health") else { return true }
+    guard let healthURL = URL(string: "http://\(vmIP):8080/health?token=\(authToken)") else { return true }
     var request = URLRequest(url: healthURL)
+    request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
     request.timeoutInterval = 10
 
     do {
