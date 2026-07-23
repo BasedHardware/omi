@@ -535,8 +535,8 @@ def check_desktop_codemagic_release() -> list[str]:
 
     planner = ROOT / ".github/scripts/plan-desktop-release.py"
     planner_text = planner.read_text(encoding="utf-8")
-    if "AUTO_RELEASE_QUIET_SECONDS = 10 * 60" not in planner_text:
-        errors.append("desktop auto-release planner must keep a 10 minute quiet window before auto-tagging")
+    if "AUTO_RELEASE_QUIET_SECONDS = 60" not in planner_text:
+        errors.append("desktop auto-release planner must keep a short (60s) quiet window before auto-tagging")
     if "latest_change_age is None" not in planner_text:
         errors.append("desktop auto-release planner must fail closed when latest change age cannot be determined")
     if "RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60" not in planner_text:
