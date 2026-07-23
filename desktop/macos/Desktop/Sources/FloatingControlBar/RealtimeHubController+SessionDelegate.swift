@@ -76,6 +76,13 @@ extension RealtimeHubController {
       return
     }
     toolEffectIdentityByTransportKey.removeValue(forKey: key)
+    if let toolStart = toolCallStartByTransportKey.removeValue(forKey: key) {
+      DesktopDiagnosticsManager.shared.recordVoiceToolLatency(
+        toolName: name,
+        provider: providerTag,
+        durationMs: Date().timeIntervalSince(toolStart) * 1000,
+        resultBytes: output.utf8.count)
+    }
     let turnID = VoiceTurnID(identity.generation)
     let deferredScreenProtocol =
       name == HubTool.screenshot.rawValue
@@ -866,6 +873,8 @@ extension RealtimeHubController {
       log("RealtimeHub[\(providerTag)]: reducer rejected tool call \(name) id=\(callId)")
       return
     }
+    // Tool is admitted for this turn — stamp the start for voice_tool_latency.
+    toolCallStartByTransportKey[transportKey] = Date()
     if name == HubTool.screenshot.rawValue {
       admitScreenScreenshotRequest(
         source: source,
@@ -1189,6 +1198,7 @@ extension RealtimeHubController {
   func clearRealtimeToolTracking() {
     realtimeToolTurnEpoch += 1
     toolEffectIdentityByTransportKey.removeAll()
+    toolCallStartByTransportKey.removeAll()
     authorizedRealtimeInvocations.removeAll()
     authorizedRealtimeScreenshotImages.removeAll()
     acceptedSpawnJournalReceiptByContinuityKey.removeAll()
