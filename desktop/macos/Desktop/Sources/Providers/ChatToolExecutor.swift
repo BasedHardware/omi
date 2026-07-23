@@ -390,9 +390,6 @@ class ChatToolExecutor {
       if toolCall.name == "get_local_status" {
         return await executeLocalStatus(expectedOwnerID: expectedOwnerID)
       }
-      if toolCall.name == "get_file_scan_results" || toolCall.name == "start_file_scan" {
-        return await executeScanFiles(toolCall.arguments, expectedOwnerID: expectedOwnerID)
-      }
       return "Unknown tool: \(toolCall.name)"
     }
   }
