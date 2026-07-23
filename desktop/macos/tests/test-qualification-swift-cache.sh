@@ -137,11 +137,19 @@ grep -Fq "fixture setup changed the outer repository HEAD" "$TMP_ROOT/vulnerable
   || fail "vulnerable negative control did not reach the outer integrity assertion: $(cat "$TMP_ROOT/vulnerable-integrity.err")"
 echo "vulnerable inherited-Git negative control reached the integrity assertion and detected outer HEAD mutation"
 
-SWIFT_SHIM_DIR="$TMP_ROOT/swift-shim"
-mkdir -p "$SWIFT_SHIM_DIR"
-cat > "$SWIFT_SHIM_DIR/swift" <<'SH'
+TOOLCHAIN_SHIM_DIR="$TMP_ROOT/toolchain-shim"
+mkdir -p "$TOOLCHAIN_SHIM_DIR"
+cat > "$TOOLCHAIN_SHIM_DIR/swift" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+echo "PATH swift must not be used directly" >&2
+exit 42
+SH
+cat > "$TOOLCHAIN_SHIM_DIR/xcrun" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${1:-}" == "swift" ]]
+shift
 [[ "${1:-}" == "package" && "${2:-}" == "dump-package" && "${3:-}" == "--package-path" && -n "${4:-}" ]]
 if grep -Fq '// invalid-package' "$4/Package.swift"; then
   echo "invalid fixture package" >&2
@@ -149,8 +157,8 @@ if grep -Fq '// invalid-package' "$4/Package.swift"; then
 fi
 printf '%s\n' '{}'
 SH
-chmod +x "$SWIFT_SHIM_DIR/swift"
-export PATH="$SWIFT_SHIM_DIR:$PATH"
+chmod +x "$TOOLCHAIN_SHIM_DIR/swift" "$TOOLCHAIN_SHIM_DIR/xcrun"
+export PATH="$TOOLCHAIN_SHIM_DIR:$PATH"
 
 export OMI_QUALIFICATION_SWIFT_CACHE_ROOT="$TMP_ROOT/cache"
 export OMI_QUALIFICATION_SWIFT_CACHE_XCODE="Xcode 16.4\nBuild version 16F6"

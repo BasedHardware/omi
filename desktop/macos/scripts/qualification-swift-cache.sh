@@ -184,7 +184,7 @@ if [[ ! -f "$PACKAGE_SWIFT" || -L "$PACKAGE_SWIFT" \
   exit 1
 fi
 
-if ! swift package dump-package --package-path "$PACKAGE_DIR" >/dev/null 2>&1; then
+if ! xcrun swift package dump-package --package-path "$PACKAGE_DIR" >/dev/null 2>&1; then
   echo "qualification Swift cache: Package.swift failed swift package dump-package: $PACKAGE_SWIFT" >&2
   exit 1
 fi
