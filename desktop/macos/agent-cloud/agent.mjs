@@ -105,6 +105,8 @@ const PORT = parseInt(process.env.PORT || "8080", 10);
 const EMBEDDING_DIM = 3072;
 // Max upload size: 10GB
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
+// Cap buffered JSON bodies for /auth and /sync so a large POST can't OOM the VM.
+const MAX_JSON_BODY_BYTES = 64 * 1024 * 1024;
 
 // --- Idle auto-stop ---
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000;   // 30 minutes
@@ -212,8 +214,6 @@ function getSchema() {
 }
 
 // --- SQL Execution Logic ---
-const BLOCKED_KEYWORDS = ["DROP", "ALTER", "CREATE", "PRAGMA", "ATTACH", "DETACH", "VACUUM"];
-
 function executeSqlQuery(sqlQuery) {
   if (!db) return JSON.stringify({ error: "Database not loaded. Upload omi.db first." });
   // stmt.readonly-based guard (data-tools): allows CTE reads the old prefix
@@ -1485,8 +1485,19 @@ function startServer() {
       }
 
       let body = "";
-      req.on("data", (chunk) => { body += chunk.toString(); });
+      let bodyTooLarge = false;
+      req.on("data", (chunk) => {
+        if (bodyTooLarge) return;
+        body += chunk.toString();
+        if (body.length > MAX_JSON_BODY_BYTES) {
+          bodyTooLarge = true;
+          res.writeHead(413, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Request body too large" }));
+          req.destroy();
+        }
+      });
       req.on("end", async () => {
+        if (bodyTooLarge) return;
         try {
           const payload = JSON.parse(body);
           const { firebaseToken } = payload;
@@ -1545,8 +1556,19 @@ function startServer() {
       }
 
       let body = "";
-      req.on("data", (chunk) => { body += chunk.toString(); });
+      let bodyTooLarge = false;
+      req.on("data", (chunk) => {
+        if (bodyTooLarge) return;
+        body += chunk.toString();
+        if (body.length > MAX_JSON_BODY_BYTES) {
+          bodyTooLarge = true;
+          res.writeHead(413, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Request body too large" }));
+          req.destroy();
+        }
+      });
       req.on("end", () => {
+        if (bodyTooLarge) return;
         try {
           const payload = JSON.parse(body);
           const { table, rows } = payload;
@@ -1562,6 +1584,15 @@ function startServer() {
           }
 
           const cols = Object.keys(rows[0]);
+          // Column names are interpolated into ALTER TABLE / INSERT identifiers;
+          // the table is whitelisted but cols are client-supplied. Reject anything
+          // that is not a plain SQL identifier so a stray quote cannot break out.
+          const badCol = cols.find((c) => !/^[A-Za-z0-9_]+$/.test(c));
+          if (badCol) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: `Invalid column name: ${badCol}` }));
+            return;
+          }
 
           // Auto-add any columns missing from the table (handles schema migrations
           // where the VM has an older database than the desktop app).

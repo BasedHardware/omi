@@ -24,6 +24,8 @@ export const USER_MESSAGES = {
   auth: "Please reconnect your account in Settings, then try again.",
   invalid_request: "That request couldn't be processed. Try rephrasing or removing large attachments.",
   unavailable: "Your agent is starting up — one moment.",
+  aborted: "Stopped.",
+  interrupted: "Stopped.",
   internal: "Something went wrong on our side.",
 };
 
@@ -105,5 +107,12 @@ export function logEvent(level, event, fields = {}, write = (line) => console.lo
       ...Object.fromEntries(Object.getOwnPropertyNames(err).map((k) => [k, err[k]])),
     };
   }
-  write(JSON.stringify(record));
+  try {
+    write(JSON.stringify(record));
+  } catch {
+    // A circular reference (e.g. a socket on err.cause) must not turn a logged
+    // error into a fresh unhandled one — logEvent runs inside catch blocks and
+    // the unhandledRejection handler.
+    write(JSON.stringify({ ts: record.ts, level, event, log_error: "record not serializable" }));
+  }
 }

@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   classifyError,
+  ERROR_CATEGORIES,
   isExpectedAbort,
   logEvent,
   markOwnedAbort,
   retryDelayMs,
+  USER_MESSAGES,
   withRetry,
 } from "../errors.mjs";
 
@@ -83,5 +85,26 @@ describe("logEvent", () => {
     expect(parsed.error.message).toBe("kaboom");
     expect(parsed.error.code).toBe("E_TEST");
     expect(parsed.error.stack).toContain("kaboom");
+  });
+
+  it("never throws on an unserializable (circular) record", () => {
+    // logEvent runs inside catch blocks and the unhandledRejection handler; a
+    // circular ref must degrade to a fallback line, not raise a fresh error.
+    const lines = [];
+    const err = new Error("loop");
+    err.self = err; // circular
+    expect(() => logEvent("error", "circular", { error: err }, (l) => lines.push(l))).not.toThrow();
+    const parsed = JSON.parse(lines[0]);
+    expect(parsed.event).toBe("circular");
+    expect(parsed.log_error).toBe("record not serializable");
+  });
+});
+
+describe("USER_MESSAGES", () => {
+  it("has calm copy for every error category (no fallthrough to internal)", () => {
+    for (const category of ERROR_CATEGORIES) {
+      expect(typeof USER_MESSAGES[category], `missing copy for '${category}'`).toBe("string");
+      expect(USER_MESSAGES[category].length).toBeGreaterThan(0);
+    }
   });
 });
