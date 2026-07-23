@@ -33,11 +33,30 @@ class WalSyncs implements IWalSync {
 
   bool _isCancelled = false;
   BtDevice? _device;
+  String? _firmwareVersion;
 
   /// Called from DeviceProvider when a device connects/disconnects so the
   /// firmware-version gate in syncAll() can route to the right Phase-0 sync.
-  void setDevice(BtDevice? device) {
+  ///
+  /// [firmwareVersion] is the enriched value resolved after getDeviceInfo();
+  /// prefer it over [device].firmwareRevision, which on the raw connect object
+  /// is frequently still 'Unknown' and would misroute ring-buffer devices to
+  /// the multi-file enumerator (so their recordings never enumerate).
+  void setDevice(BtDevice? device, {String? firmwareVersion}) {
     _device = device;
+    _firmwareVersion = firmwareVersion;
+  }
+
+  /// Best available firmware for discovery routing: the enriched value if it
+  /// resolved, otherwise whatever the raw connect object carries.
+  String? get _resolvedFirmware => resolveDiscoveryFirmware(_firmwareVersion, _device?.firmwareRevision);
+
+  /// Prefer the enriched firmware over the raw connect-object value, which is
+  /// frequently still 'Unknown'. A missing/'Unknown' enriched value falls back
+  /// to the raw one so behavior is never worse than before.
+  static String? resolveDiscoveryFirmware(String? enriched, String? raw) {
+    if (enriched != null && enriched.isNotEmpty && enriched != 'Unknown') return enriched;
+    return raw;
   }
 
   /// Firmware >= 3.0.20 speaks the ring-buffer protocol; older multi-file
@@ -105,12 +124,12 @@ class WalSyncs implements IWalSync {
   /// while a sync is in progress.
   Future<void> refreshWalsFromDevice({String? firmwareVersion}) async {
     if (_device == null) return;
-    // Prefer the caller-supplied firmware (resolved from the enriched
-    // pairedDevice) — _device here is the raw connect object whose
-    // firmwareRevision can still be 'Unknown', which would misroute discovery.
+    // Prefer the caller-supplied firmware, then the enriched value stored at
+    // setDevice — the raw connect object's firmwareRevision can still be
+    // 'Unknown', which would misroute ring-buffer discovery.
     final fw = (firmwareVersion != null && firmwareVersion.isNotEmpty && firmwareVersion != 'Unknown')
         ? firmwareVersion
-        : _device?.firmwareRevision;
+        : _resolvedFirmware;
     if (isRingBufferFirmware(fw)) {
       await _ringSync.refreshWalsFromDevice();
     } else {
@@ -263,7 +282,7 @@ class WalSyncs implements IWalSync {
     //   fw >= 3.0.20  -> ring-buffer protocol (RingStorageSync)
     //   fw 3.0.17–.19 -> multi-file LittleFS protocol (StorageSync)
     //   fw < 3.0.17   -> falls through to Phase 1a legacy SD-card path
-    final fwVersion = _device?.firmwareRevision;
+    final fwVersion = _resolvedFirmware;
     final useRing = isRingBufferFirmware(fwVersion);
     if (useRing) {
       await _ringSync.refreshWalsFromDevice();
