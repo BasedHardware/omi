@@ -180,6 +180,47 @@ import XCTest
       XCTAssertEqual(snap.msToFirstUsableFrameBucket, .lt500)  // 200ms → lt_500
     }
 
+    // MARK: - Recovery metadata ordering on terminate
+
+    /// P2 regression: when a silent hub turn triggers a rebuild, recoveryTriggered
+    /// must be called *before* terminate so the snapshot carries
+    /// recovery_triggered=true and a joinable recovery_attempt_id. If terminate
+    /// fires first, the triggering turn is recorded with recovery_triggered=false
+    /// and the next-turn recovery outcome cannot be correlated.
+    func testRecoveryTriggeredBeforeTerminateCarriesCorrelationId() {
+      let recorder = makeRecorder()
+      begin(recorder)
+      captureAccepted(recorder)
+      recorder.ingestAudioChunk(Self.silentPCM(sampleCount: 320))
+      // Production code calls recoveryTriggered before terminate (Thread 1 fix).
+      recorder.recoveryTriggered(action: .captureRebuild)
+      let snap = terminate(recorder, disposition: .silentRejected, peak: 0, rms: 0, seconds: 1.0, judgeable: true)
+
+      XCTAssertTrue(snap.recoveryTriggered, "triggering turn must record recovery_triggered=true")
+      XCTAssertEqual(snap.recoveryAction, .captureRebuild)
+      XCTAssertNotNil(snap.recoveryAttemptId, "triggering turn must carry a recovery_attempt_id")
+    }
+
+    /// P2 regression: a capture-start failure must produce a lifecycle snapshot.
+    /// In production, captureStartResolved(.failed) is followed by terminate() in
+    /// the catch block (Thread 2 fix); previously the reducer terminal effect
+    /// never called terminate(), so capture_start_outcome=failed was invisible.
+    func testCaptureStartFailedTerminationProducesLifecycleSnapshot() {
+      let recorder = makeRecorder()
+      begin(recorder)
+      recorder.captureStartRequested()
+      recorder.captureStartResolved(
+        outcome: .failed,
+        statusClass: .from(
+          error: AudioCaptureService.AudioCaptureError.engineStartFailed(NSError(domain: "x", code: 1))))
+
+      let snap = terminate(recorder, disposition: .silentRejected, peak: 0, rms: 0, seconds: 0, judgeable: false)
+
+      XCTAssertEqual(snap.captureStartOutcome, .failed)
+      XCTAssertEqual(snap.captureStartStatusClass, .engineStartFailed)
+      XCTAssertEqual(snap.failureClass, .captureNeverOperational)
+    }
+
     // MARK: - Static classification precedence
 
     func testClassificationPrecedencePlacesCaptureStartFailureAboveZeroSamples() {

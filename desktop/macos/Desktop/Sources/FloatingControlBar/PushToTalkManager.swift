@@ -1158,6 +1158,13 @@ class PushToTalkManager: ObservableObject {
           hubActive: true,
           recoveryAction: recoveryDecision.shouldRebuildCapture ? "capture_rebuild" : "none",
           recoveryResult: recoveryDecision.shouldRebuildCapture ? "attempted" : "not_attempted")
+        if recoveryDecision.shouldRebuildCapture {
+          // Record the recovery trigger before terminate so the snapshot carries
+          // recovery_triggered=true and the correlation id. Without this, the
+          // triggering turn's snapshot is emitted with recovery_triggered=false
+          // and the next-turn recovery outcome cannot be joined back.
+          pttLifecycle.recoveryTriggered(action: .captureRebuild)
+        }
         pttLifecycle.terminate(
           disposition: totalSec < Self.minTurnAudioSeconds ? .tooShort : .silentRejected,
           source: "hub",
@@ -1173,7 +1180,8 @@ class PushToTalkManager: ObservableObject {
             + "(peak≈0 ⇒ dead mic; high peak ⇒ classifier misfire; low ⇒ quiet/far mic) — not committing"
         )
         if recoveryDecision.shouldRebuildCapture {
-          requestCoreAudioCaptureRecovery(reason: "repeated dead-mic PTT turns", restartPTT: false, batchMode: false)
+          requestCoreAudioCaptureRecovery(
+            reason: "repeated dead-mic PTT turns", restartPTT: false, batchMode: false, recoveryAlreadyTriggered: true)
         }
         _ = RealtimeHubController.shared.cancelTurn(turnID: turnID)
         AnalyticsManager.shared.floatingBarPTTEnded(
@@ -2142,6 +2150,19 @@ class PushToTalkManager: ObservableObject {
         self.pttLifecycle.captureStartResolved(
           outcome: .failed,
           statusClass: .from(error: error))
+        // Emit the lifecycle snapshot so capture_start_outcome=failed is
+        // observable. The reducer terminal effect (performTerminalCleanup)
+        // does not call terminate(), so without this the exact scenario this
+        // PR exists to diagnose never produces a lifecycle event.
+        self.pttLifecycle.terminate(
+          disposition: .silentRejected,
+          source: "capture_start",
+          peak: 0,
+          rms: 0,
+          turnAudioSeconds: 0,
+          voicedAudioSeconds: nil,
+          isNearZero: true,
+          judgeable: false)
         if let diagnosticRecoveryAction {
           DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
             recoveryAction: diagnosticRecoveryAction,
@@ -2196,13 +2217,18 @@ class PushToTalkManager: ObservableObject {
     )
   }
 
-  private func requestCoreAudioCaptureRecovery(reason: String, restartPTT: Bool, batchMode: Bool) {
+  private func requestCoreAudioCaptureRecovery(
+    reason: String, restartPTT: Bool, batchMode: Bool,
+    recoveryAlreadyTriggered: Bool = false
+  ) {
     log("PushToTalkManager: requesting CoreAudio capture rebuild — \(reason)")
     // Arm here (not in recordCaptureRebuild) so Bluetooth built-in fallback cannot
     // mislabel switch_to_built_in_mic results as capture_rebuild outcomes, while the
     // silent-mic watchdog CoreAudio path still gets a next-turn success/failure.
     silentMicRecoveryPolicy.armCaptureRebuildOutcome()
-    pttLifecycle.recoveryTriggered(action: .captureRebuild)
+    if !recoveryAlreadyTriggered {
+      pttLifecycle.recoveryTriggered(action: .captureRebuild)
+    }
     stopMicCapture()
     clearBufferedTurnAudio()
     NotificationCenter.default.post(
