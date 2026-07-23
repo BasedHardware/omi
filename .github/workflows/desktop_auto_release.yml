@@ -2,15 +2,29 @@ name: Build Desktop Release Candidate
 
 on:
   workflow_dispatch:
+  # Continuous deployment: plan a beta candidate on every macOS-affecting merge to
+  # main. The candidate flows through the two-machine qualification pipeline
+  # (desktop_qualify_beta.yml: Codemagic primary lane + self-hosted qualify-m1-studio
+  # and qualify-m4-mini fallbacks); on qualification success desktop_promote_beta.yml
+  # advances the beta channel to the Codemagic-built, notarized, Sparkle-signed
+  # artifact. The push filter is intentionally coarse (the planner does the precise
+  # releasable-change check, excluding CHANGELOG/AGENTS/changelog/Backend-Rust); the
+  # quiet-window, exact-SHA, and one-active-release fences still admit at most one
+  # candidate at a time, so bursts collapse to the newest SHA. Keep these paths in
+  # lockstep with DESKTOP_RELEASE_PATHS in plan-desktop-release.py; the alignment is
+  # enforced by test_push_paths_cover_releasable_desktop_paths.
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/macos/**'
+      - 'codemagic.yaml'
+      - '.github/scripts/plan-desktop-release.py'
+      - '.github/workflows/desktop_auto_release.yml'
+      - '.github/workflows/desktop-swift-ci.yml'
   schedule:
-    # Beta release candidates are cut on a fixed 6-hourly cadence at
-    # 12am / 6am / 12pm / 6pm America/New_York. GitHub cron is UTC-only, so these
-    # hours map to EDT (UTC-4): 04:00 / 10:00 / 16:00 / 22:00 UTC. During EST
-    # (UTC-5, ~Nov-Mar) the local times drift one hour later; bump the UTC hours
-    # by +1 then if exact NYC-clock alignment is required. Each run plans the
-    # newest releasable SHA since the last tag; the quiet-window, exact-SHA, and
-    # one-active-release fences still admit at most one candidate at a time.
-    - cron: '0 4,10,16,22 * * *'
+    # Backstop retry so a change that lands inside the quiet window (or while a
+    # release is active/qualifying) is still picked up after those fences clear.
+    - cron: '17 * * * *'
 
 permissions:
   contents: write
