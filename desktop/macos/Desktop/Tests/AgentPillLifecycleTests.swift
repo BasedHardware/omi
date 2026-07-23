@@ -390,8 +390,8 @@ import XCTest
     XCTAssertTrue(source.contains("private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup]"))
     XCTAssertTrue(source.contains("ToolCallsGroup(calls: calls, compact: true)"))
     XCTAssertTrue(source.contains("ThinkingBlock(text: text)"))
-    XCTAssertTrue(source.contains("Markdown(trimmed)"))
-    XCTAssertTrue(source.contains(".markdownTheme(.aiMessage(scale: 0.88))"))
+    XCTAssertTrue(source.contains("SelectableMarkdown(text: trimmed, sender: .ai)"))
+    XCTAssertTrue(source.contains(".environment(\\.fontScale, 0.88)"))
     XCTAssertTrue(source.contains(".frame(width: 36, height: 36)"))
     XCTAssertTrue(source.contains(".contentShape(Rectangle())"))
     XCTAssertTrue(source.contains("let onBackToAgentRows: () -> Void"))
@@ -1612,12 +1612,36 @@ import XCTest
     XCTAssertTrue(chatBubbleSource.contains(".markdownTableBackgroundStyle"))
   }
 
+  func testSelectableMarkdownRenderBoundarySkipsParentOnlyFeedbackUpdates() {
+    let baseline = SelectableMarkdownContent(text: "Final answer", sender: .ai, fontScale: 1)
+
+    XCTAssertEqual(
+      baseline,
+      SelectableMarkdownContent(text: "Final answer", sender: .ai, fontScale: 1),
+      "unchanged message inputs must not rebuild SelectionOverlay when parent copy feedback changes"
+    )
+    XCTAssertNotEqual(
+      baseline,
+      SelectableMarkdownContent(text: "Updated answer", sender: .ai, fontScale: 1)
+    )
+    XCTAssertNotEqual(
+      baseline,
+      SelectableMarkdownContent(text: "Final answer", sender: .user, fontScale: 1)
+    )
+    XCTAssertNotEqual(
+      baseline,
+      SelectableMarkdownContent(text: "Final answer", sender: .ai, fontScale: 1.1)
+    )
+  }
+
   func testSelectableMarkdownProvidesAnIndependentCodeCopyControl() throws {
     // omi-test-quality: source-inspection -- static contract: the reusable SwiftUI code-block
-    // renderer owns its copy affordance; clipboard writes are exercised manually in the app.
+    // renderer owns a leaf-state copy affordance; clipboard writes are exercised manually in the app.
     let source = try selectableMarkdownSource()
 
-    XCTAssertTrue(source.contains("private func codeBlockView(_ code: String, language: String?, id: Int)"))
+    XCTAssertTrue(source.contains("private func codeBlockView(_ code: String, language: String?)"))
+    XCTAssertTrue(source.contains("private struct CodeBlockCopyButton: View"))
+    XCTAssertTrue(source.contains("@State private var copied = false"))
     XCTAssertTrue(source.contains("NSPasteboard.general.setString(code, forType: .string)"))
     XCTAssertTrue(source.contains(".help(\"Copy code\")"))
   }
