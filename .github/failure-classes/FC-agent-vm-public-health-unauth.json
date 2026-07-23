@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-agent-vm-public-health-unauth",
+  "violated_contract": "An agent VM HTTP /health endpoint reachable on a public IP must not return readiness metadata without the VM auth token.",
+  "canonical_prevention": "Gate VM /health with the same verifyAuth used by upload/sync/ws, and require every health caller (agent-proxy, desktop) to send Bearer or ?token= before publishing the gated agent.mjs.",
+  "evidence_prs": [9261],
+  "scope_hints": [
+    "desktop/macos/agent-cloud/**",
+    "backend/agent-proxy/**",
+    "desktop/macos/Desktop/Sources/AgentVMService.swift",
+    "desktop/macos/Desktop/Sources/AgentSyncService.swift"
+  ],
+  "status": "open"
+}
