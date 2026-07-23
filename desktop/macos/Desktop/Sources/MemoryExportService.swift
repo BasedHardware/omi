@@ -865,29 +865,29 @@ actor MemoryExportService {
       })
   }
 
-  /// Refreshes the authoritative connection state after returning from the
-  /// ChatGPT directory. Network failures intentionally retain the last known
-  /// state rather than presenting an authorization as revoked.
-  func refreshChatGPTDirectoryConnectionStatus() async -> MemoryExportStatus {
+  /// Refreshes the authoritative connection state for a cloud OAuth connector
+  /// (ChatGPT/Claude) after the user authorizes in the browser — only the backend
+  /// grant list knows the truth. Network failures intentionally retain the last
+  /// known state rather than presenting an authorization as revoked.
+  func refreshCloudGrantConnectionStatus(for destination: MemoryExportDestination) async -> MemoryExportStatus {
+    guard let clientID = destination.cloudOAuthClientID else { return status(for: destination) }
     do {
       let response: OAuthGrantsResponse = try await APIClient.shared.get(
         "v1/mcp/oauth/grants", includeBYOK: false)
-      let isAuthorized = response.grants.contains {
-        $0.clientID == MemoryExportDestination.chatgptOAuthClientID && $0.isActive
-      }
+      let isAuthorized = response.grants.contains { $0.clientID == clientID && $0.isActive }
 
       if isAuthorized {
-        defaults.set(Date().timeIntervalSince1970, forKey: MemoryExportDestination.chatgpt.connectedAtKey)
-        defaults.set("Authorized through ChatGPT", forKey: MemoryExportDestination.chatgpt.detailKey)
+        defaults.set(Date().timeIntervalSince1970, forKey: destination.connectedAtKey)
+        defaults.set("Authorized through \(destination.title)", forKey: destination.detailKey)
       } else {
-        defaults.removeObject(forKey: MemoryExportDestination.chatgpt.connectedAtKey)
-        defaults.removeObject(forKey: MemoryExportDestination.chatgpt.detailKey)
+        defaults.removeObject(forKey: destination.connectedAtKey)
+        defaults.removeObject(forKey: destination.detailKey)
       }
     } catch {
-      log("MemoryExportService: ChatGPT OAuth grant refresh failed: \(error.localizedDescription)")
+      log("MemoryExportService: \(destination.title) OAuth grant refresh failed: \(error.localizedDescription)")
     }
 
-    return status(for: .chatgpt)
+    return status(for: destination)
   }
 
   func notionConfiguration() -> (token: String, parentPageID: String) {
