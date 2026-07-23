@@ -10,6 +10,14 @@ class AudioCaptureService: @unchecked Sendable {
 
   // MARK: - Types
 
+  /// A currently available CoreAudio input device. `uid` stays stable when
+  /// CoreAudio assigns a different numeric device ID after reconnecting it.
+  struct InputDevice: Hashable {
+    let id: AudioDeviceID
+    let uid: String
+    let name: String
+  }
+
   /// Callback for receiving audio chunks
   typealias AudioChunkHandler = @Sendable (Data) -> Void
 
@@ -412,48 +420,32 @@ class AudioCaptureService: @unchecked Sendable {
     return isCapturing
   }
 
+  /// The input devices currently available to use for microphone capture.
+  static func availableInputDevices() -> [InputDevice] {
+    audioDeviceIDs().compactMap { deviceID in
+      guard
+        isAvailableInputDevice(deviceID),
+        let uid = deviceStringProperty(deviceID, selector: kAudioDevicePropertyDeviceUID)
+      else { return nil }
+
+      return InputDevice(
+        id: deviceID,
+        uid: uid,
+        name: deviceStringProperty(deviceID, selector: kAudioObjectPropertyName) ?? "Microphone"
+      )
+    }
+    .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+  }
+
+  /// Resolve a persisted CoreAudio device UID to its current numeric ID.
+  static func inputDeviceID(forUID uid: String) -> AudioDeviceID? {
+    availableInputDevices().first(where: { $0.uid == uid })?.id
+  }
+
   /// Get the name of the current default input device (microphone)
   static func getCurrentMicrophoneName() -> String? {
-    var deviceID: AudioDeviceID = 0
-    var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-    var address = AudioObjectPropertyAddress(
-      mSelector: kAudioHardwarePropertyDefaultInputDevice,
-      mScope: kAudioObjectPropertyScopeGlobal,
-      mElement: kAudioObjectPropertyElementMain
-    )
-
-    let status = AudioObjectGetPropertyData(
-      AudioObjectID(kAudioObjectSystemObject),
-      &address,
-      0,
-      nil,
-      &size,
-      &deviceID
-    )
-
-    guard status == noErr, deviceID != kAudioDeviceUnknown else {
-      return nil
-    }
-
-    // Get the device name
-    var name: Unmanaged<CFString>?
-    size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-    address.mSelector = kAudioObjectPropertyName
-
-    let nameStatus = AudioObjectGetPropertyData(
-      deviceID,
-      &address,
-      0,
-      nil,
-      &size,
-      &name
-    )
-
-    guard nameStatus == noErr, let cfName = name?.takeRetainedValue() else {
-      return nil
-    }
-
-    return cfName as String
+    guard let deviceID = currentDefaultInputDeviceID() else { return nil }
+    return deviceStringProperty(deviceID, selector: kAudioObjectPropertyName)
   }
 
   // MARK: - Private Methods
@@ -499,6 +491,55 @@ class AudioCaptureService: @unchecked Sendable {
 
   private static func isAvailableInputDevice(_ deviceID: AudioDeviceID) -> Bool {
     deviceID != kAudioObjectUnknown && deviceID != kAudioDeviceUnknown && deviceHasInputChannels(deviceID)
+  }
+
+  private static func audioDeviceIDs() -> [AudioDeviceID] {
+    var address = AudioObjectPropertyAddress(
+      mSelector: kAudioHardwarePropertyDevices,
+      mScope: kAudioObjectPropertyScopeGlobal,
+      mElement: kAudioObjectPropertyElementMain
+    )
+    var size: UInt32 = 0
+    guard
+      AudioObjectGetPropertyDataSize(
+        AudioObjectID(kAudioObjectSystemObject),
+        &address,
+        0,
+        nil,
+        &size
+      ) == noErr
+    else { return [] }
+
+    let count = Int(size) / MemoryLayout<AudioDeviceID>.size
+    guard count > 0 else { return [] }
+    var deviceIDs = [AudioDeviceID](repeating: kAudioObjectUnknown, count: count)
+    guard
+      AudioObjectGetPropertyData(
+        AudioObjectID(kAudioObjectSystemObject),
+        &address,
+        0,
+        nil,
+        &size,
+        &deviceIDs
+      ) == noErr
+    else { return [] }
+    return deviceIDs
+  }
+
+  private static func deviceStringProperty(_ deviceID: AudioDeviceID, selector: AudioObjectPropertySelector) -> String?
+  {
+    var value: Unmanaged<CFString>?
+    var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+    var address = AudioObjectPropertyAddress(
+      mSelector: selector,
+      mScope: kAudioObjectPropertyScopeGlobal,
+      mElement: kAudioObjectPropertyElementMain
+    )
+    guard
+      AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &value) == noErr,
+      let string = value?.takeRetainedValue()
+    else { return nil }
+    return string as String
   }
 
   /// Get stream format for a device on input scope
@@ -976,37 +1017,7 @@ class AudioCaptureService: @unchecked Sendable {
   /// Locate the CoreAudio device ID of the built-in microphone (if present).
   /// Returns `nil` when no built-in input is available (e.g. desktop Mac without a mic).
   static func findBuiltInMicDeviceID() -> AudioDeviceID? {
-    var address = AudioObjectPropertyAddress(
-      mSelector: kAudioHardwarePropertyDevices,
-      mScope: kAudioObjectPropertyScopeGlobal,
-      mElement: kAudioObjectPropertyElementMain
-    )
-    var size: UInt32 = 0
-    guard
-      AudioObjectGetPropertyDataSize(
-        AudioObjectID(kAudioObjectSystemObject),
-        &address,
-        0,
-        nil,
-        &size
-      ) == noErr
-    else { return nil }
-
-    let count = Int(size) / MemoryLayout<AudioDeviceID>.size
-    guard count > 0 else { return nil }
-    var deviceIDs = [AudioDeviceID](repeating: kAudioObjectUnknown, count: count)
-    guard
-      AudioObjectGetPropertyData(
-        AudioObjectID(kAudioObjectSystemObject),
-        &address,
-        0,
-        nil,
-        &size,
-        &deviceIDs
-      ) == noErr
-    else { return nil }
-
-    for id in deviceIDs where id != kAudioObjectUnknown {
+    for id in audioDeviceIDs() where id != kAudioObjectUnknown {
       guard deviceHasInputChannels(id) else { continue }
 
       var transport: UInt32 = 0

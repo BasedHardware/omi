@@ -2103,15 +2103,6 @@ class PushToTalkManager: ObservableObject {
       recoveryResult: outcome.rawValue)
   }
 
-  private func preferredPTTInputOverrideDeviceID() -> AudioDeviceID? {
-    if AudioCaptureService.isDefaultOutputBluetooth(),
-      let builtIn = AudioCaptureService.findBuiltInMicDeviceID()
-    {
-      return builtIn
-    }
-    return nil
-  }
-
   private func clearBufferedTurnAudio() {
     batchAudioLock.lock()
     batchAudioBuffer = Data()
