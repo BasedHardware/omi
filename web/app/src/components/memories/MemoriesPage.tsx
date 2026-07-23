@@ -53,6 +53,7 @@ export function MemoriesPage() {
     addMemory,
     editMemory,
     removeMemory,
+    removeMemories,
     toggleVisibility,
     acceptMemory,
     rejectMemory,
@@ -299,16 +300,19 @@ export function MemoriesPage() {
   const executeBulkDelete = useCallback(async () => {
     setIsDeleting(true);
     try {
-      // Delete each selected memory
-      const deletePromises = selectedIds.map((id) => removeMemory(id));
-      await Promise.all(deletePromises);
-      setSelectedIds([]);
-      setIsSelectMode(false);
-      setShowDeleteConfirm(false);
+      // Single batched request (chunked internally by removeMemories) instead of N
+      // concurrent DELETEs that triggered 429s. Selection is cleared only on full
+      // success; on partial failure the surviving IDs stay selected and retryable.
+      const ok = await removeMemories(selectedIds);
+      if (ok) {
+        setSelectedIds([]);
+        setIsSelectMode(false);
+        setShowDeleteConfirm(false);
+      }
     } finally {
       setIsDeleting(false);
     }
-  }, [selectedIds, removeMemory]);
+  }, [selectedIds, removeMemories]);
 
   // Handle copy to clipboard
   const handleCopy = useCallback(async () => {

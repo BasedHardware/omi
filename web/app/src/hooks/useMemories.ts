@@ -8,6 +8,7 @@ import {
   updateMemoryContent,
   updateMemoryVisibility,
   deleteMemory,
+  deleteMemoriesBatch,
   reviewMemory,
 } from '@/lib/api';
 import {
@@ -36,6 +37,7 @@ export interface UseMemoriesReturn {
   addMemory: (content: string, visibility?: MemoryVisibility) => Promise<Memory | null>;
   editMemory: (id: string, content: string) => Promise<boolean>;
   removeMemory: (id: string) => Promise<boolean>;
+  removeMemories: (ids: string[]) => Promise<boolean>;
   toggleVisibility: (id: string, visibility: MemoryVisibility) => Promise<boolean>;
   acceptMemory: (id: string) => Promise<boolean>;
   rejectMemory: (id: string) => Promise<boolean>;
@@ -396,6 +398,35 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     }
   }, [activeCategories]);
 
+
+  // Remove multiple memories via the batch API. IDs are sent in chunks of 100 (the
+  // server's per-request cap) and each successful chunk is applied to the UI
+  // immediately, so a later chunk failure can never leave already-deleted items
+  // visible. Returns true only when every chunk succeeded; on failure the un-attempted
+  // or failed chunk's IDs stay in the list and remain retryable.
+  const removeMemories = useCallback(
+    async (ids: string[]): Promise<boolean> => {
+      if (ids.length === 0) return true;
+      const key = getCacheKey(activeCategories);
+      const CHUNK_SIZE = 100;
+      try {
+        for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+          const chunk = ids.slice(i, i + CHUNK_SIZE);
+          await deleteMemoriesBatch(chunk);
+          const removed = new Set(chunk);
+          const updater = (prev: Memory[]) => prev.filter((m) => !removed.has(m.id));
+          setMemories(updater);
+          updateCacheMemories(key, updater);
+        }
+        return true;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to delete memories');
+        return false;
+      }
+    },
+    [activeCategories],
+  );
+
   // Toggle visibility
   const toggleVisibility = useCallback(async (
     id: string,
@@ -466,6 +497,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     addMemory,
     editMemory,
     removeMemory,
+    removeMemories,
     toggleVisibility,
     acceptMemory,
     rejectMemory,
