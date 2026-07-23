@@ -23,6 +23,7 @@ ARTIFACTS = ("Omi.zip", "omi.dmg")
 BETA_ARTIFACTS = ("Omi.Beta.zip", "omi-beta.dmg")
 ZIP_SIGNATURES = {"Omi.zip": "edSignature", "Omi.Beta.zip": "betaEdSignature"}
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+CANONICAL_BUNDLE_IDS = frozenset({"com.omi.computer-macos", "com.omi.computer-macos.beta"})
 
 
 def _fail(message: str) -> None:
@@ -88,6 +89,15 @@ def build_evidence(
         _fail("contains an unknown or untruthful release profile")
     if len(blackbox_results) != 2:
         _fail("requires exact-artifact black-box results for both canonical identities")
+    # Validate that the two results cover the stable and Beta bundle IDs so
+    # accidentally wiring the same or stale JSON to both inputs cannot pass
+    # with incomplete exact-artifact coverage.
+    result_bundle_ids = {str(result.get("bundle_id")) for result in blackbox_results}
+    if result_bundle_ids != CANONICAL_BUNDLE_IDS:
+        _fail(
+            "black-box results must cover both canonical bundle IDs "
+            f"({sorted(CANONICAL_BUNDLE_IDS)}), got {sorted(result_bundle_ids)}"
+        )
     for result in blackbox_results:
         if (
             result.get("ok") is not True
