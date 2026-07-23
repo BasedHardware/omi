@@ -179,6 +179,43 @@ static struct bt_uuid_128 settings_mic_gain_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10012, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 settings_charging_status_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10013, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+#ifdef CONFIG_OMI_ENABLE_BLE_SLEEP_CMD
+static struct bt_uuid_128 settings_sleep_cmd_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10014, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+#define OMI_SLEEP_CMD_MAGIC 0x01
+
+static void sleep_cmd_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+    turnoff_all();
+}
+
+static K_WORK_DEFINE(sleep_cmd_work, sleep_cmd_work_handler);
+
+static ssize_t settings_sleep_cmd_write_handler(struct bt_conn *conn,
+                                                const struct bt_gatt_attr *attr,
+                                                const void *buf,
+                                                uint16_t len,
+                                                uint16_t offset,
+                                                uint8_t flags)
+{
+    if (len != 1) {
+        LOG_WRN("Invalid length for sleep command write: %u", len);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    uint8_t cmd = ((uint8_t *) buf)[0];
+    if (cmd == OMI_SLEEP_CMD_MAGIC) {
+        LOG_INF("Sleep command received; powering off");
+        k_work_submit(&sleep_cmd_work);
+    } else {
+        LOG_WRN("Ignoring sleep command with unexpected value: %u", cmd);
+    }
+
+    return len;
+}
+#endif
 
 static struct bt_gatt_attr settings_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&settings_service_uuid),
@@ -201,6 +238,14 @@ static struct bt_gatt_attr settings_service_attr[] = {
                            NULL,
                            NULL),
     BT_GATT_CCC(charging_status_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+#ifdef CONFIG_OMI_ENABLE_BLE_SLEEP_CMD
+    BT_GATT_CHARACTERISTIC(&settings_sleep_cmd_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_WRITE,
+                           NULL,
+                           settings_sleep_cmd_write_handler,
+                           NULL),
+#endif
 };
 
 static struct bt_gatt_service settings_service = BT_GATT_SERVICE(settings_service_attr);
@@ -1449,6 +1494,15 @@ int transport_start()
 struct bt_conn *get_current_connection()
 {
     return current_connection;
+}
+
+bool transport_is_audio_subscribed(void)
+{
+    struct bt_conn *conn = current_connection;
+    if (conn == NULL) {
+        return false;
+    }
+    return bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
 }
 
 int broadcast_audio_packets(uint8_t *buffer, size_t size)
