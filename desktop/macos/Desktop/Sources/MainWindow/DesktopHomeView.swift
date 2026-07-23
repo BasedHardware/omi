@@ -1224,26 +1224,55 @@ private struct MemoryHubPage: View {
   let viewModelContainer: ViewModelContainer
   @State private var segment = 0
 
-  var body: some View {
-    VStack(spacing: 0) {
-      // The "Memory" rail item lands here, so Memories is the default segment;
-      // Conversations (with its live transcript) is second, and the Brain Map
-      // graph is its own tab.
-      HubSegmentedControl(segments: ["Memories", "Conversations", "Brain Map"], selection: $segment)
-        .padding(.top, 22)
-        .padding(.horizontal, 28)
-        .padding(.bottom, 4)
+  /// Memories and conversations stay easy to scan in a calm, readable column;
+  /// the spatial Brain Map needs the full content surface so users can pan and
+  /// zoom without hitting an artificial canvas boundary.
+  private static let listContentWidth: CGFloat = 900
 
-      if segment == 0 {
-        MemoriesPage(
-          viewModel: viewModelContainer.memoriesViewModel,
-          graphViewModel: viewModelContainer.memoryGraphViewModel)
-      } else if segment == 1 {
-        ConversationsPageHost(appState: appState)
+  var body: some View {
+    Group {
+      if segment == 2 {
+        ZStack(alignment: .top) {
+          // Keep the graph's camera framing intact while removing the list-page
+          // width cap. The map only occupies more of the visual field when the
+          // user deliberately pans or zooms into it.
+          MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+          hubSegmentedControl
+        }
       } else {
-        MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
+        VStack(spacing: 0) {
+          hubSegmentedControl
+
+          if segment == 0 {
+            constrainedListContent(
+              MemoriesPage(
+                viewModel: viewModelContainer.memoriesViewModel,
+                graphViewModel: viewModelContainer.memoryGraphViewModel))
+          } else {
+            constrainedListContent(ConversationsPageHost(appState: appState))
+          }
+        }
       }
     }
+  }
+
+  private var hubSegmentedControl: some View {
+    // The "Memory" rail item lands here, so Memories is the default segment;
+    // Conversations (with its live transcript) is second, and the Brain Map
+    // graph is its own tab.
+    HubSegmentedControl(segments: ["Memories", "Conversations", "Brain Map"], selection: $segment)
+      .frame(maxWidth: Self.listContentWidth)
+      .padding(.top, 22)
+      .padding(.horizontal, 28)
+      .padding(.bottom, 4)
+  }
+
+  private func constrainedListContent<V: View>(_ content: V) -> some View {
+    content
+      .frame(maxWidth: Self.listContentWidth, maxHeight: .infinity)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }
 
@@ -1308,7 +1337,7 @@ private struct PageContentView: View {
           taskChatCoordinator: viewModelContainer.taskChatCoordinator,
           selectedIndex: $selectedTabIndex)
       case 1:
-        constrainedListPage(MemoryHubPage(appState: appState, viewModelContainer: viewModelContainer))
+        MemoryHubPage(appState: appState, viewModelContainer: viewModelContainer)
       case 2:
         ChatPage(
           appProvider: viewModelContainer.appProvider,
