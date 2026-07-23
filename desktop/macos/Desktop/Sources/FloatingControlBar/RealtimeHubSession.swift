@@ -96,7 +96,16 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   var task: URLSessionWebSocketTask?
   var completedURLTaskIDs = Set<Int>()
   var urlTaskTerminalWaiters: [Int: [CheckedContinuation<Void, Never>]] = [:]
-  private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+  private var _session: URLSession?
+  /// Created lazily only on the URLSession-backed (OpenAI) transport path; Gemini
+  /// uses the injected raw websocket and never touches this. Retired in
+  /// `beginTransportTerminationOnQueue` to break the URLSession -> delegate cycle.
+  private var session: URLSession {
+    if let existing = _session { return existing }
+    let created = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+    _session = created
+    return created
+  }
   // Gemini's Live endpoint rejects both of Apple's WebSocket stacks, so it uses a
   // hand-rolled RFC 6455 client (RawWebSocket). OpenAI uses URLSession.
   var rawWS: RealtimeRawWebSocketTransport?
@@ -284,6 +293,16 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     task?.cancel(with: .goingAway, reason: nil)
     rawWS?.close()
     isOpen = false
+    // Break the URLSession -> delegate(self) retain cycle. URLSession holds its
+    // delegate strongly until invalidated, so without this a drained/failed
+    // session self-retains and never deallocates — leaking one RealtimeHubSession
+    // per reconnect / 60-min rotation / failover, defeating the drain-and-release
+    // design. finishTasksAndInvalidate lets the just-cancelled task's terminal
+    // delegate callback still fire (resolving urlTaskTerminalWaiters) before the
+    // delegate ref is released, so the drain path is unaffected. Only touch a
+    // URLSession that was actually created (Gemini never makes one).
+    _session?.finishTasksAndInvalidate()
+    _session = nil
   }
 
   private func notifyError(_ failure: RealtimeHubTransportFailure) {
