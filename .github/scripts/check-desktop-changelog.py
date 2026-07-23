@@ -17,6 +17,9 @@ EXEMPT_DESKTOP_PATHS = {
     "desktop/macos/AGENTS.md",
     "desktop/macos/docs/release.md",
     "desktop/macos/scripts/qualify-desktop-beta.sh",
+    # Sibling qualification-runner helper to qualify-desktop-beta.sh: internal
+    # release infrastructure with no user-facing app surface.
+    "desktop/macos/scripts/qualification-swift-cache.sh",
 }
 # Server-side Rust backend changes are internal reliability work, not user-facing app notes.
 EXEMPT_DESKTOP_PATH_PREFIXES = (
