@@ -56,7 +56,7 @@ const EXTERNAL_AGENT_GUIDES: Record<ExternalAgentId, AgentGuide> = {
   codex: {
     description: "OpenAI's Codex agent, driven through the official codex-acp bridge.",
     installCommands: ['npm install -g @openai/codex'],
-    suggestedCommand: 'npx -y @agentclientprotocol/codex-acp',
+    suggestedCommand: 'npx -y @agentclientprotocol/codex-acp@1.1.4',
     docsUrl: 'https://github.com/agentclientprotocol/codex-acp',
     authNote: 'Sign in with `codex login`, or add your OpenAI API key below.',
     supportsApiKey: true

@@ -51,10 +51,10 @@ export type AppSettings = {
    *  the user is). Was default OFF while it had no consumer. */
   aiProfileEnabled: boolean
   /** Track 3 (Focus assistant): whether Focus judges the screen at all. Default
-   *  ON, mirroring Mac's `focusAssistantEnabled`. Gated further by
+   *  OFF; the user must explicitly enable screen-derived assistance. Gated further by
    *  `focusNotificationsEnabled` — see the AND-gate in focusAssistant.isEnabled. */
   focusEnabled: boolean
-  /** Track 3 (Focus): Mac's `focusNotificationsEnabled`. Default ON. This is NOT
+  /** Track 3 (Focus): Mac's `focusNotificationsEnabled`. Default OFF. This is NOT
    *  the frequency throttle — it is Mac's second half of the master gate: with it
    *  off, Focus makes NO Gemini call at all ("no notification setting, no
    *  analysis"), not merely a silent verdict. Separate from
@@ -75,7 +75,7 @@ export type AppSettings = {
    *  Focus verdict, which is itself gated, so it costs nothing when off or idle. */
   glowOverlayEnabled: boolean
   /** Track 3 (proactive framework): master switch for the whole screen-analysis
-   *  loop. Default ON, mirroring Mac's `screenAnalysisEnabled`. It is not a
+   *  loop. Default OFF and opt-in. It is not a
    *  per-frame gate — when off, the coordinator's tick timer does not run at all,
    *  so no frame is ever read. */
   screenAnalysisEnabled: boolean
@@ -109,11 +109,10 @@ export type AppSettings = {
    *  `memoryExcludedApps`. Default []. */
   memoryExcludedApps: string[]
   /** Track 3 (Task assistant): whether the screen→task extractor judges the
-   *  screen at all. Default ON, matching Mac's `taskAssistantEnabled`. It sits
+   *  screen at all. Default OFF and opt-in. It sits
    *  UNDER the `screenAnalysisEnabled` master (the actual "may I send screenshots
-   *  to Gemini" consent, itself default-ON and shared with Focus/Insight), so a
-   *  default-ON here adds tasks to the already-consented screen-analysis feature
-   *  rather than opening a new cloud-vision surface. It is the SOLE task-specific
+   *  to Gemini" consent, itself opt-in and shared with Focus/Insight). It is the
+   *  sole task-specific
    *  gate (see taskAssistant.isEnabled) — decoupled from notifications, since
    *  extraction stages durable tasks whether or not a toast ever fires (Mac keeps
    *  a separate `taskNotificationsEnabled`; quiet discovery is never gated on the
@@ -278,14 +277,14 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     betaUpdatesEnabled: r.betaUpdatesEnabled === true,
     // Opt-OUT (!== false): default ON now that Focus consumes the profile.
     aiProfileEnabled: r.aiProfileEnabled !== false,
-    focusEnabled: r.focusEnabled !== false,
-    focusNotificationsEnabled: r.focusNotificationsEnabled !== false,
+    focusEnabled: r.focusEnabled === true,
+    focusNotificationsEnabled: r.focusNotificationsEnabled === true,
     focusCooldownMinutes: sanitizeCooldownMinutes(r.focusCooldownMinutes),
     focusExcludedApps: sanitizeExcludedApps(r.focusExcludedApps),
     // Default OFF (opt-IN, === true), matching Mac's `assistantsGlowOverlayEnabled`
     // (AssistantSettings.swift:35). Re-enabled via Settings → Notifications.
     glowOverlayEnabled: r.glowOverlayEnabled === true,
-    screenAnalysisEnabled: r.screenAnalysisEnabled !== false,
+    screenAnalysisEnabled: r.screenAnalysisEnabled === true,
     notificationsEnabled: r.notificationsEnabled !== false,
     notificationFrequency: sanitizeFrequency(r.notificationFrequency),
     memoryEnabled: r.memoryEnabled === true,
@@ -294,10 +293,9 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     memoryExtractionIntervalMin: sanitizeCooldownMinutes(r.memoryExtractionIntervalMin),
     memoryMinConfidence: sanitizeMinConfidence(r.memoryMinConfidence),
     memoryExcludedApps: sanitizeExcludedApps(r.memoryExcludedApps),
-    // Default ON (!== false, same idiom as screenAnalysisEnabled), matching Mac's
-    // `taskAssistantEnabled`. The screenAnalysisEnabled master is the screenshot
-    // consent gate; this only decides whether tasks ride that already-on feature.
-    taskEnabled: r.taskEnabled !== false,
+    // Privacy-preserving opt-in: task assistance can cause screen analysis, so
+    // an absent or malformed value must never enable it.
+    taskEnabled: r.taskEnabled === true,
     // Reuses the cooldown sanitizer: same contract (positive integer minutes,
     // default 10, capped at a day). A junk interval falls back to 10, never 0.
     taskFallbackIntervalMin: sanitizeCooldownMinutes(r.taskFallbackIntervalMin),

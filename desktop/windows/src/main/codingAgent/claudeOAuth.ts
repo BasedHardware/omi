@@ -433,7 +433,7 @@ export async function startClaudeOAuthFlow(
   logErr(`Claude OAuth callback server listening on port ${port}`)
   const redirectUri = `http://localhost:${port}/callback`
   const authUrl = buildClaudeAuthUrl({ redirectUri, challenge: codeChallenge, state })
-  logErr(`[diag] authorize scopes="${SCOPES}" url=${authUrl}`)
+  logErr('[diag] Claude authorize request ready (sensitive PKCE parameters omitted)')
 
   let cancelled = false
   let cancelReject: ((err: Error) => void) | null = null

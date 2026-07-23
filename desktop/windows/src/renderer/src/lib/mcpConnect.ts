@@ -5,6 +5,7 @@
 import { auth } from './firebase'
 import type {
   McpConnectorId,
+  McpCloudConnectorId,
   McpExportsSnapshot,
   McpConnectResult,
   McpCloudConnectorInfo
@@ -56,8 +57,8 @@ export async function getCloudInfo(): Promise<McpCloudConnectorInfo[]> {
 }
 
 /** Open a cloud connector's provider connector page. */
-export async function openCloudConnector(url: string): Promise<void> {
-  return window.omi.mcpOpenCloudConnector(url)
+export async function openCloudConnector(id: McpCloudConnectorId): Promise<void> {
+  return window.omi.mcpOpenCloudConnector(id)
 }
 
 // Local "opened" latch for cloud connectors. Mac's connected-detection for

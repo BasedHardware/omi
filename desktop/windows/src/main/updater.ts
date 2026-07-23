@@ -50,6 +50,13 @@ function isCurrentAttempt(attempt: UpdateAttempt): boolean {
   return attempt.channel === selectedChannel && attempt.generation === channelGeneration
 }
 
+export function shouldForceDevUpdater(
+  isPackaged: boolean,
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  return !isPackaged && env.OMI_UPDATER_DEV === '1'
+}
+
 /** The update staged for install-on-quit, if any. The update:ready event fires
  * once (usually while nobody is on Settings), so the UI queries this on mount. */
 export function getPendingUpdate(): { version: string } | null {
@@ -140,7 +147,10 @@ export function initAutoUpdater(
   platform: NodeJS.Platform = process.platform
 ): void {
   if (started || platform !== 'win32') return
-  const devForced = process.env.OMI_UPDATER_DEV === '1'
+  // A runtime environment variable must never redirect a packaged install to a
+  // developer-controlled update feed.
+  const devForced = shouldForceDevUpdater(app.isPackaged)
+  // Only run for real installs (or an explicit dev-forced local test).
   if (!app.isPackaged && !devForced) return
   started = true
 

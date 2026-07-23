@@ -18,6 +18,42 @@ export function scrubEmails(text: string): string {
 type ScrubbableEvent = {
   message?: string
   exception?: { values?: Array<{ value?: string }> }
+  request?: { url?: string; query_string?: unknown; headers?: Record<string, unknown> }
+  breadcrumbs?: Array<{ message?: string; data?: Record<string, unknown> }>
+  extra?: Record<string, unknown>
+}
+
+const SECRET_KEY_RE = /^(authorization|cookie|set-cookie|password|secret|token|api[-_]?key)$/i
+const URL_KEY_RE = /^(url|uri|href|link)$/i
+
+function scrubUrl(raw: string): string {
+  try {
+    const url = new URL(raw)
+    url.username = ''
+    url.password = ''
+    url.search = ''
+    url.hash = ''
+    return url.toString()
+  } catch {
+    return scrubEmails(raw)
+  }
+}
+
+function scrubNested(value: unknown, key = '', seen = new WeakSet<object>()): unknown {
+  if (SECRET_KEY_RE.test(key)) return '[redacted]'
+  if (typeof value === 'string') {
+    return URL_KEY_RE.test(key) ? scrubUrl(value) : scrubEmails(value)
+  }
+  if (!value || typeof value !== 'object' || seen.has(value)) return value
+  seen.add(value)
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) value[i] = scrubNested(value[i], '', seen)
+    return value
+  }
+  for (const [nestedKey, nestedValue] of Object.entries(value)) {
+    ;(value as Record<string, unknown>)[nestedKey] = scrubNested(nestedValue, nestedKey, seen)
+  }
+  return value
 }
 
 /**
@@ -34,5 +70,12 @@ export function scrubEventPii<T extends ScrubbableEvent>(event: T): T {
       if (typeof v.value === 'string') v.value = scrubEmails(v.value)
     }
   }
+  if (event.request) {
+    if (typeof event.request.url === 'string') event.request.url = scrubUrl(event.request.url)
+    delete event.request.query_string
+    if (event.request.headers) scrubNested(event.request.headers)
+  }
+  if (event.breadcrumbs) scrubNested(event.breadcrumbs)
+  if (event.extra) scrubNested(event.extra)
   return event
 }

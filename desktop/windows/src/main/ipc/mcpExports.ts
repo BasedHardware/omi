@@ -14,7 +14,7 @@ import { McpExportsService } from '../mcp/mcpExportsService'
 import { buildCloudConnectors } from '../mcp/cloudConnectors'
 import { buildMemoryPack, memoryPackChatUrl, type MemoryPackProvider } from '../mcp/memoryPack'
 import type { ExportMemory } from '../../shared/types'
-import type { McpCloudConnectorInfo } from '../../shared/mcpExports'
+import type { McpCloudConnectorId, McpCloudConnectorInfo } from '../../shared/mcpExports'
 import {
   detectClaudeCode,
   claudeMcpConnected,
@@ -180,8 +180,10 @@ function openMemoryPack(provider: MemoryPackProvider, memories: ExportMemory[]):
 }
 
 /** Open a cloud connector's provider connector page (the assisted "open & guide"). */
-function openCloudConnector(url: string): void {
-  if (!process.env.OMI_E2E) void shell.openExternal(url)
+function openCloudConnector(id: McpCloudConnectorId): void {
+  const connector = cloudInfo().find((item) => item.id === id)
+  if (!connector) throw new Error('Unknown cloud connector')
+  if (!process.env.OMI_E2E) void shell.openExternal(connector.connectorUrl)
 }
 
 export function registerMcpExportsHandlers(): void {
@@ -193,7 +195,7 @@ export function registerMcpExportsHandlers(): void {
     new McpKeyStore().clearAll()
   })
   ipcMain.handle('mcp:cloudInfo', () => cloudInfo())
-  ipcMain.handle('mcp:openCloudConnector', (_e, url: string) => openCloudConnector(url))
+  ipcMain.handle('mcp:openCloudConnector', (_e, id: McpCloudConnectorId) => openCloudConnector(id))
   ipcMain.handle('mcp:memoryPack', (_e, provider: MemoryPackProvider, memories: ExportMemory[]) =>
     openMemoryPack(provider, memories)
   )

@@ -18,11 +18,28 @@ import { installContextMenu } from '../contextMenu'
 const SUCCESS_PATH = '/v1/payments/success'
 const CANCEL_PATH = '/v1/payments/cancel'
 
-function outcomeForUrl(rawUrl: string): CheckoutOutcome | null {
+function completionOrigin(): string {
+  return new URL(import.meta.env.VITE_OMI_API_BASE || 'https://api.omi.me').origin
+}
+
+export function isAllowedCheckoutStart(rawUrl: string): boolean {
   try {
-    const { pathname } = new URL(rawUrl)
-    if (pathname.startsWith(SUCCESS_PATH)) return 'success'
-    if (pathname.startsWith(CANCEL_PATH)) return 'cancel'
+    const url = new URL(rawUrl)
+    return url.protocol === 'https:' && url.hostname.toLowerCase() === 'checkout.stripe.com'
+  } catch {
+    return false
+  }
+}
+
+export function outcomeForUrl(
+  rawUrl: string,
+  allowedCompletionOrigin: string = completionOrigin()
+): CheckoutOutcome | null {
+  try {
+    const { origin, pathname } = new URL(rawUrl)
+    if (origin !== allowedCompletionOrigin) return null
+    if (pathname === SUCCESS_PATH) return 'success'
+    if (pathname === CANCEL_PATH) return 'cancel'
   } catch {
     // Non-parseable navigations (about:blank, data: frames) are ignored.
   }
@@ -47,8 +64,8 @@ export function openCheckoutWindow(url: string): Promise<CheckoutOutcome> {
   } catch {
     return Promise.reject(new Error('checkout: unparseable URL'))
   }
-  if (parsed.protocol !== 'https:') {
-    return Promise.reject(new Error('checkout: refusing non-https URL'))
+  if (!isAllowedCheckoutStart(parsed.toString())) {
+    return Promise.reject(new Error('checkout: refusing non-Stripe URL'))
   }
 
   const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? undefined
@@ -86,13 +103,18 @@ export function openCheckoutWindow(url: string): Promise<CheckoutOutcome> {
     // A navigation to the completion route ends the flow. `will-redirect` and
     // `will-navigate` catch the 30x hop and any in-page link; `did-navigate`
     // is the backstop for a fully-loaded completion page.
-    const onNavigate = (_e: unknown, navUrl: string): void => {
+    const onNavigate = (event: { preventDefault?: () => void }, navUrl: string): void => {
       const outcome = outcomeForUrl(navUrl)
-      if (outcome) finish(outcome)
+      if (outcome) {
+        finish(outcome)
+        return
+      }
+      if (!isAllowedCheckoutStart(navUrl)) event.preventDefault?.()
     }
     win.webContents.on('will-redirect', onNavigate)
     win.webContents.on('will-navigate', onNavigate)
     win.webContents.on('did-navigate', onNavigate)
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
 
     // User closed the window without completing → treat as cancelled/abandoned.
     win.on('closed', () => finish('closed'))

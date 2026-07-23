@@ -26,24 +26,23 @@ describe('shouldBlockNavigation', () => {
     ).toBe(false)
   })
 
-  it('does not block external http/https navigations (those route via setWindowOpenHandler)', () => {
+  it('blocks external http/https navigations so remote content never inherits the preload', () => {
     const current = 'http://localhost:5179/'
-    expect(shouldBlockNavigation('https://omi.me/pricing', current)).toBe(false)
-    expect(shouldBlockNavigation('http://example.com', current)).toBe(false)
-    // Stripe checkout completion hop — handled by the checkout window's own will-navigate.
-    expect(shouldBlockNavigation('https://checkout.stripe.com/success', current)).toBe(false)
+    expect(shouldBlockNavigation('https://omi.me/pricing', current)).toBe(true)
+    expect(shouldBlockNavigation('http://example.com', current)).toBe(true)
+    expect(shouldBlockNavigation('http://localhost:5180/', current)).toBe(true)
   })
 
-  it('does not block non-web schemes here (mailto/custom — handled by the open handler)', () => {
+  it('blocks non-web schemes', () => {
     const current = 'http://localhost:5179/'
-    expect(shouldBlockNavigation('mailto:hi@omi.me', current)).toBe(false)
-    expect(shouldBlockNavigation('omi-agent://run', current)).toBe(false)
+    expect(shouldBlockNavigation('mailto:hi@omi.me', current)).toBe(true)
+    expect(shouldBlockNavigation('omi-agent://run', current)).toBe(true)
   })
 
-  it('leaves an unparseable target URL alone', () => {
+  it('fails closed on an unparseable target URL', () => {
     const current = 'http://localhost:5179/'
-    expect(shouldBlockNavigation('not a url', current)).toBe(false)
-    expect(shouldBlockNavigation('', current)).toBe(false)
+    expect(shouldBlockNavigation('not a url', current)).toBe(true)
+    expect(shouldBlockNavigation('', current)).toBe(true)
   })
 
   describe('file:// loadFile fallback origin', () => {

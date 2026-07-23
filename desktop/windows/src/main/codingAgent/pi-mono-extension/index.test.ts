@@ -599,11 +599,14 @@ describe('macOS POSIX regex would have missed Windows-dangerous input', () => {
     expect(classifyBash('Remove-Item -Recurse -Force C:\\Windows')).toBeTruthy()
   })
 
-  it.skipIf(notOnWindows)('macOS write-path rules MISS "C:\\Windows\\System32\\..." while the Windows rule catches it', () => {
-    const winPath = 'C:\\Windows\\System32\\drivers\\etc\\hosts'
-    expect(macWritePathRules.some((r) => r.test(winPath))).toBe(false)
-    expect(classifyFileWrite(winPath)).toBeTruthy()
-  })
+  it.skipIf(notOnWindows)(
+    'macOS write-path rules MISS "C:\\Windows\\System32\\..." while the Windows rule catches it',
+    () => {
+      const winPath = 'C:\\Windows\\System32\\drivers\\etc\\hosts'
+      expect(macWritePathRules.some((r) => r.test(winPath))).toBe(false)
+      expect(classifyFileWrite(winPath)).toBeTruthy()
+    }
+  )
 })
 
 // ===========================================================================
@@ -797,15 +800,18 @@ describe('callSwiftTool relay wire protocol', () => {
     }
   })
 
-  it.skipIf(notOnWindows)('rejects the connect promise if the host closes before hello_ok', async () => {
-    const bridge = createMockBridge({ answerHello: false, onConnection: (s) => s.destroy() })
-    await listen(bridge)
-    try {
-      await expect(__connectOmiPipeForTest(bridge.pipePath)).rejects.toThrow(/handshake|closed/)
-    } finally {
-      closeBridge(bridge)
+  it.skipIf(notOnWindows)(
+    'rejects the connect promise if the host closes before hello_ok',
+    async () => {
+      const bridge = createMockBridge({ answerHello: false, onConnection: (s) => s.destroy() })
+      await listen(bridge)
+      try {
+        await expect(__connectOmiPipeForTest(bridge.pipePath)).rejects.toThrow(/handshake|closed/)
+      } finally {
+        closeBridge(bridge)
+      }
     }
-  })
+  )
 
   it('receives a result over the pipe (happy round-trip)', async () => {
     const bridge = createMockBridge({ onToolUse: echoToolResult })

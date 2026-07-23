@@ -32,8 +32,8 @@ export function claudeAgentConfigDir(userDataDir: string): string {
 /**
  * Pin `process.env.CLAUDE_CONFIG_DIR` to Omi's isolated agent dir (creating it),
  * so every claudeOAuth reader/writer (which default to `process.env`) and the
- * spawned ACP bridge (which inherits `{...process.env}`) agree on the isolated
- * location instead of the user's `~/.claude`. Overrides any inherited value —
+ * spawned ACP bridge (which explicitly allowlists this variable) agree on the
+ * isolated location instead of the user's `~/.claude`. Overrides inherited values —
  * isolation is the whole point, so Omi never defers to a user-set dir.
  *
  * Call once at startup, before the coding-agent IPC is registered or any agent

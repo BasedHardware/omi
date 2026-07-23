@@ -13,11 +13,10 @@
 // Sign-in: the spawned bridge (and the SDK it runs) reads OAuth credentials from
 // `<CLAUDE_CONFIG_DIR>/.credentials.json`. Startup pins CLAUDE_CONFIG_DIR to an
 // Omi-owned, ISOLATED dir (see ./agentConfigDir.ts) so the agent never touches
-// the user's real ~/.claude. The default-adapter spawn in acp.ts inherits the
-// parent environment (`{...process.env}`), so that pinned dir flows through
-// unchanged — and claudeOAuth.ts writes the credentials file to the same
-// resolved dir, so writer and reader always agree. No extra env wiring here;
-// see ../ipc/codingAgent.ts for the flow.
+// the user's real ~/.claude. acp.ts explicitly allowlists that directory into
+// the child environment; other ambient desktop secrets are not inherited.
+// claudeOAuth.ts writes the credentials file to the same resolved dir, so writer
+// and reader always agree. See ../ipc/codingAgent.ts for the flow.
 
 import bundledAcpEntry from './claude-acp-entry.mjs?asset'
 import { AcpRuntimeAdapter } from './acp'

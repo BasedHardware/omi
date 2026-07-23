@@ -655,6 +655,7 @@ describe('PiMonoAdapter spawn shape (behavioral, Windows)', () => {
       ])
     )
     expect(args).not.toContain('--no-extensions')
+    expect(args).not.toContain('--no-builtin-tools')
     expect(options.shell).toBe(false)
     expect(options.windowsHide).toBe(true)
 

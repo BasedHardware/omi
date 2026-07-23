@@ -55,7 +55,7 @@ describe('runXConnectFlow', () => {
 
     const openExternal = vi.fn().mockResolvedValue(undefined)
     await runXConnectFlow({
-      getOAuthUrl: async () => ({ authUrl: 'https://x/auth' }),
+      getOAuthUrl: async () => ({ authUrl: 'https://x.com/i/oauth2/authorize?state=test' }),
       getStatus,
       openExternal,
       sleep: noSleep,
@@ -64,7 +64,7 @@ describe('runXConnectFlow', () => {
       phase2: fast
     })
 
-    expect(openExternal).toHaveBeenCalledWith('https://x/auth')
+    expect(openExternal).toHaveBeenCalledWith('https://x.com/i/oauth2/authorize?state=test')
     expect(c.state.phase).toBe('succeeded')
     expect(c.state.postCount).toBe(9)
     expect(c.state.memoryCount).toBe(4)
@@ -89,11 +89,28 @@ describe('runXConnectFlow', () => {
     expect(c.state.error).toBe('x_oauth_not_configured')
   })
 
+  it('refuses an OAuth URL outside the trusted X origins', async () => {
+    const c = collector()
+    const openExternal = vi.fn()
+    await runXConnectFlow({
+      getOAuthUrl: async () => ({ authUrl: 'https://attacker.example/oauth' }),
+      getStatus: vi.fn(),
+      openExternal,
+      sleep: noSleep,
+      onState: c.onState,
+      phase1: fast,
+      phase2: fast
+    })
+    expect(c.state.phase).toBe('failed')
+    expect(c.state.error).toBe('invalid_auth_url')
+    expect(openExternal).not.toHaveBeenCalled()
+  })
+
   it('fails with timeout when the account never connects', async () => {
     const c = collector()
     const getStatus = vi.fn().mockResolvedValue(okStatus({ connected: false }))
     await runXConnectFlow({
-      getOAuthUrl: async () => ({ authUrl: 'https://x/auth' }),
+      getOAuthUrl: async () => ({ authUrl: 'https://twitter.com/i/oauth2/authorize' }),
       getStatus,
       openExternal: vi.fn().mockResolvedValue(undefined),
       sleep: noSleep,

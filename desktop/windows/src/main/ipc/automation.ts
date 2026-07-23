@@ -1,6 +1,7 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { automationBridge } from '../automation/bridge'
 import { getAutomationTargetHandle } from '../automation/foregroundTarget'
+import { bindPlanToWindow, sameWindowIdentity } from '../automation/consentBinding'
 import type { AutomationPlan, AutomationStep, UiSnapshot } from '../../shared/types'
 
 // Result of the native-dialog confirm flow. `canceled` distinguishes a user
@@ -57,16 +58,23 @@ export function registerAutomationHandlers(): void {
   ipcMain.handle(
     'automation:confirmRun',
     async (e, plan: AutomationPlan): Promise<ConfirmRunResult> => {
+      const targetHandle = getAutomationTargetHandle()
+      if (!targetHandle) return { ok: false, message: 'No trusted target window is available.' }
+      const approvedSnapshot = await automationBridge.snapshot(targetHandle)
+      if (!approvedSnapshot.ok) {
+        return { ok: false, message: 'The target window could not be verified.' }
+      }
+      const boundPlan = bindPlanToWindow(plan, approvedSnapshot.window)
       const parent = BrowserWindow.fromWebContents(e.sender)
       const detail = [
-        `In “${plan.targetWindow}”:`,
+        `In “${boundPlan.targetWindow}” (${approvedSnapshot.window.processName}):`,
         '',
-        ...plan.steps.map((s, i) => describeStepForDialog(s, i))
+        ...boundPlan.steps.map((s, i) => describeStepForDialog(s, i))
       ].join('\n')
       const opts = {
         type: 'question' as const,
         title: 'Omi — approve action',
-        message: plan.summary || `Omi wants to do something in “${plan.targetWindow}”`,
+        message: boundPlan.summary || `Omi wants to do something in “${boundPlan.targetWindow}”`,
         detail,
         buttons: ['Approve & run', 'Cancel'],
         defaultId: 0,
@@ -77,7 +85,14 @@ export function registerAutomationHandlers(): void {
         ? await dialog.showMessageBox(parent, opts)
         : await dialog.showMessageBox(opts)
       if (response !== 0) return { ok: false, canceled: true }
-      const result = await automationBridge.run(plan, () => {})
+      const currentSnapshot = await automationBridge.snapshot(targetHandle)
+      if (
+        !currentSnapshot.ok ||
+        !sameWindowIdentity(approvedSnapshot.window, currentSnapshot.window)
+      ) {
+        return { ok: false, message: 'The target window changed after approval.' }
+      }
+      const result = await automationBridge.run(boundPlan, () => {})
       return { ok: result.ok, message: result.message }
     }
   )
