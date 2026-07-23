@@ -188,6 +188,33 @@ describe("PiMonoAdapter prompt correlation", () => {
     }
   });
 
+  it("does not force web when the current user explicitly prohibits it", () => {
+    for (const message of [
+      "Do you know why the web search tool times out? Don't call it because it will time out again.",
+      "Do you know why the web search tool times out? Don’t call it because it will time out again.",
+      "Do not call the web search tool; answer from what you already know.",
+      "Do not use web search resulting in external network access.",
+      "Explain web search without web search.",
+      "Do not use web search; answer from what you already know.",
+    ]) {
+      expect(routePromptForPublicWeb(message)).toBe(message);
+    }
+  });
+
+  it("does not invert explicit web intent for unrelated negation", () => {
+    for (const message of [
+      "Search the web for naming ideas, but don't call it Omi.",
+      "Search the web for webpack docs; don't use webpack examples.",
+      "Use web search for the answer, but don't call it authoritative.",
+      "Search the web because I got no web search results.",
+      "Search the web, but do not use the web search results as the only source.",
+      "Search the web and explain why no web search results appeared.",
+      "Search the web for the term no web search.",
+    ]) {
+      expect(routePromptForPublicWeb(message)).toContain("<omi_retrieval_policy>");
+    }
+  });
+
   it("does not route a child task from inherited public-web context", async () => {
     const { adapter, events } = createAdapter();
     seedSessions(adapter, "child");

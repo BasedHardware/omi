@@ -15,6 +15,7 @@ pub(crate) enum RetrievalSource {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RetrievalReason {
     ExplicitWeb,
+    ExplicitNoWeb,
     Freshness,
     AnaphoricLookup,
     ResearchIntent,
@@ -27,6 +28,7 @@ impl RetrievalReason {
     fn as_str(self) -> &'static str {
         match self {
             Self::ExplicitWeb => "explicit_web",
+            Self::ExplicitNoWeb => "explicit_no_web",
             Self::Freshness => "freshness",
             Self::AnaphoricLookup => "anaphoric_lookup",
             Self::ResearchIntent => "research_intent",
@@ -95,6 +97,30 @@ const EXPLICIT_WEB_PHRASES: &[&str] = &[
     "browse the web",
     "web search",
     "internet search",
+];
+
+const EXPLICIT_WEB_PROHIBITION_PHRASES: &[&str] = &[
+    "don't call web search",
+    "do not call web search",
+    "don't call the web search",
+    "do not call the web search",
+    "don't call internet search",
+    "do not call internet search",
+    "don't call the internet search",
+    "do not call the internet search",
+    "don't use web search",
+    "do not use web search",
+    "don't use the web search",
+    "do not use the web search",
+    "don't use internet search",
+    "do not use internet search",
+    "don't use the internet search",
+    "do not use the internet search",
+    "don't search the web",
+    "do not search the web",
+    "don't search the internet",
+    "do not search the internet",
+    "without web search",
 ];
 
 const EXPLICIT_PRIVATE_PHRASES: &[&str] = &[
@@ -296,7 +322,47 @@ fn extract_text_content(content: &Option<serde_json::Value>) -> String {
 fn normalized_lookup_text(text: &str) -> String {
     text.trim()
         .trim_matches(|ch: char| !ch.is_alphanumeric())
+        .replace(['\u{2018}', '\u{2019}'], "'")
         .to_ascii_lowercase()
+}
+
+fn explicitly_prohibits_public_web(text: &str) -> bool {
+    if EXPLICIT_WEB_PROHIBITION_PHRASES.iter().any(|phrase| {
+        text.match_indices(phrase).any(|(start, _)| {
+            let suffix = text[start + phrase.len()..].trim_start();
+            let starts_with_result_noun = ["result", "results"].iter().any(|noun| {
+                suffix
+                    .strip_prefix(noun)
+                    .is_some_and(|tail| tail.chars().next().is_none_or(|ch| !ch.is_alphanumeric()))
+            });
+            !starts_with_result_noun
+        })
+    }) {
+        return true;
+    }
+
+    // The Beta prompt used a pronoun after naming the "web search tool".
+    // Keep that special case local and causal so unrelated phrases such as
+    // "search the web, but don't call it authoritative" remain explicit web
+    // requests instead of being inverted by a context-free substring.
+    ["web search tool", "internet search tool"]
+        .iter()
+        .filter_map(|referent| text.find(referent).map(|index| (referent, index)))
+        .any(|(referent, index)| {
+            let tail = text[index + referent.len()..]
+                .chars()
+                .take(160)
+                .collect::<String>();
+            contains_any(
+                &tail,
+                &[
+                    "don't call it because",
+                    "do not call it because",
+                    "don't call it again",
+                    "do not call it again",
+                ],
+            )
+        })
 }
 
 fn previous_assistant_text(messages: &[ChatMessage]) -> String {
@@ -319,8 +385,24 @@ pub(crate) fn retrieval_policy(messages: &[ChatMessage]) -> RetrievalPolicy {
     };
     let latest = normalized_lookup_text(&extract_text_content(&latest_user.content));
     let explicit_web = contains_any(&latest, EXPLICIT_WEB_PHRASES);
+    let explicitly_prohibits_web = explicit_web && explicitly_prohibits_public_web(&latest);
     let explicit_private = contains_any(&latest, EXPLICIT_PRIVATE_PHRASES);
 
+    if explicitly_prohibits_web {
+        return RetrievalPolicy {
+            required_sources: if explicit_private {
+                vec![RetrievalSource::OmiPrivate]
+            } else {
+                Vec::new()
+            },
+            prohibited_sources: vec![RetrievalSource::PublicWeb],
+            reason: if explicit_private {
+                RetrievalReason::ExplicitPrivate
+            } else {
+                RetrievalReason::ExplicitNoWeb
+            },
+        };
+    }
     if explicit_web && explicit_private {
         return RetrievalPolicy {
             required_sources: vec![RetrievalSource::PublicWeb, RetrievalSource::OmiPrivate],
@@ -590,6 +672,41 @@ mod tests {
              the way they schedule collaborative work across time zones.",
         )]);
         assert_eq!(policy, RetrievalPolicy::auto());
+    }
+
+    #[test]
+    fn explicit_web_prohibition_wins_over_web_reference() {
+        for request in [
+            "Do you know why the web search tool times out? Don't call it because it will time out again.",
+            "Do you know why the web search tool times out? Don’t call it because it will time out again.",
+            "Do not call the web search tool; answer from what you already know.",
+            "Do not use web search resulting in external network access.",
+            "Explain web search without web search.",
+            "Do not use web search; answer from what you already know.",
+        ] {
+            let policy = retrieval_policy(&[message("user", request)]);
+            assert!(!policy.requires(RetrievalSource::PublicWeb));
+            assert!(policy.prohibits(RetrievalSource::PublicWeb));
+            assert_eq!(policy.reason, RetrievalReason::ExplicitNoWeb);
+        }
+    }
+
+    #[test]
+    fn unrelated_negation_does_not_invert_an_explicit_web_request() {
+        for request in [
+            "Search the web for naming ideas, but don't call it Omi.",
+            "Search the web for webpack docs; don't use webpack examples.",
+            "Use web search for the answer, but don't call it authoritative.",
+            "Search the web because I got no web search results.",
+            "Search the web, but do not use the web search results as the only source.",
+            "Search the web and explain why no web search results appeared.",
+            "Search the web for the term no web search.",
+        ] {
+            let policy = retrieval_policy(&[message("user", request)]);
+            assert!(policy.requires(RetrievalSource::PublicWeb));
+            assert!(!policy.prohibits(RetrievalSource::PublicWeb));
+            assert_eq!(policy.reason, RetrievalReason::ExplicitWeb);
+        }
     }
 
     #[test]
