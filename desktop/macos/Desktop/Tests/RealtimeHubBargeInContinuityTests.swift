@@ -910,15 +910,18 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     let contextRefresh = try XCTUnwrap(helperTail.range(of: "await refreshVoiceContextSnapshot()"))
     XCTAssertLessThan(ordinaryPersistenceWait.lowerBound, contextRefresh.lowerBound)
 
-    XCTAssertTrue(source.contains("var voiceContextRefreshGeneration: UInt64 = 0"))
-    XCTAssertTrue(source.contains("voiceContextRefreshGeneration == refreshGeneration"))
+    XCTAssertTrue(source.contains("let voiceContextSingleFlight = RealtimeVoiceContextSingleFlight()"))
+    XCTAssertTrue(source.contains("voiceContextSingleFlight.joinOrStart(operation)"))
+    XCTAssertTrue(source.contains("voiceContextSingleFlight.restart(operation)"))
+    XCTAssertTrue(source.contains("await prefetchVoiceContextSnapshotIfNeeded().value"))
+    XCTAssertTrue(source.contains("prefetchVoiceContextSnapshotIfNeeded(forceRefresh: true)"))
+    XCTAssertFalse(source.contains("voiceContextPrefetchTask?.cancel()"))
     XCTAssertTrue(
       source.contains(
         "resolvedSnapshot = try await FloatingControlBarManager.shared.kernelVoiceContextSnapshot()"))
     XCTAssertTrue(source.contains("prefetchedVoiceContext = resolvedSnapshot.context"))
     XCTAssertTrue(source.contains("prefetchedVoiceContextFreshnessIdentity = resolvedSnapshot.freshnessIdentity"))
-    XCTAssertTrue(source.contains("guard resolvedSnapshot.isResolved else"))
-    XCTAssertTrue(source.contains("retaining the last voice context after an unresolved kernel snapshot"))
+    XCTAssertTrue(source.contains("resolvedSnapshot.isResolved"))
     XCTAssertTrue(source.contains("failContextFreshInputPreparation("))
     XCTAssertTrue(source.contains("Voice context is temporarily unavailable"))
     XCTAssertFalse(source.contains("prefetchedFloatingAgentStatus"))

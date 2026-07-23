@@ -1165,6 +1165,27 @@ fn test_translate_request_required_web_search_fails_closed_when_disabled() {
 }
 
 #[test]
+fn test_translate_request_honors_explicit_web_search_prohibition() {
+    let req = test_request(vec![user_message(
+        "Do you know why the web search tool times out? Don't call it because it will time out again.",
+    )]);
+
+    let result = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
+    assert!(result.tools.is_none());
+    assert!(result.tool_choice.is_none());
+    let prompt = serde_json::to_value(&result.messages[0])
+        .unwrap()
+        .to_string();
+    assert!(!prompt.contains("omi_retrieval_policy"), "{prompt}");
+}
+
+#[test]
 fn test_translate_request_guessed_freshness_answers_without_web_search() {
     // A guessed public-web turn on a route that cannot search (haiku, or the
     // kill switch) must still be answered: no error, no web_search tool, and

@@ -82,13 +82,15 @@ final class HomeStageCloseSemanticsTests: XCTestCase {
       "Both collapseHomeStagePanel and toggleHomeConnectPanel must invalidate deferred focus")
   }
 
-  /// Asking (via the ask bar) opens chat and rests there; the resting surface
-  /// is chat, not the greeting hub.
-  func testHomeRestingModeIsChatSoAskingRestsInChat() throws {
+  /// Asking (via the ask bar) opens chat. After history restoration, the
+  /// resting surface follows the shared history-presentation policy.
+  func testHomeRestingModeFollowsLoadedHistoryPolicy() throws {
     let source = try dashboardSource()
 
     let resting = try computedPropertyBody(named: "homeRestingMode", in: source)
-    XCTAssertEqual(resting.trimmingCharacters(in: .whitespacesAndNewlines), ".chat")
+    XCTAssertTrue(resting.contains("HomeHistoryPresentationPolicy.restingMode("))
+    XCTAssertTrue(resting.contains("isLoading: chatProvider.isLoading"))
+    XCTAssertTrue(resting.contains("messageCount: chatProvider.messages.count"))
 
     let ask = try methodBody(named: "sendFromHomeAskBar", in: source)
     XCTAssertTrue(
