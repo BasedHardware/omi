@@ -91,6 +91,11 @@ class AudioCaptureService: @unchecked Sendable {
   /// single capture session can recover from more than one silent episode.
   var onSilentMicDetected: (@Sendable (SilentMicDetection) -> Void)?
   var detectSilentMicOnAnyTransport = false
+  /// Fires (once per change) when the HAL reports a device/format/route change
+  /// during an active capture — a known precursor of silent capture (headset
+  /// plug/unplug, Bluetooth profile flip, default-input switch). Carries no
+  /// device identity; owners record only a boolean "route changed" flag.
+  var onInputRouteChanged: (@Sendable () -> Void)?
 
   /// Human-readable description of the capture device currently in use — for
   /// diagnostics (which mic a turn was recorded from).
@@ -804,6 +809,8 @@ class AudioCaptureService: @unchecked Sendable {
     isReconfiguring = true
 
     log("AudioCapture: Configuration changed, restarting with new device...")
+    let routeHandler = onInputRouteChanged
+    DispatchQueue.main.async { routeHandler?() }
 
     // Stop IOProc on old device
     if let procID = ioProcID, deviceID != kAudioObjectUnknown {
