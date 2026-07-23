@@ -2205,7 +2205,7 @@ extension PushToTalkManager {
       batchAudioLock.lock()
       batchAudioBuffer = Data()
       batchAudioLock.unlock()
-      startMicCapture()  // capture immediately; chunks buffer until the relay connects
+      startMicCapture(overrideDeviceID: preferredPTTInputOverrideDeviceID())  // route PTT input override (user mic / Bluetooth built-in fallback)
     }
     Task { @MainActor [weak self] in
       guard let self, self.isOmniSTT,
