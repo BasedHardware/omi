@@ -670,7 +670,8 @@ final class DesktopDiagnosticsManager {
     // so a release-regression rollup can exclude normal idle teardown / planned
     // session rotation without enumerating the two `realtime_provider_expected_*`
     // event names (#10425). Expected lifecycle stays inspectable, never an error.
-    let expectedLifecycle = event == .realtimeProviderExpectedIdleTeardown
+    let expectedLifecycle =
+      event == .realtimeProviderExpectedIdleTeardown
       || event == .realtimeProviderExpectedSessionRotation
     var properties: [String: Any] = [
       "provider": safeProvider(provider),
