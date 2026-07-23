@@ -50,6 +50,11 @@ require_text 'make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=ali
 require_text 'terminate_qualification_desktop "$BUNDLE"'
 require_text '--json tagName,isDraft,isPrerelease,publishedAt,assets,body'
 require_text 'WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"'
+require_text 'uv venv --allow-existing --python "$minor" .venv'
+require_text 'uv pip sync "$lock" --python .venv/bin/python'
+require_text 'Darwin-arm64 | Darwin-aarch64) lock="pylock.macos.toml"'
+require_text '--pre-sign-source does not accept a release tag'
+require_text '"provider_mode": tier.get("provider_mode")'
 if grep -Fq 'worktree add' "$QUALIFIER" || grep -Fq 'rm -rf "$WORKTREE"' "$QUALIFIER"; then
   echo "FAIL: qualification must use the persistent exact-SHA source directly" >&2
   exit 1

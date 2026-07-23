@@ -81,8 +81,10 @@ jobs:
 
       - name: Fetch exact retained qualified manifest
         env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           RELEASE_TAG: ${{ inputs.release_tag }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
@@ -98,6 +100,22 @@ jobs:
           if actual != response.get('manifest_sha256'):
               raise SystemExit('retained manifest canonical identity mismatch')
           PY
+          evidence_asset=$(jq -r .qualification_evidence_asset /tmp/desktop-release-manifest.json)
+          expected_evidence_sha=$(jq -r .qualification_evidence_sha256 /tmp/desktop-release-manifest.json)
+          gh release download "$RELEASE_TAG" --repo "$REPO" --pattern "$evidence_asset" --dir /tmp/stable-evidence
+          actual_evidence_sha="sha256:$(shasum -a 256 "/tmp/stable-evidence/$evidence_asset" | awk '{print $1}')"
+          [[ "$actual_evidence_sha" == "$expected_evidence_sha" ]] || {
+            echo "Stable requires the exact retained qualification evidence." >&2
+            exit 1
+          }
+          jq -e '
+            .release_profile == "nightly-rigorous" and
+            .rigorous_pre_sign_passed == true and
+            .exact_artifact_blackbox_passed == true
+          ' "/tmp/stable-evidence/$evidence_asset" >/dev/null || {
+            echo "Stable requires explicit approval plus nightly-rigorous pre-sign and trusted-M1 evidence." >&2
+            exit 1
+          }
 
       - name: Read current pointers and capture workflow-owned CAS inputs
         env:

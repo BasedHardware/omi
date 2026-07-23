@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Qualify a macOS desktop candidate by rebuilding the tag and running T2 core E2E.
+# Qualify a macOS desktop source build with T2 core E2E.
 #
 # Usage:
 #   ./scripts/qualify-desktop-beta.sh v11.0.0+11000-macos
@@ -17,6 +17,8 @@ SIGNED_SMOKE_RESULT=""
 CANDIDATE_GATE_RESULT=""
 GITHUB_ACTIONS_ARTIFACT=0
 RELEASE_TAG=""
+PRE_SIGN_SOURCE=0
+RESULT_JSON=""
 
 usage() {
   cat <<'USAGE'
@@ -24,6 +26,7 @@ Qualify a macOS desktop candidate (rebuild tag + T2 core E2E).
 
 Usage:
   qualify-desktop-beta.sh [--keep-stack] [--automatic] [--github-actions-artifact] \
+    [--pre-sign-source --result-json PATH] \
     [--signed-smoke-result PATH --candidate-gate-result PATH] <vX.Y.Z+BUILD-macos>
 
 Options:
@@ -32,6 +35,8 @@ Options:
   --signed-smoke-result PATH  Codemagic signed-artifact smoke evidence (required with --automatic)
   --candidate-gate-result PATH  Digest-bound candidate gate evidence (required with --automatic)
   --github-actions-artifact  Leave trusted evidence publication to the workflow artifact
+  --pre-sign-source  Qualify the current checkout before signing/publication
+  --result-json PATH  Write pre-sign qualification evidence (required with --pre-sign-source)
 USAGE
 }
 
@@ -59,6 +64,15 @@ while [[ $# -gt 0 ]]; do
       GITHUB_ACTIONS_ARTIFACT=1
       shift
       ;;
+    --pre-sign-source)
+      PRE_SIGN_SOURCE=1
+      shift
+      ;;
+    --result-json)
+      [[ $# -ge 2 && -n "${2:-}" && "${2:-}" != -* ]] || { echo "--result-json requires a path" >&2; exit 2; }
+      RESULT_JSON="$2"
+      shift 2
+      ;;
     --help|-h)
       usage
       exit 0
@@ -80,9 +94,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$RELEASE_TAG" ]]; then
+if [[ "$PRE_SIGN_SOURCE" -eq 0 && -z "$RELEASE_TAG" ]]; then
   usage >&2
   exit 2
+fi
+if [[ "$PRE_SIGN_SOURCE" -eq 1 ]]; then
+  [[ -z "$RELEASE_TAG" ]] || { echo "--pre-sign-source does not accept a release tag" >&2; exit 2; }
+  [[ -n "$RESULT_JSON" ]] || { echo "--pre-sign-source requires --result-json" >&2; exit 2; }
+  [[ "$AUTOMATIC" -eq 0 && "$GITHUB_ACTIONS_ARTIFACT" -eq 0 ]] || {
+    echo "--pre-sign-source cannot consume or publish post-release evidence" >&2
+    exit 2
+  }
 fi
 if [[ "$AUTOMATIC" -eq 1 ]]; then
   [[ -f "$SIGNED_SMOKE_RESULT" ]] || { echo "automatic qualification requires --signed-smoke-result" >&2; exit 2; }
@@ -106,13 +128,18 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
-if ! command -v gh >/dev/null 2>&1; then
+if [[ "$PRE_SIGN_SOURCE" -eq 0 ]] && ! command -v gh >/dev/null 2>&1; then
   echo "qualify-desktop-beta.sh requires gh CLI" >&2
   exit 1
 fi
 
-VERSION="${RELEASE_TAG#v}"
-VERSION="${VERSION%-macos}"
+if [[ "$PRE_SIGN_SOURCE" -eq 1 ]]; then
+  SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+  VERSION="pre-sign-${SHA:0:12}"
+else
+  VERSION="${RELEASE_TAG#v}"
+  VERSION="${VERSION%-macos}"
+fi
 BUNDLE="omi-qualification-${VERSION}"
 WORKTREE=""
 LAUNCH_LOG=""
@@ -132,26 +159,24 @@ QUALIFICATION_SUCCESS=0
 DESKTOP_PREPARE_WAIT_SECS="${OMI_QUALIFY_PREPARE_WAIT_SECS:-5400}"
 BRIDGE_WAIT_SECS=900
 
-gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,isPrerelease,publishedAt,assets,body \
-  > /tmp/desktop-qualification-release.json
+if [[ "$PRE_SIGN_SOURCE" -eq 1 ]]; then
+  WORKTREE="$REPO_ROOT"
+else
+  gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,isPrerelease,publishedAt,assets,body \
+    > /tmp/desktop-qualification-release.json
+  python3 "$KEYVALUE_PY" preflight-release /tmp/desktop-qualification-release.json "$RELEASE_TAG"
+  SHA=$(git -C "$REPO_ROOT" rev-list -n1 "$RELEASE_TAG")
+  WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"
+fi
 
-python3 "$KEYVALUE_PY" preflight-release /tmp/desktop-qualification-release.json "$RELEASE_TAG"
-
-SHA=$(git -C "$REPO_ROOT" rev-list -n1 "$RELEASE_TAG")
-WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"
-
-# Provision the tag-pinned backend venv so the hermetic stack resolves the
-# locked Python dependencies. The ephemeral Codemagic Mac has no backend venv
-# and no global python3 with backend deps, so this must succeed there — but a
-# freshly installed uv may not carry the exact pinned patch
-# (python-build-standalone lags), so fall back to the pinned minor version and
-# still sync the exact platform lock. Machines without uv keep the legacy
-# global-python3 resolution.
+# Provision the source-pinned backend venv. A fresh uv index can omit the exact
+# repository patch, so retain the exact dependency lock while deterministically
+# falling back to the supported pinned minor interpreter.
 provision_backend_venv() {
   local worktree="$1"
   local backend="$worktree/backend"
-  [[ -f "$backend/.python-version" ]] || { echo "no backend/.python-version; skipping venv provisioning"; return 0; }
   local pinned minor lock
+  [[ -f "$backend/.python-version" ]] || { echo "backend/.python-version is required" >&2; return 1; }
   pinned="$(tr -d '[:space:]' < "$backend/.python-version")"
   minor="${pinned%.*}"
   case "$(uname -s)-$(uname -m)" in
@@ -159,12 +184,11 @@ provision_backend_venv() {
     Darwin-x86_64 | Darwin-amd64) lock="pylock.macos-x86_64.toml" ;;
     *) lock="pylock.toml" ;;
   esac
-  # Preferred path: exact-patch parity with CI via the shared script.
   if (cd "$worktree" && make setup-backend); then
     return 0
   fi
-  echo "make setup-backend failed (likely exact patch $pinned unavailable to this uv); falling back to minor $minor"
-  [[ -f "$backend/$lock" ]] || { echo "no $lock for this platform; cannot provision backend venv" >&2; return 1; }
+  echo "exact Python $pinned unavailable; retrying with supported minor $minor and $lock" >&2
+  [[ -f "$backend/$lock" ]] || { echo "missing locked backend environment: $backend/$lock" >&2; return 1; }
   (
     cd "$backend"
     uv venv --allow-existing --python "$minor" .venv
@@ -347,7 +371,7 @@ fi
 
 (
   cd "$WORKTREE/desktop/macos"
-  if [[ "$AUTOMATIC" -eq 1 ]]; then
+  if [[ "$AUTOMATIC" -eq 1 || "$PRE_SIGN_SOURCE" -eq 1 ]]; then
     ./scripts/desktop-core-harness.sh --self-check --skip-backend-contracts
   fi
   ./scripts/desktop-core-harness.sh --tier 2 --bundle "$BUNDLE" --port "$AUTOMATION_PORT" --keep-stack
@@ -365,7 +389,7 @@ if ! python3 "$KEYVALUE_PY" check-manifest "$EVIDENCE/manifest.json"; then
 fi
 
 FAULT_EVIDENCE=""
-if [[ "$AUTOMATIC" -eq 1 ]]; then
+if [[ "$AUTOMATIC" -eq 1 || "$PRE_SIGN_SOURCE" -eq 1 ]]; then
   (
     cd "$WORKTREE/desktop/macos"
     ./scripts/desktop-core-harness.sh --fault-suite --port "$((AUTOMATION_PORT + 1))"
@@ -383,6 +407,34 @@ manifest = json.load(open(sys.argv[1], encoding="utf-8"))
 if manifest.get("passed") is not True or manifest.get("tier") != "fault":
     raise SystemExit("automatic qualification failed: fault-suite manifest did not pass")
 PY
+fi
+
+if [[ "$PRE_SIGN_SOURCE" -eq 1 ]]; then
+  mkdir -p "$(dirname "$RESULT_JSON")"
+  python3 - "$RESULT_JSON" "$SHA" "$EVIDENCE/manifest.json" "$FAULT_EVIDENCE/manifest.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+output = Path(sys.argv[1])
+source_sha = sys.argv[2]
+tier = json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
+fault = json.loads(Path(sys.argv[4]).read_text(encoding="utf-8"))
+payload = {
+    "passed": tier.get("passed") is True and tier.get("tier") == 2,
+    "source_sha": source_sha,
+    "tier": "T2",
+    "provider_mode": tier.get("provider_mode"),
+    "fault_suite_passed": fault.get("passed") is True and fault.get("tier") == "fault",
+    "subject": "pre-sign source-built named bundle",
+}
+if not all((payload["passed"], payload["provider_mode"] == "offline", payload["fault_suite_passed"])):
+    raise SystemExit("pre-sign qualification evidence is incomplete or failed")
+output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+  QUALIFICATION_SUCCESS=1
+  echo "Pre-sign rigorous qualification passed for $SHA"
+  exit 0
 fi
 
 if [[ "$GITHUB_ACTIONS_ARTIFACT" -eq 1 ]]; then
