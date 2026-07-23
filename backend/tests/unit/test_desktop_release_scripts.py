@@ -66,8 +66,18 @@ def _evidence():
         "schema_version": 1,
         "release_id": "v0.12.64+12064-macos",
         "source_sha": "a" * 40,
+        "release_profile": "nightly-rigorous",
+        "rigorous_pre_sign_passed": True,
+        "exact_artifact_blackbox_passed": True,
+        "release_profile": "nightly-rigorous",
+        "rigorous_pre_sign_passed": True,
+        "exact_artifact_blackbox_passed": True,
         "source_qualification": {"passed": True, "tier": "T2", "subject": "source-built named-bundle"},
-        "signed_artifact_verification": {"passed": True, "subject": "exact signed ZIP/DMG bytes"},
+        "signed_artifact_verification": {
+            "passed": True,
+            "subject": "exact signed ZIP/DMG bytes",
+            "authority": "trusted-m1",
+        },
         "artifacts": {
             "Omi.zip": {
                 "url": "https://github.com/BasedHardware/omi/releases/download/v0.12.64+12064-macos/Omi.zip",
@@ -79,6 +89,31 @@ def _evidence():
                 "sha256": "c" * 64,
             },
         },
+    }
+
+
+def _qualification_kwargs(release_tag="v0.12.64+12064-macos", source_sha="a" * 40):
+    return {
+        "release_profile_evidence": {
+            "schema_version": 1,
+            "release_profile": "nightly-rigorous",
+            "source_sha": source_sha,
+            "rigorous_pre_sign_passed": True,
+        },
+        "blackbox_results": (
+            {
+                "ok": True,
+                "release_tag": release_tag,
+                "source_sha": source_sha,
+                "bundle_id": "com.omi.computer-macos",
+            },
+            {
+                "ok": True,
+                "release_tag": release_tag,
+                "source_sha": source_sha,
+                "bundle_id": "com.omi.computer-macos.beta",
+            },
+        ),
     }
 
 
@@ -109,6 +144,33 @@ def test_prepare_manifest_requires_exact_qualification_and_assets():
     assert manifest["qualification_passed"] is True
     assert manifest["qualification_evidence_asset"] == "qualification-evidence-v0.12.64+12064-macos.json"
     assert manifest["changelog"] == ["Fixed updates", "Improved recovery"]
+
+
+def test_manual_fast_evidence_is_truthful_and_still_requires_m1_blackbox():
+    evidence = _evidence()
+    evidence.update(
+        {
+            "release_profile": "manual-fast",
+            "rigorous_pre_sign_passed": False,
+            "source_qualification": {"passed": False, "tier": "skipped", "subject": "manual-fast explicit skip"},
+        }
+    )
+    qualification_evidence.verify_evidence(
+        evidence,
+        _release(),
+        "v0.12.64+12064-macos",
+        "a" * 40,
+        {"Omi.zip": "b" * 64, "omi.dmg": "c" * 64},
+    )
+    evidence["exact_artifact_blackbox_passed"] = False
+    with pytest.raises(ValueError, match="black-box gate"):
+        qualification_evidence.verify_evidence(
+            evidence,
+            _release(),
+            "v0.12.64+12064-macos",
+            "a" * 40,
+            {"Omi.zip": "b" * 64, "omi.dmg": "c" * 64},
+        )
 
 
 def test_prepared_manifest_is_the_exact_immutable_object_registered_and_promoted():
@@ -250,8 +312,9 @@ def test_codemagic_produces_canonical_app_and_strictly_verifiable_dmg():
     assert "xattr -d com.apple.FinderInfo" in workflow
     assert "xattr -d com.apple.ResourceFork" in workflow
     assert 'codesign --verify --deep --strict --verbose=2 "$STAGING_DIR/$APP_NAME.app"' in workflow
-    assert 'dmg_app="$DMG_MOUNTPOINT/Omi.app"' in smoke
-    assert "DMG-contained Omi.app failed deep strict codesign verification" in smoke
+    assert 'dmg_app_name="$(expected_app_bundle_name)"' in smoke
+    assert 'dmg_app="$DMG_MOUNTPOINT/$dmg_app_name"' in smoke
+    assert 'DMG-contained $dmg_app_name failed deep strict codesign verification' in smoke
 
 
 def test_dmgbuild_does_not_attach_finder_info_to_the_signed_app():
@@ -286,7 +349,11 @@ def test_prepare_manifest_rejects_caller_hashes_that_do_not_match_trusted_eviden
             "omi.dmg": {"url": "https://example.com/omi.dmg", "sha256": "c" * 64},
         },
         "source_qualification": {"passed": True, "tier": "T2", "subject": "source-built named-bundle"},
-        "signed_artifact_verification": {"passed": True, "subject": "exact signed ZIP/DMG bytes"},
+        "signed_artifact_verification": {
+            "passed": True,
+            "subject": "exact signed ZIP/DMG bytes",
+            "authority": "trusted-m1",
+        },
     }
 
     with pytest.raises(ValueError, match="qualification evidence"):
@@ -319,7 +386,11 @@ def test_qualified_artifact_replacement_is_rejected_before_beta_or_stable_pointe
         gate = root / "gate.json"
         gate.write_text(json.dumps({"passed": True, "release_tag": release["tagName"], "source_sha": "a" * 40}))
         evidence = qualification_evidence.build_evidence(
-            release, release["tagName"], "a" * 40, {**paths, "__candidate_gate__": gate}
+            release,
+            release["tagName"],
+            "a" * 40,
+            {**paths, "__candidate_gate__": gate},
+            **_qualification_kwargs(),
         )
         paths["Omi.zip"].write_bytes(b"replacement")
         with pytest.raises(ValueError, match="Omi.zip hash differs"):
@@ -358,7 +429,11 @@ def test_qualification_evidence_accepts_the_side_by_side_beta_artifact_pair():
         gate = root / "gate.json"
         gate.write_text(json.dumps({"passed": True, "release_tag": release["tagName"], "source_sha": "a" * 40}))
         evidence = qualification_evidence.build_evidence(
-            release, release["tagName"], "a" * 40, {**paths, "__candidate_gate__": gate}
+            release,
+            release["tagName"],
+            "a" * 40,
+            {**paths, "__candidate_gate__": gate},
+            **_qualification_kwargs(),
         )
         assert set(evidence["artifacts"]) == {"Omi.zip", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg"}
         assert evidence["artifacts"]["Omi.Beta.zip"]["signature"] == "beta-signature"
@@ -368,7 +443,11 @@ def test_qualification_evidence_accepts_the_side_by_side_beta_artifact_pair():
         del partial["omi-beta.dmg"]
         with pytest.raises(ValueError, match="exact qualified"):
             qualification_evidence.build_evidence(
-                release, release["tagName"], "a" * 40, {**partial, "__candidate_gate__": gate}
+                release,
+                release["tagName"],
+                "a" * 40,
+                {**partial, "__candidate_gate__": gate},
+                **_qualification_kwargs(),
             )
 
 
@@ -405,6 +484,12 @@ def test_qualification_evidence_cli_accepts_the_beta_artifact_pair_end_to_end():
         gate = root / "gate.json"
         gate.write_text(json.dumps({"passed": True, "release_tag": release["tagName"], "source_sha": "a" * 40}))
         evidence_out = root / "evidence.json"
+        profile_evidence = root / "release-profile-evidence.json"
+        profile_evidence.write_text(json.dumps(_qualification_kwargs()["release_profile_evidence"]))
+        blackbox = root / "blackbox.json"
+        beta_blackbox = root / "beta-blackbox.json"
+        blackbox.write_text(json.dumps(_qualification_kwargs()["blackbox_results"][0]))
+        beta_blackbox.write_text(json.dumps(_qualification_kwargs()["blackbox_results"][1]))
         result = subprocess.run(
             [
                 sys.executable,
@@ -418,6 +503,12 @@ def test_qualification_evidence_cli_accepts_the_beta_artifact_pair_end_to_end():
                 "a" * 40,
                 "--candidate-gate",
                 str(gate),
+                "--release-profile-evidence",
+                str(profile_evidence),
+                "--blackbox-result",
+                str(blackbox),
+                "--beta-blackbox-result",
+                str(beta_blackbox),
                 *asset_args,
                 "--evidence",
                 str(evidence_out),
@@ -444,7 +535,11 @@ def test_qualification_evidence_rejects_candidate_gate_from_a_different_source()
 
         with pytest.raises(ValueError, match="passing candidate gate"):
             qualification_evidence.build_evidence(
-                release, release["tagName"], "a" * 40, {**paths, "__candidate_gate__": gate}
+                release,
+                release["tagName"],
+                "a" * 40,
+                {**paths, "__candidate_gate__": gate},
+                **_qualification_kwargs(),
             )
 
 
@@ -558,7 +653,7 @@ def test_prepare_manifest_rejects_unqualified_candidate():
     release = _release()
     evidence = _evidence()
     evidence["source_qualification"] = {"passed": False, "tier": "T2"}
-    with pytest.raises(ValueError, match="source-built named-bundle T2"):
+    with pytest.raises(ValueError, match="truthfully report pre-sign"):
         prepare_beta.prepare_manifest(
             release,
             "v0.12.64+12064-macos",
@@ -585,7 +680,10 @@ def test_qualification_is_serialized_by_tag_and_retried_without_release_body_sta
         "exit 1"
     )
     assert "desktop_qualification_dispatch.py" not in qualification
-    assert "steps.candidate.outcome == 'success' && steps.qualify.outcome == 'success'" in qualification
+    assert "exact-artifact-blackbox:" in qualification
+    assert "runs-on: [self-hosted, macos, omi-qual-m1-studio]" in qualification
+    assert "Exercise exact signed artifacts as black boxes" in qualification
+    assert "qualify-desktop-beta.sh" not in qualification
 
 
 def test_qualification_publishes_the_single_artifact_pair_and_immutable_evidence_for_server_readback():
@@ -676,7 +774,10 @@ def test_stable_repair_is_published_immutably_before_stable_pointer_advances():
 
     assert immutable_repair < pointer < legacy_bridge < latest_route
     assert "Fetch exact retained qualified manifest" in workflow
-    assert "gh release download" not in workflow
+    assert 'gh release download "$RELEASE_TAG"' in workflow
+    assert '--pattern "$evidence_asset"' in workflow
+    assert "actual_evidence_sha" in workflow
+    assert '.release_profile == "nightly-rigorous"' in workflow
     assert "--if-generation-match=0" in workflow
     assert "manifest_sha256" in workflow
     assert '"$BASE/macos-beta"' in workflow

@@ -23,6 +23,7 @@ ARTIFACTS = ("Omi.zip", "omi.dmg")
 BETA_ARTIFACTS = ("Omi.Beta.zip", "omi-beta.dmg")
 ZIP_SIGNATURES = {"Omi.zip": "edSignature", "Omi.Beta.zip": "betaEdSignature"}
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+CANONICAL_BUNDLE_IDS = frozenset({"com.omi.computer-macos", "com.omi.computer-macos.beta"})
 
 
 def _fail(message: str) -> None:
@@ -58,7 +59,14 @@ def file_sha256(path: Path) -> str:
 
 
 def build_evidence(
-    release: dict[str, Any], release_tag: str, source_sha: str, files: dict[str, Path], qualification_run_id: int | None = None
+    release: dict[str, Any],
+    release_tag: str,
+    source_sha: str,
+    files: dict[str, Path],
+    qualification_run_id: int | None = None,
+    *,
+    release_profile_evidence: dict[str, Any] | None = None,
+    blackbox_results: tuple[dict[str, Any], ...] = (),
 ) -> dict[str, Any]:
     if release.get("tagName") != release_tag:
         _fail("release ID does not match requested tag")
@@ -72,6 +80,31 @@ def build_evidence(
         or candidate_gate.get("source_sha") != source_sha
     ):
         _fail("was not created after the passing candidate gate")
+    profile_evidence = release_profile_evidence or {}
+    profile = profile_evidence.get("release_profile")
+    rigorous = profile_evidence.get("rigorous_pre_sign_passed")
+    if profile_evidence.get("schema_version") != 1 or profile_evidence.get("source_sha") != source_sha:
+        _fail("does not contain source-bound release profile evidence")
+    if (profile, rigorous) not in (("nightly-rigorous", True), ("manual-fast", False)):
+        _fail("contains an unknown or untruthful release profile")
+    if len(blackbox_results) != 2:
+        _fail("requires exact-artifact black-box results for both canonical identities")
+    # Validate that the two results cover the stable and Beta bundle IDs so
+    # accidentally wiring the same or stale JSON to both inputs cannot pass
+    # with incomplete exact-artifact coverage.
+    result_bundle_ids = {str(result.get("bundle_id")) for result in blackbox_results}
+    if result_bundle_ids != CANONICAL_BUNDLE_IDS:
+        _fail(
+            "black-box results must cover both canonical bundle IDs "
+            f"({sorted(CANONICAL_BUNDLE_IDS)}), got {sorted(result_bundle_ids)}"
+        )
+    for result in blackbox_results:
+        if (
+            result.get("ok") is not True
+            or result.get("release_tag") != release_tag
+            or result.get("source_sha") != source_sha
+        ):
+            _fail("contains failed or mismatched exact-artifact black-box evidence")
     metadata = _metadata(str(release.get("body") or ""))
     artifacts: dict[str, dict[str, str]] = {}
     required = {"Omi.zip", "omi.dmg"}
@@ -98,16 +131,20 @@ def build_evidence(
         "schema_version": 1,
         "release_id": release_tag,
         "source_sha": source_sha,
+        "release_profile": profile,
+        "rigorous_pre_sign_passed": rigorous,
+        "exact_artifact_blackbox_passed": True,
         "source_qualification": {
-            "passed": True,
-            "tier": "T2",
-            "subject": "source-built named-bundle",
-            "fault_evidence": "trusted qualification runner",
+            "passed": rigorous,
+            "tier": "T2" if rigorous else "skipped",
+            "subject": "pre-sign source-built named-bundle" if rigorous else "manual-fast explicit skip",
+            "fault_evidence": "Codemagic pre-sign release workflow" if rigorous else None,
         },
         "signed_artifact_verification": {
             "passed": True,
             "subject": "exact signed ZIP/DMG bytes",
-            "checks": ["sha256", "Sparkle signature", "notarization", "signed smoke"],
+            "authority": "trusted-m1",
+            "checks": ["sha256", "Sparkle signature", "notarization", "signed smoke", "black-box launch"],
         },
         "artifacts": artifacts,
     }
@@ -129,16 +166,24 @@ def verify_evidence(
         _fail("release ID or source SHA does not match the trusted run")
     source_qualification = evidence.get("source_qualification")
     signed_artifacts = evidence.get("signed_artifact_verification")
+    profile = evidence.get("release_profile")
+    rigorous = evidence.get("rigorous_pre_sign_passed")
+    if (profile, rigorous) not in (("nightly-rigorous", True), ("manual-fast", False)):
+        _fail("contains an unknown or untruthful release profile")
+    expected_source = (True, "T2") if rigorous else (False, "skipped")
     if (
         not isinstance(source_qualification, dict)
-        or source_qualification.get("passed") is not True
-        or source_qualification.get("tier") != "T2"
+        or (source_qualification.get("passed"), source_qualification.get("tier")) != expected_source
     ):
-        _fail("does not prove source-built named-bundle T2 qualification")
+        _fail("does not truthfully report pre-sign source qualification")
+    if evidence.get("exact_artifact_blackbox_passed") is not True:
+        _fail("does not prove the exact-artifact black-box gate passed")
     if not isinstance(signed_artifacts, dict) or signed_artifacts.get("passed") is not True:
         _fail("does not prove exact signed artifact verification")
     if signed_artifacts.get("subject") != "exact signed ZIP/DMG bytes":
         _fail("must not claim signed production bytes ran T2")
+    if signed_artifacts.get("authority") != "trusted-m1":
+        _fail("must bind final exact-artifact qualification to the trusted M1")
     artifacts = evidence.get("artifacts")
     if not isinstance(artifacts, dict):
         _fail("does not contain artifacts")
@@ -165,6 +210,9 @@ def main() -> int:
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--evidence", required=True)
     parser.add_argument("--candidate-gate")
+    parser.add_argument("--release-profile-evidence")
+    parser.add_argument("--blackbox-result")
+    parser.add_argument("--beta-blackbox-result")
     parser.add_argument("--qualification-run-id", type=int)
     parser.add_argument("--asset", action="append", default=[])
     args = parser.parse_args()
@@ -176,10 +224,25 @@ def main() -> int:
             raise SystemExit("--asset must be NAME=PATH for a qualified release artifact")
         files[name] = Path(path)
     if args.command == "build":
-        if not args.candidate_gate:
-            raise SystemExit("build requires --candidate-gate")
+        if not all(
+            (args.candidate_gate, args.release_profile_evidence, args.blackbox_result, args.beta_blackbox_result)
+        ):
+            raise SystemExit("build requires candidate-gate, release-profile, and both black-box results")
         files["__candidate_gate__"] = Path(args.candidate_gate)
-        result = build_evidence(release, args.release_tag, args.source_sha, files, args.qualification_run_id)
+        profile_evidence = json.loads(Path(args.release_profile_evidence).read_text(encoding="utf-8"))
+        blackbox_results = tuple(
+            json.loads(Path(path).read_text(encoding="utf-8"))
+            for path in (args.blackbox_result, args.beta_blackbox_result)
+        )
+        result = build_evidence(
+            release,
+            args.release_tag,
+            args.source_sha,
+            files,
+            args.qualification_run_id,
+            release_profile_evidence=profile_evidence,
+            blackbox_results=blackbox_results,
+        )
         Path(args.evidence).write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     else:
         evidence = json.loads(Path(args.evidence).read_text(encoding="utf-8"))

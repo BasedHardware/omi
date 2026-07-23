@@ -220,8 +220,15 @@ def _candidate():
         "release_id": TAG,
         "source_sha": SHA,
         "qualification_run_id": 123,
+        "release_profile": "nightly-rigorous",
+        "rigorous_pre_sign_passed": True,
+        "exact_artifact_blackbox_passed": True,
         "source_qualification": {"passed": True, "tier": "T2", "subject": "source-built named-bundle"},
-        "signed_artifact_verification": {"passed": True, "subject": "exact signed ZIP/DMG bytes"},
+        "signed_artifact_verification": {
+            "passed": True,
+            "subject": "exact signed ZIP/DMG bytes",
+            "authority": "trusted-m1",
+        },
         "artifacts": {
             "Omi.zip": {"url": zip_url, "sha256": hashlib.sha256(b"zip bytes").hexdigest(), "signature": "sparkle"},
             "omi.dmg": {"url": dmg_url, "sha256": hashlib.sha256(b"dmg bytes").hexdigest()},
@@ -267,8 +274,15 @@ def _candidate_with_beta():
         "release_id": TAG,
         "source_sha": SHA,
         "qualification_run_id": 123,
+        "release_profile": "nightly-rigorous",
+        "rigorous_pre_sign_passed": True,
+        "exact_artifact_blackbox_passed": True,
         "source_qualification": {"passed": True, "tier": "T2", "subject": "source-built named-bundle"},
-        "signed_artifact_verification": {"passed": True, "subject": "exact signed ZIP/DMG bytes"},
+        "signed_artifact_verification": {
+            "passed": True,
+            "subject": "exact signed ZIP/DMG bytes",
+            "authority": "trusted-m1",
+        },
         "artifacts": {
             "Omi.zip": {
                 "url": release["assets"][0]["browser_download_url"],

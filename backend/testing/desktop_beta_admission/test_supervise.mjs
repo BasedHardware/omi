@@ -127,14 +127,14 @@ test("each emulator config has explicit, isolated API and websocket ports", asyn
   }
 });
 
-for (const [label, trigger, expectedCode] of [
-  ["timeout", undefined, 124],
-  ["SIGTERM", { signal: "SIGTERM", readyFile: null }, 143],
+for (const [label, trigger, expectedCode, timeoutMs] of [
+  ["timeout", undefined, 124, "1000"],
+  ["SIGTERM", { signal: "SIGTERM", readyFile: null }, 143, "5000"],
 ]) {
   test(`${label} drains emulator children`, async () => {
     const temp = temporaryDirectory();
     const pidFile = join(temp, "child.pid");
-    const args = [supervisor, "--timeout-ms", "100", "--grace-ms", "100", "--", process.execPath, fixture, pidFile, "wait"];
+    const args = [supervisor, "--timeout-ms", timeoutMs, "--grace-ms", "100", "--", process.execPath, fixture, pidFile, "wait"];
     const child = spawn(process.execPath, args, { stdio: "ignore" });
     try {
       await waitFor(() => existsSync(pidFile), "owned fixture readiness");
