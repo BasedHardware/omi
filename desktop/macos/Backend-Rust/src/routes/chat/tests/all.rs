@@ -1902,6 +1902,7 @@ async fn incremental_translation_preserves_split_utf8_tool_chunks_usage_and_done
             upstream_model: "claude-sonnet-4-6".to_string(),
             firestore: None,
         },
+        RequestDeadline::new(Duration::from_secs(100_000)),
     )
     .collect::<Vec<_>>()
     .await;
@@ -1958,6 +1959,7 @@ async fn incremental_translation_terminates_a_partial_stream_at_eof() {
             upstream_model: "claude-sonnet-4-6".to_string(),
             firestore: None,
         },
+        RequestDeadline::new(Duration::from_secs(100_000)),
     )
     .collect::<Vec<_>>()
     .await;
@@ -2102,6 +2104,7 @@ async fn thinking_deltas_stream_as_reasoning_content() {
             upstream_model: "claude-sonnet-4-6".to_string(),
             firestore: None,
         },
+        RequestDeadline::new(Duration::from_secs(100_000)),
     )
     .collect::<Vec<_>>()
     .await;
@@ -2190,4 +2193,214 @@ fn adaptive_effort_is_suppressed_on_tool_result_continuations() {
     )
     .unwrap();
     assert_eq!(result.thinking, Some(json!({"type": "adaptive"})));
+}
+
+// ── Request deadline budget (#9835) ─────────────────────────────────────────
+// Test-file citation of the caught class (FC-per-hop-timeout): #8640, #8911,
+// #9135 ("stop cutting off long-context Gemini calls at 90s"), #9644 ("restore
+// Gemini platform deadline") — each moved a per-hop timeout; the budget below
+// replaces that class wholesale for the Anthropic chat path.
+
+use crate::request_deadline::RequestDeadline;
+
+fn collect_lines(output: Vec<Result<Bytes, std::io::Error>>) -> Vec<String> {
+    output
+        .into_iter()
+        .map(|chunk| String::from_utf8(chunk.unwrap().to_vec()).unwrap())
+        .collect()
+}
+
+fn deadline_usage_context() -> StreamUsageContext {
+    StreamUsageContext {
+        uid: "test-user".to_string(),
+        upstream_model: "claude-sonnet-4-6".to_string(),
+        firestore: None,
+    }
+}
+
+/// (a) A retry/continuation chain stops at the budget floor rather than
+/// starting an attempt it cannot finish: with 7s left against a 10s floor, a
+/// transient status is passed through after ONE attempt even though the policy
+/// allows five.
+#[tokio::test(start_paused = true)]
+async fn retry_chain_stops_at_budget_floor() {
+    let deadline = RequestDeadline::new(Duration::from_secs(12));
+    let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let attempts_in_closure = attempts.clone();
+
+    let result = retry_with_budget(&deadline, 5, ANTHROPIC_ATTEMPT_FLOOR, |_attempt| {
+        let attempts = attempts_in_closure.clone();
+        async move {
+            attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            // Each attempt spends 5s of the budget before failing transiently.
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            AttemptOutcome::Transient {
+                value: 503u16,
+                status: 503,
+            }
+        }
+    })
+    .await;
+
+    assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
+    // The transient upstream error passes through as-is (no retry available).
+    assert!(matches!(result, Ok(503)));
+}
+
+/// (b) A backoff sleep is truncated at the budget edge instead of overshooting
+/// it: with 100ms of budget and a 250ms backoff, exactly 100ms elapses and the
+/// next attempt is never started.
+#[tokio::test(start_paused = true)]
+async fn retry_backoff_truncates_at_budget_edge() {
+    let deadline = RequestDeadline::new(Duration::from_millis(100));
+    let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let attempts_in_closure = attempts.clone();
+    let started = tokio::time::Instant::now();
+
+    let result: Result<u16, AnthropicSendError> =
+        retry_with_budget(&deadline, 3, Duration::ZERO, |_attempt| {
+            let attempts = attempts_in_closure.clone();
+            async move {
+                attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                AttemptOutcome::TransportError
+            }
+        })
+        .await;
+
+    // First backoff would be 250ms; the budget edge is 100ms away.
+    assert_eq!(started.elapsed(), Duration::from_millis(100));
+    assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert!(matches!(result, Err(AnthropicSendError::DeadlineExpired)));
+}
+
+/// (c) A stream emitting visible deltas survives budget expiry: the budget
+/// governs only up to the first visible event, and a long answer is not an
+/// error (#9135 must never regress).
+#[tokio::test(start_paused = true)]
+async fn visible_stream_survives_budget_expiry() {
+    let head = concat!(
+        "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_long\",\"model\":\"claude-sonnet-4-6\",\"usage\":{}}}\n\n",
+        "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"thinking...\"}}\n\n",
+    );
+    let tail = concat!(
+        "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":3}}\n\n",
+        "data: {\"type\":\"message_stop\"}\n\n",
+    );
+    let upstream = async_stream::stream! {
+        yield Ok::<Bytes, std::io::Error>(Bytes::from_static(head.as_bytes()));
+        // Keep visible progress flowing well past the 5s budget, each gap
+        // inside the 60s idle bound.
+        for _ in 0..4 {
+            tokio::time::sleep(Duration::from_secs(50)).await;
+            yield Ok(Bytes::from_static(b"data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"more\"}}\n\n"));
+        }
+        yield Ok(Bytes::from_static(tail.as_bytes()));
+    };
+
+    let output = translate_anthropic_sse_stream(
+        upstream,
+        "omi-sonnet".to_string(),
+        deadline_usage_context(),
+        RequestDeadline::new(Duration::from_secs(5)),
+    )
+    .collect::<Vec<_>>()
+    .await;
+    let lines = collect_lines(output);
+
+    assert_eq!(lines.last().unwrap(), "data: [DONE]\n\n");
+    assert!(lines
+        .iter()
+        .any(|line| line.contains("\"finish_reason\":\"stop\"")));
+    assert!(!lines.iter().any(|line| line.contains("upstream_timeout")));
+}
+
+/// (d) The live gap this change closes: an upstream that only pings before
+/// `message_start` used to reset the raw-byte idle timer forever while the
+/// client saw nothing. It now hits the request budget and ends with a typed
+/// terminal SSE error.
+#[tokio::test(start_paused = true)]
+async fn ping_only_stream_hits_budget_with_typed_error() {
+    let upstream = async_stream::stream! {
+        loop {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            yield Ok::<Bytes, std::io::Error>(Bytes::from_static(b"data: {\"type\":\"ping\"}\n\n"));
+        }
+    };
+
+    let started = tokio::time::Instant::now();
+    let output = translate_anthropic_sse_stream(
+        upstream,
+        "omi-sonnet".to_string(),
+        deadline_usage_context(),
+        RequestDeadline::new(Duration::from_secs(5)),
+    )
+    .collect::<Vec<_>>()
+    .await;
+    let lines = collect_lines(output);
+
+    // Pings never extended the budget: the turn ended at the 5s edge, not the
+    // 60s idle bound and not never.
+    assert!(started.elapsed() <= Duration::from_secs(6));
+    assert!(lines
+        .iter()
+        .any(|line| line.contains("\"type\":\"upstream_timeout\"") && line.contains("504")));
+    assert_eq!(lines.last().unwrap(), "data: [DONE]\n\n");
+}
+
+/// (e) After the first visible event the budget is done; a stall dies from the
+/// SEMANTIC idle timer, independent of the (still huge) remaining budget, and
+/// raw non-semantic bytes do not reset that timer.
+#[tokio::test(start_paused = true)]
+async fn post_first_event_stall_dies_from_semantic_idle_timer() {
+    let head = concat!(
+        "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_stall\",\"model\":\"claude-sonnet-4-6\",\"usage\":{}}}\n\n",
+        "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"partial\"}}\n\n",
+    );
+    let upstream = async_stream::stream! {
+        yield Ok::<Bytes, std::io::Error>(Bytes::from_static(head.as_bytes()));
+        // Ping-only from here on: raw bytes with no semantic progress.
+        loop {
+            tokio::time::sleep(Duration::from_secs(10)).await;
+            yield Ok(Bytes::from_static(b"data: {\"type\":\"ping\"}\n\n"));
+        }
+    };
+
+    let started = tokio::time::Instant::now();
+    let output = translate_anthropic_sse_stream(
+        upstream,
+        "omi-sonnet".to_string(),
+        deadline_usage_context(),
+        RequestDeadline::new(Duration::from_secs(100_000)),
+    )
+    .collect::<Vec<_>>()
+    .await;
+    let lines = collect_lines(output);
+
+    // Died at the 60s semantic idle bound — long before the budget.
+    assert!(started.elapsed() >= Duration::from_secs(60));
+    assert!(started.elapsed() <= Duration::from_secs(75));
+    assert!(lines
+        .iter()
+        .any(|line| line.contains("\"type\":\"server_error\"")));
+    assert_eq!(lines.last().unwrap(), "data: [DONE]\n\n");
+}
+
+/// (f) Detached work spawned during a request completes under its own policy
+/// after the request deadline expires — the spawn seam never inherits the
+/// budget.
+#[tokio::test(start_paused = true)]
+async fn detached_usage_write_completes_after_deadline_expiry() {
+    let deadline = RequestDeadline::new(Duration::from_secs(1));
+    let completed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let completed_in_task = completed.clone();
+
+    spawn_detached_usage_write(async move {
+        // The write's own policy takes far longer than the request budget.
+        tokio::time::sleep(Duration::from_secs(30)).await;
+        completed_in_task.store(true, std::sync::atomic::Ordering::SeqCst);
+    });
+
+    tokio::time::sleep(Duration::from_secs(31)).await;
+    assert!(deadline.expired());
+    assert!(completed.load(std::sync::atomic::Ordering::SeqCst));
 }
