@@ -122,6 +122,22 @@ describe("agent-cloud WS contract (e2e)", () => {
     expect(progress.length).toBeGreaterThanOrEqual(1);
   }, 20000);
 
+  it("emits exactly one started/completed pair for a main tool seen on both channels", async () => {
+    // The SDK surfaces the same main-level tool_use via stream_event AND the
+    // assistant message; the server previously emitted a tool_activity from
+    // both, double-counting starts and completions.
+    const ws = await connect();
+    const done = collectUntilResult(ws);
+    ws.send(JSON.stringify({ type: "query", prompt: "MAINTOOL please" }));
+    const messages = await done;
+    ws.close();
+    const acts = messages.filter(
+      (m) => m.type === "tool_activity" && m.name === "mcp__omi-tools__execute_sql",
+    );
+    expect(acts.filter((a) => a.status === "started").length).toBe(1);
+    expect(acts.filter((a) => a.status === "completed").length).toBe(1);
+  }, 20000);
+
   it("keeps the session (and its context) alive across reconnects", async () => {
     // First connection: run one turn, then disconnect like a backgrounded app.
     let ws = await connect();

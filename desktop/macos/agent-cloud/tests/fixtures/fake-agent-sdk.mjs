@@ -49,6 +49,25 @@ export function query({ prompt }) {
       yield resultMsg(`turn:${turnCount}`);
       return;
     }
+    if (text.includes("MAINTOOL")) {
+      // A single main-level tool_use surfaced by BOTH the stream_event and the
+      // assistant message, as the real SDK does. The server must emit exactly
+      // one started/completed pair, not one per source.
+      yield {
+        type: "stream_event",
+        event: {
+          type: "content_block_start",
+          content_block: { type: "tool_use", name: "mcp__omi-tools__execute_sql" },
+        },
+      };
+      yield {
+        type: "assistant",
+        message: { content: [{ type: "tool_use", name: "mcp__omi-tools__execute_sql", input: {} }] },
+      };
+      yield streamText("done"); // a text_delta flushes pendingTools → completed
+      yield resultMsg("done");
+      return;
+    }
     yield { type: "stream_event", event: { type: "content_block_start", content_block: { type: "text" } } };
     yield streamText("Part one. ");
     yield {

@@ -8,7 +8,7 @@ const { query, tool, createSdkMcpServer } = await import(
 import { ALLOWED_TOOLS, buildAgentDefinitions } from "./query-config.mjs";
 import { USER_MESSAGES, classifyError, isExpectedAbort, logEvent, markOwnedAbort, withRetry } from "./errors.mjs";
 import { createSubagentRouter } from "./stream-routing.mjs";
-import { buildCondensedSeed, planCondensation } from "./conversation-condenser.mjs";
+import { buildCondensedSeed } from "./conversation-condenser.mjs";
 import {
   activityCounts,
   runSqlBatch,
@@ -862,6 +862,10 @@ function startPersistentSession(initialSink, log, seedTurns = []) {
   // now the caller passes the prior turns and we seed the first prompt with a
   // condensed view (recent turns verbatim) so context survives the restart.
   const turns = [];
+  // Cap in-session history. It is only read as a condensation seed if the
+  // session dies, where recent turns dominate; without a cap a long-lived
+  // single-user VM session accumulates every full answer unboundedly.
+  const MAX_SESSION_TURNS = 50;
   let currentUser = null; // raw user prompt of the in-flight turn
   let seedPending = seedTurns.length ? seedTurns : null;
 
@@ -1030,10 +1034,12 @@ function startPersistentSession(initialSink, log, seedTurns = []) {
             if (Array.isArray(content)) {
               for (const block of content) {
                 if (block.type === "tool_use") {
+                  // Diagnostics only. The started/completed tool_activity events
+                  // are emitted from the stream_event handler (includePartialMessages
+                  // is on); emitting them here too sent duplicate events and
+                  // double-counted pendingTools (→ duplicate completed events).
                   const inputStr = JSON.stringify(block.input);
                   log(`[TOOL_CALL] ${block.name} input=${inputStr.length > 500 ? inputStr.slice(0, 500) + '...' : inputStr}`);
-                  send({ type: "tool_activity", name: block.name, status: "started" });
-                  pendingTools.push(block.name);
                 }
                 // Text is already streamed via stream_event handler — don't send again here
               }
@@ -1095,6 +1101,7 @@ function startPersistentSession(initialSink, log, seedTurns = []) {
             if (currentUser) {
               turns.push({ user: currentUser, assistant: fullText });
               currentUser = null;
+              if (turns.length > MAX_SESSION_TURNS) turns.splice(0, turns.length - MAX_SESSION_TURNS);
             }
             // Reset per-turn state
             fullText = "";
@@ -1690,8 +1697,11 @@ function startServer() {
             // Non-destructive restart: carry the prior turns forward (condensed)
             // instead of losing all context when the session died.
             const prior = sharedSession.getTurns?.() || [];
-            const plan = planCondensation(prior, { maxChars: 40000, keepRecent: 3 });
-            recoverySeed = plan.condense ? [...plan.summarize, ...plan.keep] : prior;
+            // beginTurn condenses the seed on the restarted session's first turn
+            // (summarizes all but the last few, keeps those full), so the prior
+            // turns pass straight through. The old planCondensation call was a
+            // no-op here: [...summarize, ...keep] just reconstructed prior.
+            recoverySeed = prior;
             logEvent("warn", "session_recreated_after_death", { priorTurns: prior.length });
             sharedSession = null;
           }
