@@ -56,7 +56,7 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
               height: 36,
               alignment: Alignment.center,
               decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-              child: FaIcon(FontAwesomeIcons.chevronLeft, size: 16, color: Colors.white70),
+              child: const FaIcon(FontAwesomeIcons.chevronLeft, size: 16, color: Colors.white70),
             ),
           ),
         ),
@@ -74,7 +74,7 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
               decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
               child: IconButton(
                 padding: EdgeInsets.zero,
-                icon: FaIcon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
+                icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
                 onPressed: () {
                   Navigator.of(context).push(MaterialPageRoute(builder: (context) => const DeviceSettings()));
                 },
