@@ -164,6 +164,16 @@ esac
         self.assertNotIn("backend-async-blockers", selected)
         self.assertNotIn("backend-route-policy-baseline", selected)
 
+    def test_root_agents_md_selects_agent_doc_checks(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        # `**/AGENTS.md` does not match the root file under fnmatch/PurePath.match,
+        # so the root guide needs an explicit trigger or a docs-only root edit
+        # skips both the size ratchet and the dead-pointer check.
+        for lane in ("local", "ci"):
+            selected = {check.id for check in resolve_checks(manifest, ["AGENTS.md"], lane)}
+            self.assertIn("agents-md-lean", selected)
+            self.assertIn("agent-doc-references", selected)
+
     def test_backend_route_change_selects_route_policy_baseline_in_both_lanes(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         changed = ["backend/routers/chat_sessions.py"]
