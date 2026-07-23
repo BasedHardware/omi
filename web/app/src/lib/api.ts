@@ -1849,7 +1849,6 @@ const INTEGRATION_DEFINITIONS: Array<{
     name: 'Gmail',
     description: 'Email integrations',
     logo: '/integrations/gmail-logo.jpeg',
-    coming_soon: true,
   },
 ];
 
