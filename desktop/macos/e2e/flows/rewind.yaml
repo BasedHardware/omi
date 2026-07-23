@@ -5,6 +5,7 @@ description: Rewind (Screen Capture) flow — navigate to Rewind page, verify pe
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindOCRService.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage+CaptureHealth.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindCaptureState.swift
