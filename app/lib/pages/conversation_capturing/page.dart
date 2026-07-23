@@ -345,7 +345,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              FaIcon(FontAwesomeIcons.stop, color: Colors.black, size: 16.0),
+                              const FaIcon(FontAwesomeIcons.stop, color: Colors.black, size: 16.0),
                               const SizedBox(width: 10),
                               Text(
                                 context.l10n.processNow,
@@ -441,14 +441,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           // Camera icon avatar
-          Column(
+          const Column(
             children: [
-              const CircleAvatar(
+              CircleAvatar(
                 radius: 16,
                 backgroundColor: Color(0xFF2A5D3E),
                 child: Icon(Icons.camera_alt, size: 16, color: Colors.white70),
               ),
-              const SizedBox(height: 2),
+              SizedBox(height: 2),
             ],
           ),
           const SizedBox(width: 8),

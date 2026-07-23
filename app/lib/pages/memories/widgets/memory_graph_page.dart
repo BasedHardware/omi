@@ -95,7 +95,7 @@ class ForceDirectedSimulation3D {
       node.force.setZero();
     }
 
-    final maxPairs = 5000;
+    const maxPairs = 5000;
     final totalPairs = (nodeCount * (nodeCount - 1)) ~/ 2;
     final skipFactor = totalPairs > maxPairs ? totalPairs ~/ maxPairs : 1;
     int pairIndex = 0;
@@ -594,7 +594,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
               elevation: 0,
               leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.of(context).pop()),
               actions: widget.showShareButton
-                  ? [IconButton(icon: FaIcon(FontAwesomeIcons.share, size: 20), onPressed: _shareGraph)]
+                  ? [IconButton(icon: const FaIcon(FontAwesomeIcons.share, size: 20), onPressed: _shareGraph)]
                   : null,
             )
           : null,

@@ -83,7 +83,7 @@ class _AddAppPageState extends State<AddAppPage> {
                               style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600, fontSize: 12),
                             ),
                             const SizedBox(width: 4),
-                            FaIcon(FontAwesomeIcons.arrowUpRightFromSquare, color: Colors.black, size: 10),
+                            const FaIcon(FontAwesomeIcons.arrowUpRightFromSquare, color: Colors.black, size: 10),
                           ],
                         ),
                       ),
@@ -188,7 +188,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                                         color: Colors.white,
                                                       ),
                                                     )
-                                                  : FaIcon(FontAwesomeIcons.image, size: 16, color: Colors.white),
+                                                  : const FaIcon(FontAwesomeIcons.image, size: 16, color: Colors.white),
                                             ),
                                           ),
                                         ),
@@ -212,7 +212,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                                   height: 180,
                                                   margin: const EdgeInsets.only(right: 8),
                                                   decoration: BoxDecoration(
-                                                    color: Color(0xFF35343B),
+                                                    color: const Color(0xFF35343B),
                                                     borderRadius: BorderRadius.circular(8),
                                                   ),
                                                   child: provider.isUploadingThumbnail
@@ -226,7 +226,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                                             ),
                                                           ),
                                                         )
-                                                      : Center(
+                                                      : const Center(
                                                           child: FaIcon(
                                                             FontAwesomeIcons.image,
                                                             size: 28,
@@ -282,7 +282,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                                         color: Colors.grey[900],
                                                         borderRadius: BorderRadius.circular(8),
                                                       ),
-                                                      child: FaIcon(FontAwesomeIcons.triangleExclamation),
+                                                      child: const FaIcon(FontAwesomeIcons.triangleExclamation),
                                                     ),
                                                   ),
                                                 ),
@@ -293,11 +293,11 @@ class _AddAppPageState extends State<AddAppPage> {
                                                     onTap: () => provider.removeThumbnail(index),
                                                     child: Container(
                                                       padding: const EdgeInsets.all(4),
-                                                      decoration: BoxDecoration(
+                                                      decoration: const BoxDecoration(
                                                         color: Colors.white,
                                                         shape: BoxShape.circle,
                                                       ),
-                                                      child: FaIcon(
+                                                      child: const FaIcon(
                                                         FontAwesomeIcons.xmark,
                                                         size: 10,
                                                         color: Colors.black,
@@ -753,9 +753,9 @@ class _AddAppPageState extends State<AddAppPage> {
                                                 context: context,
                                                 builder: (ctx) => Container(
                                                   padding: const EdgeInsets.all(20),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(0xFF1F1F25),
-                                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                                                  decoration: const BoxDecoration(
+                                                    color: Color(0xFF1F1F25),
+                                                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                                                   ),
                                                   child: Material(
                                                     color: Colors.transparent,
