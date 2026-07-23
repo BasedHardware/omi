@@ -44,6 +44,21 @@ def _patch_db(monkeypatch, fetched):
     monkeypatch.setattr(mem_mod, 'delete_memory_vectors_batch', vectors_mock)
     return get_mock, delete_mock, vectors_mock
 
+def _force_canonical(monkeypatch, *, existing_ids):
+    """Force the canonical cohort and stub its read-only preflight.
+
+    ``existing_ids`` is the set of ids the preflight (read_canonical_memory_item) treats
+    as present; any other id reads as None, exactly like a missing / non-active /
+    cross-user canonical memory.
+    """
+    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: True)
+    existing = set(existing_ids)
+    monkeypatch.setattr(
+        mem_mod,
+        'read_canonical_memory_item',
+        lambda uid, memory_id, db_client=None: object() if memory_id in existing else None,
+    )
+
 
 class TestBatchDeleteAuthorizationParity:
     def test_locked_memory_is_rejected_with_402_and_nothing_deleted(self, monkeypatch):
@@ -129,9 +144,9 @@ class TestBatchDeleteHappyPath:
 
 class TestBatchDeleteCanonicalCohort:
     def test_canonical_cohort_mirrors_single_delete_canonical_path(self, monkeypatch):
-        # Canonical cohort uses MemoryService.delete per id (404 on ValueError), and does not
-        # take the legacy get_memories_by_ids locked-check path.
-        monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: True)
+        # Canonical cohort preflights every id, then deletes via MemoryService.delete per
+        # id (404 on ValueError), and never takes the legacy get_memories_by_ids path.
+        _force_canonical(monkeypatch, existing_ids={'a', 'b'})
         svc_mock = MagicMock()
         monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kw: svc_mock)
         get_mock = MagicMock()
@@ -146,14 +161,31 @@ class TestBatchDeleteCanonicalCohort:
         get_mock.assert_not_called()
         delete_mock.assert_not_called()
 
-    def test_canonical_cohort_404_when_memory_not_found(self, monkeypatch):
-        monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: True)
+    def test_canonical_cohort_404_when_memory_not_found_and_nothing_deleted(self, monkeypatch):
+        # The preflight rejects a missing id before any MemoryService.delete call, so
+        # nothing is mutated — the canonical cohort's all-or-nothing guarantee.
+        _force_canonical(monkeypatch, existing_ids=set())  # 'a' reads as missing
         svc_mock = MagicMock()
-        svc_mock.delete.side_effect = ValueError('not found')
         monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kw: svc_mock)
         with pytest.raises(HTTPException) as ei:
             mem_mod.delete_memories_batch(data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['a']), uid='u1')
         assert ei.value.status_code == 404
+        svc_mock.delete.assert_not_called()
+
+    def test_canonical_cohort_does_not_delete_earlier_valid_id_when_later_id_missing(self, monkeypatch):
+        # Regression for the documented all-or-nothing contract: a valid id preceding a
+        # missing id must NOT be tombstoned. The earlier per-id delete loop mutated the
+        # valid id before the missing one raised 404, deleting part of a batch the API
+        # promises to reject wholesale.
+        _force_canonical(monkeypatch, existing_ids={'valid'})  # 'missing' reads as missing
+        svc_mock = MagicMock()
+        monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kw: svc_mock)
+        with pytest.raises(HTTPException) as ei:
+            mem_mod.delete_memories_batch(
+                data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['valid', 'missing']), uid='u1'
+            )
+        assert ei.value.status_code == 404
+        svc_mock.delete.assert_not_called()
 
 
 class TestBatchDeleteRequestModel:
