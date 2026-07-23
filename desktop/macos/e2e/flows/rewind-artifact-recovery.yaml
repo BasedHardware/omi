@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindAbandonedVideoChunkRecovery.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindModels.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindStorage.swift

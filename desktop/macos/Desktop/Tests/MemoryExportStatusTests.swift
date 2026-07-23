@@ -41,6 +41,18 @@ final class MemoryExportStatusTests: XCTestCase {
     XCTAssertFalse(hermesStatus.hasConnection)
   }
 
+  /// The ChatGPT directory listing is a single global plugin that always
+  /// authorizes under `omi-chatgpt-prod`, even on a build pointed at the dev
+  /// backend. Grant verification must accept that prod client ID regardless of
+  /// `chatgptOAuthClientID`'s env switch, or ChatGPT never flips to connected on
+  /// Beta (the shipped symptom: Claude verified, ChatGPT stuck).
+  func testChatGPTGrantVerificationAcceptsProdDirectoryClientOnAnyBackend() {
+    XCTAssertTrue(MemoryExportDestination.chatgpt.cloudOAuthGrantClientIDs.contains("omi-chatgpt-prod"))
+    XCTAssertTrue(MemoryExportDestination.chatgpt.cloudOAuthGrantClientIDs.contains("omi-chatgpt-dev"))
+    XCTAssertEqual(MemoryExportDestination.claude.cloudOAuthGrantClientIDs, ["omi-claude-prod"])
+    XCTAssertTrue(MemoryExportDestination.notion.cloudOAuthGrantClientIDs.isEmpty)
+  }
+
   func testMarkConnectedDoesNotMaskMissingLocalMCPConfig() async {
     storeOwnedMCPKey()
 

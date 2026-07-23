@@ -105,6 +105,158 @@ struct RecordingBarTranscriptText: View {
   }
 }
 
+/// Live transcript card shown at the top of Conversations while recording —
+/// updates in real time as speech is transcribed. Observes the monitor directly
+/// so the surrounding page doesn't re-render on every segment.
+///
+/// Clicking anywhere on the card invokes `onExpand`, letting the parent present
+/// a full-screen view of the live transcript.
+struct ConversationsLiveTranscript: View {
+  @ObservedObject private var monitor = LiveTranscriptMonitor.shared
+
+  /// Invoked when the user clicks the card. When non-nil, the card shows an
+  /// expand affordance and the whole surface becomes tappable.
+  var onExpand: (() -> Void)? = nil
+
+  @State private var isHovered = false
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      HStack(spacing: OmiSpacing.xs) {
+        Circle().fill(Color.red).frame(width: 7, height: 7)
+        Text("Live").scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundColor(OmiColors.textSecondary)
+        Spacer()
+        if onExpand != nil {
+          Image(systemName: "arrow.up.left.and.arrow.down.right")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(isHovered ? OmiColors.textSecondary : OmiColors.textTertiary)
+        }
+      }
+      if monitor.isEmpty {
+        Text("Listening…").scaledFont(size: OmiType.body).foregroundColor(OmiColors.textTertiary)
+          .padding(.vertical, OmiSpacing.sm)
+      } else {
+        LiveTranscriptView(segments: monitor.segments)
+          .frame(maxHeight: 220)
+          // Let clicks fall through to the card's expand tap rather than being
+          // captured by the inner scroll / text selection.
+          .allowsHitTesting(false)
+      }
+    }
+    .padding(OmiSpacing.lg)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.cardRadius, style: .continuous)
+        .fill(OmiColors.backgroundSecondary)
+        .overlay(
+          RoundedRectangle(cornerRadius: OmiChrome.cardRadius, style: .continuous)
+            .stroke(
+              OmiColors.border.opacity(onExpand != nil && isHovered ? 0.55 : 0.3), lineWidth: 1))
+    )
+    .contentShape(RoundedRectangle(cornerRadius: OmiChrome.cardRadius, style: .continuous))
+    .modifier(LiveTranscriptExpandTap(onExpand: onExpand, isHovered: $isHovered))
+  }
+}
+
+/// Adds the click-to-expand behavior only when an `onExpand` handler is present,
+/// so the card stays inert (no pointer cursor, no tap) when expansion is
+/// unavailable.
+private struct LiveTranscriptExpandTap: ViewModifier {
+  let onExpand: (() -> Void)?
+  @Binding var isHovered: Bool
+
+  /// Tracks whether we currently hold a pushed cursor so push/pop stay balanced
+  /// and the pointing-hand cursor is always popped when the card stops being
+  /// hovered — SwiftUI doesn't deliver an `onHover(false)` when the view leaves
+  /// the hierarchy. Two exit paths are handled explicitly: `onDisappear`
+  /// (recording stops and the `if appState.isTranscribing` card is removed) and
+  /// the tap handler (expanding draws the full-screen overlay over the card,
+  /// which stays mounted, so `onDisappear` never fires there).
+  @State private var didPushCursor = false
+
+  private func setHovered(_ hovering: Bool) {
+    isHovered = hovering
+    if hovering, !didPushCursor {
+      NSCursor.pointingHand.push()
+      didPushCursor = true
+    } else if !hovering, didPushCursor {
+      NSCursor.pop()
+      didPushCursor = false
+    }
+  }
+
+  func body(content: Content) -> some View {
+    if let onExpand {
+      content
+        .onTapGesture {
+          // Pop the pointing-hand before the overlay covers the still-mounted
+          // card, otherwise it lingers over the full-screen transcript.
+          setHovered(false)
+          onExpand()
+        }
+        .onHover { setHovered($0) }
+        .onDisappear { setHovered(false) }
+        .help("Expand live transcript")
+    } else {
+      content
+    }
+  }
+}
+
+/// Full-screen live transcript, presented when the user clicks the compact live
+/// transcript card. Observes the monitor directly so it keeps updating live.
+struct ConversationsLiveTranscriptFullScreen: View {
+  @ObservedObject private var monitor = LiveTranscriptMonitor.shared
+  var onCollapse: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      HStack(spacing: OmiSpacing.sm) {
+        Circle().fill(Color.red).frame(width: 8, height: 8)
+        Text("Live Transcript")
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Spacer()
+        Button(action: onCollapse) {
+          Image(systemName: "arrow.down.right.and.arrow.up.left")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(OmiColors.textSecondary)
+            .padding(OmiSpacing.sm)
+            .omiControlSurface(
+              fill: OmiColors.backgroundSecondary, radius: 14, stroke: OmiColors.border.opacity(0.2)
+            )
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(.escape, modifiers: [])
+        .help("Collapse")
+      }
+      .padding(.horizontal, OmiSpacing.xxl)
+      .padding(.top, OmiSpacing.lg)
+      .padding(.bottom, OmiSpacing.md)
+
+      Divider().overlay(OmiColors.border.opacity(0.3))
+
+      if monitor.isEmpty {
+        VStack(spacing: OmiSpacing.md) {
+          Image(systemName: "waveform")
+            .scaledFont(size: 48)
+            .foregroundColor(OmiColors.textTertiary)
+            .opacity(0.5)
+          Text("Listening…")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else {
+        LiveTranscriptView(segments: monitor.segments)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(OmiColors.backgroundPrimary)
+  }
+}
+
 /// Live transcript view showing speaker segments during recording
 struct LiveTranscriptView: View {
   let segments: [SpeakerSegment]

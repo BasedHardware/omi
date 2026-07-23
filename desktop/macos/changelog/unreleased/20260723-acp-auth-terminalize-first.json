@@ -1,0 +1,3 @@
+{
+  "change": "Fixed chat freezes when a Claude-backed session needs sign-in: the app now stops the turn immediately with a clear message instead of spinning for a minute or showing the Pro upgrade sheet"
+}

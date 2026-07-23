@@ -77,12 +77,13 @@ final class RewindActiveChunkRetentionCleanupTests: XCTestCase {
 
   override func setUp() async throws {
     try await super.setUp()
+    await RewindStorage.shared.reset()
     fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "rewind-active-chunk-cleanup")
     try await RewindStorage.shared.initialize()
   }
 
   override func tearDown() async throws {
-    await VideoChunkEncoder.shared.cancel()
+    await RewindStorage.shared.reset()
     await RewindStorageTestIsolation.tearDown(userDir: fixture?.userDir)
     fixture = nil
     try await super.tearDown()

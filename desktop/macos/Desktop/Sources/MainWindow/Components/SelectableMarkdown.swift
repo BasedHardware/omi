@@ -1,3 +1,4 @@
+import AppKit
 @preconcurrency import Foundation
 @preconcurrency import MarkdownUI
 import OmiTheme
@@ -17,6 +18,25 @@ struct SelectableMarkdown: View {
   let sender: ChatSender
   @Environment(\.fontScale) private var fontScale
 
+  var body: some View {
+    SelectableMarkdownContent(text: text, sender: sender, fontScale: fontScale)
+      .equatable()
+  }
+
+  static func containsGFMTable(_ content: String) -> Bool {
+    SelectableMarkdownContent.containsGFMTable(content)
+  }
+}
+
+/// Keeps parent-only UI feedback (copy checkmarks, hover chrome, ratings) from
+/// rebuilding SwiftUI's AppKit-backed SelectionOverlay for unchanged message
+/// content. SelectionOverlay can otherwise enter a setFont → intrinsic-size →
+/// AttributeGraph update loop and pin the main thread.
+struct SelectableMarkdownContent: View, Equatable {
+  let text: String
+  let sender: ChatSender
+  let fontScale: CGFloat
+
   // Cached parsed segments — pre-computed on init, recomputed only when text changes.
   // Avoids running splitSegments() on every SwiftUI layout pass.
   @State private var cachedSegments: [Segment]
@@ -27,10 +47,15 @@ struct SelectableMarkdown: View {
   // Font scale at time of caching — used to invalidate when scale changes.
   @State private var cachedFontScale: CGFloat = 0
 
-  init(text: String, sender: ChatSender) {
+  init(text: String, sender: ChatSender, fontScale: CGFloat) {
     self.text = text
     self.sender = sender
+    self.fontScale = fontScale
     self._cachedSegments = State(initialValue: Self.splitSegments(text))
+  }
+
+  nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.text == rhs.text && lhs.sender == rhs.sender && lhs.fontScale == rhs.fontScale
   }
 
   var body: some View {
@@ -44,8 +69,8 @@ struct SelectableMarkdown: View {
             switch segment.kind {
             case .text:
               textSegmentView(segment.content)
-            case .codeBlock:
-              codeBlockView(segment.content)
+            case .codeBlock(let language):
+              codeBlockView(segment.content, language: language)
             }
           }
         }
@@ -126,18 +151,30 @@ struct SelectableMarkdown: View {
   // MARK: - Code Block (boxed, monospace)
 
   @ViewBuilder
-  private func codeBlockView(_ code: String) -> some View {
+  private func codeBlockView(_ code: String, language: String?) -> some View {
     let codeFontSize = round(13 * fontScale)
     let bgColor =
       sender == .user
       ? Color.white.opacity(0.15)
       : OmiColors.backgroundTertiary
 
-    ScrollView(.horizontal, showsIndicators: false) {
-      Text(code)
-        .font(.system(size: codeFontSize, design: .monospaced))
-        .foregroundColor(sender == .user ? .white : OmiColors.textPrimary)
-        .if_available_writingToolsNone()
+    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+      HStack(spacing: OmiSpacing.xs) {
+        if let language {
+          Text(language)
+            .scaledFont(size: OmiType.micro, weight: .medium)
+            .foregroundColor(sender == .user ? .white.opacity(0.7) : OmiColors.textTertiary)
+        }
+        Spacer(minLength: 0)
+        CodeBlockCopyButton(code: code)
+      }
+
+      ScrollView(.horizontal, showsIndicators: false) {
+        Text(code)
+          .font(.system(size: codeFontSize, design: .monospaced))
+          .foregroundColor(sender == .user ? .white : OmiColors.textPrimary)
+          .if_available_writingToolsNone()
+      }
     }
     .padding(OmiSpacing.md)
     .background(bgColor)
@@ -347,5 +384,30 @@ struct SelectableMarkdown: View {
     }
 
     return segments
+  }
+}
+
+/// Owns transient copy feedback below the selectable-message render boundary.
+/// Updating this leaf must not invalidate the surrounding SelectionOverlay.
+private struct CodeBlockCopyButton: View {
+  let code: String
+  @State private var copied = false
+
+  var body: some View {
+    Button {
+      NSPasteboard.general.clearContents()
+      NSPasteboard.general.setString(code, forType: .string)
+      copied = true
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+        copied = false
+      }
+    } label: {
+      Image(systemName: copied ? "checkmark" : "doc.on.doc")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(copied ? .green : OmiColors.textTertiary)
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("Copy code")
+    .help("Copy code")
   }
 }

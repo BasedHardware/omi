@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the home chat bar so it grows to fit multi-line messages instead of scrolling the text out of view"
+}

@@ -4249,6 +4249,24 @@
         "title": "BatchDeleteActionItemsResponse",
         "type": "object"
       },
+      "BatchDeleteMemoriesRequest": {
+        "properties": {
+          "memory_ids": {
+            "description": "Memory IDs to delete in a single batch request",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Memory Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "memory_ids"
+        ],
+        "title": "BatchDeleteMemoriesRequest",
+        "type": "object"
+      },
       "BatchMemoriesRequest": {
         "properties": {
           "memories": {
@@ -54689,6 +54707,92 @@
       }
     },
     "/v3/memories/batch": {
+      "delete": {
+        "description": "Delete up to MEMORIES_BATCH_MAX memories in one request.\n\nReplaces the N concurrent DELETE /v3/memories/{id} calls the web UI used to fan out\non bulk selection, which blew through the per-UID rate limiter and 429'd.\n\nAuthorization parity with DELETE /v3/memories/{memory_id}: every requested id is\nvalidated with the SAME business rules as the single-delete path. Validation is\nall-or-nothing — if any id fails, nothing is deleted, so the batch route can never\nbypass the single-delete guardrails (missing/not-owned -> 404, locked paid-plan\nmemory -> 402).",
+        "operationId": "delete_memories_batch_v3_memories_batch_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchDeleteMemoriesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Delete Memories Batch",
+        "tags": [
+          "memories"
+        ]
+      },
       "post": {
         "operationId": "create_memories_batch_v3_memories_batch_post",
         "parameters": [

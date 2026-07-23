@@ -20,6 +20,10 @@ covers:
   - desktop/macos/Desktop/Sources/Theme/OmiType.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/FocusPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/InsightPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBComponents.swift
+  - desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBWallpaper.swift
+  - desktop/macos/Desktop/Sources/Theme/SecondBrainTokens.swift
 preconditions:
   - automation_bridge_ready
 

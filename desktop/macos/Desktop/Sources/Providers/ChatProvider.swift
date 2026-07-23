@@ -860,13 +860,20 @@ struct ChatMessage: Identifiable {
 
 extension ChatMessage {
   var copyableText: String {
-    let structuredText =
+    // A completed assistant turn can contain internal reasoning and transient
+    // tool/lifecycle blocks alongside its user-visible answer. The message
+    // copy affordance promises the answer, so retain only final text blocks.
+    let finalOutput =
       contentBlocks
-      .compactMap(\.copyableText)
+      .compactMap { block -> String? in
+        guard case .text(_, let text) = block else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+      }
       .joined(separator: "\n")
       .trimmingCharacters(in: .whitespacesAndNewlines)
-    if !structuredText.isEmpty {
-      return structuredText
+    if !finalOutput.isEmpty {
+      return finalOutput
     }
     return text.trimmingCharacters(in: .whitespacesAndNewlines)
   }
@@ -876,33 +883,6 @@ extension ChatMessage {
       return resources
     }
     return attachments.map(ChatResource.attachment)
-  }
-}
-
-extension ChatContentBlock {
-  var copyableText: String? {
-    switch self {
-    case .text(_, let text):
-      let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-      return trimmed.isEmpty ? nil : trimmed
-    case .thinking(_, let text):
-      let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-      return trimmed.isEmpty ? nil : "Thinking:\n\(trimmed)"
-    case .discoveryCard(_, let title, _, let fullText):
-      let trimmed = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
-      return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
-    case .agentSpawn(_, _, _, _, let title, let objective, _):
-      let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
-      return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
-    case .agentCompletion(_, _, _, _, let title, let promptSnippet, let output, _):
-      let body = [promptSnippet, output]
-        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        .filter { !$0.isEmpty }
-        .joined(separator: "\n")
-      return body.isEmpty ? title : "\(title)\n\(body)"
-    case .toolCall:
-      return nil
-    }
   }
 }
 
@@ -1082,6 +1062,13 @@ class ChatProvider: ObservableObject {
   /// inferring solely from messages.count changes (which can also come from
   /// polling/sync).
   @Published var localSendToken: LocalSendToken = LocalSendToken(generation: 0)
+
+  /// The personalized post-onboarding opener shown in the empty Chat tab the
+  /// moment onboarding finishes: a greeting addressed to the user by name plus
+  /// tappable starter questions. Non-nil only during that first landing;
+  /// cleared once the user sends their first message. See
+  /// `presentOnboardingOpener()`.
+  @Published var onboardingOpener: OnboardingOpenerContent?
 
   // MARK: - ChatErrorState (structured replacement for the inline error banner)
   //
@@ -1992,7 +1979,18 @@ class ChatProvider: ObservableObject {
 
     claudeAuthLaunchRequested = true
     log("ChatProvider: Opening validated Claude OAuth URL in browser")
+    AnalyticsManager.shared.claudeOAuthBrowserOpened(
+      harness: activeBridgeHarness,
+      bridgeMode: bridgeMode
+    )
     NSWorkspace.shared.open(url)
+  }
+
+  private static func providerAuthRequiredUserMessage(isUserClaudeMode: Bool) -> String {
+    if isUserClaudeMode {
+      return "Claude sign-in is required. Reconnect Claude, then try again."
+    }
+    return "This chat uses Claude and needs sign-in. Start a new chat with Omi AI or reconnect Claude in Settings."
   }
 
   private func handleClaudeAuthRequired(methods: [[String: Any]], authUrl: String?) {
@@ -2005,14 +2003,26 @@ class ChatProvider: ObservableObject {
     }
     claudeAuthMethods = methods
     claudeAuthUrl = authUrl
-    isClaudeAuthRequired = true
-    startClaudeAuth()
+    // Provider auth is distinct from the Pro upgrade sheet.
+    isClaudeAuthRequired = false
+
+    let sessionAdapterId = activeChatTelemetryAttempt?.attempt.resolvedSessionAdapterId
+    AnalyticsManager.shared.providerAuthRequired(
+      sessionAdapterId: sessionAdapterId,
+      harness: activeBridgeHarness,
+      bridgeMode: bridgeMode,
+      oauthUrlValid: Self.validatedClaudeOAuthURL(authUrl) != nil
+    )
   }
 
   private func handleClaudeAuthSuccess() {
     isClaudeAuthRequired = false
     claudeAuthLaunchRequested = false
     claudeAuthUrl = nil
+    AnalyticsManager.shared.claudeOAuthCallbackReceived(
+      harness: activeBridgeHarness,
+      bridgeMode: bridgeMode
+    )
     checkClaudeConnectionStatus()
   }
 
@@ -3313,52 +3323,6 @@ class ChatProvider: ObservableObject {
     return merged
   }
 
-  func projectJournalTurn(_ turn: KernelJournalTurn) {
-    let expected = mainChatSurfaceReference()
-    let voiceCompanion = expected.realtimeVoiceCompanion()
-    let isCanonicalChatSurface =
-      turn.surfaceKind == expected.surfaceKind
-      || turn.surfaceKind == voiceCompanion.surfaceKind
-    guard isCanonicalChatSurface,
-      turn.externalRefKind == expected.externalRefKind,
-      turn.externalRefId == expected.externalRefId
-    else { return }
-    let projected = turn.chatMessage()
-    for block in projected.contentBlocks {
-      guard case .agentSpawn(_, let projectedPillID, _, _, _, _, _) = block,
-        let pillID = projectedPillID
-      else { continue }
-      AgentPillsManager.shared.bindProducingJournalSurface(
-        pillID: pillID,
-        surface: expected
-      )
-    }
-    let isEmptyTerminalPlaceholder =
-      turn.status == .failed
-      && projected.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      && projected.contentBlocks.isEmpty
-      && projected.resources.isEmpty
-    if isEmptyTerminalPlaceholder {
-      messages.removeAll { $0.id == projected.id }
-      return
-    }
-    if let index = messages.firstIndex(where: { $0.id == projected.id }) {
-      messages[index] = Self.carryingLocalOnlyFields(projected, from: messages[index])
-    } else if let continuityKey = projected.clientTurnId,
-      let index = messages.firstIndex(where: {
-        $0.clientTurnId == continuityKey && $0.sender == projected.sender
-      })
-    {
-      messages[index] = Self.carryingLocalOnlyFields(projected, from: messages[index])
-    } else {
-      messages.append(projected)
-    }
-    messages.sort {
-      if $0.createdAt == $1.createdAt { return $0.id < $1.id }
-      return $0.createdAt < $1.createdAt
-    }
-  }
-
   func resetJournalProjection(surface: AgentSurfaceReference) {
     guard surface == mainChatSurfaceReference() else { return }
     messages = []
@@ -3805,6 +3769,8 @@ class ChatProvider: ObservableObject {
     let accountingPolicy = ChatRunAccountingPolicy(
       pinnedAdapterID: pinnedSession.profile.adapterId
     )
+    telemetryAttempt.bindSessionAdapter(pinnedSession.profile.adapterId)
+    telemetryAttempt.bindBridgeModePreference(bridgeMode)
     let turnUsesOmiAccount = accountingPolicy.usesOmiAccountQuota
     if turnUsesOmiAccount, usageLimiter.serverQuota == nil {
       await usageLimiter.syncQuota()
@@ -3942,7 +3908,11 @@ class ChatProvider: ObservableObject {
             if toolStallAbortFired {
               telemetryAttempt.fail(errorClass: .toolStall, partialResponse: partialResponse)
             } else if watchdogFired {
-              telemetryAttempt.fail(errorClass: .timeout, partialResponse: partialResponse)
+              telemetryAttempt.fail(
+                errorClass: .timeout,
+                partialResponse: partialResponse,
+                watchdogFired: true
+              )
             } else {
               telemetryAttempt.finish(
                 stopReason: turnLifecycle.stopReason ?? self.stopReason(for: sendGen),
@@ -4535,7 +4505,8 @@ class ChatProvider: ObservableObject {
           } else if watchdogFiredBeforeResult {
             telemetryAttempt.fail(
               errorClass: .timeout,
-              partialResponse: hadPartialResponse
+              partialResponse: hadPartialResponse,
+              watchdogFired: true
             )
           } else {
             telemetryAttempt.finish(
@@ -4786,7 +4757,8 @@ class ChatProvider: ObservableObject {
           } else if watchdogFired {
             telemetryAttempt.fail(
               errorClass: .timeout,
-              partialResponse: hadPartialResponse
+              partialResponse: hadPartialResponse,
+              watchdogFired: true
             )
           } else {
             telemetryAttempt.finish(
@@ -4877,7 +4849,11 @@ class ChatProvider: ObservableObject {
         )
         switch telemetryDisposition {
         case .failed(let errorClass):
-          telemetryAttempt.fail(errorClass: errorClass, partialResponse: hadPartialResponse)
+          telemetryAttempt.fail(
+            errorClass: errorClass,
+            partialResponse: hadPartialResponse,
+            watchdogFired: watchdogFired
+          )
           logError(
             "Failed to get AI response attempt_id=\(telemetryAttempt.context.attemptId) error_class=\(errorClass.rawValue)",
             error: error
@@ -4968,6 +4944,13 @@ class ChatProvider: ObservableObject {
         currentError = nil
         errorMessage = nil
       } else if let bridgeError = error as? BridgeError,
+        case .agentRuntimeFailure(let failure) = bridgeError,
+        failure.failureCode == .authentication
+      {
+        currentError = nil
+        errorMessage = Self.providerAuthRequiredUserMessage(isUserClaudeMode: isUserClaudeMode)
+        lastFailedPrompt = trimmedText
+      } else if let bridgeError = error as? BridgeError,
         let card = ChatErrorState.from(bridgeError)
       {
         currentError = card
@@ -4982,6 +4965,86 @@ class ChatProvider: ObservableObject {
     releaseSendLock(sendGeneration: sendGen)
 
     return completedResponseText
+  }
+
+  // MARK: - Post-onboarding opener
+
+  /// Compose and present the personalized opener the instant the Chat tab
+  /// appears after onboarding. Composed synchronously from locally-known
+  /// facts (name, listening mode, cached suggestion chips) so it is instant
+  /// and never blank; today's calendar, if connected, enriches it a moment
+  /// later without ever blocking the first paint.
+  func presentOnboardingOpener() {
+    let name = Self.firstName(AuthService.shared.givenName)
+    let mode: OnboardingOpenerComposer.ListeningMode =
+      AssistantSettings.shared.systemAudioCaptureMode == .always ? .always : .meetingsOnly
+    let baseStarters = HomeSuggestionComposer.compose(
+      personalized: HomeSuggestionsStore.shared.personalizedQuestions,
+      onboarding: PostOnboardingPromptSuggestions.suggestions())
+
+    onboardingOpener = OnboardingOpenerComposer.compose(
+      name: name, mode: mode, meetings: [], now: Date(), baseStarters: baseStarters)
+
+    // Enrich with today's real calendar when available — never blocks the
+    // instant opener above, and bails if the user has already started chatting.
+    Task { [weak self] in
+      let meetings = await Self.todaysMeetings()
+      guard !meetings.isEmpty else { return }
+      guard let self, self.onboardingOpener != nil else { return }
+      self.onboardingOpener = OnboardingOpenerComposer.compose(
+        name: name, mode: mode, meetings: meetings, now: Date(), baseStarters: baseStarters)
+    }
+  }
+
+  /// Hide the opener once the user sends their first message.
+  func dismissOnboardingOpener() {
+    onboardingOpener = nil
+  }
+
+  private static func firstName(_ full: String) -> String {
+    let trimmed = full.trimmingCharacters(in: .whitespaces)
+    return trimmed.components(separatedBy: " ").first ?? trimmed
+  }
+
+  /// Today's remaining timed meetings (soonest first), best-effort. Returns an
+  /// empty array when the calendar isn't connected or the read fails — the
+  /// opener simply stays in its name-only form.
+  private static func todaysMeetings() async -> [OnboardingMeetingBrief] {
+    guard
+      let events = try? await CalendarReaderService.shared.readEvents(
+        daysBack: 0, daysForward: 1, maxResults: 50)
+    else { return [] }
+
+    // Compute "today" in the user's local timezone. ISO8601DateFormatter defaults to
+    // UTC, but event start_time date strings carry the calendar's local offset, so a
+    // UTC prefix would drop today's meetings for any user behind/ahead of UTC near the
+    // day boundary.
+    let localDayFormatter = ISO8601DateFormatter()
+    localDayFormatter.timeZone = TimeZone.current
+    let todayPrefix = localDayFormatter.string(from: Date()).prefix(10)
+    let plain = ISO8601DateFormatter()
+    let fractional = ISO8601DateFormatter()
+    fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+    let timeFormatter = DateFormatter()
+    timeFormatter.locale = Locale.current
+    timeFormatter.setLocalizedDateFormatFromTemplate("jmm")
+
+    let cutoff = Date().addingTimeInterval(-30 * 60)  // include a meeting that just started
+
+    return
+      events
+      .filter { !$0.isAllDay && $0.startTime.prefix(10) == todayPrefix }
+      .compactMap { event -> (Date, OnboardingMeetingBrief)? in
+        guard let start = plain.date(from: event.startTime) ?? fractional.date(from: event.startTime),
+          start >= cutoff
+        else { return nil }
+        let title = event.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+        return (start, OnboardingMeetingBrief(title: title, time: timeFormatter.string(from: start)))
+      }
+      .sorted { $0.0 < $1.0 }
+      .map(\.1)
   }
 
   /// Sends the active main-chat composer and clears only the exact draft that
@@ -5866,7 +5929,10 @@ class ChatProvider: ObservableObject {
   func clearDefaultJournalForOnboardingReset() async -> Bool {
     let surface = AgentSurfaceReference.mainChat(chatId: "default")
     AgentRuntimeStatusStore.shared.clear(surface: surface)
-    return await kernelTurnProjection.clear(surface: surface)
+    // Local-only: an onboarding re-walkthrough resets the local chat view but
+    // must never hard-delete the user's server-side chat history. The backend
+    // stays authoritative and rehydrates the thread via reconcile.
+    return await kernelTurnProjection.clear(surface: surface, deleteBackend: false)
   }
 
   /// Clear current session messages (delete and create new)

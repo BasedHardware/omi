@@ -113,9 +113,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       + notchAgentListBottomMargin
   }
   static func notchHoverMenuHeight(agentCount: Int) -> CGFloat {
-    notchAgentListRowHeight
-      + notchAgentListHeight(agentCount: agentCount)
-      + notchHoverMenuBottomMargin
+    guard NotchAgentMenuPresentation.shouldPresent(agentCount: agentCount) else { return 0 }
+    return notchAgentListHeight(agentCount: agentCount) + notchHoverMenuBottomMargin
   }
   static let expandedBarSize = NSSize(width: 210, height: 50)
   /// Center gap between the two chrome lobes on displays without a notch —
@@ -972,13 +971,18 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   func openNotchHoverMenuUntilExit() {
+    guard NotchAgentMenuPresentation.shouldPresent(agentCount: AgentPillsManager.shared.pills.count) else {
+      setNotchHoverMenuVisible(false)
+      return
+    }
     setNotchHoverMenuVisible(true)
   }
 
   private func updateNotchPointer(localPoint point: NSPoint) {
     guard notchModeEnabled,
       !state.showingAIConversation,
-      state.currentNotification == nil
+      state.currentNotification == nil,
+      NotchAgentMenuPresentation.shouldPresent(agentCount: AgentPillsManager.shared.pills.count)
     else {
       setNotchHoverMenuVisible(false)
       return
@@ -2779,9 +2783,12 @@ class FloatingControlBarManager {
       appState.toggleTranscription()
     }
 
-    // Typing lives in the main app — the bar's "chat" affordances jump there.
+    // Typing lives in the main app — the bar's "chat" affordances jump there,
+    // opening straight into the chat surface (which shares the notch transcript)
+    // rather than the resting hero.
     barWindow.onAskAI = {
-      (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
+      AppDelegate.summonWindowTarget()?.openMainAppWindow()
+      NotificationCenter.default.post(name: .navigateToChat, object: nil)
     }
 
     // Hide persists the preference so bar stays hidden across restarts
@@ -3392,13 +3399,13 @@ class FloatingControlBarManager {
   /// the floating bar no longer offers typing.
   func toggleAIInput() {
     guard let window = window else {
-      (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
+      AppDelegate.summonWindowTarget()?.openMainAppWindow()
       return
     }
     if window.isVisible && window.state.showingAIConversation {
       window.closeAIConversation()
     } else {
-      (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
+      AppDelegate.summonWindowTarget()?.openMainAppWindow()
     }
   }
 

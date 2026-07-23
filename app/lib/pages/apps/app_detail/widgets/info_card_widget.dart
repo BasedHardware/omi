@@ -74,7 +74,7 @@ class InfoCardWidget extends StatelessWidget {
                       (chip) => Chip(
                         label: Text(chip, style: const TextStyle(color: Colors.white)),
                         backgroundColor: Colors.transparent,
-                        shape: StadiumBorder(side: BorderSide(color: Color(0xFF35343B))),
+                        shape: const StadiumBorder(side: BorderSide(color: Color(0xFF35343B))),
                       ),
                     )
                     .toList(),
@@ -90,7 +90,7 @@ class InfoCardWidget extends StatelessWidget {
                       (chip) => Chip(
                         label: Text(chip, style: const TextStyle(color: Colors.white)),
                         backgroundColor: Colors.transparent,
-                        shape: StadiumBorder(side: BorderSide(color: Color(0xFF35343B))),
+                        shape: const StadiumBorder(side: BorderSide(color: Color(0xFF35343B))),
                       ),
                     )
                     .toList(),

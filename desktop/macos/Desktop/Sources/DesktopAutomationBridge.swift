@@ -1539,7 +1539,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "home_close_panel",
-      summary: "Collapse Home back to the hub (same as Esc / the close buttons)"
+      summary: "Collapse Home back to its resting surface (same as Esc / the close buttons)"
     ) { _ in
       NotificationCenter.default.post(name: .homeStageClose, object: nil)
       return nil
@@ -1645,6 +1645,24 @@ final class DesktopAutomationActionRegistry {
         return ["error": error]
       }
       return ["reset": "true"]
+    }
+
+    register(
+      name: "present_onboarding_opener",
+      summary: "Compose and show the post-onboarding opener in the empty-chat slot (QA rendering seam)",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "present_onboarding_opener is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      provider.presentOnboardingOpener()
+      return [
+        "presented": "true",
+        "starter_count": "\(provider.onboardingOpener?.starters.count ?? 0)",
+      ]
     }
 
     // Send a message through the real main-window chat pipeline (ChatPage),

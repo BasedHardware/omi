@@ -18,21 +18,6 @@ final class FloatingBarTimingSignalTests: XCTestCase {
       .appendingPathComponent("Sources/FloatingControlBar")
   }
 
-  private func floatingBarViewSource() throws -> String {
-    try String(
-      contentsOf: floatingControlBarDir().appendingPathComponent("FloatingControlBarView.swift"))
-  }
-
-  func testWindowActivationKeysOffWindowSignalNotFixedDelay() throws {
-    let source = try floatingBarViewSource()
-    XCTAssertTrue(
-      source.contains("func runWhenMainAppWindowKey"),
-      "window activation should route through the window-key signal helper")
-    XCTAssertTrue(
-      source.contains("NSWindow.didBecomeKeyNotification"),
-      "the transition should key off didBecomeKey, not a fixed delay")
-  }
-
   /// Anti-regression: no new fixed-delay `asyncAfter` may be added under
   /// `FloatingControlBar/` above the pinned baseline. Recurses the directory the
   /// same way the Python ratchet does; comment mentions of the word are excluded

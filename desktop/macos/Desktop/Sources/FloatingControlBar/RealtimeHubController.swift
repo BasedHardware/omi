@@ -30,6 +30,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     /// Installed only for the lifetime of one local-profile `ptt_test_turn`.
     /// Production builds have no provider-warm bypass surface.
     var localProfileTransportAuthority: RealtimeLocalProfileTransportAuthority?
+    /// Hermetic observation seam for controller lifecycle tests. Production
+    /// replacement always enters `ensureWarm`.
+    var testingWarmAfterDrain: (() -> Void)?
   #endif
   var sessionOwnerScope: RealtimeHubOwnerScope? {
     guard let session, let binding = sessionOwnerBinding,
@@ -98,6 +101,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Authoritative owner is the kernel journal / voice-context turn IDs; restore
   /// through `RealtimeHubContinuityRestore` + `RealtimeTurnJournalAuthority`.
   var acceptedSpawnJournalReceiptByContinuityKey: [String: AcceptedSpawnJournalReceipt] = [:]
+  /// One bounded same-turn recovery after a failed spawn. The first failure
+  /// returns typed guidance to the provider; a repeat closes the turn.
+  var spawnFailureContinuationPolicy = RealtimeSpawnFailureContinuationPolicy()
   let legacyVoiceJournalImportStore = LegacyVoiceJournalImportStore.shared
   var legacyVoiceJournalImportTask: Task<Void, Never>?
   var legacyVoiceJournalImportedOwners = Set<String>()
@@ -106,6 +112,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// real PTT press bypasses this delay and preserves its captured audio.
   var idleVoiceContextRefreshTask: Task<Void, Never>?
   var canceledTurnRewarmTask: Task<Void, Never>?
+  /// Sole owner of ordinary physical-session replacement. A replacement cannot
+  /// warm until the detached transport queue has closed and drained.
+  let sessionReplacementGate = RealtimeHubTransportReplacementGate()
+  #if DEBUG
+    var testingSessionStartAfterDrain: ((RealtimeHubProvider, HubAuth, RealtimeHubOwnerScope) -> Bool)?
+  #endif
   var bargeInContinuityTask: Task<Void, Never>?
   var bargeInReplacementGeneration: UInt64 = 0
   var pendingBargeInProvider: RealtimeHubProvider?
@@ -337,7 +349,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if let turnID = VoiceTurnCoordinator.shared.activeTurnID {
       _ = VoiceTurnCoordinator.shared.requireCurrentOwner(for: turnID)
     }
-    teardownSession()
     prefetchedVoiceContext = ""
     prefetchedVoiceContextSessionID = ""
     prefetchedVoiceContextFreshnessIdentity = ""
@@ -347,6 +358,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     prefetchedVoiceSemanticGuidance = ""
     prefetchedVoiceContextTurnIDs.removeAll()
     prefetchedVoiceContextOwnerScope = nil
+    replaceSessionAfterDrain()
   }
 
   /// Hard physical owner boundary. Persisted defaults still name the previous
@@ -394,6 +406,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     deferredSessionRefreshTask = nil
     canceledTurnRewarmTask?.cancel()
     canceledTurnRewarmTask = nil
+    sessionReplacementGate.cancel()
     earlyLIDTask?.cancel()
     earlyLIDTask = nil
     fullLIDTask?.cancel()
@@ -438,6 +451,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       await detachedSession.stopAndWait()
       detachedSessionsAwaitingDrain.removeValue(forKey: ObjectIdentifier(detachedSession))
     }
+    // A replacement already in flight owns its detached session through the
+    // same terminal acknowledgement. Do not return the owner boundary while
+    // that cancelled gate still advertises "pending", or the new owner's first
+    // warm request can be coalesced and then lost.
+    await sessionReplacementGate.waitUntilIdle()
     await drainExternalRunTerminalizations(
       previousOwnerID: previousOwnerID,
       cleanupCapability: cleanupCapability)
@@ -677,8 +695,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     log(
       "RealtimeHub: \(primary.displayName) unavailable — failing over to \(primary.alternate.displayName)"
     )
-    teardownSession()
-    ensureWarm()
+    replaceSessionAfterDrain()
     return true
   }
 
@@ -720,14 +737,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       "RealtimeHub: preserving barge-in turn while failing over "
         + "\(provider.displayName) → \(alternate.displayName)")
 
-    teardownSession()
-    replacementAudioBuffer = pendingTurn
-    voiceResponseID = responseID
-    pendingBargeInOwnerScope = replacementOwnerScope
-
     if let key = APIKeyService.byokKey(alternate.byokProvider) {
       pendingBargeInProvider = alternate
       pendingBargeInAuth = .byokKey(key)
+      replacementAudioBuffer = pendingTurn
+      voiceResponseID = responseID
+      pendingBargeInOwnerScope = replacementOwnerScope
+      replaceSessionAfterDrain(
+        preservingBargeInReplacement: true,
+        rewarmAfterDrain: false)
       startReplacementSessionForBargeIn(
         provider: alternate,
         auth: .byokKey(key),
@@ -739,6 +757,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // Marker only: a newer PTT can rotate continuity while the real alternate
     // one-use token is still minting. The start path always remints this case.
     pendingBargeInAuth = .ephemeral("")
+    replacementAudioBuffer = pendingTurn
+    voiceResponseID = responseID
+    pendingBargeInOwnerScope = replacementOwnerScope
+    replaceSessionAfterDrain(
+      preservingBargeInReplacement: true,
+      rewarmAfterDrain: false)
     remintReplacementSessionForBargeIn(provider: alternate)
     return true
   }
@@ -769,33 +793,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       upstreamStatusCode: error.payload?.upstreamStatusCode,
       providerCode: error.payload?.code,
       retryable: error.payload?.retryable)
-  }
-
-  /// True only when a physical provider socket is authenticated. This is a
-  /// latency hint, never authority to open input; every turn still obtains a
-  /// context-bound admission before audio leaves its buffer.
-  var isTransportReady: Bool {
-    // Drive a turn only when the hub is actually CONNECTED + authenticated for the
-    // selected provider OR the failover provider we switched to. A turn never enters hub
-    // mode on a key/token that can't connect (stale/revoked key, failed mint, mid-
-    // reconnect, or a just-switched provider): PTT transparently uses the legacy cascade
-    // instead, so a broken hub never costs the user a turn. The hub re-warms in the
-    // background and flips this true once it connects.
-    guard
-      RealtimeHubOwnerFence.canReuseWarmSession(
-        sessionOwner: sessionOwnerScope,
-        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
-    else {
-      if session != nil {
-        log("RealtimeHub: refusing warm socket owned by a previous authenticated user")
-        discardSessionAfterOwnerChange()
-        ensureWarm()
-      }
-      return false
-    }
-    return hubConnected
-      && (sessionProvider == RealtimeHubSettings.shared.provider
-        || sessionProvider == fallbackProvider)
   }
 
   /// PTT must distinguish a merely authenticated socket from a session that can
@@ -1411,8 +1408,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       } else {
         log("RealtimeHub: handoff requested reason=\(reason.rawValue) mode=idle")
       }
-      if session != nil { teardownSession(preservingReconnectAudio: hasBufferedTurn) }
-      ensureWarm()
+      replaceSessionAfterDrain(preservingReconnectAudio: hasBufferedTurn)
     }
   }
 
@@ -1448,6 +1444,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// and retries if either a new turn or a new write appears across an await.
   /// Callers decide when it is safe to release any stronger reconnect gate.
   func refreshVoiceContextAfterPersistenceFence(reason: String) async -> Bool {
+    let fenceOwnerScope = currentOwnerScope
     while !Task.isCancelled {
       let observedTurnEpoch = turnEpoch
       let observedPersistenceGeneration = turnPersistenceLedger.generation
@@ -1462,6 +1459,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
       guard await refreshVoiceContextSnapshot() else {
         if Task.isCancelled { return false }
+        // The snapshot cannot resolve once this fence no longer owns its original
+        // authenticated scope (sign-out / owner swap). Retrying then spins
+        // agent-bridge startup at full speed, so stop instead of looping.
+        guard
+          RealtimeHubLifecyclePolicy.canRetryPersistenceFence(
+            taskCancelled: Task.isCancelled,
+            fenceOwnerScope: fenceOwnerScope,
+            currentOwnerScope: currentOwnerScope
+          )
+        else {
+          pendingSessionRefreshReason = reason
+          return false
+        }
         continue
       }
       guard !Task.isCancelled,

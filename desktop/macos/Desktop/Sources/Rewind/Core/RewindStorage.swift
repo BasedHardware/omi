@@ -28,6 +28,12 @@ actor RewindStorage {
 
   // Track corrupted video chunks to avoid repeated frame extraction attempts
   private var corruptedChunks = Set<String>()
+  /// A deterministic seam proving sidecar retention across a one-shot cleanup
+  /// failure. Production leaves this at zero.
+  private var abandonedChunkCleanupFailuresForTesting = 0
+  /// Deterministic failure injection for the DB half of abandoned-chunk
+  /// recovery. Production leaves this at zero.
+  private var abandonedChunkDatabaseFailuresForTesting = 0
 
   // MARK: - Initialization
 
@@ -39,11 +45,46 @@ actor RewindStorage {
 
   /// Reset storage state (called on user switch / sign-out)
   func reset() async {
+    do {
+      try await resetForOwnerTransition()
+    } catch {
+      logError("RewindStorage: Could not safely reset old video owner", error: error)
+    }
+  }
+
+  /// The throwing owner-transition boundary. A marker-write failure may leave
+  /// the old writer live, so callers changing the effective owner must stop
+  /// before publishing new defaults when the DB-first fallback also fails.
+  func resetForOwnerTransition() async throws {
+    let cancellation = await VideoChunkEncoder.shared.resetForUserSwitch()
+    switch cancellation {
+    case .markerWriteFailed(let reservation):
+      // Do not clear the old owner configuration while its writer remains
+      // active or its database has not accepted the durable tombstone.
+      try await recoverAfterMarkerWriteFailure(reservation: reservation)
+    case .markerRecorded:
+      do {
+        try await reconcileAbandonedVideoChunks()
+      } catch {
+        // The sidecar is deliberately retained. A later initialization for
+        // this user retries the DB/file cleanup before capture starts again.
+        logError("RewindStorage: Deferred abandoned video chunk recovery", error: error)
+      }
+    case .noActiveChunk:
+      if videosDirectory != nil {
+        do {
+          try await reconcileAbandonedVideoChunks()
+        } catch {
+          logError("RewindStorage: Deferred abandoned video chunk recovery", error: error)
+        }
+      }
+    }
+
+    await VideoChunkEncoder.shared.clearConfigurationAfterUserSwitch()
     screenshotsDirectory = nil
     videosDirectory = nil
     frameCache.removeAllObjects()
     corruptedChunks.removeAll()
-    await VideoChunkEncoder.shared.resetForUserSwitch()
     log("RewindStorage: Reset for user switch")
   }
 
@@ -68,6 +109,10 @@ actor RewindStorage {
 
     try fileManager.createDirectory(at: screenshotsDirectory, withIntermediateDirectories: true)
     try fileManager.createDirectory(at: videosDirectory, withIntermediateDirectories: true)
+
+    // Finish any previous crashed/cancelled writer before this owner can start
+    // another one. A marker remains until both database and file cleanup work.
+    try await reconcileAbandonedVideoChunks()
 
     // Initialize video encoder with videos directory
     try await VideoChunkEncoder.shared.initialize(videosDirectory: videosDirectory)
@@ -571,6 +616,126 @@ actor RewindStorage {
 
     log("RewindStorage: Cleaned up corrupted chunk \(videoPath), deleted \(deletedCount) DB entries")
     return deletedCount
+  }
+
+  /// Reconcile every durable cancellation marker for the current owner. The
+  /// marker is removed only after the tombstone/row deletion and file deletion
+  /// both succeed; repeating the operation is therefore safe after a restart.
+  func reconcileAbandonedVideoChunks() async throws {
+    guard let videosDirectory else {
+      throw RewindError.storageError("Videos directory not initialized")
+    }
+
+    for marker in try RewindAbandonedVideoChunkJournal.markers(in: videosDirectory) {
+      let deletedCount = try await abandonVideoChunk(relativePath: marker.relativePath)
+      try deleteAbandonedVideoChunkFile(relativePath: marker.relativePath, videosDirectory: videosDirectory)
+      try RewindAbandonedVideoChunkJournal.remove(marker)
+      corruptedChunks.remove(marker.relativePath)
+      log("RewindStorage: Recovered abandoned video chunk, deleted \(deletedCount) DB rows")
+    }
+  }
+
+  /// Marker creation can fail (for example, transient disk exhaustion). The
+  /// owner-transition fallback tombstones the old path first, then cancels only
+  /// that still-current writer and removes the file before retargeting storage.
+  func recoverAfterMarkerWriteFailure(reservation: RewindVideoChunkReservation) async throws {
+    guard let videosDirectory else {
+      throw RewindError.storageError("Videos directory not initialized for marker fallback")
+    }
+
+    _ = try await abandonVideoChunk(relativePath: reservation.relativePath)
+    // The DB tombstone is already durable. Retry the sidecar opportunistically
+    // so a post-cancel filesystem failure still has a startup retry path.
+    let fallbackMarker = try? RewindAbandonedVideoChunkJournal.record(
+      reservation: reservation,
+      in: videosDirectory
+    )
+    await VideoChunkEncoder.shared.forceCancelAfterStorageFallback(for: reservation)
+    do {
+      try deleteAbandonedVideoChunkFile(relativePath: reservation.relativePath, videosDirectory: videosDirectory)
+      if let fallbackMarker {
+        try RewindAbandonedVideoChunkJournal.remove(fallbackMarker)
+      }
+    } catch {
+      // The durable tombstone prevents an orphaned partial file from appearing
+      // in the timeline. Keep a fallback marker when possible and do not block
+      // the nonthrowing effective-owner transition on filesystem cleanup.
+      logError("RewindStorage: Could not delete tombstoned fallback chunk", error: error)
+    }
+    corruptedChunks.remove(reservation.relativePath)
+    log("RewindStorage: Recovered abandoned chunk after marker write failure")
+  }
+
+  /// Shared recovery classifier for every producer path, including indexer
+  /// frame processing, explicit flush, and the encoder's staleness timer.
+  func recoverAbandonedVideoChunkIfNeeded(_ error: Error) async throws -> Bool {
+    if error is RewindAbandonedVideoChunkError {
+      try await reconcileAbandonedVideoChunks()
+      return true
+    }
+    if let markerFailure = error as? RewindAbandonedVideoChunkMarkerWriteError {
+      try await recoverAfterMarkerWriteFailure(reservation: markerFailure.reservation)
+      return true
+    }
+    return false
+  }
+
+  /// Finalize the active encoder generation and reconcile any durable
+  /// abandonment marker before returning an error to non-indexer callers.
+  func flushCurrentVideoChunk() async throws -> VideoChunkEncoder.ChunkFlushResult? {
+    do {
+      return try await VideoChunkEncoder.shared.flushCurrentChunk()
+    } catch {
+      _ = try await recoverAbandonedVideoChunkIfNeeded(error)
+      throw error
+    }
+  }
+
+  func setAbandonedChunkCleanupFailuresForTesting(_ failures: Int) {
+    precondition(failures >= 0)
+    abandonedChunkCleanupFailuresForTesting = failures
+  }
+
+  func setAbandonedChunkDatabaseFailuresForTesting(_ failures: Int) {
+    precondition(failures >= 0)
+    abandonedChunkDatabaseFailuresForTesting = failures
+  }
+
+  func abandonedVideoChunkMarkerCountForTesting() throws -> Int {
+    guard let videosDirectory else {
+      throw RewindError.storageError("Videos directory not initialized")
+    }
+    return try RewindAbandonedVideoChunkJournal.markers(in: videosDirectory).count
+  }
+
+  /// Models a process relaunch after the sidecar was durably written but before
+  /// any in-process DB reconciliation ran. Tests seed the marker and live rows,
+  /// clear only volatile configuration, then exercise normal initialization.
+  func clearVolatileConfigurationForProcessRestartTesting() async {
+    await VideoChunkEncoder.shared.clearConfigurationAfterUserSwitch()
+    screenshotsDirectory = nil
+    videosDirectory = nil
+    frameCache.removeAllObjects()
+    corruptedChunks.removeAll()
+  }
+
+  private func abandonVideoChunk(relativePath: String) async throws -> Int {
+    guard abandonedChunkDatabaseFailuresForTesting == 0 else {
+      abandonedChunkDatabaseFailuresForTesting -= 1
+      throw RewindError.storageError("Injected abandoned-chunk database failure")
+    }
+    return try await RewindDatabase.shared.abandonVideoChunk(relativePath: relativePath)
+  }
+
+  private func deleteAbandonedVideoChunkFile(relativePath: String, videosDirectory: URL) throws {
+    let fullPath = try RewindAbandonedVideoChunkJournal.videoURL(relativePath: relativePath, in: videosDirectory)
+    guard abandonedChunkCleanupFailuresForTesting == 0 else {
+      abandonedChunkCleanupFailuresForTesting -= 1
+      throw RewindError.storageError("Injected abandoned-chunk cleanup failure")
+    }
+    if fileManager.fileExists(atPath: fullPath.path) {
+      try fileManager.removeItem(at: fullPath)
+    }
   }
 
   /// Get all currently known corrupted chunks

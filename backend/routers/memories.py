@@ -25,6 +25,9 @@ from utils.memory.v3.composed_get_service import V3ComposedRequestParams, V3Comp
 from utils.memory.v3.production_runtime import build_v3_production_runtime
 from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_decision
 from utils.memory.canonical_memory_adapter import (
+    CanonicalBatchMutationLimitError,
+    CanonicalMemoryNotFoundError,
+    delete_canonical_memories_batch,
     memory_item_to_memorydb,
     read_canonical_memory_item,
 )
@@ -140,6 +143,13 @@ class BatchMemoriesRequest(BaseModel):
 class BatchMemoriesResponse(BaseModel):
     memories: List[MemoryDB]
     created_count: int
+
+
+class BatchDeleteMemoriesRequest(BaseModel):
+    memory_ids: List[str] = Field(
+        description="Memory IDs to delete in a single batch request",
+        max_length=MEMORIES_BATCH_MAX,
+    )
 
 
 class ReviewResolutionRequest(BaseModel):
@@ -765,6 +775,63 @@ def resolve_memory_review_item(
     if result.get('status') == 'not_found':
         raise HTTPException(status_code=404, detail='Review item not found')
     return result
+
+
+@router.delete('/v3/memories/batch', tags=['memories'], response_model=MemoryMutationResponse)
+def delete_memories_batch(
+    data: BatchDeleteMemoriesRequest,
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:delete_batch"))
+    ),
+):
+    """Delete up to MEMORIES_BATCH_MAX memories in one request.
+
+    Replaces the N concurrent DELETE /v3/memories/{id} calls the web UI used to fan out
+    on bulk selection, which blew through the per-UID rate limiter and 429'd.
+
+    Authorization parity with DELETE /v3/memories/{memory_id}: every requested id is
+    validated with the SAME business rules as the single-delete path. Validation is
+    all-or-nothing — if any id fails, nothing is deleted, so the batch route can never
+    bypass the single-delete guardrails (missing/not-owned -> 404, locked paid-plan
+    memory -> 402).
+    """
+    # Deduplicate while preserving first-seen order so repeated ids cannot inflate
+    # counts or trigger redundant Firestore/Pinecone ops.
+    memory_ids = list(dict.fromkeys(data.memory_ids))
+    if not memory_ids:
+        return {'status': 'ok'}
+
+    db_client = getattr(db_client_module, 'db', None)
+    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
+        # The adapter validates and tombstones the full selection in one Firestore
+        # transaction. A concurrent mutation retries the transaction, so a later
+        # missing item can never leave earlier items committed from a failed request.
+        try:
+            delete_canonical_memories_batch(uid, memory_ids, db_client=db_client)
+        except CanonicalBatchMutationLimitError:
+            raise HTTPException(status_code=413, detail='Memory batch is too large to delete atomically')
+        except CanonicalMemoryNotFoundError:
+            raise HTTPException(status_code=404, detail='Memory not found')
+        return {'status': 'ok'}
+
+    # Legacy cohort: enforce the same per-memory guard as _validate_memory, but via a
+    # single batched get_all fetch instead of N serial reads. A requested id absent from
+    # the result is either missing or belongs to another user (get_memories_by_ids is
+    # scoped to the caller's uid collection) — both map to the single-delete 404.
+    fetched = {m['id']: m for m in memories_db.get_memories_by_ids(uid, memory_ids) if isinstance(m.get('id'), str)}
+    for memory_id in memory_ids:
+        memory = fetched.get(memory_id)
+        if memory is None:
+            raise HTTPException(status_code=404, detail='Memory not found')
+        if memory.get('is_locked', False):
+            raise HTTPException(status_code=402, detail='A paid plan is required to access this memory.')
+
+    memories_db.delete_memories_batch(uid, memory_ids)
+    try:
+        delete_memory_vectors_batch(uid, memory_ids)
+    except Exception:
+        logger.exception("Vector batch delete failed uid=%s count=%d (Firestore already deleted)", uid, len(memory_ids))
+    return {'status': 'ok'}
 
 
 @router.delete('/v3/memories/{memory_id}', tags=['memories'], response_model=MemoryMutationResponse)

@@ -298,13 +298,26 @@ def expectation_mismatches(data: dict[str, typing.Any], expectations: dict[str, 
     return mismatches
 
 
-def wait_for_state(ctx: HarnessContext, expectations: dict[str, typing.Any], timeout: float = 5.0) -> tuple[bool, dict[str, typing.Any]]:
+def wait_for_state(
+    ctx: HarnessContext,
+    expectations: dict[str, typing.Any],
+    timeout: float = 5.0,
+    stability_window_seconds: float = 0.0,
+) -> tuple[bool, dict[str, typing.Any]]:
     deadline = time.monotonic() + timeout
+    stability_window_seconds = max(0.0, stability_window_seconds)
+    stable_since: float | None = None
     latest: dict[str, typing.Any] = {}
     while time.monotonic() < deadline:
         latest = state_snapshot(ctx)
+        observed_at = time.monotonic()
         if expectation_matches({"state": latest}, expectations):
-            return True, latest
+            if stable_since is None:
+                stable_since = observed_at
+            if observed_at - stable_since >= stability_window_seconds:
+                return True, latest
+        else:
+            stable_since = None
         time.sleep(POLL_INTERVAL_SECONDS)
     return False, latest
 
@@ -599,7 +612,8 @@ def apply_wait(ctx: HarnessContext, step: dict[str, typing.Any], prefix: str, re
             mismatches = [expectation_mismatches({"trace": trace}, wait_spec["trace"]) for trace in traces]
             result["error"] = f"trace wait timed out after {timeout}s; mismatches={mismatches}"
     else:
-        waited_ok, state = wait_for_state(ctx, wait_spec, timeout)
+        stability_window_seconds = float(step.get("stability_window_seconds", 0))
+        waited_ok, state = wait_for_state(ctx, wait_spec, timeout, stability_window_seconds)
         state_path = ctx.steps_dir / f"{prefix}-state.json"
         write_json(state_path, state)
         result["artifacts"]["state"] = str(state_path)

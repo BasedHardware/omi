@@ -39,6 +39,19 @@ LIVE_TRANSCRIPTION_FAILURE_RULE = "omi-journey-live-transcription-fail"
 LIVE_TRANSCRIPTION_FAILURE_EXPR = (
     'sum(increase(omi_journey_terminal_total{journey="live_transcription",outcome=~"success|failure"}[30m]))'
 )
+PARAKEET_READY_POD_NO_SUCCESS_RULE = "omi-parakeet-ready-pod-no-success"
+PARAKEET_READY_POD_NO_SUCCESS_EXPR = (
+    '((sum by (pod) (increase(parakeet_requests_total{container="parakeet",namespace="prod-omi-backend",'
+    'status="error"}[5m])) >= 10) unless on (pod) (sum by (pod) '
+    '(increase(parakeet_requests_total{container="parakeet",namespace="prod-omi-backend",'
+    'status="success"}[5m])) > 0)) and on (pod) (max by (pod) '
+    '(kube_pod_status_ready{namespace="prod-omi-backend",condition="true",'
+    'pod=~"prod-omi-parakeet-.*"}) == 1)'
+)
+PARAKEET_FATAL_CUDA_RULE = "omi-parakeet-fatal-cuda"
+PARAKEET_FATAL_CUDA_EXPR = (
+    'sum by (pod) (increase(parakeet_gpu_fatal_errors_total{container="parakeet",' 'namespace="prod-omi-backend"}[5m]))'
+)
 
 
 def _rules(path: Path) -> dict[str, dict]:
@@ -156,6 +169,33 @@ def test_parakeet_stream_capacity_alerts_link_the_matching_dashboard_and_runbook
         assert f"{threshold} active streams per ready replica" in runbook
 
     assert PARAKEET_STREAMS_PER_READY_REPLICA in runbook
+
+
+def test_parakeet_alerts_detect_fatal_cuda_and_ready_pod_black_holes():
+    for rules in _all_rule_exports().values():
+        no_success = rules[PARAKEET_READY_POD_NO_SUCCESS_RULE]
+        assert no_success["data"][0]["model"]["expr"] == PARAKEET_READY_POD_NO_SUCCESS_EXPR
+        assert no_success["noDataState"] == "OK"
+        assert no_success["for"] == "2m"
+        assert no_success["labels"]["severity"] == "critical"
+        assert no_success["labels"]["impact"] == "user-experience"
+
+        fatal_cuda = rules[PARAKEET_FATAL_CUDA_RULE]
+        assert fatal_cuda["data"][0]["model"]["expr"] == PARAKEET_FATAL_CUDA_EXPR
+        assert fatal_cuda["noDataState"] == "OK"
+        assert fatal_cuda["for"] == "0s"
+        assert fatal_cuda["labels"]["severity"] == "critical"
+        assert fatal_cuda["labels"]["impact"] == "infrastructure"
+
+
+def test_parakeet_dashboard_uses_application_request_status_labels():
+    dashboard = json.loads(PARAKEET_CAPACITY_DASHBOARD.read_text(encoding="utf-8"))
+
+    for panel_id in (1, 7):
+        panel = next(panel for panel in dashboard["panels"] if panel["id"] == panel_id)
+        expression = panel["targets"][0]["expr"]
+        assert 'status="error"' in expression
+        assert 'status=~"[45].."' not in expression
 
 
 def test_pusher_degradation_uses_listener_emitter_metrics():

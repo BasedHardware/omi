@@ -12,14 +12,13 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY_ROOT = BACKEND_ROOT.parent
 GATEWAY_DEPLOY_WORKFLOWS = (
     'gcp_llm_gateway.yml',
-    'gcp_llm_gateway_auto_dev.yml',
+    'gcp_backend_auto_dev.yml',
     'gcp_backend_pusher.yml',
 )
 VPC_PROBE_WORKFLOWS = (
     'gcp_backend_auto_dev.yml',
     'gcp_backend.yml',
     'gcp_llm_gateway.yml',
-    'gcp_llm_gateway_auto_dev.yml',
     'gcp_backend_pusher.yml',
 )
 
@@ -59,6 +58,7 @@ def _render_probe_workflow_run(run: str) -> str:
         '${{ env.SERVICE }}': 'llm-gateway',
         '${{ steps.image-tag.outputs.short_sha }}': 'abc1234',
         '${{ steps.gateway-serving.outputs.gateway_url }}': 'http://10.0.0.5',
+        '${{ steps.combined-gateway-serving.outputs.gateway_url || steps.gateway-serving.outputs.gateway_url }}': 'http://10.0.0.5',
         '${{ vars.CLOUD_RUN_VPC_NETWORK }}': 'test-network',
         '${{ vars.CLOUD_RUN_VPC_SUBNET }}': 'test-subnet',
     }
@@ -104,7 +104,7 @@ def test_llm_gateway_anthropic_secret_and_authenticated_readiness_probe_contract
         assert 'X-Omi-Service-Caller: backend' in probe_command
 
 
-def test_prod_gateway_wiring_is_off_until_verified_promotion():
+def test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_injection():
     manifest = _load_yaml('deploy/runtime_env.yaml')
     prod = manifest['environments']['prod']
     gke_env = prod['gke']['backend-listen']['env']
@@ -118,14 +118,14 @@ def test_prod_gateway_wiring_is_off_until_verified_promotion():
     assert gke_env['GCP_LOCATION']['value'] == 'us-central1'
     assert gke_env['GOOGLE_CLOUD_PROJECT']['value'] == 'based-hardware'
 
-    for service in ('backend', 'backend-sync', 'backend-integration'):
+    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         service_config = prod['cloud_run']['services'][service]
         assert service_config['env']['OMI_LLM_GATEWAY_URL'] == {
             'env_var': 'OMI_LLM_GATEWAY_URL',
             'default': 'http://127.0.0.1:9',
             'category': 'service_discovery',
         }
-        assert service_config['env']['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'off'
+        assert service_config['env']['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'gateway'
         assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE']['value'] == 'true'
         assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'true'
         assert service_config['env']['USE_VERTEX_AI']['value'] == 'true'
@@ -175,6 +175,57 @@ def test_gateway_deploy_workflow_and_helper_allow_explicit_prod_launches():
     assert 'Probe LLM Gateway from the Cloud Run VPC' in workflow
     assert 'verify-llm-gateway-serving.py' in workflow
     assert 'probe-llm-gateway-from-cloud-run.sh' in workflow
+    assert 'workflow_dispatch:' in workflow
+    assert 'push:' not in workflow
+    assert 'workflow_run:' not in workflow
+    assert 'schedule:' not in workflow
+    assert '--update-traffic' not in workflow
+    assert 'gcloud run services update-traffic' not in workflow
+
+
+def test_gateway_auto_deploy_is_folded_into_the_admitted_backend_lifecycle():
+    """Static tripwire for FC-deploy-concurrency: one automatic backend-stack writer only."""
+    workflows = REPOSITORY_ROOT / '.github/workflows'
+    auto_dev_path = workflows / 'gcp_backend_auto_dev.yml'
+    workflow = auto_dev_path.read_text(encoding='utf-8')
+    trigger = workflow.split('\njobs:', 1)[0]
+
+    assert not (workflows / 'gcp_llm_gateway_auto_dev.yml').exists()
+    assert 'workflow_run:' in trigger
+    assert '\n  push:' not in trigger
+    assert 'workflows: ["Release Eligibility"]' in trigger
+    assert "github.event.workflow_run.event == 'push'" in workflow
+    assert "github.event.workflow_run.run_attempt == 1" in workflow
+    assert "github.event.workflow_run.head_branch == 'main'" in workflow
+    assert 'github.event.workflow_run.head_repository.full_name == github.repository' in workflow
+    assert '${{ needs.firestore_readiness.outputs.admitted_sha }}' in workflow
+    assert 'gcp_llm_gateway' in workflow
+
+    automatic_backend_stack_writers = []
+    for path in workflows.glob('*.yml'):
+        text = path.read_text(encoding='utf-8')
+        workflow_trigger = text.split('\njobs:', 1)[0]
+        if 'group: deploy-backend-stack-development' in workflow_trigger and (
+            'workflow_run:' in workflow_trigger or '\n  push:' in workflow_trigger
+        ):
+            automatic_backend_stack_writers.append(path.name)
+    assert automatic_backend_stack_writers == ['gcp_backend_auto_dev.yml']
+
+    build = workflow.index('      - name: Build, smoke, and push automatic LLM Gateway image')
+    deploy = workflow.index('      - name: Deploy automatic LLM Gateway with backend stack')
+    serving = workflow.index('      - name: Verify LLM Gateway serving data plane')
+    vpc_probe = workflow.index('      - name: Probe LLM Gateway from the Cloud Run VPC')
+    smoke = workflow.index('      - name: Smoke LLM Gateway')
+    caller_render = workflow.index('      - name: Render backend runtime env from the gated gateway endpoint')
+    assert build < deploy < serving < vpc_probe < smoke < caller_render
+    gateway_image = 'gcr.io/${{ vars.GCP_PROJECT_ID }}/llm-gateway:${{ steps.image-tag.outputs.short_sha }}'
+    assert f'gateway_image="{gateway_image}"' in workflow
+    assert f'--image "{gateway_image}"' in workflow
+    assert 'runtime_image_contracts.py smoke' in workflow
+    assert 'IMAGE_TAG="${{ steps.image-tag.outputs.short_sha }}" backend/scripts/deploy-llm-gateway.sh' in workflow
+    assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in workflow
+    assert '--lane omi:auto:public-shared-conversation-chat' in workflow
+    assert '--check-metrics' in workflow
 
 
 def test_backend_deploy_requires_serving_and_cloud_run_vpc_gates_before_gateway_promotion():
@@ -188,12 +239,57 @@ def test_backend_deploy_requires_serving_and_cloud_run_vpc_gates_before_gateway_
     assert (
         '--listener-values="backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml"' in workflow
     )
-    assert "steps.gateway-serving.outputs.gateway_url || 'http://127.0.0.1:9'" in workflow
-    assert 'Verify LLM gateway control plane before promotion' in auto_dev
-    assert 'Probe LLM gateway from the Cloud Run VPC before promotion' in auto_dev
+    intent_step = workflow[
+        workflow.index('      - name: Determine whether this deploy requests gateway-first serving') : workflow.index(
+            '      - name: Get GKE credentials for gateway serving gate'
+        )
+    ]
+    assert "github.event.inputs.deploy_targets == 'all'" not in intent_step
+    assert 'Reject an inert gateway endpoint when source-controlled gateway mode is requested' in workflow
+    assert 'Gateway mode requires a verified non-sentinel endpoint.' in workflow
+    assert (
+        'steps.combined-gateway-serving.outputs.gateway_url || steps.gateway-serving.outputs.gateway_url || \'http://127.0.0.1:9\''
+        in workflow
+    )
+    assert 'Build, smoke, and push automatic LLM Gateway image' in auto_dev
+    assert 'Deploy automatic LLM Gateway with backend stack' in auto_dev
+    assert 'Verify LLM Gateway serving data plane' in auto_dev
+    assert 'Probe LLM Gateway from the Cloud Run VPC' in auto_dev
+    assert 'Smoke LLM Gateway' in auto_dev
     assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in auto_dev
     assert '--lane omi:auto:public-shared-conversation-chat' in workflow
     assert '--lane omi:auto:public-shared-conversation-chat' in auto_dev
+
+
+def test_backend_can_compose_dev_gateway_with_immutable_backend_image_but_prod_stays_separate():
+    workflow = (BACKEND_ROOT.parent / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8')
+    standalone = (BACKEND_ROOT.parent / '.github/workflows/gcp_llm_gateway.yml').read_text(encoding='utf-8')
+
+    assert 'deploy_gateway:' in workflow
+    assert "default: false\n        type: boolean" in workflow
+    assert (
+        'environment=prod, deploy_gateway=true is unsupported; use the standalone manual LLM gateway workflow.'
+        in workflow
+    )
+    assert 'deploy_gateway=true requires deploy_targets=all.' in workflow
+    gateway_publish = workflow.index('      - name: Build, smoke, and push combined LLM Gateway image')
+    gateway_deploy = workflow.index('      - name: Deploy LLM Gateway with backend stack')
+    assert gateway_publish < gateway_deploy
+    combined_publish_step = workflow[gateway_publish:gateway_deploy]
+    assert (
+        'gateway_image="gcr.io/${{ vars.GCP_PROJECT_ID }}/llm-gateway:${{ steps.image-tag.outputs.short_sha }}"'
+        in combined_publish_step
+    )
+    assert 'runtime_image_contracts.py" smoke' in combined_publish_step
+    assert 'docker push "$gateway_image"' in combined_publish_step
+    assert 'Deploy LLM Gateway with backend stack' in workflow
+    assert (
+        'IMAGE_TAG="${{ steps.image-tag.outputs.short_sha }}" "$DEPLOY_CONTROL_SCRIPTS/deploy-llm-gateway.sh"'
+        in workflow
+    )
+    assert 'deploy-backend-stack-${{ github.event.inputs.environment }}' in workflow
+    assert 'deploy-backend-stack-${{ github.event.inputs.environment }}' in standalone
+    assert 'IMAGE_TAG=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")' in standalone
 
 
 def test_gateway_deploy_workflows_bind_identity_and_gate_serving_static_contract():

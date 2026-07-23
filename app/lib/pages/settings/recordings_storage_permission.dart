@@ -67,13 +67,13 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
                       title: context.l10n.improveSpeechProfile,
                       description: context.l10n.improveSpeechProfileDesc,
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
                     _buildReasonTile(
                       icon: Icons.group,
                       title: context.l10n.trainFamilyProfiles,
                       description: context.l10n.trainFamilyProfilesDesc,
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
                     _buildReasonTile(
                       icon: Icons.trending_up,
                       title: context.l10n.enhanceTranscriptAccuracy,

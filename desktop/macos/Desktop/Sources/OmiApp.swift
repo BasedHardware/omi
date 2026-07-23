@@ -231,6 +231,20 @@ struct OMIApp: App {
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked Sendable {
+  /// The live AppDelegate instance. SwiftUI's `@NSApplicationDelegateAdaptor` does
+  /// NOT make `NSApp.delegate` our `AppDelegate` — on macOS 14+ it installs an
+  /// internal forwarding delegate, so `NSApp.delegate as? AppDelegate` is `nil`.
+  /// Callers that need to reach the delegate (e.g. the global summon shortcut, the
+  /// floating bar) must go through this reference instead of casting `NSApp.delegate`.
+  nonisolated(unsafe) static weak var shared: AppDelegate?
+
+  /// The delegate that the summon call sites (global Open-Omi shortcut, floating bar
+  /// "Continue in Omi") route through to bring the main window forward. This exists as
+  /// a single chokepoint precisely because `NSApp.delegate as? AppDelegate` returns
+  /// `nil` under SwiftUI's `@NSApplicationDelegateAdaptor` — that cast silently
+  /// no-oped every summon, so the app's window never came to the foreground.
+  static func summonWindowTarget() -> AppDelegate? { shared }
+
   nonisolated(unsafe) static var openMainWindow: (() -> Void)?
   private nonisolated(unsafe) static var appIsActive = false
   private nonisolated(unsafe) static var mainWindowIsKey = false
@@ -252,6 +266,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   private var initialSettingsSyncTask: Task<Void, Never>?
 
   func applicationWillFinishLaunching(_ notification: Notification) {
+    // Publish the live delegate instance for callers that can't rely on
+    // `NSApp.delegate as? AppDelegate` (nil under SwiftUI's delegate adaptor).
+    AppDelegate.shared = self
     if AuthStorageCanary.isRequested { return }
     // Single-instance guard: a second live copy of the same bundle id + launch mode
     // would race the first against the shared Rewind SQLite DB
@@ -429,11 +446,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       let options = FirebaseOptions(contentsOfFile: path)
     {
       FirebaseApp.configure(options: options)
-      Task { @MainActor in
-        await AuthService.shared.configure()
-      }
+      Task { @MainActor in await AuthService.shared.configure() }
     } else {
-      log("Firebase configure skipped (plistPath=\(plistPath ?? "nil"))")
+      // REST-backed token restoration does not require the Firebase SDK.
+      log("Firebase configure skipped (plistPath=\(plistPath ?? "nil")); using REST-backed auth")
+      Task { @MainActor in await AuthService.shared.configure() }
     }
 
     // Initialize analytics (PostHog)
@@ -1052,14 +1069,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   /// the menu-bar "Open Omi" item, the global Open Omi (formerly Ask Omi)
   /// shortcut, and the floating bar's "Continue in Omi" affordance.
   @MainActor func openMainAppWindow() {
-    NSApp.activate()
+    // Capture this BEFORE any activate call mutates AppKit's notion of frontmost.
+    let alreadyFrontmost = NSWorkspace.shared.frontmostApplication == NSRunningApplication.current
+    NSApp.activate(ignoringOtherApps: true)
     var foundWindow = revealMainWindowIfAvailable()
     if !foundWindow {
       Self.openMainWindow?()
       foundWindow = revealMainWindowIfAvailable()
     }
-    // Dock icon is always visible; just activate the app
-    NSApp.activate()
+    NSApp.activate(ignoringOtherApps: true)
+    // Bring Omi itself frontmost. On recent macOS an app can't reliably activate
+    // ITSELF from a background global-hotkey handler — `NSApp.activate` /
+    // `NSWorkspace.openApplication(on self)` are ignored, so the window orders
+    // front but the app never becomes active and keyboard focus stays with the
+    // previous app (you can't type in the chat). Asking the system via a separate
+    // `open` process — exactly as if the user re-launched us — reliably activates.
+    // Only needed when we're coming from another app; skip if already frontmost.
+    if !alreadyFrontmost {
+      let opener = Process()
+      opener.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+      opener.arguments = ["-a", Bundle.main.bundlePath]
+      try? opener.run()
+    }
     if !foundWindow {
       log("AppDelegate: [MENUBAR] WARNING - No Omi window found when opening main window")
     }
@@ -1070,6 +1101,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       let isRealAppWindow = window.frame.width > 300 && window.frame.height > 200
       let isMenuBarPopover = window.title.hasPrefix("Item-")
       if isRealAppWindow && !isMenuBarPopover {
+        // A summon can come from any Space/desktop, so pull the window to whichever
+        // desktop is active as the app activates (openMainAppWindow triggers a real
+        // LaunchServices activation). Also un-minimize and nudge it on-screen if it
+        // drifted off a disconnected display.
+        window.collectionBehavior.insert(.moveToActiveSpace)
+        if window.isMiniaturized { window.deminiaturize(nil) }
+        if let screen = NSScreen.main, !screen.visibleFrame.intersects(window.frame) {
+          window.center()
+        }
         window.makeKeyAndOrderFront(nil)
         window.appearance = NSAppearance(named: .darkAqua)
         return true
@@ -1474,6 +1514,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   }
 
   private func cleanupLegacyAppBundles() {
+    // Stable-only: this takeover kills running com.omi.computer-macos processes
+    // and deletes the legacy bundle. From Omi Beta or a dev bundle it would
+    // terminate the user's running stable app instead of a stale duplicate.
+    guard AppBuild.mayRunLegacyStableAppCleanup else {
+      log("Skipping legacy app cleanup: not the stable production identity")
+      return
+    }
     let currentPath = Bundle.main.bundlePath
     let oldAppPaths = [
       "/Applications/Omi Computer.app",
@@ -1587,63 +1634,5 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       guard !Task.isCancelled else { return }
       await SettingsSyncManager.shared.syncFromServer()
     }
-  }
-}
-
-extension AppDelegate {
-  /// Pure Sentry `beforeSend` triage (SET-05): decides whether an event must be
-  /// dropped (`beforeSend` returns nil). Extracted from the SDK closure so the drop
-  /// list is unit-testable; it takes only the event fields the closure inspects, so
-  /// no Sentry `Event` needs constructing in tests. Keep in lockstep with the
-  /// `options.beforeSend` closure in `applicationDidFinishLaunching`.
-  static func shouldDropSentryEvent(
-    isUserReport: Bool,
-    isDev: Bool,
-    urlTag: String?,
-    messageFormatted: String?,
-    exceptions: [(type: String, value: String)]
-  ) -> Bool {
-    // Always keep user feedback (dev + prod).
-    if isUserReport { return false }
-    // Never send other events from dev builds — they pollute production Sentry data.
-    if isDev { return true }
-    // Drop HTTP errors targeting dev/local URLs — noise when tunnels or local backends are down.
-    if let urlTag,
-      urlTag.contains("localhost") || urlTag.contains("127.0.0.1")
-        || urlTag.contains("trycloudflare.com")
-    {
-      return true
-    }
-    // Drop transient network/socket errors captured as exceptions (offline, timeouts,
-    // dropped connections, cancellations) — not actionable, dominate event volume.
-    let transientNetworkCodes: [(domain: String, codes: [String])] = [
-      ("NSURLErrorDomain", ["-999", "-1001", "-1003", "-1004", "-1005", "-1009", "-1011", "-1020"]),
-      ("NSPOSIXErrorDomain", ["54", "57", "89"]),
-    ]
-    if exceptions.contains(where: { exc in
-      transientNetworkCodes.contains { entry in
-        exc.type == entry.domain
-          && entry.codes.contains { exc.value.contains("Code=\($0)") || exc.value.contains("Code: \($0)") }
-      }
-    }) {
-      return true
-    }
-    // Drop backend Gemini key-expiry/auth failures — server-side key rotation, not a
-    // per-client bug; one bad key otherwise floods Sentry with one event per request.
-    if let lower = messageFormatted?.lowercased(),
-      lower.contains("api key expired") || lower.contains("renew the api key")
-        || lower.contains("api_key_invalid")
-        || lower.contains("ai service authentication error")
-        || lower.contains("invalid_auth")
-    {
-      return true
-    }
-    // Drop AuthError.notSignedIn — transient refresh failure; the 30s timer retries.
-    if exceptions.contains(where: {
-      $0.type == "Omi_Computer.AuthError" && $0.value.contains("notSignedIn")
-    }) {
-      return true
-    }
-    return false
   }
 }

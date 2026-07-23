@@ -759,9 +759,9 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
         return AlertDialog(
           backgroundColor: const Color(0xFF1F1F25),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(
+          title: const Text(
             'How Grade Works',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -831,7 +831,7 @@ class _LineChartPainter extends CustomPainter {
     double getY(double rating) {
       // Invert Y because canvas Y increases downward
       // Map 0-5 to chartHeight-10 to 10 (with some padding)
-      final padding = 12.0;
+      const padding = 12.0;
       final availableHeight = chartHeight - padding * 2;
       return padding + (1 - rating / 5) * availableHeight;
     }

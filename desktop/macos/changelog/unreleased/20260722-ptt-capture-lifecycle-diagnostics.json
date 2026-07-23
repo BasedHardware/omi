@@ -1,0 +1,3 @@
+{
+  "change": "Push-to-talk now records privacy-safe capture-lifecycle diagnostics so a silent-mic failure can be classified and diagnosed (capture never started, zero samples, released too early, or a recovery that did/did not restore audio) without sending any audio, device names, or transcripts"
+}

@@ -349,8 +349,9 @@ final class AuthTokenStorageTests: XCTestCase {
       source.contains("private let keychainService = \"com.omi.client-device-id\""),
       "ClientDeviceService must not hardcode the shared legacy device-id Keychain service")
     // All non-production bundles must stay on UserDefaults (no Keychain prompt risk).
+    // Stable and the side-by-side Omi Beta identity each use their own scoped service.
     XCTAssertTrue(
-      source.contains("productionBundleIdentifier"),
+      source.contains("productionFamilyBundleIdentifiers"),
       "ClientDeviceService must gate Keychain use to production-family bundles only")
   }
 

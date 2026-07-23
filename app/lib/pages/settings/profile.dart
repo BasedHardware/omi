@@ -490,7 +490,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   chipValue: SharedPreferencesUtil().givenName.isEmpty
                       ? context.l10n.notSet
                       : SharedPreferencesUtil().givenName,
-                  icon: FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
+                  icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
                     PlatformManager.instance.analytics.pageOpened('Profile Change Name');
                     await showDialog(
@@ -506,14 +506,14 @@ class _ProfilePageState extends State<ProfilePage> {
                   title: context.l10n.email,
                   chipValue:
                       SharedPreferencesUtil().email.isEmpty ? context.l10n.notSet : SharedPreferencesUtil().email,
-                  icon: FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
+                  icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {},
                   showChevron: false,
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
                   title: context.l10n.language,
-                  icon: FaIcon(FontAwesomeIcons.globe, color: Color(0xFF8E8E93), size: 20),
+                  icon: const FaIcon(FontAwesomeIcons.globe, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const LanguageSettingsPage());
                   },
@@ -521,7 +521,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
                   title: context.l10n.customVocabulary,
-                  icon: FaIcon(FontAwesomeIcons.book, color: Color(0xFF8E8E93), size: 20),
+                  icon: const FaIcon(FontAwesomeIcons.book, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const CustomVocabularyPage());
                   },
@@ -529,7 +529,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
                   title: context.l10n.memories,
-                  icon: FaIcon(FontAwesomeIcons.brain, color: Color(0xFF8E8E93), size: 20),
+                  icon: const FaIcon(FontAwesomeIcons.brain, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const MemoriesPage());
                   },
@@ -543,7 +543,7 @@ class _ProfilePageState extends State<ProfilePage> {
               children: [
                 _buildProfileItem(
                   title: context.l10n.speechProfile,
-                  icon: FaIcon(FontAwesomeIcons.microphone, color: Color(0xFF8E8E93), size: 20),
+                  icon: const FaIcon(FontAwesomeIcons.microphone, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const SpeechProfilePage());
                     PlatformManager.instance.analytics.pageOpened('Profile Speech Profile');
@@ -552,7 +552,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
                   title: context.l10n.identifyingOthers,
-                  icon: FaIcon(FontAwesomeIcons.users, color: Color(0xFF8E8E93), size: 20),
+                  icon: const FaIcon(FontAwesomeIcons.users, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const UserPeoplePage());
                   },
@@ -568,7 +568,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   const Divider(height: 1, color: Color(0xFF3C3C43)),
                   _buildProfileItem(
                     title: context.l10n.backgroundModeTitle,
-                    icon: FaIcon(FontAwesomeIcons.towerBroadcast, color: Color(0xFF8E8E93), size: 20),
+                    icon: const FaIcon(FontAwesomeIcons.towerBroadcast, color: Color(0xFF8E8E93), size: 20),
                     showBetaTag: true,
                     chipValue: SharedPreferencesUtil().backgroundModeEnabled ? context.l10n.on : context.l10n.off,
                     onTap: _showBackgroundModeSheet,
@@ -577,7 +577,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
                   title: context.l10n.transcribeLaterTitle,
-                  icon: FaIcon(FontAwesomeIcons.floppyDisk, color: Color(0xFF8E8E93), size: 20),
+                  icon: const FaIcon(FontAwesomeIcons.floppyDisk, color: Color(0xFF8E8E93), size: 20),
                   showBetaTag: true,
                   chipValue: SharedPreferencesUtil().batchModeEnabled ? context.l10n.on : context.l10n.off,
                   onTap: _showOfflineModeSheet,
@@ -597,7 +597,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     return _buildProfileItem(
                       title: context.l10n.userId,
                       chipValue: truncatedUid,
-                      icon: FaIcon(FontAwesomeIcons.solidClipboard, color: Color(0xFF8E8E93), size: 20),
+                      icon: const FaIcon(FontAwesomeIcons.solidClipboard, color: Color(0xFF8E8E93), size: 20),
                       onTap: () {
                         Clipboard.setData(ClipboardData(text: uid));
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.userIdCopied)));
@@ -608,7 +608,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
                   title: context.l10n.deleteAccountTitle,
-                  icon: FaIcon(FontAwesomeIcons.exclamationTriangle, color: Colors.red, size: 20),
+                  icon: const FaIcon(FontAwesomeIcons.exclamationTriangle, color: Colors.red, size: 20),
                   onTap: () {
                     PlatformManager.instance.analytics.pageOpened('Profile Delete Account Dialog');
                     Navigator.push(context, MaterialPageRoute(builder: (context) => const DeleteAccount()));

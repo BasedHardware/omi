@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
+import { withRowLimit } from "@/lib/posthog";
 import {
   desktopQualificationFromMetadata,
   desktopReleaseLifecycle,
@@ -106,7 +107,13 @@ async function posthogQuery(query: string): Promise<any> {
         Authorization: `Bearer ${POSTHOG_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
+      // This route has its own fetch (bypasses lib/posthog's posthogFetch), so
+      // it applies the same shared row-limit guard directly — the version×event
+      // query has no LIMIT and 5 events × ~40-80 versions exceeds the silent
+      // default 100, dropping per-version counts to 0 (#10190).
+      body: JSON.stringify({
+        query: { kind: "HogQLQuery", query: withRowLimit(query) },
+      }),
       cache: "no-store",
     },
   );

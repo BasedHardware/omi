@@ -1,16 +1,16 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/AuthService.swift": 3294,
+    "desktop/macos/Desktop/Sources/AuthService.swift": 2812,
     "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": 1678,
-    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4238,
-    "desktop/macos/Desktop/Sources/MemoryExportService.swift": 1578,
-    "desktop/macos/Desktop/Sources/OmiApp.swift": 1649
+    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4256,
+    "desktop/macos/Desktop/Sources/MemoryExportService.swift": 1593,
+    "desktop/macos/Desktop/Sources/OmiApp.swift": 1638
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/AuthService.swift": "Apple first-auth name capture signals observers (authNameDidUpdate) and persists the name to Firebase so it survives reinstalls.",
-    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": "Reach-error card gains a debug bridge action so the actionable failure surface is verifiable in-process.",
-    "desktop/macos/Desktop/Sources/MemoryExportService.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
-    "desktop/macos/Desktop/Sources/OmiApp.swift": "openMainAppChat() adds a chat-landing entry beside openMainAppWindow(), and one startup call wires AgentCompletionVoiceDelivery into launch beside the other singleton starts; the service is a separate file."
+    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": "present_onboarding_opener QA action renders the real post-onboarding opener in-process for verification.",
+    "desktop/macos/Desktop/Sources/MemoryExportService.swift": "Adds cloudOAuthGrantClientIDs so ChatGPT directory grants (always omi-chatgpt-prod) verify on dev/Beta builds, fixing the connector chip never flipping to connected.",
+    "desktop/macos/Desktop/Sources/OmiApp.swift": "Launch wires AgentCompletionVoiceDelivery.shared.start() so completed background-agent runs reach a live voice session; the one-line start() call belongs at the app-launch site alongside the other launch-time service starts."
   },
   "threshold": 1500
 }

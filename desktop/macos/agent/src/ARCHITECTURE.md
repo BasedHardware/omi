@@ -46,9 +46,11 @@ Swift desktop client
 - `context-snapshot.ts` owns versioned context source selection, admission, and
   rendering. Surface policy and tool capability fingerprints are distinct from
   the shared base-content version.
-- `conversation-journal.ts` is the sole durable conversation writer. Backend
-  synchronization and deletion use its owner-scoped outboxes; Swift performs
-  physical HTTP only and returns exact claim receipts. Clear advances the
+- `conversation-journal.ts` is the sole durable conversation writer.
+  `backend-turn-projection.ts` is the shared canonical backend payload/hash
+  projection used by normal writes and startup repair. Backend synchronization
+  and deletion use owner-scoped outboxes; Swift performs physical HTTP only and
+  returns exact claim receipts. Clear advances the
   journal generation, invalidates remote reconciliation, preserves only the
   identity of already-delivering POST claims, and gates both remote reads and
   new-generation POSTs until the backend DELETE is acknowledged.
@@ -59,6 +61,11 @@ Swift desktop client
 - `adapters/*` translate a pinned run into provider calls. They cannot choose a
   different provider, mutate a session profile, or directly execute desktop
   effects.
+- `artifact-storage.ts` owns per-run managed artifact directories. Every leaf
+  attempt receives that directory as both its adapter cwd and MCP workspace;
+  delegated objectives and raw control-tool cwd values cannot default a
+  deliverable to Desktop. Explicit external-delivery reports remain a narrow
+  compatibility import path and are copied into the managed directory.
 - Generated tool manifests and Swift executors are updated together through
   `../scripts/generate-tool-surfaces.mjs`; hand-edited capability mirrors are
   prohibited.

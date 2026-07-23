@@ -298,24 +298,28 @@ enum AgentClient {
     func clearJournalTurns(
       surface: AgentSurfaceReference,
       ownerID: String? = nil,
-      expectedGeneration: Int? = nil
+      expectedGeneration: Int? = nil,
+      deleteBackend: Bool = true
     ) async throws -> Int {
       try await bridge.clearJournalTurns(
         surface: surface,
         ownerID: ownerID,
-        expectedGeneration: expectedGeneration
+        expectedGeneration: expectedGeneration,
+        deleteBackend: deleteBackend
       )
     }
 
     func clearJournalTurnsForControl(
       surface: AgentSurfaceReference,
       ownerID: String? = nil,
-      expectedGeneration: Int? = nil
+      expectedGeneration: Int? = nil,
+      deleteBackend: Bool = true
     ) async throws -> Int {
       try await bridge.clearJournalTurnsForControl(
         surface: surface,
         ownerID: ownerID,
-        expectedGeneration: expectedGeneration
+        expectedGeneration: expectedGeneration,
+        deleteBackend: deleteBackend
       )
     }
 

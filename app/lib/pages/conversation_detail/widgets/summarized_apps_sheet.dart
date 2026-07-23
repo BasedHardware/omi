@@ -706,7 +706,7 @@ class _CreateTemplateListItem extends StatelessWidget {
       children: [
         ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          leading: CircleAvatar(
+          leading: const CircleAvatar(
             backgroundColor: Colors.white,
             radius: 16,
             child: FaIcon(FontAwesomeIcons.plus, color: Colors.black, size: 18),
@@ -743,7 +743,7 @@ class _EnableAppsListItem extends StatelessWidget {
       children: [
         ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          leading: CircleAvatar(
+          leading: const CircleAvatar(
             backgroundColor: Colors.white,
             radius: 16,
             child: FaIcon(FontAwesomeIcons.solidFolderOpen, color: Colors.black, size: 14),

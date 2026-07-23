@@ -22,8 +22,8 @@ final class TranscriptionTransportTests: XCTestCase {
       url: URL(string: "wss://example.com:99999/path")!,
       queue: DispatchQueue(label: "test.rawws"))
     let errored = expectation(description: "onError fires")
-    socket.onError = { message in
-      XCTAssertTrue(message.lowercased().contains("port"), "got: \(message)")
+    socket.onError = { failure in
+      XCTAssertTrue(failure.message.lowercased().contains("port"), "got: \(failure.message)")
       errored.fulfill()
     }
     socket.connect()  // pre-fix: traps in UInt16(99999)

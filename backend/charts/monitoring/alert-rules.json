@@ -9194,5 +9194,203 @@
       "receiver": "Omi - Services Alerting (Telegram)"
     },
     "record": null
+  },
+  {
+    "uid": "omi-parakeet-ready-pod-no-success",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Parakeet",
+    "title": "Parakeet - ready pod is failing every request",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum by (pod) (increase(parakeet_requests_total{container=\"parakeet\",namespace=\"prod-omi-backend\",status=\"error\"}[5m])) >= 10) unless on (pod) (sum by (pod) (increase(parakeet_requests_total{container=\"parakeet\",namespace=\"prod-omi-backend\",status=\"success\"}[5m])) > 0)) and on (pod) (max by (pod) (kube_pod_status_ready{namespace=\"prod-omi-backend\",condition=\"true\",pod=~\"prod-omi-parakeet-.*\"}) == 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-07-23T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "2m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
+      "__panelId__": "103",
+      "summary": "A Ready Parakeet pod has at least 10 failed requests and no successful requests in five minutes.",
+      "user_impact": "Users routed to the affected pod are receiving transcription failures.",
+      "scope": "One production Parakeet pod, evaluated independently from healthy sibling replicas.",
+      "verification": "Compare per-pod success and error outcomes, then inspect the affected pod health and recent CUDA errors.",
+      "safe_next_action": "If the pod is still Ready and has zero successes, replace only that replica and verify its replacement serves successful requests."
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-parakeet-ready-pod-no-success",
+      "component": "speech-processing",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-parakeet-fatal-cuda",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Parakeet",
+    "title": "Parakeet - fatal CUDA state detected",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (pod) (increase(parakeet_gpu_fatal_errors_total{container=\"parakeet\",namespace=\"prod-omi-backend\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-07-23T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
+      "__panelId__": "21",
+      "summary": "A Parakeet worker detected a CUDA error that makes further inference unsafe.",
+      "user_impact": "No confirmed user impact yet; the affected replica is leaving service and will be restarted automatically.",
+      "scope": "One production Parakeet GPU process and its Kubernetes replica.",
+      "verification": "Confirm the pod became unready, restarted, and was replaced by a replica serving successful transcription requests.",
+      "safe_next_action": "Allow the health probes to recycle the replica; intervene only if the replacement also reports a fatal CUDA state."
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-parakeet-fatal-cuda",
+      "component": "speech-processing",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
   }
 ]

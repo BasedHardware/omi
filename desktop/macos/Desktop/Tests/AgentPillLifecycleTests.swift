@@ -390,8 +390,8 @@ import XCTest
     XCTAssertTrue(source.contains("private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup]"))
     XCTAssertTrue(source.contains("ToolCallsGroup(calls: calls, compact: true)"))
     XCTAssertTrue(source.contains("ThinkingBlock(text: text)"))
-    XCTAssertTrue(source.contains("Markdown(trimmed)"))
-    XCTAssertTrue(source.contains(".markdownTheme(.aiMessage(scale: 0.88))"))
+    XCTAssertTrue(source.contains("SelectableMarkdown(text: trimmed, sender: .ai)"))
+    XCTAssertTrue(source.contains(".environment(\\.fontScale, 0.88)"))
     XCTAssertTrue(source.contains(".frame(width: 36, height: 36)"))
     XCTAssertTrue(source.contains(".contentShape(Rectangle())"))
     XCTAssertTrue(source.contains("let onBackToAgentRows: () -> Void"))
@@ -462,53 +462,32 @@ import XCTest
     XCTAssertFalse(view.contains("agentFollowUp"))
   }
 
-  func testNotchHoverMenuKeepsAskOmiReachable() throws {
+  func testNotchHoverMenuIsAgentOnlyAfterChatEntryRetirement() throws {
     let source = try floatingControlBarViewSource()
 
-    guard let rowRange = source.range(of: "private var notchOmiChatRow: some View"),
-      let heightRange = source.range(of: "private var notchChromeHeight: CGFloat")
-    else {
-      return XCTFail("Expected notch Omi Chat hover row section")
-    }
-    let rowSource = String(source[rowRange.lowerBound..<heightRange.lowerBound])
-
-    XCTAssertTrue(rowSource.contains("Text(\"Omi Chat\")"))
-    XCTAssertTrue(rowSource.contains("openOmiChatFromNotchRow()"))
-    XCTAssertTrue(rowSource.contains("private var notchOmiChatOverlayHitTarget: some View"))
-    XCTAssertTrue(rowSource.contains(".accessibilityLabel(\"Omi Chat\")"))
-    XCTAssertTrue(rowSource.contains("notchShortcutHint(\"Ask\""))
-    XCTAssertTrue(rowSource.contains("notchShortcutHint(systemImage: \"mic.fill\""))
-    XCTAssertFalse(rowSource.contains("notchShortcutHint(\"PTT\""))
+    XCTAssertFalse(source.contains("private var notchOmiChatRow: some View"))
+    XCTAssertFalse(source.contains("private var notchOmiChatOverlayHitTarget: some View"))
+    XCTAssertFalse(source.contains("openOmiChatFromNotchRow()"))
+    XCTAssertTrue(source.contains("NotchAgentMenuPresentation.shouldPresent(agentCount: agentPills.pills.count)"))
   }
 
-  func testNotchSettingsHitTargetDoesNotCoverChatRows() throws {
+  func testNotchIdleTapUsesTheMainChatAuthority() throws {
     let source = try floatingControlBarViewSource()
 
     XCTAssertTrue(
       source.contains(
-        "            notchAgentLogoHitTarget\n              .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)"
+        "notchAgentLogoHitTarget\n            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)"
       ))
     XCTAssertFalse(
       source.contains(
         "notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight + notchHoverMenuHeight)"
       ))
-    XCTAssertTrue(source.contains("@State private var notchSettingsHovering = false"))
-    XCTAssertTrue(source.contains("if !state.isVoicePresentationActive && notchSettingsHovering"))
-    XCTAssertTrue(source.contains("private var notchSettingsButton: some View"))
-    XCTAssertTrue(source.contains(".frame(width: 44, height: 44)"))
-    XCTAssertTrue(source.contains(".accessibilityIdentifier(\"notch_floating_bar_settings\")"))
-    XCTAssertFalse(
-      source.contains(
-        ".background(Color.white.opacity(0.12))\n                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))"
-      ))
-    XCTAssertTrue(source.contains("notchSettingsHovering = showsHoverChrome"))
-    XCTAssertTrue(source.contains("openFloatingBarSettings()"))
+    XCTAssertTrue(source.contains("private func openMainChatFromIdleNotch()"))
+    XCTAssertTrue(source.contains("NotchIdleTapRoute.perform("))
+    XCTAssertTrue(source.contains("(NSApp.delegate as? AppDelegate)?.openMainAppChat()"))
+    XCTAssertFalse(source.contains("gearshape.fill"))
+    XCTAssertFalse(source.contains("openFloatingBarSettings()"))
     XCTAssertTrue(source.contains("openAgentChatsFromNotchLogo()"))
-    XCTAssertFalse(
-      source.contains(
-        ".onHover { hovering in\n            withAnimation(.easeInOut(duration: 0.12)) {\n                notchSettingsHovering = hovering"
-      ))
-    XCTAssertFalse(source.contains(".onTapGesture {\n                    openFloatingBarSettings()\n                }"))
   }
 
   func testNotchChatSizingPreservesSurfaceWidthAndGlowList() throws {
@@ -623,19 +602,8 @@ import XCTest
     XCTAssertFalse(
       source.contains(".animation(.spring(response: 0.18, dampingFraction: 0.9), value: shouldShowNotchHoverMenu)"))
     XCTAssertTrue(source.contains(".transition(.identity)"))
-    XCTAssertTrue(
-      source.contains(
-        "            notchOmiChatRow\n              .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"
-      ))
-    XCTAssertTrue(
-      source.contains(".allowsHitTesting(!shouldUseOmiChatOverlayHitTarget && notchSwitcherProgress > 0.6)"))
-    XCTAssertTrue(
-      source.contains(
-        "          notchOmiChatOverlayHitTarget\n            .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"
-      ))
-    XCTAssertTrue(source.contains(".offset(y: notchChromeHeight)"))
-    XCTAssertTrue(source.contains(".zIndex(2)"))
-    XCTAssertTrue(source.contains("height: notchHoverMenuHeight - FloatingControlBarWindow.notchAgentListRowHeight"))
+    XCTAssertFalse(source.contains("notchOmiChatRow"))
+    XCTAssertFalse(source.contains("notchOmiChatOverlayHitTarget"))
     XCTAssertTrue(source.contains("state.present(.agent(pill.id))"))
     XCTAssertTrue(source.contains("private let agentChatSwitchTransition = Animation.easeOut(duration: 0.10)"))
     XCTAssertTrue(source.contains("if state.conversationSurface == .agent(pill.id)"))
@@ -648,21 +616,19 @@ import XCTest
     XCTAssertTrue(source.contains(".frame(width: 44, height: 44)"))
     XCTAssertTrue(
       source.contains("        .onTapGesture {\n          openAgentChatsFromNotchLogo()\n        }"))
-    XCTAssertTrue(source.contains("Image(systemName: \"gearshape.fill\")"))
+    XCTAssertFalse(source.contains("Image(systemName: \"gearshape.fill\")"))
     XCTAssertTrue(source.contains("private func openAgentChatsFromNotchLogo()"))
     XCTAssertTrue(source.contains("showAgentListFromConversation()"))
     XCTAssertTrue(source.contains("setAgentSwitcherHovering(hovering)"))
     XCTAssertFalse(source.contains("@State private var agentSwitcherPinned"))
     XCTAssertFalse(source.contains("@State private var agentSwitcherHovering"))
     XCTAssertTrue(source.contains("leaveAgentConversation()"))
-    XCTAssertTrue(source.contains("Text(\"Omi Chat\")"))
     XCTAssertTrue(
       source.contains("barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)"))
     XCTAssertTrue(source.contains(".opacity(rowRevealProgress)"))
     XCTAssertFalse(source.contains("NotchLogoPlaceholderDot(progress: logoPlaceholderProgress)"))
-    XCTAssertTrue(source.contains("private var shouldUseOmiChatOverlayHitTarget: Bool"))
-    XCTAssertTrue(source.contains("if state.usesNotchIsland && shouldUseOmiChatOverlayHitTarget"))
-    XCTAssertTrue(source.contains("rowTopOffset: FloatingControlBarWindow.notchAgentListRowHeight"))
+    XCTAssertTrue(source.contains("if state.usesNotchIsland && shouldShowNotchHoverMenu"))
+    XCTAssertTrue(source.contains("rowTopOffset: 0"))
     XCTAssertTrue(source.contains("private var showingNotchWaveform: Bool"))
     XCTAssertTrue(source.contains("private var escToClearHint: some View"))
     XCTAssertTrue(
@@ -1001,10 +967,13 @@ import XCTest
     let source = try chatMessagesViewSource()
 
     XCTAssertTrue(source.contains("On the first load of a saved conversation, follow the latest message."))
-    XCTAssertTrue(
-      source.contains("    scrollToBottom(proxy: proxy)\n    scheduleInitialScroll(proxy: proxy, delay: 0.05)"))
-    XCTAssertTrue(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.18)"))
-    XCTAssertTrue(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.45)"))
+    // omi-test-quality: source-inspection -- static contract: startup history
+    // has one deferred restore; its behavioral counterpart asserts one atomic
+    // journal snapshot in KernelTurnRecordedProjectionTests.
+    XCTAssertTrue(source.contains("isInitialRestorePending = true"))
+    XCTAssertTrue(source.contains("DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)"))
+    XCTAssertFalse(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.18)"))
+    XCTAssertFalse(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.45)"))
     XCTAssertTrue(source.contains("private func handleViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy)"))
     XCTAssertTrue(source.contains(".background(viewportResizeDetector(proxy: proxy))"))
     XCTAssertTrue(
@@ -1327,8 +1296,9 @@ import XCTest
       ),
       "Provider quota failures should try alternate provider regardless of socket age")
     XCTAssertTrue(
-      hubSource.contains("let shouldRedactProviderMessage: Bool"),
-      "Credential close logs must redact raw provider auth/quota payloads")
+      hubSource.contains("let reportingPlan = RealtimeHubFailureReportingPlan.make(")
+        && hubSource.contains("logError(reportingPlan.sentryMessage)"),
+      "Credential close reporting must send only the bounded reporting plan to Sentry")
     XCTAssertTrue(
       hubSource.contains("func shouldFailoverToAlternate(for failureClass: CredentialFailureClass?) -> Bool"),
       "Provider switching must be centralized and limited to stable credential/quota failures")
@@ -1641,6 +1611,40 @@ import XCTest
     XCTAssertTrue(chatBubbleSource.contains(".table { configuration in"))
     XCTAssertTrue(chatBubbleSource.contains(".markdownTableBorderStyle"))
     XCTAssertTrue(chatBubbleSource.contains(".markdownTableBackgroundStyle"))
+  }
+
+  func testSelectableMarkdownRenderBoundarySkipsParentOnlyFeedbackUpdates() {
+    let baseline = SelectableMarkdownContent(text: "Final answer", sender: .ai, fontScale: 1)
+
+    XCTAssertEqual(
+      baseline,
+      SelectableMarkdownContent(text: "Final answer", sender: .ai, fontScale: 1),
+      "unchanged message inputs must not rebuild SelectionOverlay when parent copy feedback changes"
+    )
+    XCTAssertNotEqual(
+      baseline,
+      SelectableMarkdownContent(text: "Updated answer", sender: .ai, fontScale: 1)
+    )
+    XCTAssertNotEqual(
+      baseline,
+      SelectableMarkdownContent(text: "Final answer", sender: .user, fontScale: 1)
+    )
+    XCTAssertNotEqual(
+      baseline,
+      SelectableMarkdownContent(text: "Final answer", sender: .ai, fontScale: 1.1)
+    )
+  }
+
+  func testSelectableMarkdownProvidesAnIndependentCodeCopyControl() throws {
+    // omi-test-quality: source-inspection -- static contract: the reusable SwiftUI code-block
+    // renderer owns a leaf-state copy affordance; clipboard writes are exercised manually in the app.
+    let source = try selectableMarkdownSource()
+
+    XCTAssertTrue(source.contains("private func codeBlockView(_ code: String, language: String?)"))
+    XCTAssertTrue(source.contains("private struct CodeBlockCopyButton: View"))
+    XCTAssertTrue(source.contains("@State private var copied = false"))
+    XCTAssertTrue(source.contains("NSPasteboard.general.setString(code, forType: .string)"))
+    XCTAssertTrue(source.contains(".help(\"Copy code\")"))
   }
 
   func testNonProductionBundlesDoNotInstallNativeSentryHandlers() throws {
