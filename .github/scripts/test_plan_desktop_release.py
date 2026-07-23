@@ -26,6 +26,47 @@ LATEST_TAG = "v0.0.1+1-macos"
 RELEASABLE_PATH = "desktop/macos/Desktop/Sources/AppDelegate.swift"
 
 
+def _parse_push_filter(workflow_text: str) -> tuple[list[str], set[str]]:
+    """Extract `on.push.branches` and `on.push.paths` from the release workflow.
+
+    A deliberately small parser for the workflow's fixed shape (a `push:` block
+    with an inline `branches: [main]` and a `paths:` list of single-quoted
+    strings), so the check needs no PyYAML in any lane. Raises if the expected
+    structure is missing rather than silently returning empty results.
+    """
+    lines = workflow_text.splitlines()
+    branches: list[str] = []
+    paths: set[str] = set()
+    in_push = False
+    in_paths = False
+    for raw in lines:
+        stripped = raw.strip()
+        indent = len(raw) - len(raw.lstrip(" "))
+        if indent <= 2 and stripped.endswith(":") and stripped != "push:":
+            # Left the push block on any sibling/parent key (e.g. schedule:).
+            if in_push and indent <= 2:
+                in_push = False
+            in_paths = False
+        if stripped == "push:":
+            in_push = True
+            continue
+        if not in_push:
+            continue
+        if stripped.startswith("branches:"):
+            inside = stripped.split("branches:", 1)[1].strip().strip("[]")
+            branches = [b.strip().strip("'\"") for b in inside.split(",") if b.strip()]
+            in_paths = False
+        elif stripped == "paths:":
+            in_paths = True
+        elif in_paths and stripped.startswith("- "):
+            paths.add(stripped[2:].strip().strip("'\""))
+        elif in_paths and not stripped.startswith("- ") and stripped:
+            in_paths = False
+    if not branches or not paths:
+        raise AssertionError("Could not parse push.branches/push.paths from desktop_auto_release.yml")
+    return branches, paths
+
+
 class DesktopCandidateSourceCheckTests(unittest.TestCase):
     def test_codemagic_config_is_a_releasable_desktop_input(self) -> None:
         expected_args = [
@@ -116,14 +157,13 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
 
     def test_workflow_has_no_input_manual_trigger_and_tags_the_changelog_commit(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        # workflow_dispatch stays bare (no manual inputs). Candidates are cut on a
-        # fixed 6-hourly schedule (12am/6am/12pm/6pm America/New_York = 04:00/10:00/
-        # 16:00/22:00 UTC in EDT); no per-merge push trigger. No `inputs:` may
-        # appear in the trigger block.
+        # workflow_dispatch stays bare (no manual inputs). Continuous deployment:
+        # auto-release fires on macOS-affecting merges to main (push); the schedule
+        # remains a backstop. No `inputs:` may appear in the trigger block.
         self.assertIn("  workflow_dispatch:\n", workflow)
         self.assertNotIn("inputs:", workflow.split("\njobs:", 1)[0])
-        self.assertNotIn("\n  push:", workflow.split("\njobs:", 1)[0])
-        self.assertIn("- cron: '0 4,10,16,22 * * *'", workflow)
+        self.assertIn("  push:\n    branches: [main]", workflow)
+        self.assertIn("- cron: '17 * * * *'", workflow)
         self.assertNotIn("break_glass", workflow)
         self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
@@ -146,6 +186,26 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         # must use the bash-3.2-safe `${arr[@]+"${arr[@]}"}` expansion.
         self.assertNotIn('--readiness "${KEEP_FLAG[@]}"', readiness_script)
         self.assertIn('${KEEP_FLAG[@]+"${KEEP_FLAG[@]}"}', readiness_script)
+
+    def test_push_paths_cover_releasable_desktop_paths(self) -> None:
+        # Continuous deployment: every releasable desktop input the planner
+        # recognizes must also be in the workflow's push filter, or a merge
+        # touching only that input would be releasable yet never get the immediate
+        # push trigger (only the schedule backstop would catch it). A directory
+        # entry maps to '<dir>/**'.
+        #
+        # Parse the push filter without PyYAML: this check runs in the `local` and
+        # `ci` lanes across environments that do not all ship PyYAML.
+        branches, push_paths = _parse_push_filter(WORKFLOW.read_text(encoding="utf-8"))
+        self.assertEqual(branches, ["main"])
+        for path in planner.DESKTOP_RELEASE_PATHS:
+            expected = f"{path}/**" if (ROOT / path).is_dir() else path
+            self.assertIn(
+                expected,
+                push_paths,
+                f"releasable desktop path {path!r} (expected push filter {expected!r}) "
+                "is missing from desktop_auto_release.yml push.paths",
+            )
 
 
 if __name__ == "__main__":
