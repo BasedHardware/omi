@@ -130,4 +130,52 @@ config OMI_WATCHDOG_TIMEOUT_MS
          operations can run longer (e.g. SD/LFS pre-warm) to avoid false
          watchdog resets."
 
+config OMI_ENABLE_IDLE_SLEEP
+    bool "Idle auto-sleep (system off)"
+    depends on OMI_ENABLE_BUTTON
+    default n
+    help
+        "Automatically enter system off (deep sleep) after the device has been
+         idle for OMI_IDLE_SLEEP_TIMEOUT_MIN minutes. Idle means no audio is
+         streaming to a subscribed central and the device is not charging.
+         Wake by pressing the user button (same wake path as the long-press
+         power off). The BLE radio is off in system off, so a new connection
+         cannot wake the device."
+
+config OMI_IDLE_SLEEP_TIMEOUT_MIN
+    int "Idle timeout before auto-sleep (minutes)"
+    range 1 720
+    default 30
+    depends on OMI_ENABLE_IDLE_SLEEP
+    help
+        "Minutes of continuous idle before the device powers off to conserve
+         battery."
+
+config OMI_ENABLE_BLE_SLEEP_CMD
+    bool "BLE sleep command characteristic"
+    depends on OMI_ENABLE_BUTTON
+    default n
+    help
+        "Expose a write-only characteristic (19B10014) in the settings service
+         so the companion app can command the device into system off (e.g. an
+         end-of-day 'put Omi to sleep' action). Write a single byte 0x01 to
+         trigger the same power-off path as a long button press."
+
+config OMI_ENABLE_BATTERY_LOW_LED
+    bool "Low-battery LED warning"
+    depends on OMI_ENABLE_BATTERY
+    default n
+    help
+        "Blink the red LED when the battery level drops to or below
+         OMI_BATTERY_LOW_THRESHOLD percent and the device is not charging."
+
+config OMI_BATTERY_LOW_THRESHOLD
+    int "Low-battery LED threshold (percent)"
+    range 1 50
+    default 10
+    depends on OMI_ENABLE_BATTERY_LOW_LED
+    help
+        "Battery percentage at or below which the low-battery LED warning
+         activates."
+
 endmenu
