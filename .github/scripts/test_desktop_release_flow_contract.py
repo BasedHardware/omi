@@ -259,6 +259,40 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         m4_steps = m4_job.split("    steps:\n", 1)[1].rstrip("\n")
         self.assertEqual(m1_steps, m4_steps)
 
+    def test_codemagic_lane_exports_only_a_read_scoped_token_to_external_ci(self) -> None:
+        """External Codemagic must never receive a release-write-capable token.
+
+        The codemagic-lane also uploads the immutable evidence with
+        `gh release upload`, so it holds a write-scoped token — but that token
+        must stay inside GitHub Actions. Every value handed to Codemagic
+        (QUALIFY_GH_TOKEN) must resolve to the read-scoped app token.
+        """
+        codemagic_job = self._qualification_jobs()["codemagic-lane"]
+
+        # Two distinct app tokens: read for downloads + external export, write
+        # only for the in-Actions release upload.
+        self.assertIn("id: app-token-read", codemagic_job)
+        self.assertIn("id: app-token-write", codemagic_job)
+        read_block = codemagic_job.split("id: app-token-read", 1)[1].split("\n      - name:", 1)[0]
+        write_block = codemagic_job.split("id: app-token-write", 1)[1].split("\n      - name:", 1)[0]
+        self.assertIn("permission-contents: read", read_block)
+        self.assertIn("permission-contents: write", write_block)
+
+        # Every token exported to Codemagic must be the read-scoped one, and the
+        # write-scoped token must never appear on a QUALIFY_GH_TOKEN line.
+        qualify_token_lines = [
+            line for line in codemagic_job.splitlines() if "QUALIFY_GH_TOKEN:" in line
+        ]
+        self.assertTrue(qualify_token_lines, "codemagic-lane must export QUALIFY_GH_TOKEN to Codemagic")
+        for line in qualify_token_lines:
+            self.assertIn("steps.app-token-read.outputs.token", line)
+            self.assertNotIn("app-token-write", line)
+
+        # The write token is used only immediately before a release upload.
+        self.assertIn("GH_TOKEN: ${{ steps.app-token-write.outputs.token }}", codemagic_job)
+        write_usage = codemagic_job.split("GH_TOKEN: ${{ steps.app-token-write.outputs.token }}", 1)[1]
+        self.assertIn("gh release upload", write_usage.split("\n      - name:", 1)[0])
+
     def test_beta_qualification_cleanup_accepts_missing_gitlink(self) -> None:
         for name, script in self._gitlink_cleanup_scripts():
             with self.subTest(step=name), tempfile.TemporaryDirectory() as directory:
