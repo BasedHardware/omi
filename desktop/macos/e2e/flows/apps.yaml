@@ -6,6 +6,8 @@ app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ManualInstallationDisclosure.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiModal.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ModalPresentationState.swift
   - desktop/macos/Desktop/Sources/ConferencingApps.swift
   - desktop/macos/Desktop/Sources/ConnectorBrandIcon.swift
 preconditions:
