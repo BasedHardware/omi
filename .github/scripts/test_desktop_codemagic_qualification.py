@@ -20,9 +20,7 @@ class VerifyResultPayloadTests(unittest.TestCase):
     SHA = "a" * 40
 
     def test_accepts_exact_binding(self) -> None:
-        lane.verify_result_payload(
-            {"ok": True, "release_tag": self.TAG, "source_sha": self.SHA}, self.TAG, self.SHA
-        )
+        lane.verify_result_payload({"ok": True, "release_tag": self.TAG, "source_sha": self.SHA}, self.TAG, self.SHA)
 
     def test_rejects_not_ok(self) -> None:
         with self.assertRaises(SystemExit):
@@ -108,6 +106,65 @@ class FetchResultArtifactTests(unittest.TestCase):
                 {"artefacts": [{"name": "qualification-result.json", "url": "https://example/x"}]},
             )
         self.assertEqual(result, payload)
+
+    def test_extracts_result_from_zip_artifact(self) -> None:
+        """Codemagic zips the build/qualification/** glob; the driver must still find the result."""
+        import io
+        import zipfile
+
+        payload = {"ok": True, "release_tag": "v0.12.113+12113-macos"}
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("qualification/candidate-gate.json", "{}")
+            archive.writestr("qualification/qualification-result.json", json.dumps(payload))
+        zip_bytes = buffer.getvalue()
+
+        with mock.patch.object(lane, "_download_artifact", return_value=zip_bytes):
+            result = lane.fetch_result_artifact(
+                "token",
+                {"artefacts": [{"name": "qualification.zip", "url": "https://example/z"}]},
+            )
+        self.assertEqual(result, payload)
+
+    def test_prefers_top_level_file_over_zip(self) -> None:
+        direct = {"ok": True, "source": "file"}
+
+        def fake_download(_token, url):
+            import io
+            import zipfile
+
+            if url.endswith(".json"):
+                return json.dumps(direct).encode("utf-8")
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, "w") as archive:
+                archive.writestr("qualification-result.json", json.dumps({"ok": True, "source": "zip"}))
+            return buffer.getvalue()
+
+        with mock.patch.object(lane, "_download_artifact", side_effect=fake_download):
+            result = lane.fetch_result_artifact(
+                "token",
+                {
+                    "artefacts": [
+                        {"name": "qualification.zip", "url": "https://example/z.zip"},
+                        {"name": "qualification-result.json", "url": "https://example/r.json"},
+                    ]
+                },
+            )
+        self.assertEqual(result["source"], "file")
+
+    def test_zip_without_result_fails(self) -> None:
+        import io
+        import zipfile
+
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("qualification/candidate-gate.json", "{}")
+        with mock.patch.object(lane, "_download_artifact", return_value=buffer.getvalue()):
+            with self.assertRaises(SystemExit):
+                lane.fetch_result_artifact(
+                    "token",
+                    {"artefacts": [{"name": "qualification.zip", "url": "https://example/z"}]},
+                )
 
 
 if __name__ == "__main__":
