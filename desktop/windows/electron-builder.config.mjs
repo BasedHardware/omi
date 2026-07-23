@@ -50,7 +50,6 @@ export default {
     // koffi loads its native .node at runtime, resolved relative to its own package
     // dir — it must live outside the asar archive or the foreground monitor fails.
     'node_modules/koffi/**',
-    'node_modules/@koromix/koffi-win32-x64/**',
     // kgWorker.js is loaded via new Worker(path) which bypasses Electron's asar
     // virtual-fs patch — it must be a real file on disk.
     'out/main/kgWorker.js',
