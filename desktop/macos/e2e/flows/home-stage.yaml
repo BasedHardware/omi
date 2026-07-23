@@ -14,6 +14,13 @@ preconditions:
   - automation_bridge_ready
 
 steps:
+  - id: S0
+    name: Reset main chat for flow isolation
+    bridge.action:
+      name: reset_main_chat
+    expect:
+      result.detail.reset: "true"
+
   - id: S1
     name: Navigate to Dashboard
     bridge.navigate:
@@ -23,11 +30,11 @@ steps:
       state.selectedTabIndex: 0
 
   - id: S2
-    name: Collapse to the loaded-history resting surface
+    name: Collapse to the empty-history resting hub
     bridge.action:
       name: home_close_panel
     wait:
-      state.homeMode: chat
+      state.homeMode: hub
 
   - id: S3
     name: Open inline chat
