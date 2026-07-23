@@ -1106,6 +1106,7 @@ import XCTest
     /// Static architecture tripwire; behavioral journal coverage lives above.
     func testKernelJournalIsOnlyDurableDesktopChatWriter() throws {
       let provider = try sourceFile("Providers/ChatProvider.swift")
+      let journalProjection = try sourceFile("Providers/ChatProvider+JournalProjection.swift")
       let taskState = try sourceFile(
         "ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
       let taskStorage = try sourceFile("Rewind/Core/TaskChatMessageStorage.swift")
@@ -1142,7 +1143,7 @@ import XCTest
       let projection = try sourceFile("Chat/KernelTurnProjection.swift")
       let floating = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
       let pills = try sourceFile("FloatingControlBar/AgentPill.swift")
-      XCTAssertTrue(provider.contains("AgentPillsManager.shared.bindProducingJournalSurface("))
+      XCTAssertTrue(journalProjection.contains("AgentPillsManager.shared.bindProducingJournalSurface("))
       XCTAssertTrue(floating.contains("pill?.producingJournalSurface"))
       XCTAssertTrue(pills.contains("producingSurface: pill.producingJournalSurface"))
       for source in [projection, floating, pills] {

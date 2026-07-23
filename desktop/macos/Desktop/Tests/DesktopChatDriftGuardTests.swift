@@ -41,6 +41,29 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertTrue(mainChat.contains(".padding(.vertical, OmiSpacing.sm)"))
   }
 
+  func testChatTranscriptLoaderIgnoresSessionListRefreshes() throws {
+    let chatPage = try sourceFile("MainWindow/Pages/ChatPage.swift")
+    let dashboardPage = try sourceFile("MainWindow/Pages/DashboardPage.swift")
+
+    for source in [chatPage, dashboardPage] {
+      XCTAssertFalse(
+        source.contains("isLoadingInitial: (chatProvider.isLoading || chatProvider.isLoadingSessions)"),
+        "Session-list refreshes must not hide a non-empty transcript behind the initial message-history loader."
+      )
+      XCTAssertFalse(
+        source.contains("isLoadingInitial: chatProvider.isLoadingSessions"),
+        "Session-list refreshes must not drive the transcript's initial loader."
+      )
+    }
+
+    XCTAssertTrue(chatPage.contains("isLoadingInitial: chatProvider.isLoading && !chatProvider.isClearing"))
+    XCTAssertEqual(
+      dashboardPage.components(separatedBy: "isLoadingInitial: chatProvider.isLoading && !chatProvider.isClearing")
+        .count - 1,
+      2
+    )
+  }
+
   func testNoNewMirroredFromChatProviderTaskChatHelperBlocks() throws {
     let markers = try swiftSourceLines(containingAnyOf: [
       "mirrored from ChatProvider",
