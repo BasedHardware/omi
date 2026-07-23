@@ -19,6 +19,7 @@ import database.redis_db as redis_db
 from utils.other import endpoints as auth
 from utils.log_sanitizer import sanitize
 from utils.executors import run_blocking, db_executor
+from utils.integrations_registry import oauth_authorization_query, resolve_integration_provider
 import logging
 
 logger = logging.getLogger(__name__)
@@ -32,34 +33,6 @@ http_client: Optional[httpx.AsyncClient] = None
 
 # Templates
 templates = Jinja2Templates(directory="templates")
-
-# OAuth provider configurations
-OAUTH_CONFIGS = {
-    'google_calendar': {'name': 'Google Calendar'},
-}
-
-# Provider-specific OAuth URL configuration
-AUTH_PROVIDERS: Dict[str, Dict[str, Any]] = {
-    'google_calendar': {
-        'client_env': 'GOOGLE_CLIENT_ID',
-        'auth_base': 'https://accounts.google.com/o/oauth2/v2/auth',
-        'redirect_path': '/v2/integrations/google-calendar/callback',
-        'query': {
-            'response_type': 'code',
-            # gmail.readonly rides on this same Google grant: get_gmail_messages_tool
-            # reads the 'google_calendar' integration token (see gmail_tools.py),
-            # so the Gmail read scope must be requested here or every Gmail read 403s.
-            # NOTE: gmail.readonly is a Google *restricted* scope — the OAuth client
-            # needs Google's restricted-scope verification before this activates,
-            # and existing users must re-consent (prompt=consent already set below).
-            'scope': 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/contacts.other.readonly https://www.googleapis.com/auth/gmail.readonly',
-            'access_type': 'offline',
-            'prompt': 'consent',
-        },
-        'log_name': 'Google Calendar',
-        'error_detail': 'Google Calendar not configured - GOOGLE_CLIENT_ID missing',
-    },
-}
 
 
 def get_http_client() -> httpx.AsyncClient:
@@ -95,7 +68,8 @@ def render_oauth_response(
         redirect_url: Deep link URL to redirect to (for success case)
         error_type: Type of error (missing_code, invalid_state, config_error, server_error)
     """
-    config = OAUTH_CONFIGS.get(app_key, {'name': app_key.title()})
+    resolved = resolve_integration_provider(app_key)
+    config = resolved[1] if resolved else {'name': app_key.title()}
 
     if success:
         context: Dict[str, Any] = {
@@ -356,49 +330,49 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         logger.error(f'ERROR: BASE_API_URL not configured for integration OAuth')
         raise HTTPException(status_code=500, detail="BASE_API_URL not configured")
 
+    resolved = resolve_integration_provider(app_key)
+    if not resolved or resolved[1]['kind'] != 'oauth':
+        raise HTTPException(status_code=400, detail=f"Unsupported integration: {app_key}")
+    provider_key, provider = resolved
+    oauth = cast(Dict[str, Any], provider['oauth'])
+
     # Generate cryptographically secure random state token
     state_token = secrets.token_urlsafe(32)
 
     # Store state mapping in Redis with expiry
     try:
         state_key = f"oauth_state:{state_token}"
-        state_data = {'uid': uid, 'app_key': app_key, 'created_at': datetime.now(timezone.utc).isoformat()}
+        state_data = {'uid': uid, 'app_key': provider_key, 'created_at': datetime.now(timezone.utc).isoformat()}
         redis_db.r.setex(state_key, OAUTH_STATE_EXPIRY, json.dumps(state_data))
     except Exception as e:
         logger.error(f'ERROR: Failed to store OAuth state in Redis: {e}')
         raise HTTPException(status_code=500, detail=f"Failed to initialize OAuth flow: {str(e)}")
 
-    if app_key in AUTH_PROVIDERS:
-        cfg = AUTH_PROVIDERS[app_key]
-        client_id = os.getenv(cast(str, cfg['client_env']))
-        if not client_id:
-            logger.error(f"ERROR: {cfg['client_env']} not configured for {cfg['log_name']} integration OAuth")
-            raise HTTPException(status_code=500, detail=cfg['error_detail'])
+    client_id_env = cast(str, oauth['client_id_env'])
+    client_id = os.getenv(client_id_env)
+    if not client_id:
+        logger.error(f"ERROR: {client_id_env} not configured for {provider['name']} integration OAuth")
+        raise HTTPException(status_code=500, detail=f"{provider['name']} not configured - {client_id_env} missing")
 
-        base_url_clean = base_url.rstrip('/')
-        redirect_uri = f"{base_url_clean}{cfg['redirect_path']}"
+    base_url_clean = base_url.rstrip('/')
+    redirect_uri = f"{base_url_clean}{oauth['redirect_path']}"
 
-        params: Dict[str, str] = {
-            'client_id': client_id,
-            'redirect_uri': redirect_uri,
-            'state': state_token,
-        }
-        params.update(cast(Dict[str, str], cfg['query']))
+    params: Dict[str, str] = {
+        'client_id': client_id,
+        'redirect_uri': redirect_uri,
+        'state': state_token,
+    }
+    params.update(oauth_authorization_query(provider))
 
-        if cfg.get('requires_pkce'):
-            code_verifier = secrets.token_urlsafe(32)
-            code_challenge = (
-                base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).decode().rstrip('=')
-            )
-            verifier_key = f"oauth_code_verifier:{state_token}"
-            redis_db.r.setex(verifier_key, OAUTH_STATE_EXPIRY, code_verifier)
-            params['code_challenge'] = code_challenge
+    if oauth.get('requires_pkce'):
+        code_verifier = secrets.token_urlsafe(32)
+        code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).decode().rstrip('=')
+        verifier_key = f"oauth_code_verifier:{state_token}"
+        redis_db.r.setex(verifier_key, OAUTH_STATE_EXPIRY, code_verifier)
+        params['code_challenge'] = code_challenge
 
-        auth_url = f"{cfg['auth_base']}?{urlencode(params)}"
-        logger.info(f"Generated {cfg['log_name']} OAuth URL for user {uid}")
-
-    else:
-        raise HTTPException(status_code=400, detail=f"Unsupported integration: {app_key}")
+    auth_url = f"{oauth['auth_base']}?{urlencode(params)}"
+    logger.info(f"Generated {provider['name']} OAuth URL for user {uid}")
 
     return OAuthUrlResponse(auth_url=auth_url)
 
@@ -536,46 +510,36 @@ async def oauth_callback(
     code: Optional[str] = Query(None),
     state: Optional[str] = Query(None),
 ):
-    key_map = {
-        'google-calendar': 'google_calendar',
-    }
-    normalized_key = key_map.get(app_key, app_key)
+    resolved = resolve_integration_provider(app_key)
+    if not resolved or resolved[1]['kind'] != 'oauth':
+        return render_oauth_response(request, app_key, success=False, error_type='config_error')
+    provider_key, provider = resolved
+    oauth = cast(Dict[str, Any], provider['oauth'])
 
-    client_envs = {
-        'google_calendar': ('GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'),
-    }
-
-    if normalized_key not in client_envs:
-        return render_oauth_response(request, normalized_key, success=False, error_type='config_error')
-
-    client_id_env, client_secret_env = client_envs[normalized_key]
+    client_id_env = cast(str, oauth['client_id_env'])
+    client_secret_env = cast(str, oauth['client_secret_env'])
     client_id = os.getenv(client_id_env)
     client_secret = os.getenv(client_secret_env)
     base_url = os.getenv('BASE_API_URL')
 
     if not client_id or not client_secret or not base_url:
-        return render_oauth_response(request, normalized_key, success=False, error_type='config_error')
+        return render_oauth_response(request, provider_key, success=False, error_type='config_error')
 
     base_url_clean = base_url.rstrip('/')
-    # Preserve existing redirect paths used during auth initiation
-    redirect_path_map = {
-        'google_calendar': '/v2/integrations/google-calendar/callback',
-    }
-    redirect_uri = f"{base_url_clean}{redirect_path_map[normalized_key]}"
+    redirect_uri = f"{base_url_clean}{oauth['redirect_path']}"
 
-    if normalized_key == 'google_calendar':
-        config = OAuthProviderConfig(
-            token_endpoint='https://oauth2.googleapis.com/token',
-            token_request_type='form',
-            token_request_data={
-                'code': code,
-                'client_id': client_id,
-                'client_secret': client_secret,
-                'redirect_uri': redirect_uri,
-                'grant_type': 'authorization_code',
-            },
-        )
-        return await handle_oauth_callback(request, normalized_key, code, state, config)
+    config = OAuthProviderConfig(
+        token_endpoint=cast(str, oauth['token_endpoint']),
+        token_request_type=cast(str, oauth.get('token_request_type', 'form')),
+        token_request_data={
+            'code': code,
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code',
+        },
+    )
+    return await handle_oauth_callback(request, provider_key, code, state, config)
 
 
 @router.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
