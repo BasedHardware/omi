@@ -34,6 +34,7 @@ import io
 import json
 import sys
 import types
+import typing
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,13 @@ REPO = Path(__file__).resolve().parents[2]
 BACKEND = REPO / "backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
+
+if not hasattr(typing, "TypeGuard"):
+    class _TypeGuard:
+        def __class_getitem__(cls, _item: object) -> type[bool]:
+            return bool
+
+    typing.TypeGuard = _TypeGuard  # type: ignore[attr-defined]
 
 # ---------------------------------------------------------------------------
 # Boundary stubs: mock ONLY GitHub / Firestore / Redis / HTTP, never the logic.

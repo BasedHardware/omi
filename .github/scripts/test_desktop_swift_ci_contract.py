@@ -75,12 +75,13 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
         self.assertIn("runs-on: ubuntu-latest", changes)
         self.assertIn("should_run", changes)
+        self.assertIn("should_run_tests", changes)
         self.assertIn("should_release_compile", changes)
         self.assertIn("diff_base", changes)
 
         for job_id, output in (
             ("desktop-swift-static", "should_run"),
-            ("desktop-swift-tests", "should_run"),
+            ("desktop-swift-tests", "should_run_tests"),
             ("desktop-swift-release-compile", "should_release_compile"),
         ):
             with self.subTest(job=job_id):
@@ -111,6 +112,13 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 self.assertIn(path, changes)
+        should_run_tests = changes.split("SHOULD_RUN_TESTS=false", 1)[1].split('echo "should_run_tests=', 1)[0]
+        self.assertIn("github.event_name", should_run_tests)
+        self.assertIn("RELEASABLE_DESKTOP", should_run_tests)
+        self.assertIn("backend/testing/desktop_beta_admission/", changes)
+        self.assertNotIn("backend/testing/desktop_beta_admission/", should_run_tests)
+        self.assertNotIn(".github/workflows/desktop-swift-ci.yml", should_run_tests)
+        self.assertNotIn(".github/scripts/test_desktop_swift_ci_contract.py", should_run_tests)
 
     def test_macos_jobs_have_a_bounded_runner_budget(self):
         """A stuck Swift invocation must not consume hosted macOS capacity forever."""
@@ -154,6 +162,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("always()", gate)
         self.assertIn('test "$STATIC_RESULT" = success', gate)
         self.assertIn('test "$TEST_RESULT" = success', gate)
+        self.assertIn('test "$TEST_RESULT" = skipped', gate)
 
     def test_later_main_push_cannot_cancel_exact_sha_release_evidence(self):
         """A backend/docs push must not strand an earlier selected desktop SHA."""

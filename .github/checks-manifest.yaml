@@ -67,7 +67,7 @@ checks:
     reason: "real Firestore transaction serialization must fence stale qualified Beta admissions after reservation, pause, and generation transitions"
   - id: desktop-beta-admission-supervisor
     command: ["node", "--test", "backend/testing/desktop_beta_admission/test_supervise.mjs"]
-    triggers: ["backend/testing/desktop_beta_admission/**", ".github/checks-manifest.yaml"]
+    triggers: ["backend/testing/desktop_beta_admission/**"]
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "SCA-52: the admission emulator must own and drain only its process group, including Firestore JVM grandchildren, on every exit path"

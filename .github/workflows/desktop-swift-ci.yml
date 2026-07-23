@@ -21,6 +21,7 @@ jobs:
     outputs:
       diff_base: ${{ steps.changed.outputs.diff_base }}
       should_run: ${{ steps.changed.outputs.should_run }}
+      should_run_tests: ${{ steps.changed.outputs.should_run_tests }}
       should_release_compile: ${{ steps.changed.outputs.should_release_compile }}
       should_notification_release_regression: ${{ steps.changed.outputs.should_notification_release_regression }}
     steps:
@@ -62,10 +63,16 @@ jobs:
           done <<< "$FILES"
 
           SHOULD_RUN=false
-          if [ "$RELEASABLE_DESKTOP" = "true" ] || echo "$FILES" | grep -qE '^desktop/macos/Desktop/|^desktop/macos/test\.sh$|^desktop/macos/scripts/|^desktop/macos/tests/|^desktop/macos/e2e/flows/|^\.github/workflows/desktop-swift-ci\.yml$|^\.github/checks-manifest\.yaml$|^\.github/scripts/run_checks\.py$|^\.github/scripts/test_desktop_manifest_routes\.py$|^\.github/scripts/test_desktop_swift_ci_contract\.py$'; then
+          if [ "$RELEASABLE_DESKTOP" = "true" ] || echo "$FILES" | grep -qE '^desktop/macos/Desktop/|^desktop/macos/test\.sh$|^desktop/macos/scripts/|^desktop/macos/tests/|^desktop/macos/e2e/flows/|^backend/testing/desktop_beta_admission/|^\.github/workflows/desktop-swift-ci\.yml$|^\.github/checks-manifest\.yaml$|^\.github/scripts/run_checks\.py$|^\.github/scripts/test_desktop_manifest_routes\.py$|^\.github/scripts/test_desktop_swift_ci_contract\.py$'; then
             SHOULD_RUN=true
           fi
           echo "should_run=$SHOULD_RUN" >> "$GITHUB_OUTPUT"
+
+          SHOULD_RUN_TESTS=false
+          if { [ "${{ github.event_name }}" != "pull_request" ] && [ "$RELEASABLE_DESKTOP" = "true" ]; } || echo "$FILES" | grep -qE '^desktop/macos/Desktop/|^desktop/macos/test\.sh$|^desktop/macos/scripts/|^desktop/macos/tests/|^desktop/macos/e2e/flows/'; then
+            SHOULD_RUN_TESTS=true
+          fi
+          echo "should_run_tests=$SHOULD_RUN_TESTS" >> "$GITHUB_OUTPUT"
 
           DESKTOP_SWIFT=$RELEASABLE_DESKTOP
           if echo "$FILES" | grep -qE '^\.github/workflows/desktop-swift-ci\.yml$'; then
@@ -97,7 +104,7 @@ jobs:
             SHOULD_NOTIFICATION_RELEASE_REGRESSION=true
           fi
           echo "should_notification_release_regression=$SHOULD_NOTIFICATION_RELEASE_REGRESSION" >> "$GITHUB_OUTPUT"
-          echo "desktop_swift=$DESKTOP_SWIFT package_swift=$PACKAGE_SWIFT package_resolved=$PACKAGE_RESOLVED should_run=$SHOULD_RUN should_release_compile=$SHOULD_RELEASE_COMPILE should_notification_release_regression=$SHOULD_NOTIFICATION_RELEASE_REGRESSION"
+          echo "desktop_swift=$DESKTOP_SWIFT package_swift=$PACKAGE_SWIFT package_resolved=$PACKAGE_RESOLVED should_run=$SHOULD_RUN should_run_tests=$SHOULD_RUN_TESTS should_release_compile=$SHOULD_RELEASE_COMPILE should_notification_release_regression=$SHOULD_NOTIFICATION_RELEASE_REGRESSION"
 
   # The Swift test suite and the macOS-only manifest checks have no runtime
   # dependency on one another. Keeping them in separate jobs puts their slow
@@ -149,7 +156,7 @@ jobs:
   desktop-swift-tests:
     name: Desktop Swift Test Suites
     needs: changes
-    if: needs.changes.outputs.should_run == 'true'
+    if: needs.changes.outputs.should_run_tests == 'true'
     runs-on: macos-15
     timeout-minutes: 60
     steps:
@@ -226,9 +233,14 @@ jobs:
         env:
           STATIC_RESULT: ${{ needs.desktop-swift-static.result }}
           TEST_RESULT: ${{ needs.desktop-swift-tests.result }}
+          SHOULD_RUN_TESTS: ${{ needs.changes.outputs.should_run_tests }}
         run: |
           test "$STATIC_RESULT" = success
-          test "$TEST_RESULT" = success
+          if [ "$SHOULD_RUN_TESTS" = true ]; then
+            test "$TEST_RESULT" = success
+          else
+            test "$TEST_RESULT" = skipped
+          fi
 
   desktop-swift-release-compile:
     name: Desktop Swift Release Compile
