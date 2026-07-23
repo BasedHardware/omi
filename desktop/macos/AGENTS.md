@@ -58,7 +58,7 @@ Beta candidates are cut **on every macOS-affecting merge to `main`** (`push` tri
 
 1. **GitHub Actions** (`desktop_auto_release.yml`) — on that `push` (plus the 15-min `schedule` backstop and manual `workflow_dispatch`) it auto-increments the version and pushes a `v*-macos` tag. A ~60s quiet window (`AUTO_RELEASE_QUIET_SECONDS`) coalesces near-simultaneous merges; the one-active-release fence (Codemagic build status on the latest tag) admits one candidate at a time. Fails closed unless `Release Eligibility`, `Desktop Swift Build & Tests`, and `Desktop Swift Release Compile` all succeeded for the exact newest releasable SHA — so a candidate cuts once that SHA's CI is green (the push fires too early; the backstop catches it after CI settles).
 2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — triggered by the tag, runs on Mac mini M4:
-   - Builds universal binary (arm64 + x86_64)
+   - Builds the universal app and dSYM, UUID-checks and uploads symbols to Sentry, and publishes both
    - Signs with Developer ID, notarizes with Apple
    - Creates DMG + Sparkle ZIP
    - Runs `scripts/smoke-signed-desktop-artifact.sh` (signed app, Sparkle ZIP, DMG) before publishing, with a mandatory in-app Keychain write/read/delete canary

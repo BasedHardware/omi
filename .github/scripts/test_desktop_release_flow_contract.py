@@ -146,6 +146,22 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertIn("STABLE_DMG=/tmp/desktop-beta-qualification/assets/omi.dmg", qualification)
         self.assertIn('--asset "omi.dmg=$STABLE_DMG"', qualification)
 
+    def test_canonical_release_generates_verifies_uploads_and_publishes_dsym(self) -> None:
+        # omi-test-quality: source-inspection -- static contract: Codemagic release wiring is YAML-only.
+        release = codemagic().split("\n  omi-desktop-swift-release:\n", 1)[1]
+        release = release.split("\n  omi-desktop-qualification:\n", 1)[0]
+
+        generate = release.index("publish-desktop-debug-symbols.sh generate")
+        sign = release.index("- name: Sign app")
+        smoke = release.index("- name: Smoke signed desktop artifact")
+        upload = release.index("publish-desktop-debug-symbols.sh upload")
+        publish = release.index('gh release create "$CM_TAG"')
+        self.assertLess(generate, sign)
+        self.assertLess(smoke, upload)
+        self.assertLess(upload, publish)
+        self.assertIn('"$DSYM_ARCHIVE"', release)
+        self.assertIn("- build/*.dSYM", release)
+
     def test_has_one_automatic_candidate_to_beta_authority(self) -> None:
         candidate = workflow("desktop_auto_release.yml")
         qualification = workflow("desktop_qualify_beta.yml")

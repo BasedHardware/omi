@@ -438,8 +438,143 @@ private func shouldCaptureToSentry(_ message: String) -> Bool {
   return true
 }
 
+/// Privacy-safe, bounded ownership for the shared `logError` Sentry boundary.
+///
+/// `logError` has hundreds of callers, including failures without an underlying
+/// `Error`. Deriving the area from compile-time `#fileID` makes those failures
+/// attributable without sending the path, the free-form log message, or user
+/// content to Sentry.
+struct DesktopErrorTelemetryDescriptor: Equatable {
+  let area: String
+  let failureClass: String
+  let phase: String
+  let errorType: String
+  let errorDomain: String
+  let errorCode: String
+
+  var eventTitle: String {
+    "Desktop error [\(area)/\(failureClass)/\(phase)]"
+  }
+
+  static func make(error: Error?, fileID: StaticString) -> Self {
+    let area = area(for: String(describing: fileID))
+    guard let error else {
+      return Self(
+        area: area,
+        failureClass: "missing_underlying_error",
+        phase: "runtime",
+        errorType: "none",
+        errorDomain: "none",
+        errorCode: "none")
+    }
+
+    let nsError = error as NSError
+    let domain = domainFamily(nsError.domain)
+    return Self(
+      area: area,
+      failureClass: "underlying_error",
+      phase: "runtime",
+      errorType: typeFamily(error, domainFamily: domain),
+      errorDomain: domain,
+      errorCode: codeBucket(nsError.code, domainFamily: domain))
+  }
+
+  private static func area(for fileID: String) -> String {
+    let value = fileID.lowercased()
+    if value.contains("auth") || value.contains("credential") || value.contains("keychain") {
+      return "auth"
+    }
+    if value.contains("automation") || value.contains("agent") {
+      return "automation"
+    }
+    if value.contains("audio") || value.contains("microphone") || value.contains("transcription") {
+      return "audio"
+    }
+    if value.contains("chat") || value.contains("conversation") {
+      return "chat"
+    }
+    if value.contains("database") || value.contains("storage") || value.contains("sync") {
+      return "data"
+    }
+    if value.contains("diagnostic") || value.contains("logger") || value.contains("resource") {
+      return "diagnostics"
+    }
+    if value.contains("focus") {
+      return "focus"
+    }
+    if value.contains("integration") || value.contains("connector") {
+      return "integration"
+    }
+    if value.contains("memory") || value.contains("rewind") {
+      return "memory"
+    }
+    if value.contains("onboarding") {
+      return "onboarding"
+    }
+    if value.contains("recording") || value.contains("listen") {
+      return "recording"
+    }
+    if value.contains("realtime") || value.contains("voice") {
+      return "realtime"
+    }
+    if value.contains("settings") || value.contains("preference") {
+      return "settings"
+    }
+    if value.contains("appstate") || value.contains("omiapp") || value.contains("system") {
+      return "system"
+    }
+    if value.contains("view") || value.contains("page") || value.contains("window") {
+      return "ui"
+    }
+    return "other"
+  }
+
+  private static func domainFamily(_ domain: String) -> String {
+    switch domain {
+    case NSURLErrorDomain:
+      return "url"
+    case NSPOSIXErrorDomain:
+      return "posix"
+    case NSCocoaErrorDomain:
+      return "cocoa"
+    case NSOSStatusErrorDomain:
+      return "osstatus"
+    case NSMachErrorDomain:
+      return "mach"
+    default:
+      if domain.hasPrefix("com.omi.") || domain.hasPrefix("me.omi.") {
+        return "app"
+      }
+      return "other"
+    }
+  }
+
+  private static func typeFamily(_ error: Error, domainFamily: String) -> String {
+    if error is DecodingError { return "decoding" }
+    if error is URLError { return "url" }
+    if error is CocoaError { return "cocoa" }
+    if error is POSIXError { return "posix" }
+    let reflected = String(reflecting: type(of: error))
+    if reflected.hasPrefix("Omi_Computer.") { return "app" }
+    return domainFamily
+  }
+
+  private static func codeBucket(_ code: Int, domainFamily: String) -> String {
+    let allowed: Set<Int>
+    switch domainFamily {
+    case "url":
+      allowed = [-1200, -1020, -1011, -1009, -1005, -1004, -1003, -1001, -999]
+    case "posix":
+      allowed = [12, 24, 35, 49, 54, 57, 60, 61, 89]
+    default:
+      return "other"
+    }
+    return allowed.contains(code) ? String(code) : "other"
+  }
+}
+
 /// Log an error and capture it in Sentry
-func logError(_ message: String, error: Error? = nil) {
+func logError(_ message: String, error: Error? = nil, fileID: StaticString = #fileID) {
   let timestamp = dateFormatter.string(from: Date())
   let errorDesc = error?.localizedDescription ?? ""
   let fullMessage = error != nil ? "\(message): \(errorDesc)" : message
@@ -471,44 +606,39 @@ func logError(_ message: String, error: Error? = nil) {
 
   // Free-form error text stays local. Cloud capture is a stable title plus typed
   // error metadata and a redacted diagnostic attachment.
+  let telemetry = DesktopErrorTelemetryDescriptor.make(error: error, fileID: fileID)
   let attachmentURL = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
-    area: "other",
-    failureClass: "other",
-    phase: "other")
+    area: telemetry.area,
+    failureClass: telemetry.failureClass,
+    phase: telemetry.phase)
   defer {
     if let attachmentURL {
       try? FileManager.default.removeItem(at: attachmentURL)
     }
   }
-  if let error = error {
-    let nsError = error as NSError
-    let errorType = String(reflecting: type(of: error))
-    SentrySDK.capture(message: "Desktop error") { scope in
-      scope.setLevel(.error)
-      scope.setContext(
-        value: [
-          "error_type": errorType,
-          "error_domain": nsError.domain,
-          "error_code": nsError.code,
-        ], key: "app_context")
-      if let attachmentURL {
-        scope.addAttachment(
-          Attachment(
-            path: attachmentURL.path,
-            filename: "desktop-incident-diagnostics.json",
-            contentType: "application/json"))
-      }
-    }
-  } else {
-    SentrySDK.capture(message: "Desktop error") { scope in
-      scope.setLevel(.error)
-      if let attachmentURL {
-        scope.addAttachment(
-          Attachment(
-            path: attachmentURL.path,
-            filename: "desktop-incident-diagnostics.json",
-            contentType: "application/json"))
-      }
+  SentrySDK.capture(message: telemetry.eventTitle) { scope in
+    scope.setLevel(.error)
+    scope.setTag(value: telemetry.area, key: "diagnostic_area")
+    scope.setTag(value: telemetry.failureClass, key: "failure_class")
+    scope.setTag(value: telemetry.phase, key: "diagnostic_phase")
+    scope.setTag(value: telemetry.errorType, key: "error_type")
+    scope.setTag(value: telemetry.errorDomain, key: "error_domain")
+    scope.setTag(value: telemetry.errorCode, key: "error_code")
+    scope.setContext(
+      value: [
+        "area": telemetry.area,
+        "failure_class": telemetry.failureClass,
+        "phase": telemetry.phase,
+        "error_type": telemetry.errorType,
+        "error_domain": telemetry.errorDomain,
+        "error_code": telemetry.errorCode,
+      ], key: "app_context")
+    if let attachmentURL {
+      scope.addAttachment(
+        Attachment(
+          path: attachmentURL.path,
+          filename: "desktop-incident-diagnostics.json",
+          contentType: "application/json"))
     }
   }
 }
