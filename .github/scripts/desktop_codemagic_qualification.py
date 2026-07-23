@@ -13,12 +13,15 @@ self-hosted qualification lane.
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
+import posixpath
 import sys
 import time
 import urllib.error
 import urllib.request
+import zipfile
 
 API_BASE = "https://api.codemagic.io"
 SUCCESS_STATUSES = {"finished"}
@@ -42,9 +45,7 @@ def _request(url: str, token: str, payload: dict | None = None) -> dict:
         return json.loads(response.read().decode("utf-8"))
 
 
-def start_build(
-    token: str, app_id: str, workflow_id: str, branch: str, release_tag: str, gh_token: str
-) -> str:
+def start_build(token: str, app_id: str, workflow_id: str, branch: str, release_tag: str, gh_token: str) -> str:
     variables = {"OMI_QUALIFY_TAG": release_tag}
     if gh_token:
         # Short-lived Omi Bot app token for the build's read-only gh calls; the
@@ -103,10 +104,7 @@ def verify_result_payload(payload: dict, release_tag: str, target_sha: str) -> N
     if payload.get("ok") is not True:
         fail(f"qualification result does not report ok=true: {json.dumps(payload)[:500]}")
     if payload.get("release_tag") != release_tag:
-        fail(
-            "qualification result is bound to a different tag: "
-            f"{payload.get('release_tag')!r} != {release_tag!r}"
-        )
+        fail("qualification result is bound to a different tag: " f"{payload.get('release_tag')!r} != {release_tag!r}")
     if payload.get("source_sha") != target_sha:
         fail(
             "qualification result is bound to a different source SHA: "
@@ -114,19 +112,58 @@ def verify_result_payload(payload: dict, release_tag: str, target_sha: str) -> N
         )
 
 
-def fetch_result_artifact(token: str, build: dict) -> dict:
-    artefacts = build.get("artefacts") or []
-    url = ""
-    for artefact in artefacts:
-        if isinstance(artefact, dict) and artefact.get("name") == RESULT_ARTIFACT_NAME:
-            url = str(artefact.get("url", ""))
-            break
-    if not url:
-        names = [a.get("name") for a in artefacts if isinstance(a, dict)]
-        fail(f"finished Codemagic build has no {RESULT_ARTIFACT_NAME} artifact (found: {names})")
+def _download_artifact(token: str, url: str) -> bytes:
     request = urllib.request.Request(url, headers={"x-auth-token": token})
     with urllib.request.urlopen(request, timeout=60) as response:
-        return json.loads(response.read().decode("utf-8"))
+        return response.read()
+
+
+def _result_from_zip(payload: bytes) -> dict | None:
+    """Return the qualification result from a Codemagic artifact zip, if present.
+
+    Codemagic exposes recognized build outputs as top-level artefacts but
+    packages arbitrary files (our JSON) that match a directory/`**` glob into a
+    zip artefact. Match by basename so the archive's internal path
+    (e.g. `qualification/qualification-result.json`) still resolves.
+    """
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(payload))
+    except zipfile.BadZipFile:
+        return None
+    for name in archive.namelist():
+        if posixpath.basename(name) == RESULT_ARTIFACT_NAME:
+            with archive.open(name) as member:
+                return json.loads(member.read().decode("utf-8"))
+    return None
+
+
+def fetch_result_artifact(token: str, build: dict) -> dict:
+    """Retrieve qualification-result.json however Codemagic exposed it.
+
+    Preference order: a top-level artefact named exactly the result file, then
+    any zip artefact that contains it. This adapts to Codemagic packaging the
+    `build/qualification/**` glob either as individual files or a single zip,
+    so the handoff does not silently fail (which would drop every candidate to
+    the self-hosted fallback lanes).
+    """
+    artefacts = [a for a in (build.get("artefacts") or []) if isinstance(a, dict)]
+
+    for artefact in artefacts:
+        if artefact.get("name") == RESULT_ARTIFACT_NAME and artefact.get("url"):
+            return json.loads(_download_artifact(token, str(artefact["url"])).decode("utf-8"))
+
+    # No direct file artefact — search zip artefacts for the packaged result.
+    for artefact in artefacts:
+        name = str(artefact.get("name", ""))
+        url = str(artefact.get("url", ""))
+        if url and name.lower().endswith(".zip"):
+            result = _result_from_zip(token and _download_artifact(token, url) or b"")
+            if result is not None:
+                return result
+
+    names = [a.get("name") for a in artefacts]
+    fail(f"finished Codemagic build exposes no {RESULT_ARTIFACT_NAME} (top-level or zipped); artefacts: {names}")
+    raise AssertionError("unreachable")
 
 
 def main() -> None:
