@@ -14,7 +14,7 @@ Release identity is uniform across surfaces (Sentry + PostHog):
 | Dimension | PostHog key | Sentry | Source |
 |-----------|-------------|--------|--------|
 | App version | `app_version` | `release` (`v{ver}+{build}-macos`) | `CFBundleShortVersionString` |
-| App build | `app_build` | `release` (same tag) / `dist` | `CFBundleVersion` |
+| App build | `app_build` | `release` (same tag) | `CFBundleVersion` |
 | Release channel | `update_channel` (`stable`/`beta`) | `dist` + `update_channel` tag | `AppBuild.currentUpdateChannel` |
 | Bundle id | — | `bundle_id` tag | `AppBuild.bundleIdentifier` |
 
