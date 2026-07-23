@@ -1,6 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { conversationTurnFromRow } from "./conversation-turns.js";
 import { generateAgentId } from "./sqlite-store.js";
+import {
+  backendTombstoneCode,
+  backendTurnPayload,
+  backendTurnPayloadHash,
+  type BackendTurnPayload,
+} from "./backend-turn-projection.js";
 import type {
   AgentStore,
   BackendTurnOutboxRecord,
@@ -38,7 +44,8 @@ const DEFAULT_OUTBOX_LEASE_MS = 30_000;
 const MAX_DRAIN_BATCH = 100;
 const BACKEND_RECONCILE_PAGE_LIMIT = 100;
 const MAX_BACKEND_RECONCILE_CURSOR_BYTES = 512;
-const MAX_JOURNAL_REVISION = 2_147_483_647;
+
+export type { BackendTurnPayload } from "./backend-turn-projection.js";
 
 export type JournalDeliveryDestination = "backend" | "local";
 
@@ -157,18 +164,6 @@ export interface BackendTurnDelivery extends BackendTurnOutboxRecord {
 }
 
 export type BackendTurnResultDisposition = "active" | "superseded" | "duplicate";
-
-export interface BackendTurnPayload {
-  turnId: string;
-  clientMessageId: string;
-  journalRevision: number;
-  text: string;
-  sender: "human" | "ai";
-  appId: string | null;
-  sessionId: string | null;
-  metadata: string | null;
-  messageSource: "desktop_chat" | "realtime_voice";
-}
 
 export interface BackendConversationDeleteDelivery {
   operationId: string;
@@ -2515,52 +2510,6 @@ function sha256(value: string): string {
 
 function journalTurnPayloadHash(value: Record<string, unknown>): string {
   return sha256(stableJson(value));
-}
-
-function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
-  const metadata = parseObjectJson(turn.metadataJson) as Record<string, unknown>;
-  const backendMetadata = {
-    ...metadata,
-    ...(turn.contentBlocks.length > 0 ? { content_blocks: turn.contentBlocks } : {}),
-    ...(turn.resources.length > 0 ? { resources: turn.resources } : {}),
-  };
-  const projectedText = turn.content.trim()
-    ? turn.content
-    : turn.role === "assistant"
-      && turn.status === "completed"
-      && (turn.contentBlocks.length > 0 || turn.resources.length > 0)
-      ? "Done."
-      : "";
-  return {
-    turnId: turn.turnId,
-    clientMessageId: turn.turnId,
-    journalRevision: boundedJournalRevision(turn.turnSeq),
-    text: projectedText,
-    sender: turn.role === "user" ? "human" : "ai",
-    appId: typeof metadata.appId === "string" ? metadata.appId : null,
-    sessionId: typeof metadata.sessionId === "string" ? metadata.sessionId : null,
-    metadata: Object.keys(backendMetadata).length === 0 ? null : stableJson(backendMetadata),
-    messageSource: turn.origin === "realtime_voice" ? "realtime_voice" : "desktop_chat",
-  };
-}
-
-function boundedJournalRevision(revision: number): number {
-  if (!Number.isSafeInteger(revision) || revision < 1 || revision > MAX_JOURNAL_REVISION) {
-    throw new Error(`Journal revision must be between 1 and ${MAX_JOURNAL_REVISION}`);
-  }
-  return revision;
-}
-
-function backendTombstoneCode(turn: ConversationTurn): string | null {
-  const payload = backendTurnPayload(turn);
-  if (payload.text.trim()) return null;
-  if (turn.status === "failed") return "empty_failed_turn_cancelled";
-  if (turn.status === "completed") return "empty_completed_turn_cancelled";
-  return null;
-}
-
-function backendTurnPayloadHash(payload: BackendTurnPayload): string {
-  return sha256(stableJson(payload));
 }
 
 function historicalBackendPayloadTurnSeq(
