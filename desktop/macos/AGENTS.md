@@ -18,7 +18,7 @@ Check errors in the latest (or specific) release using the **sentry-release skil
 ./scripts/sentry-release.sh --all        # include carryover issues
 ./scripts/sentry-release.sh --quota      # billing/quota status
 ```
-See `.claude/skills/sentry-release/SKILL.md` for full documentation.
+Run the script with `--help` for the full option list.
 
 ### User Issue Investigation
 When debugging issues for a specific user, check Sentry dashboard for crashes and PostHog for events.
@@ -90,7 +90,7 @@ Stable is manual:
 Promotion from beta to stable is handled by `desktop_promote_prod.yml`, not Codemagic.
 
 ## Firebase Connection
-Use `/firebase` command or see `.claude/skills/firebase/SKILL.md`
+Use the `/firebase` command if your agent provides it.
 
 Quick connect:
 ```bash
@@ -236,7 +236,8 @@ do not hand-edit those paths to match a specific machine.
 - Local: `http://localhost:8080`
 
 ## Credentials
-See `.claude/settings.json` for connection details.
+Connection details come from your local agent configuration; they are deliberately not
+checked in. Ask the user for anything you are missing rather than guessing an endpoint.
 
 ## Development Workflow
 
@@ -252,7 +253,7 @@ See `.claude/settings.json` for connection details.
 - **Release builds**: Handled entirely by Codemagic CI (no local release script needed)
 - **DO NOT** use bare `swift build` — it will fail with SDK version mismatch
 - **DO NOT** use `xcodebuild` — there is no `.xcodeproj`
-- **DO NOT** launch the app directly from `build/` — always use `./run.sh` or `./reset-and-run.sh`. These scripts install to `/Applications/Omi Dev.app` and launch from there, which is required for macOS "Quit & Reopen" (after granting permissions) to find the correct binary. Launching from `build/` causes stale binaries to run after permission restarts.
+- **DO NOT** launch the app directly from `build/` — always use `./run.sh`. These scripts install to `/Applications/Omi Dev.app` and launch from there, which is required for macOS "Quit & Reopen" (after granting permissions) to find the correct binary. Launching from `build/` causes stale binaries to run after permission restarts.
 - **DO NOT** manually copy binaries into app bundles and launch them — this bypasses signing, `/Applications/` installation, and LaunchServices registration
 
 - **DO NOT** kill, delete, or interfere with running "Omi", "omi", or "Omi Beta" app bundles — these are production/release installs the user relies on
