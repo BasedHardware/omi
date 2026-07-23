@@ -26,6 +26,29 @@ final class HomeStageCollapseCatcherTests: XCTestCase {
   }
 }
 
+final class HomeHistoryPresentationPolicyTests: XCTestCase {
+  func testInitialHistoryLoadKeepsUsefulHubVisible() {
+    XCTAssertEqual(
+      HomeHistoryPresentationPolicy.restingMode(isLoading: true, messageCount: 0),
+      .hub)
+    XCTAssertEqual(
+      HomeHistoryPresentationPolicy.restingMode(isLoading: true, messageCount: 12),
+      .hub)
+  }
+
+  func testCompletedHistoryLoadMakesChatTheRestingSurface() {
+    XCTAssertEqual(
+      HomeHistoryPresentationPolicy.restingMode(isLoading: false, messageCount: 12),
+      .chat)
+  }
+
+  func testCompletedEmptyLoadKeepsNewUserHubVisible() {
+    XCTAssertEqual(
+      HomeHistoryPresentationPolicy.restingMode(isLoading: false, messageCount: 0),
+      .hub)
+  }
+}
+
 @MainActor
 final class MainChatNavigationRequestStoreTests: XCTestCase {
   func testRequestIsConsumedExactlyOnce() {
