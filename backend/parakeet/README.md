@@ -26,7 +26,10 @@ WebSocket: send raw PCM16 chunks, receive JSON segments in real-time.
 - No punctuation (RNNT limitation — lowercase output)
 
 ### `GET /health` — Health check
-Returns `{"status": "healthy", "ready": true}` (200) when model is loaded, or `{"status": "loading", "ready": false}` (503) during model initialization. K8s readiness/startup probes use this endpoint.
+Returns `{"status": "healthy", "ready": true}` (200) when the model is ready,
+`{"status": "loading", "ready": false}` (503) during initialization, or
+`{"status": "unhealthy", "ready": false, "reason": "..."}` (503) after a fatal
+CUDA error. Kubernetes readiness, liveness, and startup probes use this endpoint.
 
 ### `GET /batch/metrics` — Batch engine stats
 Returns `{"total_requests", "total_batches", "total_files", "rejected_requests", "pending_requests"}`.
@@ -40,7 +43,7 @@ Returns `{"total_requests", "total_batches", "total_files", "rejected_requests",
 | `PARAKEET_MODEL` | `nvidia/parakeet-tdt-0.6b-v3` | Batch model |
 | `PARAKEET_DEVICE` | `cuda:0` | GPU device for batch inference |
 | `PARAKEET_TORCH_COMPILE` | `true` | Enable torch.compile (+20-30% throughput from kernel fusion) |
-| `PARAKEET_CUDA_GRAPHS` | `true` | Enable CUDA graph decoding (disable for T4/Turing GPUs) |
+| `PARAKEET_CUDA_GRAPHS` | `false` | Enable CUDA graph decoding. Must stay disabled when `PARAKEET_STREAM_MODEL` is configured because batch and streaming inference share one CUDA context. |
 | `PARAKEET_GC_INTERVAL` | `50` | Full gc.collect() every N batches (gc.collect(0) per batch) |
 | `PARAKEET_GPU_POLL_TIMEOUT` | `0.05` | GPU worker queue poll interval in seconds |
 | `PARAKEET_BF16` | `1` | BF16 model loading (halves GPU memory) |
