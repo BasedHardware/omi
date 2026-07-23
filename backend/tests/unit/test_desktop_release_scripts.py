@@ -250,8 +250,10 @@ def test_codemagic_produces_canonical_app_and_strictly_verifiable_dmg():
     assert "xattr -d com.apple.FinderInfo" in workflow
     assert "xattr -d com.apple.ResourceFork" in workflow
     assert 'codesign --verify --deep --strict --verbose=2 "$STAGING_DIR/$APP_NAME.app"' in workflow
-    assert 'dmg_app="$DMG_MOUNTPOINT/Omi.app"' in smoke
-    assert "DMG-contained Omi.app failed deep strict codesign verification" in smoke
+    assert "expected_app_bundle_name()" in smoke
+    assert 'dmg_app_name="$(expected_app_bundle_name)"' in smoke
+    assert 'dmg_app="$DMG_MOUNTPOINT/$dmg_app_name"' in smoke
+    assert "DMG-contained $dmg_app_name failed deep strict codesign verification" in smoke
 
 
 def test_dmgbuild_does_not_attach_finder_info_to_the_signed_app():
