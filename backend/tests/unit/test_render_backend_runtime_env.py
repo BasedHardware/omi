@@ -199,6 +199,37 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     assert 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED' not in notifications_env
 
 
+def test_render_prod_gateway_callers_inject_verified_endpoint(capsys, monkeypatch):
+    monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
+    monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
+    monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
+    monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
+    monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_ID', 'fake-claude-client-id')
+    monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_NAME', 'Claude')
+    monkeypatch.setenv('MCP_OAUTH_CLAUDE_REDIRECT_URIS', 'https://claude.example/callback')
+    monkeypatch.setenv(
+        'ACCOUNT_DELETION_HANDLER_URL', 'https://backend-sync.example.com/v1/users/account-deletion-wipes/run'
+    )
+    monkeypatch.setenv(
+        'LISTEN_FINALIZATION_TASKS_HANDLER_URL',
+        'https://backend-sync.example.com/v1/conversation-finalization-jobs/run',
+    )
+    monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_INVOKER_SA', 'invoker@project.iam.gserviceaccount.com')
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://backend-sync.example.com/v2/sync-jobs/run')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@project.iam.gserviceaccount.com')
+    monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://172.16.160.108')
+    monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
+
+    assert _MODULE['main']() == 0
+    output = capsys.readouterr().out
+
+    for service in ('backend', 'backend_sync', 'backend_sync_backfill', 'backend_integration'):
+        service_env = _job_env_block(output, service)
+        assert 'OMI_LLM_GATEWAY_FEATURE_MODE=gateway' in service_env
+        assert 'OMI_LLM_GATEWAY_URL=http://172.16.160.108' in service_env
+        assert 'OMI_LLM_GATEWAY_URL=http://127.0.0.1:9' not in service_env
+
+
 def test_render_prod_requires_vpc_env_vars_before_job_outputs(monkeypatch):
     """Prod network flags are env_var-backed; missing VPC vars abort render before job outputs.
 
