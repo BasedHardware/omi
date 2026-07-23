@@ -10,6 +10,7 @@ import {
   inheritContextSnapshotForSession,
   kernelSystemPolicy,
   renderContextSnapshot,
+  renderContextSnapshotForBinding,
   updateContextSource,
 } from "../src/runtime/context-snapshot.js";
 import {
@@ -92,6 +93,67 @@ describe("kernel ContextSnapshot", () => {
     expect(cacheBoundedPolicy).not.toContain(at65!.contextPlan.dynamicContextIdentity);
     expect(renderContextSnapshot(at65!, "main_chat", "coordinator"))
       .toContain(at65!.contextPlan.dynamicContextIdentity);
+    store.close();
+  });
+
+  it("delivers full history once per binding, then only new or changed canonical turns", () => {
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "owner-delta",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "delta" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    for (let sequence = 1; sequence <= 64; sequence += 1) {
+      recordJournalTurn(store, {
+        ownerId: "owner-delta",
+        conversationId: surface.conversationId,
+        turnId: `delta-turn-${sequence}`,
+        role: sequence % 2 ? "user" : "assistant",
+        surfaceKind: "main_chat",
+        origin: "typed_chat",
+        status: "completed",
+        content: `delta canonical turn ${sequence}`,
+        contentBlocks: [],
+        createdAtMs: sequence,
+      });
+    }
+
+    const first = buildContextSnapshot(store, surface.agentSessionId, "owner-delta", 64);
+    const full = renderContextSnapshotForBinding(first, "main_chat", "coordinator");
+    expect(full.deliveryMode).toBe("full");
+    expect(full.rendered).toContain("delta canonical turn 1");
+    expect(full.rendered).toContain("delta canonical turn 64");
+
+    recordJournalTurn(store, {
+      ownerId: "owner-delta",
+      conversationId: surface.conversationId,
+      turnId: "delta-turn-65",
+      role: "user",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "delta canonical turn 65",
+      contentBlocks: [],
+      createdAtMs: 65,
+    });
+    const second = buildContextSnapshot(store, surface.agentSessionId, "owner-delta", 65);
+    const delta = renderContextSnapshotForBinding(second, "main_chat", "coordinator", full.next);
+    expect(delta.deliveryMode).toBe("delta");
+    expect(delta.rendered).toContain('"includedTurnCount":1');
+    expect(delta.rendered).toContain("delta canonical turn 65");
+    expect(delta.rendered).not.toContain("delta canonical turn 2");
+
+    updateJournalTurn(store, {
+      ownerId: "owner-delta",
+      conversationId: surface.conversationId,
+      turnId: "delta-turn-65",
+      content: "delta canonical turn 65 corrected",
+      status: "completed",
+    });
+    const corrected = buildContextSnapshot(store, surface.agentSessionId, "owner-delta", 66);
+    const correction = renderContextSnapshotForBinding(corrected, "main_chat", "coordinator", delta.next);
+    expect(correction.rendered).toContain('"includedTurnCount":1');
+    expect(correction.rendered).toContain("delta canonical turn 65 corrected");
     store.close();
   });
 

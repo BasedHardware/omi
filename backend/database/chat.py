@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 BATCH_LIMIT = 500  # Firestore hard limit
 DELETE_MESSAGES_BATCH_LIMIT = 200  # Leaves room for one session-counter write per deleted message.
 DELETE_MESSAGES_CONFLICT_RETRIES = 3
+CHAT_HISTORY_BASE_VISIBLE_MESSAGES = 10
+CHAT_HISTORY_APPEND_EPOCH_MESSAGES = 8
 
 
 class ClientMessageIdPayloadConflict(ValueError):
@@ -273,6 +275,61 @@ def get_messages(
         message['files'] = [files[file_id] for file_id in message.get('files_id', []) if file_id in files]
 
     return messages
+
+
+def cache_aligned_history_limit(total_visible_messages: int) -> int:
+    """Return a bounded history size whose start moves only at epoch boundaries.
+
+    A fixed newest-N window changes at the front on every chat turn, invalidating
+    Anthropic's cumulative message-prefix cache. This policy keeps at least the
+    existing ten-message continuity window and lets it grow append-only for eight
+    messages before resetting to ten. The request therefore carries 10..17
+    messages, never less history than before and never an unbounded transcript.
+    """
+    if total_visible_messages < 0:
+        raise ValueError('total_visible_messages must be non-negative')
+    if total_visible_messages <= CHAT_HISTORY_BASE_VISIBLE_MESSAGES:
+        return total_visible_messages
+    return CHAT_HISTORY_BASE_VISIBLE_MESSAGES + (
+        (total_visible_messages - CHAT_HISTORY_BASE_VISIBLE_MESSAGES) % CHAT_HISTORY_APPEND_EPOCH_MESSAGES
+    )
+
+
+def get_cache_aligned_messages(
+    uid: str,
+    *,
+    app_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Read a cache-aligned, scope-safe chat history in newest-first order.
+
+    Reported messages are excluded from the visible count and read. Over-fetching
+    by the scoped reported count guarantees the target number of visible messages
+    even when hidden records fall inside the selected raw Firestore page.
+    """
+    user_ref = db.collection('users').document(uid)
+    scoped_ref = user_ref.collection('messages')
+    if chat_session_id:
+        scoped_ref = scoped_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
+    else:
+        scoped_ref = scoped_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+
+    total_result = scoped_ref.count().get()
+    total = int(total_result[0][0].value) if total_result and total_result[0] else 0
+    reported_result = scoped_ref.where(filter=FieldFilter('reported', '==', True)).count().get()
+    reported = int(reported_result[0][0].value) if reported_result and reported_result[0] else 0
+    visible_total = max(0, total - reported)
+    visible_limit = cache_aligned_history_limit(visible_total)
+    if visible_limit == 0:
+        return []
+
+    raw_limit = min(total, visible_limit + reported)
+    return get_messages(
+        uid,
+        limit=raw_limit,
+        app_id=app_id,
+        chat_session_id=chat_session_id,
+    )[:visible_limit]
 
 
 @prepare_for_read(decrypt_func=_prepare_message_for_read)

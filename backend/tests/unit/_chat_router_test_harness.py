@@ -81,6 +81,7 @@ def wire_common_stubs(install) -> SimpleNamespace:
     chat_db = install('database.chat')
     chat_db.get_chat_session = MagicMock(return_value=None)
     chat_db.get_messages = MagicMock(return_value=[])
+    chat_db.get_cache_aligned_messages = MagicMock(return_value=[])
     chat_db.add_message = MagicMock(side_effect=lambda uid, message_data: message_data)
     chat_db.add_message_to_chat_session = MagicMock()
     install('database.conversations')

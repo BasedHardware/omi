@@ -435,11 +435,11 @@ def cache_requested_for_openai_request(request: Mapping[str, Any]) -> bool:
 
 
 def cache_requested_for_anthropic_request(request: Mapping[str, Any]) -> bool:
-    return any(_contains_cache_control(request.get(field)) for field in ('system', 'messages', 'tools'))
+    return _contains_cache_control(request)
 
 
 def cache_write_ttl_for_anthropic_request(request: Mapping[str, Any]) -> str | None:
-    ttls = _cache_control_ttls([request.get(field) for field in ('system', 'messages', 'tools')])
+    ttls = _cache_control_ttls(request)
     if len(ttls) == 1:
         return next(iter(ttls))
     return 'mixed' if ttls else None
