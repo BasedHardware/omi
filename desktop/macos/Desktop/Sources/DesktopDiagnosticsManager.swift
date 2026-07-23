@@ -14,6 +14,7 @@ enum DesktopHealthEventName: String {
   case pttCommitted = "ptt_committed"
   case voiceTurnStarted = "voice_turn_started"
   case voiceTurnTerminal = "voice_turn_terminal"
+  case voiceToolLatency = "voice_tool_latency"
   case realtimeTokenMintFailed = "realtime_token_mint_failed"
   case realtimeProviderExpectedIdleTeardown = "realtime_provider_expected_idle_teardown"
   case realtimeProviderExpectedSessionRotation = "realtime_provider_expected_session_rotation"
@@ -282,6 +283,23 @@ final class DesktopDiagnosticsManager {
         "tcc_microphone_granted": micPermissionGranted,
       ],
       trackRemotely: false)
+  }
+
+  /// Per-tool wall time on a realtime voice turn: from the provider's tool
+  /// request to the result being returned — i.e. the "dead air" the user hears
+  /// while a tool runs. Instruments where voice latency actually goes (fast
+  /// local reads vs. slow backend/RAG round-trips) so optimization targets the
+  /// real cost instead of a guess. Bounded dimensions only: `tool_name` and
+  /// `provider` are a fixed low-cardinality set; no arguments or output content.
+  func recordVoiceToolLatency(toolName: String, provider: String, durationMs: Double, resultBytes: Int) {
+    record(
+      .voiceToolLatency,
+      properties: [
+        "tool_name": toolName,
+        "provider": provider,
+        "duration_ms": rounded(durationMs),
+        "result_bytes": resultBytes,
+      ])
   }
 
   func recordPTTSilentTurn(

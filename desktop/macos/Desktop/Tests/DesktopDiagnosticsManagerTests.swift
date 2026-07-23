@@ -428,6 +428,21 @@ import XCTest
       XCTAssertEqual(snapshot["telemetry_schema_version"] as? Int, 1)
     }
 
+    func testVoiceToolLatencyRecordsBoundedPerToolDuration() throws {
+      DesktopDiagnosticsManager.shared.recordVoiceToolLatency(
+        toolName: "search_conversations",
+        provider: "gemini",
+        durationMs: 4_213.6,
+        resultBytes: 1_842)
+
+      let snapshot = try latestSnapshot()
+      XCTAssertEqual(snapshot["event"] as? String, "voice_tool_latency")
+      XCTAssertEqual(snapshot["tool_name"] as? String, "search_conversations")
+      XCTAssertEqual(snapshot["provider"] as? String, "gemini")
+      XCTAssertEqual(snapshot["result_bytes"] as? Int, 1_842)
+      XCTAssertEqual((snapshot["duration_ms"] as? Double) ?? -1, 4_213.6, accuracy: 0.01)
+    }
+
     func testVoiceTurnOutcomeExcludesUserControlledEnds() {
       XCTAssertEqual(DesktopDiagnosticsManager.voiceTurnOutcome(for: "success"), "success")
       XCTAssertEqual(DesktopDiagnosticsManager.voiceTurnOutcome(for: "cancelled"), "excluded")

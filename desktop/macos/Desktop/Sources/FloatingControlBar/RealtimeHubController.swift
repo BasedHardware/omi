@@ -156,6 +156,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Transport correlation only. Logical pending-tool ownership and completion
   /// live in `VoiceTurn`; each correlation returns the reducer-issued identity.
   var toolEffectIdentityByTransportKey: [String: VoiceEffectIdentity] = [:]
+  /// Wall-clock start of each in-flight realtime tool call, keyed by the same
+  /// transport key as `toolEffectIdentityByTransportKey`. Drives the
+  /// `voice_tool_latency` telemetry (request → result), so it must be cleared on
+  /// the same paths that clear the identity map.
+  var toolCallStartByTransportKey: [String: Date] = [:]
   /// (b) Genuinely local: in-flight begin-external-run Task handle. Kernel owns
   /// the resulting binding; this Task dies with the process and is not rebuilt.
   struct ExternalRunAuthorityState {
