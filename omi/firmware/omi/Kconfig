@@ -178,4 +178,24 @@ config OMI_BATTERY_LOW_THRESHOLD
         "Battery percentage at or below which the low-battery LED warning
          activates."
 
+config OMI_ENABLE_CAPTURE_LED
+    bool "Capture-state LED (blue capturing, red idle)"
+    default n
+    help
+        "Drive the status LED from the audio capture state: blue while a
+         central is subscribed to the audio stream (capturing), red when
+         connected but not capturing or disconnected. The audio CCC handler
+         updates the flag automatically, and the app may override it by
+         writing the capture-state characteristic (19B10015)."
+
+config OMI_ENABLE_DEVICE_NAME_RW
+    bool "Writable, persisted BLE device name"
+    select BT_DEVICE_NAME_DYNAMIC
+    default n
+    help
+        "Expose a read/write name characteristic (19B10016) in the settings
+         service so the companion app can rename the pendant. The name is
+         stored in NVS and re-applied via bt_set_name() on boot, so it
+         survives reboot without enabling CONFIG_BT_SETTINGS."
+
 endmenu
