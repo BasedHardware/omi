@@ -539,7 +539,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                     _controller!.animateTo(_controller!.index - 1);
                                   }
                                 },
-                                icon: FaIcon(
+                                icon: const FaIcon(
                                   FontAwesomeIcons.arrowLeft,
                                   size: 16.0,
                                   color: Colors.white,
@@ -640,7 +640,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                       );
                                     }
                                   },
-                                  icon: FaIcon(
+                                  icon: const FaIcon(
                                     FontAwesomeIcons.arrowLeft,
                                     size: 16.0,
                                     color: Colors.white,
