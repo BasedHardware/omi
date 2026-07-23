@@ -35,13 +35,13 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
   }
 
   static final _reasons = [
-    _Reason('too_expensive', FontAwesomeIcons.wallet),
-    _Reason('not_using_enough', FontAwesomeIcons.clock),
-    _Reason('missing_features', FontAwesomeIcons.puzzlePiece),
-    _Reason('audio_quality', FontAwesomeIcons.microphone),
-    _Reason('battery_drain', FontAwesomeIcons.batteryQuarter),
-    _Reason('found_alternative', FontAwesomeIcons.arrowRightArrowLeft),
-    _Reason('other', FontAwesomeIcons.ellipsis),
+    const _Reason('too_expensive', FontAwesomeIcons.wallet),
+    const _Reason('not_using_enough', FontAwesomeIcons.clock),
+    const _Reason('missing_features', FontAwesomeIcons.puzzlePiece),
+    const _Reason('audio_quality', FontAwesomeIcons.microphone),
+    const _Reason('battery_drain', FontAwesomeIcons.batteryQuarter),
+    const _Reason('found_alternative', FontAwesomeIcons.arrowRightArrowLeft),
+    const _Reason('other', FontAwesomeIcons.ellipsis),
   ];
 
   String _label(String key) => switch (key) {
