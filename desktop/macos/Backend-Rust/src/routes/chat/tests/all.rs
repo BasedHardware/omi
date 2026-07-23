@@ -905,15 +905,24 @@ fn test_translate_request_with_tools() {
     )
     .unwrap();
     let tools = result.tools.unwrap();
-    // Keep ordinary agentic calls on their normal incremental streaming
-    // path; the server-side search tool is added only when retrieval
-    // policy requires fresh public information.
-    assert_eq!(tools.len(), 1);
-    let custom = serde_json::to_value(&tools[0]).unwrap();
+    // web_search is exposed on every tool-carrying agentic turn the route
+    // supports — prepended before the client tools — and the model decides
+    // whether to call it (tool_choice=auto). It is never pre-forced by a
+    // keyword guess, and no forced-search instruction is injected.
+    assert_eq!(tools.len(), 2);
+    assert_eq!(
+        serde_json::to_value(&tools[0]).unwrap()["name"],
+        "web_search"
+    );
+    let custom = serde_json::to_value(&tools[1]).unwrap();
     assert_eq!(custom["name"], "get_weather");
     assert_eq!(custom["description"], "Get weather for a location");
     assert!(custom.get("input_schema").is_some());
     assert!(!result.requires_public_web);
+    assert!(!serde_json::to_value(&result.messages)
+        .unwrap()
+        .to_string()
+        .contains("omi_retrieval_policy"));
 }
 
 #[test]
@@ -957,7 +966,11 @@ fn test_translate_request_web_search_disabled() {
 }
 
 #[test]
-fn test_translate_request_forces_required_web_search_without_client_tools() {
+fn test_translate_request_anaphoric_lookup_no_forced_instruction() {
+    // Regression guard for the removed keyword classifier: "look it up" used to
+    // be force-classified as a public-web turn and got the <omi_retrieval_policy>
+    // instruction prepended. It must not anymore — with no client tools the turn
+    // stays tool-free and uninstructed; the model resolves "it" from context.
     let req = test_request(vec![
         user_message("I'm working on humanpost.co now"),
         assistant_message("Is HumanPost separate from Vost or part of it?"),
@@ -971,23 +984,21 @@ fn test_translate_request_forces_required_web_search_without_client_tools() {
         ReasoningEffort::Unspecified,
     )
     .unwrap();
-    let tools = result.tools.unwrap();
-    assert_eq!(tools.len(), 1);
-    assert_eq!(
-        serde_json::to_value(&tools[0]).unwrap()["name"],
-        "web_search"
-    );
-    assert_eq!(result.tool_choice, Some(json!({"type": "auto"})));
-    let latest = result.messages.last().unwrap().content.to_string();
-    assert!(latest.contains("Public web search is required"));
-    assert!(latest.contains("look it up"));
+    assert!(result.tools.is_none());
+    assert!(!result.requires_public_web);
+    assert!(!serde_json::to_value(&result.messages)
+        .unwrap()
+        .to_string()
+        .contains("omi_retrieval_policy"));
 }
 
 #[test]
-fn test_translate_request_forces_web_search_for_location_qualified_weather() {
-    // This is the same gateway request shape used by both the main
-    // pi-mono session and default delegated pi-mono child sessions. The
-    // server-side tool avoids giving either process a credential directly.
+fn test_translate_request_web_search_alongside_client_tools() {
+    // A tool-carrying turn gets web_search prepended next to the client tools,
+    // with no forced instruction and no pre-routing. The turn is never marked
+    // as a public-web turn — the model chooses whether to search via
+    // tool_choice=auto (None => auto upstream). The <retrieval_source_rules>
+    // system prompt, not a keyword classifier, guides that choice.
     let mut req = test_request(vec![user_message("What's the weather in NYC right now?")]);
     req.tools = Some(vec![ToolDefinition {
         tool_type: "function".to_string(),
@@ -997,13 +1008,6 @@ fn test_translate_request_forces_web_search_for_location_qualified_weather() {
             parameters: None,
         },
     }]);
-    // A client may have requested one of its own functions, but a fresh
-    // public lookup must retain a provider-compatible automatic choice so
-    // the server-side web tool can run before any client tool.
-    req.tool_choice = Some(json!({
-        "type": "function",
-        "function": {"name": "search_memories"}
-    }));
 
     let result = translate_request_inner(
         &req,
@@ -1021,15 +1025,12 @@ fn test_translate_request_forces_web_search_for_location_qualified_weather() {
         serde_json::to_value(&tools[1]).unwrap()["name"],
         "search_memories"
     );
-    assert_eq!(result.tool_choice, Some(json!({"type": "auto"})));
-    assert!(result.requires_public_web);
-    assert!(result
-        .messages
-        .last()
+    assert!(result.tool_choice.is_none());
+    assert!(!result.requires_public_web);
+    assert!(!serde_json::to_value(&result.messages)
         .unwrap()
-        .content
         .to_string()
-        .contains("Public web search is required"));
+        .contains("omi_retrieval_policy"));
 }
 
 #[test]
@@ -1070,7 +1071,9 @@ fn test_pause_turn_continuation_preserves_raw_assistant_content_and_tools() {
         serde_json::to_value(&continuation.tools).unwrap(),
         original_tools
     );
-    assert!(continuation.requires_public_web);
+    // The buffered pause_turn continuation helper preserves the request as-is;
+    // turns are no longer pre-marked as public-web (the model drives search).
+    assert!(!continuation.requires_public_web);
 }
 
 #[test]
@@ -1121,16 +1124,25 @@ fn test_pause_turn_server_tool_response_decodes_and_preserves_raw_content() {
 }
 
 #[test]
-fn test_translate_request_required_web_search_fails_closed_when_disabled() {
+fn test_translate_request_degrades_when_web_search_disabled() {
+    // A route that cannot run web_search (kill switch or haiku) no longer fails
+    // the turn — a heuristic must never carry the authority of an explicit
+    // instruction (PR #9692). The turn translates cleanly with no web_search
+    // tool and no error; the model answers from its own knowledge.
     let req = test_request(vec![user_message("Search the web for HumanPost")]);
-    let error = translate_request_inner(
+    let result = translate_request_inner(
         &req,
         "claude-sonnet-4-6",
         false,
         ReasoningEffort::Unspecified,
     )
-    .unwrap_err();
-    assert!(error.contains("required public web search is unavailable"));
+    .unwrap();
+    assert!(result.tools.is_none());
+    assert!(!result.requires_public_web);
+    assert!(!serde_json::to_value(&result.messages)
+        .unwrap()
+        .to_string()
+        .contains("omi_retrieval_policy"));
 }
 
 #[test]
@@ -1160,7 +1172,11 @@ fn test_translate_request_guessed_freshness_answers_without_web_search() {
 }
 
 #[test]
-fn test_translate_request_private_lookup_excludes_server_web_search() {
+fn test_translate_request_private_lookup_still_exposes_web_search_tool() {
+    // The gateway no longer suppresses web_search on a "private-looking" query.
+    // Both tools are available; the <retrieval_source_rules> system prompt tells
+    // the model to use the private Omi tool (not web_search) for the user's own
+    // history. Source selection is the model's decision, not a keyword gate.
     let mut req = test_request(vec![user_message("Search my conversations for HumanPost")]);
     req.tools = Some(vec![ToolDefinition {
         tool_type: "function".to_string(),
@@ -1179,12 +1195,17 @@ fn test_translate_request_private_lookup_excludes_server_web_search() {
     )
     .unwrap();
     let tools = result.tools.unwrap();
-    assert_eq!(tools.len(), 1);
+    assert_eq!(tools.len(), 2);
     assert_eq!(
         serde_json::to_value(&tools[0]).unwrap()["name"],
+        "web_search"
+    );
+    assert_eq!(
+        serde_json::to_value(&tools[1]).unwrap()["name"],
         "search_conversations"
     );
     assert!(result.tool_choice.is_none());
+    assert!(!result.requires_public_web);
 }
 
 #[test]

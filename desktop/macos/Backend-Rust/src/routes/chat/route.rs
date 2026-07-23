@@ -13,7 +13,6 @@ use crate::byok;
 use crate::models::chat_completions::*;
 use crate::routes::llm_stub::{llm_stub_enabled, stub_chat_completions_response};
 use crate::routes::rate_limit::{requires_server_metering, RateDecision};
-use crate::routes::retrieval_policy::{caller_disabled_tools, retrieval_policy, RetrievalSource};
 use crate::AppState;
 
 use super::request_translation::{translate_request_inner, web_search_enabled, ReasoningEffort};
@@ -145,39 +144,11 @@ async fn chat_completions_inner(
         StatusCode::BAD_REQUEST
     })?;
 
+    // Web search availability is not a turn-level gate anymore: the model decides
+    // whether to call web_search, and a route that cannot run it (kill switch or
+    // haiku) simply doesn't expose the tool — the turn still answers from model
+    // knowledge instead of failing with a 503. See translate_request_inner.
     let web_search_enabled = web_search_enabled();
-    let policy = retrieval_policy(&req.messages);
-    // Only an explicit "search the web" is worth failing the turn over. A
-    // heuristic guess degrades to a normal answer in `translate_request_inner`.
-    if policy.requires(RetrievalSource::PublicWeb)
-        && policy.web_requirement_is_explicit()
-        && !caller_disabled_tools(&req)
-        && (!web_search_enabled || route.upstream_model.starts_with("claude-haiku"))
-    {
-        tracing::warn!(
-            event = "retrieval_policy",
-            required_web = true,
-            reason = policy.reason(),
-            web_search_exposed = false,
-            web_search_forced = false,
-            "required public web search is unavailable"
-        );
-        return Ok(response_or_500(
-            Response::builder()
-                .status(StatusCode::SERVICE_UNAVAILABLE)
-                .header("content-type", "application/json"),
-            Body::from(
-                json!({
-                    "error": {
-                        "message": "Public web search is temporarily unavailable. Please try again.",
-                        "type": "web_search_unavailable",
-                        "code": 503
-                    }
-                })
-                .to_string(),
-            ),
-        ));
-    }
 
     // BYOK: check for user-provided Anthropic API key (issue #7357).
     // When present, use the user's key and skip server-key rate limiting.
