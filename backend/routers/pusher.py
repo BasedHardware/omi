@@ -40,6 +40,7 @@ from utils.webhooks import (
 from utils.cloud_tasks import get_listen_finalization_tasks_max_attempts, is_audio_merge_dispatch_enabled
 from utils.other.storage import maybe_invalidate_conversation_playback, upload_audio_chunks_batch
 from utils.metrics import PUSHER_ACTIVE_WS_CONNECTIONS
+from utils.readiness import ReadinessGate
 from utils.observability.journeys import JourneyAttempt, JourneyOutcome, record_capture_finalization_terminal
 from utils.speaker_identification import extract_speaker_samples
 import logging
@@ -320,6 +321,18 @@ async def _websocket_util_trigger(
     except RuntimeError as e:
         logger.error(e)
         await websocket.close(code=1011, reason="Dirty state")
+        return
+
+    # Defense-in-depth: during drain the LB should already have removed us from
+    # the NEG, but reject straggler NEW connections.  We accept the handshake
+    # FIRST so the client sees a clean WS close frame (1001 Going Away) rather
+    # than a failed HTTP upgrade — a pre-accept close is surfaced as an
+    # exception by the websockets client and recorded as a circuit-breaker
+    # failure in backend-listen (backend/utils/pusher.py), which can trip the
+    # pod's pusher circuit during a normal rollout.
+    if not ReadinessGate.is_serving():
+        logger.info(f'Rejecting new WS for {uid}: pusher is draining')
+        await websocket.close(code=1001)
         return
 
     journey_attempt = JourneyAttempt('pusher_session')
