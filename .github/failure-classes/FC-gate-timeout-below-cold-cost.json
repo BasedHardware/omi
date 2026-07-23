@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "FC-gate-timeout-below-cold-cost",
+  "violated_contract": "A release gate's fixed time budget must exceed the worst-case cost of the healthy work it bounds (a cold, from-scratch rebuild), and a timed-out attempt must not poison the cache that would let the retry run warm.",
+  "canonical_prevention": "Size the qualification cold-preparation budget to the observed cold-build duration with headroom (env-overridable), and keep the static timing-contract test asserting the current budget plus its recurrence history so the value cannot silently regress below the cold cost again.",
+  "evidence_prs": [10374],
+  "scope_hints": [
+    "desktop/macos/scripts/qualify-desktop-beta.sh",
+    "desktop/macos/tests/test-qualify-desktop-beta-contract.sh"
+  ],
+  "status": "open"
+}
