@@ -152,13 +152,15 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         beta = workflow("desktop_promote_beta.yml")
         self.assertIn("schedule:", candidate)
         self.assertIn("workflow_dispatch:", candidate)
-        # Auto-release runs on a fixed 6-hourly schedule (plus manual dispatch).
-        # This is a single candidate authority: every trigger runs the same fenced
-        # planner (quiet-window + one-active-release), and beta promotion keys off
-        # the qualification's workflow_dispatch event below, not this workflow's
-        # trigger. Chained/merge triggers that could form a second authority or
-        # build every merge are forbidden.
-        self.assertNotIn("push:", candidate)
+        # Continuous deployment: auto-release fires on every macOS-affecting merge
+        # to main (push), with the schedule as a backstop. This stays a single
+        # candidate authority: every trigger runs the same fenced planner
+        # (quiet-window + one-active-release), and beta promotion keys off the
+        # qualification's workflow_dispatch event below, not this workflow's
+        # trigger. Chained triggers that could form a second authority remain
+        # forbidden.
+        self.assertIn("push:", candidate)
+        self.assertIn("branches: [main]", candidate)
         self.assertNotIn("workflow_run:", candidate)
         self.assertNotIn("workflow_call:", candidate)
         self.assertNotIn("uses: ./.github/workflows/desktop_promote_beta.yml", qualification)
