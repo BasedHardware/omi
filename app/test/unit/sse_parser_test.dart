@@ -72,7 +72,7 @@ void main() {
 
     test('many small fragments', () async {
       // Simulate 10-byte TCP fragments for "data: hello world\n\n"
-      final full = 'data: hello world\n\n';
+      const full = 'data: hello world\n\n';
       final fragments = <String>[];
       for (var i = 0; i < full.length; i += 5) {
         fragments.add(full.substring(i, i + 5 > full.length ? full.length : i + 5));
@@ -129,7 +129,7 @@ void main() {
     });
 
     test('empty stream produces no events', () async {
-      final stream = Stream<String>.empty();
+      const stream = Stream<String>.empty();
       final events = await parseSseStream(stream).toList();
       expect(events, isEmpty);
     });
