@@ -2,9 +2,22 @@ name: Build Desktop Release Candidate
 
 on:
   workflow_dispatch:
+  # Fire on every macOS-affecting merge to main so a candidate is planned within
+  # minutes of the merge instead of waiting for the hourly retry. The push filter
+  # is intentionally coarse (the planner does the precise releasable-change check,
+  # excluding CHANGELOG/AGENTS/changelog/Backend-Rust); the same quiet-window,
+  # exact-SHA, and one-active-release fences below still admit at most one
+  # eligible candidate at a time, so bursts collapse to the newest SHA.
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/macos/**'
+      - '.github/scripts/plan-desktop-release.py'
+      - '.github/workflows/desktop_auto_release.yml'
+      - '.github/workflows/desktop-swift-ci.yml'
   schedule:
-    # Retry hourly; planner quiet-window, exact-SHA checks, and active-release
-    # fences still admit at most one eligible candidate at a time.
+    # Backstop retry so a merge that lands inside the quiet window (or while a
+    # release is active) is still picked up after those fences clear.
     - cron: '17 * * * *'
 
 permissions:
