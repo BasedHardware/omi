@@ -13,6 +13,9 @@ LOG_MODULE_REGISTER(app_settings, CONFIG_LOG_DEFAULT_LEVEL);
 // In-memory cache for the settings
 static uint8_t dim_light_ratio = DEFAULT_DIM_LIGHT_RATIO;
 static uint8_t mic_gain = DEFAULT_MIC_GAIN;
+#ifdef CONFIG_OMI_ENABLE_DEVICE_NAME_RW
+static char device_name[CONFIG_BT_DEVICE_NAME_MAX + 1] = CONFIG_BT_DEVICE_NAME;
+#endif
 static struct rtc_time rtc_timestamp = {0};
 static uint64_t rtc_epoch = 0;
 
@@ -40,6 +43,21 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
         }
         return rc;
     }
+
+#ifdef CONFIG_OMI_ENABLE_DEVICE_NAME_RW
+    if (settings_name_steq(name, "dev_name", &next) && !next) {
+        if (len == 0 || len > CONFIG_BT_DEVICE_NAME_MAX) {
+            return -EINVAL;
+        }
+        rc = read_cb(cb_arg, device_name, len);
+        if (rc >= 0) {
+            device_name[len] = '\0';
+            LOG_INF("Loaded dev_name: %s", device_name);
+            return 0;
+        }
+        return rc;
+    }
+#endif
 
     if (settings_name_steq(name, "mic_gain", &next) && !next) {
         if (len != sizeof(mic_gain)) {
@@ -80,7 +98,7 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
             uint32_t epoch_u32 = 0;
             rc = read_cb(cb_arg, &epoch_u32, sizeof(epoch_u32));
             if (rc >= 0) {
-                rtc_epoch = (uint64_t)epoch_u32;
+                rtc_epoch = (uint64_t) epoch_u32;
                 LOG_INF("Loaded rtc_epoch(u32)=%u -> %llu", epoch_u32, rtc_epoch);
                 return 0;
             }
@@ -88,7 +106,9 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
         }
 
         LOG_WRN("rtc_epoch size mismatch: len=%u expected=%u (or legacy %u)",
-            (unsigned)len, (unsigned)sizeof(rtc_epoch), (unsigned)sizeof(uint32_t));
+                (unsigned) len,
+                (unsigned) sizeof(rtc_epoch),
+                (unsigned) sizeof(uint32_t));
         return -EINVAL;
     }
 
@@ -96,7 +116,9 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
         if (len == sizeof(lsm6dsl_time_base)) {
             rc = read_cb(cb_arg, &lsm6dsl_time_base, sizeof(lsm6dsl_time_base));
             if (rc >= 0) {
-                LOG_INF("Loaded lsm6dsl_time_base: epoch_s=%llu ts=0x%08x", lsm6dsl_time_base.epoch_s, lsm6dsl_time_base.ts);
+                LOG_INF("Loaded lsm6dsl_time_base: epoch_s=%llu ts=0x%08x",
+                        lsm6dsl_time_base.epoch_s,
+                        lsm6dsl_time_base.ts);
                 return 0;
             }
             return rc;
@@ -121,7 +143,9 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
         }
 
         LOG_WRN("lsm6dsl_time_base size mismatch: len=%u expected=%u (or legacy %u)",
-            (unsigned)len, (unsigned)sizeof(lsm6dsl_time_base), (unsigned)(sizeof(uint64_t) + sizeof(uint32_t)));
+                (unsigned) len,
+                (unsigned) sizeof(lsm6dsl_time_base),
+                (unsigned) (sizeof(uint64_t) + sizeof(uint32_t)));
         return -EINVAL;
     }
 
@@ -208,7 +232,11 @@ int app_settings_init(void)
     }
 
     LOG_INF("Settings initialized. dim_ratio=%u mic_gain=%u rtc_epoch=%llu lsm6_base_epoch=%llu lsm6_base_ts=0x%08x",
-		dim_light_ratio, mic_gain, rtc_epoch, lsm6dsl_time_base.epoch_s, lsm6dsl_time_base.ts);
+            dim_light_ratio,
+            mic_gain,
+            rtc_epoch,
+            lsm6dsl_time_base.epoch_s,
+            lsm6dsl_time_base.ts);
     return (err == -ENOENT) ? 0 : err;
 }
 
@@ -245,3 +273,26 @@ uint8_t app_settings_get_mic_gain(void)
 {
     return mic_gain;
 }
+
+#ifdef CONFIG_OMI_ENABLE_DEVICE_NAME_RW
+int app_settings_save_device_name(const char *name, size_t len)
+{
+    if (name == NULL || len == 0 || len > CONFIG_BT_DEVICE_NAME_MAX) {
+        return -EINVAL;
+    }
+    memcpy(device_name, name, len);
+    device_name[len] = '\0';
+    int err = settings_save_one("omi/dev_name", device_name, len);
+    if (err) {
+        LOG_ERR("Failed to save dev_name (err %d)", err);
+    } else {
+        LOG_INF("Saved dev_name: %s", device_name);
+    }
+    return err;
+}
+
+const char *app_settings_get_device_name(void)
+{
+    return device_name;
+}
+#endif
