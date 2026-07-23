@@ -1451,6 +1451,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// and retries if either a new turn or a new write appears across an await.
   /// Callers decide when it is safe to release any stronger reconnect gate.
   func refreshVoiceContextAfterPersistenceFence(reason: String) async -> Bool {
+    let fenceOwnerScope = currentOwnerScope
     while !Task.isCancelled {
       let observedTurnEpoch = turnEpoch
       let observedPersistenceGeneration = turnPersistenceLedger.generation
@@ -1465,6 +1466,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
       guard await refreshVoiceContextSnapshot() else {
         if Task.isCancelled { return false }
+        // The snapshot cannot resolve once this fence no longer owns its original
+        // authenticated scope (sign-out / owner swap). Retrying then spins
+        // agent-bridge startup at full speed, so stop instead of looping.
+        guard
+          RealtimeHubLifecyclePolicy.canRetryPersistenceFence(
+            taskCancelled: Task.isCancelled,
+            fenceOwnerScope: fenceOwnerScope,
+            currentOwnerScope: currentOwnerScope
+          )
+        else {
+          pendingSessionRefreshReason = reason
+          return false
+        }
         continue
       }
       guard !Task.isCancelled,
