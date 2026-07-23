@@ -62,6 +62,11 @@ struct SBOnboardingView: View {
       .padding(.top, 20).padding(.trailing, 24)
     }
     .onAppear { model.begin() }
+    // ChatGPT/Claude OAuth finishes in the browser — re-check the grants when
+    // the user comes back so their chip actually flips to "✓ on".
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      if model.step == .context { model.refreshContextStates() }
+    }
     // Safety net: the `.shortcut` step suspends global hotkeys and nulls the main
     // menu (restored only via the advance/skip/complete buttons). If the view is
     // removed by any other path (e.g. auth flips to signed-out), restore them here

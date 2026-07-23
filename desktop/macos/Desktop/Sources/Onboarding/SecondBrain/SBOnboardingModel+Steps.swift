@@ -560,7 +560,12 @@ extension SBOnboardingModel {
       guard let self else { return }
       for id in ["chatgpt", "claude"] {
         let dest: MemoryExportDestination = id == "chatgpt" ? .chatgpt : .claude
-        if await MemoryExportService.shared.status(for: dest).hasConnection { self.contextStates[id] = "on" }
+        // OAuth for these completes in the browser, so only the backend grant
+        // list knows the truth — a local status check would never flip the chip.
+        let connected = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: dest).hasConnection
+        if let resolved = Self.cloudContextState(current: self.contextStates[id], connected: connected) {
+          self.contextStates[id] = resolved
+        }
       }
       // Apple Notes rides the same Full Disk Access grant that powers Files, so a
       // readable NoteStore should show "✓ on" up front — not a "Connect" button
@@ -576,6 +581,15 @@ extension SBOnboardingModel {
       let gmail = await GmailReaderService.shared.verifyConnection()
       if gmail.isConnected { self.contextStates["gmail"] = "on" }
     }
+  }
+
+  /// Chip state for a cloud OAuth connector (ChatGPT/Claude) after a backend
+  /// grant refresh: connected always wins; an unfinished "connecting" (the user
+  /// came back without completing OAuth) resolves to "idle" so the Connect
+  /// button returns; anything else is left unchanged (nil).
+  nonisolated static func cloudContextState(current: String?, connected: Bool) -> String? {
+    if connected { return "on" }
+    return current == "connecting" ? "idle" : nil
   }
 
   /// Resolve a cookie-based Google connector (Calendar, Gmail). These don't OAuth —
@@ -654,12 +668,17 @@ extension SBOnboardingModel {
     case "chatgpt", "claude":
       let dest: MemoryExportDestination = id == "chatgpt" ? .chatgpt : .claude
       Task { [weak self] in
+        let outcome: MemoryExportExecutor.Outcome
         do {
-          _ = try await MemoryExportExecutor.run(dest)
+          outcome = try await MemoryExportExecutor.run(dest)
         } catch {
           self?.contextStates[id] = "unavailable"
           return
         }
+        // Assisted/directory flows finish in the browser — checking now would
+        // always read "not connected" and reset the chip. Keep it "connecting";
+        // the app-activation refresh resolves it when the user comes back.
+        guard outcome.mode == .completed else { return }
         let connected = await MemoryExportService.shared.status(for: dest).hasConnection
         self?.contextStates[id] = connected ? "on" : "idle"
       }
