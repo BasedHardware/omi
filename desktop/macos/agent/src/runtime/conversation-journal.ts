@@ -1091,7 +1091,18 @@ export function listJournalTurns(
 
 export function clearJournalConversation(
   store: AgentStore,
-  input: { ownerId: string; conversationId: string; expectedGeneration: number; nowMs?: number },
+  input: {
+    ownerId: string;
+    conversationId: string;
+    expectedGeneration: number;
+    nowMs?: number;
+    // When false, the local journal is fenced and its turns are purged, but the
+    // user's server-side chat history is left untouched (no backend delete is
+    // enqueued). Used by resets (onboarding re-walkthrough, non-prod harness)
+    // that must not destroy cloud history. Defaults to true — the explicit
+    // user "Clear history" action still deletes backend messages.
+    deleteBackend?: boolean;
+  },
 ): {
   conversationId: string;
   generation: number;
@@ -1148,12 +1159,15 @@ export function clearJournalConversation(
        WHERE conversation_id = ?`,
       [generation, now, input.conversationId],
     );
-    const backendDeleteOperationId = enqueueBackendConversationDelete(store, {
-      ownerId: input.ownerId,
-      conversationId: input.conversationId,
-      conversationGeneration: generation,
-      nowMs: now,
-    });
+    const backendDeleteOperationId =
+      input.deleteBackend === false
+        ? null
+        : enqueueBackendConversationDelete(store, {
+            ownerId: input.ownerId,
+            conversationId: input.conversationId,
+            conversationGeneration: generation,
+            nowMs: now,
+          });
     // Canonical rows are hard-deleted. The narrow claim tombstone above retains
     // only exact physical-delivery identity so a pre-clear POST can settle
     // before the backend delete is acknowledged; it is never projected as chat.

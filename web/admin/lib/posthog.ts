@@ -21,6 +21,26 @@ import { getDb } from "@/lib/firebase/admin";
 const CACHE_COLLECTION = "admin_stats_cache";
 const SOFT_TTL_MS = 30 * 60 * 1000; // serve cached without re-querying for 30 min
 
+// PostHog's query API fills `LIMIT 100` into any HogQL (sub)query that carries
+// none and truncates silently — this cut the newest days off the
+// response-reliability charts (#10191) and drops per-version rows on the
+// releases panel (#10190). 50_000 is PostHog's served maximum (verified live:
+// `LIMIT 100000` returns exactly 50000 rows).
+export const POSTHOG_SERVED_MAX_ROWS = 50_000;
+
+// Guard against the silent default cap by binding one explicit outer LIMIT to
+// the whole result. Wrapping in a subquery is required for correctness with
+// `UNION ALL`, where a trailing `LIMIT` binds to the last arm only (verified:
+// `SELECT 1 UNION ALL SELECT 2 LIMIT 1` returns 2 rows). Wrapping only ever
+// adds a ceiling: a caller's tighter inner `LIMIT` still wins, so this never
+// widens an intentionally small query.
+export function withRowLimit(
+  query: string,
+  max: number = POSTHOG_SERVED_MAX_ROWS,
+): string {
+  return `SELECT * FROM (\n${query}\n) AS _row_limit_guard\nLIMIT ${max}`;
+}
+
 type CacheDoc = { payload: string; freshAt: number };
 
 async function readCache(
@@ -67,7 +87,9 @@ export async function posthogFetch(
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
+      body: JSON.stringify({
+        query: { kind: "HogQLQuery", query: withRowLimit(query) },
+      }),
     });
     if (res.status !== 429 || attempt === maxRetries) return res;
     const waitMs = 800 * (attempt + 1) + Math.floor(Math.random() * 300);
@@ -146,13 +168,15 @@ export async function posthogResults(
     }
     const raw = await res.json();
     const results = Array.isArray(raw.results) ? raw.results : [];
-    // PostHog fills LIMIT 100 into any HogQL (sub)query that has none and
-    // truncates silently — exactly 100 rows from a LIMIT-less query is the
-    // signature of that cap (it cut the newest days off response-reliability).
-    if (results.length === 100 && !/\blimit\b/i.test(query)) {
+    // posthogFetch now binds an explicit LIMIT of POSTHOG_SERVED_MAX_ROWS to
+    // every query, so the silent default-100 cap can no longer truncate. The
+    // remaining ceiling is PostHog's served maximum: a result at that count is
+    // itself truncated and the caller should widen its window or paginate.
+    if (results.length >= POSTHOG_SERVED_MAX_ROWS) {
       console.warn(
-        "PostHog returned exactly 100 rows for a query without LIMIT — likely truncated by the default cap",
+        "PostHog returned the served-max row count — result is truncated at the ceiling",
         {
+          servedMax: POSTHOG_SERVED_MAX_ROWS,
           querySnippet: query.replace(/\s+/g, " ").trim().slice(0, 160),
         },
       );

@@ -3,5 +3,7 @@ self-hosted-runner:
     - ubuntu-latest-m
     - macos
     - omi-desktop-qualification
+    - omi-qual-m1-studio
+    - omi-qual-m4-mini
 
 config-variables: null

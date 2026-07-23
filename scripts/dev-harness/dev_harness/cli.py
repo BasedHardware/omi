@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
 import os
@@ -107,20 +108,39 @@ def _native_typesense_binary() -> str | None:
     return shutil.which("typesense-server")
 
 
+@functools.lru_cache(maxsize=1)
+def _docker_daemon_healthy() -> bool:
+    """A docker CLI without a responding daemon must not win auto-detection."""
+    if not shutil.which("docker"):
+        return False
+    try:
+        probe = subprocess.run(
+            ["docker", "info"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return probe.returncode == 0
+
+
 def typesense_runtime() -> str:
     """How the harness runs Typesense: "docker" (historical default) or "native".
 
-    OMI_TYPESENSE_RUNTIME pins the choice; unset, Docker wins when the CLI is
-    present and a native typesense-server binary is the fallback so Docker-less
-    machines (ephemeral CI Macs, minimal runners) can still run the hermetic
-    stack. Resolution is announced at `up` so evidence logs record the mode.
+    OMI_TYPESENSE_RUNTIME pins the choice; unset, a healthy Docker daemon wins,
+    then a native typesense-server binary (so Docker-less or broken-Docker
+    machines — ephemeral CI Macs, minimal runners — still run the hermetic
+    stack), and a docker CLI without either keeps the historical docker error
+    ownership. Resolution is announced at `up` so evidence logs record the mode.
     """
     explicit = os.environ.get("OMI_TYPESENSE_RUNTIME", "").strip().lower()
     if explicit:
         if explicit not in ("docker", "native"):
             raise SystemExit(f"OMI_TYPESENSE_RUNTIME must be 'docker' or 'native', got {explicit!r}")
         return explicit
-    if shutil.which("docker"):
+    if _docker_daemon_healthy():
         return "docker"
     if _native_typesense_binary():
         return "native"
@@ -258,6 +278,11 @@ def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]
             missing.append(
                 "docker (required for local Typesense on loopback; "
                 "or install typesense-server and set OMI_TYPESENSE_RUNTIME=native)"
+            )
+        elif not _docker_daemon_healthy():
+            missing.append(
+                "docker daemon (docker CLI present but `docker info` failed; "
+                "start Docker/colima or install typesense-server for OMI_TYPESENSE_RUNTIME=native)"
             )
     elif not _native_typesense_binary():
         missing.append(

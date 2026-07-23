@@ -131,10 +131,39 @@ SHA=$(git -C "$REPO_ROOT" rev-list -n1 "$RELEASE_TAG")
 WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"
 
 # Provision the tag-pinned backend venv so the hermetic stack resolves the
-# exact locked Python dependencies. Machines without uv keep the legacy
-# global-python3 resolution (cache reuse may clean the venv between runs).
+# locked Python dependencies. The ephemeral Codemagic Mac has no backend venv
+# and no global python3 with backend deps, so this must succeed there — but a
+# freshly installed uv may not carry the exact pinned patch
+# (python-build-standalone lags), so fall back to the pinned minor version and
+# still sync the exact platform lock. Machines without uv keep the legacy
+# global-python3 resolution.
+provision_backend_venv() {
+  local worktree="$1"
+  local backend="$worktree/backend"
+  [[ -f "$backend/.python-version" ]] || { echo "no backend/.python-version; skipping venv provisioning"; return 0; }
+  local pinned minor lock
+  pinned="$(tr -d '[:space:]' < "$backend/.python-version")"
+  minor="${pinned%.*}"
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64 | Darwin-aarch64) lock="pylock.macos.toml" ;;
+    Darwin-x86_64 | Darwin-amd64) lock="pylock.macos-x86_64.toml" ;;
+    *) lock="pylock.toml" ;;
+  esac
+  # Preferred path: exact-patch parity with CI via the shared script.
+  if (cd "$worktree" && make setup-backend); then
+    return 0
+  fi
+  echo "make setup-backend failed (likely exact patch $pinned unavailable to this uv); falling back to minor $minor"
+  [[ -f "$backend/$lock" ]] || { echo "no $lock for this platform; cannot provision backend venv" >&2; return 1; }
+  (
+    cd "$backend"
+    uv venv --allow-existing --python "$minor" .venv
+    uv pip sync "$lock" --python .venv/bin/python
+  )
+}
+
 if command -v uv >/dev/null 2>&1; then
-  (cd "$WORKTREE" && make setup-backend)
+  provision_backend_venv "$WORKTREE"
 else
   echo "uv not found; dev-harness python resolves via global python3"
 fi
