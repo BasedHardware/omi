@@ -749,7 +749,7 @@ struct DashboardPage: View {
         homePanelStage(stageWidth: stageWidth, askBarWidth: askBarWidth)
       }
     }
-    .padding(.top, Self.homeStageTopPadding)
+    .padding(.top, homeMode == .hub ? Self.homeStageTopPadding : OmiSpacing.lg)
     .padding(.bottom, Self.homeStageBottomPadding)
   }
 
