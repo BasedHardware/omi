@@ -163,7 +163,7 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn("  workflow_dispatch:\n", workflow)
         self.assertNotIn("inputs:", workflow.split("\njobs:", 1)[0])
         self.assertIn("  push:\n    branches: [main]", workflow)
-        self.assertIn("- cron: '17 * * * *'", workflow)
+        self.assertIn("- cron: '*/15 * * * *'", workflow)
         self.assertNotIn("break_glass", workflow)
         self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
