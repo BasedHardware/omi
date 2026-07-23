@@ -360,7 +360,7 @@ class ShortcutSettings: ObservableObject {
   /// Empty means Automatic. A non-empty value is a stable CoreAudio device UID
   /// selected specifically for push-to-talk, independent of the macOS default input.
   @Published var pttInputDeviceUID: String {
-    didSet { UserDefaults.standard.set(pttInputDeviceUID, forKey: "shortcut_pttInputDeviceUID") }
+    didSet { UserDefaults.standard.set(pttInputDeviceUID, forKey: .shortcutPTTInputDeviceUID) }
   }
 
   /// Selected AI model for Ask Omi.
@@ -593,7 +593,7 @@ class ShortcutSettings: ObservableObject {
     self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
     self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
     self.pttMuteSystemAudio = UserDefaults.standard.object(forKey: "shortcut_pttMuteSystemAudio") as? Bool ?? true
-    self.pttInputDeviceUID = UserDefaults.standard.string(forKey: "shortcut_pttInputDeviceUID") ?? ""
+    self.pttInputDeviceUID = UserDefaults.standard.string(forKey: .shortcutPTTInputDeviceUID) ?? ""
     self.selectedModel = ModelQoS.Claude.sanitizedSelection(
       UserDefaults.standard.string(forKey: "shortcut_selectedModel")
     )
