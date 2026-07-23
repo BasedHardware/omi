@@ -101,8 +101,18 @@ def _qualification_kwargs(release_tag="v0.12.64+12064-macos", source_sha="a" * 4
             "rigorous_pre_sign_passed": True,
         },
         "blackbox_results": (
-            {"ok": True, "release_tag": release_tag, "source_sha": source_sha},
-            {"ok": True, "release_tag": release_tag, "source_sha": source_sha},
+            {
+                "ok": True,
+                "release_tag": release_tag,
+                "source_sha": source_sha,
+                "bundle_id": "com.omi.computer-macos",
+            },
+            {
+                "ok": True,
+                "release_tag": release_tag,
+                "source_sha": source_sha,
+                "bundle_id": "com.omi.computer-macos.beta",
+            },
         ),
     }
 
