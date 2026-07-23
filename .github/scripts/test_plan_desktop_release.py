@@ -139,6 +139,13 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertNotIn("fetch --quiet --force origin main", readiness_script)
         self.assertIn("pre-tag-readiness:", workflow)
         self.assertIn("verify-pre-tag-readiness.py verify", workflow)
+        # Regression: the gate runs on the trusted M1 under macOS bash 3.2, where
+        # `"${arr[@]}"` on an EMPTY array under `set -u` traps "unbound variable"
+        # and failed the readiness gate on every release with KEEP_STACK != 1 (the
+        # normal path), silently blocking all auto-tagging. Optional array flags
+        # must use the bash-3.2-safe `${arr[@]+"${arr[@]}"}` expansion.
+        self.assertNotIn('--readiness "${KEEP_FLAG[@]}"', readiness_script)
+        self.assertIn('${KEEP_FLAG[@]+"${KEEP_FLAG[@]}"}', readiness_script)
 
 
 if __name__ == "__main__":
