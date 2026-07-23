@@ -6,11 +6,13 @@ import Foundation
 /// the user presses PTT a second time.
 @MainActor
 final class RealtimeVoiceContextSingleFlight {
-  private final class Flight {
-    var task: Task<Bool, Never>!
+  private struct Flight {
+    let id: UInt64
+    let task: Task<Bool, Never>
   }
 
   private var activeFlight: Flight?
+  private var nextFlightID: UInt64 = 0
 
   var isRunning: Bool {
     activeFlight != nil
@@ -37,16 +39,17 @@ final class RealtimeVoiceContextSingleFlight {
   private func start(
     _ operation: @escaping @MainActor @Sendable () async -> Bool
   ) -> Task<Bool, Never> {
-    let flight = Flight()
-    flight.task = Task { @MainActor [weak self, weak flight] in
+    nextFlightID &+= 1
+    let flightID = nextFlightID
+    let task = Task { @MainActor [weak self] in
       let result = await operation()
-      if let self, let flight, self.activeFlight === flight {
+      if let self, self.activeFlight?.id == flightID {
         self.activeFlight = nil
       }
       return result
     }
-    activeFlight = flight
-    return flight.task
+    activeFlight = Flight(id: flightID, task: task)
+    return task
   }
 
   func cancel() {
