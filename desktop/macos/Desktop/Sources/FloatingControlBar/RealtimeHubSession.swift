@@ -64,7 +64,104 @@ protocol RealtimeHubSessionDelegate: AnyObject {
     name: String, callId: String, argumentsJSON: String,
     identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
   func hubDidFinishTurn(identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
-  func hubDidError(_ message: String, source: RealtimeHubSession)
+  func hubDidError(_ failure: RealtimeHubTransportFailure, source: RealtimeHubSession)
+}
+
+enum RealtimeHubTransportFailureKind: String, Equatable, Sendable {
+  case localAddressUnavailable = "local_address_unavailable"
+  case providerClose = "provider_close"
+  case providerError = "provider_error"
+  case configuration
+  case connect
+  case handshake
+  case receive
+  case send
+  case protocolViolation = "protocol_violation"
+  case unknown
+}
+
+struct RealtimeHubTransportFailure: Equatable, Sendable {
+  let kind: RealtimeHubTransportFailureKind
+  let message: String
+  let systemDomain: String?
+  let systemCode: Int?
+
+  static func rawWebSocket(_ failure: RealtimeRawWebSocketFailure) -> Self {
+    if let underlyingError = failure.underlyingError,
+      isLocalAddressUnavailable(underlyingError)
+    {
+      return Self(
+        kind: .localAddressUnavailable,
+        message: failure.message,
+        systemDomain: "posix",
+        systemCode: Int(POSIXErrorCode.EADDRNOTAVAIL.rawValue))
+    }
+    return Self(
+      kind: kind(for: failure.phase),
+      message: failure.message,
+      systemDomain: boundedSystemDomain(failure.underlyingError),
+      systemCode: failure.underlyingError.map { ($0 as NSError).code })
+  }
+
+  static func providerClose(code: Int, reason: String) -> Self {
+    Self(
+      kind: .providerClose,
+      message: "WebSocket closed (\(code)) \(reason)",
+      systemDomain: nil,
+      systemCode: code)
+  }
+
+  static func providerError(_ message: String) -> Self {
+    Self(kind: .providerError, message: message, systemDomain: nil, systemCode: nil)
+  }
+
+  static func system(_ error: Error, phase: RealtimeHubTransportFailureKind) -> Self {
+    if isLocalAddressUnavailable(error) {
+      return Self(
+        kind: .localAddressUnavailable,
+        message: error.localizedDescription,
+        systemDomain: "posix",
+        systemCode: Int(POSIXErrorCode.EADDRNOTAVAIL.rawValue))
+    }
+    return Self(
+      kind: phase,
+      message: error.localizedDescription,
+      systemDomain: boundedSystemDomain(error),
+      systemCode: (error as NSError).code)
+  }
+
+  private static func kind(
+    for phase: RealtimeRawWebSocketFailurePhase
+  ) -> RealtimeHubTransportFailureKind {
+    switch phase {
+    case .configuration: return .configuration
+    case .connect: return .connect
+    case .handshake: return .handshake
+    case .receive: return .receive
+    case .send: return .send
+    case .protocolViolation: return .protocolViolation
+    }
+  }
+
+  private static func isLocalAddressUnavailable(_ error: Error) -> Bool {
+    if let networkError = error as? NWError,
+      case .posix(let code) = networkError
+    {
+      return code == .EADDRNOTAVAIL
+    }
+    let nsError = error as NSError
+    return nsError.domain == NSPOSIXErrorDomain
+      && nsError.code == Int(POSIXErrorCode.EADDRNOTAVAIL.rawValue)
+  }
+
+  private static func boundedSystemDomain(_ error: Error?) -> String? {
+    guard let error else { return nil }
+    if error is NWError { return "network" }
+    let domain = (error as NSError).domain
+    if domain == NSPOSIXErrorDomain { return "posix" }
+    if domain == NSURLErrorDomain { return "url" }
+    return "other"
+  }
 }
 
 struct RealtimeHubEventIdentity: Equatable, Sendable {
@@ -153,10 +250,13 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   private let q = DispatchQueue(label: "omi.realtime-hub.session")
 
   private var task: URLSessionWebSocketTask?
+  private var completedURLTaskIDs = Set<Int>()
+  private var urlTaskTerminalWaiters: [Int: [CheckedContinuation<Void, Never>]] = [:]
   private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
   // Gemini's Live endpoint rejects both of Apple's WebSocket stacks, so it uses a
   // hand-rolled RFC 6455 client (RawWebSocket). OpenAI uses URLSession.
-  private var rawWS: RawWebSocket?
+  private var rawWS: RealtimeRawWebSocketTransport?
+  private let rawWebSocketFactory: (URL, DispatchQueue) -> RealtimeRawWebSocketTransport
   private var usesRawWS: Bool { provider == .gemini }
 
   private var isOpen = false
@@ -238,6 +338,9 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     stableCacheIdentity: String = "",
     dynamicContextIdentity: String = "",
     contextCacheReplaced: Bool = false,
+    rawWebSocketFactory: @escaping (URL, DispatchQueue) -> RealtimeRawWebSocketTransport = {
+      RawWebSocket(url: $0, queue: $1)
+    },
     delegate: RealtimeHubSessionDelegate
   ) {
     self.provider = provider
@@ -248,6 +351,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     self.stableCacheIdentity = stableCacheIdentity
     self.dynamicContextIdentity = dynamicContextIdentity
     self.contextCacheReplaced = contextCacheReplaced
+    self.rawWebSocketFactory = rawWebSocketFactory
     self.delegate = delegate
     super.init()
   }
@@ -261,12 +365,17 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   private func _start() {
     guard !terminated else { return }
     guard let request = makeRequest(), let url = request.url else {
-      notifyError("Could not build \(provider.displayName) request URL")
+      notifyError(
+        RealtimeHubTransportFailure(
+          kind: .configuration,
+          message: "Could not build \(provider.displayName) request URL",
+          systemDomain: nil,
+          systemCode: nil))
       return
     }
     log("RealtimeHub: connecting \(provider.displayName) → \(url.host ?? "?") (client-direct)")
     if usesRawWS {
-      let ws = RawWebSocket(url: url, queue: q)
+      let ws = rawWebSocketFactory(url, q)
       rawWS = ws
       ws.onOpen = { [weak self] in
         guard let self else { return }
@@ -275,8 +384,12 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         self.sendSessionSetup()
       }
       ws.onMessage = { [weak self] data in self?.handleMessage(data) }
-      ws.onClose = { [weak self] code, reason in self?.notifyError("WebSocket closed (\(code)) \(reason)") }
-      ws.onError = { [weak self] msg in self?.notifyError(msg) }
+      ws.onClose = { [weak self] code, reason in
+        self?.notifyError(.providerClose(code: code, reason: reason))
+      }
+      ws.onError = { [weak self] failure in
+        self?.notifyError(.rawWebSocket(failure))
+      }
       ws.connect()
       return
     }
@@ -295,26 +408,68 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
 
   func stop() {
     q.async { [weak self] in
-      self?.stopOnQueue()
+      self?.beginStopOnQueue()
     }
   }
 
-  /// Close the transport and drain its serialization queue before returning.
+  /// Close the transport and await the underlying stack's terminal acknowledgement.
   /// Owner replacement awaits this before the replacement owner becomes visible.
   func stopAndWait() async {
+    let handles: (URLSessionWebSocketTask?, RealtimeRawWebSocketTransport?) = await withCheckedContinuation {
+      continuation in
+      q.async { [weak self] in
+        guard let self else {
+          continuation.resume(returning: (nil, nil))
+          return
+        }
+        let handles = (self.task, self.rawWS)
+        self.beginStopOnQueue()
+        continuation.resume(returning: handles)
+      }
+    }
+    await waitForRawTransportTerminal(handles.1)
+    await waitForURLTaskTerminal(handles.0)
+    let handlesBox = SessionCallbackBox(handles)
     await withCheckedContinuation { continuation in
       q.async { [weak self] in
-        self?.stopOnQueue()
+        let handles = handlesBox.value
+        if let urlTask = handles.0, self?.task === urlTask {
+          self?.task = nil
+        }
+        if let rawTransport = handles.1, self?.rawWS === rawTransport {
+          self?.rawWS = nil
+        }
         continuation.resume()
       }
     }
   }
 
-  private func stopOnQueue() {
-    task?.cancel(with: .goingAway, reason: nil)
-    task = nil
-    rawWS?.close()
-    rawWS = nil
+  private func waitForRawTransportTerminal(_ transport: RealtimeRawWebSocketTransport?) async {
+    guard let transport else { return }
+    await transport.closeAndWait()
+  }
+
+  private func waitForURLTaskTerminal(_ urlTask: URLSessionWebSocketTask?) async {
+    guard let urlTask else { return }
+    await withCheckedContinuation { continuation in
+      q.async { [weak self] in
+        guard let self else {
+          continuation.resume()
+          return
+        }
+        let taskID = urlTask.taskIdentifier
+        if self.completedURLTaskIDs.contains(taskID) || urlTask.state == .completed {
+          continuation.resume()
+          return
+        }
+        self.urlTaskTerminalWaiters[taskID, default: []].append(continuation)
+        urlTask.cancel(with: .goingAway, reason: nil)
+      }
+    }
+  }
+
+  private func beginStopOnQueue() {
+    beginTransportTerminationOnQueue()
     isOpen = false
     pendingAudio.removeAll()
     pendingVideo.removeAll()
@@ -337,16 +492,23 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     completedGeminiEventIdentity = nil
   }
 
-  private func notifyError(_ message: String) {
+  private func beginTransportTerminationOnQueue() {
+    task?.cancel(with: .goingAway, reason: nil)
+    rawWS?.close()
+    isOpen = false
+  }
+
+  private func notifyError(_ failure: RealtimeHubTransportFailure) {
     guard !terminated else { return }
     terminated = true
-    // Make this physical session non-sendable on q before the main-actor
-    // controller observes the error and schedules teardown.
-    isOpen = false
-    task = nil
-    rawWS = nil
+    // The session owns the physical transport. Retire it before publishing the
+    // terminal callback so controller recovery can never overlap a replacement
+    // with a still-live socket.
+    // Preserve buffered logical input until the controller has captured any
+    // reconnect obligation. Only the physical transport terminates here.
+    beginTransportTerminationOnQueue()
     let d = delegate
-    Task { @MainActor in d?.hubDidError(message, source: self) }
+    Task { @MainActor in d?.hubDidError(failure, source: self) }
   }
 
   // MARK: Public stream API
@@ -1104,7 +1266,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       guard let self else { return }
       switch result {
       case .failure(let error):
-        self.q.async { self.notifyError(error.localizedDescription) }
+        self.q.async { self.notifyError(.system(error, phase: .receive)) }
       case .success(let message):
         let data: Data?
         switch message {
@@ -1352,7 +1514,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       openAIResponseCreatePending = false
       openAIActiveResponseID = nil
       let msg = (e["error"] as? [String: Any])?["message"] as? String ?? "OpenAI realtime error"
-      notifyError(msg)
+      notifyError(.providerError(msg))
     default:
       break
     }
@@ -1551,7 +1713,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       rawWS.sendText(text) { [weak self] error in
         guard let self else { return }
         self.q.async {
-          if let error { self.notifyError(error.localizedDescription) }
+          if let error { self.notifyError(.system(error, phase: .send)) }
           completionBox.value?(error)
         }
       }
@@ -1564,7 +1726,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     task.send(.string(text)) { [weak self] error in
       guard let self else { return }
       self.q.async {
-        if let error { self.notifyError(error.localizedDescription) }
+        if let error { self.notifyError(.system(error, phase: .send)) }
         completionBox.value?(error)
       }
     }
@@ -1574,7 +1736,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   /// and encoding paths. A screen-evidence receipt must never wait for a provider deadline after
   /// the session has already proved it cannot enqueue the exact wire.
   private func failSend(_ error: Error, completion: ((Error?) -> Void)?) {
-    notifyError(error.localizedDescription)
+    notifyError(.system(error, phase: .send))
     completion?(error)
   }
 }
@@ -1610,12 +1772,25 @@ extension RealtimeHubSession: URLSessionWebSocketDelegate {
     didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?
   ) {
     let r = reason.flatMap { String(data: $0, encoding: .utf8) } ?? ""
-    q.async { self.notifyError("WebSocket closed (\(closeCode.rawValue)) \(r)") }
+    q.async {
+      self.notifyError(
+        .providerClose(
+          code: closeCode.rawValue,
+          reason: r))
+    }
   }
 
   func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-    if let error {
-      q.async { self.notifyError("WebSocket failed: \(error.localizedDescription)") }
+    q.async {
+      let taskID = task.taskIdentifier
+      self.completedURLTaskIDs.insert(taskID)
+      let waiters = self.urlTaskTerminalWaiters.removeValue(forKey: taskID) ?? []
+      for waiter in waiters {
+        waiter.resume()
+      }
+      if let error {
+        self.notifyError(.system(error, phase: .connect))
+      }
     }
   }
 }

@@ -1,6 +1,43 @@
 import Foundation
 import Network
 
+enum RealtimeRawWebSocketFailurePhase: String, Sendable {
+  case configuration
+  case connect
+  case handshake
+  case receive
+  case send
+  case protocolViolation = "protocol_violation"
+}
+
+struct RealtimeRawWebSocketFailure: @unchecked Sendable {
+  let phase: RealtimeRawWebSocketFailurePhase
+  let message: String
+  let underlyingError: Error?
+
+  init(
+    phase: RealtimeRawWebSocketFailurePhase,
+    message: String,
+    underlyingError: Error? = nil
+  ) {
+    self.phase = phase
+    self.message = message
+    self.underlyingError = underlyingError
+  }
+}
+
+protocol RealtimeRawWebSocketTransport: AnyObject {
+  var onOpen: (() -> Void)? { get set }
+  var onMessage: ((Data) -> Void)? { get set }
+  var onClose: ((Int, String) -> Void)? { get set }
+  var onError: ((RealtimeRawWebSocketFailure) -> Void)? { get set }
+
+  func connect()
+  func sendText(_ text: String, completion: (@Sendable (Error?) -> Void)?)
+  func close()
+  func closeAndWait() async
+}
+
 // MARK: - Hand-rolled WebSocket client (RFC 6455 over Network.framework TCP+TLS)
 //
 // Apple's WebSocket stacks cannot reach Google's Gemini Live endpoint:
@@ -16,11 +53,11 @@ import Network
 // JSON in binary frames). Continuation (0x0) frames are reassembled; pings are
 // answered with pongs.
 
-final class RawWebSocket: @unchecked Sendable {
+final class RawWebSocket: RealtimeRawWebSocketTransport, @unchecked Sendable {
   var onOpen: (() -> Void)?
   var onMessage: ((Data) -> Void)?
   var onClose: ((Int, String) -> Void)?
-  var onError: ((String) -> Void)?
+  var onError: ((RealtimeRawWebSocketFailure) -> Void)?
 
   private let url: URL
   private let queue: DispatchQueue
@@ -34,6 +71,8 @@ final class RawWebSocket: @unchecked Sendable {
   // Reassembly across fragmented frames.
   private var fragment = Data()
   private var closed = false
+  private var terminalAcknowledged = false
+  private var terminalWaiters: [CheckedContinuation<Void, Never>] = []
 
   init(url: URL, queue: DispatchQueue) {
     self.url = url
@@ -42,7 +81,10 @@ final class RawWebSocket: @unchecked Sendable {
 
   func connect() {
     guard let host = url.host, !host.isEmpty else {
-      fail("invalid WebSocket host")
+      fail(
+        RealtimeRawWebSocketFailure(
+          phase: .configuration,
+          message: "invalid WebSocket host"))
       return
     }
 
@@ -50,7 +92,10 @@ final class RawWebSocket: @unchecked Sendable {
     guard (1...65535).contains(rawPort),
       let port = NWEndpoint.Port(rawValue: UInt16(rawPort))
     else {
-      fail("invalid WebSocket port \(rawPort)")
+      fail(
+        RealtimeRawWebSocketFailure(
+          phase: .configuration,
+          message: "invalid WebSocket port \(rawPort)"))
       return
     }
 
@@ -63,8 +108,15 @@ final class RawWebSocket: @unchecked Sendable {
       guard let self else { return }
       switch state {
       case .ready: self.sendUpgrade()
-      case .failed(let e): self.fail("connection failed: \(e)")
+      case .failed(let error):
+        self.fail(
+          RealtimeRawWebSocketFailure(
+            phase: .connect,
+            message: "connection failed: \(error)",
+            underlyingError: error))
+        self.acknowledgeTerminal()
       case .waiting(let e): log("RawWebSocket: waiting \(e)")
+      case .cancelled: self.acknowledgeTerminal()
       default: break
       }
     }
@@ -76,13 +128,24 @@ final class RawWebSocket: @unchecked Sendable {
   }
 
   func close() {
-    guard !closed else { return }
-    closed = true
-    pingTimer?.cancel()
-    pingTimer = nil
-    send(frame(opcode: 0x8, payload: Data()))
-    conn?.cancel()
-    conn = nil
+    queue.async { [weak self] in self?.beginClose() }
+  }
+
+  func closeAndWait() async {
+    await withCheckedContinuation { continuation in
+      queue.async { [weak self] in
+        guard let self else {
+          continuation.resume()
+          return
+        }
+        if self.terminalAcknowledged {
+          continuation.resume()
+          return
+        }
+        self.terminalWaiters.append(continuation)
+        self.beginClose()
+      }
+    }
   }
 
   // MARK: - Handshake
@@ -103,8 +166,14 @@ final class RawWebSocket: @unchecked Sendable {
       + "Sec-WebSocket-Version: 13\r\n\r\n"
     conn?.send(
       content: Data(req.utf8),
-      completion: .contentProcessed { [weak self] e in
-        if let e { self?.fail("upgrade send: \(e)") }
+      completion: .contentProcessed { [weak self] error in
+        if let error {
+          self?.fail(
+            RealtimeRawWebSocketFailure(
+              phase: .handshake,
+              message: "upgrade send: \(error)",
+              underlyingError: error))
+        }
       })
     readLoop()
   }
@@ -113,7 +182,11 @@ final class RawWebSocket: @unchecked Sendable {
     conn?.receive(minimumIncompleteLength: 1, maximumLength: 1 << 16) { [weak self] data, _, isComplete, error in
       guard let self else { return }
       if let error {
-        self.fail("receive: \(error)")
+        self.fail(
+          RealtimeRawWebSocketFailure(
+            phase: .receive,
+            message: "receive: \(error)",
+            underlyingError: error))
         return
       }
       if let data, !data.isEmpty {
@@ -126,7 +199,10 @@ final class RawWebSocket: @unchecked Sendable {
         }
       }
       if isComplete {
-        self.fail("stream closed")
+        self.fail(
+          RealtimeRawWebSocketFailure(
+            phase: .receive,
+            message: "stream closed"))
         return
       }
       if !self.closed { self.readLoop() }
@@ -138,7 +214,10 @@ final class RawWebSocket: @unchecked Sendable {
     let head = String(s[s.startIndex..<range.lowerBound])
     let statusLine = head.components(separatedBy: "\r\n").first ?? ""
     guard statusLine.contains("101") else {
-      fail("handshake failed: \(statusLine)")
+      fail(
+        RealtimeRawWebSocketFailure(
+          phase: .handshake,
+          message: "handshake failed: \(statusLine)"))
       return
     }
     handshakeDone = true
@@ -209,7 +288,10 @@ final class RawWebSocket: @unchecked Sendable {
         var u: UInt64 = 0
         for i in 0..<8 { u = (u << 8) | UInt64(inbound[base + 2 + i]) }
         guard u <= 64 * 1024 * 1024 else {
-          onError?("RawWebSocket: frame length \(u) exceeds 64MB cap — closing")
+          onError?(
+            RealtimeRawWebSocketFailure(
+              phase: .protocolViolation,
+              message: "RawWebSocket frame length exceeds 64MB cap"))
           inbound.removeAll()
           close()
           return
@@ -262,9 +344,8 @@ final class RawWebSocket: @unchecked Sendable {
         // this path leaked one zombie 20s timer per re-warm across the app's lifetime.
         pingTimer?.cancel()
         pingTimer = nil
-        onClose?(code, reason)
         conn?.cancel()
-        conn = nil
+        onClose?(code, reason)
       case 0x9:  // ping → pong
         send(frame(opcode: 0xA, payload: payload))
       case 0xA:  // pong
@@ -282,20 +363,50 @@ final class RawWebSocket: @unchecked Sendable {
     }
     conn.send(
       content: data,
-      completion: .contentProcessed { [weak self] e in
-        if let e { self?.fail("send: \(e)") }
-        completion?(e)
+      completion: .contentProcessed { [weak self] error in
+        if let error {
+          self?.fail(
+            RealtimeRawWebSocketFailure(
+              phase: .send,
+              message: "send: \(error)",
+              underlyingError: error))
+        }
+        completion?(error)
       })
   }
 
-  private func fail(_ message: String) {
+  private func beginClose() {
+    guard conn != nil else {
+      acknowledgeTerminal()
+      return
+    }
+    if !closed {
+      closed = true
+      pingTimer?.cancel()
+      pingTimer = nil
+      send(frame(opcode: 0x8, payload: Data()))
+    }
+    conn?.cancel()
+  }
+
+  private func fail(_ failure: RealtimeRawWebSocketFailure) {
     guard !closed else { return }
     closed = true
     pingTimer?.cancel()
     pingTimer = nil
-    onError?(message)
     conn?.cancel()
+    onError?(failure)
+  }
+
+  private func acknowledgeTerminal() {
+    guard !terminalAcknowledged else { return }
+    terminalAcknowledged = true
     conn = nil
+    let waiters = terminalWaiters
+    terminalWaiters.removeAll()
+    for waiter in waiters {
+      waiter.resume()
+    }
   }
 
   deinit {

@@ -566,9 +566,8 @@ extension RealtimeHubController {
       // Give every abandoned turn a fresh socket boundary, but never make the
       // next physical press wait behind the canceled turn's persistence fence.
       // Its captured audio joins the same typed handoff if it races this work.
-      teardownSession()
       pendingSessionRefreshReason = RealtimeHubSessionHandoffReason.persistedVoiceContext.rawValue
-      ensureWarm()
+      replaceSessionAfterDrain()
       canceledTurnRewarmTask?.cancel()
       canceledTurnRewarmTask = Task { @MainActor [weak self] in
         if let canceledPreparationTask {

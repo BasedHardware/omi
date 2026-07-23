@@ -875,7 +875,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(source.contains("reason: .cancelledTurnContinuity"))
     XCTAssertTrue(
       source.contains("pendingSessionRefreshReason = RealtimeHubSessionHandoffReason.persistedVoiceContext.rawValue"))
-    XCTAssertTrue(source.contains("ensureWarm()"))
+    XCTAssertTrue(source.contains("replaceSessionAfterDrain()"))
     XCTAssertFalse(source.contains("general warm deferred behind canceled-turn continuity fence"))
     XCTAssertFalse(source.contains("session start rejected behind canceled-turn continuity fence"))
   }
@@ -894,8 +894,11 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertLessThan(preparationWait.lowerBound, continuityWait.lowerBound)
     XCTAssertLessThan(continuityWait.lowerBound, persistenceFence.lowerBound)
     XCTAssertLessThan(
-      try XCTUnwrap(cancelTail.range(of: "ensureWarm()", range: cancelTail.startIndex..<preparationWait.lowerBound))
-        .lowerBound,
+      try XCTUnwrap(
+        cancelTail.range(
+          of: "replaceSessionAfterDrain()",
+          range: cancelTail.startIndex..<preparationWait.lowerBound)
+      ).lowerBound,
       persistenceFence.lowerBound)
 
     let helper = try XCTUnwrap(

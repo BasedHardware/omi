@@ -17,6 +17,10 @@ extension RealtimeHubController {
       // token while the offline gauntlet is exercising the production reducer.
       if isAuthorizedLocalProfileTransport() { return }
     #endif
+    guard !sessionReplacementGate.isPending else {
+      log("RealtimeHub: warm start coalesced behind physical transport drain")
+      return
+    }
     guard !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress else {
       log("RealtimeHub: warm start denied during effective-owner transition")
       return
@@ -40,8 +44,12 @@ extension RealtimeHubController {
     if session != nil, sessionOwnerScope != ownerScope {
       log("RealtimeHub: rebuilding warm session after authenticated owner changed")
       discardSessionAfterOwnerChange()
+      return
     }
-    if session != nil { teardownSession() }
+    if session != nil {
+      replaceSessionAfterDrain()
+      return
+    }
 
     let contextRequirement = voiceSessionContext(for: ownerScope)
     guard RealtimeWarmSessionStartPolicy.canStart(requirementIsResolved: contextRequirement.isResolved) else {
@@ -355,6 +363,10 @@ extension RealtimeHubController {
     auth: HubAuth,
     ownerScope: RealtimeHubOwnerScope
   ) {
+    guard !sessionReplacementGate.isPending else {
+      log("RealtimeHub: physical session start rejected until previous transport acknowledges close")
+      return
+    }
     guard !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress else {
       log("RealtimeHub: physical session start denied during effective-owner transition")
       return
@@ -372,6 +384,11 @@ extension RealtimeHubController {
       }
       return
     }
+    #if DEBUG
+      if testingSessionStartAfterDrain?(provider, auth, ownerScope) == true {
+        return
+      }
+    #endif
     sessionVoiceContextFreshnessIdentity = topLevelContext.snapshotFreshnessIdentity
     let instructions = RealtimeHubTools.systemInstruction(
       kernelContext: topLevelContext.rendered,
@@ -967,7 +984,8 @@ extension RealtimeHubController {
   }
 
   func detachPhysicalSessionForTeardown(
-    preservingReconnectAudio: Bool = false
+    preservingReconnectAudio: Bool = false,
+    preservingBargeInReplacement: Bool = false
   ) -> RealtimeHubSession? {
     let detachedSession = session
     // Detach first so a socket we're dropping can't deliver a late error/close to us
@@ -994,7 +1012,9 @@ extension RealtimeHubController {
     if !preservingReconnectAudio {
       reconnectAudioBuffer = nil
     }
-    clearBargeInReplacementState()
+    if !preservingBargeInReplacement {
+      clearBargeInReplacementState()
+    }
     clearRealtimeToolTracking()
     return detachedSession
   }
@@ -1006,6 +1026,55 @@ extension RealtimeHubController {
       )
     else { return }
     schedulePhysicalSessionTeardown(detachedSession)
+  }
+
+  /// Replaces the current physical transport without overlap. Detachment is
+  /// synchronous (so stale callbacks are fenced immediately), but a new socket
+  /// cannot become visible until the old transport queue has completed close.
+  func replaceSessionAfterDrain(
+    preservingReconnectAudio: Bool = false,
+    preservingBargeInReplacement: Bool = false,
+    reconnectDelayNanoseconds: UInt64 = 0,
+    rewarmAfterDrain: Bool = true
+  ) {
+    guard !sessionReplacementGate.isPending else {
+      log("RealtimeHub: coalescing physical replacement while transport drain is pending")
+      return
+    }
+    let detachedSession = detachPhysicalSessionForTeardown(
+      preservingReconnectAudio: preservingReconnectAudio,
+      preservingBargeInReplacement: preservingBargeInReplacement)
+    let ownerGeneration = ownerBoundaryGeneration
+    let detachedSessionID = detachedSession.map(ObjectIdentifier.init)
+    if let detachedSession, let detachedSessionID {
+      detachedSessionsAwaitingDrain[detachedSessionID] = detachedSession
+    }
+    sessionReplacementGate.replace(
+      reconnectDelayNanoseconds: reconnectDelayNanoseconds,
+      stop: { [weak self, weak detachedSession] in
+        guard let self else { return }
+        if let detachedSession {
+          await detachedSession.stopAndWait()
+        }
+        if let detachedSessionID {
+          self.detachedSessionsAwaitingDrain.removeValue(forKey: detachedSessionID)
+        }
+      },
+      start: { [weak self] in
+        guard let self, self.ownerBoundaryGeneration == ownerGeneration else { return }
+        self.reconnectPending = false
+        let abandonedBargeInReplacement =
+          preservingBargeInReplacement && self.pendingBargeInOwnerScope == nil
+        if rewarmAfterDrain || abandonedBargeInReplacement, self.session == nil {
+          #if DEBUG
+            if let testingWarmAfterDrain = self.testingWarmAfterDrain {
+              testingWarmAfterDrain()
+              return
+            }
+          #endif
+          self.ensureWarm()
+        }
+      })
   }
 
   func schedulePhysicalSessionTeardown(_ detachedSession: RealtimeHubSession) {
@@ -1031,7 +1100,8 @@ extension RealtimeHubController {
 
   @discardableResult
   func prepareBargeInReplacement() -> Bool {
-    guard let provider = sessionProvider ?? pendingBargeInProvider,
+    guard !sessionReplacementGate.isPending,
+      let provider = sessionProvider ?? pendingBargeInProvider,
       let auth = sessionAuth ?? pendingBargeInAuth,
       let ownerScope = sessionOwnerScope ?? pendingBargeInOwnerScope,
       RealtimeHubOwnerFence.acceptsBargeInReplacement(
@@ -1043,16 +1113,6 @@ extension RealtimeHubController {
       let responseID = voiceResponseID,
       let identity = VoiceTurnCoordinator.shared.reserveEffectIdentity()
     else { return false }
-    let interruptedSession = session
-    interruptedSession?.detach()
-    session = nil
-    sessionProvider = nil
-    sessionAuth = nil
-    sessionOwnerBinding = nil
-    hubConnected = false
-    if let interruptedSession {
-      schedulePhysicalSessionTeardown(interruptedSession)
-    }
     replacementAudioBuffer = RealtimeReplacementAudioBuffer(
       turnID: turnID,
       responseID: responseID,
@@ -1066,6 +1126,9 @@ extension RealtimeHubController {
     pendingBargeInProvider = provider
     pendingBargeInAuth = auth
     pendingBargeInOwnerScope = ownerScope
+    replaceSessionAfterDrain(
+      preservingBargeInReplacement: true,
+      rewarmAfterDrain: false)
     return true
   }
 
@@ -1327,17 +1390,21 @@ extension RealtimeHubController {
     auth: HubAuth,
     ownerScope: RealtimeHubOwnerScope
   ) {
-    guard
-      RealtimeHubOwnerFence.acceptsBargeInReplacement(
-        sessionOwner: ownerScope,
-        replacementOwner: pendingBargeInOwnerScope,
-        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
-    else {
-      clearBargeInReplacementState()
-      ensureWarm()
-      return
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      await self.sessionReplacementGate.waitUntilIdle()
+      guard
+        RealtimeHubOwnerFence.acceptsBargeInReplacement(
+          sessionOwner: ownerScope,
+          replacementOwner: self.pendingBargeInOwnerScope,
+          currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
+      else {
+        self.clearBargeInReplacementState()
+        self.ensureWarm()
+        return
+      }
+      self.startSession(provider: provider, auth: auth, ownerScope: ownerScope)
     }
-    startSession(provider: provider, auth: auth, ownerScope: ownerScope)
   }
 
   func finishBargeInReplacementAfterSessionReady() {
