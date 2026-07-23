@@ -1,5 +1,12 @@
 HOOKS_DIR := $(shell git rev-parse --git-path hooks)
-PYTHON ?= $(shell bash -c 'source "$$(git rev-parse --show-toplevel)/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
+# Resolve the repo root as $$(pwd), not `git rev-parse --show-toplevel`: that
+# command fails ("this operation must be run in a work tree") in some linked
+# worktree layouts (e.g. a Conductor workspace whose gitdir lives under the main
+# clone), leaving an empty prefix that broke setup (#10352). make runs from the
+# checkout root, so pwd is correct. Keep the command substitution (not Make text
+# interpolation) so spaces or quote/command-substitution characters in the
+# checkout root are treated as data and cannot break quoting or inject commands.
+PYTHON ?= $(shell bash -c 'source "$$(pwd)/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
 # Export so recipes use $$PYTHON (shell variable expansion) instead of $(PYTHON)
 # (Make text interpolation). Shell variable expansion treats the resolved path
 # as data and cannot be broken by quote or command-substitution characters in

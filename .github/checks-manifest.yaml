@@ -24,6 +24,11 @@ checks:
     triggers: ["Makefile", "backend/scripts/sync-python-deps.sh", "scripts/pre-push", "scripts/test-make-setup.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "make setup must provision the minimal, rerunnable backend environment required by selected pre-push checks"
+  - id: worktree-setup-hooks
+    command: ["bash", "scripts/test-worktree-setup-hooks.sh"]
+    triggers: ["Makefile", "scripts/install-git-hooks.sh", "scripts/test-worktree-setup-hooks.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "make setup and the installed hooks must resolve the repo root without `git rev-parse --show-toplevel`, which fails in linked-worktree layouts (Conductor) and silently bypassed the local pre-push gate (#10352)"
   - id: check-manifest-contract
     command: ["python3", ".github/scripts/test_run_checks.py"]
     triggers: ["all"]
