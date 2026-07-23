@@ -3,7 +3,7 @@
   "id": "FC-shell-unset-array-under-nounset",
   "violated_contract": "A release/CI gate script must not crash on its own shell portability defect; expanding a possibly-empty bash array must be safe under `set -u` on every shell the gate actually runs on (the trusted macOS runners use bash 3.2).",
   "canonical_prevention": "Expand optional arrays with the `${arr[@]+\"${arr[@]}\"}` form (never bare `\"${arr[@]}\"`) so an empty array does not trap `unbound variable` on bash 3.2; assert the safe form in the gate's contract test.",
-  "evidence_prs": [10388],
+  "evidence_prs": [10402],
   "scope_hints": ["desktop/macos/scripts/**", ".github/scripts/**"],
   "status": "open"
 }
