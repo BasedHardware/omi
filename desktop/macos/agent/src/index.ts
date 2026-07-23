@@ -82,6 +82,7 @@ import { isProductionAdapterId, type PromptBlock, type RuntimeAdapter } from "./
 import { detectImageMimeType } from "./mime-detect.js";
 import { AcpError, AcpRuntimeAdapter, isRecoverableAcpAuthError } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
+import { nextJournalPumpDelayMs } from "./runtime/journal-pump-backoff.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
 import {
@@ -1457,8 +1458,10 @@ async function main(): Promise<void> {
     }
   };
   let pumpingJournalOutbox = false;
-  const pumpJournalOutbox = () => {
-    if (!ownerAuthorityEstablished || pumpingJournalOutbox) return;
+  // Returns true when the pump ran (or was safely skipped) without throwing, so
+  // the timer can back off while it keeps failing instead of hot-looping.
+  const pumpJournalOutbox = (): boolean => {
+    if (!ownerAuthorityEstablished || pumpingJournalOutbox) return true;
     pumpingJournalOutbox = true;
     try {
       const activeOwnerId = currentOwnerId;
@@ -1481,7 +1484,12 @@ async function main(): Promise<void> {
           targetId: deletion.targetId,
         });
       }
-      for (const delivery of drainBackendTurnOutbox(store, { ownerId: activeOwnerId, limit: 20 })) {
+      for (const delivery of drainBackendTurnOutbox(store, {
+        ownerId: activeOwnerId,
+        limit: 20,
+        onQuarantine: (turnId) =>
+          logErr(`Journal outbox parked turn ${turnId}: canonical payload hash mismatch (not re-delivered)`),
+      })) {
         send({
           type: "journal_backend_sync",
           requestId: `journal:${delivery.turnId}:${delivery.deliveryGeneration}`,
@@ -1496,14 +1504,37 @@ async function main(): Promise<void> {
           payloadHash: delivery.payloadHash,
         });
       }
+      return true;
     } catch (error) {
       logErr(`Journal outbox pump failed: ${error}`);
+      return false;
     } finally {
       pumpingJournalOutbox = false;
     }
   };
-  const journalPumpTimer = setInterval(pumpJournalOutbox, 1_000);
-  journalPumpTimer.unref();
+  // Self-rescheduling timer with exponential backoff: a poisoned outbox row can
+  // make the pump throw indefinitely, so a fixed interval would re-throw every
+  // second forever. Back off on consecutive failures (capped at ~1/min) and snap
+  // back to base cadence the moment a pump completes cleanly.
+  let journalPumpTimer: ReturnType<typeof setTimeout> | undefined;
+  let journalPumpFailureStreak = 0;
+  const scheduleJournalPumpTick = (delayMs: number): void => {
+    journalPumpTimer = setTimeout(runJournalPumpTick, delayMs);
+    journalPumpTimer.unref();
+  };
+  const runJournalPumpTick = (): void => {
+    const clean = pumpJournalOutbox();
+    if (clean) {
+      if (journalPumpFailureStreak > 0) {
+        logErr(`Journal outbox pump recovered after ${journalPumpFailureStreak} consecutive failure(s)`);
+        journalPumpFailureStreak = 0;
+      }
+    } else {
+      journalPumpFailureStreak += 1;
+    }
+    scheduleJournalPumpTick(nextJournalPumpDelayMs(journalPumpFailureStreak));
+  };
+  scheduleJournalPumpTick(nextJournalPumpDelayMs(0));
   // 3. Signal readiness
   send({
     type: "init",
@@ -2941,7 +2972,7 @@ async function main(): Promise<void> {
           "runtime_stopped",
           "Agent runtime stopped during tool execution",
         );
-        clearInterval(journalPumpTimer);
+        if (journalPumpTimer) clearTimeout(journalPumpTimer);
         store.close();
         await acpAdapter.stop();
         await Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));
