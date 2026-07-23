@@ -10,6 +10,7 @@ covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/LegacyVoiceJournalImporter.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager+InputDeviceRouting.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/ShortcutSettings.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RawWebSocket.swift
   - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniService.swift
