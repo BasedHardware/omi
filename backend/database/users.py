@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional, TypedDict
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, document_id_from_seed
@@ -761,9 +762,19 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
     return all_people
 
 
-def update_person(uid: str, person_id: str, name: str):
+def update_person(uid: str, person_id: str, name: str) -> bool:
+    """Rename a person. Returns False when the person does not exist so callers can 404,
+    instead of letting Firestore .update() raise NotFound and surface as an HTTP 500."""
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    person_ref.update({'name': name})
+    if not person_ref.get().exists:
+        return False
+    try:
+        person_ref.update({'name': name})
+    except NotFound:
+        # The person was deleted between the existence check and the update; treat as missing so
+        # the caller 404s instead of 500ing on the Firestore NotFound race.
+        return False
+    return True
 
 
 def delete_person(uid: str, person_id: str):
