@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-poisoned-accelerator-readiness",
+  "violated_contract": "A GPU inference replica whose process-local accelerator context is unsafe must stop accepting work and must not remain Ready.",
+  "canonical_prevention": "Classify fatal accelerator errors at the authoritative GPU worker, fail new work closed, surface the poisoned state through readiness and liveness, and reject decoder configurations that can invalidate a shared CUDA context.",
+  "evidence_prs": [7938],
+  "scope_hints": ["backend/parakeet/**", "backend/charts/parakeet/**"],
+  "status": "open"
+}
