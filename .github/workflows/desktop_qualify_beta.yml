@@ -56,17 +56,30 @@ jobs:
           ref: ${{ inputs.release_tag }}
           fetch-depth: 0
 
-      - name: Generate Omi Bot token
-        id: app-token
+      # Least privilege: the token handed to external Codemagic is read-only,
+      # and release-write authority (evidence upload) stays inside Actions with
+      # a separate write-scoped token minted below.
+      - name: Generate read-scoped Omi Bot token (candidate reads + Codemagic lane)
+        id: app-token-read
         uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+          permission-contents: read
+
+      - name: Generate write-scoped Omi Bot token (Actions-only evidence upload)
+        id: app-token-write
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+          permission-contents: write
 
       - name: Download and validate newest candidate evidence
         id: candidate
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          # Read-only: gh release view/download of published candidate assets.
+          GH_TOKEN: ${{ steps.app-token-read.outputs.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           REPO: ${{ github.repository }}
         run: |
@@ -121,9 +134,10 @@ jobs:
         id: codemagic
         env:
           CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
-          # Short-lived app token for the build's read-only gh calls; the
-          # Codemagic qualification workflow imports no standing credentials.
-          QUALIFY_GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          # Read-scoped app token for the external build's read-only gh calls
+          # (release view/download). The Codemagic qualification workflow imports
+          # no standing credentials and never receives release-write authority.
+          QUALIFY_GH_TOKEN: ${{ steps.app-token-read.outputs.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           TARGET_SHA: ${{ steps.candidate.outputs.target_sha }}
         run: |
@@ -179,7 +193,8 @@ jobs:
         id: publish
         if: steps.evidence.outcome == 'success'
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          # Write authority for the evidence upload stays inside Actions.
+          GH_TOKEN: ${{ steps.app-token-write.outputs.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           REPO: ${{ github.repository }}
         run: |
