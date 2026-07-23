@@ -20,7 +20,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 DEFAULT_PROJECT = "based-hardware"
-DEFAULT_RUNNING_AGE_DAYS = 2
 DEFAULT_TERMINATED_MIN_AGE_HOURS = 12
 NAME_PREFIX = "omi-agent-"
 
@@ -39,9 +38,16 @@ def is_reapable(
     instance: dict[str, Any],
     *,
     now: datetime,
-    running_age_days: int,
     terminated_min_age_hours: int,
 ) -> bool:
+    """Return True only for TERMINATED instances past the grace window.
+
+    RUNNING VMs are never reaped here: ``agent-proxy`` keeps active sessions
+    RUNNING via ``/ping`` keep-alive, and this script has no heartbeat
+    signal to distinguish a long-lived session from an abandoned one.
+    Reaping RUNNING VMs by creation age alone would delete VMs underneath
+    active sessions (review: #10390).
+    """
     name = str(instance.get("name") or "")
     if not name.startswith(NAME_PREFIX):
         return False
@@ -54,13 +60,6 @@ def is_reapable(
         age = now - parse_rfc3339(raw)
         return age >= timedelta(hours=terminated_min_age_hours)
 
-    if status == "RUNNING":
-        raw = instance.get("creationTimestamp")
-        if not raw:
-            return False
-        age = now - parse_rfc3339(str(raw))
-        return age >= timedelta(days=running_age_days)
-
     return False
 
 
@@ -68,7 +67,6 @@ def select_reapable(
     instances: list[dict[str, Any]],
     *,
     now: datetime | None = None,
-    running_age_days: int = DEFAULT_RUNNING_AGE_DAYS,
     terminated_min_age_hours: int = DEFAULT_TERMINATED_MIN_AGE_HOURS,
 ) -> list[dict[str, Any]]:
     clock = now or datetime.now(timezone.utc)
@@ -78,7 +76,6 @@ def select_reapable(
         if is_reapable(
             inst,
             now=clock,
-            running_age_days=running_age_days,
             terminated_min_age_hours=terminated_min_age_hours,
         )
     ]
@@ -130,11 +127,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", default=os.environ.get("GCE_PROJECT", DEFAULT_PROJECT))
     parser.add_argument(
-        "--running-age-days",
-        type=int,
-        default=int(os.environ.get("REAP_RUNNING_AGE_DAYS", DEFAULT_RUNNING_AGE_DAYS)),
-    )
-    parser.add_argument(
         "--terminated-min-age-hours",
         type=int,
         default=int(os.environ.get("REAP_TERMINATED_MIN_AGE_HOURS", DEFAULT_TERMINATED_MIN_AGE_HOURS)),
@@ -179,7 +171,6 @@ def main(argv: list[str] | None = None) -> int:
     print(
         "agent-vm-reaper start "
         f"project={args.project} "
-        f"running_age_days={args.running_age_days} "
         f"terminated_min_age_hours={args.terminated_min_age_hours} "
         f"dry_run={dry_run}"
     )
@@ -192,7 +183,6 @@ def main(argv: list[str] | None = None) -> int:
 
     targets = select_reapable(
         instances,
-        running_age_days=args.running_age_days,
         terminated_min_age_hours=args.terminated_min_age_hours,
     )
     print(f"found {len(targets)} reapable omi-agent VMs (of {len(instances)} listed)")
@@ -208,6 +198,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    failures = 0
     for inst in targets:
         name = str(inst["name"])
         zone = zone_name(inst)
@@ -219,10 +210,11 @@ def main(argv: list[str] | None = None) -> int:
             delete_instance(args.project, name, zone)
             print(f"deleted {name} ({zone})")
         except subprocess.CalledProcessError as exc:
+            failures += 1
             print(f"FAILED to delete {name} ({zone}): {exc}", file=sys.stderr)
 
-    print("agent-vm-reaper done")
-    return 0
+    print(f"agent-vm-reaper done ({failures} failure(s))")
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":

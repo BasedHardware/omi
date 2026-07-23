@@ -14,7 +14,10 @@
 #     REAP_TERMINATED_MIN_AGE_HOURS (grace so same-day resume can still
 #     start_stopped_vm; after grace the status NOT_FOUND path clears Firestore
 #     and AgentVMService re-provisions + re-uploads the DB).
-#   - delete RUNNING omi-agent VMs older than REAP_RUNNING_AGE_DAYS (abandoned).
+#
+# RUNNING VMs are intentionally NOT reaped: agent-proxy keeps active sessions
+# RUNNING via /ping keep-alive, and the reaper has no heartbeat signal to
+# safely distinguish a long-lived session from an abandoned one.
 #
 # Install / IAM / ConfigMap sync (refuse-by-default):
 #   AGENT_VM_REAPER_APPLY=1 bash backend/scripts/apply-agent-vm-reaper.sh
@@ -49,8 +52,6 @@ spec:
             env:
             - name: GCE_PROJECT
               value: "based-hardware"
-            - name: REAP_RUNNING_AGE_DAYS
-              value: "2"
             - name: REAP_TERMINATED_MIN_AGE_HOURS
               value: "12"
             # Safe default: log-only. Flip via apply-agent-vm-reaper.sh LIVE=1.
