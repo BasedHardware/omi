@@ -104,7 +104,7 @@ def test_llm_gateway_anthropic_secret_and_authenticated_readiness_probe_contract
         assert 'X-Omi-Service-Caller: backend' in probe_command
 
 
-def test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_injection():
+def test_prod_gateway_wiring_is_off_until_verified_promotion():
     manifest = _load_yaml('deploy/runtime_env.yaml')
     prod = manifest['environments']['prod']
     gke_env = prod['gke']['backend-listen']['env']
@@ -118,14 +118,14 @@ def test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_inj
     assert gke_env['GCP_LOCATION']['value'] == 'us-central1'
     assert gke_env['GOOGLE_CLOUD_PROJECT']['value'] == 'based-hardware'
 
-    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+    for service in ('backend', 'backend-sync', 'backend-integration'):
         service_config = prod['cloud_run']['services'][service]
         assert service_config['env']['OMI_LLM_GATEWAY_URL'] == {
             'env_var': 'OMI_LLM_GATEWAY_URL',
             'default': 'http://127.0.0.1:9',
             'category': 'service_discovery',
         }
-        assert service_config['env']['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'gateway'
+        assert service_config['env']['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'off'
         assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE']['value'] == 'true'
         assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'true'
         assert service_config['env']['USE_VERTEX_AI']['value'] == 'true'
