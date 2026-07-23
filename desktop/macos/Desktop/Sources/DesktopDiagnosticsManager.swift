@@ -771,8 +771,9 @@ final class DesktopDiagnosticsManager {
   /// listed and survive the filter.
   private static let contentBearingPropertyKeys: Set<String> = [
     "transcript", "transcript_text", "audio", "audio_data", "pcm", "prompt", "prompt_text",
-    "response", "response_text", "message", "error_message", "localized_description",
-    "content", "title", "notification_title", "window_title", "screen_title",
+    "response", "response_text", "message", "error_message", "error_description", "error_desc",
+    "localized_description", "description", "detail", "detail_reason", "detail_message",
+    "reason_detail", "content", "title", "notification_title", "window_title", "screen_title",
   ]
 
   func writeDiagnosticsAttachment() -> URL? {

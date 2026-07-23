@@ -604,6 +604,19 @@ import XCTest
       // The bounded cousin (a length, not content) survives.
       XCTAssertEqual(snapshot["transcript_length"] as? Int, 42)
     }
+    func testWalUploadFailureStripsFreeFormDetailReason() throws {
+      // A real caller (WALService.uploadWalToCloud) pipes String(describing: error)
+      // into detail_reason; the emit chokepoint must strip that free-form text while
+      // keeping the bounded failure_class + area.
+      DesktopDiagnosticsManager.shared.recordWalUploadFailed(
+        walId: "wal-1",
+        reason: "backend returned a customer-specific private transcript snippet")
+      let snapshot = try latestSnapshot()
+      XCTAssertEqual(snapshot["event"] as? String, "fallback_triggered")
+      XCTAssertEqual(snapshot["area"] as? String, "wal_upload")
+      XCTAssertEqual(snapshot["failure_class"] as? String, "wal_upload_failed")
+      XCTAssertNil(snapshot["detail_reason"])
+    }
     private func assertLatestHealthSnapshot(
       event: DesktopHealthEventName,
       contains expected: [String: Any] = [:],

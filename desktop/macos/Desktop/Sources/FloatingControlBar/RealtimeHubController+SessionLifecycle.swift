@@ -296,7 +296,8 @@ extension RealtimeHubController {
         if error.healthError.failureClass.isAccountWide {
           log("RealtimeHub: account credential failure during mint — staying on cascade")
         } else if !self.failoverToAlternateProvider(
-          reason: self.failoverReason(for: error.healthError.failureClass))
+          reason: self.failoverReason(for: error.healthError.failureClass),
+          mintAttemptId: String(mintGeneration))
         {
           log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
         }
@@ -318,7 +319,8 @@ extension RealtimeHubController {
         if error.failureClass.isAccountWide {
           log("RealtimeHub: account credential failure during mint — staying on cascade")
         } else if !self.failoverToAlternateProvider(
-          reason: self.failoverReason(for: error.failureClass))
+          reason: self.failoverReason(for: error.failureClass),
+          mintAttemptId: String(mintGeneration))
         {
           log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
         }
@@ -338,7 +340,7 @@ extension RealtimeHubController {
           reason: "backend_transient",
           phase: "warm",
           mintAttemptId: String(mintGeneration))
-        if !self.failoverToAlternateProvider() {
+        if !self.failoverToAlternateProvider(mintAttemptId: String(mintGeneration)) {
           log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
         }
         return
@@ -1251,6 +1253,7 @@ extension RealtimeHubController {
           return
         }
         guard self.releaseMint(generation: mintGeneration, ownerScope: ownerScope) else { return }
+        CredentialHealthManager.shared.record(error, context: "realtime_barge_in_mint")
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
           provider: providerParam,
           reason: error.failureClass.logValue,
