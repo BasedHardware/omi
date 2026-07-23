@@ -62,6 +62,8 @@ struct DesktopHomeView: View {
   @State private var highlightedSettingId: String? = nil
   @State private var showTryAskingPopup = false
   @State private var previousIndexBeforeSettings: Int = 0
+  @State private var previousIndexBeforeRewind: Int = 0
+  @ObservedObject private var modalState = ModalPresentationState.shared
   @State private var logoPulse = false
   @State private var lastActivationRefresh = Date.distantPast
   @State private var didScheduleAgentVMProvisioning = false
@@ -620,6 +622,25 @@ struct DesktopHomeView: View {
     return ![.permissions, .help].contains(item)
   }
 
+  /// Leading inset for the header's Settings chip so it clears the window
+  /// traffic lights now that the titlebar is hidden and content fills the frame.
+  static let trafficLightInset: CGFloat = 62
+
+  /// Opens or closes the settings sidebar. Owned here so the back-navigation
+  /// target (the tab you were on) stays correct; the header chip just calls it.
+  private func toggleSettings() {
+    OmiMotion.withGated(.spring(response: 0.42, dampingFraction: 0.86)) {
+      if isInSettings {
+        selectedIndex =
+          previousIndexBeforeSettings == SidebarNavItem.settings.rawValue
+          ? SidebarNavItem.dashboard.rawValue
+          : previousIndexBeforeSettings
+      } else {
+        selectedIndex = SidebarNavItem.settings.rawValue
+      }
+    }
+  }
+
   /// Reference instant for the top bar's "new since you were last here" counts.
   private var topBarSinceDate: Date {
     topBarNewSinceRaw > 0 ? Date(timeIntervalSince1970: topBarNewSinceRaw) : Date()
@@ -971,11 +992,11 @@ struct DesktopHomeView: View {
 
   private var mainContent: some View {
     HStack(spacing: 0) {
-      // Sidebar slot: settings sidebar overlays main sidebar
-      // IMPORTANT: SidebarView is kept alive (but hidden) when in settings to prevent
-      // EXC_BAD_ACCESS crash in SwiftUI's tooltip system. When the view is conditionally
-      // removed, its .help() tooltip graph nodes get invalidated, but the macOS tooltip
-      // tracking system still tries to evaluate them during window key state changes.
+      // Full-height glass sidebar (runs behind the traffic lights). It owns the
+      // "Back to app" control at its top so the whole left column is one panel,
+      // not a header band above a sidebar. SidebarView is kept alive (hidden)
+      // in settings to avoid the tooltip-graph EXC_BAD_ACCESS on window key
+      // changes when a `.help()`-bearing view is torn down.
       if isInSettings {
         ZStack {
           if showsPrimarySidebar {
@@ -991,52 +1012,35 @@ struct DesktopHomeView: View {
           SettingsSidebar(
             selectedSection: $selectedSettingsSection,
             highlightedSettingId: $highlightedSettingId,
-            onBack: {
-              OmiMotion.withGated(Self.pageNavigationAnimation) {
-                selectedIndex =
-                  previousIndexBeforeSettings == SidebarNavItem.settings.rawValue
-                  ? SidebarNavItem.dashboard.rawValue
-                  : previousIndexBeforeSettings
-              }
-            }
+            onBack: { toggleSettings() }
           )
         }
         .fixedSize(horizontal: true, vertical: false)
         .clipped()
+        .transition(.move(edge: .leading).combined(with: .opacity))
       } else if showsPrimarySidebar {
         ZStack {
-          if showsPrimarySidebar {
-            SidebarView(
-              selectedIndex: $selectedIndex,
-              isCollapsed: $isSidebarCollapsed,
-              appState: appState
-            )
-            .opacity(isInSettings ? 0 : 1)
-            .allowsHitTesting(!isInSettings)
-          }
-
+          SidebarView(
+            selectedIndex: $selectedIndex,
+            isCollapsed: $isSidebarCollapsed,
+            appState: appState
+          )
+          .opacity(isInSettings ? 0 : 1)
+          .allowsHitTesting(!isInSettings)
         }
         .fixedSize(horizontal: true, vertical: false)
         .clipped()
       }
 
-      // Main content area with rounded container
+      // Content column: its own top bar (Settings chip when closed, Omi identity
+      // centered, capture, segmented nav) rides above the page, right of the
+      // sidebar — so the sidebar glass is never covered by a full-width band.
       ZStack {
-        // Content container background — clean flat neutral dark (no gradient).
-        RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
-          .fill(Color(red: 0.050, green: 0.052, blue: 0.059))
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
-              .stroke(OmiColors.border.opacity(0.22), lineWidth: 1)
-          )
-          .shadow(color: .black.opacity(0.22), radius: 26, x: 0, y: 14)
+        // Match the dashboard canvas's top color so the top bar and the page
+        // below it read as one surface — no seam under the segmented nav.
+        Color(red: 0.056, green: 0.058, blue: 0.065)
 
-        // Page content - switch recreates views on tab change
-        // Extracted into a separate struct so that pages like TasksPage
-        // are not re-rendered when AppState publishes unrelated changes.
         VStack(spacing: 0) {
-          // Constant floating top bar — primary nav, new-item counts, and the
-          // Capture/Listening controls. Replaces the old left nav rail.
           if showsTopBar {
             DesktopTopBar(
               selectedIndex: $selectedIndex,
@@ -1044,31 +1048,68 @@ struct DesktopHomeView: View {
               memoriesViewModel: viewModelContainer.memoriesViewModel,
               tasksStore: viewModelContainer.tasksStore,
               sinceDate: topBarSinceDate,
+              leadingInset: isInSettings ? 0 : Self.trafficLightInset,
+              isInSettings: isInSettings,
               onRewind: {
                 OmiMotion.withGated(Self.pageNavigationAnimation) {
                   selectedIndex = SidebarNavItem.rewind.rawValue
                 }
-              }
+              },
+              onToggleSettings: { toggleSettings() }
             )
             .zIndex(1)
           }
 
+          // Page content - switch recreates views on tab change. Extracted so
+          // pages like TasksPage aren't re-rendered on unrelated AppState changes.
           PageContentView(
             selectedIndex: selectedIndex,
             appState: appState,
             viewModelContainer: viewModelContainer,
             selectedSettingsSection: $selectedSettingsSection,
             highlightedSettingId: $highlightedSettingId,
-            selectedTabIndex: $selectedIndex
+            selectedTabIndex: $selectedIndex,
+            onRewindBack: {
+              OmiMotion.withGated(Self.pageNavigationAnimation) {
+                selectedIndex =
+                  previousIndexBeforeRewind == SidebarNavItem.rewind.rawValue
+                  ? SidebarNavItem.dashboard.rawValue
+                  : previousIndexBeforeRewind
+              }
+            }
           )
         }
         .onExitCommand {
           navigateHomeOnEscapeIfNeeded()
         }
-        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
-      .padding(OmiSpacing.md)
     }
+    .ignoresSafeArea(.container, edges: .top)
+    // One uniform frosted backdrop for any hoisted modal: the whole window
+    // blurs together and the card sits sharp on top. Tap-outside / Esc dismiss.
+    .blur(radius: modalState.isPresenting ? 10 : 0)
+    .overlay {
+      if modalState.isPresenting, let modal = modalState.content {
+        ZStack {
+          Color.black.opacity(0.25)
+            .ignoresSafeArea()
+            .contentShape(Rectangle())
+            .onTapGesture { modalState.dismiss() }
+          modal
+            .background(OmiColors.backgroundPrimary)
+            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.cardRadius, style: .continuous))
+            .overlay(
+              RoundedRectangle(cornerRadius: OmiChrome.cardRadius, style: .continuous)
+                .stroke(OmiColors.border.opacity(0.4), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.4), radius: 30, x: 0, y: 14)
+            .transition(.scale(scale: 0.97).combined(with: .opacity))
+          OverlayModalEscapeCatcher { modalState.dismiss() }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
+    }
+    .animation(.easeOut(duration: 0.22), value: modalState.isPresenting)
     .overlay {
       // Goal completion celebration overlay
       GoalCelebrationView()
@@ -1153,6 +1194,12 @@ struct DesktopHomeView: View {
       {
         previousIndexBeforeSettings = oldValue
       }
+      // Track the tab we came from so Rewind's Back returns there.
+      if newValue == SidebarNavItem.rewind.rawValue
+        && oldValue != SidebarNavItem.rewind.rawValue
+      {
+        previousIndexBeforeRewind = oldValue
+      }
       // Only auto-refresh stores when their pages are visible
       updateStoreActivity(for: newValue)
     }
@@ -1187,34 +1234,12 @@ struct DesktopHomeView: View {
 /// A minimal SB-styled segmented toggle used to fold two related surfaces into
 /// one tab (Conversations/Memories, Focus/Insights).
 private struct HubSegmentedControl: View {
-  @Environment(\.sbTheme) private var sb
   let segments: [String]
   @Binding var selection: Int
 
   var body: some View {
-    HStack(spacing: 4) {
-      ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
-        Button {
-          withAnimation(.easeOut(duration: 0.15)) { selection = index }
-        } label: {
-          Text(segment)
-            .geist(size: 13, weight: selection == index ? .semibold : .medium)
-            .foregroundStyle(selection == index ? sb.ink : sb.ink(.w45))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
-            .background(
-              RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(selection == index ? sb.ink(.w1) : Color.clear)
-            )
-        }
-        .buttonStyle(.plain)
-      }
-    }
-    .padding(4)
-    .background(
-      RoundedRectangle(cornerRadius: 10, style: .continuous).fill(sb.ink(.w04))
-    )
-    .frame(maxWidth: .infinity, alignment: .leading)
+    OmiSegmentedControl(segments: segments, selection: $selection)
+      .frame(maxWidth: .infinity, alignment: .center)
   }
 }
 
@@ -1230,31 +1255,30 @@ private struct MemoryHubPage: View {
   private static let listContentWidth: CGFloat = 900
 
   var body: some View {
-    Group {
-      if segment == 2 {
-        ZStack(alignment: .top) {
-          // Keep the graph's camera framing intact while removing the list-page
-          // width cap. The map only occupies more of the visual field when the
-          // user deliberately pans or zooms into it.
+    // One stable layout: the segmented control rides on top (so its sliding
+    // indicator persists across every section), the content below cross-fades.
+    VStack(spacing: 0) {
+      hubSegmentedControl
+
+      Group {
+        switch segment {
+        case 0:
+          constrainedListContent(
+            MemoriesPage(
+              viewModel: viewModelContainer.memoriesViewModel,
+              graphViewModel: viewModelContainer.memoryGraphViewModel))
+        case 1:
+          constrainedListContent(ConversationsPageHost(appState: appState))
+        default:
+          // The map keeps its uncapped width so panning/zooming never hits an
+          // artificial boundary; it simply fills the area below the control.
           MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-          hubSegmentedControl
-        }
-      } else {
-        VStack(spacing: 0) {
-          hubSegmentedControl
-
-          if segment == 0 {
-            constrainedListContent(
-              MemoriesPage(
-                viewModel: viewModelContainer.memoriesViewModel,
-                graphViewModel: viewModelContainer.memoryGraphViewModel))
-          } else {
-            constrainedListContent(ConversationsPageHost(appState: appState))
-          }
         }
       }
+      .id(segment)
+      .transition(.opacity.animation(.easeInOut(duration: 0.2)))
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
   }
 
@@ -1287,11 +1311,16 @@ private struct FocusHubPage: View {
         .padding(.horizontal, 28)
         .padding(.bottom, 4)
 
-      if segment == 0 {
-        InsightPage()
-      } else {
-        FocusPage()
+      Group {
+        if segment == 0 {
+          InsightPage()
+        } else {
+          FocusPage()
+        }
       }
+      .id(segment)
+      .transition(.opacity.animation(.easeInOut(duration: 0.2)))
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
   }
 }
@@ -1303,6 +1332,8 @@ private struct PageContentView: View {
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingId: String?
   @Binding var selectedTabIndex: Int
+  /// Returns from Rewind to the tab the user came from (owned by the shell).
+  var onRewindBack: () -> Void = {}
 
   /// The list/detail pages (Conversations, Memories, Tasks, Apps) render their
   /// content in a centered, width-capped column so wide monitors get calm
@@ -1360,7 +1391,7 @@ private struct PageContentView: View {
       case 6:
         InsightPage()
       case 7:
-        RewindPage(appState: appState)
+        RewindPage(appState: appState, onBack: onRewindBack)
       case 8:
         constrainedListPage(
           AppsPage(
