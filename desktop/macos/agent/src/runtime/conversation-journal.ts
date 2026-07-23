@@ -1748,10 +1748,24 @@ function assertBackendConversationDeleteClaim(
   }
 }
 
+/**
+ * Diagnostic `last_error_code` stamped on an outbox row whose stored payload
+ * hash diverges from the canonical journal turn. Such a row is parked (see
+ * {@link drainBackendTurnOutbox}) so the pump can keep draining; the same code
+ * lets an operator spot the quarantine in the local store.
+ */
+export const OUTBOX_CANONICAL_HASH_MISMATCH_CODE = "canonical_hash_mismatch";
+
 /** Atomically leases completed journal rows for the backend sync adapter. */
 export function drainBackendTurnOutbox(
   store: AgentStore,
-  input: { ownerId?: string; limit?: number; nowMs?: number; leaseMs?: number } = {},
+  input: {
+    ownerId?: string;
+    limit?: number;
+    nowMs?: number;
+    leaseMs?: number;
+    onQuarantine?: (turnId: string) => void;
+  } = {},
 ): BackendTurnDelivery[] {
   const now = input.nowMs ?? Date.now();
   const leaseMs = Math.max(1, input.leaseMs ?? DEFAULT_OUTBOX_LEASE_MS);
@@ -1781,6 +1795,7 @@ export function drainBackendTurnOutbox(
     );
 
     const deliveries: BackendTurnDelivery[] = [];
+    const quarantined: string[] = [];
     for (const candidate of candidates) {
       const turnId = String(candidate.turn_id);
       const currentOutbox = requireOutboxRecord(store, turnId);
@@ -1788,7 +1803,21 @@ export function drainBackendTurnOutbox(
       const payload = backendTurnPayload(turn);
       const payloadHash = backendTurnPayloadHash(payload);
       if (payloadHash !== currentOutbox.payloadHash) {
-        throw new Error("Backend turn outbox revision does not match the canonical journal turn");
+        // Fail closed on a divergence from the canonical turn — but quarantine
+        // this one row instead of throwing. Throwing aborts the whole batch
+        // transaction, so the 1s outbox pump re-selects the same poisoned row
+        // forever, wedging delivery for every turn (observed as an app-wide
+        // stall that persists across restarts because the row is durable).
+        // Parking to 'failed' excludes it from future selection; a later
+        // `updateJournalTurn` re-stamps the hash and re-arms it to 'pending'.
+        store.execute(
+          `UPDATE backend_turn_outbox
+           SET status = 'failed', last_error_code = ?, lease_expires_at_ms = NULL, updated_at_ms = ?
+           WHERE turn_id = ?`,
+          [OUTBOX_CANONICAL_HASH_MISMATCH_CODE, now, turnId],
+        );
+        quarantined.push(turnId);
+        continue;
       }
       const journalState = requireJournalState(store, currentOutbox.conversationId);
       store.execute(
@@ -1802,6 +1831,9 @@ export function drainBackendTurnOutbox(
       );
       const outbox = requireOutboxRecord(store, turnId);
       deliveries.push({ ...outbox, clientMessageId: turnId, turn, payload });
+    }
+    if (input.onQuarantine) {
+      for (const turnId of quarantined) input.onQuarantine(turnId);
     }
     return deliveries;
   });

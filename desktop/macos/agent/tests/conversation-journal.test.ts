@@ -22,6 +22,7 @@ import {
   journalTurnChangedWakes,
   listJournalTurns,
   migrateJournalConversation,
+  OUTBOX_CANONICAL_HASH_MISMATCH_CODE,
   recordJournalExchange,
   recordJournalTurn,
   settleClearedBackendTurnClaim,
@@ -1272,6 +1273,64 @@ describe("kernel conversation journal", () => {
       attemptCount: 1,
       turn: { turnId: "turn-pending", status: "completed", contentBlocks: blocks, resources },
     });
+    fixture.store.close();
+  });
+
+  it("quarantines a canonical-hash-mismatched outbox row instead of wedging the pump", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    // Two completed turns → two pending outbox rows.
+    recordCompletedTextTurn(fixture, "turn-poisoned", "First answer", 10);
+    recordCompletedTextTurn(fixture, "turn-healthy", "Second answer", 20);
+
+    // Simulate the durable corruption seen in the field: the stored outbox
+    // payload hash diverges from the canonical journal turn. Previously this
+    // threw out of the batch transaction, so the 1s pump re-selected the same
+    // row forever and never delivered any turn.
+    fixture.store.execute(
+      "UPDATE backend_turn_outbox SET payload_hash = ? WHERE turn_id = ?",
+      ["stale-divergent-hash", "turn-poisoned"],
+    );
+
+    const quarantined: string[] = [];
+    const deliveries = drainBackendTurnOutbox(fixture.store, {
+      nowMs: 30,
+      onQuarantine: (turnId) => quarantined.push(turnId),
+    });
+
+    // The healthy turn still delivers; the poisoned row is parked, not thrown.
+    expect(deliveries.map((d) => d.turnId)).toEqual(["turn-healthy"]);
+    expect(quarantined).toEqual(["turn-poisoned"]);
+    const parked = fixture.store.getRow(
+      "SELECT status, last_error_code FROM backend_turn_outbox WHERE turn_id = ?",
+      ["turn-poisoned"],
+    );
+    expect(parked).toMatchObject({
+      status: "failed",
+      last_error_code: OUTBOX_CANONICAL_HASH_MISMATCH_CODE,
+    });
+
+    // Re-draining does not re-select the parked row: the pump makes progress and
+    // stops hot-looping (no second quarantine, no throw).
+    const secondQuarantine: string[] = [];
+    const secondPass = drainBackendTurnOutbox(fixture.store, {
+      nowMs: 60,
+      onQuarantine: (turnId) => secondQuarantine.push(turnId),
+    });
+    expect(secondPass).toEqual([]);
+    expect(secondQuarantine).toEqual([]);
+
+    // A later legitimate mutation re-stamps the hash and re-arms delivery.
+    updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-poisoned",
+      content: "First answer, revised",
+      contentBlocks: [{ type: "text", id: "turn-poisoned:text", text: "First answer, revised" }],
+      status: "completed",
+      nowMs: 70,
+    });
+    const rearmed = drainBackendTurnOutbox(fixture.store, { nowMs: 80 });
+    expect(rearmed.map((d) => d.turnId)).toEqual(["turn-poisoned"]);
     fixture.store.close();
   });
 
