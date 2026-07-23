@@ -49,14 +49,30 @@ final class VideoChunkEncoderHEVCWriterTests: XCTestCase {
     let image = try solidRedImage()
     let startedAt = Date()
 
+    let idleStatus = await encoder.getBufferStatus()
+    XCTAssertEqual(idleStatus.lifecyclePhase, "idle")
+    XCTAssertEqual(idleStatus.queueBucket, "none")
+    XCTAssertTrue(idleStatus.isInitialized)
+
     let firstFrame = try await encoder.addFrame(image: image, timestamp: startedAt)
     let secondFrame = try await encoder.addFrame(image: image, timestamp: startedAt.addingTimeInterval(3))
     XCTAssertNotNil(firstFrame)
     XCTAssertNotNil(secondFrame)
 
+    let writingStatus = await encoder.getBufferStatus()
+    XCTAssertEqual(writingStatus.lifecyclePhase, "writing")
+    XCTAssertEqual(writingStatus.queueBucket, "few")
+    XCTAssertTrue(writingStatus.hasStalenessTimer)
+
     let flushResult = try await encoder.flushCurrentChunk()
     let result = try XCTUnwrap(flushResult)
     XCTAssertEqual(result.frames.map(\.frameOffset), [0, 1])
+
+    let finalizedStatus = await encoder.getBufferStatus()
+    XCTAssertEqual(finalizedStatus.lifecyclePhase, "idle")
+    XCTAssertEqual(finalizedStatus.queueBucket, "none")
+    XCTAssertFalse(finalizedStatus.hasStalenessTimer)
+    XCTAssertEqual(finalizedStatus.finalizationWaiterBucket, "none")
 
     let maybeVideosDirectory = await RewindStorage.shared.getVideosDirectory()
     let videosDirectory = try XCTUnwrap(maybeVideosDirectory)

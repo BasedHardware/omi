@@ -37,6 +37,13 @@ enum RewindVideoChunkCancellationResult: Sendable {
 private enum RewindVideoChunkLifecyclePhase: Equatable, Sendable {
   case writing
   case finalizing
+
+  var diagnosticName: String {
+    switch self {
+    case .writing: return "writing"
+    case .finalizing: return "finalizing"
+    }
+  }
 }
 
 /// Actor-local ownership for the currently installed video writer.
@@ -82,6 +89,10 @@ struct RewindVideoChunkLifecycle: Equatable, Sendable {
 
   func isWriting(_ reservation: RewindVideoChunkReservation) -> Bool {
     activeReservation == reservation && phase == .writing
+  }
+
+  var diagnosticPhase: String {
+    phase?.diagnosticName ?? "idle"
   }
 }
 
@@ -1186,11 +1197,26 @@ actor VideoChunkEncoder {
     let encoderRestartCount: Int
     let emergencyResetCount: Int
     let writerNotReadyCount: Int
+    let lifecyclePhase: String
+    let queueBucket: String
+    let isInitialized: Bool
+    let hasStalenessTimer: Bool
+    let finalizationWaiterBucket: String
+  }
+
+  nonisolated static func diagnosticCountBucket(_ count: Int) -> String {
+    switch count {
+    case ...0: return "none"
+    case 1: return "one"
+    case 2...10: return "few"
+    default: return "many"
+    }
   }
 
   /// Get current buffer and lifecycle status for memory diagnostics.
   func getBufferStatus() -> EncoderStatus {
     let now = Date()
+    let finalizationWaiterCount = inFlightFinalization?.waiters.count ?? 0
     return EncoderStatus(
       frameCount: frameTimestamps.count,
       maxBufferFrames: maxBufferFrames,
@@ -1200,7 +1226,12 @@ actor VideoChunkEncoder {
       consecutiveWriteFailures: consecutiveWriteFailures,
       encoderRestartCount: encoderRestartCount,
       emergencyResetCount: emergencyResetCount,
-      writerNotReadyCount: writerNotReadyCount
+      writerNotReadyCount: writerNotReadyCount,
+      lifecyclePhase: chunkLifecycle.diagnosticPhase,
+      queueBucket: Self.diagnosticCountBucket(frameTimestamps.count),
+      isInitialized: isInitialized,
+      hasStalenessTimer: stalenessCheckTask != nil,
+      finalizationWaiterBucket: Self.diagnosticCountBucket(finalizationWaiterCount)
     )
   }
 }

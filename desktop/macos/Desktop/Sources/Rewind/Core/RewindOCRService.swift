@@ -4,7 +4,7 @@ import Sentry
 import Vision
 
 /// Represents a text block with its bounding box (in normalized coordinates 0-1)
-struct OCRTextBlock: Codable, Equatable {
+struct OCRTextBlock: Codable, Equatable, Sendable {
   let text: String
   /// Bounding box in normalized coordinates (0-1), origin at bottom-left (Vision coordinate system)
   let x: Double
@@ -25,7 +25,7 @@ struct OCRTextBlock: Codable, Equatable {
 }
 
 /// Complete OCR result with all text blocks
-struct OCRResult: Codable, Equatable {
+struct OCRResult: Codable, Equatable, Sendable {
   let fullText: String
   let blocks: [OCRTextBlock]
   let processedAt: Date
@@ -73,6 +73,34 @@ struct OCRResult: Codable, Equatable {
   }
 }
 
+/// Owns exactly one terminal result across Vision's two completion paths.
+///
+/// `VNImageRequestHandler.perform` may synchronously throw after the request
+/// callback has already fired (or a late callback may arrive after a throw).
+/// Both paths therefore compete through this lock before touching Swift's
+/// checked continuation. The losing path is an expected no-op, not a second
+/// resume that traps the process.
+final class VisionRequestCompletion<Value: Sendable>: @unchecked Sendable {
+  private let lock = NSLock()
+  private var continuation: CheckedContinuation<Value, Error>?
+
+  init(_ continuation: CheckedContinuation<Value, Error>) {
+    self.continuation = continuation
+  }
+
+  @discardableResult
+  func complete(_ result: Result<Value, Error>) -> Bool {
+    let continuation = lock.withLock {
+      let claimed = self.continuation
+      self.continuation = nil
+      return claimed
+    }
+    guard let continuation else { return false }
+    continuation.resume(with: result)
+    return true
+  }
+}
+
 /// Apple Vision-based OCR service for extracting text from screenshots
 actor RewindOCRService {
   static let shared = RewindOCRService()
@@ -109,6 +137,25 @@ actor RewindOCRService {
 
   static func usesLanguageCorrection() -> Bool {
     true
+  }
+
+  /// Bridges a callback-style Vision request whose synchronous `perform` call
+  /// can also throw. Keeping this boundary generic makes the competing terminal
+  /// paths deterministically testable without mocking Vision framework types.
+  nonisolated static func awaitSingleVisionCompletion<Value: Sendable>(
+    perform: (@escaping @Sendable (Result<Value, Error>) -> Bool) throws -> Void
+  ) async throws -> Value {
+    try await withCheckedThrowingContinuation { continuation in
+      let completion = VisionRequestCompletion(continuation)
+      let finish: @Sendable (Result<Value, Error>) -> Bool = { result in
+        completion.complete(result)
+      }
+      do {
+        try perform(finish)
+      } catch {
+        _ = completion.complete(.failure(error))
+      }
+    }
   }
 
   /// Compute a perceptual difference hash (dHash) of a CGImage.
@@ -185,15 +232,15 @@ actor RewindOCRService {
       lastLoggedOCRMode = modeName
     }
 
-    return try await withCheckedThrowingContinuation { continuation in
+    return try await Self.awaitSingleVisionCompletion { finish in
       let request = VNRecognizeTextRequest { request, error in
         if let error = error {
-          continuation.resume(throwing: RewindError.ocrFailed(error.localizedDescription))
+          _ = finish(.failure(RewindError.ocrFailed(error.localizedDescription)))
           return
         }
 
         guard let observations = request.results as? [VNRecognizedTextObservation] else {
-          continuation.resume(returning: OCRResult(fullText: "", blocks: [], processedAt: Date()))
+          _ = finish(.success(OCRResult(fullText: "", blocks: [], processedAt: Date())))
           return
         }
 
@@ -232,7 +279,7 @@ actor RewindOCRService {
           blocks: blocks,
           processedAt: Date()
         )
-        continuation.resume(returning: result)
+        _ = finish(.success(result))
       }
 
       request.recognitionLevel = Self.recognitionLevel()
@@ -244,7 +291,7 @@ actor RewindOCRService {
       do {
         try handler.perform([request])
       } catch {
-        continuation.resume(throwing: RewindError.ocrFailed(error.localizedDescription))
+        throw RewindError.ocrFailed(error.localizedDescription)
       }
     }
   }

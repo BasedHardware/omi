@@ -167,8 +167,8 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     finish(timedOut: false)
   }
 
-  func hubDidError(_ message: String, source: RealtimeHubSession) {
-    if errorMsg == nil { errorMsg = message }
+  func hubDidError(_ failure: RealtimeHubTransportFailure, source: RealtimeHubSession) {
+    if errorMsg == nil { errorMsg = failure.message }
     finish(timedOut: false)
   }
 
