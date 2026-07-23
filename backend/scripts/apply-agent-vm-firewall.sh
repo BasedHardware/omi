@@ -143,27 +143,31 @@ while IFS= read -r RULE_JSON; do
   DESCRIPTION=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("description", ""))' "$RULE_JSON")
   RULES_CSV=$(rule_args "$RULE_JSON")
 
-  GCLOUD_ARGS=(
+  # Flags shared by create and update (mutable attributes).
+  UPDATE_ARGS=(
     "$NAME"
     --project="$PROJECT"
-    --network="$NETWORK"
     --priority="$PRIORITY"
-    --direction="$DIRECTION"
-    --action="$ACTION"
     --rules="$RULES_CSV"
     --source-ranges="$SOURCE_RANGES"
     --target-tags="$TARGET_TAGS"
   )
   if [[ -n "$DESCRIPTION" ]]; then
-    GCLOUD_ARGS+=(--description="$DESCRIPTION")
+    UPDATE_ARGS+=(--description="$DESCRIPTION")
   fi
 
+  # --action, --direction, and --network are immutable after creation;
+  # gcloud compute firewall-rules update rejects them. Only create gets them.
   if gcloud compute firewall-rules describe "$NAME" --project="$PROJECT" >/dev/null 2>&1; then
     echo "updating existing firewall rule $NAME (project=$PROJECT)"
-    gcloud compute firewall-rules update "${GCLOUD_ARGS[@]}"
+    gcloud compute firewall-rules update "${UPDATE_ARGS[@]}"
   else
     echo "creating firewall rule $NAME (project=$PROJECT)"
-    gcloud compute firewall-rules create "${GCLOUD_ARGS[@]}"
+    gcloud compute firewall-rules create \
+      "${UPDATE_ARGS[@]}" \
+      --network="$NETWORK" \
+      --direction="$DIRECTION" \
+      --action="$ACTION"
   fi
 done < <(read_rules)
 
