@@ -57,7 +57,7 @@ def _force_canonical(monkeypatch, *, existing_ids):
 
     def delete_batch(uid, memory_ids, db_client=None):
         if any(memory_id not in existing for memory_id in memory_ids):
-            raise ValueError("canonical memory not found")
+            raise canonical_adapter.CanonicalMemoryNotFoundError("canonical memory not found")
 
     delete_mock = MagicMock(side_effect=delete_batch)
     monkeypatch.setattr(mem_mod, 'delete_canonical_memories_batch', delete_mock)
@@ -234,6 +234,16 @@ class TestBatchDeleteCanonicalCohort:
 
         atomic_delete_mock.assert_called_once()
         svc_mock.delete.assert_not_called()
+
+    def test_canonical_internal_validation_error_is_not_mislabeled_as_404(self, monkeypatch):
+        atomic_delete_mock = _force_canonical(monkeypatch, existing_ids={'a'})
+        atomic_delete_mock.side_effect = ValueError('malformed canonical payload')
+
+        with pytest.raises(ValueError, match='malformed canonical payload'):
+            mem_mod.delete_memories_batch(
+                data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['a']),
+                uid='u1',
+            )
 
     def test_atomic_adapter_reads_entire_batch_before_queuing_writes(self, monkeypatch):
         class Snapshot:

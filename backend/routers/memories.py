@@ -26,6 +26,7 @@ from utils.memory.v3.production_runtime import build_v3_production_runtime
 from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_decision
 from utils.memory.canonical_memory_adapter import (
     CanonicalBatchMutationLimitError,
+    CanonicalMemoryNotFoundError,
     delete_canonical_memories_batch,
     memory_item_to_memorydb,
     read_canonical_memory_item,
@@ -809,7 +810,7 @@ def delete_memories_batch(
             delete_canonical_memories_batch(uid, memory_ids, db_client=db_client)
         except CanonicalBatchMutationLimitError:
             raise HTTPException(status_code=413, detail='Memory batch is too large to delete atomically')
-        except ValueError:
+        except CanonicalMemoryNotFoundError:
             raise HTTPException(status_code=404, detail='Memory not found')
         return {'status': 'ok'}
 

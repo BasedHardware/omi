@@ -69,6 +69,10 @@ class CanonicalBatchMutationLimitError(ValueError):
     """Raised before commit when a canonical batch cannot fit one transaction."""
 
 
+class CanonicalMemoryNotFoundError(ValueError):
+    """Raised when an item is absent or inactive during an atomic batch read."""
+
+
 def _payload_or_empty(value: object) -> Payload:
     return cast(Payload, value) if isinstance(value, dict) else {}
 
@@ -1001,10 +1005,10 @@ def delete_canonical_memories_batch(uid: str, memory_ids: List[str], *, db_clien
             item_ref = client.document(f"{collections.memory_items}/{memory_id}")
             snapshot = item_ref.get(transaction=write_transaction)
             if not getattr(snapshot, "exists", False):
-                raise ValueError(f"canonical memory not found: {memory_id}")
+                raise CanonicalMemoryNotFoundError(f"canonical memory not found: {memory_id}")
             item = MemoryItem(**_snapshot_payload(snapshot))
             if item.status != MemoryItemStatus.active or item.memory_id != memory_id:
-                raise ValueError(f"canonical memory not found: {memory_id}")
+                raise CanonicalMemoryNotFoundError(f"canonical memory not found: {memory_id}")
             items.append(item)
 
         mutation_count = sum(len(item.evidence) + 2 for item in items)
