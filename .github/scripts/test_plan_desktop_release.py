@@ -169,23 +169,19 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
         self.assertLess(workflow.index('git commit -m "chore: consolidate changelog for v${VERSION}"'), workflow.index('git tag "$RELEASE_TAG"'))
 
-    def test_pre_tag_readiness_workflow_contract(self) -> None:
+    def test_candidate_creation_has_no_selfhosted_pre_tag_gate(self) -> None:
+        # Continuous deployment: candidate creation (tag-release) must depend only
+        # on the hosted planner gate, NOT on a self-hosted pre-candidate readiness
+        # job. A self-hosted gate before immutable tag creation was a single point
+        # of failure (a down runner blocked ALL releases) and contradicted "create
+        # on every change, then qualify". Heavy validation belongs to
+        # desktop_qualify_beta.yml, which runs AFTER the candidate exists.
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        readiness_script = (ROOT / "desktop/macos/scripts/pre-tag-readiness.sh").read_text(encoding="utf-8")
-        upload_step = workflow.split("      - name: Upload readiness evidence", 1)[1]
-        upload_step = upload_step.split("\n      - name:", 1)[0]
-        self.assertIn("if-no-files-found: error", upload_step)
-        self.assertIn("+refs/heads/main:refs/remotes/origin/main", readiness_script)
-        self.assertNotIn("fetch --quiet --force origin main", readiness_script)
-        self.assertIn("pre-tag-readiness:", workflow)
-        self.assertIn("verify-pre-tag-readiness.py verify", workflow)
-        # Regression: the gate runs on the trusted M1 under macOS bash 3.2, where
-        # `"${arr[@]}"` on an EMPTY array under `set -u` traps "unbound variable"
-        # and failed the readiness gate on every release with KEEP_STACK != 1 (the
-        # normal path), silently blocking all auto-tagging. Optional array flags
-        # must use the bash-3.2-safe `${arr[@]+"${arr[@]}"}` expansion.
-        self.assertNotIn('--readiness "${KEEP_FLAG[@]}"', readiness_script)
-        self.assertIn('${KEEP_FLAG[@]+"${KEEP_FLAG[@]}"}', readiness_script)
+        self.assertNotIn("pre-tag-readiness:", workflow)
+        self.assertNotIn("desktop-pre-tag-readiness-evidence", workflow)
+        self.assertNotIn("verify-pre-tag-readiness.py", workflow)
+        tag_release = workflow.split("\n  tag-release:\n", 1)[1].split("\n  ", 1)[0]
+        self.assertIn("needs: [plan-release]", tag_release)
 
     def test_push_paths_cover_releasable_desktop_paths(self) -> None:
         # Continuous deployment: every releasable desktop input the planner
