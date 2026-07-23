@@ -29,8 +29,9 @@ On every push to `main` that touches `desktop/windows/**` (or a manual
    - Provisions `.env` from `.env.example` (public Firebase/PostHog config), then
      `pnpm install --frozen-lockfile` (rebuilds `better-sqlite3`, builds the .NET
      OCR/automation helpers).
-   - Builds the NSIS installer. **Signed** if the Azure Trusted Signing secrets
-     are present, **unsigned** otherwise (the release notes say which).
+   - Requires the complete Azure Trusted Signing configuration, builds a signed
+     NSIS installer, and verifies both installer and app Authenticode signatures.
+     Missing signing configuration fails the release before anything is published.
    - Publishes the installer `.exe`, its `.exe.blockmap` (differential updates),
      and `latest.yml` (the electron-updater feed) to a **prerelease** GitHub
      Release named `Omi for Windows <version> (beta)`, using `gh`.
@@ -45,8 +46,7 @@ package in its runtime closure must be unpacked to disk.
 electron-builder only **auto-detects** a config named `electron-builder.<ext>`
 (yml/json/js/cjs/mjs/ts); it does **not** auto-detect the `electron-builder.config.*`
 name. So every build must pass `--config electron-builder.config.mjs` explicitly —
-the workflow's unsigned path runs `pnpm build:win` (which already carries the flag)
-and the signed path passes it by hand. Dropping the `--config` flag would silently
+the signed release path passes it explicitly. Dropping the `--config` flag would silently
 drop this whole config (and the pi-mono closure), shipping an installer that breaks
 the coding agent. There is intentionally **no** `electron-builder.yml` — the
 `.config.mjs` file is the single source of truth.
@@ -86,7 +86,7 @@ The bump must not re-trigger the workflow. Three independent guards:
 
 `electron-updater` (see `src/main/updater.ts`) reads the feed configured in
 `electron-builder.config.mjs` (`publish:` → GitHub `BasedHardware/omi`, `releaseType:
-release`). Because the workflow marks builds **prerelease**, they are *not*
+release`). Because the workflow marks builds **prerelease**, they are _not_
 auto-pushed to installed apps — users download betas manually. Promoting a build
 to stable (flipping its GitHub release from prerelease to release) is what makes
 `electron-updater` serve it. This matches the macOS beta/stable split.
@@ -98,17 +98,16 @@ to stable (flipping its GitHub release from prerelease to release) is what makes
 
 ## One-time signing setup (owner)
 
-Until these secrets exist the pipeline builds **unsigned** installers — they work,
-but Windows SmartScreen warns "unknown publisher" on first run. Wiring Azure
-Trusted Signing removes that warning with no code changes (the workflow detects
-the secrets and switches to the signed build path automatically).
+Until these secrets exist the release job fails closed and publishes nothing.
+Local development installers may still be unsigned, but every GitHub release
+requires Azure Trusted Signing.
 
 ### 1. Create an Azure Trusted Signing account
 
 1. In the [Azure Portal](https://portal.azure.com), create a **Trusted Signing
    account** (search "Trusted Signing"). Note the **region** — it determines the
    signing endpoint, e.g. `https://eus.codesigning.azure.net/` (East US).
-2. Inside the account, create a **Certificate Profile** (type: *Public Trust* for
+2. Inside the account, create a **Certificate Profile** (type: _Public Trust_ for
    publicly distributed apps). Complete the identity validation Microsoft
    requires. Note the **profile name**.
 3. Note the **account name** (the Trusted Signing account's name).
@@ -128,34 +127,34 @@ the secrets and switches to the signed build path automatically).
 Create these under the repo's **Settings → Secrets and variables → Actions**. The
 names must match exactly (the workflow reads these):
 
-| Secret | Value | Purpose |
-|--------|-------|---------|
-| `AZURE_TENANT_ID` | Directory (tenant) ID | auth |
-| `AZURE_CLIENT_ID` | Application (client) ID | auth |
-| `AZURE_CLIENT_SECRET` | client secret value | auth |
-| `AZURE_CODE_SIGNING_ENDPOINT` | e.g. `https://eus.codesigning.azure.net/` | signing profile |
-| `AZURE_CODE_SIGNING_ACCOUNT` | Trusted Signing account name | signing profile |
-| `AZURE_CERT_PROFILE_NAME` | certificate profile name | signing profile |
-| `AZURE_PUBLISHER_NAME` | validated publisher name (e.g. `Based Hardware`) | signing profile |
+| Secret                        | Value                                            | Purpose         |
+| ----------------------------- | ------------------------------------------------ | --------------- |
+| `AZURE_TENANT_ID`             | Directory (tenant) ID                            | auth            |
+| `AZURE_CLIENT_ID`             | Application (client) ID                          | auth            |
+| `AZURE_CLIENT_SECRET`         | client secret value                              | auth            |
+| `AZURE_CODE_SIGNING_ENDPOINT` | e.g. `https://eus.codesigning.azure.net/`        | signing profile |
+| `AZURE_CODE_SIGNING_ACCOUNT`  | Trusted Signing account name                     | signing profile |
+| `AZURE_CERT_PROFILE_NAME`     | certificate profile name                         | signing profile |
+| `AZURE_PUBLISHER_NAME`        | validated publisher name (e.g. `Based Hardware`) | signing profile |
 
-The build path treats a build as "signed" only when **all seven** secrets (the
-three auth values plus the four signing-profile values) are present. Add all seven
-together — a partial set falls back to an unsigned build.
+The release requires **all seven** secrets (the three auth values plus the four
+signing-profile values). Add all seven together; a missing or partial set fails
+the release before the build or upload.
 
 Once the secrets exist, the next release is signed automatically — no workflow or
 `electron-builder.config.mjs` change needed.
 
 ## Manual / local
 
-- **Trigger a release by hand:** Actions → *Auto Release Desktop (Windows) on
-  Main* → **Run workflow**. `release_mode: force_release` releases even with no
+- **Trigger a release by hand:** Actions → _Auto Release Desktop (Windows) on
+  Main_ → **Run workflow**. `release_mode: force_release` releases even with no
   new changes; `next_version` pins an explicit version.
 - **Build the installer locally** (unsigned): from `desktop/windows/`,
   `pnpm build:win`. Output lands in `dist/` (`Omi-for-Windows-Setup-<version>.exe`,
   its `.blockmap`, and `latest.yml`).
 - **If the build job fails after the tag was created:** re-run the **failed jobs
   only** (Actions → the run → "Re-run failed jobs") — that reuses the plan job's
-  tag/version outputs and re-publishes to the existing tag. Do *not* "Re-run all
+  tag/version outputs and re-publishes to the existing tag. Do _not_ "Re-run all
   jobs": the plan job would see no new change since the just-created tag and skip,
   stranding the tag with no assets. Alternatively, `workflow_dispatch` with
   `release_mode: force_release` cuts a fresh version.

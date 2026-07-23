@@ -32,19 +32,19 @@ on:
   push:
     branches: ["main"]
     paths:
-      - 'desktop/windows/**'
+      - "desktop/windows/**"
   workflow_dispatch:
     inputs:
       release_mode:
-        description: 'Release behavior'
+        description: "Release behavior"
         required: false
-        default: 'release_now'
+        default: "release_now"
         type: choice
         options:
           - release_now
           - force_release
       next_version:
-        description: 'Optional explicit version to tag (for example, 1.2.0)'
+        description: "Optional explicit version to tag (for example, 1.2.0)"
         required: false
         type: string
 
@@ -208,7 +208,7 @@ jobs:
       # OCR + UI-automation helpers are .NET projects built during install/build.
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: "8.0.x"
 
       - name: Provision .env (ships public Firebase/PostHog config)
         shell: pwsh
@@ -217,16 +217,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Sign only when Azure Trusted Signing secrets are present. When absent the
-      # installer is built unsigned (Windows SmartScreen shows "unknown
-      # publisher"); the release notes say so. See docs/release-pipeline.md.
-      - name: Detect signing secrets
+      # Published installers must be signed. Local development builds may remain
+      # unsigned, but this release path fails closed if signing is unavailable.
+      - name: Require signing secrets
         id: signing
         shell: bash
         env:
-          # All-or-nothing: every secret the signed build path needs (auth +
-          # profile) must be present, or a partial set would run the signed path
-          # with an empty value and die at signing instead of falling back unsigned.
+          # Every credential and profile value is required.
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
@@ -235,15 +232,15 @@ jobs:
           AZURE_ACCOUNT: ${{ secrets.AZURE_CODE_SIGNING_ACCOUNT }}
           AZURE_PROFILE: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
         run: |
-          if [ -n "${AZURE_TENANT_ID}" ] && [ -n "${AZURE_CLIENT_ID}" ] && [ -n "${AZURE_CLIENT_SECRET}" ] && \
-             [ -n "${AZURE_PUBLISHER_NAME}" ] && [ -n "${AZURE_ENDPOINT}" ] && [ -n "${AZURE_ACCOUNT}" ] && [ -n "${AZURE_PROFILE}" ]; then
-            echo "signed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "signed=false" >> "$GITHUB_OUTPUT"
-          fi
+          for name in AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_PUBLISHER_NAME AZURE_ENDPOINT AZURE_ACCOUNT AZURE_PROFILE; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Required Azure Trusted Signing value $name is missing; refusing to publish an unsigned Windows release."
+              exit 1
+            fi
+          done
+          echo "signed=true" >> "$GITHUB_OUTPUT"
 
       - name: Build signed installer (Azure Trusted Signing)
-        if: steps.signing.outputs.signed == 'true'
         shell: bash
         env:
           # Auth (electron-builder / @azure/identity read these from the env).
@@ -267,17 +264,22 @@ jobs:
             -c.win.azureSignOptions.certificateProfileName="$AZURE_PROFILE" \
             -c.win.azureSignOptions.codeSigningAccountName="$AZURE_ACCOUNT"
 
-      - name: Build unsigned installer
-        if: steps.signing.outputs.signed != 'true'
-        shell: bash
-        # pnpm build:win == `npm run build && electron-builder --win --x64 --config
-        # electron-builder.config.mjs --publish never` — it carries the required config
-        # flag AND --publish never. The latter matters: the config's `publish` block is
-        # the electron-updater FEED pointer, but electron-builder also treats it as an
-        # upload target and auto-publishes when CI + a git tag are detected (this job
-        # checks out the release tag). Without --publish never it dies on a missing
-        # GH_TOKEN; the real upload happens in the explicit `gh release` step below.
-        run: pnpm build:win
+      - name: Verify Authenticode signatures
+        shell: pwsh
+        run: |
+          $targets = @(
+            Get-ChildItem -Path dist -Filter '*.exe' -File
+            Get-Item -Path 'dist/win-unpacked/omi-windows.exe'
+          )
+          if ($targets.Count -lt 2) {
+            throw 'Expected both the NSIS installer and unpacked app executable.'
+          }
+          foreach ($target in $targets) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $target.FullName
+            if ($signature.Status -ne 'Valid') {
+              throw "Invalid Authenticode signature on $($target.FullName): $($signature.Status) $($signature.StatusMessage)"
+            }
+          }
 
       - name: Collect release artifacts
         shell: bash
@@ -303,14 +305,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ needs.plan-and-tag.outputs.release_tag }}
           VERSION: ${{ needs.plan-and-tag.outputs.version }}
-          SIGNED: ${{ steps.signing.outputs.signed }}
         run: |
           set -euo pipefail
-          if [ "$SIGNED" = "true" ]; then
-            SIGN_NOTE="Signed with Azure Trusted Signing."
-          else
-            SIGN_NOTE="**Unsigned build** — Windows SmartScreen will warn \"unknown publisher\". Signing activates automatically once the Azure Trusted Signing secrets are set (see desktop/windows/docs/release-pipeline.md)."
-          fi
+          SIGN_NOTE="Signed with Azure Trusted Signing."
           NOTES="Automated Windows beta build for v${VERSION}.
 
           ${SIGN_NOTE}

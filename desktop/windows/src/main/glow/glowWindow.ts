@@ -94,7 +94,7 @@ export function createGlowWindow(): BrowserWindow {
     // and never takes focus.
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       backgroundThrottling: false
     }
   })

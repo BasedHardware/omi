@@ -21,9 +21,23 @@ const PHASE1 = { intervalMs: 2000, maxAttempts: 60 }
 const PHASE2 = { intervalMs: 2000, maxAttempts: 90 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+const X_OAUTH_HOSTS = new Set(['x.com', 'twitter.com'])
+
+export function isAllowedXOAuthUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl)
+    return url.protocol === 'https:' && X_OAUTH_HOSTS.has(url.hostname.toLowerCase())
+  } catch {
+    return false
+  }
+}
 
 // The single X run's live state, held in main so it survives panel unmount.
 let runState: XRunState = { phase: 'idle', postCount: 0, memoryCount: 0 }
+
+function configuredApiBase(): string {
+  return (import.meta.env.VITE_OMI_API_BASE || 'https://api.omi.me').replace(/\/+$/, '')
+}
 
 function broadcast(): void {
   for (const w of BrowserWindow.getAllWindows()) {
@@ -41,7 +55,10 @@ export function xRunStateSnapshot(): XRunState {
 }
 
 async function authedFetch<T>(session: XSession, path: string, method: 'GET' | 'POST'): Promise<T> {
-  const res = await net.fetch(`${session.apiBase}${path}`, {
+  // The renderer relays the short-lived token, but it has no authority to pick
+  // the host that receives it. The build/runtime configuration is the trust
+  // anchor for the Omi API origin.
+  const res = await net.fetch(`${configuredApiBase()}${path}`, {
     method,
     headers: { Authorization: `Bearer ${session.token}`, 'X-App-Platform': 'windows' }
   })
@@ -126,6 +143,10 @@ export async function runXConnectFlow(deps: {
   const { authUrl, error } = await deps.getOAuthUrl()
   if (error || !authUrl) {
     deps.onState({ phase: 'failed', error: error || 'no_auth_url' })
+    return
+  }
+  if (!isAllowedXOAuthUrl(authUrl)) {
+    deps.onState({ phase: 'failed', error: 'invalid_auth_url' })
     return
   }
   await deps.openExternal(authUrl)

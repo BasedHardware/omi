@@ -2,6 +2,7 @@
 import type { ByokEnrollResult, ByokKeys, ByokProvider } from './byok'
 import type { ChatContentBlock } from './chatContent'
 import type {
+  McpCloudConnectorId,
   McpConnectorId,
   McpExportsSnapshot,
   McpConnectResult,
@@ -1356,7 +1357,7 @@ export type OmiBridgeApi = {
   /** ChatGPT/Claude assisted-connector cards (static field values, no secret). */
   mcpCloudInfo: () => Promise<McpCloudConnectorInfo[]>
   /** Open a cloud connector's provider connector page (assisted "open & guide"). */
-  mcpOpenCloudConnector: (url: string) => Promise<void>
+  mcpOpenCloudConnector: (id: McpCloudConnectorId) => Promise<void>
   /** Memory-PACK variant: format the pack, copy to clipboard, open the provider
    *  chat. Returns the opened URL. */
   mcpMemoryPack: (

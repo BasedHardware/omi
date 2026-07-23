@@ -29,6 +29,7 @@ import type { RewindSettings } from '../../shared/types'
 /** How many semantic neighbours to pull before the similarity floor + the
  *  already-in-FTS filter thin them out. */
 const VECTOR_TOP_K = 50
+export const MAX_REWIND_FRAME_BYTES = 16 * 1024 * 1024
 
 /**
  * Semantic hits for a query, or [] when semantic search is unavailable (signed
@@ -59,7 +60,7 @@ async function vectorHits(query: string): Promise<VectorHit[]> {
 // results (type "invoice", then "receipt": invoice's vectors land last).
 let searchSeq = 0
 
-export function registerRewindHandlers(): void {
+export function registerRewindHandlers(getCaptureWc: () => Electron.WebContents | null): void {
   ipcMain.handle('rewind:frames', async (_e, from: number, to: number) =>
     listRewindFrames(from, to)
   )
@@ -153,7 +154,17 @@ export function registerRewindHandlers(): void {
   ipcMain.handle('rewind:primarySourceId', async () => getPrimarySourceId())
   // Receive a sampled JPEG frame from the renderer capture host and store it
   // (after foreground-window metadata + idle/lock/dup gating).
-  ipcMain.handle('rewind:saveFrame', async (_e, data: Uint8Array) =>
-    ingestRewindFrame(Buffer.from(data))
-  )
+  ipcMain.handle('rewind:saveFrame', async (e, data: Uint8Array) => {
+    const captureWc = getCaptureWc()
+    if (!captureWc || e.sender.id !== captureWc.id) {
+      throw new Error('rewind:saveFrame is restricted to the capture renderer')
+    }
+    if (!(data instanceof Uint8Array) || data.byteLength === 0) {
+      throw new Error('rewind:saveFrame requires non-empty bytes')
+    }
+    if (data.byteLength > MAX_REWIND_FRAME_BYTES) {
+      throw new Error('rewind:saveFrame exceeds the frame-size limit')
+    }
+    return ingestRewindFrame(Buffer.from(data))
+  })
 }

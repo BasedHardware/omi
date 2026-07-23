@@ -37,12 +37,17 @@ vi.mock('electron', () => ({
 }))
 vi.mock('./tray', () => ({ setTrayUpdateReady: vi.fn() }))
 
-import { initAutoUpdater } from './updater'
+import { initAutoUpdater, shouldForceDevUpdater } from './updater'
 import { setAppSettings } from './appSettings'
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
 describe('updater beta channel wiring', () => {
+  it('never enables the developer feed in a packaged build', () => {
+    expect(shouldForceDevUpdater(true, { OMI_UPDATER_DEV: '1' })).toBe(false)
+    expect(shouldForceDevUpdater(false, { OMI_UPDATER_DEV: '1' })).toBe(true)
+  })
+
   it('reads the persisted opt-in at init and flips allowPrerelease on live changes', () => {
     // Fake timers so init's 45s/4h checks stay dormant — the only checkForUpdates
     // calls we assert on come from the beta-toggle listener.

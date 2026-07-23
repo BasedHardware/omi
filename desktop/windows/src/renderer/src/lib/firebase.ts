@@ -6,7 +6,7 @@ import {
   signOut,
   updateProfile,
   onAuthStateChanged,
-  browserLocalPersistence,
+  inMemoryPersistence,
   type User
 } from 'firebase/auth'
 import { teardownUserData } from './authTeardown'
@@ -26,15 +26,12 @@ const app = initializeApp({
 // initializeAuth's browser persistence can't initialize — keeps importing
 // modules that touch firebase unit-testable without changing runtime behavior.
 // Persistence hierarchy: the encrypted-at-rest store (safeStorage/DPAPI via the
-// main process) is primary; browserLocalPersistence stays as a permanent fallback
-// so a machine without OS encryption degrades to plaintext rather than locking the
-// user out. Firebase auto-migrates any existing plaintext session INTO the
-// encrypted store on init and deletes the plaintext copy (see
-// encryptedAuthPersistence — _shouldAllowMigration).
+// main process) is primary. When OS encryption is unavailable, retain the session
+// in memory only; never persist refresh credentials to plaintext localStorage.
 export const auth = (() => {
   try {
     return initializeAuth(app, {
-      persistence: [encryptedAuthPersistence, browserLocalPersistence]
+      persistence: [encryptedAuthPersistence, inMemoryPersistence]
     })
   } catch {
     return getAuth(app)
