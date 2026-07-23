@@ -71,9 +71,17 @@ final class AgentErrorClassifierTests: XCTestCase {
   }
 
   func testOversizedPayloadNamesTheCause() {
-    let classified = AgentErrorClassifier.classify("413 Failed to buffer the request body: length limit exceeded")
-    XCTAssertEqual(classified.code, .payloadTooLarge)
-    XCTAssertFalse(classified.retryable)
+    for raw in [
+      "413 Failed to buffer the request body: length limit exceeded",
+      "Provider responded with HTTP 413",  // bare 413 at end — previously fell to retryable unknown
+      "Request failed: Payload Too Large",
+    ] {
+      let classified = AgentErrorClassifier.classify(raw)
+      XCTAssertEqual(classified.code, .payloadTooLarge, raw)
+      XCTAssertFalse(classified.retryable, raw)
+    }
+    // A 413 embedded in a larger number must not false-positive.
+    XCTAssertNotEqual(AgentErrorClassifier.classify("elapsed 1413ms").code, .payloadTooLarge)
   }
 
   func testToolSchemaRejectionDoesNotBlameTheUser() {

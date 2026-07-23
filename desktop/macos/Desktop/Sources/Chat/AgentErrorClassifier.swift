@@ -41,7 +41,7 @@ enum AgentErrorClassifier {
     // User pressed Stop — not a technical failure. Recognized so it is never
     // mislabeled as a retryable error (the #1 string in the live corpus, 616
     // events/30d); upstream telemetry should also split it from chat_agent_error.
-    if lower == "response stopped." || lower.hasPrefix("response stopped") {
+    if lower.hasPrefix("response stopped") {
       return ClassifiedAgentError(
         code: .userInterrupted,
         userMessage: "Response stopped.",
@@ -116,8 +116,8 @@ enum AgentErrorClassifier {
         userMessage: "Couldn't reach the AI service — check your internet connection and try again.",
         retryable: true)
     }
-    if lower.contains("length limit exceeded") || lower.contains("request body") && lower.contains("413")
-      || lower.contains("413 ")
+    if lower.contains("length limit exceeded") || lower.contains("payload too large")
+      || lower.range(of: #"\b413\b"#, options: .regularExpression) != nil
     {
       return ClassifiedAgentError(
         code: .payloadTooLarge,
