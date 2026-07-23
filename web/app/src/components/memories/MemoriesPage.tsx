@@ -301,13 +301,20 @@ export function MemoriesPage() {
     setIsDeleting(true);
     try {
       // Single batched request (chunked internally by removeMemories) instead of N
-      // concurrent DELETEs that triggered 429s. Selection is cleared only on full
-      // success; on partial failure the surviving IDs stay selected and retryable.
-      const ok = await removeMemories(selectedIds);
-      if (ok) {
+      // concurrent DELETEs that triggered 429s. On full success the selection clears;
+      // on partial failure only the not-yet-deleted ids stay selected, so a retry never
+      // re-sends ids the server already removed (which the all-or-nothing endpoint
+      // would 404 on).
+      const { success, deletedIds } = await removeMemories(selectedIds);
+      if (success) {
         setSelectedIds([]);
         setIsSelectMode(false);
         setShowDeleteConfirm(false);
+      } else if (deletedIds.length > 0) {
+        // Drop ids already deleted by earlier successful chunks; keep only the failed /
+        // un-attempted ids selected and retryable.
+        const deleted = new Set(deletedIds);
+        setSelectedIds((prev) => prev.filter((id) => !deleted.has(id)));
       }
     } finally {
       setIsDeleting(false);
