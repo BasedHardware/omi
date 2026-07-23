@@ -1,11 +1,11 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2213,
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4318
+    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2216,
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4330
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": "deleteBackend flag threaded through both clearJournalTurns variants so a reset is local-only",
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "deleteBackend added to the journal_clear_turns wire message"
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "Keep stdout readabilityHandler while the agent child is alive so a full pipe cannot deadlock mid-turn; deleteBackend remains on journal_clear_turns."
   },
   "threshold": 1500
 }
