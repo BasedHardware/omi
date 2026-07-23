@@ -72,15 +72,26 @@ class ChangelogRequirementTests(unittest.TestCase):
         for path in (
             "desktop/macos/docs/release.md",
             "desktop/macos/scripts/qualify-desktop-beta.sh",
+            # Sibling qualification-runner helper (EXEMPT_DESKTOP_PATHS).
+            "desktop/macos/scripts/qualification-swift-cache.sh",
+            # Test files are never user-facing app changes (EXEMPT_DESKTOP_PATH_PREFIXES).
+            # #10374's timeout bump touched this file; without the exemption the
+            # post-merge push run of the changelog gate reddened main (#10387).
+            "desktop/macos/tests/test-qualify-desktop-beta-contract.sh",
+            "desktop/macos/tests/some-other-desktop-test.sh",
+            # Rust backend prefix.
+            "desktop/macos/Backend-Rust/src/main.rs",
         ):
             with self.subTest(path=path):
                 self.assertFalse(checker.is_desktop_change_requiring_changelog(path))
 
-        self.assertTrue(
-            checker.is_desktop_change_requiring_changelog(
-                "desktop/macos/Desktop/Sources/AppDelegate.swift"
-            )
-        )
+        # Product source still requires a changelog — the exemptions must not leak.
+        for path in (
+            "desktop/macos/Desktop/Sources/AppDelegate.swift",
+            "desktop/macos/scripts/some-user-facing-script.sh",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(checker.is_desktop_change_requiring_changelog(path))
 
 
 if __name__ == "__main__":
