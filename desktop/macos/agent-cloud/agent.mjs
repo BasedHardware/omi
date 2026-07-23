@@ -5,7 +5,7 @@
 const { query, tool, createSdkMcpServer } = await import(
   process.env.OMI_AGENT_SDK_MODULE || "@anthropic-ai/claude-agent-sdk"
 );
-import { ALLOWED_TOOLS, buildAgentDefinitions, normalizeIntegrationKey } from "./query-config.mjs";
+import { ALLOWED_TOOLS, buildAgentDefinitions } from "./query-config.mjs";
 import { USER_MESSAGES, classifyError, isExpectedAbort, logEvent, markOwnedAbort, withRetry } from "./errors.mjs";
 import { createSubagentRouter } from "./stream-routing.mjs";
 import { buildCondensedSeed, planCondensation } from "./conversation-condenser.mjs";
@@ -178,7 +178,7 @@ GUIDELINES:
 - For personal facts/preferences, query the memories table first
 - For calendar, email, health data — use the backend tools (get_calendar_events_tool, get_gmail_messages_tool, etc.)
 - For ROW-HEAVY work — searching through many screenshots/tasks/transcripts (content recall, task triage, multi-day pattern analysis) — delegate to the researcher subagent via the Task tool; it reads the rows in its own context and returns distilled findings. Answer directly when one or two aggregate queries (or a single get_daily_recap call) suffice.
-- CONNECTING INTEGRATIONS: if a connector/tool reports it is "not connected", or the user asks how to connect calendar/gmail/etc., call get_connect_link with the integration key (e.g. "google_calendar") and give the user the exact link it returns, verbatim, telling them to click it and sign in. NEVER invent setup steps, mention external MCP servers/skills, or describe manual settings flows — only use get_connect_link.
+- CONNECTING INTEGRATIONS: if a connector/tool reports it is "not connected", or the user asks how to connect calendar/gmail/etc., call get_connect_link with that capability (e.g. "gmail") and give the user the exact link it returns, verbatim. NEVER invent setup steps, mention external MCP servers/skills, or describe manual settings flows — only use get_connect_link.
 - Be concise and helpful. Format results clearly.`;
 
   agentDefinitions = buildAgentDefinitions(schema);
@@ -521,17 +521,14 @@ const getConnectLinkTool = tool(
 Call this WHENEVER a connector/tool reports it is "not connected" (e.g. calendar,
 gmail), or the user asks how to connect one. Return the real link to the user and
 tell them to click it and sign in — NEVER describe manual setup steps or invent
-other methods. integration is the app key, e.g. "google_calendar".`,
-  { integration: z.string().describe('Integration app key, e.g. "google_calendar"') },
+other methods. integration is the requested capability, e.g. "gmail" or "calendar".`,
+  { integration: z.string().describe('Integration capability, e.g. "gmail" or "calendar"') },
   async ({ integration }) => {
     if (!userFirebaseToken) {
       return { content: [{ type: "text", text: "The user must be signed in to Omi before connecting integrations." }] };
     }
-    // Gmail/contacts/calendar all resolve to the one Google grant (google_calendar);
-    // without this the backend 400s on "gmail" and the model invents setup steps.
-    const appKey = normalizeIntegrationKey(integration);
     try {
-      const resp = await fetch(`${BACKEND_URL}/v1/integrations/${encodeURIComponent(appKey)}/oauth-url`, {
+      const resp = await fetch(`${BACKEND_URL}/v1/integrations/${encodeURIComponent(integration)}/oauth-url`, {
         headers: { Authorization: `Bearer ${userFirebaseToken}` },
       });
       if (!resp.ok) {
@@ -554,7 +551,7 @@ other methods. integration is the app key, e.g. "google_calendar".`,
         content: [
           {
             type: "text",
-            text: `CONNECT LINK for ${integration}: ${url}\nGive this link to the user verbatim and tell them to click it and sign in with Google; once done, ask them to try again.`,
+            text: `CONNECT LINK for ${integration}: ${url}\nGive this link to the user verbatim and tell them to click it and finish connecting; once done, ask them to try again.`,
           },
         ],
       };
