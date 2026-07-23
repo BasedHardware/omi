@@ -93,3 +93,26 @@ def test_provision_keeps_public_nat_and_firewall_tag():
     assert '"items": ["omi-agent-vm"]' in insert_body
     assert "ONE_TO_ONE_NAT" in insert_body
     assert "accessConfigs" in insert_body
+
+
+def test_apply_script_update_path_omits_immutable_flags():
+    """Static tripwire: gcloud firewall-rules update must not receive create-only flags.
+
+    --action, --direction, and --network are immutable after creation.
+    Passing them to update makes the script non-idempotent - it fails instead of
+    refreshing an existing rule during cutover.
+    """
+    source = APPLY_SCRIPT.read_text()
+
+    # The update invocation line must not carry immutable flags.
+    update_line = next((ln for ln in source.splitlines() if "firewall-rules update" in ln), None)
+    assert update_line, "expected a firewall-rules update invocation"
+    for flag in ("--action", "--direction", "--network"):
+        assert flag not in update_line, f"firewall-rules update must not receive immutable flag {flag}"
+
+    # The create invocation block (create line + continuation lines) must carry them.
+    create_idx = next((i for i, ln in enumerate(source.splitlines()) if "firewall-rules create" in ln), None)
+    assert create_idx is not None, "expected a firewall-rules create invocation"
+    create_block = "\n".join(source.splitlines()[create_idx : create_idx + 6])
+    for flag in ("--action", "--direction", "--network"):
+        assert flag in create_block, f"firewall-rules create must receive {flag}"
