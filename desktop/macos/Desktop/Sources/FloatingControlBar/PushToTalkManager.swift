@@ -1374,6 +1374,15 @@ class PushToTalkManager: ObservableObject {
           }
         } catch {
           logError("PushToTalkManager: batch transcription failed", error: error)
+          self.pttLifecycle.terminate(
+            disposition: .committed,
+            source: "batch_stt",
+            peak: 0,
+            rms: 0,
+            turnAudioSeconds: 0,
+            voicedAudioSeconds: nil,
+            isNearZero: false,
+            judgeable: true)
           self.voiceTurnCoordinator.publish(
             .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
           return
@@ -1505,6 +1514,20 @@ class PushToTalkManager: ObservableObject {
     )
     if hasQuery {
       DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: false)
+      pttLifecycle.terminate(
+        disposition: .committed,
+        source: isOmniSTT ? "omni_stt" : "batch_stt",
+        peak: 0,
+        rms: 0,
+        turnAudioSeconds: 0,
+        voicedAudioSeconds: nil,
+        isNearZero: false,
+        judgeable: true)
+    } else {
+      // Empty transcript after the turn reached finalization (e.g. a live-Deepgram
+      // turn that returned nothing). The recorder's tracked capture state
+      // (first-audio / first-usable-frame) classifies it; this resolves any pending
+      // recovery exactly once instead of skipping the lifecycle emit.
       pttLifecycle.terminate(
         disposition: .committed,
         source: isOmniSTT ? "omni_stt" : "batch_stt",
@@ -2098,7 +2121,9 @@ class PushToTalkManager: ObservableObject {
         self.micCaptureStartInFlight = false
         self.pttLifecycle.captureStartResolved(outcome: .accepted, statusClass: .ok)
         self.pttLifecycle.noteInputRoute(
-          class: .from(deviceDescription: capture.currentDeviceDescription),
+          class: .from(
+            deviceDescription: capture.currentDeviceDescription,
+            isBluetooth: capture.isCurrentDeviceBluetoothTransport),
           source: overrideDeviceID == nil ? .default : .override)
         self.voiceTurnCoordinator.publish(
           .captureStarted(turnID: turnID, captureID: captureID))

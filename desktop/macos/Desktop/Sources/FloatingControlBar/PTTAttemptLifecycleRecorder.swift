@@ -94,10 +94,13 @@ final class PTTAttemptLifecycleRecorder {
     case virtual
     case unknown
 
-    static func from(deviceDescription: String?) -> InputRouteClass {
+    static func from(deviceDescription: String?, isBluetooth: Bool = false) -> InputRouteClass {
+      // Bluetooth is the A2DP/HFP silent-capture case the recovery code targets;
+      // prefer the CoreAudio transport flag over substring-matching the redacted
+      // `id=` description (which never carries "bluetooth").
+      if isBluetooth { return .bluetooth }
       let lower = (deviceDescription ?? "").lowercased()
       if lower.contains("built-in") { return .builtIn }
-      if lower.contains("bluetooth") { return .bluetooth }
       if lower.contains("virtual") || lower.contains("aggregate") { return .virtual }
       if lower.isEmpty || lower == "?" { return .unknown }
       return .external
@@ -332,6 +335,12 @@ final class PTTAttemptLifecycleRecorder {
 
   /// A recovery was requested for this attempt. Mints a bounded correlation id
   /// that the *next judgeable* attempt resolves.
+  ///
+  /// If a prior recovery is still pending (a non-judgeable turn left it
+  /// unresolved), the new id supersedes it: the prior triggering event already
+  /// recorded its own id, so only its *resolution* outcome becomes unknowable —
+  /// a rare two-recoveries-in-succession case where the prior outcome is
+  /// genuinely superseded by the fresh rebuild.
   func recoveryTriggered(action: RecoveryAction) {
     guard action != .none else { return }
     recoveryTriggered = true
@@ -369,7 +378,7 @@ final class PTTAttemptLifecycleRecorder {
     if priorRecoveryId != nil, !recoveryTriggered {
       if !judgeable {
         resolvedOutcome = .notJudgeable
-      } else if isNearZero {
+      } else if firstUsableFrameAt == nil {
         resolvedOutcome = .stillSilent
       } else {
         resolvedOutcome = .recovered
@@ -386,7 +395,6 @@ final class PTTAttemptLifecycleRecorder {
       captureStartOutcome: captureStartOutcome,
       hadFirstAudioCallback: firstAudioCallbackAt != nil,
       hadFirstUsableFrame: firstUsableFrameAt != nil,
-      isNearZero: isNearZero,
       judgeable: judgeable,
       resolvedRecoveryOutcome: resolvedOutcome)
 
@@ -432,7 +440,6 @@ final class PTTAttemptLifecycleRecorder {
     captureStartOutcome: CaptureStartOutcome,
     hadFirstAudioCallback: Bool,
     hadFirstUsableFrame: Bool,
-    isNearZero: Bool,
     judgeable: Bool,
     resolvedRecoveryOutcome: RecoveryOutcomeOfNextTurn
   ) -> FailureClass {
@@ -465,9 +472,12 @@ final class PTTAttemptLifecycleRecorder {
     if disposition == .tooShort {
       return .tooShortAudible
     }
-    // silentRejected with usable audio is unexpected; fall back to the zero-sample
-    // boundary so the incident stays observable rather than dropping.
-    return isNearZero ? .zeroOrNearZeroSamples : .committed
+    // silentRejected with usable audio (e.g. a loud transient the VAD rejected as
+    // non-speech) is still a rejected turn, not a committed one. Keep it observable
+    // remotely — returning .committed would mark it local-only and hide exactly the
+    // silent incident this model exists to surface. first_chunks_energy_bucket +
+    // turn_disposition separate it from a true zero-sample turn in a query.
+    return .zeroOrNearZeroSamples
   }
 
   // MARK: - Helpers

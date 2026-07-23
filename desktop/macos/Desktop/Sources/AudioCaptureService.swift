@@ -103,6 +103,14 @@ class AudioCaptureService: @unchecked Sendable {
     let isBuiltIn = (deviceID == AudioCaptureService.findBuiltInMicDeviceID())
     return isBuiltIn ? "built-in id=\(deviceID)" : "id=\(deviceID)"
   }
+  /// Whether the active capture device is on a Bluetooth transport (A2DP/HFP),
+  /// the known profile-conflict case that feeds zeros. Exposed so the PTT
+  /// lifecycle route classification can label Bluetooth without logging the
+  /// device name. Derives from CoreAudio transport type, not the redacted
+  /// `currentDeviceDescription` string.
+  var isCurrentDeviceBluetoothTransport: Bool {
+    Self.isBluetoothTransport(deviceID: deviceID)
+  }
 
   // Silent-mic watchdog. Re-arms after each fire so one session can recover from more
   // than one silent episode; two guards keep it from spinning the recovery loop:

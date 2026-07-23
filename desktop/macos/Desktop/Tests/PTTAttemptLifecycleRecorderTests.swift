@@ -188,7 +188,6 @@ import XCTest
         captureStartOutcome: .failed,
         hadFirstAudioCallback: true,
         hadFirstUsableFrame: false,
-        isNearZero: true,
         judgeable: true,
         resolvedRecoveryOutcome: .none)
       XCTAssertEqual(cls, .captureNeverOperational)
@@ -200,10 +199,24 @@ import XCTest
         captureStartOutcome: .accepted,
         hadFirstAudioCallback: true,
         hadFirstUsableFrame: true,
-        isNearZero: true,
         judgeable: true,
         resolvedRecoveryOutcome: .recovered)
       XCTAssertEqual(cls, .recoveryOutcomeRecovered)
+    }
+
+    /// P1 regression: a silentRejected turn that had a usable frame (e.g. a loud
+    /// transient the VAD rejected) must NOT relabel as `.committed`, which would
+    /// mark it local-only and hide the silent incident. It stays observable as a
+    /// zero-sample/speech-rejected boundary.
+    func testSilentRejectedWithUsableFrameStaysObservable() {
+      let cls = PTTAttemptLifecycleRecorder.classify(
+        disposition: .silentRejected,
+        captureStartOutcome: .accepted,
+        hadFirstAudioCallback: true,
+        hadFirstUsableFrame: true,
+        judgeable: true,
+        resolvedRecoveryOutcome: .none)
+      XCTAssertEqual(cls, .zeroOrNearZeroSamples)
     }
 
     // MARK: - Privacy: only bounded fields, never raw device identity or audio
@@ -235,6 +248,22 @@ import XCTest
       XCTAssertEqual(props["input_route_class"] as? String, "bluetooth")
       XCTAssertEqual(props["input_route_source"] as? String, "override")
       XCTAssertEqual(props["route_changed_during_attempt"] as? Bool, true)
+    }
+    func testBluetoothTransportFlagClassifiesBluetoothOverDescription() {
+      // The redacted description never carries "bluetooth"; the CoreAudio
+      // transport flag is the truthful signal the recovery code depends on.
+      XCTAssertEqual(
+        PTTAttemptLifecycleRecorder.InputRouteClass.from(
+          deviceDescription: "id=42", isBluetooth: true),
+        .bluetooth)
+      XCTAssertEqual(
+        PTTAttemptLifecycleRecorder.InputRouteClass.from(
+          deviceDescription: "id=42", isBluetooth: false),
+        .external)
+      XCTAssertEqual(
+        PTTAttemptLifecycleRecorder.InputRouteClass.from(
+          deviceDescription: "built-in id=1", isBluetooth: true),
+        .bluetooth)
     }
 
     func testPeakAmplitudeOfZeroBufferIsZero() {
