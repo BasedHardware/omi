@@ -30,7 +30,9 @@ BUDGETS: dict[str, tuple[int, int]] = {
     ".github/AGENTS.md": (45, 4_500),
     "app/AGENTS.md": (170, 11_500),
     "backend/AGENTS.md": (350, 39_000),
-    "desktop/macos/AGENTS.md": (560, 45_500),
+    # main grew this with Codemagic release-pipeline detail after the budget was
+    # first set from a stale base; recalibrated to current main + headroom.
+    "desktop/macos/AGENTS.md": (560, 47_000),
     "omi/firmware/AGENTS.md": (30, 1_500),
     "web/admin/AGENTS.md": (25, 1_500),
 }
