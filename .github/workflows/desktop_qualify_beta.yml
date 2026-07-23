@@ -150,10 +150,12 @@ jobs:
           TARGET_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
           STABLE_DMG=/tmp/desktop-beta-qualification/assets/omi.dmg
           test -n "$STABLE_DMG"
-          # Side-by-side Omi Beta assets are optional until every release ships them.
-          BETA_EVIDENCE_ASSETS=""
+          # Side-by-side Omi Beta assets are optional until every release ships
+          # them. Use an array (not a word-split string) so the args stay quoted;
+          # the ${arr[@]+"${arr[@]}"} guard is empty-safe under set -u on bash 3.2.
+          BETA_EVIDENCE_ASSETS=()
           if [ -f /tmp/desktop-beta-qualification/assets/Omi.Beta.zip ]; then
-            BETA_EVIDENCE_ASSETS="--asset Omi.Beta.zip=/tmp/desktop-beta-qualification/assets/Omi.Beta.zip --asset omi-beta.dmg=/tmp/desktop-beta-qualification/assets/omi-beta.dmg"
+            BETA_EVIDENCE_ASSETS=(--asset Omi.Beta.zip=/tmp/desktop-beta-qualification/assets/Omi.Beta.zip --asset omi-beta.dmg=/tmp/desktop-beta-qualification/assets/omi-beta.dmg)
           fi
           python3 .github/scripts/desktop_qualification_evidence.py build \
             --release-json /tmp/desktop-beta-qualification/release.json \
@@ -162,7 +164,7 @@ jobs:
             --qualification-run-id "$GITHUB_RUN_ID" \
             --asset Omi.zip=/tmp/desktop-beta-qualification/assets/Omi.zip \
             --asset "omi.dmg=$STABLE_DMG" \
-            $BETA_EVIDENCE_ASSETS \
+            ${BETA_EVIDENCE_ASSETS[@]+"${BETA_EVIDENCE_ASSETS[@]}"} \
             --evidence /tmp/desktop-beta-qualification/qualification-evidence.json
 
       - name: Upload immutable qualification evidence
@@ -364,10 +366,12 @@ jobs:
           TARGET_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
           STABLE_DMG=/tmp/desktop-beta-qualification/assets/omi.dmg
           test -n "$STABLE_DMG"
-          # Side-by-side Omi Beta assets are optional until every release ships them.
-          BETA_EVIDENCE_ASSETS=""
+          # Side-by-side Omi Beta assets are optional until every release ships
+          # them. Use an array (not a word-split string) so the args stay quoted;
+          # the ${arr[@]+"${arr[@]}"} guard is empty-safe under set -u on bash 3.2.
+          BETA_EVIDENCE_ASSETS=()
           if [ -f /tmp/desktop-beta-qualification/assets/Omi.Beta.zip ]; then
-            BETA_EVIDENCE_ASSETS="--asset Omi.Beta.zip=/tmp/desktop-beta-qualification/assets/Omi.Beta.zip --asset omi-beta.dmg=/tmp/desktop-beta-qualification/assets/omi-beta.dmg"
+            BETA_EVIDENCE_ASSETS=(--asset Omi.Beta.zip=/tmp/desktop-beta-qualification/assets/Omi.Beta.zip --asset omi-beta.dmg=/tmp/desktop-beta-qualification/assets/omi-beta.dmg)
           fi
           python3 .github/scripts/desktop_qualification_evidence.py build \
             --release-json /tmp/desktop-beta-qualification/release.json \
@@ -376,7 +380,7 @@ jobs:
             --qualification-run-id "$GITHUB_RUN_ID" \
             --asset Omi.zip=/tmp/desktop-beta-qualification/assets/Omi.zip \
             --asset "omi.dmg=$STABLE_DMG" \
-            $BETA_EVIDENCE_ASSETS \
+            ${BETA_EVIDENCE_ASSETS[@]+"${BETA_EVIDENCE_ASSETS[@]}"} \
             --evidence /tmp/desktop-beta-qualification/qualification-evidence.json
 
       - name: Upload immutable qualification evidence
@@ -544,10 +548,12 @@ jobs:
           TARGET_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
           STABLE_DMG=/tmp/desktop-beta-qualification/assets/omi.dmg
           test -n "$STABLE_DMG"
-          # Side-by-side Omi Beta assets are optional until every release ships them.
-          BETA_EVIDENCE_ASSETS=""
+          # Side-by-side Omi Beta assets are optional until every release ships
+          # them. Use an array (not a word-split string) so the args stay quoted;
+          # the ${arr[@]+"${arr[@]}"} guard is empty-safe under set -u on bash 3.2.
+          BETA_EVIDENCE_ASSETS=()
           if [ -f /tmp/desktop-beta-qualification/assets/Omi.Beta.zip ]; then
-            BETA_EVIDENCE_ASSETS="--asset Omi.Beta.zip=/tmp/desktop-beta-qualification/assets/Omi.Beta.zip --asset omi-beta.dmg=/tmp/desktop-beta-qualification/assets/omi-beta.dmg"
+            BETA_EVIDENCE_ASSETS=(--asset Omi.Beta.zip=/tmp/desktop-beta-qualification/assets/Omi.Beta.zip --asset omi-beta.dmg=/tmp/desktop-beta-qualification/assets/omi-beta.dmg)
           fi
           python3 .github/scripts/desktop_qualification_evidence.py build \
             --release-json /tmp/desktop-beta-qualification/release.json \
@@ -556,7 +562,7 @@ jobs:
             --qualification-run-id "$GITHUB_RUN_ID" \
             --asset Omi.zip=/tmp/desktop-beta-qualification/assets/Omi.zip \
             --asset "omi.dmg=$STABLE_DMG" \
-            $BETA_EVIDENCE_ASSETS \
+            ${BETA_EVIDENCE_ASSETS[@]+"${BETA_EVIDENCE_ASSETS[@]}"} \
             --evidence /tmp/desktop-beta-qualification/qualification-evidence.json
 
       - name: Upload immutable qualification evidence
