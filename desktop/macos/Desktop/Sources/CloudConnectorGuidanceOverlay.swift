@@ -315,13 +315,25 @@ final class CloudConnectorGuidanceOverlay {
   }
 
   /// Drag-card placement: horizontally centered on the anchor (Settings window)
-  /// when there is one, and vertically centered within the bottom quarter of the
-  /// screen — below the Settings list, so the card never covers the drop target.
+  /// and pinned directly beneath it, so the card follows the window and never
+  /// covers the drop target. If there's no room below (Settings sits near the
+  /// screen bottom), flip to just above the window instead. With no anchor yet,
+  /// fall back to the bottom quarter of the screen.
   static func dragCardFrame(anchor: CGRect?, cardSize: CGSize, visibleFrame: CGRect) -> CGRect {
+    let gap: CGFloat = 12
+    let padding: CGFloat = 12
     let x = (anchor ?? visibleFrame).midX - cardSize.width / 2
-    let y = visibleFrame.minY + (visibleFrame.height / 4 - cardSize.height) / 2
+    let y: CGFloat
+    if let anchor {
+      // AppKit is bottom-left origin: the window's bottom edge is `minY`, so
+      // "under" the window is a smaller y.
+      let below = anchor.minY - gap - cardSize.height
+      y = below >= visibleFrame.minY + padding ? below : anchor.maxY + gap
+    } else {
+      y = visibleFrame.minY + (visibleFrame.height / 4 - cardSize.height) / 2
+    }
     let proposed = CGRect(x: x, y: y, width: cardSize.width, height: cardSize.height)
-    return SpatialOverlayGeometry.clamped(proposed, to: visibleFrame, padding: 12)
+    return SpatialOverlayGeometry.clamped(proposed, to: visibleFrame, padding: padding)
   }
 
   /// A named development bundle can have a much longer display name than the

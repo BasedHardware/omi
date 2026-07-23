@@ -73,6 +73,10 @@ final class SBOnboardingModel: ObservableObject {
   @Published var screenDemoLoading = false
   @Published var voiceHeard = false
   @Published var voiceAnswer: String?
+  /// True once Omi has actually answered the demo question (the notch shows a
+  /// response). The screen-demo Continue button stays hidden until then, so the
+  /// user can't skip past before seeing the "fun part" work.
+  @Published var screenDemoDone = false
   var voiceCancellable: AnyCancellable?
   var voiceTimeout: Task<Void, Never>?
 
@@ -93,7 +97,9 @@ final class SBOnboardingModel: ObservableObject {
   /// otherwise it's fetched from the backend after sign-in). `givenName` is plain
   /// UserDefaults, not observable, so without this a name landing after the name
   /// step already streamed would never fill in.
-  private var nameObserver: NSObjectProtocol?
+  /// `nonisolated(unsafe)` so the nonisolated `deinit` can remove it — the token is
+  /// only ever written on the main actor and `removeObserver` is thread-safe.
+  nonisolated(unsafe) private var nameObserver: NSObjectProtocol?
 
   init(appState: AppState, chatProvider: ChatProvider, onComplete: (() -> Void)?) {
     self.appState = appState
@@ -167,8 +173,10 @@ final class SBOnboardingModel: ObservableObject {
     case .context:
       return "The more I can see, the more I can help. Connect anything you want me to know:"
     case .capture:
+      // The shortcut chord is rendered as keycap chips in `captureWidget` (a
+      // streamed Text can't host inline keycap views), so it's omitted here.
       return
-        "You're all set, \(name). \(summonHint) reaches me anytime. One last thing: should I listen all the time, or only during your meetings?"
+        "You're all set, \(name). One last thing: should I listen all the time, or only during your meetings?"
     }
   }
 
@@ -180,11 +188,9 @@ final class SBOnboardingModel: ObservableObject {
     return "friend"
   }
 
-  /// Human hint for the chosen open-Omi shortcut, used in the capture copy.
-  var summonHint: String {
-    let tokens = ShortcutSettings.shared.askOmiShortcut.displayTokens
-    return tokens.isEmpty ? "Your shortcut" : tokens.joined()
-  }
+  /// The chosen open-Omi chord as individual tokens, rendered as keycap chips in
+  /// `captureWidget` (e.g. ⌘ + O) rather than plain glyphs in the message copy.
+  var summonTokens: [String] { ShortcutSettings.shared.askOmiShortcut.displayTokens }
 
   // MARK: lifecycle
 
@@ -204,8 +210,10 @@ final class SBOnboardingModel: ObservableObject {
     // granted before the quit shows ✓ rather than prompting again.
     let savedRaw = UserDefaults.standard.integer(forKey: Self.resumeStepKey)
     if savedRaw > Step.promise.rawValue, let resumed = Step(rawValue: savedRaw) {
-      step = resumed
-      streamMessage(for: resumed)
+      // Skip a resumed permission step the user granted while away.
+      let target = firstUnaskedStep(from: resumed)
+      step = target
+      streamMessage(for: target)
       return
     }
     streamMessage(for: .promise)
@@ -266,9 +274,12 @@ final class SBOnboardingModel: ObservableObject {
       thread.append(Msg(isOmi: false, text: userAnswer))
     }
     teardownStep(step)
-    step = next
-    UserDefaults.standard.set(next.rawValue, forKey: Self.resumeStepKey)
-    streamMessage(for: next)
+    // Don't ask for a permission the user has already granted — skip straight to
+    // the first step that still needs an answer.
+    let target = firstUnaskedStep(from: next)
+    step = target
+    UserDefaults.standard.set(target.rawValue, forKey: Self.resumeStepKey)
+    streamMessage(for: target)
   }
 
   /// Tear down any live monitors/tasks a step installed before leaving it.

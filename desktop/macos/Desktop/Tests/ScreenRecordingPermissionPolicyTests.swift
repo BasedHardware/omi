@@ -140,10 +140,11 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
     XCTAssertEqual(CloudConnectorGuidanceOverlay.dragCardInitialAlpha(reduceMotion: true), 1)
   }
 
-  /// The drag card sits centered in the bottom quarter of the screen (below the
-  /// Settings list, never covering the drop target), x-centered on the anchor.
+  /// The drag card pins directly beneath the Settings window (x-centered on it,
+  /// its top a fixed gap below the window's bottom edge) so it follows the window
+  /// and never covers the drop target.
   @MainActor
-  func testDragCardSitsInBottomQuarterOfScreen() {
+  func testDragCardSitsDirectlyUnderSettingsWindow() {
     let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
     let card = CGSize(width: 180, height: 164)
     let anchor = CGRect(x: 900, y: 300, width: 600, height: 500)
@@ -151,9 +152,32 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
     let frame = CloudConnectorGuidanceOverlay.dragCardFrame(
       anchor: anchor, cardSize: card, visibleFrame: visible)
     XCTAssertEqual(frame.midX, anchor.midX)
-    XCTAssertLessThanOrEqual(frame.maxY, visible.minY + visible.height / 4)
+    // Sits below the window's bottom edge (minY) with a 12pt gap, not covering it.
+    XCTAssertEqual(frame.maxY, anchor.minY - 12)
+  }
 
-    // No anchor → centered on the screen, still in the bottom quarter.
+  /// When the Settings window sits too low to fit the card beneath it, the card
+  /// flips to just above the window rather than clamping back over the drop target.
+  @MainActor
+  func testDragCardFlipsAboveWhenNoRoomBelow() {
+    let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+    let card = CGSize(width: 180, height: 164)
+    // Low, short window: no 164pt of room below its bottom edge (minY = 20).
+    let anchor = CGRect(x: 900, y: 20, width: 600, height: 200)
+
+    let frame = CloudConnectorGuidanceOverlay.dragCardFrame(
+      anchor: anchor, cardSize: card, visibleFrame: visible)
+    XCTAssertEqual(frame.midX, anchor.midX)
+    XCTAssertGreaterThanOrEqual(frame.minY, anchor.maxY)
+  }
+
+  /// With no Settings window detected yet, the card falls back to the bottom
+  /// quarter of the screen, centered horizontally.
+  @MainActor
+  func testDragCardFallsBackToBottomQuarterWithoutAnchor() {
+    let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+    let card = CGSize(width: 180, height: 164)
+
     let centered = CloudConnectorGuidanceOverlay.dragCardFrame(
       anchor: nil, cardSize: card, visibleFrame: visible)
     XCTAssertEqual(centered.midX, visible.midX)

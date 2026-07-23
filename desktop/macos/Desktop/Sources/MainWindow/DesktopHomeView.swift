@@ -4,6 +4,21 @@ import SwiftUI
 
 private struct AnySendableBox: @unchecked Sendable { let value: Any? }
 
+/// Decides whether a persisted capture intent needs its runtime service restored.
+///
+/// Intent is stored independently from the running services. A fresh launch and a
+/// settings sync therefore both need to reconcile the two states instead of using
+/// a one-time readiness check as the source of truth.
+enum PersistedCaptureLaunchPolicy {
+  static func shouldStartTranscription(intentEnabled: Bool, isTranscribing: Bool) -> Bool {
+    intentEnabled && !isTranscribing
+  }
+
+  static func shouldStartScreenAnalysis(intentEnabled: Bool, isMonitoring: Bool) -> Bool {
+    intentEnabled && !isMonitoring
+  }
+}
+
 // MARK: - NSHostingView sizingOptions access
 
 /// Protocol to access sizingOptions on any NSHostingView<Content> regardless of the generic parameter.
@@ -46,13 +61,12 @@ struct DesktopHomeView: View {
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
   @State private var highlightedSettingId: String? = nil
   @State private var showTryAskingPopup = false
-  /// Post-onboarding coach-mark walkthrough: nil = inactive, else current step index.
-  @State private var walkthroughStep: Int? = nil
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
   @State private var lastActivationRefresh = Date.distantPast
   @State private var didScheduleAgentVMProvisioning = false
   @State private var proactiveMonitoringStartGate = RetryableDelayedStartGate()
+  @State private var isWaitingForScreenAnalysisKeys = false
   // Anchor for the proactive-monitoring warmup budget. Captured at view
   // creation (≈ launch) so the delay is spent once per session, not once per
   // trigger — see StartupWarmupPolicy.remainingProactiveAssistantsStartDelay.
@@ -129,13 +143,10 @@ struct DesktopHomeView: View {
             .onAppear {
               if UserDefaults.standard.bool(forKey: "onboardingJustCompleted") {
                 UserDefaults.standard.removeObject(forKey: "onboardingJustCompleted")
-                log("DesktopHomeView: Onboarding just completed — starting UI walkthrough")
-                // Land on Home; the top bar's nav pills (always visible) are what
-                // the coach-marks spotlight, so keep the chat-first layout with the
-                // old rail collapsed rather than expanding it.
+                log("DesktopHomeView: Onboarding just completed — landing on Home")
+                // Land on Home in the chat-first layout with the old rail collapsed.
                 selectedIndex = SidebarNavItem.dashboard.rawValue
                 isSidebarCollapsed = true
-                walkthroughStep = 0
               }
             }
           mainContent
@@ -167,9 +178,6 @@ struct DesktopHomeView: View {
                 )
               }
             }
-            .overlayPreferenceValue(SidebarCoachAnchorKey.self) { anchors in
-              walkthroughOverlay(anchors)
-            }
             .overlay(alignment: .top) {
               if let policy = updatePolicyManager.visiblePolicy, !policy.isRequired {
                 DesktopUpdatePolicyBanner(
@@ -197,22 +205,6 @@ struct DesktopHomeView: View {
                 && !UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing")
               {
                 scheduleInitialFileIndexing()
-              }
-
-              let settings = AssistantSettings.shared
-
-              // Auto-start transcription if enabled in settings.
-              // If API keys aren't loaded yet, onChange below retries.
-              if settings.transcriptionEnabled && !appState.isTranscribing {
-                if APIKeyService.keysAvailable {
-                  log("DesktopHomeView: Auto-starting transcription")
-                  appState.startTranscription()
-                } else {
-                  log("DesktopHomeView: Deferring transcription — API keys not yet loaded")
-                  Task { await APIKeyService.shared.waitForKeys() }
-                }
-              } else if !settings.transcriptionEnabled {
-                log("DesktopHomeView: Transcription disabled in settings, skipping auto-start")
               }
 
               // Migration: one-time reset for users whose screenAnalysisEnabled
@@ -246,19 +238,7 @@ struct DesktopHomeView: View {
                 log("DesktopHomeView: Restored screen capture default for quiet named bundle")
               }
 
-              // Start proactive assistants monitoring if enabled in settings.
-              // If API keys aren't loaded yet, this may fail — onChange below retries.
-              if settings.screenAnalysisEnabled {
-                if APIKeyService.keysAvailable {
-                  scheduleProactiveMonitoringStart(reason: "launch")
-                } else {
-                  log(
-                    "DesktopHomeView: Deferring screen analysis — API keys not yet loaded"
-                  )
-                }
-              } else {
-                log("DesktopHomeView: Screen analysis disabled in settings, skipping auto-start")
-              }
+              restorePersistedCaptureServices(reason: "launch")
 
               // Start Crisp chat in background for notifications, scoped to the signed-in user
               CrispManager.shared.start(
@@ -295,31 +275,17 @@ struct DesktopHomeView: View {
                 Task { await appState.refreshConversations() }
               }
               updatePolicyManager.refresh()
-              // Auto-start monitoring when returning to app if screen analysis is enabled
-              // but monitoring is not running. Handles the case where the user granted
-              // screen recording permission in System Settings and switched back.
-              let plugin = ProactiveAssistantsPlugin.shared
-              if AssistantSettings.shared.screenAnalysisEnabled && !plugin.isMonitoring {
-                plugin.refreshScreenRecordingPermission()
-                if plugin.hasScreenRecordingPermission {
-                  log("DesktopHomeView: Permission available on app active — scheduling monitoring")
-                  scheduleProactiveMonitoringStart(reason: "app active")
-                }
-              }
+              // Reconcile persisted intent after returning from System Settings or
+              // after a runtime service stopped while the app was inactive.
+              restorePersistedCaptureServices(reason: "app active")
             }
             .onChange(of: apiKeyService.isLoaded) { _, loaded in
               guard loaded else { return }
               log("DesktopHomeView: API keys loaded — retrying deferred services")
-              // Retry transcription
-              if AssistantSettings.shared.transcriptionEnabled && !appState.isTranscribing {
-                log("DesktopHomeView: Starting deferred transcription")
-                appState.startTranscription()
-              }
-              // Retry screen analysis
-              let plugin = ProactiveAssistantsPlugin.shared
-              if AssistantSettings.shared.screenAnalysisEnabled && !plugin.isMonitoring {
-                scheduleProactiveMonitoringStart(reason: "key load")
-              }
+              restorePersistedCaptureServices(reason: "key load")
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidSyncFromServer)) { _ in
+              reconcileCaptureServicesAfterSettingsSync()
             }
             // Cmd+R: refresh all data (conversations, chat, tasks, memories)
             .onReceive(NotificationCenter.default.publisher(for: .refreshAllData)) { _ in
@@ -939,62 +905,68 @@ struct DesktopHomeView: View {
     if !scheduled { proactiveMonitoringStartGate.finishAttempt() }
   }
 
+  private func restorePersistedCaptureServices(reason: String) {
+    let settings = AssistantSettings.shared
+    if PersistedCaptureLaunchPolicy.shouldStartTranscription(
+      intentEnabled: settings.transcriptionEnabled,
+      isTranscribing: appState.isTranscribing
+    ) {
+      log("DesktopHomeView: Restoring transcription from persisted intent (\(reason))")
+      // Local transcription does not require remote API keys. AppState owns the
+      // permission and provider checks, so it remains the single start boundary.
+      appState.startTranscription()
+    }
+
+    let plugin = ProactiveAssistantsPlugin.shared
+    guard
+      PersistedCaptureLaunchPolicy.shouldStartScreenAnalysis(
+        intentEnabled: settings.screenAnalysisEnabled,
+        isMonitoring: plugin.isMonitoring
+      )
+    else { return }
+
+    guard APIKeyService.keysAvailable else {
+      waitForScreenAnalysisKeys(reason: reason)
+      return
+    }
+
+    plugin.refreshScreenRecordingPermission()
+    guard plugin.hasScreenRecordingPermission else {
+      log("DesktopHomeView: Screen recording permission unavailable; retaining capture intent (\(reason))")
+      return
+    }
+    scheduleProactiveMonitoringStart(reason: reason)
+  }
+
+  private func waitForScreenAnalysisKeys(reason: String) {
+    guard !isWaitingForScreenAnalysisKeys else { return }
+    isWaitingForScreenAnalysisKeys = true
+    log("DesktopHomeView: Deferring screen analysis until API keys load (\(reason))")
+    Task { @MainActor in
+      await APIKeyService.shared.waitForKeys()
+      isWaitingForScreenAnalysisKeys = false
+      guard APIKeyService.keysAvailable else {
+        log("DesktopHomeView: API keys remain unavailable; retaining capture intent")
+        return
+      }
+      restorePersistedCaptureServices(reason: "key wait completed")
+    }
+  }
+
+  private func reconcileCaptureServicesAfterSettingsSync() {
+    let plugin = ProactiveAssistantsPlugin.shared
+    if !AssistantSettings.shared.screenAnalysisEnabled, plugin.isMonitoring {
+      log("DesktopHomeView: Stopping screen analysis after server settings sync")
+      plugin.stopMonitoring()
+    }
+    restorePersistedCaptureServices(reason: "settings sync")
+  }
+
   private func updateStoreActivity(for index: Int) {
     viewModelContainer.tasksStore.isActive =
       index == SidebarNavItem.dashboard.rawValue || index == SidebarNavItem.tasks.rawValue
     viewModelContainer.memoriesViewModel.isActive =
       index == SidebarNavItem.memories.rawValue
-  }
-
-  // MARK: - Post-onboarding UI walkthrough (coach-marks)
-
-  // Anchored to the top bar's nav pills (Home, Memory, Tasks, Apps) + the
-  // Capture/Listening controls — see DesktopTopBar's `.anchorPreference`s.
-  private static let walkthroughSteps: [OnboardingCoachStep] = [
-    .init(
-      itemRawValue: SidebarNavItem.dashboard.rawValue, title: "Home",
-      body: "Your day at a glance, and where you talk to me."),
-    .init(
-      itemRawValue: SidebarNavItem.conversations.rawValue, title: "Memory",
-      body: "Everything I hear and remember, with a live transcript as you speak."),
-    .init(
-      itemRawValue: SidebarNavItem.tasks.rawValue, title: "Tasks",
-      body: "The to-dos I pull out of your day, all in one place."),
-    .init(
-      itemRawValue: SidebarNavItem.apps.rawValue, title: "Apps",
-      body: "Connect tools and extend what I can do."),
-    .init(
-      itemRawValue: SidebarCoachAnchorKey.captureAnchorID, title: "Capture",
-      body: "Start or pause listening here, and rewind to replay what I just heard."),
-  ]
-
-  @ViewBuilder private func walkthroughOverlay(_ anchors: [Int: Anchor<CGRect>]) -> some View {
-    if let step = walkthroughStep {
-      OnboardingWalkthroughOverlay(
-        steps: Self.walkthroughSteps,
-        index: step,
-        anchors: anchors,
-        onNext: { advanceWalkthrough() },
-        onSkip: { finishWalkthrough() }
-      )
-    }
-  }
-
-  private func advanceWalkthrough() {
-    guard let step = walkthroughStep else { return }
-    if step + 1 < Self.walkthroughSteps.count {
-      walkthroughStep = step + 1
-    } else {
-      finishWalkthrough()
-    }
-  }
-
-  private func finishWalkthrough() {
-    walkthroughStep = nil
-    isSidebarCollapsed = true
-    // Land in the normal chat-first Home (the regular chat the user uses day to
-    // day), not a separate Chat tab — onboarding shouldn't have its own chat UI.
-    selectedIndex = SidebarNavItem.dashboard.rawValue
   }
 
   private var mainContent: some View {
@@ -1317,21 +1289,8 @@ private struct PageContentView: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
-  /// Tabs that float the persistent "Ask omi anything" bar over their content:
-  /// Memory hub, Memories, and Tasks. Home (Dashboard) already owns its bar.
-  private static let floatingAskBarTabs: Set<Int> = [1, 3, 4]
-
   var body: some View {
     pages
-    // Floating ask-bar experiment shelved for launch (Nik, Jul 22 2026) — the
-    // omi-askbar test bundle showed it working; re-enable by restoring:
-    // .overlay(alignment: .bottom) {
-    //   if Self.floatingAskBarTabs.contains(selectedIndex) {
-    //     FloatingPageAskBar(
-    //       chatProvider: viewModelContainer.chatProvider,
-    //       selectedTabIndex: $selectedTabIndex)
-    //   }
-    // }
   }
 
   @ViewBuilder

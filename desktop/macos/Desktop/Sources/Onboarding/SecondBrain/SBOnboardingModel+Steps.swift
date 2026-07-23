@@ -80,6 +80,23 @@ extension SBOnboardingModel {
         self.refreshPermCheck(key)
         if self.isGranted(key) {
           self.setPermOn(key)
+          // System audio needs a SEPARATE Core Audio tap consent (the "bypass the
+          // private window picker … screen and audio" prompt) beyond the Screen
+          // Recording TCC this step grants. Prime it here — in-context on this step,
+          // and awaited BEFORE we advance — so the modal surfaces on the system-audio
+          // step (not a later one) and the real capture path never re-prompts after
+          // onboarding. Screen Recording (which the tap requires) is granted now.
+          if key == "system_audio", #available(macOS 14.4, *) {
+            _ = await SystemAudioCaptureService.primePermission()
+            guard !Task.isCancelled else { return }
+          }
+          // Auto-advance once the grant lands — the user shouldn't have to click
+          // Continue after granting. Brief pause so the ✓ is visible, then only
+          // advance if they're still on this permission's step (a late poll for a
+          // step already left must never yank the flow forward).
+          try? await Task.sleep(nanoseconds: 600_000_000)
+          guard !Task.isCancelled else { return }
+          self.autoAdvanceIfCurrent(key)
           return
         }
       }
@@ -108,7 +125,16 @@ extension SBOnboardingModel {
   /// shows ✓ instead of an Allow button they'd tap for nothing.
   func precheckPerm(_ key: String) {
     refreshPermCheck(key)
-    if isGranted(key) { setPermOn(key) }
+    if isGranted(key) {
+      setPermOn(key)
+      // If the user lands on the system-audio step already holding Screen Recording,
+      // prime the separate Core Audio tap consent here (in-context) so it isn't
+      // deferred to the first capture after onboarding. precheck doesn't advance, so
+      // fire-and-forget is fine — the modal shows while this step is on screen.
+      if key == "system_audio", #available(macOS 14.4, *) {
+        Task.detached { _ = await SystemAudioCaptureService.primePermission() }
+      }
+    }
   }
 
   func isGranted(_ key: String) -> Bool {
@@ -134,6 +160,15 @@ extension SBOnboardingModel {
       // flips to "on" when FDA is granted from the context step — its poll only
       // drives fdaState, unlike every other connector that writes back its own state.
       contextStates["files"] = "on"
+      // Apple Notes reads through the same FDA grant, so re-probe it here too —
+      // otherwise granting FDA leaves Notes showing a pointless "Connect" button.
+      if contextStates["applenotes"] != "on" {
+        Task { [weak self] in
+          if await AppleNotesReaderService.shared.connectionStatus().isConnected {
+            self?.contextStates["applenotes"] = "on"
+          }
+        }
+      }
     case "accessibility": accState = .on
     case "automation": autoState = .on
     default: break
@@ -172,6 +207,51 @@ extension SBOnboardingModel {
   func answerFiles() { advance(userAnswer: fdaState == .on ? "Allowed" : "Skip", to: .accessibility) }
   func answerAccessibility() { advance(userAnswer: accState == .on ? "Allowed" : "Skip", to: .automation) }
   func answerAutomation() { advance(userAnswer: autoState == .on ? "Allowed" : "Skip", to: .shortcutOpen) }
+
+  /// Advance past a permission step automatically once its grant lands — but only
+  /// when the user is still ON that step, so a late poll never skips a step they've
+  /// already moved past.
+  func autoAdvanceIfCurrent(_ key: String) {
+    guard permissionKey(for: step) == key, permState(key) == .on else { return }
+    switch step {
+    case .mic: answerMic()
+    case .systemAudio: answerSystemAudio()
+    case .screen: answerScreen()
+    case .files: answerFiles()
+    case .accessibility: answerAccessibility()
+    case .automation: answerAutomation()
+    default: break
+    }
+  }
+
+  /// The permission key a step gates on, or nil for non-permission steps.
+  func permissionKey(for step: Step) -> String? {
+    switch step {
+    case .mic: return "microphone"
+    case .systemAudio: return "system_audio"
+    case .screen: return "screen_recording"
+    case .files: return "full_disk_access"
+    case .accessibility: return "accessibility"
+    case .automation: return "automation"
+    default: return nil
+    }
+  }
+
+  /// Starting at `target`, skip past any permission step whose permission is
+  /// already granted — so the user is never asked for something they've already
+  /// given (matches the legacy onboarding's live permission detection). Refreshes
+  /// each permission's TCC state before deciding, and reflects the grant so the
+  /// row is already ✓ if we ever land on it. Returns the first step to actually ask.
+  func firstUnaskedStep(from target: Step) -> Step {
+    var step = target
+    while let key = permissionKey(for: step) {
+      refreshPermCheck(key)
+      guard isGranted(key), let next = Step(rawValue: step.rawValue + 1) else { break }
+      setPermOn(key)
+      step = next
+    }
+    return step
+  }
 }
 
 // MARK: - Summon shortcut (pick → press → notch)
@@ -322,11 +402,18 @@ extension SBOnboardingModel {
   /// attached automatically for screen-aware questions; the answer streams into
   /// the notch, which spins while Omi is thinking.
   func startScreenDemo() {
+    screenDemoDone = false
     FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
     FloatingControlBarManager.shared.barState?.switchAIDraft(to: .onboardingFloating)
     resetFloatingBarConversation()
     if let bar = FloatingControlBarManager.shared.barState {
       PushToTalkManager.shared.setup(barState: bar)
+      // Mark the demo done the first time Omi actually responds in the notch, so
+      // the Continue button only appears once the user has seen it work.
+      voiceCancellable = bar.$showingAIResponse
+        .filter { $0 }
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] _ in self?.screenDemoDone = true }
     }
     ShortcutSettings.shared.pttTranscriptionModeDemoOverride = .live
     Task { await chatProvider.warmupBridge() }
@@ -345,6 +432,7 @@ extension SBOnboardingModel {
     voiceTimeout?.cancel()
     voiceTimeout = nil
     voiceCancellable = nil
+    screenDemoDone = false
     ShortcutSettings.shared.pttTranscriptionModeDemoOverride = nil
     resetFloatingBarConversation()
     PushToTalkManager.shared.cleanup()
@@ -413,7 +501,7 @@ extension SBOnboardingModel {
       for row in self.agentRows {
         // Only offer Connect for agents actually present on this Mac; otherwise
         // mark "unavailable" so the row shows "not installed" with no button.
-        let installed = await Self.agentInstalled(row.id)
+        let installed = await Self.agentInstalled(self.agentDestination(row.id))
         guard installed else {
           self.agentStates[row.id] = "unavailable"
           continue
@@ -424,20 +512,12 @@ extension SBOnboardingModel {
     }
   }
 
-  /// Best-effort local install probe: presence of the tool's config/home dir.
-  private static func agentInstalled(_ id: String) async -> Bool {
-    await Task.detached {
-      let home = FileManager.default.homeDirectoryForCurrentUser
-      let fm = FileManager.default
-      func exists(_ rel: String) -> Bool { fm.fileExists(atPath: home.appendingPathComponent(rel).path) }
-      switch id {
-      case "openclaw": return exists(".openclaw")
-      case "hermes": return exists(".hermes")
-      case "claudeCode": return exists(".claude.json") || exists(".claude")
-      case "codex": return exists(".codex")
-      default: return false
-      }
-    }.value
+  /// Local install probe using the SAME evidence the real connect path requires,
+  /// so a row never offers "Connect" and then flips to "not installed" on click
+  /// (e.g. Codex: a stray `~/.codex` dir is not enough — the connector needs the
+  /// `codex` binary on PATH). Delegates to `MemoryBankConnector.isInstalled`.
+  private static func agentInstalled(_ destination: MemoryExportDestination) async -> Bool {
+    await Task.detached { MemoryBankConnector.isInstalled(destination) }.value
   }
 
   func connectAgent(_ id: String) {
@@ -482,8 +562,19 @@ extension SBOnboardingModel {
         let dest: MemoryExportDestination = id == "chatgpt" ? .chatgpt : .claude
         if await MemoryExportService.shared.status(for: dest).hasConnection { self.contextStates[id] = "on" }
       }
+      // Apple Notes rides the same Full Disk Access grant that powers Files, so a
+      // readable NoteStore should show "✓ on" up front — not a "Connect" button
+      // that would only flip to on for nothing (this precheck was missing, which
+      // made the row look fake).
+      if self.contextStates["applenotes"] != "on",
+        await AppleNotesReaderService.shared.connectionStatus().isConnected
+      {
+        self.contextStates["applenotes"] = "on"
+      }
       let cal = await CalendarReaderService.shared.verifyConnection()
       if cal.isConnected { self.contextStates["calendar"] = "on" }
+      let gmail = await GmailReaderService.shared.verifyConnection()
+      if gmail.isConnected { self.contextStates["gmail"] = "on" }
     }
   }
 
