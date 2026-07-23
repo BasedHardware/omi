@@ -3547,8 +3547,6 @@ export interface UserWebhooksStatusResponse {
 }
 
 export interface ValidationError {
-  ctx?: Record<string, unknown>;
-  input?: unknown;
   loc: Array<string | number>;
   msg: string;
   type: string;
