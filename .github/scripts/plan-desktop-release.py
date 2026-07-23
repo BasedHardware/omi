@@ -17,7 +17,11 @@ REQUIRED_SOURCE_CHECK_NAMES = (
     "Desktop Swift Release Compile",
 )
 RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60
-AUTO_RELEASE_QUIET_SECONDS = 10 * 60
+# Short debounce so a merge is tagged within ~a minute instead of waiting ten.
+# The one-active-release fence (Codemagic build status on the latest tag) already
+# collapses rapid bursts to the newest SHA while a build runs, so this window only
+# needs to coalesce near-simultaneous merges, not batch a whole feature.
+AUTO_RELEASE_QUIET_SECONDS = 60
 DESKTOP_RELEASE_PATHS = (
     "desktop/macos",
     "codemagic.yaml",
