@@ -452,7 +452,21 @@ struct SBOnboardingView: View {
           .geist(size: 12.5).foregroundStyle(sb.ink(.w45))
           .fixedSize(horizontal: false, vertical: true)
       }
-      SBInkButton(title: "Continue") { model.answerScreenDemo() }
+      // Continue only appears once Omi has actually answered in the notch — before
+      // that, a quiet "Skip for now" so the user doesn't blow past the live demo.
+      Group {
+        if model.screenDemoDone {
+          SBInkButton(title: "Continue") { model.answerScreenDemo() }
+        } else {
+          Button {
+            model.answerScreenDemo()
+          } label: {
+            Text("Skip for now").geist(size: 13).foregroundStyle(sb.ink(.w35))
+          }
+          .buttonStyle(.plain)
+        }
+      }
+      .padding(.top, 6)
     }
     .frame(maxWidth: 380, alignment: .leading)
   }
@@ -538,6 +552,16 @@ struct SBOnboardingView: View {
 
   private var captureWidget: some View {
     VStack(spacing: 8) {
+      // The chosen open-Omi chord as keycap chips (e.g. ⌘ O), matching the ⌥ keycap
+      // on the demo step — instead of plain "⌘O" glyphs buried in the message copy.
+      if !model.summonTokens.isEmpty {
+        HStack(spacing: 5) {
+          ForEach(model.summonTokens, id: \.self) { tok in keycap(tok) }
+          Text("reaches me anytime").geist(size: 14).foregroundStyle(sb.ink(.w85))
+          Spacer(minLength: 0)
+        }
+        .padding(.bottom, 2)
+      }
       Button {
         model.captureContinuous()
       } label: {
