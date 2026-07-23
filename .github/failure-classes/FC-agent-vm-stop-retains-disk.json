@@ -4,7 +4,8 @@
   "violated_contract": "An idle-stopped omi-agent GCE instance must not retain a billable boot disk indefinitely; stop is not delete, and autoDelete only runs on instance deletion.",
   "canonical_prevention": "Run a dry-run-first, workload-identity-bound reaper that deletes aged TERMINATED (and abandoned RUNNING) omi-agent instances on a schedule; keep the client NOT_FOUND → re-provision + DB re-upload path as the resume contract after delete.",
   "evidence_prs": [
-    7596
+    7596,
+    10390
   ],
   "scope_hints": [
     "backend/charts/agent-vm-reaper/**",
