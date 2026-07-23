@@ -17,6 +17,7 @@ covers:
   - desktop/macos/Desktop/Sources/Auth/AuthStorageCanary.swift
   - desktop/macos/Desktop/Sources/DesktopKeychainStore.swift
   - desktop/macos/Desktop/Sources/Logger.swift
+  - desktop/macos/Desktop/Sources/Observability/SentryBeforeSendPolicy.swift
   - desktop/macos/Desktop/Sources/ClientDeviceService.swift
   - desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift
   - desktop/macos/Desktop/Sources/AgentSyncService.swift

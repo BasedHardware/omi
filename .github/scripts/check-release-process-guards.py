@@ -557,6 +557,7 @@ def check_desktop_codemagic_release() -> list[str]:
     required_files = [
         "desktop/macos/scripts/prepare-agent-runtime.sh",
         "desktop/macos/scripts/prepare-desktop-bundle-native-deps.sh",
+        "desktop/macos/scripts/publish-desktop-debug-symbols.sh",
         "desktop/macos/scripts/audit-desktop-bundle-deps.sh",
         "desktop/macos/scripts/smoke-signed-desktop-artifact.sh",
         "desktop/macos/scripts/test-tool-surfaces.sh",
@@ -580,6 +581,15 @@ def check_desktop_codemagic_release() -> list[str]:
         desktop_workflow_body = ""
     else:
         desktop_workflow_body = desktop_workflow_match.group("body")
+
+    for required_fragment in (
+        "publish-desktop-debug-symbols.sh generate",
+        "publish-desktop-debug-symbols.sh upload",
+        '"$DSYM_ARCHIVE"',
+        "- build/*.dSYM",
+    ):
+        if required_fragment not in desktop_workflow_body:
+            errors.append(f"desktop release is missing fail-closed debug-symbol publication: {required_fragment}")
 
     smoke_index = desktop_workflow_body.find("Smoke signed desktop artifact")
     release_index = desktop_workflow_body.find("Create GitHub release")

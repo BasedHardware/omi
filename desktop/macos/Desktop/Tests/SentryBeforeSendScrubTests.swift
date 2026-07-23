@@ -48,6 +48,12 @@ final class SentryBeforeSendScrubTests: XCTestCase {
       "non-report dev events pollute production Sentry data and must be dropped")
   }
 
+  func testDropsHeartbeatIssueEventButKeepsNormalProductionEvents() {
+    XCTAssertTrue(drop(message: "Session Heartbeat"))
+    XCTAssertTrue(drop(message: "  session heartbeat\n"))
+    XCTAssertFalse(drop(message: "Session refresh failed"))
+  }
+
   func testDropsLocalAndTunnelUrlTaggedErrors() {
     for u in [
       "http://localhost:8080/v1/x", "https://127.0.0.1:9000/y",
