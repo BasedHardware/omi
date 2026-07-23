@@ -116,7 +116,13 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
 
     def test_workflow_has_no_input_manual_trigger_and_tags_the_changelog_commit(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("workflow_dispatch:\n  schedule:", workflow)
+        # workflow_dispatch stays bare (no manual inputs). Auto-release now also
+        # fires on macOS-affecting merges to main (push) so a candidate is planned
+        # within minutes; the schedule remains as a backstop for merges that land
+        # inside the quiet window. No `inputs:` may appear in the trigger block.
+        self.assertIn("  workflow_dispatch:\n", workflow)
+        self.assertNotIn("inputs:", workflow.split("\njobs:", 1)[0])
+        self.assertIn("  push:\n    branches: [main]", workflow)
         self.assertIn("- cron: '17 * * * *'", workflow)
         self.assertNotIn("break_glass", workflow)
         self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
