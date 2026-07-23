@@ -1,3 +1,4 @@
+import AppKit
 import OmiTheme
 import SwiftUI
 
@@ -13,7 +14,26 @@ struct DesktopTopBar: View {
   /// Items created after this instant count as "new" — updated whenever Omi
   /// last resigned front (see DesktopHomeView).
   let sinceDate: Date
+  /// Leading inset that clears the window traffic lights when the bar rides in
+  /// the hidden-titlebar band with no sidebar to its left.
+  var leadingInset: CGFloat = 0
+  /// When true the leading chip reads "Back to app" and closes settings; when
+  /// false it reads "Settings" and opens them. Same control, it just morphs.
+  var isInSettings: Bool = false
   let onRewind: () -> Void
+  /// Toggles the settings sidebar open/closed. Owned by DesktopHomeView so the
+  /// back-navigation target (previous tab) stays correct.
+  var onToggleSettings: () -> Void = {}
+
+  /// Drives the sliding selection inside the segmented nav control.
+  @Namespace private var navSegmentNamespace
+
+  private static let logoImage: NSImage? = {
+    guard let url = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png") else {
+      return nil
+    }
+    return NSImage(contentsOf: url)
+  }()
 
   private struct NavItem: Identifiable {
     let index: Int
@@ -42,74 +62,132 @@ struct DesktopTopBar: View {
   }
 
   var body: some View {
-    HStack(spacing: OmiSpacing.md) {
+    VStack(spacing: OmiSpacing.xs) {
+      // Row 1 — toolbar aligned with the traffic lights: the Settings chip sits
+      // by them (only while closed — in settings "Back to app" lives on the
+      // sidebar glass), the Omi identity is centered, capture on the right.
+      ZStack {
+        omiIdentity
+
+        HStack(spacing: OmiSpacing.md) {
+          if !isInSettings {
+            settingsChip
+              .padding(.leading, leadingInset)
+              .transition(.opacity)
+          }
+          Spacer(minLength: OmiSpacing.md)
+          CaptureListeningControls(appState: appState, onRewind: onRewind)
+        }
+      }
+      .frame(height: 34)
+
+      // Row 2 — the segmented primary nav, centered below the identity.
       navPills
-      Spacer(minLength: OmiSpacing.md)
-      CaptureListeningControls(appState: appState, onRewind: onRewind)
-      settingsButton
     }
-    .frame(height: 44)
     .padding(.horizontal, OmiSpacing.lg)
-    .padding(.vertical, OmiSpacing.sm)
+    .padding(.top, 10)
+    .padding(.bottom, OmiSpacing.sm)
+    .background(WindowDragArea())
   }
 
-  /// Gear that opens Settings. The old left rail held the settings/profile entry;
-  /// with the rail gone this is the only visible way in (⌘, still works too).
-  private var settingsButton: some View {
-    let isActive = selectedIndex == SidebarNavItem.settings.rawValue
-    return Button {
-      OmiMotion.withGated(.easeOut(duration: 0.08)) {
-        selectedIndex = SidebarNavItem.settings.rawValue
+  /// The app identity beside the window controls: mark + wordmark, centered.
+  private var omiIdentity: some View {
+    HStack(spacing: OmiSpacing.xs) {
+      if let logo = Self.logoImage {
+        Image(nsImage: logo)
+          .resizable()
+          .scaledToFit()
+          .frame(width: 18, height: 18)
       }
-    } label: {
-      Image(systemName: "gearshape")
-        .scaledFont(size: OmiType.body, weight: .semibold)
-        .foregroundColor(isActive ? OmiColors.textPrimary : OmiColors.textTertiary)
-        .frame(width: 32, height: 32)
-        .background(Circle().fill(isActive ? OmiColors.textPrimary.opacity(0.08) : Color.clear))
-        .contentShape(Circle())
+      Text("Omi")
+        .scaledFont(size: OmiType.subheading, weight: .semibold)
+        .foregroundColor(OmiColors.textPrimary)
+    }
+    .allowsHitTesting(false)
+  }
+
+  /// Opens settings. It sits by the traffic lights; when settings is open the
+  /// matching "Back to app" control lives on the sidebar glass instead.
+  private var settingsChip: some View {
+    Button(action: onToggleSettings) {
+      HStack(spacing: OmiSpacing.sm) {
+        Image(systemName: "gearshape")
+          .scaledFont(size: OmiType.body, weight: .semibold)
+          .frame(width: 18, height: 18)
+        Text("Settings")
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+      }
+      .foregroundColor(OmiColors.textTertiary)
+      .padding(.horizontal, OmiSpacing.md)
+      .frame(height: 34)
+      .background(
+        Capsule(style: .continuous)
+          .fill(Color.white.opacity(0.05))
+          .overlay(Capsule(style: .continuous).stroke(Color.white.opacity(0.07), lineWidth: 1))
+      )
+      .contentShape(Capsule())
     }
     .buttonStyle(.plain)
     .help("Settings")
   }
 
   private var navPills: some View {
-    // Flat, containerless nav so the bar blends with the chat page: unselected
-    // items are muted text; the selected item gets a subtle highlight only.
-    HStack(spacing: OmiSpacing.xs) {
+    // Segmented control: one rounded track holds the four primary tabs and the
+    // selected segment's fill slides between them via matchedGeometry, so it
+    // reads as a single native control instead of loose pills.
+    HStack(spacing: 2) {
       ForEach(navItems) { item in
-        Button {
-          OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = item.index }
-        } label: {
-          HStack(spacing: 6) {
-            Image(systemName: item.icon)
-              .scaledFont(size: OmiType.caption, weight: .semibold)
-            Text(item.title)
-              .scaledFont(size: OmiType.caption, weight: .semibold)
-            // New-item badge lives on the button it belongs to (Memory =
-            // memories + conversations, Tasks = tasks) since Omi was last front.
-            if newCount(for: item) > 0 {
-              Text("+\(newCount(for: item))")
-                .scaledFont(size: OmiType.micro, weight: .bold)
-                .foregroundColor(OmiColors.textPrimary)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(Capsule(style: .continuous).fill(OmiColors.textPrimary.opacity(0.16)))
-            }
-          }
-          .foregroundColor(selectedIndex == item.index ? OmiColors.textPrimary : OmiColors.textTertiary)
-          .padding(.horizontal, OmiSpacing.md)
-          .padding(.vertical, 6)
-          .background(
-            Capsule(style: .continuous)
-              .fill(selectedIndex == item.index ? OmiColors.textPrimary.opacity(0.08) : Color.clear)
-          )
-          .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .help(item.title)
+        navSegment(item)
       }
     }
+    .padding(3)
+    .background(
+      Capsule(style: .continuous)
+        .fill(Color.white.opacity(0.05))
+        .overlay(
+          Capsule(style: .continuous)
+            .stroke(Color.white.opacity(0.07), lineWidth: 1)
+        )
+    )
+  }
+
+  private func navSegment(_ item: NavItem) -> some View {
+    let isSelected = selectedIndex == item.index
+    return Button {
+      OmiMotion.withGated(.spring(response: 0.32, dampingFraction: 0.82)) {
+        selectedIndex = item.index
+      }
+    } label: {
+      HStack(spacing: 6) {
+        Image(systemName: item.icon)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+        Text(item.title)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+        // New-item badge lives on the segment it belongs to (Memory =
+        // memories + conversations, Tasks = tasks) since Omi was last front.
+        if newCount(for: item) > 0 {
+          Text("+\(newCount(for: item))")
+            .scaledFont(size: OmiType.micro, weight: .bold)
+            .foregroundColor(OmiColors.textPrimary)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(Capsule(style: .continuous).fill(OmiColors.textPrimary.opacity(0.18)))
+        }
+      }
+      .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, 6)
+      .background {
+        if isSelected {
+          Capsule(style: .continuous)
+            .fill(Color.white.opacity(0.12))
+            .matchedGeometryEffect(id: "navSegment", in: navSegmentNamespace)
+        }
+      }
+      .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .help(item.title)
   }
 
   /// New-item count to badge on a nav button (since Omi was last in front).
@@ -121,5 +199,16 @@ struct DesktopTopBar: View {
     case SidebarNavItem.tasks.rawValue: return newTasks
     default: return 0
     }
+  }
+}
+
+/// Lets the user drag the window by the top bar's empty areas, the way a native
+/// toolbar behaves. Controls on top keep their own clicks; only the gaps drag.
+private struct WindowDragArea: NSViewRepresentable {
+  func makeNSView(context: Context) -> NSView { DragView() }
+  func updateNSView(_ nsView: NSView, context: Context) {}
+
+  private final class DragView: NSView {
+    override var mouseDownCanMoveWindow: Bool { true }
   }
 }

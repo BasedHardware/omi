@@ -442,11 +442,7 @@ struct ConversationsPage: View {
             .buttonStyle(.plain)
           }
         }
-        .padding(.horizontal, OmiSpacing.sm)
-        .padding(.vertical, OmiSpacing.md)
-        .frame(minHeight: 46)
-        .omiControlSurface(
-          fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18))
+        .omiSearchFieldChrome()
 
         // Filter buttons
         filterButtonsRow

@@ -18,6 +18,9 @@ covers:
   - desktop/macos/Desktop/Sources/Theme/OmiTextEditor.swift
   - desktop/macos/Desktop/Sources/Theme/OmiToggleStyle.swift
   - desktop/macos/Desktop/Sources/Theme/OmiType.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiSegmentedControl.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiFieldStyle.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiIconButton.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/FocusPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/InsightPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift

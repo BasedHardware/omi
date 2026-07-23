@@ -2878,10 +2878,7 @@ struct TasksPage: View {
           .buttonStyle(.plain)
         }
       }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .background(OmiColors.backgroundSecondary)
-      .cornerRadius(OmiChrome.elementRadius)
+      .omiSearchFieldChrome()
 
       if !viewModel.isMultiSelectMode {
         completedToggleButton
@@ -2993,42 +2990,28 @@ struct TasksPage: View {
   }
 
   private var addTaskButton: some View {
-    Button {
+    OmiIconButton(systemName: "plus", help: "Add task (⌘N)") {
       viewModel.inlineCreateAfterTaskId = nil
       viewModel.isInlineCreating = true
-    } label: {
-      Image(systemName: "plus")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
-        .padding(.horizontal, OmiSpacing.sm)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(OmiColors.backgroundSecondary)
-        .cornerRadius(OmiChrome.elementRadius)
     }
-    .buttonStyle(.plain)
-    .help("Add task (⌘N)")
   }
 
   // MARK: - Completed Toggle (mobile parity)
 
   private var completedToggleButton: some View {
-    Button {
-      viewModel.toggleShowCompletedView()
-    } label: {
-      Image(systemName: viewModel.showCompleted ? "checkmark.circle.fill" : "checkmark.circle")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(viewModel.showCompleted ? OmiColors.textPrimary : OmiColors.textSecondary)
-        .padding(.horizontal, OmiSpacing.sm)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(OmiColors.backgroundSecondary)
-        .cornerRadius(OmiChrome.elementRadius)
-        .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .stroke(viewModel.showCompleted ? OmiColors.border : Color.clear, lineWidth: 1)
-        )
-    }
-    .buttonStyle(.plain)
-    .help(viewModel.showCompleted ? "Hide completed tasks" : "Show completed tasks")
+    OmiSegmentedControl(
+      segments: ["To Do", "Done"],
+      selection: Binding(
+        get: { viewModel.showCompleted ? 1 : 0 },
+        set: { newValue in
+          let wantCompleted = (newValue == 1)
+          if viewModel.showCompleted != wantCompleted {
+            viewModel.toggleShowCompletedView()
+          }
+        }
+      )
+    )
+    .help(viewModel.showCompleted ? "Showing completed tasks" : "Showing to-do tasks")
   }
 
   private var multiSelectControls: some View {
@@ -3100,53 +3083,31 @@ struct TasksPage: View {
   }
 
   private var taskSettingsButton: some View {
-    Button {
-      NotificationCenter.default.post(
-        name: .navigateToTaskSettings,
-        object: nil
-      )
-    } label: {
-      Image(systemName: "gearshape")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textSecondary)
-        .padding(OmiSpacing.sm)
-        .background(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .fill(OmiColors.backgroundSecondary)
-        )
+    OmiIconButton(systemName: "gearshape", help: "Task Settings") {
+      NotificationCenter.default.post(name: .navigateToTaskSettings, object: nil)
     }
-    .buttonStyle(.plain)
-    .help("Task Settings")
   }
 
   private var chatToggleButton: some View {
-    Button {
+    OmiIconButton(
+      systemName: showChatPanel
+        ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right",
+      isActive: showChatPanel,
+      help: showChatPanel ? "Close chat panel" : "Open task chat"
+    ) {
       if showChatPanel {
         closeChatPanel()
       } else if let selectedId = viewModel.keyboardSelectedTaskId,
         let task = viewModel.displayTasks.first(where: { $0.id == selectedId })
       {
-        // A task is selected — open chat directly for it
         openChatForTask(task)
       } else {
-        // No task selected — open empty sidebar
         adjustWindowWidth(expand: true)
         OmiMotion.withGated(.easeInOut(duration: 0.25)) {
           showChatPanel = true
         }
       }
-    } label: {
-      Image(systemName: showChatPanel ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(showChatPanel ? OmiColors.textPrimary : OmiColors.textSecondary)
-        .padding(OmiSpacing.sm)
-        .background(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .fill(showChatPanel ? OmiColors.textPrimary.opacity(0.12) : OmiColors.backgroundSecondary)
-        )
     }
-    .buttonStyle(.plain)
-    .help(showChatPanel ? "Close chat panel" : "Open task chat")
   }
 
   // MARK: - Loading View
