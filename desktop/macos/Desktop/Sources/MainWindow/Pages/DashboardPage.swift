@@ -595,8 +595,7 @@ struct DashboardPage: View {
         isSending: chatProvider.isSending,
         hasMoreMessages: chatProvider.hasMoreMessages,
         isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
-        isLoadingInitial: (chatProvider.isLoading || chatProvider.isLoadingSessions)
-          && !chatProvider.isClearing,
+        isLoadingInitial: chatProvider.isLoading && !chatProvider.isClearing,
         app: selectedApp,
         onLoadMore: { await chatProvider.loadMoreMessages() },
         onRate: { messageId, rating in
@@ -1092,8 +1091,7 @@ struct DashboardPage: View {
         isSending: chatProvider.isSending,
         hasMoreMessages: chatProvider.hasMoreMessages,
         isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
-        isLoadingInitial: (chatProvider.isLoading || chatProvider.isLoadingSessions)
-          && !chatProvider.isClearing,
+        isLoadingInitial: chatProvider.isLoading && !chatProvider.isClearing,
         app: selectedApp,
         onLoadMore: { await chatProvider.loadMoreMessages() },
         onRate: { messageId, rating in
