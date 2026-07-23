@@ -23,6 +23,11 @@ DELETE_MESSAGES_BATCH_LIMIT = 200  # Leaves room for one session-counter write p
 DELETE_MESSAGES_CONFLICT_RETRIES = 3
 CHAT_HISTORY_BASE_VISIBLE_MESSAGES = 10
 CHAT_HISTORY_APPEND_EPOCH_MESSAGES = 8
+# Maximum number of reported (hidden) rows to over-fetch per raw Firestore
+# query when reading cache-aligned history. Keeps the raw read bounded even
+# when a user has thousands of lifetime reported messages; the newest page
+# rarely contains more reported rows than this cap.
+CHAT_HISTORY_REPORTED_RAW_SCAN_CAP = 50
 
 
 class ClientMessageIdPayloadConflict(ValueError):
@@ -323,7 +328,12 @@ def get_cache_aligned_messages(
     if visible_limit == 0:
         return []
 
-    raw_limit = min(total, visible_limit + reported)
+    # Cap the raw Firestore read so a large lifetime reported count cannot
+    # cause unbounded document reads on every chat send. The over-fetch only
+    # needs to cover reported rows that fall inside the newest raw page, not
+    # the lifetime total.
+    reported_overfetch = min(reported, CHAT_HISTORY_REPORTED_RAW_SCAN_CAP)
+    raw_limit = min(total, visible_limit + reported_overfetch)
     return get_messages(
         uid,
         limit=raw_limit,

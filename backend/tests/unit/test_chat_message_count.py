@@ -111,6 +111,35 @@ def test_cache_aligned_history_read_is_scoped_and_overfetches_hidden_records():
     ]
 
 
+def test_cache_aligned_history_caps_reported_overfetch_for_large_lifetime_count():
+    """A large lifetime reported count must not cause unbounded Firestore reads.
+
+    A user with hundreds or thousands of old reported messages should not stream
+    all of them on every chat send. The raw read is capped to
+    CHAT_HISTORY_REPORTED_RAW_SCAN_CAP plus the visible limit.
+    """
+    fake_db = MagicMock()
+    messages_ref = _messages_ref(fake_db)
+    messages_ref.where.return_value = messages_ref
+    # 500 total, 300 reported → 200 visible; visible_limit = 10 + (190 % 8) = 10 + 6 = 16
+    messages_ref.count.return_value.get.side_effect = [_count(500), _count(300)]
+    visible_messages = [{"id": f"m{i}"} for i in range(66)]
+
+    with patch.object(chat_db, "db", fake_db), patch.object(
+        chat_db, "get_messages", return_value=visible_messages
+    ) as get_messages:
+        result = chat_db.get_cache_aligned_messages("u1", app_id="app-1")
+
+    expected_raw_limit = 16 + chat_db.CHAT_HISTORY_REPORTED_RAW_SCAN_CAP  # 16 + 50 = 66
+    get_messages.assert_called_once_with(
+        "u1",
+        limit=min(500, expected_raw_limit),
+        app_id="app-1",
+        chat_session_id=None,
+    )
+    assert result == visible_messages[:16]
+
+
 def test_cache_aligned_history_without_session_is_scoped_to_app():
     fake_db = MagicMock()
     messages_ref = _messages_ref(fake_db)

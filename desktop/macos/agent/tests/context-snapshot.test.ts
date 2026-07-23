@@ -157,6 +157,65 @@ describe("kernel ContextSnapshot", () => {
     store.close();
   });
 
+  it("falls back to full delivery when previously retained turns disappear", () => {
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "owner-shrink",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "shrink" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    for (let sequence = 1; sequence <= 5; sequence += 1) {
+      recordJournalTurn(store, {
+        ownerId: "owner-shrink",
+        conversationId: surface.conversationId,
+        turnId: `shrink-turn-${sequence}`,
+        role: sequence % 2 ? "user" : "assistant",
+        surfaceKind: "main_chat",
+        origin: "typed_chat",
+        status: "completed",
+        content: `shrink canonical turn ${sequence}`,
+        contentBlocks: [],
+        createdAtMs: sequence,
+      });
+    }
+
+    const first = buildContextSnapshot(store, surface.agentSessionId, "owner-shrink", 5);
+    const full = renderContextSnapshotForBinding(first, "main_chat", "coordinator");
+    expect(full.deliveryMode).toBe("full");
+
+    // Simulate journal_clear_turns: delete some turns so the retained set shrinks.
+    store.execute(
+      "DELETE FROM conversation_turns WHERE conversation_id = ? AND turn_id IN (?, ?)",
+      [surface.conversationId, "shrink-turn-1", "shrink-turn-2"],
+    );
+
+    // New turn arrives after the clear.
+    recordJournalTurn(store, {
+      ownerId: "owner-shrink",
+      conversationId: surface.conversationId,
+      turnId: "shrink-turn-6",
+      role: "user",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "shrink canonical turn 6",
+      contentBlocks: [],
+      createdAtMs: 6,
+    });
+
+    const afterShrink = buildContextSnapshot(store, surface.agentSessionId, "owner-shrink", 7);
+    const result = renderContextSnapshotForBinding(afterShrink, "main_chat", "coordinator", full.next);
+    // Must be a full re-render, not a delta, so the model knows turns 1 and 2
+    // are gone. A delta with no tombstone would let the model believe they still
+    // exist in the binding's conversation history.
+    expect(result.deliveryMode).toBe("full");
+    expect(result.rendered).not.toContain("delivery=delta");
+    expect(result.rendered).toContain("shrink canonical turn 3");
+    expect(result.rendered).toContain("shrink canonical turn 6");
+    expect(result.rendered).not.toContain("shrink canonical turn 1");
+    store.close();
+  });
+
   it("requires direct conversational recall from canonical recent turns", () => {
     const policy = kernelSystemPolicy("realtime_voice", "coordinator");
 
