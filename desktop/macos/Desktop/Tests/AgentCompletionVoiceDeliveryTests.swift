@@ -200,6 +200,21 @@ final class AgentCompletionVoiceDeliveryTests: XCTestCase {
     XCTAssertTrue(harness.acknowledged.isEmpty)
   }
 
+  func testVoiceSessionOpenInputWindowIsInertBeforeStart() async {
+    // beginInputTurn emits hubDidOpenInputWindow, which RealtimeHub unit tests
+    // exercise. Like voiceSessionDidConnect(), the input-window retry must stay
+    // inert before start() — otherwise the shared instance reaches the live
+    // agent runtime mid-test and the suite hangs.
+    let harness = Harness(hasStarted: false)
+
+    harness.sut.voiceSessionDidOpenInputWindow()
+    await harness.drainScheduledWork()
+
+    XCTAssertEqual(harness.peekCount, 0)
+    XCTAssertTrue(harness.scheduled.isEmpty)
+    XCTAssertTrue(harness.acknowledged.isEmpty)
+  }
+
   func testTransitionsWhileDeliveryInFlightCoalesceIntoOneTrailingRun() async {
     let harness = Harness()
     let first = AgentSurfaceReference.floatingBarRun(runId: "run-1")

@@ -111,6 +111,7 @@ final class AgentCompletionVoiceDelivery {
   /// retry a completion that `sendBackgroundAgentContext` refused while the
   /// session was connected-but-idle (its checkpoint is still unadvanced).
   func voiceSessionDidOpenInputWindow() {
+    guard hasStarted else { return }
     scheduleDelivery()
   }
 
