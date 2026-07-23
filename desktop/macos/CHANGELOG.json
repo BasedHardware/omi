@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Chat now searches the web for natural research requests like \"find out who X is online\" or \"look them up on the web\", not just explicit \"search the web\" phrasings."
+  ],
   "releases": [
     {
       "version": "0.12.94",
