@@ -2577,6 +2577,27 @@ describe("kernel conversation journal", () => {
     fixture.store.close();
   });
 
+  it("local-only clear purges local turns without enqueuing a backend delete", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    recordCompletedTextTurn(fixture, "turn-local-only-1", "hello", 10);
+    const cleared = clearJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      expectedGeneration: 1,
+      nowMs: 90,
+      deleteBackend: false,
+    });
+    // Local turns are purged and the generation is fenced, but nothing is
+    // enqueued to delete the user's server-side chat history.
+    expect(cleared.deletedTurns).toBe(1);
+    expect(cleared.backendDeleteOperationId).toBeNull();
+    expect(drainBackendConversationDeleteOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      nowMs: 91,
+    })).toHaveLength(0);
+    fixture.store.close();
+  });
+
   it("tombstones empty failed placeholders and projects structured-only completion deterministically", () => {
     const fixture = newSurface("main_chat", "chat", "default");
     recordJournalTurn(fixture.store, {

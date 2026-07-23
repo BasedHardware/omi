@@ -4,6 +4,21 @@ import SwiftUI
 
 private struct AnySendableBox: @unchecked Sendable { let value: Any? }
 
+/// Decides whether a persisted capture intent needs its runtime service restored.
+///
+/// Intent is stored independently from the running services. A fresh launch and a
+/// settings sync therefore both need to reconcile the two states instead of using
+/// a one-time readiness check as the source of truth.
+enum PersistedCaptureLaunchPolicy {
+  static func shouldStartTranscription(intentEnabled: Bool, isTranscribing: Bool) -> Bool {
+    intentEnabled && !isTranscribing
+  }
+
+  static func shouldStartScreenAnalysis(intentEnabled: Bool, isMonitoring: Bool) -> Bool {
+    intentEnabled && !isMonitoring
+  }
+}
+
 // MARK: - NSHostingView sizingOptions access
 
 /// Protocol to access sizingOptions on any NSHostingView<Content> regardless of the generic parameter.
@@ -51,6 +66,7 @@ struct DesktopHomeView: View {
   @State private var lastActivationRefresh = Date.distantPast
   @State private var didScheduleAgentVMProvisioning = false
   @State private var proactiveMonitoringStartGate = RetryableDelayedStartGate()
+  @State private var isWaitingForScreenAnalysisKeys = false
   // Anchor for the proactive-monitoring warmup budget. Captured at view
   // creation (≈ launch) so the delay is spent once per session, not once per
   // trigger — see StartupWarmupPolicy.remainingProactiveAssistantsStartDelay.
@@ -191,22 +207,6 @@ struct DesktopHomeView: View {
                 scheduleInitialFileIndexing()
               }
 
-              let settings = AssistantSettings.shared
-
-              // Auto-start transcription if enabled in settings.
-              // If API keys aren't loaded yet, onChange below retries.
-              if settings.transcriptionEnabled && !appState.isTranscribing {
-                if APIKeyService.keysAvailable {
-                  log("DesktopHomeView: Auto-starting transcription")
-                  appState.startTranscription()
-                } else {
-                  log("DesktopHomeView: Deferring transcription — API keys not yet loaded")
-                  Task { await APIKeyService.shared.waitForKeys() }
-                }
-              } else if !settings.transcriptionEnabled {
-                log("DesktopHomeView: Transcription disabled in settings, skipping auto-start")
-              }
-
               // Migration: one-time reset for users whose screenAnalysisEnabled
               // was incorrectly set to false by a bug in syncMonitoringState() that
               // persisted false whenever monitoring stopped for any reason.
@@ -238,19 +238,7 @@ struct DesktopHomeView: View {
                 log("DesktopHomeView: Restored screen capture default for quiet named bundle")
               }
 
-              // Start proactive assistants monitoring if enabled in settings.
-              // If API keys aren't loaded yet, this may fail — onChange below retries.
-              if settings.screenAnalysisEnabled {
-                if APIKeyService.keysAvailable {
-                  scheduleProactiveMonitoringStart(reason: "launch")
-                } else {
-                  log(
-                    "DesktopHomeView: Deferring screen analysis — API keys not yet loaded"
-                  )
-                }
-              } else {
-                log("DesktopHomeView: Screen analysis disabled in settings, skipping auto-start")
-              }
+              restorePersistedCaptureServices(reason: "launch")
 
               // Start Crisp chat in background for notifications, scoped to the signed-in user
               CrispManager.shared.start(
@@ -287,31 +275,17 @@ struct DesktopHomeView: View {
                 Task { await appState.refreshConversations() }
               }
               updatePolicyManager.refresh()
-              // Auto-start monitoring when returning to app if screen analysis is enabled
-              // but monitoring is not running. Handles the case where the user granted
-              // screen recording permission in System Settings and switched back.
-              let plugin = ProactiveAssistantsPlugin.shared
-              if AssistantSettings.shared.screenAnalysisEnabled && !plugin.isMonitoring {
-                plugin.refreshScreenRecordingPermission()
-                if plugin.hasScreenRecordingPermission {
-                  log("DesktopHomeView: Permission available on app active — scheduling monitoring")
-                  scheduleProactiveMonitoringStart(reason: "app active")
-                }
-              }
+              // Reconcile persisted intent after returning from System Settings or
+              // after a runtime service stopped while the app was inactive.
+              restorePersistedCaptureServices(reason: "app active")
             }
             .onChange(of: apiKeyService.isLoaded) { _, loaded in
               guard loaded else { return }
               log("DesktopHomeView: API keys loaded — retrying deferred services")
-              // Retry transcription
-              if AssistantSettings.shared.transcriptionEnabled && !appState.isTranscribing {
-                log("DesktopHomeView: Starting deferred transcription")
-                appState.startTranscription()
-              }
-              // Retry screen analysis
-              let plugin = ProactiveAssistantsPlugin.shared
-              if AssistantSettings.shared.screenAnalysisEnabled && !plugin.isMonitoring {
-                scheduleProactiveMonitoringStart(reason: "key load")
-              }
+              restorePersistedCaptureServices(reason: "key load")
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidSyncFromServer)) { _ in
+              reconcileCaptureServicesAfterSettingsSync()
             }
             // Cmd+R: refresh all data (conversations, chat, tasks, memories)
             .onReceive(NotificationCenter.default.publisher(for: .refreshAllData)) { _ in
@@ -931,6 +905,63 @@ struct DesktopHomeView: View {
     if !scheduled { proactiveMonitoringStartGate.finishAttempt() }
   }
 
+  private func restorePersistedCaptureServices(reason: String) {
+    let settings = AssistantSettings.shared
+    if PersistedCaptureLaunchPolicy.shouldStartTranscription(
+      intentEnabled: settings.transcriptionEnabled,
+      isTranscribing: appState.isTranscribing
+    ) {
+      log("DesktopHomeView: Restoring transcription from persisted intent (\(reason))")
+      // Local transcription does not require remote API keys. AppState owns the
+      // permission and provider checks, so it remains the single start boundary.
+      appState.startTranscription()
+    }
+
+    let plugin = ProactiveAssistantsPlugin.shared
+    guard
+      PersistedCaptureLaunchPolicy.shouldStartScreenAnalysis(
+        intentEnabled: settings.screenAnalysisEnabled,
+        isMonitoring: plugin.isMonitoring
+      )
+    else { return }
+
+    guard APIKeyService.keysAvailable else {
+      waitForScreenAnalysisKeys(reason: reason)
+      return
+    }
+
+    plugin.refreshScreenRecordingPermission()
+    guard plugin.hasScreenRecordingPermission else {
+      log("DesktopHomeView: Screen recording permission unavailable; retaining capture intent (\(reason))")
+      return
+    }
+    scheduleProactiveMonitoringStart(reason: reason)
+  }
+
+  private func waitForScreenAnalysisKeys(reason: String) {
+    guard !isWaitingForScreenAnalysisKeys else { return }
+    isWaitingForScreenAnalysisKeys = true
+    log("DesktopHomeView: Deferring screen analysis until API keys load (\(reason))")
+    Task { @MainActor in
+      await APIKeyService.shared.waitForKeys()
+      isWaitingForScreenAnalysisKeys = false
+      guard APIKeyService.keysAvailable else {
+        log("DesktopHomeView: API keys remain unavailable; retaining capture intent")
+        return
+      }
+      restorePersistedCaptureServices(reason: "key wait completed")
+    }
+  }
+
+  private func reconcileCaptureServicesAfterSettingsSync() {
+    let plugin = ProactiveAssistantsPlugin.shared
+    if !AssistantSettings.shared.screenAnalysisEnabled, plugin.isMonitoring {
+      log("DesktopHomeView: Stopping screen analysis after server settings sync")
+      plugin.stopMonitoring()
+    }
+    restorePersistedCaptureServices(reason: "settings sync")
+  }
+
   private func updateStoreActivity(for index: Int) {
     viewModelContainer.tasksStore.isActive =
       index == SidebarNavItem.dashboard.rawValue || index == SidebarNavItem.tasks.rawValue
@@ -1193,26 +1224,55 @@ private struct MemoryHubPage: View {
   let viewModelContainer: ViewModelContainer
   @State private var segment = 0
 
-  var body: some View {
-    VStack(spacing: 0) {
-      // The "Memory" rail item lands here, so Memories is the default segment;
-      // Conversations (with its live transcript) is second, and the Brain Map
-      // graph is its own tab.
-      HubSegmentedControl(segments: ["Memories", "Conversations", "Brain Map"], selection: $segment)
-        .padding(.top, 22)
-        .padding(.horizontal, 28)
-        .padding(.bottom, 4)
+  /// Memories and conversations stay easy to scan in a calm, readable column;
+  /// the spatial Brain Map needs the full content surface so users can pan and
+  /// zoom without hitting an artificial canvas boundary.
+  private static let listContentWidth: CGFloat = 900
 
-      if segment == 0 {
-        MemoriesPage(
-          viewModel: viewModelContainer.memoriesViewModel,
-          graphViewModel: viewModelContainer.memoryGraphViewModel)
-      } else if segment == 1 {
-        ConversationsPageHost(appState: appState)
+  var body: some View {
+    Group {
+      if segment == 2 {
+        ZStack(alignment: .top) {
+          // Keep the graph's camera framing intact while removing the list-page
+          // width cap. The map only occupies more of the visual field when the
+          // user deliberately pans or zooms into it.
+          MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+          hubSegmentedControl
+        }
       } else {
-        MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
+        VStack(spacing: 0) {
+          hubSegmentedControl
+
+          if segment == 0 {
+            constrainedListContent(
+              MemoriesPage(
+                viewModel: viewModelContainer.memoriesViewModel,
+                graphViewModel: viewModelContainer.memoryGraphViewModel))
+          } else {
+            constrainedListContent(ConversationsPageHost(appState: appState))
+          }
+        }
       }
     }
+  }
+
+  private var hubSegmentedControl: some View {
+    // The "Memory" rail item lands here, so Memories is the default segment;
+    // Conversations (with its live transcript) is second, and the Brain Map
+    // graph is its own tab.
+    HubSegmentedControl(segments: ["Memories", "Conversations", "Brain Map"], selection: $segment)
+      .frame(maxWidth: Self.listContentWidth)
+      .padding(.top, 22)
+      .padding(.horizontal, 28)
+      .padding(.bottom, 4)
+  }
+
+  private func constrainedListContent<V: View>(_ content: V) -> some View {
+    content
+      .frame(maxWidth: Self.listContentWidth, maxHeight: .infinity)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }
 
@@ -1258,21 +1318,8 @@ private struct PageContentView: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
-  /// Tabs that float the persistent "Ask omi anything" bar over their content:
-  /// Memory hub, Memories, and Tasks. Home (Dashboard) already owns its bar.
-  private static let floatingAskBarTabs: Set<Int> = [1, 3, 4]
-
   var body: some View {
     pages
-    // Floating ask-bar experiment shelved for launch (Nik, Jul 22 2026) — the
-    // omi-askbar test bundle showed it working; re-enable by restoring:
-    // .overlay(alignment: .bottom) {
-    //   if Self.floatingAskBarTabs.contains(selectedIndex) {
-    //     FloatingPageAskBar(
-    //       chatProvider: viewModelContainer.chatProvider,
-    //       selectedTabIndex: $selectedTabIndex)
-    //   }
-    // }
   }
 
   @ViewBuilder
@@ -1290,7 +1337,7 @@ private struct PageContentView: View {
           taskChatCoordinator: viewModelContainer.taskChatCoordinator,
           selectedIndex: $selectedTabIndex)
       case 1:
-        constrainedListPage(MemoryHubPage(appState: appState, viewModelContainer: viewModelContainer))
+        MemoryHubPage(appState: appState, viewModelContainer: viewModelContainer)
       case 2:
         ChatPage(
           appProvider: viewModelContainer.appProvider,

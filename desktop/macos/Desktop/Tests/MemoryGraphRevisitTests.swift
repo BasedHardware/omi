@@ -16,6 +16,13 @@ final class MemoryGraphRevisitTests: XCTestCase {
     // The Brain Map moved from an inline Memories card to its own hub tab, still
     // driven by the persistent, container-owned view model.
     XCTAssertTrue(home.contains("MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)"))
+    // Static wiring tripwire: list content keeps its capped column while the
+    // Brain Map owns the full content surface and paints with the page's shared
+    // background token instead of a distinct gray canvas.
+    XCTAssertFalse(home.contains("constrainedListPage(MemoryHubPage"))
+    XCTAssertTrue(home.contains("if segment == 2"))
+    XCTAssertTrue(home.contains("MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)"))
+    XCTAssertTrue(graph.contains("scnView.backgroundColor = NSColor(OmiColors.backgroundPrimary)"))
   }
 
   @MainActor

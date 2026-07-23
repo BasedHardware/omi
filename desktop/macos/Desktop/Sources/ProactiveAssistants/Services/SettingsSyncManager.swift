@@ -43,7 +43,9 @@ class SettingsSyncManager {
 
   // MARK: - Apply Remote → Local
 
-  private func applyRemoteSettings(_ remote: AssistantSettingsResponse) {
+  /// Applies a server-authoritative snapshot, then notifies runtime owners to
+  /// reconcile services whose persisted intent may have changed after launch.
+  func applyRemoteSettings(_ remote: AssistantSettingsResponse) {
     // Shared settings
     if let shared = remote.shared {
       if let v = shared.cooldownInterval { AssistantSettings.shared.cooldownInterval = v }
@@ -108,6 +110,8 @@ class SettingsSyncManager {
         UpdaterViewModel.shared.updateChannel = parsed
       }
     }
+
+    NotificationCenter.default.post(name: .assistantSettingsDidSyncFromServer, object: nil)
   }
 
   // MARK: - Build Local → Response

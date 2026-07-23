@@ -1499,6 +1499,7 @@ actor AgentBridge {
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
     expectedGeneration: Int? = nil,
+    deleteBackend: Bool = true,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> Int {
     let authorization = try resolveAuthorization(
@@ -1510,6 +1511,7 @@ actor AgentBridge {
       surface: surface,
       ownerID: ownerID,
       expectedGeneration: expectedGeneration,
+      deleteBackend: deleteBackend,
       authorizationSnapshot: authorization
     )
   }
@@ -1518,6 +1520,7 @@ actor AgentBridge {
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
     expectedGeneration: Int? = nil,
+    deleteBackend: Bool = true,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> Int {
     guard AppBuild.isNonProduction else {
@@ -1532,6 +1535,7 @@ actor AgentBridge {
       surface: surface,
       ownerID: ownerID,
       expectedGeneration: expectedGeneration,
+      deleteBackend: deleteBackend,
       authorizationSnapshot: authorization
     )
   }

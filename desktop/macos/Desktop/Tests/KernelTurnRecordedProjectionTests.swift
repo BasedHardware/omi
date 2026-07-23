@@ -390,7 +390,7 @@ import XCTest
             generation: requestedOwnerID == "owner-a" ? 3 : 7
           )
         },
-        journalClearOperation: { _, _, requestedOwnerID, expectedGeneration in
+        journalClearOperation: { _, _, requestedOwnerID, expectedGeneration, _ in
           clearCalls.append((requestedOwnerID, expectedGeneration))
           return 0
         },
@@ -408,6 +408,37 @@ import XCTest
       XCTAssertEqual(listCalls.last?.limit, 1)
       XCTAssertEqual(clearCalls.map(\.ownerID), ["owner-b"])
       XCTAssertEqual(clearCalls.map(\.generation), [7])
+    }
+
+    func testOnboardingResetClearsLocalJournalWithoutDeletingBackendChat() async {
+      let provider = ChatProvider()
+      var deleteBackendCalls: [Bool] = []
+      provider.kernelTurnProjection = KernelTurnProjection(
+        host: provider,
+        client: AgentClient.Session(harnessMode: "piMono"),
+        ownerIDProvider: { "onboarding-reset-owner" },
+        journalListOperation: { _, _, _, afterTurnSeq, limit in
+          XCTAssertEqual(afterTurnSeq, 0)
+          XCTAssertEqual(limit, 1)
+          return self.journalPage(
+            conversationId: "onboarding-reset-conversation",
+            turns: [],
+            generation: 4
+          )
+        },
+        journalClearOperation: { _, _, _, _, deleteBackend in
+          deleteBackendCalls.append(deleteBackend)
+          return 0
+        },
+        kernelReadyOperation: { true }
+      )
+
+      let cleared = await provider.clearDefaultJournalForOnboardingReset()
+
+      // The onboarding reset still clears the local journal, but must NOT delete
+      // the user's server-side chat history — the reset is local-only.
+      XCTAssertTrue(cleared)
+      XCTAssertEqual(deleteBackendCalls, [false])
     }
 
     func testTemporaryAutomationOwnerKeepsFaultResetOnKernelBoundary() async {
@@ -429,7 +460,7 @@ import XCTest
         journalListOperation: { _, _, ownerID, _, _ in
           self.journalPage(conversationId: "fault-conversation", turns: [], generation: 9)
         },
-        journalClearOperation: { _, _, ownerID, generation in
+        journalClearOperation: { _, _, ownerID, generation, _ in
           clearCalls.append((ownerID, generation))
           return 0
         },
@@ -481,7 +512,7 @@ import XCTest
               generation: 9
             )
           },
-          journalClearOperation: { _, surface, _, _ in
+          journalClearOperation: { _, surface, _, _, _ in
             clearedSurfaceIDs.append(surface.externalRefId)
             return 1
           },
@@ -530,7 +561,7 @@ import XCTest
               generation: 9
             )
           },
-          journalClearOperation: { _, surface, _, _ in
+          journalClearOperation: { _, surface, _, _, _ in
             clearedSurfaceIDs.append(surface.externalRefId)
             return 1
           },
@@ -577,7 +608,7 @@ import XCTest
           XCTAssertEqual(limit, 1)
           return self.journalPage(conversationId: "fault-harness-conversation", turns: [], generation: 9)
         },
-        journalClearOperation: { _, _, ownerID, expectedGeneration in
+        journalClearOperation: { _, _, ownerID, expectedGeneration, _ in
           clearCalls.append((ownerID, expectedGeneration))
           return 1
         },
@@ -628,7 +659,7 @@ import XCTest
             generation: 9
           )
         },
-        journalClearOperation: { _, _, ownerID, expectedGeneration in
+        journalClearOperation: { _, _, ownerID, expectedGeneration, _ in
           clearCalls.append((ownerID, expectedGeneration))
           return 1
         },
@@ -665,7 +696,7 @@ import XCTest
         client: AgentClient.Session(harnessMode: "piMono"),
         ownerIDProvider: { "owner-b" },
         journalListOperation: { _, _, _, _, _ in throw BootstrapFailure() },
-        journalClearOperation: { _, _, _, _ in
+        journalClearOperation: { _, _, _, _, _ in
           clearCallCount += 1
           return 1
         },

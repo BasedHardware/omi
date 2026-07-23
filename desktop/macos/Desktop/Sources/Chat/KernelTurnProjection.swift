@@ -193,7 +193,8 @@ final class KernelTurnProjection {
     _ client: AgentClient.Session,
     _ surface: AgentSurfaceReference,
     _ ownerID: String,
-    _ expectedGeneration: Int
+    _ expectedGeneration: Int,
+    _ deleteBackend: Bool
   ) async throws -> Int
 
   typealias KernelReadyOperation = () async -> Bool
@@ -727,7 +728,8 @@ final class KernelTurnProjection {
   func clear(
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
-    requiresModelReadiness: Bool = true
+    requiresModelReadiness: Bool = true,
+    deleteBackend: Bool = true
   ) async -> Bool {
     guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return false }
     let kernelReady =
@@ -782,19 +784,22 @@ final class KernelTurnProjection {
           client,
           surface,
           lease.ownerID,
-          expectedGeneration
+          expectedGeneration,
+          deleteBackend
         )
       } else if requiresModelReadiness {
         _ = try await client.clearJournalTurns(
           surface: surface,
           ownerID: lease.ownerID,
-          expectedGeneration: expectedGeneration
+          expectedGeneration: expectedGeneration,
+          deleteBackend: deleteBackend
         )
       } else {
         _ = try await client.clearJournalTurnsForControl(
           surface: surface,
           ownerID: lease.ownerID,
-          expectedGeneration: expectedGeneration
+          expectedGeneration: expectedGeneration,
+          deleteBackend: deleteBackend
         )
       }
       guard isCurrent(lease) else { return false }
