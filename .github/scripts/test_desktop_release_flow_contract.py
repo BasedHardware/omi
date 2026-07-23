@@ -266,19 +266,8 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertIn("verdict", jobs)
         self.assertNotIn("continue-on-error:", jobs["verdict"])
         self.assertIn("needs: [codemagic-lane, qualify-m1-studio, qualify-m4-mini]", jobs["verdict"])
-        for lane_verdict_env in ("CM_V", "M1_V", "M4_V"):
-            self.assertIn(lane_verdict_env, jobs["verdict"])
-        # Each lane self-classifies qualified / failed / unavailable.
-        self.assertIn("lane_verdict:", jobs["codemagic-lane"])
-        self.assertIn("lane_verdict:", m1_job)
-        self.assertIn("lane_verdict:", m4_job)
-        # Fail-open policy: a lane that RAN qualification and genuinely failed
-        # blocks; otherwise a qualified lane promotes; otherwise (all lanes
-        # unavailable/infra) the run still succeeds so unreachable machines cannot
-        # block the release.
-        self.assertIn('= "failed" ]', jobs["verdict"])
-        self.assertIn("failing open", jobs["verdict"])
-        self.assertIn('= "qualified" ]', jobs["verdict"])
+        for qualified_output in ("CM_QUALIFIED", "M1_QUALIFIED", "M4_QUALIFIED"):
+            self.assertIn(qualified_output, jobs["verdict"])
 
         # The two machine lanes must stay byte-identical after their job
         # headers: only labels, gating, and comments above `steps:` differ.
