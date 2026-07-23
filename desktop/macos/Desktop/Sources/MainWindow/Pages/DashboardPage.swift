@@ -287,7 +287,7 @@ struct DashboardPage: View {
   private static let homeAskBarMaxWidth: CGFloat = 980
   private static let homeStagePanelMaxWidth: CGFloat = 1280
   private static let homeChatColumnMaxWidth: CGFloat = 900
-  private static let homeStageTopPadding: CGFloat = 74
+  private static let homeStageTopPadding: CGFloat = 8
   private static let homeStageBottomPadding: CGFloat = 26
   private static let homeStageAnimation = Animation.spring(response: 0.46, dampingFraction: 0.86)
   private static let appsPopupMaxWidth: CGFloat = 1040
@@ -1117,19 +1117,21 @@ struct DashboardPage: View {
         welcomeContent: { dashboardChatWelcome }
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
+      // A short fade at each end: the transcript recedes softly under the
+      // segmented nav at the top and toward the composer at the bottom.
       .mask(
         LinearGradient(
           stops: [
             .init(color: .clear, location: 0.0),
-            .init(color: .black, location: 0.05),
-            .init(color: .black, location: 0.97),
+            .init(color: .black, location: 0.03),
+            .init(color: .black, location: 0.95),
             .init(color: .clear, location: 1.0),
           ],
           startPoint: .top,
           endPoint: .bottom
         )
       )
-      .padding(.vertical, OmiSpacing.xs)
+      .padding(.top, OmiSpacing.xs)
 
     }
     // Chat is the Home surface itself — no card chrome, it sits directly on
@@ -2330,6 +2332,7 @@ struct HomeAskBar: View {
         .buttonStyle(.plain)
         .disabled(attachments.count >= kMaxChatAttachments)
         .help("Attach files")
+        .padding(.bottom, 3)
 
         // Auto-growing input: `axis: .vertical` + `lineLimit(1...6)` grow the pill
         // as text wraps (scrolls past six lines). Return submits, Shift+Return
@@ -2356,6 +2359,7 @@ struct HomeAskBar: View {
         }
 
         actionButton
+          .padding(.bottom, 1)
       }
       .padding(.leading, OmiSpacing.lg)
       .padding(.trailing, OmiSpacing.sm)
@@ -4077,90 +4081,46 @@ struct HomeListeningStatusButton: View {
   let action: () -> Void
   let modeAction: () -> Void
 
-  // Single pill-level hover flag so moving between the title and the mode
-  // toggle never flickers the revealed controls.
   @State private var isHovering = false
 
+  // Fixed-size chip that matches Capture exactly: icon + title, no hover-grow.
+  // On/off/blocked is conveyed by color only; the listening mode moves to a
+  // right-click menu so the resting pill never changes size or reveals extras.
   var body: some View {
-    HStack(spacing: 0) {
-      Button(action: action) {
-        HStack(spacing: OmiSpacing.sm) {
-          ZStack {
-            if isToggling {
-              ProgressView()
-                .controlSize(.small)
-                .scaleEffect(0.55)
-            } else {
-              Image(systemName: systemImage)
-                .scaledFont(size: OmiType.body, weight: .semibold)
-            }
-          }
-          .frame(width: 18, height: 18)
-
-          VStack(alignment: .leading, spacing: 1) {
-            Text(title)
-              .scaledFont(size: OmiType.caption, weight: .semibold)
-              .lineLimit(1)
-
-            // Mode ("Always" / "In meeting" / …) is revealed only on
-            // hover to keep the resting pill clean.
-            if isHovering {
-              Text(modeTitle)
-                .scaledFont(size: 8, weight: .medium)
-                .foregroundStyle(status.isActive ? HomePalette.secondary : HomePalette.muted)
-                .lineLimit(1)
-                .transition(.opacity)
-            }
+    Button(action: action) {
+      HStack(spacing: OmiSpacing.sm) {
+        ZStack {
+          if isToggling {
+            ProgressView()
+              .controlSize(.small)
+              .scaleEffect(0.55)
+          } else {
+            Image(systemName: systemImage)
+              .scaledFont(size: OmiType.body, weight: .semibold)
           }
         }
-        .padding(.leading, OmiSpacing.md)
-        .padding(.trailing, OmiSpacing.sm)
-        .frame(height: 34)
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .disabled(isToggling)
-      .help("Listening: \(status.text), \(modeTitle)")
-      .accessibilityLabel("Listening \(status.text), \(modeTitle)")
+        .frame(width: 18, height: 18)
 
-      // Divider + mode toggle are revealed only on hover to keep the
-      // resting pill compact.
-      if isHovering {
-        Rectangle()
-          .fill(HomePalette.hairline.opacity(0.65))
-          .frame(width: 1, height: 18)
-          .transition(.opacity)
-
-        Button(action: modeAction) {
-          Image(systemName: isMeetingsOnly ? "person.2.fill" : "person.fill")
-            .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundStyle(modeIconColor)
-            .frame(width: 30, height: 34)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(isMeetingsOnly ? "Switch to always listening" : "Switch to meetings only")
-        .accessibilityLabel(isMeetingsOnly ? "Switch Listening to Always" : "Switch Listening to Meetings Only")
-        .transition(.opacity)
+        Text(title)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .lineLimit(1)
       }
+      .foregroundStyle(status.isActive ? HomePalette.ink : (status.isBlocked ? status.indicator : HomePalette.muted))
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
+      .frame(height: 34)
+      .background(Capsule(style: .continuous).fill(statusFill))
+      .overlay(Capsule(style: .continuous).stroke(statusStroke, lineWidth: 1))
+      .contentShape(Capsule())
     }
-    .foregroundStyle(status.isActive ? HomePalette.ink : (status.isBlocked ? status.indicator : HomePalette.muted))
-    .background(
-      Capsule(style: .continuous)
-        .fill(statusFill)
-    )
-    .overlay(
-      Capsule(style: .continuous)
-        .stroke(statusStroke, lineWidth: 1)
-    )
-    .contentShape(Capsule())
-    .frame(height: 34)
+    .buttonStyle(.plain)
+    .disabled(isToggling)
     .onHover { isHovering = $0 }
-    .omiAnimation(.easeInOut(duration: 0.14), value: isHovering)
-  }
-
-  private var modeIconColor: Color {
-    status.isActive ? HomePalette.green : HomePalette.muted
+    .help("Listening: \(status.text), \(modeTitle)")
+    .accessibilityLabel("Listening \(status.text), \(modeTitle)")
+    .contextMenu {
+      Button(isMeetingsOnly ? "Listen always" : "Listen only during meetings", action: modeAction)
+    }
   }
 
   private var statusFill: Color {
