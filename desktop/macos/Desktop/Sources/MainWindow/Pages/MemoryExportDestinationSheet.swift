@@ -518,10 +518,7 @@ struct MemoryExportDestinationSheet: View {
     .background(OmiColors.backgroundPrimary)
     .task {
       await model.loadConfiguration()
-      statuses[destination] =
-        destination == .chatgpt
-        ? await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
-        : await MemoryExportService.shared.status(for: destination)
+      statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: destination)
       if destination.supportsMCP && destination.requiresHostedMCPKeyForSetup && model.mcpKey == nil {
         await model.generateMCPKey()
       }
@@ -531,7 +528,7 @@ struct MemoryExportDestinationSheet: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       refreshPermissionStateIfNeeded()
-      refreshChatGPTDirectoryConnectionIfNeeded()
+      refreshCloudGrantConnectionIfNeeded()
     }
   }
 
@@ -540,10 +537,10 @@ struct MemoryExportDestinationSheet: View {
     permissionRefreshID += 1
   }
 
-  private func refreshChatGPTDirectoryConnectionIfNeeded() {
-    guard destination == .chatgpt else { return }
+  private func refreshCloudGrantConnectionIfNeeded() {
+    guard destination.cloudOAuthClientID != nil else { return }
     Task {
-      statuses[.chatgpt] = await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
+      statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: destination)
     }
   }
 
@@ -766,10 +763,8 @@ struct MemoryExportDestinationSheet: View {
         Button {
           Task {
             await model.executeWithOmi(destination: destination)
-            statuses[destination] =
-              destination == .chatgpt
-              ? await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
-              : await MemoryExportService.shared.status(for: destination)
+            statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(
+              for: destination)
             // Assisted flow: the user pastes values by hand, so surface the
             // field-by-field steps instead of leaving them collapsed.
             if destination.mcpExecuteKind == .assisted, destination.assistedOverlayHint != nil {
