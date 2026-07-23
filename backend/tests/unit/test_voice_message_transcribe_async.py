@@ -7,7 +7,7 @@ The two Deepgram pre-recorded transcription helpers it uses, ``transcribe_pcm_by
 HTTP round-trip (``httpx.Client().post`` in ``utils/stt/pre_recorded.py``). Calling them
 directly froze the loop for the whole transcription, stalling every other connection and
 the health checks (the exact "sync requests in async is silent poison" hazard in
-``backend/CLAUDE.md``).
+``backend/AGENTS.md``).
 
 They must be offloaded with ``await run_blocking(<executor>, fn, ...)``, the same way the
 handler already offloads its WAV file write. These AST checks assert the offload stays in

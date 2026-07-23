@@ -116,37 +116,18 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
 
     def test_workflow_has_no_input_manual_trigger_and_tags_the_changelog_commit(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        # workflow_dispatch stays bare (no manual inputs). Auto-release now also
-        # fires on macOS-affecting merges to main (push) so a candidate is planned
-        # within minutes; the schedule remains as a backstop for merges that land
-        # inside the quiet window. No `inputs:` may appear in the trigger block.
+        # workflow_dispatch stays bare (no manual inputs). Candidates are cut on a
+        # fixed 6-hourly schedule (12am/6am/12pm/6pm America/New_York = 04:00/10:00/
+        # 16:00/22:00 UTC in EDT); no per-merge push trigger. No `inputs:` may
+        # appear in the trigger block.
         self.assertIn("  workflow_dispatch:\n", workflow)
         self.assertNotIn("inputs:", workflow.split("\njobs:", 1)[0])
-        self.assertIn("  push:\n    branches: [main]", workflow)
-        self.assertIn("- cron: '17 * * * *'", workflow)
+        self.assertNotIn("\n  push:", workflow.split("\njobs:", 1)[0])
+        self.assertIn("- cron: '0 4,10,16,22 * * *'", workflow)
         self.assertNotIn("break_glass", workflow)
         self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
         self.assertLess(workflow.index('git commit -m "chore: consolidate changelog for v${VERSION}"'), workflow.index('git tag "$RELEASE_TAG"'))
-
-    def test_push_paths_cover_releasable_desktop_paths(self) -> None:
-        # Every releasable desktop input the planner recognizes must also be in
-        # the workflow's push filter, or a merge touching only that input would be
-        # releasable yet never get the immediate push trigger (only the hourly
-        # cron would catch it). A directory entry maps to '<dir>/**'.
-        import yaml
-
-        on = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))[True]
-        push_paths = set(on["push"]["paths"])
-        self.assertEqual(on["push"]["branches"], ["main"])
-        for path in planner.DESKTOP_RELEASE_PATHS:
-            expected = f"{path}/**" if (ROOT / path).is_dir() else path
-            self.assertIn(
-                expected,
-                push_paths,
-                f"releasable desktop path {path!r} (expected push filter {expected!r}) "
-                "is missing from desktop_auto_release.yml push.paths",
-            )
 
     def test_pre_tag_readiness_workflow_contract(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")

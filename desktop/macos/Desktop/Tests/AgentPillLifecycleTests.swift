@@ -967,10 +967,13 @@ import XCTest
     let source = try chatMessagesViewSource()
 
     XCTAssertTrue(source.contains("On the first load of a saved conversation, follow the latest message."))
-    XCTAssertTrue(
-      source.contains("    scrollToBottom(proxy: proxy)\n    scheduleInitialScroll(proxy: proxy, delay: 0.05)"))
-    XCTAssertTrue(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.18)"))
-    XCTAssertTrue(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.45)"))
+    // omi-test-quality: source-inspection -- static contract: startup history
+    // has one deferred restore; its behavioral counterpart asserts one atomic
+    // journal snapshot in KernelTurnRecordedProjectionTests.
+    XCTAssertTrue(source.contains("isInitialRestorePending = true"))
+    XCTAssertTrue(source.contains("DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)"))
+    XCTAssertFalse(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.18)"))
+    XCTAssertFalse(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.45)"))
     XCTAssertTrue(source.contains("private func handleViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy)"))
     XCTAssertTrue(source.contains(".background(viewportResizeDetector(proxy: proxy))"))
     XCTAssertTrue(

@@ -256,10 +256,14 @@ jobs:
     # steps to qualify-m4-mini (enforced by
     # test_desktop_release_flow_contract.py); only the runner label differs.
     needs: [codemagic-lane, plan-fallbacks]
+    # Fail open: run unless the planner explicitly reported this runner offline.
+    # If plan-fallbacks itself failed (e.g. token generation), its output is
+    # empty, which must still let the fallback attempt run rather than skip
+    # every self-hosted lane and re-create the single-point-of-failure outage.
     if: >-
       ${{ always() &&
           needs.codemagic-lane.outputs.qualified != 'true' &&
-          needs.plan-fallbacks.outputs.m1_online == 'true' }}
+          needs.plan-fallbacks.outputs.m1_online != 'false' }}
     runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m1-studio]
     continue-on-error: true
     permissions:
@@ -437,11 +441,13 @@ jobs:
     # to qualify-m1-studio (enforced by
     # test_desktop_release_flow_contract.py); only the runner label differs.
     needs: [codemagic-lane, plan-fallbacks, qualify-m1-studio]
+    # Fail open (see qualify-m1-studio): run unless the planner explicitly
+    # reported this runner offline, so a planner failure cannot skip the lane.
     if: >-
       ${{ always() &&
           needs.codemagic-lane.outputs.qualified != 'true' &&
           needs.qualify-m1-studio.outputs.qualified != 'true' &&
-          needs.plan-fallbacks.outputs.m4_online == 'true' }}
+          needs.plan-fallbacks.outputs.m4_online != 'false' }}
     runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m4-mini]
     continue-on-error: true
     permissions:

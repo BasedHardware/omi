@@ -119,7 +119,17 @@ LAUNCH_LOG=""
 LAUNCH_SIGNAL_FILE=""
 DESKTOP_LAUNCH_PID=""
 QUALIFICATION_SUCCESS=0
-DESKTOP_PREPARE_WAIT_SECS=3600
+# Cold, from-scratch rebuild of the exact tag compiles ~1190 SwiftPM modules
+# (FluidAudio, MarkdownUI, Firebase, ONNX, …) before the named bundle is even
+# packaged/signed/launched. On a self-hosted M1 that first cold build alone runs
+# ~65 min and, with packaging + install, dispatches the desktop launch at ~75 min
+# — past the old 3600s budget, so every fresh tag timed out at [~1139/1190]
+# compiling and left no reusable .build for the warm retry, stalling Beta
+# (v0.12.99–v0.12.113 all failed, self-hosted lane, `not dispatched within 3600s`).
+# 5400s (90 min) covers the observed cold path with headroom while staying within
+# the self-hosted job cap; warm same-SHA retry/prewarm still completes in a
+# fraction of this. Overridable per runner via OMI_QUALIFY_PREPARE_WAIT_SECS.
+DESKTOP_PREPARE_WAIT_SECS="${OMI_QUALIFY_PREPARE_WAIT_SECS:-5400}"
 BRIDGE_WAIT_SECS=900
 
 gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,isPrerelease,publishedAt,assets,body \

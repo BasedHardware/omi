@@ -18,7 +18,7 @@ Check errors in the latest (or specific) release using the **sentry-release skil
 ./scripts/sentry-release.sh --all        # include carryover issues
 ./scripts/sentry-release.sh --quota      # billing/quota status
 ```
-See `.claude/skills/sentry-release/SKILL.md` for full documentation.
+Run the script with `--help` for the full option list.
 
 ### User Issue Investigation
 When debugging issues for a specific user, check Sentry dashboard for crashes and PostHog for events.
@@ -54,9 +54,9 @@ Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.
 
 ## Release Pipeline
 
-Merging `desktop/macos/**` or the release-owning root `codemagic.yaml` triggers a candidate on that merge. This keeps immutable tags bound to the Codemagic configuration that builds them. A candidate advances to beta automatically only after every qualification gate passes:
+Beta release candidates are cut on a fixed **6-hourly schedule** — 12am / 6am / 12pm / 6pm America/New_York (`0 4,10,16,22 * * *` UTC in EDT; see the workflow comment for the EST drift). Each run plans the newest releasable `desktop/macos/**` (or release-owning root `codemagic.yaml`) change since the last tag, keeping immutable tags bound to the Codemagic configuration that builds them. A candidate advances to beta automatically only after every qualification gate passes:
 
-1. **GitHub Actions** (`desktop_auto_release.yml`) — batches mainline changes, auto-increments the version, and pushes a `v*-macos` build-candidate tag. It fires on `push` to `main` scoped to the releasable desktop paths (`DESKTOP_RELEASE_PATHS`; the push filter is kept in lockstep by `test_push_paths_cover_releasable_desktop_paths`), with the hourly `schedule` as a backstop for merges that land inside the quiet window or while a release is active. A ~60s quiet window (`AUTO_RELEASE_QUIET_SECONDS`) coalesces near-simultaneous merges; the one-active-release fence (Codemagic build status on the latest tag) still admits at most one candidate at a time, so bursts collapse to the newest SHA. It fails closed before changelog or tag mutation unless `Release Eligibility`, `Desktop Swift Build & Tests`, and `Desktop Swift Release Compile` all completed successfully for the exact newest queued releasable desktop SHA. Later backend/docs-only commits do not replace that immutable source with a SHA where desktop CI was skipped; the tag includes the newly consolidated release notes.
+1. **GitHub Actions** (`desktop_auto_release.yml`) — on that 6-hourly `schedule` (plus manual `workflow_dispatch`; no per-merge push trigger) it batches mainline changes, auto-increments the version, and pushes a `v*-macos` build-candidate tag. A short quiet window (`AUTO_RELEASE_QUIET_SECONDS`) coalesces near-simultaneous merges; the one-active-release fence (Codemagic build status on the latest tag) admits at most one candidate at a time, so a schedule tick collapses to the newest releasable SHA. It fails closed before changelog or tag mutation unless `Release Eligibility`, `Desktop Swift Build & Tests`, and `Desktop Swift Release Compile` all completed successfully for the exact newest queued releasable desktop SHA. Later backend/docs-only commits do not replace that immutable source with a SHA where desktop CI was skipped; the tag includes the newly consolidated release notes.
 2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — triggered by the tag, runs on Mac mini M4:
    - Builds universal binary (arm64 + x86_64)
    - Signs with Developer ID, notarizes with Apple
@@ -90,7 +90,7 @@ Stable is manual:
 Promotion from beta to stable is handled by `desktop_promote_prod.yml`, not Codemagic.
 
 ## Firebase Connection
-Use `/firebase` command or see `.claude/skills/firebase/SKILL.md`
+Use the `/firebase` command if your agent provides it.
 
 Quick connect:
 ```bash
@@ -236,7 +236,8 @@ do not hand-edit those paths to match a specific machine.
 - Local: `http://localhost:8080`
 
 ## Credentials
-See `.claude/settings.json` for connection details.
+Connection details come from your local agent configuration; they are deliberately not
+checked in. Ask the user for anything you are missing rather than guessing an endpoint.
 
 ## Development Workflow
 
@@ -252,7 +253,7 @@ See `.claude/settings.json` for connection details.
 - **Release builds**: Handled entirely by Codemagic CI (no local release script needed)
 - **DO NOT** use bare `swift build` — it will fail with SDK version mismatch
 - **DO NOT** use `xcodebuild` — there is no `.xcodeproj`
-- **DO NOT** launch the app directly from `build/` — always use `./run.sh` or `./reset-and-run.sh`. These scripts install to `/Applications/Omi Dev.app` and launch from there, which is required for macOS "Quit & Reopen" (after granting permissions) to find the correct binary. Launching from `build/` causes stale binaries to run after permission restarts.
+- **DO NOT** launch the app directly from `build/` — always use `./run.sh`. These scripts install to `/Applications/Omi Dev.app` and launch from there, which is required for macOS "Quit & Reopen" (after granting permissions) to find the correct binary. Launching from `build/` causes stale binaries to run after permission restarts.
 - **DO NOT** manually copy binaries into app bundles and launch them — this bypasses signing, `/Applications/` installation, and LaunchServices registration
 
 - **DO NOT** kill, delete, or interfere with running "Omi", "omi", or "Omi Beta" app bundles — these are production/release installs the user relies on

@@ -152,14 +152,13 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         beta = workflow("desktop_promote_beta.yml")
         self.assertIn("schedule:", candidate)
         self.assertIn("workflow_dispatch:", candidate)
-        # Auto-release also fires on macOS-affecting merges to main so a candidate
-        # is planned within minutes of a merge. This stays a single candidate
-        # authority: every trigger runs the same fenced planner (quiet-window +
-        # one-active-release), and beta promotion keys off the qualification's
-        # workflow_dispatch event below, not this workflow's trigger. Chained
-        # triggers that could form a second authority remain forbidden.
-        self.assertIn("push:", candidate)
-        self.assertIn("branches: [main]", candidate)
+        # Auto-release runs on a fixed 6-hourly schedule (plus manual dispatch).
+        # This is a single candidate authority: every trigger runs the same fenced
+        # planner (quiet-window + one-active-release), and beta promotion keys off
+        # the qualification's workflow_dispatch event below, not this workflow's
+        # trigger. Chained/merge triggers that could form a second authority or
+        # build every merge are forbidden.
+        self.assertNotIn("push:", candidate)
         self.assertNotIn("workflow_run:", candidate)
         self.assertNotIn("workflow_call:", candidate)
         self.assertNotIn("uses: ./.github/workflows/desktop_promote_beta.yml", qualification)
@@ -246,12 +245,17 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertIn("runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m4-mini]", m4_job)
 
         # Lanes are serialized and each runs only when no earlier lane
-        # qualified; offline runners are skipped rather than queue-stalled.
+        # qualified. Runner gating fails OPEN: a lane is skipped only when the
+        # planner explicitly reported the runner offline ('!= false'), so a
+        # plan-fallbacks failure (e.g. token generation) cannot skip every
+        # self-hosted lane and re-create the single-point-of-failure outage.
         self.assertIn("needs.codemagic-lane.outputs.qualified != 'true'", m1_job)
-        self.assertIn("needs.plan-fallbacks.outputs.m1_online == 'true'", m1_job)
+        self.assertIn("needs.plan-fallbacks.outputs.m1_online != 'false'", m1_job)
+        self.assertNotIn("needs.plan-fallbacks.outputs.m1_online == 'true'", m1_job)
         self.assertIn("needs.codemagic-lane.outputs.qualified != 'true'", m4_job)
         self.assertIn("needs.qualify-m1-studio.outputs.qualified != 'true'", m4_job)
-        self.assertIn("needs.plan-fallbacks.outputs.m4_online == 'true'", m4_job)
+        self.assertIn("needs.plan-fallbacks.outputs.m4_online != 'false'", m4_job)
+        self.assertNotIn("needs.plan-fallbacks.outputs.m4_online == 'true'", m4_job)
 
         # Only the verdict job may fail the workflow run.
         self.assertIn("continue-on-error: true", jobs["codemagic-lane"])

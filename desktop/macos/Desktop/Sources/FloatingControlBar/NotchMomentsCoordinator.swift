@@ -29,6 +29,10 @@ final class NotchMomentsCoordinator {
   private var sessionStartedAt: Date?
   /// The task shown in the most recent receipt (so Undo can retract it).
   private var lastReceiptTask: TaskActionItem?
+  /// Receipt verification runs asynchronously against the canonical action-items
+  /// read path. Keep one request per observed task so cache updates cannot emit
+  /// duplicate success receipts while that read is in flight.
+  private var pendingReceiptVerificationIDs = Set<String>()
 
   private init() {}
 
@@ -107,10 +111,51 @@ final class NotchMomentsCoordinator {
         .filter({ newIds.contains($0.id) && $0.createdAt >= freshCutoff })
         .max(by: { $0.createdAt < $1.createdAt })
     else { return }
-    lastReceiptTask = newTask
-    post(
-      title: "✓ Noted — \(newTask.description)", message: "",
-      assistantId: NotchMoment.receiptAssistantId)
+    verifyAndPostReceipt(for: newTask)
+  }
+
+  /// A local cache insert is not a durable-save acknowledgement. Read the task
+  /// through the canonical API before claiming it was saved, then make sure it
+  /// still remains in the active local projection before presenting the receipt.
+  private func verifyAndPostReceipt(for task: TaskActionItem) {
+    guard pendingReceiptVerificationIDs.insert(task.id).inserted else { return }
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
+    else {
+      pendingReceiptVerificationIDs.remove(task.id)
+      return
+    }
+
+    Task { @MainActor [weak self] in
+      defer { self?.pendingReceiptVerificationIDs.remove(task.id) }
+      guard let self else { return }
+      do {
+        let canonicalTask = try await APIClient.shared.getActionItem(
+          id: task.id,
+          expectedOwnerId: ownerID,
+          authorizationSnapshot: authorizationSnapshot)
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+          self.appState?.isTranscribing == true,
+          Self.isReceiptConfirmation(task, canonicalTask),
+          TasksStore.shared.incompleteTasks.contains(where: { $0.id == task.id })
+        else { return }
+        self.lastReceiptTask = canonicalTask
+        self.post(
+          title: "✓ Saved to Tasks — \(canonicalTask.description)", message: "",
+          assistantId: NotchMoment.receiptAssistantId)
+      } catch {
+        // Deliberately do not claim a save when the canonical task read fails.
+        // The next store update can re-attempt with a new task identity once
+        // the task has actually made it through the durable read path.
+        log("NotchMoments: Suppressed unconfirmed task receipt")
+      }
+    }
+  }
+
+  /// The receipt contract: the canonical read must name the same active task.
+  /// Keep this pure so its behavior remains covered without a live API.
+  nonisolated static func isReceiptConfirmation(_ observed: TaskActionItem, _ canonical: TaskActionItem) -> Bool {
+    observed.id == canonical.id && !canonical.completed && !canonical.isRetired
   }
 
   // MARK: actions from the cards
@@ -122,6 +167,11 @@ final class NotchMomentsCoordinator {
   }
 
   func reviewFollowUps() {
+    AppDelegate.openMainWindow?()
+    NotificationCenter.default.post(name: .navigateToTasks, object: nil)
+  }
+
+  func reviewLastReceipt() {
     AppDelegate.openMainWindow?()
     NotificationCenter.default.post(name: .navigateToTasks, object: nil)
   }
