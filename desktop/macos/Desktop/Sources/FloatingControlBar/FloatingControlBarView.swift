@@ -559,31 +559,6 @@ struct FloatingControlBarView: View {
     }
   }
 
-  /// Live receipt — "✓ Noted — <task>" with Undo, shown while listening as Omi
-  /// writes something down. Monochrome, on the pill's black glass. Auto-collapses.
-  private func notchReceiptCard(_ notification: FloatingBarNotification) -> some View {
-    HStack(spacing: 10) {
-      Text(notification.title)
-        .scaledFont(size: 12.5)
-        .foregroundColor(.white)
-        .lineLimit(1)
-      Spacer(minLength: 8)
-      Button {
-        NotchMomentsCoordinator.shared.undoLastReceipt()
-        FloatingControlBarManager.shared.dismissCurrentNotification()
-      } label: {
-        Text("Undo")
-          .scaledFont(size: 11.5)
-          .foregroundColor(.white.opacity(0.55))
-          .underline()
-      }
-      .buttonStyle(.plain)
-    }
-    .padding(.horizontal, OmiSpacing.md)
-    .padding(.vertical, OmiSpacing.sm)
-    .frame(maxWidth: .infinity, alignment: .leading)
-  }
-
   /// Conversation ends — the USP moment. "N follow-ups ready" + Review / Later.
   private func notchEndCard(_ notification: FloatingBarNotification) -> some View {
     VStack(alignment: .leading, spacing: 2) {

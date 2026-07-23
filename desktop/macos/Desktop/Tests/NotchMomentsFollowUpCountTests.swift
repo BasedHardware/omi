@@ -58,4 +58,26 @@ final class NotchMomentsFollowUpCountTests: XCTestCase {
     XCTAssertEqual(
       NotchMomentsCoordinator.followUpCount(tasks: tasks, baselineIds: baseline, since: nil), 1)
   }
+
+  func testReceiptRequiresMatchingActiveCanonicalTask() {
+    let observed = task("task-1", createdAt: sessionStart)
+    let canonical = task("task-1", createdAt: sessionStart)
+
+    XCTAssertTrue(NotchMomentsCoordinator.isReceiptConfirmation(observed, canonical))
+    XCTAssertFalse(
+      NotchMomentsCoordinator.isReceiptConfirmation(
+        observed,
+        task("different-task", createdAt: sessionStart)),
+      "a different canonical task must never acknowledge the observed cache insert")
+  }
+
+  func testReceiptRejectsCompletedOrRetiredCanonicalTask() {
+    let observed = task("task-1", createdAt: sessionStart)
+    let completed = TaskActionItem(id: "task-1", description: "task-1", completed: true, createdAt: sessionStart)
+    let retired = TaskActionItem(
+      id: "task-1", description: "task-1", completed: false, createdAt: sessionStart, deleted: true)
+
+    XCTAssertFalse(NotchMomentsCoordinator.isReceiptConfirmation(observed, completed))
+    XCTAssertFalse(NotchMomentsCoordinator.isReceiptConfirmation(observed, retired))
+  }
 }
