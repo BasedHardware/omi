@@ -9,6 +9,7 @@ covers:
   - desktop/macos/Desktop/Sources/DefaultsKey.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/LegacyVoiceJournalImporter.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PTTAttemptLifecycleRecorder.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/ShortcutSettings.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RawWebSocket.swift
