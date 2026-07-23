@@ -1,4 +1,4 @@
-"""Tests for the oversized chat-input guard (utils/retrieval/input_guard.py).
+"""Tests for the oversized chat-input guard (utils/retrieval/safety.py).
 
 The guard keeps the most recent turns that fit a token budget and flags when the newest turn
 alone is too large. Extremely long messages otherwise blow the model's context window, the agent
@@ -9,7 +9,7 @@ heavy chat/LLM import stack.
 
 from types import SimpleNamespace
 
-from utils.retrieval.input_guard import (
+from utils.retrieval.safety import (
     INPUT_TOO_LONG_MESSAGE,
     MAX_CHAT_INPUT_TOKENS,
     fit_within_budget,

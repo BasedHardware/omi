@@ -50,8 +50,7 @@ from utils.retrieval.tools import (
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
-from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
-from utils.retrieval.input_guard import fit_within_budget, INPUT_TOO_LONG_MESSAGE
+from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError, fit_within_budget, INPUT_TOO_LONG_MESSAGE
 from utils.llm.byok_errors import handle_llm_error_async
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, num_tokens_from_string
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
