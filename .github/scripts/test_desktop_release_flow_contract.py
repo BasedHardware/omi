@@ -246,12 +246,17 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertIn("runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m4-mini]", m4_job)
 
         # Lanes are serialized and each runs only when no earlier lane
-        # qualified; offline runners are skipped rather than queue-stalled.
+        # qualified. Runner gating fails OPEN: a lane is skipped only when the
+        # planner explicitly reported the runner offline ('!= false'), so a
+        # plan-fallbacks failure (e.g. token generation) cannot skip every
+        # self-hosted lane and re-create the single-point-of-failure outage.
         self.assertIn("needs.codemagic-lane.outputs.qualified != 'true'", m1_job)
-        self.assertIn("needs.plan-fallbacks.outputs.m1_online == 'true'", m1_job)
+        self.assertIn("needs.plan-fallbacks.outputs.m1_online != 'false'", m1_job)
+        self.assertNotIn("needs.plan-fallbacks.outputs.m1_online == 'true'", m1_job)
         self.assertIn("needs.codemagic-lane.outputs.qualified != 'true'", m4_job)
         self.assertIn("needs.qualify-m1-studio.outputs.qualified != 'true'", m4_job)
-        self.assertIn("needs.plan-fallbacks.outputs.m4_online == 'true'", m4_job)
+        self.assertIn("needs.plan-fallbacks.outputs.m4_online != 'false'", m4_job)
+        self.assertNotIn("needs.plan-fallbacks.outputs.m4_online == 'true'", m4_job)
 
         # Only the verdict job may fail the workflow run.
         self.assertIn("continue-on-error: true", jobs["codemagic-lane"])
