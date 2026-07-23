@@ -419,7 +419,16 @@ class ListenSessionRuntime:
         if self.state.fair_use_track_dg_usage and self.state.dg_usage_ms_pending:
             await self.persistence.call(record_dg_usage_ms, self.request.uid, self.state.dg_usage_ms_pending)
             self.state.dg_usage_ms_pending = 0
-        if self.use_custom_stt or not self.state.last_usage_record_timestamp:
+        if self.use_custom_stt:
+            # Exempt from transcription billing and live caps, but the speech
+            # still drives Omi-paid LLM post-processing — meter it in its own
+            # isolated fair-use lane so the spend is visible (#7690).
+            if FAIR_USE_ENABLED and self.receiver.vad_gate is not None:
+                custom_speech_ms = self.receiver.vad_gate.consume_speech_ms_delta()
+                if custom_speech_ms:
+                    await self.persistence.call(record_speech_ms, self.request.uid, custom_speech_ms, 'custom_stt')
+            return 0
+        if not self.state.last_usage_record_timestamp:
             return 0
         speech_seconds = 0
         if self.receiver.vad_gate is not None:
