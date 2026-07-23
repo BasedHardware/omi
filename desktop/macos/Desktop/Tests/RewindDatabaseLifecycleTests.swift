@@ -78,11 +78,7 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
     defer { try? FileManager.default.removeItem(at: userDir) }
 
     await RewindIndexer.shared.reset()
-    // The shared VideoChunkEncoder binds to one user's videos directory and refuses
-    // to re-init under a different one. RewindIndexer.reset() doesn't clear it, so a
-    // prior test in the suite can leave it bound to another directory — clear its
-    // storage-owner config here so this test is isolated regardless of run order.
-    await VideoChunkEncoder.shared.clearConfigurationAfterUserSwitch()
+    await RewindStorage.shared.reset()
     await RewindDatabase.shared.close()
     RewindDatabase.currentUserId = testUserId
     await RewindDatabase.shared.configure(userId: testUserId)
@@ -102,6 +98,7 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
       "initializing the indexer must reopen a database closed after the indexer was initialized")
 
     await RewindIndexer.shared.reset()
+    await RewindStorage.shared.reset()
     await RewindDatabase.shared.close()
     RewindDatabase.currentUserId = nil
   }
@@ -116,12 +113,7 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
     defer { try? FileManager.default.removeItem(at: userDir) }
 
     await RewindIndexer.shared.reset()
-    // Clear the shared VideoChunkEncoder's storage-owner binding (see the note in
-    // testInitializeReopensDatabaseClosedAfterIndexerInitialization): otherwise a
-    // prior test leaves it bound to another directory and processFrame below throws
-    // "Video encoder must reset before changing storage owner" under the CI suite's
-    // run order.
-    await VideoChunkEncoder.shared.clearConfigurationAfterUserSwitch()
+    await RewindStorage.shared.reset()
     await RewindDatabase.shared.close()
     RewindDatabase.currentUserId = testUserId
     await RewindDatabase.shared.configure(userId: testUserId)
@@ -153,6 +145,7 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
       "processing a frame must reopen a database closed after the indexer was initialized")
 
     await RewindIndexer.shared.reset()
+    await RewindStorage.shared.reset()
     await RewindDatabase.shared.close()
     RewindDatabase.currentUserId = nil
   }

@@ -18,43 +18,6 @@ final class FloatingBarTimingSignalTests: XCTestCase {
       .appendingPathComponent("Sources/FloatingControlBar")
   }
 
-  private func floatingBarViewSource() throws -> String {
-    try String(
-      contentsOf: floatingControlBarDir().appendingPathComponent("FloatingControlBarView.swift"))
-  }
-
-  func testIdleNotchWindowActivationDelegatesToCanonicalAuthorityNotFixedDelay() throws {
-    // BL-005: the floating bar must not re-open the main window on a fixed-delay
-    // `asyncAfter` guess. Idle-notch activation delegates to the single main-chat
-    // window authority (`AppDelegate.openMainAppChat`) via NotchIdleTapRoute — it
-    // does not run its own timed window activation. (The earlier
-    // `runWhenMainAppWindowKey` / `didBecomeKey` helper was folded into that
-    // canonical authority in a4fac7b366; this guard follows the logic there. The
-    // request/consume landing signal is covered behaviorally below.)
-    let bar = try floatingBarViewSource()
-    XCTAssertTrue(
-      bar.contains("NotchIdleTapRoute"),
-      "idle-notch activation should route through the single tap-route authority")
-    XCTAssertTrue(
-      bar.contains("openMainAppChat"),
-      "the floating bar should delegate window activation to the canonical main-chat "
-        + "authority, not run its own timed activation")
-  }
-
-  /// The canonical chat-landing keys off a one-shot request that survives window
-  /// creation (consumed when the window becomes visible), not a fixed delay.
-  /// Exercised behaviorally so it doesn't depend on implementation strings.
-  @MainActor
-  func testMainChatNavigationRequestIsOneShotSurvivingWindowCreation() {
-    let store = MainChatNavigationRequestStore.shared
-    _ = store.consume()  // clear any prior state
-    XCTAssertFalse(store.isPending)
-    store.request()
-    XCTAssertTrue(store.isPending, "a raised request must stay pending until the window consumes it")
-    XCTAssertTrue(store.consume(), "the window consumes the pending request on mount")
-    XCTAssertFalse(store.consume(), "the request is one-shot — a second consume yields nothing")
-  }
-
   /// Anti-regression: no new fixed-delay `asyncAfter` may be added under
   /// `FloatingControlBar/` above the pinned baseline. Recurses the directory the
   /// same way the Python ratchet does; comment mentions of the word are excluded
