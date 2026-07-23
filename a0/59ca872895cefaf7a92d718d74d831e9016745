@@ -1,0 +1,23 @@
+desktop/macos/Desktop/Sources/Chat/AgentFailureTranscriptFormatter.swift
+  s_efe5c62a8ad125::t_c6ff991b15cb48 4-8
+desktop/macos/Desktop/Tests/VoiceTurnDomainTests/VoiceTurnUIProjectionCopyTests.swift
+  s_efe5c62a8ad125::t_b24eb73c88e302 128-154
+desktop/macos/changelog/unreleased/20260722-generic-agent-start-failure-copy.json
+  s_efe5c62a8ad125::t_63f26cab2ad800 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "a059ca872895cefaf7a92d718d74d831e9016745",
+  "prompts": {},
+  "sessions": {
+    "s_efe5c62a8ad125": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cfd8af6e-8834-41f4-abf4-41e70fe66bf4",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
