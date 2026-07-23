@@ -88,7 +88,12 @@ MAX_DAILY_AUDIO_MS = MAX_DAILY_AUDIO_HOURS * 3600 * 1000
 
 
 LIVE_SPEECH_SOURCES = ('realtime', 'sync_fresh')
-_VALID_SPEECH_SOURCES = frozenset((*LIVE_SPEECH_SOURCES, 'sync_backfill'))
+# custom_stt is metered but never live-enforced: those users transcribe on
+# their own provider and are exempt from transcription caps, yet their speech
+# drives the same downstream LLM post-processing spend — the lane makes that
+# spend visible without gating anyone (#7690). Any cap is a separate policy
+# decision reading this lane.
+_VALID_SPEECH_SOURCES = frozenset((*LIVE_SPEECH_SOURCES, 'sync_backfill', 'custom_stt'))
 
 
 def _normalize_speech_source(source: str) -> str:

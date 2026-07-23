@@ -1725,6 +1725,96 @@ describe("kernel conversation journal", () => {
     store.close();
   });
 
+  it("repairs a startup-terminalized turn before it can starve later backend chat sync", () => {
+    const databasePath = newDatabasePath();
+    let store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 100 });
+    const fixture = insertSurface(store, "main_chat", "chat", "restart-outbox");
+    recordCompletedTextTurn(fixture, "turn-already-delivered", "Do not resend", 5);
+    const [deliveredClaim] = drainBackendTurnOutbox(store, { nowMs: 6 });
+    ackBackendTurnOutbox(store, {
+      ownerId: fixture.ownerId,
+      turnId: deliveredClaim.turnId,
+      remoteId: "remote-already-delivered",
+      attemptCount: deliveredClaim.attemptCount,
+      deliveryGeneration: deliveredClaim.deliveryGeneration,
+      conversationGeneration: deliveredClaim.conversationGeneration,
+      payloadHash: deliveredClaim.payloadHash,
+      nowMs: 7,
+    });
+    const run = store.insertRun({
+      sessionId: fixture.sessionId,
+      clientId: "client",
+      requestId: "interrupted-after-run-success",
+      status: "succeeded",
+      mode: "ask",
+      completedAtMs: 11,
+    });
+    const attempt = store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 1,
+      status: "succeeded",
+      adapterId: "acp",
+      adapterInstanceId: "",
+      completedAtMs: 11,
+    });
+    recordJournalTurn(store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-interrupted",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "streaming",
+      content: "",
+      contentBlocks: [],
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      createdAtMs: 10,
+    });
+    const staleHash = String(store.getRow(
+      "SELECT payload_hash FROM backend_turn_outbox WHERE turn_id = ?",
+      ["turn-interrupted"],
+    ).payload_hash);
+    store.close();
+
+    store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 20 });
+    expect(store.reconcileStartup()).toMatchObject({
+      reconciledJournalTurnIds: ["turn-interrupted"],
+      repairedBackendTurnOutboxIds: ["turn-interrupted"],
+    });
+    const repairedOutbox = store.getRow(
+      "SELECT status, last_error_code, payload_hash FROM backend_turn_outbox WHERE turn_id = ?",
+      ["turn-interrupted"],
+    );
+    expect(repairedOutbox).toMatchObject({
+      status: "failed",
+      last_error_code: "empty_completed_turn_cancelled",
+    });
+    expect(repairedOutbox.payload_hash).not.toBe(staleHash);
+    expect(store.getRow(
+      "SELECT status, remote_id FROM backend_turn_outbox WHERE turn_id = ?",
+      ["turn-already-delivered"],
+    )).toEqual({
+      status: "delivered",
+      remote_id: "remote-already-delivered",
+    });
+
+    const resumedFixture = {
+      store,
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      conversationId: fixture.conversationId,
+    };
+    recordCompletedTextTurn(resumedFixture, "turn-after-restart", "Chat still syncs", 30);
+    expect(drainBackendTurnOutbox(store, { nowMs: 31 })).toMatchObject([
+      {
+        turnId: "turn-after-restart",
+        payload: { text: "Chat still syncs" },
+      },
+    ]);
+    store.close();
+  });
+
   it("reconciles a backend row visible before outbox ACK into the canonical turn in place", () => {
     const fixture = newSurface("main_chat", "chat", "default");
     const run = fixture.store.insertRun({

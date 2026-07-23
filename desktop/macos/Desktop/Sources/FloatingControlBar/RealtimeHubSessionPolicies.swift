@@ -480,6 +480,27 @@ enum RealtimeHubLifecyclePolicy {
     !replacementPending
   }
 
+  /// Whether the persistence-fence refresh loop may retry after a kernel
+  /// snapshot failed to resolve.
+  ///
+  /// Retrying is only safe while the fence still owns the authenticated scope it
+  /// started under. Once the owner changes or signs out (session invalidation),
+  /// the kernel snapshot can never resolve — the agent bridge refuses to start
+  /// without a current authorization — so the snapshot fails *instantly* on
+  /// every iteration. Looping in that state spins agent-bridge startup at full
+  /// speed (thousands of "sign in to use AI chat" failures per minute). Signed-in
+  /// snapshot failures are naturally rate-limited by their network round-trip, so
+  /// this owner-scope gate is what prevents the busy-loop.
+  static func canRetryPersistenceFence(
+    taskCancelled: Bool,
+    fenceOwnerScope: RealtimeHubOwnerScope,
+    currentOwnerScope: RealtimeHubOwnerScope
+  ) -> Bool {
+    guard !taskCancelled else { return false }
+    guard case .authenticated = currentOwnerScope else { return false }
+    return fenceOwnerScope == currentOwnerScope
+  }
+
 }
 
 /// Immutable account identity attached to a realtime socket, its context, and

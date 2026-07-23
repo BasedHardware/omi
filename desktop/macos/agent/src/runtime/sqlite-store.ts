@@ -2,6 +2,12 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
+import {
+  backendTombstoneCode,
+  backendTurnPayload,
+  backendTurnPayloadHash,
+} from "./backend-turn-projection.js";
+import { conversationTurnFromRow } from "./conversation-turns.js";
 import type {
   AdapterBinding,
   AgentArtifact,
@@ -645,7 +651,8 @@ export class SqliteAgentStore implements AgentStore {
       }
 
       const reconciledJournalTurns = reconcileNonterminalJournalRows(this.db, now);
-      for (const repair of reconciledJournalTurns) {
+      const repairedBackendTurnOutboxes = reconcileBackendTurnOutboxRows(this.db, now);
+      for (const repair of [...reconciledJournalTurns, ...repairedBackendTurnOutboxes]) {
         const surface = this.getOptionalRow(
           `SELECT agent_session_id FROM surface_conversations
            WHERE conversation_id = ? ORDER BY last_active_at_ms DESC LIMIT 1`,
@@ -820,6 +827,7 @@ export class SqliteAgentStore implements AgentStore {
         repairedBindingProfileReferenceIds: repairedProfileReferences.bindingIds,
         repairedLegacyJournalTurnIds,
         reconciledJournalTurnIds: reconciledJournalTurns.map((repair) => repair.turnId),
+        repairedBackendTurnOutboxIds: repairedBackendTurnOutboxes.map((repair) => repair.turnId),
         recoveryDispatchIds,
         clearedAttemptInstanceIds,
         clearedBindingInstanceIds,
@@ -1844,6 +1852,55 @@ function reconcileNonterminalJournalRows(
       code,
     };
   });
+}
+
+function reconcileBackendTurnOutboxRows(
+  db: Pick<DatabaseSync, "prepare">,
+  nowMs: number,
+): StartupJournalRepair[] {
+  const rows = db.prepare(
+    `SELECT ct.*, outbox.payload_hash AS outbox_payload_hash
+     FROM backend_turn_outbox outbox
+     JOIN conversation_turns ct
+       ON ct.conversation_id = outbox.conversation_id
+      AND ct.turn_id = outbox.turn_id
+     WHERE outbox.status IN ('pending', 'retrying', 'delivering')
+       AND ct.status IN ('completed', 'failed')
+     ORDER BY outbox.created_at_ms ASC, outbox.turn_id ASC`,
+  ).all() as Row[];
+  const repairs: StartupJournalRepair[] = [];
+  for (const row of rows) {
+    const turn = conversationTurnFromRow(row);
+    const payloadHash = backendTurnPayloadHash(backendTurnPayload(turn));
+    if (payloadHash === text(row.outbox_payload_hash)) continue;
+    const tombstoneCode = backendTombstoneCode(turn);
+    db.prepare(
+      `UPDATE backend_turn_outbox
+       SET payload_hash = ?,
+           status = CASE WHEN ? IS NOT NULL THEN 'failed' ELSE 'pending' END,
+           attempt_count = 0,
+           available_at_ms = ?,
+           lease_expires_at_ms = NULL,
+           last_error_code = ?,
+           updated_at_ms = ?
+       WHERE turn_id = ? AND payload_hash != ?`,
+    ).run(
+      payloadHash,
+      tombstoneCode,
+      nowMs,
+      tombstoneCode,
+      nowMs,
+      turn.turnId,
+      payloadHash,
+    );
+    repairs.push({
+      turnId: turn.turnId,
+      conversationId: turn.conversationId,
+      producingRunId: turn.producingRunId,
+      code: "daemon_restart_outbox_revision_repair",
+    });
+  }
+  return repairs;
 }
 
 function rewriteJournalRow(
