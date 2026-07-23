@@ -411,8 +411,10 @@ def check_codemagic_release_publishers() -> list[str]:
         return [*errors, "canonical and preview workflows must both have scripts"]
     if canonical_scripts is not preview_scripts:
         errors.append("preview scripts must be the exact YAML alias node used by the canonical workflow")
-    if len(canonical_scripts) != 21:
-        errors.append("canonical workflow must retain exactly 21 approved script steps")
+    # 22 = 21 hardening-approved steps + the INV-BETA-1 "Create Omi Beta variant"
+    # step (founder-reviewed re-land, PR #10317).
+    if len(canonical_scripts) != 22:
+        errors.append("canonical workflow must retain exactly 22 approved script steps")
 
     for scalar in _iter_semantic_strings(canonical):
         for forbidden_authority in _FORBIDDEN_NORMAL_RELEASE_GCP_AUTHORITIES:
@@ -533,8 +535,8 @@ def check_desktop_codemagic_release() -> list[str]:
 
     planner = ROOT / ".github/scripts/plan-desktop-release.py"
     planner_text = planner.read_text(encoding="utf-8")
-    if "AUTO_RELEASE_QUIET_SECONDS = 10 * 60" not in planner_text:
-        errors.append("desktop auto-release planner must keep a 10 minute quiet window before auto-tagging")
+    if "AUTO_RELEASE_QUIET_SECONDS = 60" not in planner_text:
+        errors.append("desktop auto-release planner must keep a short (60s) quiet window before auto-tagging")
     if "latest_change_age is None" not in planner_text:
         errors.append("desktop auto-release planner must fail closed when latest change age cannot be determined")
     if "RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60" not in planner_text:
@@ -555,6 +557,7 @@ def check_desktop_codemagic_release() -> list[str]:
     required_files = [
         "desktop/macos/scripts/prepare-agent-runtime.sh",
         "desktop/macos/scripts/prepare-desktop-bundle-native-deps.sh",
+        "desktop/macos/scripts/publish-desktop-debug-symbols.sh",
         "desktop/macos/scripts/audit-desktop-bundle-deps.sh",
         "desktop/macos/scripts/smoke-signed-desktop-artifact.sh",
         "desktop/macos/scripts/test-tool-surfaces.sh",
@@ -578,6 +581,15 @@ def check_desktop_codemagic_release() -> list[str]:
         desktop_workflow_body = ""
     else:
         desktop_workflow_body = desktop_workflow_match.group("body")
+
+    for required_fragment in (
+        "publish-desktop-debug-symbols.sh generate",
+        "publish-desktop-debug-symbols.sh upload",
+        '"$DSYM_ARCHIVE"',
+        "- build/*.dSYM",
+    ):
+        if required_fragment not in desktop_workflow_body:
+            errors.append(f"desktop release is missing fail-closed debug-symbol publication: {required_fragment}")
 
     smoke_index = desktop_workflow_body.find("Smoke signed desktop artifact")
     release_index = desktop_workflow_body.find("Create GitHub release")

@@ -138,13 +138,8 @@ class RunnerBehaviorTests(unittest.TestCase):
                 "node": f'''#!/bin/sh
 case "$1" in
   -p) echo 22 ;;
-  -e)
-    case "$2" in
-      *server.listen*) echo 45678 ;;
-      *) printf '{{}}' > "$3" ;;
-    esac
-    ;;
-  -) printf '%s\\n' "$@" > "{capture}" ;;
+  *emulator_config.mjs) printf '45678 45679\\n' ;;
+  *supervise.mjs) printf '%s\\n' "$@" > "{capture}" ;;
 esac
 ''',
                 "java": "#!/bin/sh\necho '    java.version = 21.0.1' >&2\n",
@@ -158,7 +153,9 @@ esac
             result = subprocess.run(["bash", str(runner)], text=True, capture_output=True, env=env, check=False)
 
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("uv run --no-project", capture.read_text(encoding="utf-8"))
+            captured = capture.read_text(encoding="utf-8")
+            self.assertIn("uv run --no-project", captured)
+            self.assertIn("--cleanup-path", captured)
 
     def test_trigger_matching_selects_only_relevant_checks(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
@@ -166,6 +163,16 @@ esac
         self.assertIn("brand-ui", selected)
         self.assertNotIn("backend-async-blockers", selected)
         self.assertNotIn("backend-route-policy-baseline", selected)
+
+    def test_root_agents_md_selects_agent_doc_checks(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        # `**/AGENTS.md` does not match the root file under fnmatch/PurePath.match,
+        # so the root guide needs an explicit trigger or a docs-only root edit
+        # skips both the size ratchet and the dead-pointer check.
+        for lane in ("local", "ci"):
+            selected = {check.id for check in resolve_checks(manifest, ["AGENTS.md"], lane)}
+            self.assertIn("agents-md-lean", selected)
+            self.assertIn("agent-doc-references", selected)
 
     def test_backend_route_change_selects_route_policy_baseline_in_both_lanes(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)

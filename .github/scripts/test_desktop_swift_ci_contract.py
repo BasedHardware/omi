@@ -99,6 +99,35 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         release_job = self.jobs["desktop-swift-release-compile"]
         self.assertIn("fetch-depth: 1", release_job)
 
+    def test_release_control_inputs_produce_exact_sha_checks(self):
+        """Candidate-building config must run the checks consumed by the release planner."""
+        changes = self.jobs["changes"]
+
+        for path in (
+            "codemagic.yaml",
+            ".github/scripts/plan-desktop-release.py",
+            ".github/workflows/desktop_auto_release.yml",
+            ".github/workflows/desktop-swift-ci.yml",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, changes)
+
+    def test_macos_jobs_have_a_bounded_runner_budget(self):
+        """A stuck Swift invocation must not consume hosted macOS capacity forever."""
+        for job_id in MACOS_JOBS:
+            with self.subTest(job=job_id):
+                self.assertIn("timeout-minutes: 60", self.jobs[job_id])
+
+    def test_closed_prs_release_the_same_pr_concurrency_group_without_allocating_a_runner(self):
+        """A close event supersedes its PR run before any macOS job can start."""
+        workflow = _workflow_text()
+        changes = self.jobs["changes"]
+
+        self.assertRegex(workflow, r"types:\s*\[[^]]*closed[^]]*\]")
+        self.assertIn("github.event.pull_request.number || github.sha", workflow)
+        self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", workflow)
+        self.assertIn("github.event.action != 'closed'", changes)
+
     def test_notification_boundary_runs_targeted_release_regression(self):
         changes = self.jobs["changes"]
         job = self.jobs["desktop-swift-tests"]

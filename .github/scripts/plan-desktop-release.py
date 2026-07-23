@@ -17,7 +17,18 @@ REQUIRED_SOURCE_CHECK_NAMES = (
     "Desktop Swift Release Compile",
 )
 RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60
-AUTO_RELEASE_QUIET_SECONDS = 10 * 60
+# Short debounce so a merge is tagged within ~a minute instead of waiting ten.
+# The one-active-release fence (Codemagic build status on the latest tag) already
+# collapses rapid bursts to the newest SHA while a build runs, so this window only
+# needs to coalesce near-simultaneous merges, not batch a whole feature.
+AUTO_RELEASE_QUIET_SECONDS = 60
+DESKTOP_RELEASE_PATHS = (
+    "desktop/macos",
+    "codemagic.yaml",
+    ".github/scripts/plan-desktop-release.py",
+    ".github/workflows/desktop_auto_release.yml",
+    ".github/workflows/desktop-swift-ci.yml",
+)
 
 
 def run(args: list[str], *, check: bool = True) -> str:
@@ -43,9 +54,9 @@ def latest_desktop_tag() -> str | None:
 
 def releasable_desktop_changes_since(ref: str | None) -> list[str]:
     if ref is None:
-        output = git(["ls-files", "desktop/macos"])
+        output = git(["ls-files", *DESKTOP_RELEASE_PATHS])
     else:
-        output = git(["diff", "--name-only", "--diff-filter=ACDMR", f"{ref}..HEAD", "--", "desktop/macos"])
+        output = git(["diff", "--name-only", "--diff-filter=ACDMR", f"{ref}..HEAD", "--", *DESKTOP_RELEASE_PATHS])
 
     changes = []
     for path in output.splitlines():

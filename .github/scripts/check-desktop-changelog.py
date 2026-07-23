@@ -17,10 +17,21 @@ EXEMPT_DESKTOP_PATHS = {
     "desktop/macos/AGENTS.md",
     "desktop/macos/docs/release.md",
     "desktop/macos/scripts/qualify-desktop-beta.sh",
+    # Sibling qualification-runner helper to qualify-desktop-beta.sh: internal
+    # release infrastructure with no user-facing app surface.
+    "desktop/macos/scripts/qualification-swift-cache.sh",
+    # Pre-tag readiness gate script: internal release infrastructure (runs on the
+    # trusted M1 before tagging), no user-facing app surface.
+    "desktop/macos/scripts/pre-tag-readiness.sh",
 }
 # Server-side Rust backend changes are internal reliability work, not user-facing app notes.
+# Test and release-infra changes are likewise never user-facing app notes; the
+# `no-changelog-needed` PR label only satisfies the PR run, so post-merge push
+# runs of this gate must exempt these paths by path or they redden main
+# (qualify-desktop-beta.sh timeout bump #10374 tripped tests/ on the merge push).
 EXEMPT_DESKTOP_PATH_PREFIXES = (
     "desktop/macos/Backend-Rust/",
+    "desktop/macos/tests/",
 )
 
 
