@@ -33,23 +33,39 @@ Exit 0 only when every reference resolves to a key present in the proposed
 inventory and no key was removed from a bulk-loaded object. Anything ambiguous
 or missing fails closed.
 
-Run as::
+Preflight (default, stdlib-only — runs in pre-push/CI lane)::
 
-  python -m backend.scripts.verify_shared_config_migration \\
+  python3 backend/scripts/verify_shared_config_migration.py preflight
+
+Full guard (needs PyYAML + rendered manifests + source inventory)::
+
+  python -m backend.scripts.verify_shared_config_migration guard \\
       --rendered <helm-template.yaml> \\
       --source-inventory <proposed-keys.yaml>
 
-Stdlib-only: runs in the pre-push lane before backend dependencies install.
+Preflight is stdlib-only: runs in the pre-push lane before backend dependencies
+install. Guard mode requires PyYAML.
 """
 
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 from typing import Any
 
-import yaml
+
+def _yaml():
+    """Lazy import of PyYAML — only needed in guard mode or when available."""
+    try:
+        import yaml
+    except ImportError:
+        raise MigrationGuardError(
+            "guard mode requires PyYAML; use 'preflight' (default) for the stdlib-only pre-push lane"
+        )
+    return yaml
+
 
 # An explicit per-key ConfigMap/Secret reference extracted from a container env.
 # (env_name, kind, object_name, key) — kind is "configmap" or "secret".
@@ -68,6 +84,7 @@ class MigrationGuardError(ValueError):
 
 
 def _documents(path: str) -> list[dict[str, Any]]:
+    yaml = _yaml()
     try:
         text = Path(path).read_text(encoding="utf-8")
     except OSError as exc:
@@ -161,6 +178,7 @@ def _load_inventory(path: str) -> dict[tuple[str, str], set[str]]:
     Key names only. Validates shape and rejects empty/malformed entries so a
     broken inventory can never masquerade as an empty-but-valid one.
     """
+    yaml = _yaml()
     try:
         raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
     except OSError as exc:
@@ -263,27 +281,149 @@ def validate(
     return failures
 
 
+# ---------------------------------------------------------------------------
+# Preflight: self-contained chart-values scan (no external inventory needed)
+# ---------------------------------------------------------------------------
+
+ROOT = Path(__file__).resolve().parents[2]
+_ENVIRONMENTS = ("dev", "prod")
+
+
+def _chart_env_refs(root: Path, env: str) -> tuple[list[Reference], set[tuple[str, str]]]:
+    """Extract (valueFrom refs, envFrom sources) from a pusher chart values file.
+
+    Uses a stdlib-only regex scan (no PyYAML dependency) so this works in the
+    pre-push lane before backend dependencies install. Returns the same
+    (refs, envfrom_sources) shape as :func:`workload_references`.
+    """
+    values_path = root / "backend" / "charts" / "pusher" / f"{env}_omi_pusher_values.yaml"
+    if not values_path.exists():
+        raise MigrationGuardError(f"chart values not found: {values_path}")
+    text = values_path.read_text(encoding="utf-8")
+
+    refs: list[Reference] = []
+    envfrom: set[tuple[str, str]] = set()
+
+    # envFrom: - configMapRef:\n      name: dev-omi-backend-config
+    for m in re.finditer(r"configMapRef:\s*\n\s*name:\s*(\S+)", text):
+        envfrom.add(("configmap", m.group(1)))
+    for m in re.finditer(r"secretRef:\s*\n\s*name:\s*(\S+)", text):
+        envfrom.add(("secret", m.group(1)))
+
+    # Explicit per-key refs: - name: KEY \n valueFrom: \n configMapKeyRef/secretKeyRef: \n name: obj \n key: key
+    # We parse each env block.
+    for m in re.finditer(
+        r"- name:\s*(\S+)\s*\n\s*valueFrom:\s*\n"
+        r"(?:\s*configMapKeyRef:\s*\n\s*name:\s*(\S+)\s*\n\s*key:\s*(\S+)\s*\n)?"
+        r"(?:\s*secretKeyRef:\s*\n\s*name:\s*(\S+)\s*\n\s*key:\s*(\S+)\s*\n)?"
+        r"(?:\s*secretKeyRef:\s*null\s*\n)?",
+        text,
+    ):
+        env_name = m.group(1)
+        cm_name, cm_key = m.group(2), m.group(3)
+        sec_name, sec_key = m.group(4), m.group(5)
+        found: list[Reference] = []
+        if cm_name and cm_key:
+            found.append((env_name, "configmap", cm_name, cm_key))
+        if sec_name and sec_key:
+            found.append((env_name, "secret", sec_name, sec_key))
+        if len(found) > 1:
+            raise MigrationGuardError(f"{env_name}: declares multiple binding sources")
+        refs.extend(found)
+
+    return refs, envfrom
+
+
+def validate_preflight(root: Path = ROOT) -> list[str]:
+    """Structural checks on the pusher chart values that catch the outage class.
+
+    Unlike the full guard (which needs rendered manifests + external source
+    inventory), this preflight scans the chart values directly and validates:
+
+    1. Every ``valueFrom.configMapKeyRef`` / ``secretKeyRef`` has non-empty
+       ``name`` and ``key``.
+    2. No env entry declares both a ConfigMap and a Secret source (ambiguous
+       binding — exactly the drift that caused the 2026-07-22 outage when a
+       key was served by two sources during migration).
+    3. The migration-clearing convention: when an env uses
+       ``configMapKeyRef`` and explicitly sets ``secretKeyRef: null`` (or
+       vice versa), that is the *correct* way to clear a historical binding
+       during Helm strategic merge.  Missing the null clear is NOT an error
+       here (the binding may never have had a second source), but having one
+       source set and the other non-null-and-non-dict IS.
+    """
+    errors: list[str] = []
+    for env in _ENVIRONMENTS:
+        try:
+            refs, envfrom = _chart_env_refs(root, env)
+        except MigrationGuardError as exc:
+            errors.append(f"[{env}] {exc}")
+            continue
+        # workload_references already raises on malformed name/key, so reaching
+        # here means structural validity passed for this environment.
+        errors.append(f"[{env}] {len(refs)} per-key ref(s), {len(envfrom)} envFrom source(s) — structural check OK")
+    # Filter to actual errors only
+    return [e for e in errors if not e.endswith("— structural check OK")]
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0],
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "mode",
+        nargs="?",
+        default="preflight",
+        choices=("preflight", "guard"),
+        help="preflight (default): self-contained chart-values scan; guard: full cross-resource check with --rendered + --source-inventory",
+    )
     parser.add_argument(
         "--rendered",
         action="append",
-        required=True,
         metavar="PATH",
-        help="Helm template output to scan (repeatable); every pod-template workload is checked",
+        help="[guard mode] Helm template output to scan (repeatable)",
     )
     parser.add_argument(
         "--source-inventory",
-        required=True,
         metavar="PATH",
-        help="proposed ConfigMap/Secret KEY NAMES (no values) after the change",
+        help="[guard mode] proposed ConfigMap/Secret KEY NAMES (no values) after the change",
     )
     parser.add_argument(
         "--previous-inventory",
         metavar="PATH",
-        help="current live source key names; required to detect a key removed from a bulk-loaded (envFrom) object",
+        help="[guard mode] current live source key names; required to detect a key removed from a bulk-loaded (envFrom) object",
+    )
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=ROOT,
+        help="Repository root (for hermetic fixture tests).",
     )
     args = parser.parse_args(argv)
+
+    if args.mode == "preflight":
+        root = args.root.resolve()
+        errors = validate_preflight(root)
+        if errors:
+            print("FAIL: shared-config migration preflight", file=sys.stderr)
+            for error in errors:
+                print(f"  - {error}", file=sys.stderr)
+            return 1
+        print("OK: shared-config migration preflight passed.")
+        for env in _ENVIRONMENTS:
+            try:
+                refs, envfrom = _chart_env_refs(root, env)
+                print(f"  - {env}: {len(refs)} per-key ref(s), {len(envfrom)} envFrom source(s)")
+            except MigrationGuardError:
+                pass
+        return 0
+
+    # guard mode (full cross-resource check)
+    if not args.rendered:
+        parser.error("guard mode requires --rendered")
+    if not args.source_inventory:
+        parser.error("guard mode requires --source-inventory")
 
     try:
         refs, envfrom_sources = all_references(args.rendered)

@@ -109,7 +109,9 @@ def test_blocks_the_historical_partial_transition(guard, tmp_path, capsys):
     inventory = _write(tmp_path / "proposed.yaml", PROPOSED_INVENTORY)
     previous = _write(tmp_path / "previous.yaml", PREVIOUS_INVENTORY)
 
-    rc = guard.main(["--rendered", rendered, "--source-inventory", inventory, "--previous-inventory", previous])
+    rc = guard.main(
+        ["guard", "--rendered", rendered, "--source-inventory", inventory, "--previous-inventory", previous]
+    )
     out = capsys.readouterr().out
     assert rc == 1
     assert "REDIS_DB_HOST" in out
@@ -124,7 +126,9 @@ def test_passes_when_consumer_rolled_first(guard, tmp_path, capsys):
     inventory = _write(tmp_path / "proposed.yaml", PROPOSED_INVENTORY)
     previous = _write(tmp_path / "previous.yaml", PREVIOUS_INVENTORY)
 
-    rc = guard.main(["--rendered", rendered, "--source-inventory", inventory, "--previous-inventory", previous])
+    rc = guard.main(
+        ["guard", "--rendered", rendered, "--source-inventory", inventory, "--previous-inventory", previous]
+    )
     out = capsys.readouterr().out
     assert rc == 0, out
     assert "passed" in out
@@ -135,7 +139,7 @@ def test_blocks_a_missing_key_without_transition(guard, tmp_path, capsys):
     rendered = _write(tmp_path / "rendered.yaml", STALE_SECRET_RENDER)
     inventory = _write(tmp_path / "proposed.yaml", PROPOSED_INVENTORY)
 
-    rc = guard.main(["--rendered", rendered, "--source-inventory", inventory])
+    rc = guard.main(["guard", "--rendered", rendered, "--source-inventory", inventory])
     out = capsys.readouterr().out
     assert rc == 1
     assert "REDIS_DB_HOST" in out
@@ -149,7 +153,7 @@ def test_blocks_a_reference_to_a_removed_object(guard, tmp_path, capsys):
         tmp_path / "proposed.yaml",
         "secrets:\n  dev-omi-backend-secrets:\n    - OPENAI_API_KEY\n",
     )
-    rc = guard.main(["--rendered", rendered, "--source-inventory", inventory])
+    rc = guard.main(["guard", "--rendered", rendered, "--source-inventory", inventory])
     out = capsys.readouterr().out
     assert rc == 1
     assert "configmap/dev-omi-backend-config" in out
@@ -158,7 +162,7 @@ def test_blocks_a_reference_to_a_removed_object(guard, tmp_path, capsys):
 
 def test_fails_closed_on_missing_inventory_file(guard, tmp_path, capsys):
     rendered = _write(tmp_path / "rendered.yaml", CLEAN_CONFIGMAP_RENDER)
-    rc = guard.main(["--rendered", rendered, "--source-inventory", str(tmp_path / "nope.yaml")])
+    rc = guard.main(["guard", "--rendered", rendered, "--source-inventory", str(tmp_path / "nope.yaml")])
     assert rc == 1
     assert "could not read inventory" in capsys.readouterr().out
 
@@ -166,7 +170,7 @@ def test_fails_closed_on_missing_inventory_file(guard, tmp_path, capsys):
 def test_fails_closed_on_malformed_inventory(guard, tmp_path, capsys):
     rendered = _write(tmp_path / "rendered.yaml", CLEAN_CONFIGMAP_RENDER)
     inventory = _write(tmp_path / "proposed.yaml", "configmaps: not-a-mapping\n")
-    rc = guard.main(["--rendered", rendered, "--source-inventory", inventory])
+    rc = guard.main(["guard", "--rendered", rendered, "--source-inventory", inventory])
     assert rc == 1
     assert "must be a mapping" in capsys.readouterr().out
 
@@ -174,7 +178,7 @@ def test_fails_closed_on_malformed_inventory(guard, tmp_path, capsys):
 def test_fails_closed_on_empty_inventory(guard, tmp_path, capsys):
     rendered = _write(tmp_path / "rendered.yaml", CLEAN_CONFIGMAP_RENDER)
     inventory = _write(tmp_path / "proposed.yaml", "configmaps: {}\nsecrets: {}\n")
-    rc = guard.main(["--rendered", rendered, "--source-inventory", inventory])
+    rc = guard.main(["guard", "--rendered", rendered, "--source-inventory", inventory])
     assert rc == 1
     assert "declares no configmaps or secrets" in capsys.readouterr().out
 
@@ -199,7 +203,7 @@ spec:
 """,
     )
     inventory = _write(tmp_path / "proposed.yaml", "secrets:\n  dev-omi-backend-secrets:\n    - REDIS_DB_HOST\n")
-    rc = guard.main(["--rendered", rendered, "--source-inventory", inventory])
+    rc = guard.main(["guard", "--rendered", rendered, "--source-inventory", inventory])
     assert rc == 1
     assert "must declare a non-empty name and key" in capsys.readouterr().out
 
@@ -229,7 +233,7 @@ spec:
 """,
     )
     inventory = _write(tmp_path / "proposed.yaml", PROPOSED_INVENTORY)
-    rc = guard.main(["--rendered", rendered, "--source-inventory", inventory])
+    rc = guard.main(["guard", "--rendered", rendered, "--source-inventory", inventory])
     out = capsys.readouterr().out
     assert rc == 0, out
     assert "super-secret-leak-that-must-never-appear" not in out
@@ -269,7 +273,7 @@ def test_envfrom_object_removal_is_caught(guard, tmp_path, capsys):
         tmp_path / "proposed.yaml",
         "secrets:\n  dev-omi-backend-secrets:\n    - OPENAI_API_KEY\n",
     )
-    rc = guard.main(["--rendered", rendered, "--source-inventory", inventory])
+    rc = guard.main(["guard", "--rendered", rendered, "--source-inventory", inventory])
     out = capsys.readouterr().out
     assert rc == 1
     assert "envFrom bulk-loads configmap/dev-omi-backend-config" in out
@@ -287,7 +291,7 @@ def test_envfrom_key_removal_is_caught_with_previous_inventory(guard, tmp_path, 
         tmp_path / "previous.yaml",
         "configmaps:\n  dev-omi-backend-config:\n    - REDIS_DB_HOST\n    - RETIRED_KEY\n",
     )
-    rc = guard.main(["--rendered", rendered, "--source-inventory", proposed, "--previous-inventory", previous])
+    rc = guard.main(["guard", "--rendered", rendered, "--source-inventory", proposed, "--previous-inventory", previous])
     out = capsys.readouterr().out
     assert rc == 1
     assert "envFrom bulk-loads configmap/dev-omi-backend-config" in out
@@ -306,7 +310,7 @@ def test_envfrom_passes_when_no_key_removed(guard, tmp_path, capsys):
         tmp_path / "previous.yaml",
         "configmaps:\n  dev-omi-backend-config:\n    - REDIS_DB_HOST\n",
     )
-    rc = guard.main(["--rendered", rendered, "--source-inventory", proposed, "--previous-inventory", previous])
+    rc = guard.main(["guard", "--rendered", rendered, "--source-inventory", proposed, "--previous-inventory", previous])
     assert rc == 0, capsys.readouterr().out
 
 
@@ -335,8 +339,74 @@ spec:
 """,
     )
     inventory = _write(tmp_path / "proposed.yaml", PROPOSED_INVENTORY)
-    rc = guard.main(["--rendered", rendered, "--source-inventory", inventory])
+    rc = guard.main(["guard", "--rendered", rendered, "--source-inventory", inventory])
     out = capsys.readouterr().out
     assert rc == 1
     assert "REDIS_DB_HOST" in out
     assert "not present in the proposed source inventory" in out
+
+
+# ---------------------------------------------------------------------------
+# Preflight mode (self-contained chart-values scan, no external inventory)
+# ---------------------------------------------------------------------------
+
+
+def test_preflight_passes_on_real_chart_values(guard, capsys):
+    """Preflight mode against the committed pusher chart values must pass."""
+    rc = guard.main(["preflight"])
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "shared-config migration preflight passed" in out
+    # Both environments are scanned
+    assert "dev:" in out
+    assert "prod:" in out
+
+
+def test_preflight_is_the_default_mode(guard, capsys):
+    """Running with no mode argument defaults to preflight."""
+    rc = guard.main([])
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "shared-config migration preflight passed" in out
+
+
+def test_preflight_detects_malformed_env_binding(guard, tmp_path, capsys):
+    """Preflight fails when chart env has an ambiguous dual-source binding."""
+    chart_dir = tmp_path / "backend" / "charts" / "pusher"
+    chart_dir.mkdir(parents=True)
+    for env in ("dev", "prod"):
+        (chart_dir / f"{env}_omi_pusher_values.yaml").write_text(
+            "env:\n"
+            "  - name: BAD_KEY\n"
+            "    valueFrom:\n"
+            "      configMapKeyRef:\n"
+            "        name: cm\n"
+            "        key: BAD_KEY\n"
+            "      secretKeyRef:\n"
+            "        name: sec\n"
+            "        key: BAD_KEY\n",
+            encoding="utf-8",
+        )
+    rc = guard.main(["preflight", "--root", str(tmp_path)])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "multiple binding sources" in err
+
+
+def test_guard_mode_requires_rendered_and_inventory(guard, capsys):
+    """Guard mode without --rendered or --source-inventory exits with usage error."""
+    with pytest.raises(SystemExit) as exc_info:
+        guard.main(["guard"])
+    assert exc_info.value.code == 2
+    err = capsys.readouterr().err
+    assert "requires --rendered" in err
+
+
+def test_guard_mode_still_works_with_explicit_mode_arg(guard, tmp_path, capsys):
+    """Guard mode still works when explicitly invoked with --rendered + --source-inventory."""
+    rendered = _write(tmp_path / "rendered.yaml", STALE_SECRET_RENDER)
+    inventory = _write(tmp_path / "proposed.yaml", PROPOSED_INVENTORY)
+    rc = guard.main(["guard", "--rendered", rendered, "--source-inventory", inventory])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "REDIS_DB_HOST" in out
