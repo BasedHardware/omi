@@ -86,6 +86,12 @@ export function query({ prompt }) {
   }
 
   const iterator = (async function* () {
+    // Regression hook: die before emitting a session_id, reproducing an SDK
+    // stream that throws during startup. Exercises that sessionIdReady is still
+    // resolved from the loop catch so awaiters/prewarm don't hang forever.
+    if (process.env.OMI_FAKE_SDK_CRASH_BEFORE_ID) {
+      throw new Error("simulated pre-session-id crash");
+    }
     yield { type: "system", session_id: "fake-session-1" };
     if (prompt && typeof prompt[Symbol.asyncIterator] === "function") {
       for await (const userMsg of prompt) {

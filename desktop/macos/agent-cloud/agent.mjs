@@ -1122,6 +1122,11 @@ function startPersistentSession(initialSink, log, seedTurns = []) {
       const category = classifyError(err).category;
       logEvent("error", "session_loop_died", { category, error: err });
       dead = true;
+      // If the stream died before emitting session_id, unblock anyone awaiting
+      // sessionIdReady — the id will never arrive. Awaiters re-check isDead()/
+      // getSessionId() and restart a fresh session instead of hanging forever.
+      sessionIdResolve?.();
+      sessionIdResolve = null;
       try {
         send({ type: "error", code: category, message: USER_MESSAGES[category] ?? USER_MESSAGES.internal });
       } catch {}
@@ -1661,6 +1666,12 @@ function startServer() {
             break;
           }
           sharedSession.sessionIdReady.then(() => {
+            // sessionIdReady also resolves when the loop dies before an id —
+            // treat a dead/idless session as a failed prewarm, not a success.
+            if (sharedSession.isDead?.() || !sharedSession.getSessionId()) {
+              send({ type: "prewarm_ack", success: false });
+              return;
+            }
             send({ type: "prewarm_ack", success: true });
             log("Prewarm: sharedSession ready");
           }).catch(() => {
@@ -1694,10 +1705,12 @@ function startServer() {
             }
           }
 
-          // Wait for session_id
+          // Wait for session_id. This also resolves if the loop died before an
+          // id arrived (sessionIdResolve is called from the loop catch), so a
+          // dead session no longer hangs here — re-check before proceeding.
           await sharedSession.sessionIdReady;
           const sid = sharedSession.getSessionId();
-          if (!sid) {
+          if (sharedSession.isDead?.() || !sid) {
             send({ type: "error", message: "Session failed to initialize" });
             sharedSession = null;
             break;
