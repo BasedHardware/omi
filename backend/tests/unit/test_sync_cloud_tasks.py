@@ -694,7 +694,12 @@ class TestVerifyCloudTasksOidc:
             with pytest.raises(RuntimeError):
                 cloud_tasks.enqueue_sync_job({'job_id': 'j'})
 
-    def test_backfill_uses_dedicated_queue_handler_and_audience(self):
+    def test_backfill_lane_still_uses_the_main_queue(self):
+        # An offline recording can never carry server capture proof, so every
+        # offline upload classifies as backfill. Routing that lane to the
+        # bounded historical-recovery worker sent the whole offline workload
+        # through a few dispatch slots, and Cloud Tasks backed the surplus off
+        # for hours. The lane label stays on the payload for metering.
         cloud_tasks = _load_cloud_tasks()
         env = {
             'SYNC_TASKS_QUEUE': 'sync-jobs',
@@ -707,11 +712,10 @@ class TestVerifyCloudTasksOidc:
             cloud_tasks.enqueue_sync_job({'job_id': 'job-1', 'lane': 'backfill'})
 
         enqueue.assert_called_once_with(
-            'sync-backfill',
-            'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+            'sync-jobs',
+            'https://backend-sync.example.com/v2/sync-jobs/run',
             'job-1',
             {'job_id': 'job-1', 'lane': 'backfill'},
-            audience='https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         )
 
     def test_enqueue_account_deletion_task_is_named_by_job_id(self):
