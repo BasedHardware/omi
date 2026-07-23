@@ -1,0 +1,3 @@
+{
+  "change": "Fixed chat copying so it excludes hidden reasoning, and added one-click copy buttons to code blocks"
+}

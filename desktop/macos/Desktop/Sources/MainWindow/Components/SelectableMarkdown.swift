@@ -1,3 +1,4 @@
+import AppKit
 @preconcurrency import Foundation
 @preconcurrency import MarkdownUI
 import OmiTheme
@@ -26,6 +27,7 @@ struct SelectableMarkdown: View {
   @State private var attrCache: [String: AttributedString?] = [:]
   // Font scale at time of caching — used to invalidate when scale changes.
   @State private var cachedFontScale: CGFloat = 0
+  @State private var copiedCodeBlockID: Int?
 
   init(text: String, sender: ChatSender) {
     self.text = text
@@ -44,8 +46,8 @@ struct SelectableMarkdown: View {
             switch segment.kind {
             case .text:
               textSegmentView(segment.content)
-            case .codeBlock:
-              codeBlockView(segment.content)
+            case .codeBlock(let language):
+              codeBlockView(segment.content, language: language, id: segment.id)
             }
           }
         }
@@ -126,18 +128,46 @@ struct SelectableMarkdown: View {
   // MARK: - Code Block (boxed, monospace)
 
   @ViewBuilder
-  private func codeBlockView(_ code: String) -> some View {
+  private func codeBlockView(_ code: String, language: String?, id: Int) -> some View {
     let codeFontSize = round(13 * fontScale)
     let bgColor =
       sender == .user
       ? Color.white.opacity(0.15)
       : OmiColors.backgroundTertiary
 
-    ScrollView(.horizontal, showsIndicators: false) {
-      Text(code)
-        .font(.system(size: codeFontSize, design: .monospaced))
-        .foregroundColor(sender == .user ? .white : OmiColors.textPrimary)
-        .if_available_writingToolsNone()
+    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+      HStack(spacing: OmiSpacing.xs) {
+        if let language {
+          Text(language)
+            .scaledFont(size: OmiType.micro, weight: .medium)
+            .foregroundColor(sender == .user ? .white.opacity(0.7) : OmiColors.textTertiary)
+        }
+        Spacer(minLength: 0)
+        Button {
+          NSPasteboard.general.clearContents()
+          NSPasteboard.general.setString(code, forType: .string)
+          copiedCodeBlockID = id
+          DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            if copiedCodeBlockID == id {
+              copiedCodeBlockID = nil
+            }
+          }
+        } label: {
+          Image(systemName: copiedCodeBlockID == id ? "checkmark" : "doc.on.doc")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(copiedCodeBlockID == id ? .green : OmiColors.textTertiary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Copy code")
+        .help("Copy code")
+      }
+
+      ScrollView(.horizontal, showsIndicators: false) {
+        Text(code)
+          .font(.system(size: codeFontSize, design: .monospaced))
+          .foregroundColor(sender == .user ? .white : OmiColors.textPrimary)
+          .if_available_writingToolsNone()
+      }
     }
     .padding(OmiSpacing.md)
     .background(bgColor)

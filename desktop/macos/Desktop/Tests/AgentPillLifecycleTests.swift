@@ -1612,6 +1612,16 @@ import XCTest
     XCTAssertTrue(chatBubbleSource.contains(".markdownTableBackgroundStyle"))
   }
 
+  func testSelectableMarkdownProvidesAnIndependentCodeCopyControl() throws {
+    // omi-test-quality: source-inspection -- static contract: the reusable SwiftUI code-block
+    // renderer owns its copy affordance; clipboard writes are exercised manually in the app.
+    let source = try selectableMarkdownSource()
+
+    XCTAssertTrue(source.contains("private func codeBlockView(_ code: String, language: String?, id: Int)"))
+    XCTAssertTrue(source.contains("NSPasteboard.general.setString(code, forType: .string)"))
+    XCTAssertTrue(source.contains(".help(\"Copy code\")"))
+  }
+
   func testNonProductionBundlesDoNotInstallNativeSentryHandlers() throws {
     let source = try omiAppSource()
     let loggerSource = try loggerSource()
