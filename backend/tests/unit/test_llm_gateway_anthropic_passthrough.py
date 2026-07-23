@@ -60,6 +60,7 @@ class _FakeAsyncClient:
         self.stream_calls: list[dict[str, Any]] = []
         self._post_response: httpx.Response | None = None
         self._stream_context: _FakeAsyncStreamContext | None = None
+        self._stream_context_factory = None
 
     async def post(self, url: str, *, json: dict[str, Any], headers: dict[str, str], **kwargs):
         self.post_calls.append({'url': url, 'json': json, 'headers': headers, **kwargs})
@@ -67,7 +68,10 @@ class _FakeAsyncClient:
         return self._post_response
 
     def stream(self, method: str, url: str, *, json: dict[str, Any], headers: dict[str, str], **kwargs):
-        self.stream_calls.append({'method': method, 'url': url, 'json': json, 'headers': headers, **kwargs})
+        call = {'method': method, 'url': url, 'json': json, 'headers': headers, **kwargs}
+        self.stream_calls.append(call)
+        if self._stream_context_factory is not None:
+            return self._stream_context_factory(call)
         assert self._stream_context is not None
         return self._stream_context
 
@@ -159,7 +163,7 @@ def test_anthropic_messages_passthrough_preserves_cache_control(_reset_anthropic
     assert len(fake.post_calls) == 1
     forwarded = fake.post_calls[0]['json']
     assert forwarded['model'] == 'claude-sonnet-5'
-    assert forwarded['effort'] == 'medium'
+    assert 'effort' not in forwarded
     assert forwarded['system'][0]['cache_control'] == {'type': 'ephemeral', 'ttl': '1h'}
     assert forwarded['tools'][0]['name'] == 'get_memories_tool'
     assert fake.post_calls[0]['headers']['x-api-key'] == 'anthropic-test-key'
@@ -246,6 +250,33 @@ def test_anthropic_messages_stream_passthrough_preserves_server_tool_sse(_reset_
     assert recorded[0]['outcome'] == 'success'
     assert recorded[0]['phase'] == 'terminal_marker'
     assert recorded[0]['context'].credential_source == 'omi_managed'
+
+
+def test_chat_agent_stream_omits_unsupported_effort_option(_reset_anthropic_client):
+    """The production chat-agent streaming shape must not trigger Anthropic capability rejection."""
+    fake: _FakeAsyncClient = _reset_anthropic_client
+
+    def provider_response(call: dict[str, Any]) -> _FakeAsyncStreamContext:
+        if 'effort' in call['json']:
+            return _FakeAsyncStreamContext(
+                status_code=400,
+                chunks=[b'{"error":{"type":"invalid_request_error","message":"effort is not supported"}}'],
+            )
+        return _FakeAsyncStreamContext(
+            status_code=200,
+            chunks=[b'event: message_stop\n', b'data: {"type":"message_stop"}\n\n'],
+        )
+
+    fake._stream_context_factory = provider_response
+
+    response = TestClient(app).post(
+        '/v1/messages',
+        json=_agentic_request(stream=True),
+        headers=_auth_headers(),
+    )
+
+    assert response.status_code == 200
+    assert 'effort' not in fake.stream_calls[0]['json']
 
 
 def test_anthropic_messages_stream_returns_upstream_error_status(_reset_anthropic_client, monkeypatch):
