@@ -8,7 +8,7 @@ import time
 import wave as _wave
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 import soundfile as sf
 import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv
@@ -42,6 +42,35 @@ _MAX_GPU_QUEUE = 512
 
 _VALID_ATTN_MODES = ("full", "local", "auto")
 
+_FATAL_CUDA_MESSAGE_MARKERS: Tuple[Tuple[str, str], ...] = (
+    ("device-side assert", "device_side_assert"),
+    ("cudaerrorassert", "device_side_assert"),
+    ("an illegal memory access was encountered", "illegal_memory_access"),
+    ("cudaerrorillegaladdress", "illegal_memory_access"),
+    ("unspecified launch failure", "launch_failure"),
+    ("cudaerrorlaunchfailure", "launch_failure"),
+    ("capture must end on the same stream it began on", "stream_capture"),
+    ("operation not permitted when stream is capturing", "stream_capture"),
+    ("cudaerrorstreamcaptureunsupported", "stream_capture"),
+)
+
+
+def classify_fatal_cuda_error(exc: BaseException) -> Optional[str]:
+    """Return a bounded reason when CUDA state is unsafe for further inference."""
+    current: Optional[BaseException] = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        message = str(current).lower()
+        for marker, reason in _FATAL_CUDA_MESSAGE_MARKERS:
+            if marker in message:
+                return reason
+        accelerator_error_type: Any = getattr(_torch.cuda, "AcceleratorError", None)
+        if isinstance(accelerator_error_type, type) and isinstance(current, accelerator_error_type):
+            return "accelerator_error"
+        current = current.__cause__ or current.__context__
+    return None
+
 
 class AudioDurationExceededError(Exception):
     pass
@@ -67,7 +96,7 @@ class WorkItem:
 
 
 class GPUWorker:
-    def __init__(self) -> None:
+    def __init__(self, on_fatal_cuda_error: Optional[Callable[[str], None]] = None) -> None:
         self._queue: queue.Queue[WorkItem] = queue.Queue(maxsize=_MAX_GPU_QUEUE)
         self._thread: Optional[threading.Thread] = None
         self._model: Any = None
@@ -77,6 +106,9 @@ class GPUWorker:
         self._gc_counter: int = 0
         self._ready: threading.Event = threading.Event()
         self._load_error: Optional[Exception] = None
+        self._fatal_cuda_reason: Optional[str] = None
+        self._state_lock: threading.Lock = threading.Lock()
+        self._on_fatal_cuda_error = on_fatal_cuda_error
         self._running: bool = False
         self._submit_lock: threading.Lock = threading.Lock()
         self._attn_mode: str = os.getenv("PARAKEET_ATTENTION_MODE", "full").lower()
@@ -93,7 +125,14 @@ class GPUWorker:
 
     @property
     def is_ready(self) -> bool:
-        return self._ready.is_set() and self._load_error is None
+        with self._state_lock:
+            fatal_cuda_reason = self._fatal_cuda_reason
+        return self._ready.is_set() and self._load_error is None and fatal_cuda_reason is None
+
+    @property
+    def fatal_cuda_reason(self) -> Optional[str]:
+        with self._state_lock:
+            return self._fatal_cuda_reason
 
     @property
     def vram_info(self) -> Dict[str, Any]:
@@ -114,19 +153,52 @@ class GPUWorker:
             raise TimeoutError(f"GPU model did not load within {timeout}s")
         if self._load_error is not None:
             raise self._load_error
+        if self.fatal_cuda_reason is not None:
+            raise RuntimeError("GPU worker encountered a fatal CUDA error")
 
     def stop(self) -> None:
         with self._submit_lock:
-            if not self._running:
-                return
+            should_signal = self._running
             self._running = False
-        evt = threading.Event()
-        try:
-            self._queue.put(WorkItem(WorkType.SHUTDOWN, None, sync_event=evt), timeout=5)
-        except queue.Full:
-            pass
-        if self._thread:
+        if should_signal:
+            evt = threading.Event()
+            try:
+                self._queue.put(WorkItem(WorkType.SHUTDOWN, None, sync_event=evt), timeout=5)
+            except queue.Full:
+                pass
+        if self._thread and self._thread is not threading.current_thread():
             self._thread.join(timeout=30)
+
+    def report_inference_error(self, exc: BaseException) -> bool:
+        """Fail the worker closed when an inference error invalidates CUDA state."""
+        reason = classify_fatal_cuda_error(exc)
+        if reason is None:
+            return False
+
+        first_report = False
+        with self._state_lock:
+            if self._fatal_cuda_reason is None:
+                self._fatal_cuda_reason = reason
+                first_report = True
+        with self._submit_lock:
+            self._running = False
+
+        if first_report:
+            self._drain_queue(RuntimeError("GPU worker unavailable after fatal CUDA error"))
+            logger.critical(
+                "Fatal CUDA error marked GPU worker unavailable (reason=%s, exception_type=%s)",
+                reason,
+                type(exc).__name__,
+            )
+            if self._on_fatal_cuda_error is not None:
+                try:
+                    self._on_fatal_cuda_error(reason)
+                except Exception as callback_error:
+                    logger.error(
+                        "Fatal CUDA metric callback failed (exception_type=%s)",
+                        type(callback_error).__name__,
+                    )
+        return True
 
     def submit(
         self, payload: Dict[str, Any], loop: asyncio.AbstractEventLoop
@@ -201,6 +273,8 @@ class GPUWorker:
             logger.error(f"Model loading failed: {exc}")
             self._load_error = exc
             self._ready.set()
+            with self._submit_lock:
+                self._running = False
             return
 
         while self._running:
@@ -212,6 +286,7 @@ class GPUWorker:
             if item.work_type == WorkType.SHUTDOWN:
                 break
 
+            fatal_cuda_error = False
             try:
                 t_infer = time.monotonic()
                 if item.work_type == WorkType.EMBEDDING:
@@ -219,13 +294,25 @@ class GPUWorker:
                 else:
                     result = self._batch_transcribe(item.payload)
                 item.inference_seconds = time.monotonic() - t_infer
-                self._deliver_result(item, result)
+                if self.fatal_cuda_reason is None:
+                    self._deliver_result(item, result)
+                else:
+                    self._deliver_error(item, RuntimeError("GPU worker unavailable after fatal CUDA error"))
             except Exception as exc:
+                fatal_cuda_error = self.report_inference_error(exc)
                 self._deliver_error(item, exc)
-            finally:
+            try:
                 self._maybe_gc()
+            except Exception as gc_error:
+                fatal_cuda_error = self.report_inference_error(gc_error) or fatal_cuda_error
+                if not fatal_cuda_error:
+                    logger.error("GPU worker garbage collection failed (exception_type=%s)", type(gc_error).__name__)
+            if fatal_cuda_error or self.fatal_cuda_reason is not None:
+                break
 
         self._drain_queue()
+        with self._submit_lock:
+            self._running = False
         logger.info("GPU worker thread stopped")
 
     @staticmethod
@@ -249,6 +336,8 @@ class GPUWorker:
         device = os.getenv("PARAKEET_DEVICE", "cuda:0")
         do_compile = os.getenv("PARAKEET_TORCH_COMPILE", "false").lower() in ("true", "1", "yes")
         disable_cuda_graphs = os.getenv("PARAKEET_CUDA_GRAPHS", "false").lower() not in ("true", "1", "yes")
+        if not disable_cuda_graphs and os.getenv("PARAKEET_STREAM_MODEL", "").strip():
+            raise ValueError("PARAKEET_CUDA_GRAPHS must be false when PARAKEET_STREAM_MODEL is configured")
 
         _torch.backends.cudnn.benchmark = True
         if hasattr(_torch, 'set_float32_matmul_precision'):
@@ -345,6 +434,8 @@ class GPUWorker:
             self._embedding_model = inference
             logger.info("Built-in speaker embedding model loaded (wespeaker-voxceleb-resnet34-LM)")
         except Exception as e:
+            if self.report_inference_error(e):
+                raise
             logger.warning(f"Could not load built-in embedding model: {e}")
 
     @_torch.inference_mode()
@@ -454,12 +545,12 @@ class GPUWorker:
                 out.append({"text": str(r)})
         return out
 
-    def _drain_queue(self) -> None:
+    def _drain_queue(self, error: Optional[Exception] = None) -> None:
         while not self._queue.empty():
             try:
                 item = self._queue.get_nowait()
                 if item.work_type != WorkType.SHUTDOWN:
-                    err = RuntimeError("GPU worker shutting down")
+                    err = error or RuntimeError("GPU worker shutting down")
                     self._deliver_error(item, err)
             except queue.Empty:
                 break
