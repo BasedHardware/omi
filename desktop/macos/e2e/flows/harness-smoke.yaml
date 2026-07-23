@@ -11,6 +11,7 @@ covers:
   - desktop/macos/Desktop/Sources/BundleEnvironment.swift
   - desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift
   - desktop/macos/Desktop/Sources/AuthService.swift
+  - desktop/macos/Desktop/Sources/Auth/OAuthLoopbackCallbackServer.swift
   - desktop/macos/Desktop/Sources/AuthSessionCoordinator.swift
   - desktop/macos/Desktop/Sources/Auth/SessionRecoveryView.swift
   - desktop/macos/Desktop/Sources/Auth/AuthStorageCanary.swift
