@@ -251,8 +251,16 @@ struct DashboardPage: View {
   @AppStorage("systemAudioCaptureMode") private var systemAudioCaptureModeRaw =
     AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
-  @State private var homeMode: HomeStageMode = .chat
+  @State private var homeMode: HomeStageMode = .landing
   @FocusState private var homeAskFieldFocused: Bool
+
+  /// Landing hero state. `homeLandingReveal` drives the staggered entrance and
+  /// `homeLandingLogoAngle` is the subtle ambient rotation. `landingScrollMonitor`
+  /// is a scroll-wheel monitor installed only while the landing shows, so any
+  /// deliberate scroll reveals the conversation.
+  @State private var homeLandingReveal = false
+  @State private var homeLandingLogoAngle: Double = 0
+  @State private var landingScrollMonitor: Any?
 
   /// Rotation index for the home knows-list; a timer advances it so the hub
   /// cycles through fresh suggestions while you're looking at it.
@@ -285,6 +293,9 @@ struct DashboardPage: View {
   private static let homeStageMaxSideInset: CGFloat = 96
   private static let homeAskBarMinWidth: CGFloat = 560
   private static let homeAskBarMaxWidth: CGFloat = 980
+  /// The landing composer is tighter and centered; it widens to the chat
+  /// column width as it drops to the bottom on send.
+  private static let homeLandingAskBarWidth: CGFloat = 640
   private static let homeStagePanelMaxWidth: CGFloat = 1280
   private static let homeChatColumnMaxWidth: CGFloat = 900
   private static let homeStageTopPadding: CGFloat = 8
@@ -480,6 +491,7 @@ struct DashboardPage: View {
         }
         syncCaptureState()
         autoOpenChatForExistingHistoryIfNeeded()
+        startHomeLandingEntrance()
         // Post-onboarding, the resting hub is shown by default — open the chat
         // surface so the personalized opener (set on onboarding completion) is
         // actually visible instead of hidden behind the hub.
@@ -501,6 +513,7 @@ struct DashboardPage: View {
       }
       .onDisappear {
         intelligenceStore.setRecommendationActionHandler(nil)
+        removeLandingScrollReveal()
       }
       .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
         viewModel.refreshGoals()
@@ -543,13 +556,20 @@ struct DashboardPage: View {
       }
       // Chat history is the home surface: as soon as the (async) history
       // load shows prior messages, land on the chat panel, not the greeting.
+      // The landing is intentionally NOT revealed by message-count changes:
+      // count churns for background reasons (startup restore, pagination,
+      // owner reconciliation, activate-refresh), none of which are a
+      // user-facing "new turn". The landing reveals only on an explicit user
+      // action (sending, or the Continue-conversation affordance).
       .onChange(of: chatProvider.messages.count) { _, _ in
         autoOpenChatForExistingHistoryIfNeeded()
       }
       // Clicking into the ask bar reveals the inline chat; the same is true
       // when focus lands there via keyboard (Tab / Full Keyboard Access).
+      // The landing keeps its centered composer on focus — only sending
+      // transitions to chat — so it is excluded here.
       .onChange(of: homeAskFieldFocused) { _, focused in
-        if focused && !useLegacyHomeDesign && homeMode != .chat {
+        if focused && !useLegacyHomeDesign && homeMode != .chat && homeMode != .landing {
           openHomeChat()
         }
       }
@@ -800,37 +820,159 @@ struct DashboardPage: View {
   /// Panel layout (chat / connect): the surface fills the height with the ask
   /// bar anchored directly beneath it.
   private func homePanelStage(stageWidth: CGFloat, askBarWidth: CGFloat) -> some View {
+    // `homeAskBar` is one persistent instance between the two conditional
+    // regions, so switching landing→chat animates its frame from center to
+    // bottom (draft text and focus are preserved) instead of cross-fading.
     VStack(spacing: 0) {
-      ZStack {
-        switch homeMode {
-        case .chat:
-          homeChatPanel(width: askBarWidth)
-            .transition(.homeDropFromTop)
-        case .connect:
-          homeConnectPanel(stageWidth: stageWidth)
-            .transition(.homeDropFromTop)
-        case .hub:
-          EmptyView()
-        }
-      }
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-      // Rolling suggestions sit just above the ask bar while the chat is empty —
-      // but not for a just-onboarded user, whose empty chat shows the personalized
-      // onboarding opener (with its own starter questions) instead.
-      if chatProvider.messages.isEmpty && chatProvider.onboardingOpener == nil {
-        homeRollingSuggestions
+      if homeMode == .landing {
+        Spacer(minLength: 0)
+        homeLandingHero
           .frame(width: askBarWidth)
-          .padding(.bottom, OmiSpacing.sm)
+          .padding(.bottom, OmiSpacing.xl)
+      } else {
+        ZStack {
+          switch homeMode {
+          case .chat:
+            homeChatPanel(width: askBarWidth)
+              .transition(.homeDropFromTop)
+          case .connect:
+            homeConnectPanel(stageWidth: stageWidth)
+              .transition(.homeDropFromTop)
+          case .hub, .landing:
+            EmptyView()
+          }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        // Rolling suggestions sit just above the ask bar while the chat is empty —
+        // but not for a just-onboarded user, whose empty chat shows the personalized
+        // onboarding opener (with its own starter questions) instead.
+        if chatProvider.messages.isEmpty && chatProvider.onboardingOpener == nil {
+          homeRollingSuggestions
+            .frame(width: askBarWidth)
+            .padding(.bottom, OmiSpacing.sm)
+        }
       }
 
       homeAskBar
         .frame(width: askBarWidth)
-        .padding(.top, OmiSpacing.xl)
+        .padding(.top, homeMode == .landing ? 0 : OmiSpacing.xl)
 
-      dashboardChatErrorCard
-        .frame(width: askBarWidth)
-        .padding(.top, OmiSpacing.sm)
+      if homeMode == .landing {
+        homeLandingChips
+          .frame(width: askBarWidth)
+          .padding(.top, OmiSpacing.lg)
+        Spacer(minLength: 0)
+      } else {
+        dashboardChatErrorCard
+          .frame(width: askBarWidth)
+          .padding(.top, OmiSpacing.sm)
+      }
+    }
+  }
+
+  // MARK: - Landing hero (on-open empty state)
+
+  /// The centered on-open hero: a subtly rotating Omi mark, the greeting, and
+  /// a one-line subtitle, each element staggered in. The composer and prompt
+  /// chips sit directly beneath (rendered by `homePanelStage`).
+  private var homeLandingHero: some View {
+    VStack(spacing: OmiSpacing.md) {
+      landingLogo
+        .homeLandingReveal(homeLandingReveal, delay: 0.0)
+
+      Text("Ask omi anything")
+        .scaledFont(size: OmiType.subheading, weight: .semibold)
+        .foregroundColor(OmiColors.textPrimary)
+        .homeLandingReveal(homeLandingReveal, delay: 0.08)
+
+      Text("Your personal AI assistant, ready when you are")
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(OmiColors.textSecondary)
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: 360)
+        .homeLandingReveal(homeLandingReveal, delay: 0.14)
+    }
+    .frame(maxWidth: .infinity)
+    .onAppear { installLandingScrollReveal() }
+    .onDisappear { removeLandingScrollReveal() }
+  }
+
+  /// While the landing shows, any deliberate scroll reveals the conversation
+  /// (the transcript lives "above" the landing). Scoped by install/remove on
+  /// the hero's appear/disappear, and re-checked against `homeMode` so a scroll
+  /// never reveals from another surface or under a modal.
+  private func installLandingScrollReveal() {
+    guard landingScrollMonitor == nil else { return }
+    landingScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+      if homeMode == .landing, !isHomeModalPresented, abs(event.scrollingDeltaY) > 4 {
+        openHomeChat(focusInput: false)
+      }
+      return event
+    }
+  }
+
+  private func removeLandingScrollReveal() {
+    if let monitor = landingScrollMonitor {
+      NSEvent.removeMonitor(monitor)
+      landingScrollMonitor = nil
+    }
+  }
+
+  private var landingLogo: some View {
+    Group {
+      if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
+        let logoImage = NSImage(contentsOf: logoURL)
+      {
+        Image(nsImage: logoImage)
+          .resizable()
+          .scaledToFit()
+      } else {
+        Image(systemName: "circle.hexagongrid.fill")
+          .resizable()
+          .scaledToFit()
+          .foregroundColor(OmiColors.textPrimary)
+      }
+    }
+    .frame(width: 44, height: 44)
+    .rotationEffect(.degrees(homeLandingLogoAngle))
+  }
+
+  /// Suggested prompts under the landing composer. Tapping one continues the
+  /// same conversation (openHomeChat + send). Hidden when no suggestions exist.
+  @ViewBuilder private var homeLandingChips: some View {
+    let prompts = Array(homeSuggestedQuestions.prefix(3))
+    if !prompts.isEmpty {
+      HStack(spacing: OmiSpacing.sm) {
+        ForEach(prompts, id: \.self) { prompt in
+          Button {
+            askHomeSuggestion(prompt)
+          } label: {
+            Text(prompt)
+              .scaledFont(size: OmiType.caption, weight: .medium)
+              .foregroundColor(OmiColors.textSecondary)
+              .lineLimit(1)
+              .padding(.horizontal, OmiSpacing.md)
+              .padding(.vertical, OmiSpacing.sm)
+              .background(Capsule(style: .continuous).fill(Color.white.opacity(0.06)))
+              .overlay(Capsule(style: .continuous).stroke(Color.white.opacity(0.08), lineWidth: 1))
+              .contentShape(Capsule())
+          }
+          .buttonStyle(.plain)
+        }
+      }
+      .homeLandingReveal(homeLandingReveal, delay: 0.20)
+    }
+  }
+
+  /// Kicks off the landing hero's staggered entrance and its subtle ambient
+  /// rotation. Both gate off cleanly under Reduce Motion.
+  private func startHomeLandingEntrance() {
+    homeLandingReveal = true
+    if !OmiMotion.reduceMotion {
+      withAnimation(.linear(duration: 18).repeatForever(autoreverses: false)) {
+        homeLandingLogoAngle = 360
+      }
     }
   }
 
@@ -1190,11 +1332,11 @@ struct DashboardPage: View {
       .padding(OmiSpacing.lg)
       .frame(maxWidth: .infinity, alignment: .topLeading)
       .background(
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
+        RoundedRectangle(cornerRadius: 29, style: .continuous)
           .fill(Color.white.opacity(0.025))
       )
       .overlay(
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
+        RoundedRectangle(cornerRadius: 29, style: .continuous)
           .stroke(HomePalette.hairline.opacity(0.55), lineWidth: 1)
       )
   }
@@ -1262,6 +1404,11 @@ struct DashboardPage: View {
 
   private func homeAskBarWidth(for stageWidth: CGFloat) -> CGFloat {
     let contentWidth = homeStageContentWidth(for: stageWidth)
+    if homeMode == .landing {
+      // Landing: a tighter, centered composer that widens back to the chat
+      // column width as it animates down to the bottom on send.
+      return min(Self.homeLandingAskBarWidth, contentWidth)
+    }
     if homeMode != .hub {
       // Chat mode: bar and message column share one readable width, edges
       // aligned (bubbles start/end on the bar's verticals).
@@ -1329,10 +1476,11 @@ struct DashboardPage: View {
     }
   }
 
-  /// The surface Home rests on when no panel is explicitly open: the chat
-  /// timeline once any history exists, otherwise the greeting hub.
-  /// Home opens directly in the continuous chat (no greeting hero). Rolling
-  /// suggestions sit above the ask bar while the chat is empty.
+  /// The surface Home rests on once the user has entered the conversation:
+  /// the continuous chat timeline. Home *opens* on the landing hero
+  /// (`.landing`); the first send transitions here and it stays the resting
+  /// surface for the rest of the session. Rolling suggestions sit above the
+  /// ask bar while the chat is empty.
   private var homeRestingMode: HomeStageMode {
     .chat
   }
@@ -2220,14 +2368,18 @@ enum HomeStageMode: Equatable {
   case hub
   case chat
   case connect
+  /// The on-open landing: a centered hero (rotating mark + composer) shown
+  /// before the transcript. Same conversation underneath — the first send
+  /// transitions to `.chat` and continues the one shared thread.
+  case landing
 
   /// Whether the user-facing collapse catchers (click-outside + Esc) mount.
   /// Only a panel that can collapse to a *different* resting surface gets a
-  /// catcher. The hub is the base surface, never an overlay: mounting a
-  /// catcher over hub-with-history would invert the gesture and make a stray
-  /// click or Esc *open* the chat.
+  /// catcher. `hub` and `landing` are base surfaces, never overlays: mounting
+  /// a catcher over them would invert the gesture and make a stray click or
+  /// Esc *open* the chat.
   static func collapseCatcherActive(mode: HomeStageMode, resting: HomeStageMode) -> Bool {
-    mode != resting && mode != .hub
+    mode != resting && mode != .hub && mode != .landing
   }
 
   var automationLabel: String {
@@ -2235,6 +2387,7 @@ enum HomeStageMode: Equatable {
     case .hub: return "hub"
     case .chat: return "chat"
     case .connect: return "connect"
+    case .landing: return "landing"
     }
   }
 }
@@ -2274,6 +2427,18 @@ extension AnyTransition {
       active: HomeStageDropModifier(offsetY: 10, scale: 1, opacity: 0),
       identity: HomeStageDropModifier(offsetY: 0, scale: 1, opacity: 1)
     )
+  }
+}
+
+extension View {
+  /// Staggered fade + slight upward drift for a landing-hero element. The
+  /// caller varies `delay` per element so they settle in sequence. Gates off
+  /// under Reduce Motion.
+  fileprivate func homeLandingReveal(_ shown: Bool, delay: Double) -> some View {
+    self
+      .opacity(shown ? 1 : 0)
+      .offset(y: shown ? 0 : 10)
+      .animation(OmiMotion.gated(.easeOut(duration: 0.45).delay(delay)), value: shown)
   }
 }
 
@@ -2326,13 +2491,13 @@ struct HomeAskBar: View {
           Image(systemName: "paperclip")
             .scaledFont(size: OmiType.subheading, weight: .medium)
             .foregroundStyle(isFocused ? HomePalette.secondary : HomePalette.muted)
-            .frame(width: 24, height: 34)
+            .frame(width: 24, height: 30)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(attachments.count >= kMaxChatAttachments)
         .help("Attach files")
-        .padding(.bottom, 3)
+        .padding(.bottom, 2)
 
         // Auto-growing input: `axis: .vertical` + `lineLimit(1...6)` grow the pill
         // as text wraps (scrolls past six lines). Return submits, Shift+Return
@@ -2349,7 +2514,7 @@ struct HomeAskBar: View {
         .foregroundStyle(HomePalette.ink)
         .lineLimit(1...6)
         .focused(focus)
-        .padding(.vertical, 7)
+        .padding(.vertical, 5)
         .onKeyPress(phases: .down) { press in
           guard press.key == .return else { return .ignored }
           // Shift+Return falls through to the field's newline handling.
@@ -2363,26 +2528,26 @@ struct HomeAskBar: View {
       }
       .padding(.leading, OmiSpacing.lg)
       .padding(.trailing, OmiSpacing.sm)
-      .padding(.vertical, 12)
-      .frame(minHeight: 58)
+      .padding(.vertical, 7)
+      .frame(minHeight: 44)
     }
     .background(
-      RoundedRectangle(cornerRadius: 29, style: .continuous)
+      RoundedRectangle(cornerRadius: 22, style: .continuous)
         .fill(HomePalette.tile.opacity(isHovering || isFocused ? 1 : 0.92))
     )
     .overlay {
       if isDropTargeted {
-        RoundedRectangle(cornerRadius: 29, style: .continuous)
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
           .stroke(Color.white.opacity(0.42), lineWidth: 1)
       } else {
-        RoundedRectangle(cornerRadius: 29, style: .continuous)
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
           .stroke(HomePalette.stageGlow.opacity(isFocused ? 0.16 : 0.08), lineWidth: 1)
           .blur(radius: 1.8)
       }
     }
     .shadow(color: HomePalette.stageGlow.opacity(isFocused ? 0.11 : 0.045), radius: isFocused ? 22 : 16, y: 8)
     .shadow(color: .black.opacity(isFocused ? 0.45 : 0.34), radius: 24, y: 10)
-    .contentShape(.rect(cornerRadius: 29))
+    .contentShape(.rect(cornerRadius: 22))
     .onTapGesture {
       onActivate()
       focus.wrappedValue = true
@@ -2463,7 +2628,7 @@ struct HomeAskBar: View {
           .scaledFont(size: OmiType.body, weight: .bold)
           .foregroundStyle(Color.black)
       }
-      .frame(width: 34, height: 34)
+      .frame(width: 30, height: 30)
       .contentShape(Circle())
     }
     .buttonStyle(.plain)
@@ -2487,7 +2652,7 @@ struct HomeAskBar: View {
             .foregroundStyle(HomePalette.ink)
         }
       }
-      .frame(width: 34, height: 34)
+      .frame(width: 30, height: 30)
       .contentShape(Circle())
     }
     .buttonStyle(.plain)
@@ -3613,11 +3778,11 @@ private struct HomeGlassPanel<Content: View>: View {
       .padding(OmiSpacing.lg)
       .frame(maxWidth: .infinity, alignment: .topLeading)
       .background(
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
+        RoundedRectangle(cornerRadius: 29, style: .continuous)
           .fill(HomePalette.panel)
       )
       .overlay(
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
+        RoundedRectangle(cornerRadius: 29, style: .continuous)
           .stroke(HomePalette.hairline.opacity(0.8), lineWidth: 1)
       )
       .shadow(color: .black.opacity(0.08), radius: 14, y: 6)

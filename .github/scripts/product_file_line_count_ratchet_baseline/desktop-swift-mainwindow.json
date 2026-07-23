@@ -2,7 +2,7 @@
   "files": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 1969,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3645,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4468,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4633,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3295,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5667,
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1690
@@ -10,7 +10,7 @@
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "SB redesign: Omi-mark avatar on replies that spins while thinking (typing-dots suppressed for Omi's own replies) and tool-call chips gated to the streaming turn, merged with main's metadata-row reveal honoring keyboard focus (shared FocusState + testable ChatBubbleMetadataReveal); a component split is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": "Filter toggle, category menu and Create App become capsule chips with shared hover states (OmiFieldStyle/chip language); a component split is tracked follow-up.",
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": "Home ask bar now auto-grows as a multi-line TextField so long messages wrap instead of scrolling off-screen (+14 lines over the prior SB-redesign home/chat layout); a component split is tracked follow-up.",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": "Home opens on a landing hero (rotating mark, tighter centered composer that widens to the chat column on send, prompt chips, scroll-to-reveal) before the transcript; the first send continues the one shared conversation. A component split is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": "Bridge memory search now awaits the active initial or pagination projection before refreshing, preventing an immediate post-navigation marker search from using stale lifecycle capability state.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": "SB redesign: adds the Notion-style status board (time-bucket columns, task cards with priority/due chips) and Board/List toggle alongside the existing list; a component split is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": "SB redesign: adds the hover-expand AppNavRail (icons\u2192labels) and the merged/simplified navigation (Memory, Insights) driving selectedIndex; a component split is tracked follow-up."

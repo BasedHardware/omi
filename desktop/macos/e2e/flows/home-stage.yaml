@@ -1,7 +1,7 @@
 version: 2
 name: home-stage
 tier: 2
-description: Redesigned Home stage transitions (hub/chat/connect) via automation bridge
+description: Redesigned Home stage transitions (landing/chat/connect) via automation bridge
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
@@ -22,11 +22,9 @@ steps:
       state.selectedTabIndex: 0
 
   - id: S2
-    name: Collapse to hub baseline (chat auto-opens when history exists)
-    bridge.action:
-      name: home_close_panel
+    name: Landing hero on open
     wait:
-      state.homeMode: hub
+      state.homeMode: landing
 
   - id: S3
     name: Open inline chat
@@ -54,11 +52,11 @@ steps:
       state.homeMode: connect
 
   - id: S6
-    name: Collapse back to hub
+    name: Collapse back to the resting chat surface
     bridge.action:
       name: home_close_panel
     wait:
-      state.homeMode: hub
+      state.homeMode: chat
 
   - id: S7
     name: Logs clean
