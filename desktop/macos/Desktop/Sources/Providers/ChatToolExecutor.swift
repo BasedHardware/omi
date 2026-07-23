@@ -1014,6 +1014,30 @@ class ChatToolExecutor {
     return true
   }
 
+  /// Backend tools that write the user's tasks to the server. Unlike the local
+  /// `execute_sql` write path (handled above), the `create_action_item` /
+  /// `update_action_item` backend tools had no post-write refresh — so an
+  /// agent-created task was persisted on the server but never pulled into the
+  /// local TasksStore, leaving it invisible in the task list until a manual
+  /// reload (while the "+" button, which writes through TasksStore, showed up
+  /// immediately). Returns false when the expected owner is no longer current.
+  static func backendToolWritesTasks(_ toolName: String) -> Bool {
+    toolName == "create_action_item" || toolName == "update_action_item"
+  }
+
+  static func executeBackendTaskWritePostEffects(
+    toolName: String,
+    expectedOwnerID: String?,
+    ownerIsCurrent: (String?) -> Bool = { isExpectedOwnerCurrent($0) },
+    refreshTasksFromServer: () async -> Void
+  ) async -> Bool {
+    guard backendToolWritesTasks(toolName) else { return true }
+    guard ownerIsCurrent(expectedOwnerID) else { return false }
+    log("Tool \(toolName): backend task write, refreshing TasksStore from server")
+    await refreshTasksFromServer()
+    return ownerIsCurrent(expectedOwnerID)
+  }
+
   // MARK: - Local Status
 
   private static func executeLocalStatus(expectedOwnerID: String?) async -> String {
@@ -2798,6 +2822,16 @@ class ChatToolExecutor {
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
+        guard
+          await executeBackendTaskWritePostEffects(
+            toolName: "create_action_item",
+            expectedOwnerID: expectedOwnerID,
+            refreshTasksFromServer: {
+              await TasksStore.shared.refreshDashboardTasksFromServer(
+                expectedOwnerID: expectedOwnerID,
+                authorizationSnapshot: currentOwnerAuthorizationSnapshot)
+            })
+        else { return authorizedOwnerChangedResult() }
         return resp.resultText
 
       case "update_action_item":
@@ -2818,6 +2852,16 @@ class ChatToolExecutor {
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
+        guard
+          await executeBackendTaskWritePostEffects(
+            toolName: "update_action_item",
+            expectedOwnerID: expectedOwnerID,
+            refreshTasksFromServer: {
+              await TasksStore.shared.refreshDashboardTasksFromServer(
+                expectedOwnerID: expectedOwnerID,
+                authorizationSnapshot: currentOwnerAuthorizationSnapshot)
+            })
+        else { return authorizedOwnerChangedResult() }
         return resp.resultText
 
       case "create_calendar_event":
