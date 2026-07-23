@@ -101,6 +101,27 @@ final class AgentCompletionVoiceDeliveryTests: XCTestCase {
     XCTAssertTrue(harness.acknowledged.isEmpty, "checkpoint must not advance on failed delivery")
   }
 
+  func testConnectedIdleGeminiRetriesDeliveryWhenInputWindowOpens() async {
+    let harness = Harness()
+    let surface = AgentSurfaceReference.floatingBarRun(runId: "run-1")
+
+    // Completion finishes while the warm session is idle (no activity window):
+    // sendBackgroundAgentContext refuses, injectContext reports false, and the
+    // checkpoint stays unadvanced (nothing is buffered or acked).
+    harness.injectResult = false
+    harness.sut.observe([surface.key: projection(surface: surface, status: .running)])
+    harness.sut.observe([surface.key: projection(surface: surface, status: .succeeded)])
+    await harness.drainScheduledWork()
+    XCTAssertTrue(harness.acknowledged.isEmpty, "a refused completion must not advance the checkpoint")
+
+    // The activity window opens (Gemini beginInputTurn) → capability signal →
+    // retry; the send now succeeds and the checkpoint advances exactly once.
+    harness.injectResult = true
+    harness.sut.voiceSessionDidOpenInputWindow()
+    await harness.drainScheduledWork()
+    XCTAssertEqual(harness.acknowledged, [["run-1"]], "window-open retry delivers and acks exactly once")
+  }
+
   func testNoLiveVoiceSessionDoesNotPeekOrAcknowledge() async {
     let harness = Harness()
     harness.voiceLive = false

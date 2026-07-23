@@ -106,6 +106,14 @@ final class AgentCompletionVoiceDelivery {
     scheduleDelivery()
   }
 
+  /// A warm session opened an input window (Gemini `activityStart`) and can now
+  /// accept injected context. Same capability signal as `voiceSessionDidConnect`:
+  /// retry a completion that `sendBackgroundAgentContext` refused while the
+  /// session was connected-but-idle (its checkpoint is still unadvanced).
+  func voiceSessionDidOpenInputWindow() {
+    scheduleDelivery()
+  }
+
   func observe(_ projections: [String: AgentRunProjection]) {
     var fired = false
     for (key, projection) in projections {

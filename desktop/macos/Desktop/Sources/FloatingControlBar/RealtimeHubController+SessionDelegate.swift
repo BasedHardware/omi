@@ -604,6 +604,11 @@ extension RealtimeHubController {
     authorizedRealtimeToolError(code: AuthorizedToolExecution.Rejection.ownerChangedDuringExecution.code)
   }
 
+  func hubDidOpenInputWindow(source: RealtimeHubSession) {
+    guard isCurrentSession(source) else { return }
+    AgentCompletionVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
+  }
+
   func hubDidConnect(source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
     lastWarmAt = Date()
