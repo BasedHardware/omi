@@ -37,6 +37,9 @@ bool is_connected = false;
 bool is_charging = false;
 bool is_off = false;
 bool blink_toggle = false;
+#ifdef CONFIG_OMI_ENABLE_CAPTURE_LED
+bool is_capturing = false;
+#endif
 
 static void print_reset_reason(void)
 {
@@ -166,14 +169,50 @@ void set_led_state()
             blink_toggle = !blink_toggle;
         }
     } else {
+#ifdef CONFIG_OMI_ENABLE_CAPTURE_LED
+        // Blue while a central is actively capturing (audio subscribed), red otherwise
+        blue = is_connected && is_capturing;
+        red = !blue;
+#else
         blue = is_connected;
         red = !is_connected;
+#endif
+#if defined(CONFIG_OMI_ENABLE_BATTERY) && defined(CONFIG_OMI_ENABLE_BATTERY_LOW_LED)
+        if (battery_percentage > 0 && battery_percentage <= CONFIG_OMI_BATTERY_LOW_THRESHOLD) {
+            // Low battery warning: blink red regardless of connection state
+            blue = false;
+            red = blink_toggle;
+            blink_toggle = !blink_toggle;
+        }
+#endif
     }
 
     set_led_green(green);
     set_led_blue(blue);
     set_led_red(red);
 }
+
+#ifdef CONFIG_OMI_ENABLE_IDLE_SLEEP
+#define IDLE_SLEEP_TIMEOUT_SEC (CONFIG_OMI_IDLE_SLEEP_TIMEOUT_MIN * 60)
+static uint32_t idle_seconds = 0;
+
+static void update_idle_sleep(void)
+{
+    // Streaming audio to a subscribed central, or charging, holds the device awake.
+    bool active = is_charging || (is_connected && transport_is_audio_subscribed());
+
+    if (active) {
+        idle_seconds = 0;
+        return;
+    }
+
+    idle_seconds++;
+    if (idle_seconds >= IDLE_SLEEP_TIMEOUT_SEC) {
+        LOG_INF("Idle for %u s; entering system off", idle_seconds);
+        turnoff_all();
+    }
+}
+#endif
 
 static int suspend_unused_modules(void)
 {
@@ -356,6 +395,9 @@ int main(void)
 #endif
 
         set_led_state();
+#ifdef CONFIG_OMI_ENABLE_IDLE_SLEEP
+        update_idle_sleep();
+#endif
         k_msleep(1000);
     }
 
