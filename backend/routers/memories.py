@@ -25,6 +25,8 @@ from utils.memory.v3.composed_get_service import V3ComposedRequestParams, V3Comp
 from utils.memory.v3.production_runtime import build_v3_production_runtime
 from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_decision
 from utils.memory.canonical_memory_adapter import (
+    CanonicalBatchMutationLimitError,
+    delete_canonical_memories_batch,
     memory_item_to_memorydb,
     read_canonical_memory_item,
 )
@@ -800,25 +802,15 @@ def delete_memories_batch(
 
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        # Canonical cohort: mirror the single-delete canonical path exactly, but
-        # validate the ENTIRE batch before mutating anything. delete_canonical_memory
-        # tombstones the memory and only THEN raises ValueError on a later missing id,
-        # so a naive per-id loop would delete earlier valid ids before discovering a
-        # later missing one — breaking the documented all-or-nothing contract. Preflight
-        # every id with the same read-only existence check the single-delete path relies
-        # on (read_canonical_memory_item is uid-scoped and returns None for missing /
-        # non-active / cross-user ids, mirroring MemoryService.delete's not-found rule).
-        service = MemoryService(db_client=db_client)
-        for memory_id in memory_ids:
-            if read_canonical_memory_item(uid, memory_id, db_client=db_client) is None:
-                raise HTTPException(status_code=404, detail='Memory not found')
-        for memory_id in memory_ids:
-            try:
-                service.delete(uid, memory_id)
-            except ValueError:
-                # Defense-in-depth for a TOCTOU race between preflight and a concurrent
-                # delete; the not-found case is already covered by the preflight above.
-                raise HTTPException(status_code=404, detail='Memory not found')
+        # The adapter validates and tombstones the full selection in one Firestore
+        # transaction. A concurrent mutation retries the transaction, so a later
+        # missing item can never leave earlier items committed from a failed request.
+        try:
+            delete_canonical_memories_batch(uid, memory_ids, db_client=db_client)
+        except CanonicalBatchMutationLimitError:
+            raise HTTPException(status_code=413, detail='Memory batch is too large to delete atomically')
+        except ValueError:
+            raise HTTPException(status_code=404, detail='Memory not found')
         return {'status': 'ok'}
 
     # Legacy cohort: enforce the same per-memory guard as _validate_memory, but via a

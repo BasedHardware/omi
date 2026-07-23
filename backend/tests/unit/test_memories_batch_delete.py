@@ -17,6 +17,8 @@ monkeypatched DB/vector helpers (no sys.modules mutation, no TestClient).
 """
 
 import os
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -28,6 +30,9 @@ from fastapi import HTTPException  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
 
 from routers import memories as mem_mod  # noqa: E402
+from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState  # noqa: E402
+from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState  # noqa: E402
+from utils.memory import canonical_memory_adapter as canonical_adapter  # noqa: E402
 
 
 def _force_legacy(monkeypatch):
@@ -46,18 +51,52 @@ def _patch_db(monkeypatch, fetched):
 
 
 def _force_canonical(monkeypatch, *, existing_ids):
-    """Force the canonical cohort and stub its read-only preflight.
-
-    ``existing_ids`` is the set of ids the preflight (read_canonical_memory_item) treats
-    as present; any other id reads as None, exactly like a missing / non-active /
-    cross-user canonical memory.
-    """
+    """Force the canonical cohort and stub its atomic batch adapter."""
     monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: True)
     existing = set(existing_ids)
-    monkeypatch.setattr(
-        mem_mod,
-        'read_canonical_memory_item',
-        lambda uid, memory_id, db_client=None: object() if memory_id in existing else None,
+
+    def delete_batch(uid, memory_ids, db_client=None):
+        if any(memory_id not in existing for memory_id in memory_ids):
+            raise ValueError("canonical memory not found")
+
+    delete_mock = MagicMock(side_effect=delete_batch)
+    monkeypatch.setattr(mem_mod, 'delete_canonical_memories_batch', delete_mock)
+    return delete_mock
+
+
+def _canonical_item(memory_id):
+    now = datetime.now(timezone.utc)
+    return MemoryItem(
+        memory_id=memory_id,
+        uid='u1',
+        version=1,
+        tier=MemoryLayer.short_term,
+        status=MemoryItemStatus.active,
+        processing_state=ProcessingState.processed,
+        content=f'fact {memory_id}',
+        evidence=[
+            MemoryEvidence(
+                evidence_id=f'ev_{memory_id}',
+                source_id='conv-1',
+                source_type='conversation',
+                source_version='v1',
+                artifact_preservation=ArtifactPreservationState.preserved,
+            )
+        ],
+        source_state=SourceState.active,
+        sensitivity_labels=[],
+        visibility='private',
+        user_asserted=False,
+        captured_at=now,
+        updated_at=now,
+        expires_at=now + timedelta(days=30),
+        ledger_commit_id='c1',
+        ledger_sequence=1,
+        item_revision=1,
+        source_commit_id='c1',
+        source_commit_sequence=1,
+        content_hash='h',
+        account_generation=1,
     )
 
 
@@ -145,48 +184,103 @@ class TestBatchDeleteHappyPath:
 
 class TestBatchDeleteCanonicalCohort:
     def test_canonical_cohort_mirrors_single_delete_canonical_path(self, monkeypatch):
-        # Canonical cohort preflights every id, then deletes via MemoryService.delete per
-        # id (404 on ValueError), and never takes the legacy get_memories_by_ids path.
-        _force_canonical(monkeypatch, existing_ids={'a', 'b'})
-        svc_mock = MagicMock()
-        monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kw: svc_mock)
+        # Canonical cohort delegates the full selection to one atomic adapter call and
+        # never takes the legacy get_memories_by_ids path.
+        atomic_delete_mock = _force_canonical(monkeypatch, existing_ids={'a', 'b'})
         get_mock = MagicMock()
         delete_mock = MagicMock()
         monkeypatch.setattr(mem_mod.memories_db, 'get_memories_by_ids', get_mock)
         monkeypatch.setattr(mem_mod.memories_db, 'delete_memories_batch', delete_mock)
 
         mem_mod.delete_memories_batch(data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['a', 'b']), uid='u1')
-        assert svc_mock.delete.call_count == 2
-        svc_mock.delete.assert_any_call('u1', 'a')
-        svc_mock.delete.assert_any_call('u1', 'b')
+        atomic_delete_mock.assert_called_once_with('u1', ['a', 'b'], db_client=mem_mod.db_client_module.db)
         get_mock.assert_not_called()
         delete_mock.assert_not_called()
 
     def test_canonical_cohort_404_when_memory_not_found_and_nothing_deleted(self, monkeypatch):
-        # The preflight rejects a missing id before any MemoryService.delete call, so
-        # nothing is mutated — the canonical cohort's all-or-nothing guarantee.
-        _force_canonical(monkeypatch, existing_ids=set())  # 'a' reads as missing
-        svc_mock = MagicMock()
-        monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kw: svc_mock)
+        atomic_delete_mock = _force_canonical(monkeypatch, existing_ids=set())
         with pytest.raises(HTTPException) as ei:
             mem_mod.delete_memories_batch(data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['a']), uid='u1')
         assert ei.value.status_code == 404
-        svc_mock.delete.assert_not_called()
+        atomic_delete_mock.assert_called_once()
 
     def test_canonical_cohort_does_not_delete_earlier_valid_id_when_later_id_missing(self, monkeypatch):
-        # Regression for the documented all-or-nothing contract: a valid id preceding a
-        # missing id must NOT be tombstoned. The earlier per-id delete loop mutated the
-        # valid id before the missing one raised 404, deleting part of a batch the API
-        # promises to reject wholesale.
-        _force_canonical(monkeypatch, existing_ids={'valid'})  # 'missing' reads as missing
-        svc_mock = MagicMock()
-        monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kw: svc_mock)
+        # Regression for the documented all-or-nothing contract: the route makes one
+        # transactional adapter call, so it has no per-id fallback that could commit
+        # "valid" before discovering "missing".
+        atomic_delete_mock = _force_canonical(monkeypatch, existing_ids={'valid'})
         with pytest.raises(HTTPException) as ei:
             mem_mod.delete_memories_batch(
                 data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['valid', 'missing']), uid='u1'
             )
         assert ei.value.status_code == 404
+        atomic_delete_mock.assert_called_once_with(
+            'u1',
+            ['valid', 'missing'],
+            db_client=mem_mod.db_client_module.db,
+        )
+
+    def test_canonical_batch_adapter_failure_never_falls_back_to_per_id_delete(self, monkeypatch):
+        atomic_delete_mock = _force_canonical(monkeypatch, existing_ids={'a', 'b'})
+        atomic_delete_mock.side_effect = RuntimeError('transaction commit failed')
+        svc_mock = MagicMock()
+        monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kw: svc_mock)
+
+        with pytest.raises(RuntimeError, match='transaction commit failed'):
+            mem_mod.delete_memories_batch(
+                data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['a', 'b']),
+                uid='u1',
+            )
+
+        atomic_delete_mock.assert_called_once()
         svc_mock.delete.assert_not_called()
+
+    def test_atomic_adapter_reads_entire_batch_before_queuing_writes(self, monkeypatch):
+        class Snapshot:
+            def __init__(self, payload=None):
+                self.exists = payload is not None
+                self._payload = payload
+
+            def to_dict(self):
+                return self._payload
+
+        class Document:
+            def __init__(self, path):
+                self.path = path
+
+            def get(self, transaction=None):
+                payload = _canonical_item('valid').model_dump(mode='json') if self.path.endswith('/valid') else None
+                return Snapshot(payload)
+
+        transaction = MagicMock()
+        client = MagicMock()
+        client.transaction.return_value = transaction
+        client.document.side_effect = Document
+
+        def transactional_for_test(function):
+            def run(txn):
+                result = function(txn)
+                txn.commit()
+                return result
+
+            return run
+
+        monkeypatch.setattr(canonical_adapter, 'transactional', transactional_for_test)
+        monkeypatch.setattr(
+            canonical_adapter,
+            'read_memory_v3_trusted_account_generation',
+            lambda **kwargs: SimpleNamespace(read_error_reason=None, account_generation=1, head_commit_id='c1'),
+        )
+
+        with pytest.raises(ValueError, match='canonical memory not found: missing'):
+            canonical_adapter.delete_canonical_memories_batch(
+                'u1',
+                ['valid', 'missing'],
+                db_client=client,
+            )
+
+        transaction.set.assert_not_called()
+        transaction.commit.assert_not_called()
 
 
 class TestBatchDeleteRequestModel:
