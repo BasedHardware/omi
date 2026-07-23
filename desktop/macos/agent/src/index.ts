@@ -2459,6 +2459,7 @@ async function main(): Promise<void> {
           ownerId,
           conversationId: resolved.conversationId,
           expectedGeneration: request.expectedGeneration,
+          deleteBackend: request.deleteBackend,
         });
         send({
           type: "journal_operation_result",
