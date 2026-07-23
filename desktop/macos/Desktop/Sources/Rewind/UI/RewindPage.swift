@@ -6,6 +6,9 @@ import SwiftUI
 /// The timeline is the primary interface, with search results highlighted inline
 struct RewindPage: View {
   var appState: AppState? = nil
+  /// Returns to the shell tab the user came from. Nil in the standalone window,
+  /// where the gear menu handles navigation instead.
+  var onBack: (() -> Void)? = nil
 
   @StateObject private var viewModel = RewindViewModel()
 
@@ -339,6 +342,25 @@ struct RewindPage: View {
         .buttonStyle(.plain)
         .help("Back to results")
       } else {
+        // Back to the tab the user came from (shell only).
+        if let onBack {
+          Button(action: onBack) {
+            HStack(spacing: OmiSpacing.xs) {
+              Image(systemName: "arrow.left")
+                .scaledFont(size: OmiType.caption, weight: .semibold)
+              Text("Back")
+                .scaledFont(size: OmiType.caption, weight: .semibold)
+            }
+            .foregroundColor(.white.opacity(0.85))
+            .padding(.horizontal, OmiSpacing.sm + 2)
+            .padding(.vertical, 6)
+            .background(Capsule(style: .continuous).fill(Color.white.opacity(0.1)))
+            .contentShape(Capsule())
+          }
+          .buttonStyle(.plain)
+          .help("Back to app")
+        }
+
         // Rewind title
         HStack(spacing: OmiSpacing.sm) {
           Text("Rewind")
