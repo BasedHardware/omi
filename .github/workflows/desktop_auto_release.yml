@@ -8,10 +8,15 @@ on:
   # excluding CHANGELOG/AGENTS/changelog/Backend-Rust); the same quiet-window,
   # exact-SHA, and one-active-release fences below still admit at most one
   # eligible candidate at a time, so bursts collapse to the newest SHA.
+  # Keep these in lockstep with DESKTOP_RELEASE_PATHS in plan-desktop-release.py
+  # (a directory X there maps to 'X/**' here); test_push_paths_cover_releasable_
+  # desktop_paths enforces the alignment so a releasable input can't silently
+  # lose its immediate trigger.
   push:
     branches: [main]
     paths:
       - 'desktop/macos/**'
+      - 'codemagic.yaml'
       - '.github/scripts/plan-desktop-release.py'
       - '.github/workflows/desktop_auto_release.yml'
       - '.github/workflows/desktop-swift-ci.yml'
