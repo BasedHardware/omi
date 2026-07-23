@@ -2443,6 +2443,18 @@ workflows:
           echo "OMI_PYTHON_API_URL=$OMI_PYTHON_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
           echo "App bundle created: $APP_BUNDLE"
 
+          # Generate symbols from the final universal executable after lipo and
+          # install_name_tool mutations. The helper fails closed unless the dSYM
+          # UUID set exactly matches both executable slices.
+          DSYM_PATH="$BUILD_DIR/Omi Computer.app.dSYM"
+          DSYM_ARCHIVE="$BUILD_DIR/Omi.dSYM.zip"
+          scripts/publish-desktop-debug-symbols.sh generate \
+            --binary "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" \
+            --dsym "$DSYM_PATH" \
+            --archive "$DSYM_ARCHIVE"
+          echo "DSYM_PATH=$DSYM_PATH" >> "$CM_ENV"
+          echo "DSYM_ARCHIVE=$DSYM_ARCHIVE" >> "$CM_ENV"
+
       - name: Sign app
         script: |
           scripts/prepare-desktop-bundle-native-deps.sh "$APP_BUNDLE"
@@ -2825,6 +2837,13 @@ workflows:
             exit 0
           fi
           set -euo pipefail
+
+          # Symbolication is a release requirement, not best-effort publishing.
+          # Upload the UUID-verified dSYM before creating the immutable candidate.
+          scripts/publish-desktop-debug-symbols.sh upload \
+            --binary "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" \
+            --dsym "$DSYM_PATH"
+
           CHANGELOG_MD=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format markdown || echo "- Bug fixes and improvements")
 
           # Build changelog as pipe-separated string for KEY_VALUE_START
@@ -2874,6 +2893,7 @@ workflows:
               "$DMG_PATH" \
               "$BETA_SPARKLE_ZIP_PATH" \
               "$BETA_DMG_PATH" \
+              "$DSYM_ARCHIVE" \
               "$BUILD_DIR/desktop-smoke-result.json" \
               "$BUILD_DIR/desktop-smoke-result-beta.json"
             echo "GitHub release candidate created: $CM_TAG"
@@ -2910,6 +2930,7 @@ workflows:
       - build/*.app
       - build/*.dmg
       - build/*.zip
+      - build/*.dSYM
       - build/desktop-smoke-result.json
     publishing:
       email:

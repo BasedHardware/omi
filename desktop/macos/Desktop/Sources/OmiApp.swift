@@ -1651,6 +1651,13 @@ extension AppDelegate {
     if isUserReport { return false }
     // Never send other events from dev builds — they pollute production Sentry data.
     if isDev { return true }
+    // Heartbeat health telemetry is breadcrumb-only. Reject any issue event from
+    // a stale or otherwise unknown capture path without suppressing the breadcrumb.
+    if messageFormatted?.trimmingCharacters(in: .whitespacesAndNewlines)
+      .caseInsensitiveCompare("Session Heartbeat") == .orderedSame
+    {
+      return true
+    }
     // Drop HTTP errors targeting dev/local URLs — noise when tunnels or local backends are down.
     if let urlTag,
       urlTag.contains("localhost") || urlTag.contains("127.0.0.1")

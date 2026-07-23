@@ -12,15 +12,13 @@ final class SentryHeartbeatTelemetryTests: XCTestCase {
     XCTAssertEqual(breadcrumb.data?["event_type"] as? String, "heartbeat")
   }
 
-  func testAppDelegateHeartbeatSourceUsesBreadcrumbNotCaptureMessage() throws {
-    let source = try String(
-      contentsOf: URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .appendingPathComponent("Sources/OmiApp.swift"),
-      encoding: .utf8
-    )
-    XCTAssertTrue(source.contains("SentryHeartbeatTelemetry.recordSessionHeartbeat()"))
-    XCTAssertFalse(source.contains("SentrySDK.capture(message: \"Session Heartbeat\")"))
+  func testHeartbeatIssueEventIsRejectedByProductionBeforeSendPolicy() {
+    XCTAssertTrue(
+      AppDelegate.shouldDropSentryEvent(
+        isUserReport: false,
+        isDev: false,
+        urlTag: nil,
+        messageFormatted: "Session Heartbeat",
+        exceptions: []))
   }
 }
