@@ -2543,10 +2543,10 @@ class FloatingControlBarManager {
     let context: FloatingBarNotificationContext?
   }
 
-  private var window: FloatingControlBarWindow?
+  var window: FloatingControlBarWindow?
   /// Tracks whether the deferred notch reveal has happened this session for
   /// explicit opt-in contexts such as onboarding/demo/minimal mode.
-  private var hasRevealedNotchThisSession = false
+  var hasRevealedNotchThisSession = false
   private var snoozeTimer: Timer?
   private var recordingCancellable: AnyCancellable?
   private var durationCancellable: AnyCancellable?
@@ -3137,7 +3137,7 @@ class FloatingControlBarManager {
     case .hidden:
       return
     case .showImmediately:
-      show()
+      showForLaunch()
     case .deferUntilFirstPushToTalk:
       showDeferredUntilFirstPushToTalk()
     }
@@ -3151,37 +3151,12 @@ class FloatingControlBarManager {
       log("FloatingControlBarManager: showDeferredUntilFirstPushToTalk() — notch hidden until first Push-to-Talk")
       return
     }
-    show()
+    showForLaunch()
   }
 
   /// Show the floating bar and persist the preference.
   func show() {
-    log("FloatingControlBarManager: show() called, window=\(window != nil), isVisible=\(window?.isVisible ?? false)")
-    isEnabled = true
-    if isSnoozed {
-      log(
-        "FloatingControlBarManager: show() suppressed because bar is snoozed until \(snoozedUntil?.description ?? "?")")
-      return
-    }
-    // Reveal on every hidden→present transition (not just once per session):
-    // the island should always grow out of the notch instead of popping in.
-    let shouldPlayNotchReveal =
-      window?.usesNotchIslandForCurrentScreen == true
-      && (window?.isVisible != true || !hasRevealedNotchThisSession)
-    hasRevealedNotchThisSession = true
-    window?.normalizeForTemporaryShow()
-    window?.makeKeyAndOrderFront(nil)
-    if shouldPlayNotchReveal {
-      window?.playNotchRevealAnimation()
-    }
-    log("FloatingControlBarManager: show() done, frame=\(window?.frame ?? .zero)")
-
-    // Auto-focus input if AI conversation is open
-    if let window = window, window.state.showingAIConversation && !window.state.showingAIResponse {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-        window.focusInputField()
-      }
-    }
+    present(.explicitUserAction, persistEnabledPreference: true)
   }
 
   /// Hide the floating bar and persist the preference.
@@ -3206,7 +3181,12 @@ class FloatingControlBarManager {
       log("FloatingControlBarManager: showTemporarily() suppressed because bar is disabled")
       return
     }
-    if isSnoozed {
+    guard
+      FloatingBarPresentationPolicy.shouldPresent(
+        request: .background,
+        isSnoozed: isSnoozed
+      )
+    else {
       log("FloatingControlBarManager: showTemporarily() suppressed because bar is snoozed")
       return
     }
