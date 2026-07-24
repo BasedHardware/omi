@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 
 import tiktoken
 from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.messages import SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
@@ -51,19 +52,20 @@ def _cache_bucket_key(prefix: str, *, now: float | None = None) -> str:
     return f'{prefix}-v1-b{slot % CONVERSATION_CACHE_BUCKET_COUNT}'
 
 
-def _gpt56_cacheable_system_message(content: str, *, cache_enabled: bool) -> tuple[str, Any]:
+def _gpt56_cacheable_system_message(content: str, *, cache_enabled: bool) -> Any:
     """Mark a static system prefix only when the request uses the GPT-5.6 gateway."""
     if not cache_enabled:
         return ('system', content)
-    return (
-        'system',
-        [
+    # A concrete message prevents ChatPromptTemplate from treating literal JSON
+    # braces in parser instructions as template variables.
+    return SystemMessage(
+        content=[
             {
                 'type': 'text',
                 'text': content,
                 'prompt_cache_breakpoint': {'mode': 'explicit'},
             }
-        ],
+        ]
     )
 
 
@@ -936,19 +938,6 @@ def extract_action_items(
     DUE DATE EXTRACTION:
     Resolve each due date in the user's LOCAL time. NEVER produce a past date.
 
-    REFERENCE_TIME (user's local time): If {started_at_local} is >7 days before {current_time_local}, use {current_time_local} (historical reprocessing). Otherwise use {started_at_local}.
-
-    Date resolution: "today" → REFERENCE_TIME date, "tomorrow" → next day, weekday names → next occurrence, "next week" → +7 days.
-    Time resolution: "morning" → 9AM, "afternoon" → 2PM, "evening" → 6PM, "noon" → 12PM, "end of day"/"midnight" → 11:59PM, no time → 11:59PM. "urgent"/"ASAP" → 2h from REFERENCE_TIME.
-    Output the resolved value as the user's LOCAL wall-clock time in ISO 8601 with NO timezone suffix or offset (no 'Z', no '+05:30') — the server converts it to UTC. Verify it is in the future relative to REFERENCE_TIME; if past, omit due_at.
-
-    Example: REFERENCE_TIME "2025-10-03T13:25:00", "tomorrow before 10am" → "2025-10-04T10:00:00"
-    Format: naive local ISO 8601, no suffix (e.g., "2025-10-04T10:00:00").
-
-    Conversation started at (local): {started_at_local}
-    Current time (local): {current_time_local}
-    User timezone: {tz}
-
     {format_instructions}'''.replace(
         '    ', ''
     ).strip()
@@ -956,7 +945,21 @@ def extract_action_items(
     response_language = output_language_code or language_code
     action_items_parser = PydanticOutputParser(pydantic_object=ActionItemsExtraction)
     # Second system message: conversation context + existing items (dynamic, per-conversation)
-    context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}{existing_items_context}'
+    context_message = '''The content language is {language_code}. You MUST respond entirely in {response_language}.
+
+    DUE DATE EXTRACTION:
+    REFERENCE_TIME (user's local time): If {started_at_local} is >7 days before {current_time_local}, use {current_time_local} (historical reprocessing). Otherwise use {started_at_local}.
+    Date resolution: "today" → REFERENCE_TIME date, "tomorrow" → next day, weekday names → next occurrence, "next week" → +7 days.
+    Time resolution: "morning" → 9AM, "afternoon" → 2PM, "evening" → 6PM, "noon" → 12PM, "end of day"/"midnight" → 11:59PM, no time → 11:59PM. "urgent"/"ASAP" → 2h from REFERENCE_TIME.
+    Output the resolved value as the user's LOCAL wall-clock time in ISO 8601 with NO timezone suffix or offset (no 'Z', no '+05:30') — the server converts it to UTC. Verify it is in the future relative to REFERENCE_TIME; if past, omit due_at.
+    Example: REFERENCE_TIME "2025-10-03T13:25:00", "tomorrow before 10am" → "2025-10-04T10:00:00"
+    Format: naive local ISO 8601, no suffix (e.g., "2025-10-04T10:00:00").
+    Conversation started at (local): {started_at_local}
+    Current time (local): {current_time_local}
+    User timezone: {tz}
+
+    Content:
+    {conversation_context}{existing_items_context}'''
     gateway_mode_enabled = should_route_features_through_gateway()
     if gateway_mode_enabled:
         instructions_text = instructions_text.format(

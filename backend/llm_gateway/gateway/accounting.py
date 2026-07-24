@@ -538,7 +538,9 @@ def _openai_usage(raw: Mapping[str, Any], *, cache_requested: bool) -> ProviderU
     return ProviderUsage(
         prompt_tokens=prompt,
         cached_input_tokens=cached,
-        uncached_input_tokens=max(prompt - cached, 0),
+        # OpenAI includes explicit cache-write tokens in prompt_tokens; their
+        # write rate replaces the ordinary uncached-input rate for those units.
+        uncached_input_tokens=max(prompt - cached - cache_write, 0),
         output_tokens=output,
         reasoning_tokens=reasoning,
         output_tokens_include_reasoning=True,

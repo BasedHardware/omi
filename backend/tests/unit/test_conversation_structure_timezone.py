@@ -81,6 +81,8 @@ sys.modules["database.auth"].get_user_name = MagicMock(return_value="Test User")
 _stub_package("langchain_core")
 langchain_output_parsers = _stub_module("langchain_core.output_parsers")
 langchain_output_parsers.PydanticOutputParser = MagicMock()
+langchain_messages = _stub_module("langchain_core.messages")
+langchain_messages.SystemMessage = MagicMock()
 langchain_prompts = _stub_module("langchain_core.prompts")
 langchain_prompts.ChatPromptTemplate = MagicMock()
 

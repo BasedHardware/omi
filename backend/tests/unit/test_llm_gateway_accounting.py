@@ -80,6 +80,7 @@ def test_openai_usage_parses_cache_writes_and_prices_luna_write_tokens() -> None
     assert usage is not None
     assert usage.cache_write_tokens == 400_000
     assert usage.cache_write_ttl == '30m'
+    assert usage.uncached_input_tokens == 400_000
 
     trace = AttemptTrace()
     attempt = trace.record(
@@ -95,7 +96,7 @@ def test_openai_usage_parses_cache_writes_and_prices_luna_write_tokens() -> None
     event = build_accounting_event(_context(), attempt)
 
     assert event.cache_write_tokens == 400_000
-    assert event.estimated_cost_micro_usd == 7_320_000
+    assert event.estimated_cost_micro_usd == 6_920_000
     assert event.rate_card_id == 'openai.gpt-5.6-luna.2026-07-17'
 
 
