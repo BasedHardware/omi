@@ -1,4 +1,9 @@
-import koffi from 'koffi'
+import {
+  linuxAvailable,
+  getLinuxForegroundExePath,
+  getLinuxForegroundInfo,
+  getLinuxForegroundTitle
+} from './linuxForeground'
 
 // PROCESS_QUERY_LIMITED_INFORMATION — enough to read the image path, and works
 // for processes at higher integrity than ours (unlike QUERY_INFORMATION).
@@ -103,6 +108,8 @@ function load(): Win32 | null {
   if (cached) return cached
   if (loadFailed) return null
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const koffi = require('koffi') as typeof import('koffi')
     const user32 = koffi.load('user32.dll')
     const kernel32 = koffi.load('kernel32.dll')
 
@@ -402,6 +409,9 @@ function load(): Win32 | null {
 // unavailable (no foreground window, permission edge, or koffi failed to load).
 // Never throws.
 export function getForegroundExePath(): string | null {
+  if (process.platform === 'linux') {
+    return linuxAvailable() ? getLinuxForegroundExePath() : null
+  }
   if (process.platform !== 'win32') return null
   try {
     return load()?.getForegroundExePath() ?? null
@@ -414,6 +424,11 @@ export function getForegroundExePath(): string | null {
 // Returns the current foreground window's HWND (decimal string) + owning exe
 // path, or nulls when unavailable. Never throws.
 export function getForegroundWindowInfo(): ForegroundWindowInfo {
+  if (process.platform === 'linux') {
+    return linuxAvailable()
+      ? getLinuxForegroundInfo()
+      : { handle: null, exePath: null, className: null }
+  }
   if (process.platform !== 'win32') return { handle: null, exePath: null, className: null }
   try {
     return load()?.getForegroundWindowInfo() ?? { handle: null, exePath: null, className: null }
@@ -426,6 +441,9 @@ export function getForegroundWindowInfo(): ForegroundWindowInfo {
 // Returns the current foreground window's title text, or null when unavailable.
 // Never throws.
 export function getForegroundWindowTitle(): string | null {
+  if (process.platform === 'linux') {
+    return linuxAvailable() ? getLinuxForegroundTitle() : null
+  }
   if (process.platform !== 'win32') return null
   try {
     return load()?.getForegroundWindowTitle() ?? null

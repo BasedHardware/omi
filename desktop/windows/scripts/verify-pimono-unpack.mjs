@@ -29,12 +29,13 @@ function fail(lines) {
 }
 
 // --- Guard 1: sanity (fresh walk; throws on unresolved root / collapsed closure) ---
-let fresh, closureSize, coveredCount
+let fresh, closureSize, coveredCount, optionalPlatformSiblingGlobs
 try {
-  ;({ globs: fresh, closureSize, coveredCount } = computeUnpackGlobs())
+  ;({ globs: fresh, closureSize, coveredCount, optionalPlatformSiblingGlobs } = computeUnpackGlobs())
 } catch (err) {
   fail(err instanceof Error ? err.message : String(err))
 }
+const optionalPlatformSiblingSet = new Set(optionalPlatformSiblingGlobs)
 
 // --- Guard 2: drift (fresh in-memory vs the COMMITTED file — do NOT regenerate) ---
 if (!existsSync(GENERATED_FILE)) {
@@ -56,7 +57,10 @@ if (!Array.isArray(committed)) {
 const freshSet = new Set(fresh)
 const committedSet = new Set(committed)
 const added = fresh.filter((g) => !committedSet.has(g)) // in tree, missing from file
-const removed = committed.filter((g) => !freshSet.has(g)) // in file, gone from tree
+// Committed may list optional platform-native siblings not installed on this host.
+const removed = committed.filter(
+  (g) => !freshSet.has(g) && !optionalPlatformSiblingSet.has(g)
+) // in file, gone from tree
 if (added.length > 0 || removed.length > 0) {
   const lines = [
     'pi-mono closure DRIFT — the committed list is out of date vs a fresh dependency walk.',
@@ -73,7 +77,11 @@ if (added.length > 0 || removed.length > 0) {
 const missingOnDisk = []
 for (const glob of committed) {
   const rel = glob.replace(/\/\*\*$/, '') // node_modules/<name>
-  if (!existsSync(join(WIN_ROOT, rel, 'package.json'))) missingOnDisk.push(rel)
+  if (!existsSync(join(WIN_ROOT, rel, 'package.json'))) {
+    // Optional platform-native siblings are only installed on their target OS.
+    if (optionalPlatformSiblingSet.has(glob)) continue
+    missingOnDisk.push(rel)
+  }
 }
 if (missingOnDisk.length > 0) {
   fail(
