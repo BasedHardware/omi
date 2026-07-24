@@ -96,6 +96,7 @@ def _agentic_request(**overrides: Any) -> dict[str, Any]:
         ],
         'messages': [{'role': 'user', 'content': 'hello'}],
         'tools': [{'name': 'get_memories_tool', 'description': 'Get memories', 'input_schema': {'type': 'object'}}],
+        'cache_control': {'type': 'ephemeral', 'ttl': '1h'},
         'stream': False,
     }
     body.update(overrides)
@@ -165,6 +166,7 @@ def test_anthropic_messages_passthrough_preserves_cache_control(_reset_anthropic
     assert forwarded['model'] == 'claude-sonnet-5'
     assert 'effort' not in forwarded
     assert forwarded['system'][0]['cache_control'] == {'type': 'ephemeral', 'ttl': '1h'}
+    assert forwarded['cache_control'] == {'type': 'ephemeral', 'ttl': '1h'}
     assert forwarded['tools'][0]['name'] == 'get_memories_tool'
     assert fake.post_calls[0]['headers']['x-api-key'] == 'anthropic-test-key'
 

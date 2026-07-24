@@ -183,6 +183,7 @@ describe("PiMonoAdapter prompt correlation", () => {
     for (const message of [
       "search my calendar for weather in NYC",
       "what did I say today about the current weather?",
+      "what did I do today?",
     ]) {
       expect(routePromptForPublicWeb(message)).toBe(message);
     }
