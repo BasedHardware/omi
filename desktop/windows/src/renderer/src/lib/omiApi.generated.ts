@@ -5898,6 +5898,15 @@ export interface OmiApiPaths {
     };
   };
   "/v1/goals/{goal_id}": {
+    get: {
+      operationId: "get_goal_by_id_v1_goals__goal_id__get";
+      responses: {
+        "200": GoalResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
     patch: {
       operationId: "update_goal_v1_goals__goal_id__patch";
       responses: {
@@ -11332,6 +11341,25 @@ export async function extract_and_update_progress_v1_goals_extract_progress_post
 export async function suggest_goal_v1_goals_suggest_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<GoalSuggestionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/goals/suggest`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_goal_by_id_v1_goals__goal_id__get(path: { goal_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<GoalResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/goals/${path.goal_id}`;
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "GET",
