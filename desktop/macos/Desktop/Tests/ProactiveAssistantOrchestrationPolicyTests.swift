@@ -556,7 +556,7 @@ final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
   func testPreviewSimilarityThresholdPolicyByAppClass() {
     XCTAssertEqual(
       PreviewSimilarityThresholdPolicy.threshold(bundleID: "com.apple.Notes", appName: "Notes"),
-      0.98)
+      0.99)
     XCTAssertEqual(
       PreviewSimilarityThresholdPolicy.threshold(
         bundleID: "com.microsoft.VSCode", appName: "Code"),
@@ -594,6 +594,7 @@ final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
     // Notes/docs tier: one flipped dHash bit must still capture (typical text edit).
     let notesThreshold = PreviewSimilarityThresholdPolicy.threshold(
       bundleID: "com.apple.Notes", appName: "Notes")
+    XCTAssertEqual(notesThreshold, 0.99, accuracy: 1e-9)
     XCTAssertFalse(trigger.shouldSkipPreview(0x1235, similarityThreshold: notesThreshold))
 
     // Old coarse default (0.92) would have skipped this edit — regression guard.
@@ -607,7 +608,7 @@ final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
         bundleID: "com.google.Chrome",
         appName: "Google Chrome",
         windowTitle: "Spec - Google Docs"),
-      0.98)
+      0.99)
     // Code host → code tier.
     XCTAssertEqual(
       PreviewSimilarityThresholdPolicy.threshold(

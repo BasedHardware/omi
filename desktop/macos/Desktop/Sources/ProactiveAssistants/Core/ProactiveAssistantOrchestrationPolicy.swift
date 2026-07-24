@@ -471,7 +471,7 @@ struct ProactiveCaptureTrigger {
 /// Lower = tolerate noisy pixel churn (games/media/social).
 ///
 /// Tiers (chosen for 80px dHash noise):
-/// - 0.98 notes/docs:  ~1 bit of 64 may flip from cursor/scroll chrome; keep edits
+/// - 0.99 notes/docs:  1/64 bit flip (≈0.984) must still capture text edits
 /// - 0.96 code/IDE:    text dense but gutter/minimap/status tick often
 /// - 0.95 default:     generic desktop apps
 /// - 0.92 chat:        avatars/typing/unread badges pulse
@@ -485,7 +485,7 @@ enum PreviewSimilarityThresholdPolicy {
   // Lower = tolerate noisy pixel churn (games/media/social).
   //
   // Tiers for ~80px dHash noise:
-  // 0.98 notes/docs   ~1/64 bit may flip from cursor chrome; keep text edits
+  // 0.99 notes/docs   1/64 bit flip (≈0.984) must still capture text edits
   // 0.96 code/IDE     dense text; gutter/minimap/status tick often
   // 0.95 default      generic desktop apps
   // 0.92 chat         avatars/typing/unread badges pulse
@@ -493,7 +493,7 @@ enum PreviewSimilarityThresholdPolicy {
   // 0.88 media        artwork/progress bar animates
   // 0.85 social web   feeds/autoplay thumbs thrash
   // 0.82 games        near-constant motion; sparse keyframes only
-  static let notes: Double = 0.98
+  static let notes: Double = 0.99
   static let code: Double = 0.96
   static let `default`: Double = 0.95
   static let chat: Double = 0.92
@@ -651,6 +651,8 @@ enum PreviewSimilarityThresholdPolicy {
       "linear.app", "figma.com", "miro.com", "whimsical.com",
       "codesandbox.io", "replit.com", "stackblitz.com",
       "jira", "atlassian.net",
+      // macOS window titles often omit the host (e.g. "org/repo · GitHub").
+      "github", "gitlab", "bitbucket",
     ]
     if codeSignals.contains(where: { title.contains($0) }) { return code }
 
@@ -673,6 +675,8 @@ enum PreviewSimilarityThresholdPolicy {
       "disneyplus.com", "hulu.com", "spotify.com", "music.apple.com",
       "steamcommunity.com", "store.steampowered.com",
       "epicgames.com", "roblox.com", "chess.com", "lichess.org",
+      // Brand-only titles (e.g. "Funny Cats - YouTube").
+      "youtube", "netflix", "twitch",
     ]
     if thrashSignals.contains(where: { title.contains($0) }) { return game }
 
