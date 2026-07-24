@@ -24,6 +24,31 @@ from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
 
+# Google Calendar and Gmail share a single OAuth grant stored under this key.
+GOOGLE_INTEGRATION_KEY = 'google_calendar'
+
+GMAIL_READONLY_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly'
+
+# Scopes requested when the user connects their Google account.
+GOOGLE_OAUTH_SCOPES = (
+    'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/contacts.readonly',
+    'https://www.googleapis.com/auth/contacts.other.readonly',
+    GMAIL_READONLY_SCOPE,
+)
+
+
+def google_integration_has_scope(integration: Optional[Dict[str, Any]], scope: str) -> bool:
+    """Whether a stored Google integration was granted `scope`.
+
+    Grants created before a scope was requested have no `granted_scopes` field, so
+    they read as not granted and the user is asked to reconnect.
+    """
+    if not integration:
+        return False
+    return scope in (integration.get('granted_scopes') or [])
+
+
 # Transient HTTP status codes that should be retried
 _RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
