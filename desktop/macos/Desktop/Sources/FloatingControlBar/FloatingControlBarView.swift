@@ -1,6 +1,5 @@
 import AppKit
 import Combine
-@preconcurrency import MarkdownUI
 import OmiSupport
 import OmiTheme
 import SwiftUI
@@ -2018,7 +2017,7 @@ private struct AgentMainChatView: View {
           switch group {
           case .text(_, let text):
             if !text.isEmpty {
-              SelectableMarkdown(text: text, sender: .ai)
+              OmiMarkdown(text: text, sender: .ai)
                 .environment(\.colorScheme, .dark)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -2061,7 +2060,7 @@ private struct AgentMainChatView: View {
     } else {
       let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
       if !trimmed.isEmpty {
-        SelectableMarkdown(text: trimmed, sender: .ai)
+        OmiMarkdown(text: trimmed, sender: .ai)
           .textSelection(.enabled)
           .environment(\.fontScale, 0.88)
           .fixedSize(horizontal: false, vertical: true)
