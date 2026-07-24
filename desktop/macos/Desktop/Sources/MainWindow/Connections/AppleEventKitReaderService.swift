@@ -66,7 +66,9 @@ protocol AppleEventKitStore: AnyObject {
   func newReminder() -> EKReminder
   func calendarItem(withIdentifier identifier: String) -> EKCalendarItem?
   func defaultCalendarForNewReminders() -> EKCalendar?
-  func save(_ reminder: EKReminder, commit: Bool) throws
+  /// Persists the reminder and returns the stable EventKit identifier used for later sync.
+  @discardableResult
+  func saveReminder(_ reminder: EKReminder, commit: Bool) throws -> String
   func commit() throws
 }
 
@@ -82,6 +84,12 @@ extension EKEventStore: AppleEventKitStore {
 
   func newReminder() -> EKReminder {
     EKReminder(eventStore: self)
+  }
+
+  @discardableResult
+  func saveReminder(_ reminder: EKReminder, commit: Bool) throws -> String {
+    try save(reminder, commit: commit)
+    return reminder.calendarItemIdentifier
   }
 }
 
@@ -128,13 +136,46 @@ extension AppleEventKitSource {
 }
 
 @MainActor
+protocol AppleRemindersSyncing: AnyObject {
+  func getPendingAppleRemindersSync() async throws -> AppleRemindersPendingSync
+  func syncAppleReminders(_ updates: [AppleRemindersSyncUpdate]) async throws
+  func deleteSyncedActionItem(id: String) async throws
+}
+
+@MainActor
+final class APIClientAppleRemindersSync: AppleRemindersSyncing {
+  private let client: APIClient
+
+  init(client: APIClient = .shared) {
+    self.client = client
+  }
+
+  func getPendingAppleRemindersSync() async throws -> AppleRemindersPendingSync {
+    try await client.getPendingAppleRemindersSync()
+  }
+
+  func syncAppleReminders(_ updates: [AppleRemindersSyncUpdate]) async throws {
+    try await client.syncAppleReminders(updates)
+  }
+
+  func deleteSyncedActionItem(id: String) async throws {
+    try await client.deleteActionItem(id: id)
+  }
+}
+
+@MainActor
 final class AppleEventKitReaderService {
   static let shared = AppleEventKitReaderService()
 
   private let eventStore: any AppleEventKitStore
+  private let remindersSync: any AppleRemindersSyncing
 
-  init(eventStore: any AppleEventKitStore = EKEventStore()) {
+  init(
+    eventStore: any AppleEventKitStore = EKEventStore(),
+    remindersSync: any AppleRemindersSyncing = APIClientAppleRemindersSync()
+  ) {
     self.eventStore = eventStore
+    self.remindersSync = remindersSync
   }
 
   func connectionStatus(for source: AppleEventKitSource) async -> AppleEventKitConnectionStatus {
@@ -212,14 +253,17 @@ final class AppleEventKitReaderService {
 
   func syncReminders() async throws -> AppleRemindersSyncResult {
     try await ensureAccess(to: .reminders, requestIfNeeded: true)
-    let pending = try await APIClient.shared.getPendingAppleRemindersSync()
+    let pending = try await remindersSync.getPendingAppleRemindersSync()
     let formatter = ISO8601DateFormatter()
     var updates: [AppleRemindersSyncUpdate] = []
+    var exported = 0
 
     if !pending.pendingExport.isEmpty {
       guard let calendar = eventStore.defaultCalendarForNewReminders() else {
         throw AppleEventKitReaderError.readFailed(.reminders, "No writable reminders list is available.")
       }
+      // Acknowledge each export immediately after EventKit commit so a mid-batch
+      // network failure cannot re-create already-persisted Apple reminders.
       for item in pending.pendingExport {
         let reminder = eventStore.newReminder()
         reminder.title = item.description_
@@ -229,18 +273,19 @@ final class AppleEventKitReaderService {
           reminder.dueDateComponents = Calendar.current.dateComponents(
             [.year, .month, .day, .hour, .minute], from: dueAt)
         }
-        try eventStore.save(reminder, commit: false)
-        updates.append(
-          AppleRemindersSyncUpdate(
-            id: item.id,
-            exported: true,
-            exportPlatform: "apple_reminders",
-            appleReminderId: reminder.calendarItemIdentifier
-          ))
+        let reminderID = try eventStore.saveReminder(reminder, commit: true)
+        try await remindersSync.syncAppleReminders(
+          [
+            AppleRemindersSyncUpdate(
+              id: item.id,
+              exported: true,
+              exportPlatform: "apple_reminders",
+              appleReminderId: reminderID
+            )
+          ]
+        )
+        exported += 1
       }
-      try eventStore.commit()
-      try await APIClient.shared.syncAppleReminders(updates)
-      updates.removeAll(keepingCapacity: true)
     }
 
     var changed = 0
@@ -264,7 +309,7 @@ final class AppleEventKitReaderService {
       } else if item.completed && !reminder.isCompleted {
         reminder.isCompleted = true
         reminder.completionDate = Date()
-        try eventStore.save(reminder, commit: true)
+        try eventStore.saveReminder(reminder, commit: true)
         itemChanged = true
       }
 
@@ -288,7 +333,7 @@ final class AppleEventKitReaderService {
           }
         }
         if needsSave {
-          try eventStore.save(reminder, commit: true)
+          try eventStore.saveReminder(reminder, commit: true)
           itemChanged = true
         }
       }
@@ -299,11 +344,11 @@ final class AppleEventKitReaderService {
       if itemChanged { changed += 1 }
     }
 
-    try await APIClient.shared.syncAppleReminders(updates)
-    for id in deletedIDs { try await APIClient.shared.deleteActionItem(id: id) }
+    try await remindersSync.syncAppleReminders(updates)
+    for id in deletedIDs { try await remindersSync.deleteSyncedActionItem(id: id) }
     return AppleRemindersSyncResult(
-      total: max(0, pending.pendingExport.count + pending.syncedItems.count - deletedIDs.count),
-      exported: pending.pendingExport.count,
+      total: max(0, exported + pending.syncedItems.count - deletedIDs.count),
+      exported: exported,
       updated: changed,
       deleted: deletedIDs.count
     )
