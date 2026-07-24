@@ -1339,6 +1339,12 @@ async def _stale_processing_orphan_reconciled_inline(stack: Stack) -> None:
 
     _wait_until(aged_completed, label='inline aged orphan reconciled to completed', timeout=30.0)
 
+    def legacy_migrated() -> bool:
+        row = stack.conversation(uid, legacy_id)
+        return bool(row and row.get('status') == 'processing' and row.get('processing_admitted_at'))
+
+    _wait_until(legacy_migrated, label='inline legacy row migrated with admission stamp', timeout=30.0)
+
     if stack.conversation(uid, fresh_id).get('status') != 'processing':
         raise StackFailure('inline reconciler swept a fresh admission')
     legacy = stack.conversation(uid, legacy_id)
