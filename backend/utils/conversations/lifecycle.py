@@ -112,10 +112,10 @@ def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *
 
 
 def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:
-    """Persist a processing result and report whether its generation was still current.
+    """Persist a processing result and report whether the conversation still exists.
 
-    ``False`` fences a stale or discarded processor.  Callers must stop before
-    emitting derived side effects such as webhooks or integration fanout.
+    ``False`` means its owner deleted it.  Callers must stop before emitting
+    derived side effects such as webhooks or integration fanout.
     """
     _require_status(
         conversation_data,
@@ -123,23 +123,7 @@ def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) 
         ConversationStatus.completed,
         ConversationStatus.failed,
     )
-    status = _status_value(conversation_data['status'])
-    expected = (
-        {ConversationStatus.in_progress.value, ConversationStatus.processing.value}
-        if status == ConversationStatus.processing.value
-        else {
-            ConversationStatus.processing.value,
-            ConversationStatus.merging.value,
-            # Reprocess overwrites an already-completed conversation's
-            # generated content; the lifecycle guard must not fence it out.
-            ConversationStatus.completed.value,
-        }
-    )
-    return conversations_db.persist_processing_result_with_lifecycle(
-        uid,
-        conversation_data,
-        expected_statuses=expected,
-    )
+    return conversations_db.persist_processing_result_with_lifecycle(uid, conversation_data)
 
 
 def persist_imported_conversation(uid: str, conversation_data: dict[str, Any]) -> None:
@@ -156,12 +140,16 @@ def transition(
     expected: ConversationStatus | None = None,
     extra_updates: dict[str, Any] | None = None,
 ) -> bool:
-    """Apply one typed status transition, failing closed on stale or invalid state."""
+    """Apply one typed status transition, failing closed on an invalid state.
+
+    A discard does not block one.  It is the system's verdict that a
+    conversation held nothing, and a later sync can arrive carrying the speech
+    it was missing; treating it as terminal left such a conversation stuck at
+    whatever status it was wearing when the verdict was made.
+    """
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if not conversation:
         raise LifecycleTransitionError(f'conversation {conversation_id} does not exist')
-    if conversation.get('discarded'):
-        return False
     current = _status_value(conversation.get('status'))
     if expected is not None and current != expected.value:
         return False
