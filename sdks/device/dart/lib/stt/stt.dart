@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 enum SttEngine { deepgram, whisper, parakeet }
@@ -13,10 +14,9 @@ abstract class StreamingTranscriber {
   Future<void> stop();
 }
 
-String deepgramWsUrl(String apiKey, {int sampleRate = 16000}) {
+String deepgramWsUrl({int sampleRate = 16000}) {
   return 'wss://api.deepgram.com/v1/listen?punctuate=true&model=nova&language=en-US'
-      '&encoding=linear16&sample_rate=$sampleRate&channels=1'
-      '&token=${Uri.encodeComponent(apiKey)}';
+      '&encoding=linear16&sample_rate=$sampleRate&channels=1';
 }
 
 String parakeetWsUrl(String apiUrl, {int sampleRate = 16000}) {
@@ -31,8 +31,8 @@ String parakeetWsUrl(String apiUrl, {int sampleRate = 16000}) {
 
 class DeepgramTranscriber implements StreamingTranscriber {
   DeepgramTranscriber({required this.apiKey, required this.onTranscript, this.sampleRate = 16000}) {
-    final uri = Uri.parse(deepgramWsUrl(apiKey, sampleRate: sampleRate));
-    _channel = WebSocketChannel.connect(uri);
+    final uri = Uri.parse(deepgramWsUrl(sampleRate: sampleRate));
+    _channel = IOWebSocketChannel.connect(uri, headers: {'Authorization': 'Token $apiKey'});
     _sub = _channel.stream.listen((event) {
       if (event is! String) return;
       try {
