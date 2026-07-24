@@ -210,3 +210,5 @@ tests/unit/test_byok_security.py::TestCacheRouting::test_cached_openai_chat_no_r
 # Behavior test drives the real process_segment target-attach fallback (#10033/#10119 review ask);
 # it is the sole heavy test in its file, so it amortizes the sync pipeline import into its call phase.
 tests/unit/test_sync_merge_target_selection.py::test_sync_target_attach_fallback_to_closest
+# File-isolation amortizes memories module import on first test in baseline memory suite.
+tests/unit/test_baseline_memories.py::TestBaselineMemoryModel::test_is_baseline_defaults_to_false
