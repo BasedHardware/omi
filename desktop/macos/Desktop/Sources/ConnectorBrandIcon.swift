@@ -48,6 +48,10 @@ enum ConnectorBrand: String, Sendable {
 
   fileprivate var appBundleIdentifier: String? {
     switch self {
+    case .appleCalendar:
+      return "com.apple.iCal"
+    case .appleReminders:
+      return "com.apple.reminders"
     case .appleNotes:
       return "com.apple.Notes"
     case .notion:

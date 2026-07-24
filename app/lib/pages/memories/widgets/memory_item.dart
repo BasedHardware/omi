@@ -81,6 +81,10 @@ class MemoryItem extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (memory.isBaseline) ...[
+                      const Icon(Icons.flag, color: Colors.blue, size: 20),
+                      const SizedBox(width: AppStyles.spacingS),
+                    ],
                     if (memory.conversationId != null) ...[
                       _buildConversationLinkButton(context),
                       const SizedBox(width: AppStyles.spacingS),

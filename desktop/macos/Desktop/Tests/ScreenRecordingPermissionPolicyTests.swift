@@ -184,6 +184,46 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
     XCTAssertLessThanOrEqual(centered.maxY, visible.minY + visible.height / 4)
   }
 
+  /// Card sits below the window → arrow points up at the list above it.
+  @MainActor
+  func testDragArrowPointsUpWhenCardIsBelowWindow() {
+    let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+    let card = CGSize(width: 180, height: 164)
+    let anchor = CGRect(x: 900, y: 300, width: 600, height: 500)
+    XCTAssertFalse(
+      CloudConnectorGuidanceOverlay.dragCardArrowPointsDown(
+        anchor: anchor, cardSize: card, visibleFrame: visible),
+      "Card below the window must point its arrow UP toward the list")
+  }
+
+  /// Card flips above the window (no room below) → arrow must point DOWN at the
+  /// list beneath it, not stay hardcoded up (the reported wrong-arrow bug).
+  @MainActor
+  func testDragArrowPointsDownWhenCardFlipsAboveWindow() {
+    let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+    let card = CGSize(width: 180, height: 164)
+    let anchor = CGRect(x: 900, y: 20, width: 600, height: 200)
+    XCTAssertTrue(
+      CloudConnectorGuidanceOverlay.dragCardArrowPointsDown(
+        anchor: anchor, cardSize: card, visibleFrame: visible),
+      "Card flipped above the window must point its arrow DOWN toward the list")
+    // And the flip-above placement it mirrors must actually be above the window.
+    let frame = CloudConnectorGuidanceOverlay.dragCardFrame(
+      anchor: anchor, cardSize: card, visibleFrame: visible)
+    XCTAssertGreaterThanOrEqual(frame.minY, anchor.maxY)
+  }
+
+  /// No anchor yet (Settings not open) → default arrow up, matching the
+  /// bottom-of-screen fallback placement.
+  @MainActor
+  func testDragArrowPointsUpWithoutAnchor() {
+    let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+    let card = CGSize(width: 180, height: 164)
+    XCTAssertFalse(
+      CloudConnectorGuidanceOverlay.dragCardArrowPointsDown(
+        anchor: nil, cardSize: card, visibleFrame: visible))
+  }
+
   @MainActor
   func testDragCardExpandsForLongBundleDisplayNames() {
     XCTAssertEqual(

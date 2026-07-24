@@ -315,7 +315,7 @@ async fn fetch_sentry_event_details(
 
     let url = format!("https://sentry.io/api/0/issues/{}/events/latest/", issue_id);
 
-    let client = reqwest::Client::new();
+    let client = crate::services::http::bounded_client(std::time::Duration::from_secs(15));
     let response = match client
         .get(&url)
         .header("Authorization", format!("Bearer {}", auth_token))
@@ -554,7 +554,7 @@ async fn poll_sentry_feedback(State(state): State<AppState>) -> Result<Json<Valu
     // failure, unparseable body) are transient and outside this service's control, so
     // they return a typed 2xx "skipped" response instead of a 500 — a 500 here wrongly
     // implies desktop-backend broke and spams the prod error logs. See issue #9139.
-    let client = reqwest::Client::new();
+    let client = crate::services::http::bounded_client(std::time::Duration::from_secs(15));
     let sentry_url = "https://sentry.io/api/0/organizations/mediar-n5/issues/?query=issue.category:feedback&limit=25&sort=date";
 
     let response = match client
@@ -724,6 +724,9 @@ pub fn webhook_routes() -> Router<AppState> {
 
 #[cfg(test)]
 mod tests {
+    // Tests may unwrap: the crate-level unwrap_used deny targets production
+    // code; a test failing on unwrap is the test doing its job.
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

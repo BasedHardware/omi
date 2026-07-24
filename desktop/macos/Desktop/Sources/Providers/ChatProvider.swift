@@ -1720,16 +1720,15 @@ class ChatProvider: ObservableObject {
     sessionId: String?,
     systemPromptStyle: ChatSystemPromptStyle
   ) -> AgentSurfaceReference {
-    if let surfaceRef {
-      return surfaceRef
+    switch Self.querySurfaceChoice(
+      hasSurfaceRef: surfaceRef != nil, isOnboarding: isOnboarding,
+      isFloating: systemPromptStyle == .floating)
+    {
+    case .onboarding: return .onboarding()
+    case .explicit: return surfaceRef ?? .mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
+    case .floatingMain: return mainChatSurfaceReference()
+    case .defaultMain: return .mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
     }
-    if isOnboarding {
-      return .onboarding()
-    }
-    if systemPromptStyle == .floating {
-      return mainChatSurfaceReference()
-    }
-    return .mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
   }
 
   private func journalOrigin(for surface: AgentSurfaceReference) -> String {
