@@ -386,6 +386,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MCP_OAUTH_CLIENTS_JSON
+  - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
+    value: "900"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

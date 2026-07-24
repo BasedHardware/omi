@@ -273,8 +273,19 @@ def _drain_stale_processing_conversations():
         logger.error(f"Startup stale-processing reconciliation failed: {e}")
 
 
-async def _periodic_listen_finalization_reconcile(interval_seconds: int = 300):
+def _listen_finalization_reconcile_interval_seconds() -> int:
+    """Periodic reconcile cadence; overridable for hermetic behavioral tests."""
+    try:
+        seconds = int(os.getenv('LISTEN_FINALIZATION_RECONCILE_INTERVAL_SECONDS', '300'))
+    except ValueError:
+        seconds = 300
+    return max(1, seconds)
+
+
+async def _periodic_listen_finalization_reconcile(interval_seconds: int | None = None):
     """Replay stale finalization leases and publish durable backlog metrics."""
+    if interval_seconds is None:
+        interval_seconds = _listen_finalization_reconcile_interval_seconds()
     while True:
         await asyncio.sleep(interval_seconds)
         try:

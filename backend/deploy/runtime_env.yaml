@@ -161,6 +161,9 @@ environments:
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
+          LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+            value: '900'
+            category: reliability
       parakeet:
         values_file: backend/charts/parakeet/dev_omi_parakeet_values.yaml
         env:
@@ -904,6 +907,9 @@ environments:
             secret:
               name: prod-omi-backend-secrets
               key: MCP_OAUTH_CLIENTS_JSON
+          LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+            value: '900'
+            category: reliability
       parakeet:
         values_file: backend/charts/parakeet/prod_omi_parakeet_values.yaml
         env:

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from datetime import datetime, timezone
 from contextlib import contextmanager
 from typing import Any, Mapping
@@ -240,6 +241,43 @@ def rollback_processing_admission(uid: str, conversation_id: str) -> bool:
     )
 
 
+def _processing_lease_renewal_interval() -> float:
+    """Seconds between admission-lease renewals for a live synchronous processor.
+
+    Renewed well within the crash-orphan recovery floor, so a processor that is
+    still alive always looks fresh to the sweep and can never be terminalized,
+    while a hard-crashed processor stops renewing and its lease ages out.
+    """
+    stale_after = jobs_db.get_stale_processing_orphan_after()
+    return max(60.0, stale_after.total_seconds() / 4.0)
+
+
+def _run_processing_lease_heartbeat(
+    uid: str,
+    conversation_id: str,
+    *,
+    stop_event: threading.Event,
+    wait,
+    renew,
+    interval: float,
+) -> None:
+    """Renew the admission lease until the guarded block signals stop.
+
+    ``wait`` is ``stop_event.wait``: it returns ``True`` the moment the processor
+    finishes (or raises), so the loop exits without a trailing renewal. Returning
+    ``False`` means the interval elapsed with no stop signal -> renew the lease.
+    A persistent renewal error stops the heartbeat so a failing write cannot hot-loop.
+    """
+    while not stop_event.is_set():
+        if wait(interval):
+            return
+        try:
+            renew(uid, conversation_id)
+        except Exception:
+            logger.exception('processing lease renewal failed uid=%s conversation=%s', uid, conversation_id)
+            return
+
+
 @contextmanager
 def processing_admission_guard(uid: str, conversation_id: str):
     """Guard an inline (in-request) processing run against stranding its admission.
@@ -248,7 +286,29 @@ def processing_admission_guard(uid: str, conversation_id: str):
     the lifecycle owner rolls the admission back to ``in_progress`` and re-raises.
     A rollback error (e.g. the conversation was deleted mid-processing) is
     logged instead of replacing the original processing exception.
+
+    While the guarded block runs, a daemon heartbeat renews the server-owned
+    admission lease (``processing_admitted_at``). A live — even slow — processor
+    therefore always looks fresh to the crash-orphan sweep and can never be
+    terminalized; only a processor that hard-crashes stops renewing, so its lease
+    ages out and the row becomes a recoverable orphan. The exact-generation fence
+    in ``complete_orphan_conversation`` is the second layer of defense.
     """
+    stop_event = threading.Event()
+    interval = _processing_lease_renewal_interval()
+    thread = threading.Thread(
+        target=_run_processing_lease_heartbeat,
+        args=(uid, conversation_id),
+        kwargs={
+            'stop_event': stop_event,
+            'wait': stop_event.wait,
+            'renew': jobs_db.renew_processing_lease,
+            'interval': interval,
+        },
+        name=f'processing-lease-{conversation_id}',
+        daemon=True,
+    )
+    thread.start()
     try:
         yield
     except Exception:
@@ -264,6 +324,9 @@ def processing_admission_guard(uid: str, conversation_id: str):
             rolled_back,
         )
         raise
+    finally:
+        stop_event.set()
+        thread.join(timeout=max(5.0, interval))
 
 
 def fail_and_discard_processing(uid: str, conversation_id: str) -> bool:
