@@ -393,18 +393,24 @@ class ListenReceiver:
                 )
                 if sent:
                     self.host.state.dg_usage_ms_pending += dg_usage_ms
-        self.channel_mix_buffers[channel_index].extend(pcm)
-        decision = decide_multi_channel_mix(
-            self.channel_mix_buffers, audio_bytes_enabled=self.host.audio_bytes_send is not None
-        )
-        if decision.should_mix:
-            mixed = mix_n_channel_buffers(
-                [bytearray(buffer[: decision.min_len]) for buffer in self.channel_mix_buffers]
+        # Only accumulate channel audio for the pusher mix when an audio-bytes consumer is attached.
+        # decide_multi_channel_mix and the teardown flush both gate on this same condition, so
+        # without a consumer nothing ever drains these per-channel buffers. Appending regardless (the
+        # old behavior) left them growing for the whole session (~64 KB/s for stereo) until the
+        # worker ran out of memory, taking every co-located live session down with it.
+        if self.host.audio_bytes_send is not None:
+            self.channel_mix_buffers[channel_index].extend(pcm)
+            decision = decide_multi_channel_mix(
+                self.channel_mix_buffers, audio_bytes_enabled=self.host.audio_bytes_send is not None
             )
-            if mixed and self.host.audio_bytes_send is not None:
-                self.host.audio_bytes_send(mixed, self.host.state.last_audio_received_time or time.time())
-            for buffer in self.channel_mix_buffers:
-                del buffer[: decision.min_len]
+            if decision.should_mix:
+                mixed = mix_n_channel_buffers(
+                    [bytearray(buffer[: decision.min_len]) for buffer in self.channel_mix_buffers]
+                )
+                if mixed and self.host.audio_bytes_send is not None:
+                    self.host.audio_bytes_send(mixed, self.host.state.last_audio_received_time or time.time())
+                for buffer in self.channel_mix_buffers:
+                    del buffer[: decision.min_len]
 
     async def _handle_text(self, message: str) -> None:
         try:
