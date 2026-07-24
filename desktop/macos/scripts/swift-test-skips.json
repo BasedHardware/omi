@@ -3,7 +3,8 @@
   "allowed_tests": [
     "ChatDiscoverabilityTests/testAgentControlCapabilitiesMatchCanonicalManifest",
     "ChatDiscoverabilityTests/testDesktopCapabilitiesExistInAgentToolDeclarations",
-    "APIClientRoutingTests/testDeleteConversationRoutesToPython"
+    "APIClientRoutingTests/testDeleteConversationRoutesToPython",
+    "PushToTalkStateMachineTests/testOwnerTransitionTerminatesActiveHubAndDrainsItsPhysicalSession"
   ],
   "skips": [
     {
@@ -20,6 +21,11 @@
       "test": "APIClientRoutingTests/testDeleteConversationRoutesToPython",
       "issue": "https://github.com/BasedHardware/omi/issues/9031",
       "reason": "The client omits ?cascade=true; cascade is backend-gated behind owner sign-off, so flipping it is a data-deletion behavior change."
+    },
+    {
+      "test": "PushToTalkStateMachineTests/testOwnerTransitionTerminatesActiveHubAndDrainsItsPhysicalSession",
+      "issue": "https://github.com/BasedHardware/omi/issues/10499",
+      "reason": "CI hang during hub-route owner transition drain; suite watchdog kills the process and peer suites can fail waiting on the shared SwiftPM .build lock."
     }
   ]
 }
