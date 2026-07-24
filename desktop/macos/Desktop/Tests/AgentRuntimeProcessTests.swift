@@ -1026,16 +1026,16 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
+    let whitespaceNormalizedSource = source.split(whereSeparator: \.isWhitespace).joined(separator: " ")
 
     XCTAssertTrue(source.contains("Self.removeInheritedBYOKEnvironment(from: &env)"))
     XCTAssertTrue(source.contains("let byok = await Self.usableBYOKEnvironment()"))
-    // The inline `!DesktopLocalProfile.isEnabled` was refactored into
-    // `AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(...)`; this static
-    // tripwire was left asserting the old string (it fails on upstream too, where
-    // this suite is skipped). Match the current source's equivalent.
-    XCTAssertTrue(source.contains("let forceRefreshToken ="))
-    XCTAssertTrue(source.contains("preferredAdapterId == .piMono"))
-    XCTAssertTrue(source.contains("AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup("))
+    XCTAssertTrue(
+      whitespaceNormalizedSource.contains(
+        "let forceRefreshToken = preferredAdapterId == .piMono "
+          + "&& AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup("
+      ))
+    XCTAssertTrue(source.contains("isDesktopLocalProfile: DesktopLocalProfile.isEnabled"))
     XCTAssertTrue(source.contains("getAuthHeader("))
     XCTAssertTrue(source.contains("forceRefresh: forceRefreshToken"))
     XCTAssertTrue(source.contains("expectedUserId: authorizationSnapshot.ownerID"))

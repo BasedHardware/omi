@@ -112,6 +112,7 @@ describe("kernel conversation journal", () => {
   it("derives delivery from the canonical conversation and rejects surface spoofing", () => {
     const store = new SqliteAgentStore({ stateDir: newStateDir(), reconcileOnOpen: false });
     const main = insertSurface(store, "main_chat", "chat", "canonical-main");
+    const onboarding = insertSurface(store, "onboarding", "session", "canonical-onboarding");
     const task = insertSurface(store, "task_chat", "task", "canonical-task");
     const base = {
       ownerId: main.ownerId,
@@ -136,6 +137,12 @@ describe("kernel conversation journal", () => {
       surfaceKind: "task_chat",
       origin: "task_chat",
     })).toMatchObject({ created: true, outboxStatus: null });
+    expect(recordJournalTurn(store, {
+      ...base,
+      conversationId: onboarding.conversationId,
+      turnId: "turn-onboarding",
+      surfaceKind: "onboarding",
+    })).toMatchObject({ created: true, outboxStatus: null });
     expect(() => recordJournalTurn(store, {
       ...base,
       conversationId: main.conversationId,
@@ -144,10 +151,10 @@ describe("kernel conversation journal", () => {
       origin: "task_chat",
     })).toThrow(/canonical conversation delivery boundary/i);
 
-    expect(store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(2);
-    expect(store.getRow("SELECT COUNT(*) AS count FROM conversation_turn_revisions").count).toBe(2);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(3);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM conversation_turn_revisions").count).toBe(3);
     expect(store.getRow("SELECT COUNT(*) AS count FROM backend_turn_outbox").count).toBe(1);
-    expect(store.getRow("SELECT COUNT(*) AS count FROM conversation_journal_state").count).toBe(2);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM conversation_journal_state").count).toBe(3);
     store.close();
   });
 
@@ -2744,6 +2751,37 @@ describe("kernel conversation journal", () => {
       ownerId: fixture.ownerId,
       nowMs: 91,
     })).toHaveLength(0);
+    fixture.store.close();
+  });
+
+  it("canonical local-only ownership suppresses backend deletion even when a caller requests it", () => {
+    const fixture = newSurface("onboarding", "session", "default");
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-local-onboarding",
+      role: "assistant",
+      surfaceKind: "onboarding",
+      origin: "agent_runtime",
+      status: "completed",
+      content: "setup only",
+      contentBlocks: [{ type: "text", id: "setup:text", text: "setup only" }],
+      createdAtMs: 10,
+    });
+    const cleared = clearJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      expectedGeneration: 1,
+      nowMs: 90,
+      deleteBackend: true,
+    });
+
+    expect(cleared.deletedTurns).toBe(1);
+    expect(cleared.backendDeleteOperationId).toBeNull();
+    expect(drainBackendConversationDeleteOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      nowMs: 91,
+    })).toEqual([]);
     fixture.store.close();
   });
 

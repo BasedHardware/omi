@@ -16,6 +16,28 @@ enum FloatingBarLaunchPresentation: Equatable {
   case deferUntilFirstPushToTalk
 }
 
+/// A temporary snooze silences passive floating-bar presentation, but it must
+/// never swallow a direct request to talk. Settings-hidden and snoozed bars
+/// therefore share the same Push-to-Talk reveal behavior.
+enum FloatingBarPresentationRequest {
+  case explicitUserAction
+  case background
+}
+
+enum FloatingBarPresentationPolicy {
+  static func shouldPresent(
+    request: FloatingBarPresentationRequest,
+    isSnoozed: Bool
+  ) -> Bool {
+    switch request {
+    case .explicitUserAction:
+      true
+    case .background:
+      !isSnoozed
+    }
+  }
+}
+
 struct FloatingBarLaunchPolicy {
   static func presentation(
     isEnabled: Bool,

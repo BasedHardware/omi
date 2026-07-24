@@ -633,7 +633,6 @@ struct OnboardingView: View {
       OnboardingPromptSuggestionBuilder.build(from: introCoordinator))
 
     // Clean up onboarding state and persisted chat data
-    chatProvider.isOnboarding = false
     ChatToolExecutor.onboardingAppState = nil
     OnboardingChatPersistence.clear()
     ChatDraftStore.shared.clear(.onboardingMain)
@@ -644,9 +643,9 @@ struct OnboardingView: View {
       onComplete()
     }
 
-    // Transition UI FIRST — service failures must never block the UI.
-    // Setting this synchronously crashes in Button.body.getter, so defer it.
-    DispatchQueue.main.async {
+    // Restore the real chat projection before revealing the product UI.
+    Task {
+      await chatProvider.finishOnboardingJournal()
       appState.hasCompletedOnboarding = true
     }
 
@@ -665,20 +664,6 @@ struct OnboardingView: View {
     } else {
       startMonitoringIfNeeded()
       appState.startTranscription()
-    }
-
-    // Create welcome task
-    Task {
-      let welcomeDescription = "Run omi for two days to start receiving helpful insights"
-      let alreadyExists = await ActionItemStorage.shared.actionItemExists(
-        description: welcomeDescription)
-      if !alreadyExists {
-        await TasksStore.shared.createTask(
-          description: welcomeDescription,
-          dueAt: Date(),
-          priority: "low"
-        )
-      }
     }
   }
 

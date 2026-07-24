@@ -39,7 +39,7 @@ const DELETE_OUTBOX_COLUMNS = `
   created_at_ms, updated_at_ms, delivered_at_ms
 `;
 
-const LOCAL_ONLY_SURFACES = new Set(["task_chat", "workstream"]);
+const LOCAL_ONLY_SURFACES = new Set(["onboarding", "task_chat", "workstream"]);
 const DEFAULT_OUTBOX_LEASE_MS = 30_000;
 const MAX_DRAIN_BATCH = 100;
 const BACKEND_RECONCILE_PAGE_LIMIT = 100;
@@ -1154,8 +1154,11 @@ export function clearJournalConversation(
        WHERE conversation_id = ?`,
       [generation, now, input.conversationId],
     );
+    const deleteBackend =
+      canonicalJournalDelivery(store, input.ownerId, input.conversationId) === "backend"
+      && input.deleteBackend !== false;
     const backendDeleteOperationId =
-      input.deleteBackend === false
+      !deleteBackend
         ? null
         : enqueueBackendConversationDelete(store, {
             ownerId: input.ownerId,

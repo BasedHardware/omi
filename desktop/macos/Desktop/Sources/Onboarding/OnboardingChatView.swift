@@ -643,7 +643,7 @@ struct OnboardingChatView: View {
     )
 
     // Mark as onboarding so analytics and prompts use onboarding mode
-    chatProvider.isOnboarding = true
+    chatProvider.beginOnboardingJournal()
 
     // Check if we're resuming after a mid-onboarding restart (e.g. screen recording permission)
     if OnboardingChatPersistence.isMidOnboarding {

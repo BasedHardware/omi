@@ -17,17 +17,23 @@ import XCTest
 @MainActor
 final class OnboardingGoogleConnectTests: XCTestCase {
 
-  func testGoogleConnectActionDistinguishesConnectSignInAndError() {
-    XCTAssertEqual(
-      SBOnboardingModel.googleConnectAction(connected: true, needsSignIn: false), .connect)
-    XCTAssertEqual(
-      SBOnboardingModel.googleConnectAction(connected: true, needsSignIn: true), .connect,
-      "Connected always wins")
-    XCTAssertEqual(
-      SBOnboardingModel.googleConnectAction(connected: false, needsSignIn: true), .signIn)
-    XCTAssertEqual(
-      SBOnboardingModel.googleConnectAction(connected: false, needsSignIn: false), .retryError,
-      "Not-connected + not-needs-sign-in is a real error, not a sign-in prompt")
+  func testResolutionOnlyPersistsAndSignsInForTheRightStates() {
+    // Upstream's `googleContextResolution` owns the state decision; our persistence
+    // branch keys off `state == "on"`, and only `.needsSignIn` opens the Google page.
+    let connected = SBOnboardingModel.googleContextResolution(
+      connectorID: "gmail", connected: true, needsSignIn: false)
+    XCTAssertEqual(connected.state, "on")
+    XCTAssertFalse(connected.shouldOpenSignIn)
+
+    let signIn = SBOnboardingModel.googleContextResolution(
+      connectorID: "gmail", connected: false, needsSignIn: true)
+    XCTAssertEqual(signIn.state, "needsSignIn")
+    XCTAssertTrue(signIn.shouldOpenSignIn)
+
+    let error = SBOnboardingModel.googleContextResolution(
+      connectorID: "calendar", connected: false, needsSignIn: false)
+    XCTAssertEqual(error.state, "error")
+    XCTAssertFalse(error.shouldOpenSignIn, "A real error must not open the sign-in page")
   }
 
   func testGmailOnboardingIdMapsToEmailStatusStoreId() {

@@ -16,8 +16,10 @@ final class RealtimeHubSessionHandoffPolicyTests: XCTestCase {
       gate.replace(
         stop: {
           events.append("stop")
-          stopEntered.fulfill()
-          await withCheckedContinuation { releaseStop = $0 }
+          await withCheckedContinuation {
+            releaseStop = $0
+            stopEntered.fulfill()
+          }
           events.append("drained")
         },
         start: {
@@ -49,8 +51,10 @@ final class RealtimeHubSessionHandoffPolicyTests: XCTestCase {
     XCTAssertTrue(
       gate.replace(
         stop: {
-          stopEntered.fulfill()
-          await withCheckedContinuation { releaseStop = $0 }
+          await withCheckedContinuation {
+            releaseStop = $0
+            stopEntered.fulfill()
+          }
         },
         start: { startCount += 1 }))
     await fulfillment(of: [stopEntered], timeout: 1)
