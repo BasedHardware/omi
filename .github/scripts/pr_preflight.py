@@ -23,6 +23,18 @@ class Check:
     reason: str
 
 
+def _resolve_repo_root() -> Path:
+    # The pre-push gate cd's to the repo root before invoking this script, and
+    # git runs hooks at the work-tree top, so fall back to the working directory
+    # when `git rev-parse --show-toplevel` cannot resolve a work tree: a linked
+    # worktree whose git context resolves to a git dir exits 128 here ("this
+    # operation must be run in a work tree") and would otherwise abort the gate.
+    try:
+        return Path(run_git(Path.cwd(), "rev-parse", "--show-toplevel"))
+    except subprocess.CalledProcessError:
+        return Path.cwd()
+
+
 def run_git(root: Path, *args: str) -> str:
     result = subprocess.run(
         ["git", *args],
@@ -160,7 +172,7 @@ def main() -> int:
     if bool(args.repository) != bool(args.pr_number):
         print("FAIL: --repository and --pr-number must be supplied together", file=sys.stderr)
         return 2
-    root = (args.root or Path(run_git(Path.cwd(), "rev-parse", "--show-toplevel"))).resolve()
+    root = (args.root or _resolve_repo_root()).resolve()
     started = time.monotonic()
     try:
         merge_base = run_git(root, "merge-base", args.base, args.head)
