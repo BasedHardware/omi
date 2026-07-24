@@ -6539,6 +6539,47 @@
         "title": "ConversationActionItemsResponse",
         "type": "object"
       },
+      "ConversationAnalytics": {
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "speaker_count": {
+            "title": "Speaker Count",
+            "type": "integer"
+          },
+          "speakers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SpeakerAnalytics"
+            },
+            "title": "Speakers",
+            "type": "array"
+          },
+          "total_seconds": {
+            "title": "Total Seconds",
+            "type": "number"
+          },
+          "total_words": {
+            "title": "Total Words",
+            "type": "integer"
+          },
+          "words_per_minute": {
+            "title": "Words Per Minute",
+            "type": "number"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "total_seconds",
+          "total_words",
+          "words_per_minute",
+          "speaker_count"
+        ],
+        "title": "ConversationAnalytics",
+        "type": "object"
+      },
       "ConversationAudio": {
         "description": "Stamp for the conversation-level playback artifact (playback/{uid}/{conv}/conversation.mp3).\n\naudio_files_fingerprint identifies the audio_files content the artifact was\nbuilt from; a mismatch with the doc's current audio_files means the artifact\nis stale and must be rebuilt.",
         "properties": {
@@ -17632,6 +17673,55 @@
           "expires_at"
         ],
         "title": "SnapshotReceipt",
+        "type": "object"
+      },
+      "SpeakerAnalytics": {
+        "properties": {
+          "is_user": {
+            "default": false,
+            "title": "Is User",
+            "type": "boolean"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "speaker": {
+            "title": "Speaker",
+            "type": "string"
+          },
+          "talk_seconds": {
+            "title": "Talk Seconds",
+            "type": "number"
+          },
+          "talk_share": {
+            "title": "Talk Share",
+            "type": "number"
+          },
+          "word_count": {
+            "title": "Word Count",
+            "type": "integer"
+          },
+          "words_per_minute": {
+            "title": "Words Per Minute",
+            "type": "number"
+          }
+        },
+        "required": [
+          "speaker",
+          "talk_seconds",
+          "word_count",
+          "words_per_minute",
+          "talk_share"
+        ],
+        "title": "SpeakerAnalytics",
         "type": "object"
       },
       "SpeechProfileMutationResponse": {
@@ -31670,6 +31760,96 @@
           }
         ],
         "summary": "Update Action Item Description",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/analytics": {
+      "get": {
+        "description": "Per-speaker analytics for a conversation (issue #4481).\n\nReturns each speaker's talk time, word count, and words per minute, plus the\nconversation totals. Speakers are the account owner (\"You\"), identified people\n(resolved to their name), and any remaining diarization speakers.",
+        "operationId": "get_conversation_analytics_v1_conversations__conversation_id__analytics_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationAnalytics"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Analytics",
         "tags": [
           "conversations"
         ]

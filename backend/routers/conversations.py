@@ -17,6 +17,7 @@ from models.conversation import (
     BulkAssignSegmentsRequest,
     CalendarEventLink,
     Conversation,
+    ConversationAnalytics,
     ConversationFinalizationStatusResponse,
     ConversationMutationResponse,
     CreateConversationResponse,
@@ -32,6 +33,7 @@ from models.conversation import (
     UpdateSummaryRequest,
 )
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
 from utils.conversations.render import conversation_to_dict
 from models.conversation_enums import ConversationStatus, ConversationVisibility
@@ -1240,6 +1242,24 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
             suggested_apps.append(app)
 
     return {"suggested_apps": [app.model_dump() for app in suggested_apps], "conversation_id": conversation_id}
+
+
+@router.get(
+    "/v1/conversations/{conversation_id}/analytics", response_model=ConversationAnalytics, tags=['conversations']
+)
+def get_conversation_analytics(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Per-speaker analytics for a conversation (issue #4481).
+
+    Returns each speaker's talk time, word count, and words per minute, plus the
+    conversation totals. Speakers are the account owner ("You"), identified people
+    (resolved to their name), and any remaining diarization speakers.
+    """
+    conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = deserialize_conversation(conversation_data)
+    person_ids = conversation.get_person_ids()
+    people = users_db.get_people_by_ids(uid, person_ids) if person_ids else []
+    names = {p['id']: p.get('name', '') for p in people}
+    return build_conversation_analytics(conversation, names)
 
 
 @router.post(
