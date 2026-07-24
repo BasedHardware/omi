@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime, timezone
 from contextlib import contextmanager
 from typing import Any, Mapping
 
@@ -169,12 +170,18 @@ def transition(
 
 def admit_processing(uid: str, conversation_id: str, *, extra_updates: dict[str, Any] | None = None) -> bool:
     """The single compare-and-swap admission point for finalization processing."""
+    updates = dict(extra_updates or {})
+    # The synchronous legacy route has no durable job, so a hard crash after
+    # admission strands the row on ``processing``. Stamp the admission instant so
+    # the stale reconciler can bound recovery to genuine crashes by admission age
+    # rather than document-creation age (which is stale for listen-created rows).
+    updates.setdefault('processing_admitted_at', datetime.now(timezone.utc))
     return transition(
         uid,
         conversation_id,
         ConversationStatus.processing,
         expected=ConversationStatus.in_progress,
-        extra_updates=extra_updates,
+        extra_updates=updates,
     )
 
 

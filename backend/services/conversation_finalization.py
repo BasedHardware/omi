@@ -12,6 +12,7 @@ import logging
 from typing import Any
 
 from database import conversation_finalization_jobs as jobs_db
+from utils.conversations import lifecycle as lifecycle_service
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
     get_listen_finalization_tasks_max_attempts,
@@ -85,6 +86,51 @@ def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: An
         LISTEN_FINALIZATION_RETRIES_TOTAL.inc()
 
     _publish_job_metrics(firestore_client=firestore_client)
+    return result
+
+
+def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int]:
+    """Close bare-`processing` conversations stranded by a synchronous-route crash.
+
+    The durable replay sweep (``reconcile_listen_finalization_jobs``) only covers
+    rows with a finalization job. A bare-`processing` row admitted by the
+    synchronous legacy route (or a server/merge create) and then lost to a hard
+    crash has no job, so it is never replayed and the recording never resolves.
+    Drive each orphan through the truthful terminal ownership CAS
+    (``lifecycle.complete``): a row already completed, discarded, or superseded
+    by a newer generation is fenced out, so the orphan reaches exactly one
+    terminal and its recording stays retrievable. Re-enrichment is a separate
+    follow-up; this safety net only ends the stuck lifecycle. It needs no durable
+    dispatch, so it runs in every deployment mode.
+    """
+    result: dict[str, int] = {'completed': 0, 'skipped': 0}
+    stale_after = jobs_db.get_stale_processing_orphan_after()
+    try:
+        candidates = jobs_db.get_stale_processing_orphan_candidates(
+            stale_after=stale_after, limit=limit, firestore_client=firestore_client
+        )
+    except Exception:
+        logger.exception('stale processing conversation reconciliation query failed')
+        return result | {'error': 1}
+    for candidate in candidates:
+        uid = candidate.get('uid')
+        conversation_id = candidate.get('conversation_id')
+        if not isinstance(uid, str) or not isinstance(conversation_id, str):
+            result['skipped'] += 1
+            continue
+        try:
+            completed = lifecycle_service.complete(uid, conversation_id)
+        except Exception:
+            logger.exception(
+                'stale processing conversation completion failed uid=%s conversation=%s', uid, conversation_id
+            )
+            result['skipped'] += 1
+            continue
+        if completed:
+            result['completed'] += 1
+            logger.info('reconciled stale processing conversation uid=%s conversation=%s', uid, conversation_id)
+        else:
+            result['skipped'] += 1
     return result
 
 
