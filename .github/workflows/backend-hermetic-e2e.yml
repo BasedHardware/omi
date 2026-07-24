@@ -266,6 +266,10 @@ jobs:
           sudo apt-get install --yes redis-server
 
       - name: Run Phase 0A replay harness feasibility experiment
+        env:
+          # Fixed state root so failed-job evidence (logs/attestations) is retained
+          # at a known path for the failure step below.
+          OMI_REPLAY_STATE_ROOT: ${{ runner.temp }}/omi-replay-harness
         run: npm run test:replay-harness-phase0a:emulator
 
       - name: Show replay harness logs on failure
@@ -273,7 +277,7 @@ jobs:
         run: |
           state_root="$RUNNER_TEMP/omi-replay-harness"
           if [[ -d "$state_root" ]]; then
-            find "$state_root" -type f -name '*.log' -print -exec tail -n 160 {} \;
+            find "$state_root" -type f \( -name '*.log' -o -name 'attestation.json' \) -print -exec sh -c 'echo "===== $1 ====="; tail -n 160 "$1"' _ {} \;
           else
             echo "Replay harness state directory was not retained."
           fi
