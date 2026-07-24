@@ -352,6 +352,19 @@ def fail_and_discard_processing(uid: str, conversation_id: str) -> bool:
     )
 
 
+def reacquire_deferred_processing(uid: str, conversation_id: str) -> bool:
+    """Atomically clear deferred and renew the admission lease.
+
+    Deferred enrichment must clear ``deferred`` and renew its processing lease
+    in one guarded transition.  A plain ``update(deferred=False)`` followed by a
+    delayed first heartbeat leaves a window where the stale-processing sweep
+    can terminalize the row; the stale processor would then persist derived
+    side effects after ownership loss.  This transaction closes that window and
+    fails closed if the row is no longer ``processing`` or was discarded.
+    """
+    return jobs_db.reacquire_deferred_processing(uid, conversation_id)
+
+
 def begin_merge(uid: str, conversation_id: str) -> bool:
     return transition(uid, conversation_id, ConversationStatus.merging)
 

@@ -89,14 +89,19 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     """First open of a lazily-deferred desktop conversation. The LLM enrichment (summary, action
     items, memories, embeddings, app results) takes ~10s, so we run it in the BACKGROUND and return
     the conversation immediately: the client gets an instant open (transcript already present) and
-    polls until `status` flips to `completed`. The `deferred` flag is cleared first so the poll's
-    repeated GETs don't each kick off another enrichment. On enrichment failure the flag is
-    re-armed and status reset to completed so the next open retries cleanly instead of spinning."""
+    polls until `status` flips to `completed`. The `deferred` flag is cleared atomically with the
+    admission-lease renewal so the stale-processing sweep cannot terminalize the row between clear
+    and first heartbeat. On enrichment failure the flag is re-armed and status reset to completed
+    so the next open retries cleanly instead of spinning."""
     conversation_id = conversation.get('id')
     try:
-        conversations_db.update_conversation(uid, conversation_id, {'deferred': False})
+        reacquired = lifecycle_service.reacquire_deferred_processing(uid, conversation_id)
     except Exception as e:
-        logger.error(f"lazy enrich claim failed uid={uid} conv={conversation_id}: {e}")
+        logger.error(f"lazy enrich reacquire failed uid={uid} conv={conversation_id}: {e}")
+        return conversation
+    if not reacquired:
+        # The row was terminalized or discarded before reacquisition. A stale
+        # processor must not persist derived side effects after ownership loss.
         return conversation
 
     def _run_enrichment():
