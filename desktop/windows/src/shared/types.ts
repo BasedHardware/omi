@@ -986,6 +986,10 @@ export type OmiBridgeApi = {
   rewindDayBounds: () => Promise<{ min: number; max: number } | null>
   /** Total captured frames, all time — a COUNT(*), not a row fetch. */
   rewindFrameCount: () => Promise<number>
+  /** Fires (no payload) each time a frame is actually stored, so a live view of
+   *  the frame count (the Hub's "Screenshots" stat) can re-read `rewindFrameCount`
+   *  instead of freezing at its mount-time value. */
+  onRewindCaptured: (cb: () => void) => () => void
   /** Phase 1 of a Rewind search: KEYWORD (FTS5/BM25) results, immediately. Never
    *  waits on the network — semantic hits follow on `onRewindSearchResults`. */
   rewindSearch: (query: string) => Promise<RewindSearchGroup[]>

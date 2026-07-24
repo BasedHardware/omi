@@ -147,7 +147,18 @@ export function registerRewindHandlers(): void {
   ipcMain.handle('rewind:primarySourceId', async () => getPrimarySourceId())
   // Receive a sampled JPEG frame from the renderer capture host and store it
   // (after foreground-window metadata + idle/lock/dup gating).
-  ipcMain.handle('rewind:saveFrame', async (_e, data: Uint8Array) =>
-    ingestRewindFrame(Buffer.from(data))
-  )
+  ipcMain.handle('rewind:saveFrame', async (_e, data: Uint8Array) => {
+    const result = await ingestRewindFrame(Buffer.from(data))
+    // A stored frame bumps the all-time frame count. Tell open windows so the
+    // Hub's "Screenshots" stat re-reads live instead of freezing at whatever it
+    // was when the Hub mounted (it fetches the count once and has no other
+    // refresh trigger). Only fire when a frame was actually stored — deduped /
+    // idle / locked frames don't change the count.
+    if (result.captured) {
+      for (const w of BrowserWindow.getAllWindows()) {
+        if (!w.isDestroyed()) w.webContents.send('rewind:captured')
+      }
+    }
+    return result
+  })
 }

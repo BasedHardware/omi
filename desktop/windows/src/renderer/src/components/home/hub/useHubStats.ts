@@ -29,6 +29,12 @@ import { getCachedHubStats, overlay, persistHubStats } from './hubStatsCache'
 // says so ("100+"); a short page IS the whole set and is rendered exactly.
 const CLOUD_PAGE_SIZE = 100
 
+// Frames are stored up to ~once a second during active capture. Re-running the
+// screenshot COUNT(*) on every one would be wasteful, so coalesce bursts to at
+// most one re-read per this window (with a trailing read so the final count is
+// never missed).
+const REWIND_COUNT_REFRESH_MS = 5000
+
 export function useHubStats(): HubStatCounts {
   // The account the cache is scoped to. Read synchronously so the FIRST render
   // already resolves the right blob (no em-dash flash), and track auth changes so
@@ -72,14 +78,40 @@ export function useHubStats(): HubStatCounts {
   const [screenshots, setScreenshots] = useState<number | null>(null)
   useEffect(() => {
     let live = true
-    void window.omi
-      ?.rewindFrameCount?.()
-      .then((n) => {
-        if (live) setScreenshots(n)
-      })
-      .catch(() => {})
+    const read = (): void => {
+      void window.omi
+        ?.rewindFrameCount?.()
+        .then((n) => {
+          if (live) setScreenshots(n)
+        })
+        .catch(() => {})
+    }
+    read()
+    // Re-read when a frame is stored so a Hub left open all day keeps a live
+    // count instead of freezing at its mount value (the reported bug). Throttled:
+    // re-read at most once per window, with a trailing read so the last frame's
+    // count still lands.
+    let lastReadAt = 0
+    let trailing: ReturnType<typeof setTimeout> | null = null
+    const onCaptured = (): void => {
+      const now = Date.now()
+      const since = now - lastReadAt
+      if (since >= REWIND_COUNT_REFRESH_MS) {
+        lastReadAt = now
+        read()
+      } else if (trailing === null) {
+        trailing = setTimeout(() => {
+          trailing = null
+          lastReadAt = Date.now()
+          read()
+        }, REWIND_COUNT_REFRESH_MS - since)
+      }
+    }
+    const unsub = window.omi?.onRewindCaptured?.(onCaptured)
     return () => {
       live = false
+      if (trailing !== null) clearTimeout(trailing)
+      unsub?.()
     }
     // Keyed on uid for the same reason as the tasks read above.
   }, [uid])
