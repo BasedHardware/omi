@@ -14,7 +14,7 @@ The bridge does not store prompts or responses. It validates Omi `uid` and `app_
 
 ## 1. Prepare a dedicated Hermes profile
 
-Install Hermes Agent and create a separate profile for Omi. Enable only the toolsets you want Omi chat to access. A read-only profile is strongly recommended for the first deployment.
+Install Hermes Agent and create a separate profile for Omi. Enable only the toolsets you want Omi chat to access. Use a restricted, proposal-only profile: prefer read-only tools, allow drafting or proposing changes instead of applying them, and require approval through Hermes for any consequential action.
 
 Enable its API server in that profile's `.env`:
 
@@ -36,6 +36,8 @@ curl http://127.0.0.1:8642/v1/capabilities \
 See the authoritative [Hermes Agent API server documentation](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server).
 
 ## 2. Run the bridge
+
+Python 3.11 or newer is required (`asyncio.timeout` enforces the end-to-end run deadline). The included Dockerfile uses Python 3.12.
 
 ```bash
 cd plugins/omi-hermes-agent-app
@@ -62,16 +64,46 @@ Optional configuration:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `HERMES_API_URL` | `http://127.0.0.1:8642` | Hermes API server base URL |
-| `HERMES_TIMEOUT_SECONDS` | `60` | Maximum duration of a Hermes run |
+| `HERMES_TIMEOUT_SECONDS` | `60` | Deadline for creating and polling a Hermes run; after expiry, the bridge allows up to 5 additional seconds to stop it cleanly |
 | `HERMES_OMI_INSTRUCTIONS` | Safe concise Omi prompt | Instructions layered over the Hermes system prompt |
 
 Both allowlists are mandatory. Missing allowlists fail closed with HTTP 503.
 
 ## 3. Give Omi a public HTTPS URL
 
-Omi's backend invokes Chat Tools, so the bridge must be reachable from the public internet over HTTPS. Put only this bridge behind a tunnel or reverse proxy. Keep the Hermes API on loopback or a private network.
+Omi's backend invokes Chat Tools, so the bridge must be reachable from the public internet over HTTPS. Terminate TLS at a tunnel or reverse proxy and expose only this bridge. Keep the Hermes API on loopback or a private network; its port must not be internet-reachable.
 
 Examples include Tailscale Funnel, Cloudflare Tunnel, or an HTTPS reverse proxy on your own server.
+
+At the public edge, enforce a small request-body limit, rate-limit the tool endpoint, and ensure request bodies are never logged. This minimal Nginx example uses one global rate bucket, so it does not assume stable or unique Omi egress IPs:
+
+```nginx
+http {
+    limit_req_zone $server_name zone=omi_bridge:10m rate=5r/s;
+
+    server {
+        listen 443 ssl;
+        server_name your-bridge.example;
+        ssl_certificate /path/to/fullchain.pem;
+        ssl_certificate_key /path/to/privkey.pem;
+
+        location = /tools/ask_hermes {
+            client_max_body_size 32k;
+            limit_req zone=omi_bridge burst=10 nodelay;
+            access_log off;
+            proxy_pass http://127.0.0.1:8000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Proto https;
+        }
+
+        location / {
+            proxy_pass http://127.0.0.1:8000;
+        }
+    }
+}
+```
+
+Nginx's standard access log formats do not include request bodies; keep them that way and do not add `$request_body` to a custom log format or application/proxy logging. The endpoint-specific `access_log off` above is an additional safeguard. Tune the global rate for your expected traffic.
 
 Verify the manifest:
 
@@ -98,7 +130,8 @@ The manifest exposes one tool: `ask_hermes(request)`.
 - **Use a dedicated Hermes profile.** The Hermes API can use every tool enabled for that profile, including terminal and file tools.
 - **Do not expose the Hermes API server directly.** Only expose this narrow bridge.
 - **Approvals are never granted by the bridge.** If a run enters `waiting_for_approval`, the bridge stops it and tells the user to confirm in Hermes.
-- **Omi Chat Tool calls are not currently signed.** UID/app ID allowlists reduce exposure but are not cryptographic caller authentication. Until Omi signs these requests, use a restricted profile and rate-limit the public endpoint at the reverse proxy.
+- **Omi Chat Tool calls are not currently signed.** UID and app ID are caller-supplied routing identifiers and defense-in-depth filters, not cryptographic authentication. They do not prove that a request came from Omi. Until Omi provides signed requests, keep Hermes private, use the dedicated restricted/proposal-only profile, and enforce body and rate limits at the public edge.
+- **Terminate TLS at the public edge.** Do not serve the bridge over plaintext internet connections, log request bodies, or forward public traffic directly to Hermes.
 - Keep the app private until end-to-end behavior and permissions have been reviewed.
 
 ## Test

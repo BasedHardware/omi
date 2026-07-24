@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import os
 import re
-import time
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException, Request
 
 MAX_REQUEST_CHARS = 2_000
 MAX_OUTPUT_CHARS = 8_000
+STOP_TIMEOUT_SECONDS = 5.0
 _SAFE_ID_RE = re.compile(r"[^A-Za-z0-9._-]+")
 DEFAULT_INSTRUCTIONS = (
     "You are responding through Omi. Be concise and directly answer the user's request. "
@@ -87,56 +88,64 @@ class HermesClient:
             "Content-Type": "application/json",
         }
 
-    def ask(self, question: str, *, uid: str, idempotency_key: str) -> str:
-        deadline = time.monotonic() + self.settings.timeout_seconds
+    async def _stop_run(self, client: httpx.AsyncClient, run_id: str) -> None:
+        response = await client.post(
+            f"{self.settings.hermes_api_url}/v1/runs/{run_id}/stop",
+            headers=self.headers,
+        )
+        response.raise_for_status()
+
+    async def ask(self, question: str, *, uid: str, idempotency_key: str) -> str:
         headers = {**self.headers, "Idempotency-Key": idempotency_key}
         payload = {
             "input": question,
             "session_id": f"omi-chat-{_safe_id(uid)}",
             "instructions": self.settings.instructions,
         }
+        run_id = ""
         try:
-            with httpx.Client(
+            async with httpx.AsyncClient(
                 timeout=min(self.settings.timeout_seconds, 30.0)
             ) as client:
-                response = client.post(
-                    f"{self.settings.hermes_api_url}/v1/runs",
-                    json=payload,
-                    headers=headers,
-                )
-                response.raise_for_status()
-                run_id = str(response.json().get("run_id") or "")
-                if not run_id:
-                    raise BridgeError(502, "invalid_hermes_response")
-
-                while time.monotonic() < deadline:
-                    status_response = client.get(
-                        f"{self.settings.hermes_api_url}/v1/runs/{run_id}",
-                        headers=self.headers,
-                    )
-                    status_response.raise_for_status()
-                    run = status_response.json()
-                    status = str(run.get("status") or "")
-                    if status == "completed":
-                        output = str(run.get("output") or "").strip()
-                        if not output:
-                            raise BridgeError(502, "empty_hermes_response")
-                        return output[:MAX_OUTPUT_CHARS]
-                    if status in {"failed", "cancelled"}:
-                        raise BridgeError(502, f"hermes_{status}")
-                    if status == "waiting_for_approval":
-                        client.post(
-                            f"{self.settings.hermes_api_url}/v1/runs/{run_id}/stop",
-                            headers=self.headers,
+                try:
+                    async with asyncio.timeout(self.settings.timeout_seconds):
+                        response = await client.post(
+                            f"{self.settings.hermes_api_url}/v1/runs",
+                            json=payload,
+                            headers=headers,
                         )
-                        raise BridgeError(409, "approval_required")
-                    time.sleep(0.5)
+                        response.raise_for_status()
+                        run_id = str(response.json().get("run_id") or "")
+                        if not run_id:
+                            raise BridgeError(502, "invalid_hermes_response")
 
-                client.post(
-                    f"{self.settings.hermes_api_url}/v1/runs/{run_id}/stop",
-                    headers=self.headers,
-                )
-                raise BridgeError(504, "hermes_timeout")
+                        while True:
+                            status_response = await client.get(
+                                f"{self.settings.hermes_api_url}/v1/runs/{run_id}",
+                                headers=self.headers,
+                            )
+                            status_response.raise_for_status()
+                            run = status_response.json()
+                            status = str(run.get("status") or "")
+                            if status == "completed":
+                                output = str(run.get("output") or "").strip()
+                                if not output:
+                                    raise BridgeError(502, "empty_hermes_response")
+                                return output[:MAX_OUTPUT_CHARS]
+                            if status in {"failed", "cancelled"}:
+                                raise BridgeError(502, f"hermes_{status}")
+                            if status == "waiting_for_approval":
+                                await self._stop_run(client, run_id)
+                                raise BridgeError(409, "approval_required")
+                            await asyncio.sleep(0.5)
+                except TimeoutError as exc:
+                    if run_id:
+                        try:
+                            async with asyncio.timeout(STOP_TIMEOUT_SECONDS):
+                                await self._stop_run(client, run_id)
+                        except TimeoutError as stop_exc:
+                            raise BridgeError(502, "hermes_stop_failed") from stop_exc
+                    raise BridgeError(504, "hermes_timeout") from exc
         except BridgeError:
             raise
         except (httpx.HTTPError, ValueError) as exc:
@@ -221,7 +230,7 @@ async def ask_hermes(request: Request) -> dict[str, str]:
                 f"{uid}\x00{app_id}\x00{question}\x00{uuid.uuid4()}".encode()
             ).hexdigest()
         )
-        output = HermesClient(settings).ask(
+        output = await HermesClient(settings).ask(
             question, uid=uid, idempotency_key=idempotency_key
         )
         return {"result": output}
