@@ -54,6 +54,8 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     assert "state_dir / 'cloud-rest-restart'" in runner
     assert '_stale_processing_orphan_reconciled' in runner
     assert "state_dir / 'cloud-stale-orphan'" in runner
+    assert '_stale_processing_orphan_reconciled_inline' in runner
+    assert "state_dir / 'inline-stale-orphan'" in runner
     assert "'task_already_exists'" in task_seam
     assert 'OMI_STACK_FINALIZATION_RACE_PARTIES' in listener_entrypoint
     assert 'last {min(len(lines), 120)} line(s) from {child.log_path}' in runner

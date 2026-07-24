@@ -82,6 +82,9 @@ def test_idle_metrics_and_monitoring_contract_distinguish_traffic_from_a_missing
     assert 'omi_journey_accepted_total{journey="live_transcription"}' in exported
     assert 'omi_journey_terminal_total{journey="pusher_session",outcome="success"}' in exported
     assert 'omi_capture_finalization_reconciliations_total{outcome="requeued"}' in exported
+    assert 'listen_finalization_stale_processing_reconciliations_total{outcome="completed"}' in exported
+    assert 'listen_finalization_stale_processing_reconciliations_total{outcome="error"}' in exported
+    assert 'listen_finalization_stale_processing_reconciliations_total{outcome="migrated"}' in exported
 
     monitoring = REPO / 'backend/charts/monitoring'
     split_alerts = json.loads((monitoring / 'alerts/resilience.json').read_text(encoding='utf-8'))
