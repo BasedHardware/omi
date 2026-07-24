@@ -127,8 +127,9 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
     except Exception:
         logger.exception('stale processing sweep cursor read failed; sweeping from the top')
         cursor = {'resume_after_path': None, 'generation': 0}
-    resume_after_path = cursor.get('resume_after_path')
-    expected_generation = cursor.get('generation', 0)
+    _path = cursor.get('resume_after_path')
+    resume_after_path: str | None = _path if isinstance(_path, str) else None
+    expected_generation: int = int(cursor.get('generation') or 0)
     try:
         sweep = jobs_db.get_stale_processing_orphan_candidates(
             stale_after=stale_after, limit=limit, resume_after_path=resume_after_path, firestore_client=firestore_client
