@@ -5,7 +5,7 @@
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": 4829,
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": 2584,
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": 1534,
-    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": 1584
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": 1639
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": "Agent completion presentation now follows the canonical terminal lifecycle used by PTT and chat.",
@@ -13,7 +13,7 @@
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": "Second Brain continuous-chat routing shares window geometry with agent-only hover sizing and canonical idle-notch chat ownership.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": "The owning turn manager carries privacy-bounded push-to-talk capture-lifecycle diagnostics wiring alongside strict concurrency, response-critical batch STT, and parallel screen-context capture.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": "Adds mint_attempt_id correlation on barge-in failover exhaustion so a mint failure joins its terminal exhausted outcome when the alternate provider is already active; telemetry-only, no lifecycle change (#10425).",
-    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior."
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers; sendBackgroundAgentContext now confirms the provider send before returning true (exactly-once: no ack before delivery) and the session emits hubDidOpenInputWindow so a warm-idle completion is retried — both must live beside the file-private send/turn machinery."
   },
   "threshold": 1500
 }

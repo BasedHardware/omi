@@ -364,6 +364,42 @@ import XCTest
       XCTAssertFalse(committed.pendingCommit)
     }
 
+    func testBackgroundAgentContextDoesNotBufferBeforeTransportIsReady() async {
+      // Exactly-once contract: a completion must never be marked delivered while
+      // it is only sitting in an in-memory buffer that stop()/close() would drop.
+      // sendBackgroundAgentContext must therefore refuse (return false) instead of
+      // buffering when the session cannot deliver right now.
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .openai, delegate: delegate)
+
+      let acceptedBeforeReady = await session.sendBackgroundAgentContext("agent finished")
+      let coldSnapshot = await session.inputLifecycleSnapshot()
+      XCTAssertFalse(acceptedBeforeReady, "a closed socket must not accept background context")
+      XCTAssertEqual(coldSnapshot.pendingTextInputCount, 0, "background context must not be buffered")
+
+      session.markReadyForTesting()
+      let acceptedWhenReady = await session.sendBackgroundAgentContext("agent finished")
+      let readySnapshot = await session.inputLifecycleSnapshot()
+      XCTAssertTrue(acceptedWhenReady, "an open OpenAI session accepts background context immediately")
+      XCTAssertEqual(readySnapshot.pendingTextInputCount, 0, "an accepted send leaves nothing buffered")
+    }
+
+    func testGeminiBackgroundAgentContextRefusesWithoutAnActivityWindow() async {
+      // Gemini can only accept text inside an open activity window; without one,
+      // sendTextInput would buffer. Background context must instead refuse so the
+      // caller keeps its checkpoint unadvanced and retries when a window opens.
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .gemini, delegate: delegate)
+      session.markReadyForTesting()
+
+      let accepted = await session.sendBackgroundAgentContext("agent finished")
+      let snapshot = await session.inputLifecycleSnapshot()
+
+      XCTAssertFalse(snapshot.activityOpen)
+      XCTAssertFalse(accepted, "Gemini must refuse background context with no open activity window")
+      XCTAssertEqual(snapshot.pendingTextInputCount, 0, "refused background context must not be buffered")
+    }
+
     func testOpenAITransportCloseImmediatelyMakesSessionNonSendableBeforeControllerTeardown() async {
       let delegate = RealtimeHubSessionDelegateSpy()
       let session = makeSession(provider: .openai, delegate: delegate)
@@ -440,6 +476,40 @@ import XCTest
       XCTAssertEqual(completed.inputIdentityCount, 0)
     }
 
+    func testBackgroundAgentContextRefusesGeminiWhileWarmIdleThenSendsWhenWindowOpens() async {
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .gemini, delegate: delegate)
+      session.markReadyForTesting()
+
+      // Warm but idle (no activity window): must REFUSE — return false, never
+      // buffer-and-report-success. A buffered completion is dropped by
+      // stopOnQueue/abandonInputTurn, so reporting success would advance the
+      // exactly-once checkpoint on a completion that is then lost.
+      let refusedWhileIdle = await session.sendBackgroundAgentContext("agent finished")
+      XCTAssertFalse(refusedWhileIdle)
+
+      // A turn opens the activity window — now the session can accept context.
+      session.beginInputTurn()
+      let sentAfterWindow = await session.sendBackgroundAgentContext("agent finished")
+      XCTAssertTrue(sentAfterWindow)
+    }
+
+    func testBackgroundAgentContextReturnsFalseWhenTheConfirmedSendFails() async {
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .openai, delegate: delegate)
+      session.markReadyForTesting()
+
+      // The checkpoint advances on this `true`, so `true` must mean confirmed
+      // delivery: a failed provider send must report false, not fire-and-forget.
+      session.setTestingForcedSendError(RealtimeHubSessionTestError.forced)
+      let failedSend = await session.sendBackgroundAgentContext("agent finished")
+      XCTAssertFalse(failedSend)
+
+      session.setTestingForcedSendError(nil)
+      let confirmedSend = await session.sendBackgroundAgentContext("agent finished")
+      XCTAssertTrue(confirmedSend)
+    }
+
     private func makeSession(
       provider: RealtimeHubProvider,
       delegate: RealtimeHubSessionDelegate,
@@ -464,6 +534,8 @@ import XCTest
       }
     }
   }
+
+  private enum RealtimeHubSessionTestError: Error { case forced }
 
   @MainActor
   private final class RealtimeHubSessionDelegateSpy: RealtimeHubSessionDelegate {

@@ -29,6 +29,16 @@ protocol RealtimeHubSessionDelegate: AnyObject {
     identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
   func hubDidFinishTurn(identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
   func hubDidError(_ failure: RealtimeHubTransportFailure, source: RealtimeHubSession)
+  /// The session became able to accept injected (non-PTT) context — a warm
+  /// Gemini activity window just opened. The capability signal that retries a
+  /// background-agent completion left unadvanced while the session was idle.
+  func hubDidOpenInputWindow(source: RealtimeHubSession)
+}
+
+extension RealtimeHubSessionDelegate {
+  /// Default no-op: only the controller that owns background-completion delivery
+  /// needs the "ready for injected context" signal.
+  func hubDidOpenInputWindow(source: RealtimeHubSession) {}
 }
 
 enum RealtimeHubTransportFailureKind: String, Equatable, Sendable {
