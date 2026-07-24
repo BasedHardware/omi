@@ -63,6 +63,10 @@ def validate_gateway_release_admission(text: str) -> list[str]:
             "gateway production admission must verify the Release Eligibility proof",
         ),
         (
+            "--require-first-attempt",
+            "gateway production admission must reject Release Eligibility reruns",
+        ),
+        (
             'git checkout --detach "$DEPLOY_SHA"',
             "gateway production admission must check out the admitted SHA",
         ),

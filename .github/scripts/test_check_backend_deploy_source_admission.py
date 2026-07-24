@@ -64,6 +64,18 @@ class ReleaseAdmissionVerifierTests(unittest.TestCase):
             repository=REPOSITORY,
         )
 
+    def test_backend_default_accepts_successful_rerun(self) -> None:
+        VERIFIER.validate_admission(self.payload(run_attempt=2), sha=SHA, repository=REPOSITORY)
+
+    def test_gateway_first_attempt_mode_rejects_rerun(self) -> None:
+        with self.assertRaisesRegex(VERIFIER.ReleaseAdmissionError, "no successful main"):
+            VERIFIER.validate_admission(
+                self.payload(run_attempt=2),
+                sha=SHA,
+                repository=REPOSITORY,
+                require_first_attempt=True,
+            )
+
     def test_rejects_ambiguous_release_sha(self) -> None:
         for value in ("main", "a" * 7, "A" * 40, "0" * 40):
             with self.subTest(value=value), self.assertRaisesRegex(VERIFIER.ReleaseAdmissionError, "release SHA"):
@@ -76,7 +88,6 @@ class ReleaseAdmissionVerifierTests(unittest.TestCase):
             ("event", {"event": "pull_request"}),
             ("status", {"status": "in_progress"}),
             ("conclusion", {"conclusion": "failure"}),
-            ("rerun", {"run_attempt": 2}),
             ("branch", {"head_branch": "release"}),
             ("sha", {"head_sha": "b" * 40}),
             ("repository", {"head_repository": {"full_name": "fork/omi"}}),

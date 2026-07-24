@@ -93,6 +93,11 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
                 "gateway production admission must verify the Release Eligibility proof",
             ),
             (
+                "--require-first-attempt",
+                "",
+                "gateway production admission must reject Release Eligibility reruns",
+            ),
+            (
                 'git checkout --detach "$DEPLOY_SHA"',
                 'git checkout --detach main',
                 "gateway production admission must check out the admitted SHA",
