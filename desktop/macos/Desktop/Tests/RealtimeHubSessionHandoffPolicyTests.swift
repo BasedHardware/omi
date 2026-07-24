@@ -203,6 +203,7 @@ final class RealtimeHubSessionHandoffPolicyTests: XCTestCase {
   }
 
   @MainActor
+  @MainActor
   func testBargeInFailoverExhaustedWhenAlternateProviderAlreadyActive() {
     DesktopDiagnosticsManager.shared.resetForTests()
     defer { DesktopDiagnosticsManager.shared.resetForTests() }
