@@ -38,10 +38,24 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/pylock*.toml
+
+      - name: Install pinned backend dependencies
+        working-directory: backend
+        run: uv pip sync pylock.toml --system
+
       - name: Check backend runtime env manifest
         if: needs.changes.outputs.has_backend_runtime_env == 'true'
         run: |
-          python3 -m pip install -q pyyaml pytest
           CLOUD_RUN_VPC_NETWORK=offline-check-network \
           CLOUD_RUN_VPC_SUBNET=offline-check-subnet \
             backend/scripts/pre-deploy-check.sh
