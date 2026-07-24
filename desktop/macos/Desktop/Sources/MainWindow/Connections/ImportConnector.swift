@@ -27,7 +27,7 @@ struct ImportConnector: Identifiable {
       id: "apple-calendar",
       title: "Apple Calendar",
       subtitle: "This Mac",
-      description: "Import events through macOS Calendar access.",
+      description: "Import local events; notes, attendees, and locations are saved as memories.",
       brand: .appleCalendar,
       statusText: "Not connected",
       metricText: nil,

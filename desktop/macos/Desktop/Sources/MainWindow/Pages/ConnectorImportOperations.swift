@@ -212,7 +212,7 @@ enum ConnectorImportOperations {
       let events = try await AppleEventKitReaderService.shared.readCalendarEvents()
       progress.update(
         title: "Importing Apple Calendar",
-        detail: "Saving local calendar events as memories."
+        detail: "Saving event notes, attendees, and locations as memories."
       )
       let result = await AppleEventKitReaderService.shared.saveCalendarAsMemories(events: events)
       guard result.failed == 0 else {

@@ -1544,7 +1544,7 @@ struct ImportConnectorSheet: View {
     case "apple-calendar":
       startRun(
         title: "Connecting to Apple Calendar",
-        detail: "Requesting access to local calendar events."
+        detail: "Full Calendar access reads notes, attendees, and locations and saves them as memories."
       ) { progress in
         await ConnectorImportOperations.importAppleCalendar(progress: progress)
       }
