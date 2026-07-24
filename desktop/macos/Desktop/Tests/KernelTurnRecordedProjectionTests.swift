@@ -836,6 +836,56 @@ import XCTest
       XCTAssertEqual(provider.messages.map(\.id), ["existing-main-turn"])
     }
 
+    func testQueuedReloadSuccessSupersedesAnEarlierFailedPass() async throws {
+      struct FirstPassFailure: Error {}
+
+      let provider = ChatProvider()
+      let surface = provider.mainChatSurfaceReference()
+      provider.projectJournalTurn(
+        try turn(
+          surface: surface,
+          turnId: "existing-main-turn",
+          turnSeq: 1,
+          content: "Replace this stale transcript"
+        ))
+      let replacement = try turn(
+        surface: surface,
+        turnId: "replacement-turn",
+        turnSeq: 1,
+        content: "Fresh complete transcript"
+      )
+      let projectionBox = Box<KernelTurnProjection?>(nil)
+      var listCalls = 0
+      let projection = KernelTurnProjection(
+        host: provider,
+        client: AgentClient.Session(harnessMode: "piMono"),
+        ownerIDProvider: { "owner-b" },
+        journalListOperation: { _, _, _, _, _ in
+          listCalls += 1
+          if listCalls == 1 {
+            guard let nestedProjection = projectionBox.value else {
+              throw FirstPassFailure()
+            }
+            _ = await nestedProjection.refresh(surface: surface)
+            throw FirstPassFailure()
+          }
+          return self.journalPage(
+            conversationId: "replacement-conversation",
+            turns: [replacement]
+          )
+        },
+        kernelReadyOperation: { true }
+      )
+      projectionBox.value = projection
+
+      let reloaded = await projection.reload(surface: surface)
+
+      XCTAssertTrue(reloaded)
+      XCTAssertEqual(listCalls, 2)
+      XCTAssertEqual(provider.messages.map(\.id), ["replacement-turn"])
+      XCTAssertEqual(provider.messages.map(\.text), ["Fresh complete transcript"])
+    }
+
     func testRuntimeOwnerNotificationSynchronouslyInvalidatesVisibleProjection() throws {
       let provider = ChatProvider()
       let surface = provider.mainChatSurfaceReference()

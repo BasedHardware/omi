@@ -305,6 +305,9 @@ final class KernelTurnProjection {
 
     repeat {
       guard isCurrent(lease) else { return false }
+      // A queued request is a fresh attempt. Its outcome supersedes an earlier
+      // failed pass once the accumulated replacement snapshot is complete.
+      refreshSucceeded = true
       if refreshRequestedSurfaceEpochs[surfaceKey] == lease.epoch {
         refreshRequestedSurfaceEpochs.removeValue(forKey: surfaceKey)
       }
