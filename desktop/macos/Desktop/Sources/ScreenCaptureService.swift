@@ -5,7 +5,7 @@ import ImageIO
 import ScreenCaptureKit
 
 final class ScreenCaptureService: Sendable {
-  private let maxSize: CGFloat = 3000
+  private static let maxSize: CGFloat = 3000
   private let jpegQuality: CGFloat = 0.8
   private static let activeWindowResolveTimeoutNs: UInt64 = 500_000_000  // 500ms
   private static let activeWindowCacheTTL: TimeInterval = 2
@@ -877,7 +877,9 @@ final class ScreenCaptureService: Sendable {
   }
 
   /// Aspect-preserving stream configuration, or nil if the window has no area.
-  private func captureConfiguration(for window: SCWindow) -> SCStreamConfiguration? {
+  private func captureConfiguration(for window: SCWindow, maxSize: CGFloat = ScreenCaptureService.maxSize)
+    -> SCStreamConfiguration?
+  {
     guard
       let size = Self.captureDimensions(
         width: window.frame.width, height: window.frame.height, maxSize: maxSize)
@@ -951,7 +953,9 @@ final class ScreenCaptureService: Sendable {
   /// Capture a specific window by ID (avoids re-resolving the active window).
   /// Returns a detailed result so the caller can distinguish transient window
   /// disappearance from real capture failures.
-  func captureWindowCGImage(windowID: CGWindowID) async -> WindowCaptureResult {
+  func captureWindowCGImage(windowID: CGWindowID, maxSize: CGFloat = ScreenCaptureService.maxSize) async
+    -> WindowCaptureResult
+  {
     do {
       var content = try await Self.sharedContent()
       if !content.windows.contains(where: { $0.windowID == windowID }) {
@@ -960,7 +964,7 @@ final class ScreenCaptureService: Sendable {
 
       let filterAndConfig: (SCContentFilter, SCStreamConfiguration)? = autoreleasepool {
         guard let window = content.windows.first(where: { $0.windowID == windowID }),
-          let config = captureConfiguration(for: window)
+          let config = captureConfiguration(for: window, maxSize: maxSize)
         else {
           return nil
         }
@@ -1048,8 +1052,8 @@ final class ScreenCaptureService: Sendable {
 
       var finalImage = nsImage
       let size = nsImage.size
-      if max(size.width, size.height) > maxSize {
-        let ratio = maxSize / max(size.width, size.height)
+      if max(size.width, size.height) > Self.maxSize {
+        let ratio = Self.maxSize / max(size.width, size.height)
         let newSize = NSSize(width: size.width * ratio, height: size.height * ratio)
         finalImage = resizeImage(nsImage, to: newSize)
       }
