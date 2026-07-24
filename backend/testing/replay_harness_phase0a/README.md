@@ -34,13 +34,23 @@ is loopback-only with no attestation. Phase 0A externalizes all three:
    declared health endpoints, and builds an attestation. It contains zero
    sync-specific branching logic.
 3. **Default-deny egress**: every role installs a socket guard with an explicit
-   allow-list of declared fake endpoints. Every connection attempt is logged,
-   then allowed or denied. The attestation proves zero denied attempts.
-4. **Declared fault mutant**: a `terminal_guard_bypassed` fault control (declared
-   in the topology contract) bypasses the worker's terminal-status guard. The
-   loopback delivers the same task twice (at-least-once). Without the fault:
-   one STT invocation (idempotency holds). With the fault: two STT invocations
-   (defect caught).
+   allow-list of declared fake endpoints. TCP connection-oriented sends
+   (`connect`, `connect_ex`, `create_connection`), DNS resolution
+   (`getaddrinfo`, `gethostbyname`, `gethostbyname_ex`), and UDP unconnected
+   sends (`sendto`, `sendmsg`) are observed and enforced. Non-Python dependency
+   processes (Redis server, Firestore emulator JVM) are bind-constrained to
+   loopback by the runner but not per-connection observed. The attestation states
+   this scope explicitly and recomputes every egress decision from raw evidence.
+4. **Regression-sensitive mutant proof**: three scenarios prove the harness can
+   induce and catch a duplicate-STT defect, using the externally observable STT
+   invocation count as the sole black-box signal (no white-box marker):
+   - **BASE** (unmutated, duplicate delivery): composition holds, STT = 1.
+   - **MUTANT_UNGUARDED** (STT double-invoke fault + duplicate delivery): the
+     deterministic STT leaf invokes the provider twice for the same audio,
+     inducing the defect, STT ≥ 2. The scenario FAILS unless the defect
+     surfaces — it is regression-sensitive.
+   - **MUTANT_GUARDED** (terminal guard bypassed, defenses active): the
+     content-ledger convergence acks the redelivery without re-running, STT = 1.
 
 ## What it does NOT prove (feasibility-only boundaries)
 
@@ -75,12 +85,13 @@ The runner:
    - Redis (bind 127.0.0.1, ephemeral port)
    - Cloud Tasks loopback (HTTP server, ephemeral port)
    - Worker ASGI (uvicorn, ephemeral port)
-   - Admission ASGI (uvicorn, ephemeral port)
-3. Runs the **base** scenario (unmutated, duplicate delivery → one STT).
-4. Tears down, relaunches, runs the **mutant** scenario (terminal guard
-   bypassed, duplicate delivery → two STT, defect caught).
-5. Builds and validates a topology/egress attestation for each scenario.
-6. Reports the feasibility outcome.
+3. Runs the **base** scenario (unmutated, duplicate delivery → STT = 1).
+4. Tears down, relaunches, runs the **mutant-unguarded** scenario (STT
+   double-invoke + duplicate delivery → STT ≥ 2, defect induced).
+5. Tears down, relaunches, runs the **mutant-guarded** scenario (terminal guard
+   bypassed, defenses active, duplicate delivery → STT = 1, defense holds).
+6. Builds and validates a topology/egress attestation for each scenario.
+7. Reports the feasibility outcome.
 
 Each scenario uses a unique state root, unique ports, and a unique Firestore
 project namespace — concurrent invocations cannot collide.
