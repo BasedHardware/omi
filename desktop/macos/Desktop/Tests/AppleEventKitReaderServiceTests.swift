@@ -319,10 +319,10 @@ private final class AppleRemindersSyncStub: AppleRemindersSyncing {
   }
 
   func deleteSyncedActionItem(id: String) async throws {
+    deletedIDs.append(id)
     if failDeleteForIDs.contains(id) {
       throw Error.deleteFailed(id)
     }
-    deletedIDs.append(id)
   }
 }
 
