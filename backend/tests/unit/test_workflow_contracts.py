@@ -292,6 +292,19 @@ def test_shared_change_detection_and_backend_isolation_are_ci_wired():
     assert 'if [ -z "${OMI_SWIFT_TEST_DISCOVERY_ROOT:-}" ]; then' in swift_test_suites
 
 
+def test_backend_static_contract_job_uses_the_pinned_backend_environment():
+    repo = BACKEND_DIR.parent
+    workflow = (repo / '.github/workflows/backend-checks.yml').read_text(encoding='utf-8')
+    pre_deploy = (BACKEND_DIR / 'scripts/pre-deploy-check.sh').read_text(encoding='utf-8')
+
+    assert 'uses: actions/setup-python@v6' in workflow
+    assert 'uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84' in workflow
+    assert 'uv pip sync pylock.toml --system' in workflow
+    assert 'backend/scripts/pre-deploy-check.sh' in workflow
+    assert 'python3 -m pip install' not in pre_deploy
+    assert "python3 -c 'import pytest, yaml'" in pre_deploy
+
+
 def test_mobile_generated_files_only_run_for_codegen_or_localization_changes():
     repo = BACKEND_DIR.parent
     detect_changes = (repo / '.github/actions/detect-changes/action.yml').read_text(encoding='utf-8')

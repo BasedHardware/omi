@@ -24,14 +24,15 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     assert 'uses: actions/setup-node@v7' in job
     assert "node-version: '22'" in job
     assert 'cache-dependency-path: package-lock.json' in job
-    assert 'npm ci --ignore-scripts' in job
+    assert 'npm ci --ignore-scripts --prefer-offline --no-audit --fund=false' in job
+    assert 'for attempt in 1 2 3' in job
     assert 'uses: actions/setup-java@v5' in job
     assert "java-version: '21'" in job
     assert 'sudo apt-get install --yes redis-server' in job
     assert 'npm run test:listen-pusher-stack:emulator -- --state-dir "$RUNNER_TEMP/listen-pusher-stack"' in job
-    assert 'name: Show listen gauntlet backend logs on failure' in job
+    assert 'name: Show listen gauntlet process diagnostics on failure' in job
     assert 'if: failure()' in job
-    assert 'find "$state_dir" -type f -name backend.log -print -exec tail -n 160 {} \\;' in job
+    assert "find \"$state_dir\" -type f \\( -name '*.log' -o -name '*.jsonl' \\) -print -exec tail -n 160 {} \\;" in job
 
     assert package['scripts']['test:listen-pusher-stack:emulator'] == 'backend/testing/listen_pusher_stack/run.sh'
     listen_contract = next(
@@ -53,6 +54,7 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     assert "state_dir / 'cloud-rest-restart'" in runner
     assert "'task_already_exists'" in task_seam
     assert 'OMI_STACK_FINALIZATION_RACE_PARTIES' in listener_entrypoint
+    assert 'last {min(len(lines), 120)} line(s) from {child.log_path}' in runner
 
 
 def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:
@@ -89,3 +91,14 @@ def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:
         'SYNC_CLOUD_TASKS_RESULT',
     ):
         assert result_name in gate
+
+
+def test_hermetic_e2e_tokenizer_warmup_is_cached_and_bounded() -> None:
+    workflow = (_REPO_ROOT / '.github' / 'workflows' / 'backend-hermetic-e2e.yml').read_text(encoding='utf-8')
+    job = workflow.split('  hermetic-e2e:\n', 1)[1].split('\n  listen-pusher-stack-gauntlet:\n', 1)[0]
+
+    assert 'uses: actions/cache@v6' in job
+    assert 'path: ${{ runner.temp }}/tiktoken-cache' in job
+    assert "key: tiktoken-${{ runner.os }}-${{ hashFiles('backend/pylock.toml') }}" in job
+    assert job.count('TIKTOKEN_CACHE_DIR: ${{ runner.temp }}/tiktoken-cache') == 2
+    assert 'python backend/scripts/prewarm_tiktoken_cache.py' in job
