@@ -9,7 +9,8 @@ import {
   X,
   Mic,
   Trash2,
-  Target
+  Target,
+  ScanText
 } from 'lucide-react'
 import { runScreenSynthesisOnce } from '../../../lib/screenSynthesis'
 import { BUILT_IN_EXCLUDED_APPS } from '../../../../../shared/rewindExclusions'
@@ -168,6 +169,20 @@ export function RewindTab(): React.JSX.Element {
               Every 10s
             </option>
           </select>
+        }
+      />
+      <SettingRow
+        icon={ScanText}
+        title="High-resolution capture"
+        subtitle="Capture frames at 1080p so on-screen text stays legible for OCR. Uses more CPU/GPU while capture is on."
+        keywords="rewind resolution quality ocr text sharp hd 1080p"
+        control={
+          <Toggle
+            on={!!rewind?.highResCapture}
+            onChange={(on) => rewind && saveRewind({ ...rewind, highResCapture: on })}
+            disabled={!rewind}
+            label="High-resolution capture"
+          />
         }
       />
       <SettingRow

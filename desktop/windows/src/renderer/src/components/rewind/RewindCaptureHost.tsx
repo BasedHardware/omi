@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { RewindSettings, RewindCaptureDirective } from '../../../../shared/types'
+import { rewindCaptureProfile, sampledCanvasSize } from './captureProfile'
 
-// Cap the longest sampled edge — plenty for a timeline + OCR, and keeps each
-// canvas grab + JPEG encode cheap.
-const MAX_EDGE = 1600
-const JPEG_QUALITY = 0.6
 // Wait before re-opening a stream whose track died, so a source that is
 // unavailable in bursts (display asleep, GPU reset) can't spin getUserMedia.
 const RESTART_DELAY_MS = 2000
@@ -60,6 +57,7 @@ export function RewindCaptureHost(): React.JSX.Element {
   useEffect(() => {
     const enabled = !!settings?.captureEnabled && !paused
     const intervalMs = effectiveIntervalMs
+    const profile = rewindCaptureProfile(!!settings?.highResCapture)
     let cancelled = false
     // Bumped on every teardown so a grab still in flight (a save is an IPC
     // round-trip) can't reschedule itself onto a stream that is already gone —
@@ -99,9 +97,7 @@ export function RewindCaptureHost(): React.JSX.Element {
       try {
         const v = videoRef.current
         if (v && isLive() && v.videoWidth && v.videoHeight && !savingRef.current) {
-          const scale = Math.min(1, MAX_EDGE / Math.max(v.videoWidth, v.videoHeight))
-          const w = Math.round(v.videoWidth * scale)
-          const h = Math.round(v.videoHeight * scale)
+          const { width: w, height: h } = sampledCanvasSize(v.videoWidth, v.videoHeight, profile)
           const canvas =
             canvasRef.current ?? (canvasRef.current = document.createElement('canvas'))
           if (canvas.width !== w) canvas.width = w
@@ -110,7 +106,7 @@ export function RewindCaptureHost(): React.JSX.Element {
           if (ctx) {
             ctx.drawImage(v, 0, 0, w, h)
             const blob = await new Promise<Blob | null>((r) =>
-              canvas.toBlob(r, 'image/jpeg', JPEG_QUALITY)
+              canvas.toBlob(r, 'image/jpeg', profile.jpegQuality)
             )
             if (blob && !cancelled && gen === generation) {
               savingRef.current = true
@@ -146,12 +142,14 @@ export function RewindCaptureHost(): React.JSX.Element {
               chromeMediaSource: 'desktop',
               chromeMediaSourceId: sourceId,
               // The live stream is decoded continuously in the renderer, so its
-              // resolution + frame rate set the steady-state cost of having
-              // capture on. Keep both low: 720p is enough for a timeline + OCR of
-              // normal-size text, and we only sample every few seconds, so 1fps
-              // capture is plenty. (Was 1080p@30fps → froze; 1080p@2fps → laggy.)
-              maxWidth: 1280,
-              maxHeight: 720,
+              // resolution + frame rate set the steady-state cost of having capture
+              // on. The default profile keeps both low: 720p is enough for a
+              // timeline + OCR of normal-size text, and we only sample every few
+              // seconds, so 1fps is plenty. (Was 1080p@30fps → froze; 1080p@2fps →
+              // laggy.) `highResCapture` opts into 1080p for legible OCR (#10489);
+              // frame rate stays at 1fps in both.
+              maxWidth: profile.maxWidth,
+              maxHeight: profile.maxHeight,
               maxFrameRate: 1
             }
           }
@@ -181,7 +179,7 @@ export function RewindCaptureHost(): React.JSX.Element {
       cancelled = true
       stop()
     }
-  }, [settings?.captureEnabled, effectiveIntervalMs, paused])
+  }, [settings?.captureEnabled, settings?.highResCapture, effectiveIntervalMs, paused])
 
   return (
     <video

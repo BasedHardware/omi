@@ -2053,6 +2053,10 @@ export type RewindSettings = {
   /** App names to never screenshot (case-insensitive substring match against the
    *  foreground app/process name). Empty = capture everything. */
   excludedApps: string[]
+  /** Capture screen frames at a higher resolution so on-screen text stays legible
+   *  for OCR (at a higher steady-state CPU/GPU cost). Off by default: the standard
+   *  720p profile is the perf-tuned baseline; only users who need OCR opt in. */
+  highResCapture: boolean
 }
 
 /** Runtime capture directive pushed main→renderer, derived from OS power/lock state.

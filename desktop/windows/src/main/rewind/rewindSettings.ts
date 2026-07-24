@@ -12,7 +12,10 @@ const DEFAULTS: RewindSettings = {
   captureEnabled: true,
   intervalMs: 1000,
   retentionDays: 14,
-  excludedApps: []
+  excludedApps: [],
+  // Off by default — the standard 720p profile is the perf-tuned baseline (higher
+  // resolutions were laggy in continuous capture). Opt-in for OCR legibility.
+  highResCapture: false
 }
 
 function file(): string {
@@ -51,7 +54,9 @@ function sanitize(raw: Partial<RewindSettings>): RewindSettings {
     captureEnabled: raw.captureEnabled !== false,
     intervalMs,
     retentionDays,
-    excludedApps
+    excludedApps,
+    // Default OFF: only an explicit `true` opts into the higher-cost profile.
+    highResCapture: raw.highResCapture === true
   }
 }
 
