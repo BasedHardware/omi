@@ -58,6 +58,13 @@ final class PiMonoWiringTests: XCTestCase {
 }
 SWIFT
 
+cat >"$TMPDIR/tests/PushToTalkStateMachineTests.swift" <<'SWIFT'
+import XCTest
+final class PushToTalkStateMachineTests: XCTestCase {
+    func testOwnerTransitionTerminatesActiveHubAndDrainsItsPhysicalSession() {}
+}
+SWIFT
+
 cat >"$TMPDIR/bin/xcrun" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -107,7 +114,7 @@ if [[ "$*" == *"swift test"* ]]; then
 
   # Hold the worker briefly so a fast peer suite cannot finish before overlap
   # is observed when only two suites are in flight.
-  sleep 0.1
+  sleep 0.25
 fi
 
 if [ "$suite" = "AlphaTests" ]; then
@@ -156,7 +163,7 @@ fi
 if ! grep -q "alpha failed" "$TMPDIR/runner.out"; then
   fail "runner did not preserve the failed suite log"
 fi
-if ! grep -q "Ran 6 Swift suites in isolation with 2 worker(s)." "$TMPDIR/runner.out"; then
+if ! grep -q "Ran 7 Swift suites in isolation with 2 worker(s)." "$TMPDIR/runner.out"; then
   fail "runner did not report suite count and worker count"
 fi
 if ! grep -q -- "--skip ChatDiscoverabilityTests/testAgentControlCapabilitiesMatchCanonicalManifest" "$FAKE_XCRUN_LOG"; then
@@ -174,6 +181,10 @@ if ! awk -F '\t' '{ expected = $4; sub(/\/home$/, "/tmp", expected); if ($5 != e
   "$FAKE_XCRUN_SCRATCH_LOG"; then
   fail "runner did not isolate CoreFoundation preferences and temporary files per worker"
 fi
+if ! grep -q -- "--skip PushToTalkStateMachineTests/testOwnerTransitionTerminatesActiveHubAndDrainsItsPhysicalSession" "$FAKE_XCRUN_LOG"; then
+  fail "runner did not pass PushToTalk hang skip to SwiftPM"
+fi
+fi
 
 # Local runs should get the same proven suite-level parallelism as CI unless a
 # diagnosis explicitly asks for fewer workers.
@@ -182,7 +193,7 @@ unset OMI_SWIFT_TEST_SUITE_WORKERS SWIFT_TEST_SUITE_WORKERS
 if "$RUNNER" >"$TMPDIR/default-runner.out" 2>"$TMPDIR/default-runner.err"; then
   fail "default runner unexpectedly succeeded despite AlphaTests failure"
 fi
-if ! grep -q "Ran 6 Swift suites in isolation with 4 worker(s)," "$TMPDIR/default-runner.out"; then
+if ! grep -q "Ran 7 Swift suites in isolation with 4 worker(s)." "$TMPDIR/default-runner.out"; then
   fail "runner did not default local suite execution to four workers"
 fi
 
