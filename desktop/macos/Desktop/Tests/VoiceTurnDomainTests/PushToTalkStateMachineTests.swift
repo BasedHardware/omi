@@ -144,6 +144,20 @@ final class PushToTalkStateMachineTests: XCTestCase {
   // RealtimeHubOwnerBoundarySnapshot); the release-mode CI test compile must skip it.
   #if DEBUG
     @MainActor
+    func testOwnerBoundaryEffectHandlerInstallDoesNotStartListening() {
+      let manager = PushToTalkManager.shared
+      manager.cleanup()
+      defer { manager.cleanup() }
+
+      manager.installOwnerBoundaryEffectHandlerFixture()
+
+      XCTAssertNil(VoiceTurnCoordinator.shared.activeTurn)
+      XCTAssertNil(manager.ownerBoundarySnapshot.activeTurnID)
+      XCTAssertFalse(manager.ownerBoundarySnapshot.hasCaptureDriver)
+      XCTAssertFalse(manager.ownerBoundarySnapshot.captureStartInFlight)
+    }
+
+    @MainActor
     func testOwnerTransitionTerminatesActiveNonHubCaptureBeforeOwnerBBecomesVisible() async {
       let manager = PushToTalkManager.shared
       let defaults = ownerBoundaryDefaults("non-hub")
