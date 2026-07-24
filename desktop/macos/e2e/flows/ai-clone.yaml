@@ -1,0 +1,38 @@
+version: 2
+name: ai-clone
+tier: 2
+description: AI Clone page navigation and safe state snapshot (no Beeper required)
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/AIClone/AIClonePage.swift
+  - desktop/macos/Desktop/Sources/AIClone/AICloneService.swift
+  - desktop/macos/Desktop/Sources/AIClone/AICloneModels.swift
+  - desktop/macos/Desktop/Sources/AIClone/AICloneReplyEngine.swift
+  - desktop/macos/Desktop/Sources/AIClone/AICloneBenchmark.swift
+  - desktop/macos/Desktop/Sources/AIClone/BeeperDesktopClient.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to AI Clone settings section
+    bridge.navigate:
+      target: settings
+      settingsSection: ai_clone
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: AI Clone
+
+  - id: S2
+    name: AI Clone snapshot reports disconnected fail-closed defaults
+    bridge.action:
+      name: ai_clone_snapshot
+    expect:
+      ok: true
+      detail.enabled: "false"
+
+  - id: S3
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
