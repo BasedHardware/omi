@@ -19,6 +19,61 @@ HEAD_IDENTITY = "CHECKED_OUT_SHA=$(git rev-parse HEAD)"
 IMAGE_IDENTITY = 'IMAGE_TAG=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")'
 DIAGNOSTIC = "ERROR: checked-out HEAD $CHECKED_OUT_SHA is not an ancestor of fresh origin/main"
 PERSISTED_IMAGE_IDENTITY = 'echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"'
+GATEWAY_WORKFLOW = Path(".github/workflows/gcp_llm_gateway.yml")
+GATEWAY_RELEASE_SHA_INPUT = (
+    "      release_sha:\n"
+    "        description: 'Production only: exact main SHA with a successful first-attempt Release Eligibility proof'\n"
+    "        required: false\n"
+    "        default: ''"
+)
+
+
+def validate_gateway_release_admission(text: str) -> list[str]:
+    """Require the standalone gateway's production SHA to use the shared proof gate."""
+
+    errors: list[str] = []
+    for fragment, message in (
+        (GATEWAY_RELEASE_SHA_INPUT, "gateway deploy must expose a production-only release_sha input"),
+        (
+            "ref: ${{ github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch }}",
+            "gateway development deploy must retain its branch checkout while production starts from main",
+        ),
+        (
+            "sha_pattern='^[0-9a-f]{40}$'",
+            "gateway production admission must reject malformed or missing release_sha",
+        ),
+        (
+            '[[ ! "$DEPLOY_SHA" =~ $sha_pattern || "$DEPLOY_SHA" == "0000000000000000000000000000000000000000" ]]',
+            "gateway production admission must reject malformed or missing release_sha",
+        ),
+        (
+            'git cat-file -e "${DEPLOY_SHA}^{commit}"',
+            "gateway production admission must require the requested SHA commit object",
+        ),
+        (
+            'git merge-base --is-ancestor "$DEPLOY_SHA" "$main_sha"',
+            "gateway production admission must require release_sha to be merged into fresh main",
+        ),
+        (
+            "actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}",
+            "gateway production admission must query Release Eligibility for the exact SHA",
+        ),
+        (
+            ".github/scripts/verify_backend_release_admission.py",
+            "gateway production admission must verify the Release Eligibility proof",
+        ),
+        (
+            'git checkout --detach "$DEPLOY_SHA"',
+            "gateway production admission must check out the admitted SHA",
+        ),
+        (
+            '"$CHECKED_OUT_SHA" != "$DEPLOY_SHA"',
+            "gateway production admission must bind image identity to the admitted checkout",
+        ),
+    ):
+        if fragment not in text:
+            errors.append(message)
+    return errors
 
 
 def validate(root: Path) -> list[str]:
@@ -55,6 +110,8 @@ def validate(root: Path) -> list[str]:
             or persistent_image_writes != [PERSISTED_IMAGE_IDENTITY]
         ):
             errors.append(f"{relative} must establish its immutable image tag exactly once from checked-out HEAD")
+        if relative == GATEWAY_WORKFLOW:
+            errors.extend(validate_gateway_release_admission(text))
     return errors
 
 
