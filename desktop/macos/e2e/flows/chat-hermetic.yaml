@@ -1,5 +1,6 @@
 version: 2
 name: chat-hermetic
+tier: 2
 description: Hermetic chat in Home tab — send/receive with Rust OMI_LLM_STUB=1 (v0.12.119+ redesign — chat is embedded in Home, not a separate tab)
 app: non-prod
 covers:
