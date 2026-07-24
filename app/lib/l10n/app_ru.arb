@@ -3230,5 +3230,7 @@
     "whisperModelSizeLarge": "Большая",
     "whisperModelSizeMedium": "Средняя",
     "whisperModelSizeSmall": "Малая",
-    "whisperModelSizeTiny": "Крошечная"
+    "whisperModelSizeTiny": "Крошечная",
+    "sendRawAudioToOmi": "Отправлять необработанный звук в Omi",
+    "sendRawAudioToOmiDescription": "Отключите, чтобы необработанный звук не отправлялся в Omi. Расшифровки и данные, необходимые облачным функциям, всё ещё могут отправляться в Omi."
 }

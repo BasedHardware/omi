@@ -9775,4 +9775,11 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'اتصال به این میکروفون ممکن نشد. مطمئن شوید در تنظیمات iPhone متصل است.';
+
+  @override
+  String get sendRawAudioToOmi => 'ارسال صدای خام به Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'برای جلوگیری از ارسال صدای خام به Omi این گزینه را خاموش کنید. متن پیاده‌شده و داده‌های مورد نیاز قابلیت‌های ابری ممکن است همچنان به Omi ارسال شوند.';
 }

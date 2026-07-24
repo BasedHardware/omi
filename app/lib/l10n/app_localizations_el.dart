@@ -9842,4 +9842,11 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Δεν ήταν δυνατή η σύνδεση σε αυτό το μικρόφωνο. Βεβαιωθείτε ότι είναι συνδεδεμένο στις Ρυθμίσεις του iPhone.';
+
+  @override
+  String get sendRawAudioToOmi => 'Αποστολή ακατέργαστου ήχου στο Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Απενεργοποιήστε το για να μην αποστέλλεται ακατέργαστος ήχος στο Omi. Οι απομαγνητοφωνήσεις και τα δεδομένα που απαιτούν οι λειτουργίες cloud ενδέχεται να συνεχίσουν να αποστέλλονται στο Omi.';
 }

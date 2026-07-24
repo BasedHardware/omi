@@ -3195,5 +3195,7 @@
     "whisperModelSizeLarge": "Велика",
     "whisperModelSizeMedium": "Середня",
     "whisperModelSizeSmall": "Мала",
-    "whisperModelSizeTiny": "Крихітна"
+    "whisperModelSizeTiny": "Крихітна",
+    "sendRawAudioToOmi": "Надсилати необроблений звук до Omi",
+    "sendRawAudioToOmiDescription": "Вимкніть, щоб необроблений звук не надсилався до Omi. Транскрипти й дані, потрібні хмарним функціям, усе ще можуть надсилатися до Omi."
 }

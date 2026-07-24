@@ -9863,4 +9863,11 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Hindi makakonekta sa mikroponong iyon. Tiyaking nakakonekta ito sa Mga Setting ng iPhone.';
+
+  @override
+  String get sendRawAudioToOmi => 'Ipadala ang raw na audio sa Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'I-off para hindi maipadala ang raw na audio sa Omi. Maaari pa ring ipadala sa Omi ang mga transcript at data na kailangan ng mga cloud feature.';
 }

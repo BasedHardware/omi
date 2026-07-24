@@ -3195,5 +3195,7 @@
     "whisperModelSizeLarge": "Suuri",
     "whisperModelSizeMedium": "Keskikokoinen",
     "whisperModelSizeSmall": "Pieni",
-    "whisperModelSizeTiny": "Pikkuruinen"
+    "whisperModelSizeTiny": "Pikkuruinen",
+    "sendRawAudioToOmi": "Lähetä käsittelemätön ääni Omille",
+    "sendRawAudioToOmiDescription": "Poista käytöstä, jotta käsittelemätöntä ääntä ei lähetetä Omille. Litterointeja ja pilviominaisuuksien tarvitsemia tietoja voidaan silti lähettää Omille."
 }

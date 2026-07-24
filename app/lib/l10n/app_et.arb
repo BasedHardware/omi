@@ -3195,5 +3195,7 @@
     "whisperModelSizeLarge": "Suur",
     "whisperModelSizeMedium": "Keskmine",
     "whisperModelSizeSmall": "Väike",
-    "whisperModelSizeTiny": "Pisike"
+    "whisperModelSizeTiny": "Pisike",
+    "sendRawAudioToOmi": "Saada töötlemata heli Omisse",
+    "sendRawAudioToOmiDescription": "Lülita välja, et töötlemata heli Omisse ei saadetaks. Transkriptsioone ja pilvefunktsioonide jaoks vajalikke andmeid võidakse endiselt Omisse saata."
 }

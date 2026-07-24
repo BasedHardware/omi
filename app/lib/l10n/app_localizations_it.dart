@@ -9830,4 +9830,11 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Impossibile connettersi a quel microfono. Assicurati che sia connesso nelle Impostazioni dell\'iPhone.';
+
+  @override
+  String get sendRawAudioToOmi => 'Invia l\'audio grezzo a Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Disattiva per impedire l\'invio dell\'audio grezzo a Omi. Le trascrizioni e i dati necessari alle funzioni cloud possono ancora essere inviati a Omi.';
 }

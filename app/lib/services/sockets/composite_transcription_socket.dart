@@ -13,6 +13,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
   final String? suggestedTranscriptType;
   final String? sttProvider;
+  final bool forwardRawAudioToSecondary;
 
   PureSocketStatus _status = PureSocketStatus.notConnected;
   IPureSocketListener? _listener;
@@ -25,6 +26,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
     required this.secondarySocket,
     this.suggestedTranscriptType = 'suggested_transcript',
     this.sttProvider,
+    this.forwardRawAudioToSecondary = true,
   }) {
     _primaryListener = _PrimarySocketListener(this);
     _secondaryListener = _SecondarySocketListener(this);
@@ -61,6 +63,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
       DebugLogManager.logEvent('composite_socket_connected', {
         'primary_status': primarySocket.status.toString(),
         'secondary_status': secondarySocket.status.toString(),
+        'forward_raw_audio_to_secondary': forwardRawAudioToSecondary,
       });
       onConnected();
       return true;
@@ -146,7 +149,9 @@ class CompositeTranscriptionSocket implements IPureSocket {
       return;
     }
     primarySocket.send(message);
-    secondarySocket.send(message);
+    if (forwardRawAudioToSecondary || message is! List<int>) {
+      secondarySocket.send(message);
+    }
   }
 
   void _onPrimaryMessage(dynamic message) {

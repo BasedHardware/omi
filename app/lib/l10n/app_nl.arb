@@ -3195,5 +3195,7 @@
     "whisperModelSizeLarge": "Groot",
     "whisperModelSizeMedium": "Gemiddeld",
     "whisperModelSizeSmall": "Klein",
-    "whisperModelSizeTiny": "Heel klein"
+    "whisperModelSizeTiny": "Heel klein",
+    "sendRawAudioToOmi": "Onbewerkte audio naar Omi sturen",
+    "sendRawAudioToOmiDescription": "Schakel uit om te voorkomen dat onbewerkte audio naar Omi wordt gestuurd. Transcripties en gegevens die cloudfuncties nodig hebben, kunnen nog steeds naar Omi worden gestuurd."
 }

@@ -3196,5 +3196,7 @@
     "whisperModelSizeLarge": "Grande",
     "whisperModelSizeMedium": "Mediano",
     "whisperModelSizeSmall": "Pequeño",
-    "whisperModelSizeTiny": "Diminuto"
+    "whisperModelSizeTiny": "Diminuto",
+    "sendRawAudioToOmi": "Enviar audio sin procesar a Omi",
+    "sendRawAudioToOmiDescription": "Desactívalo para impedir que se envíe audio sin procesar a Omi. Las transcripciones y los datos necesarios para las funciones en la nube aún pueden enviarse a Omi."
 }

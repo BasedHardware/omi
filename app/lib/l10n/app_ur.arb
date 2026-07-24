@@ -10782,5 +10782,7 @@
     "whisperModelSizeLarge": "بڑا",
     "whisperModelSizeMedium": "درمیانہ",
     "whisperModelSizeSmall": "چھوٹا",
-    "whisperModelSizeTiny": "بہت چھوٹا"
+    "whisperModelSizeTiny": "بہت چھوٹا",
+    "sendRawAudioToOmi": "خام آڈیو Omi کو بھیجیں",
+    "sendRawAudioToOmiDescription": "خام آڈیو کو Omi بھیجے جانے سے روکنے کے لیے اسے بند کریں۔ ٹرانسکرپٹس اور کلاؤڈ فیچرز کے لیے درکار ڈیٹا اب بھی Omi کو بھیجا جا سکتا ہے۔"
 }

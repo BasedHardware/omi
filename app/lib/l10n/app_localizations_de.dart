@@ -9855,4 +9855,11 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Verbindung mit diesem Mikrofon fehlgeschlagen. Stelle sicher, dass es in den iPhone-Einstellungen verbunden ist.';
+
+  @override
+  String get sendRawAudioToOmi => 'Roh-Audio an Omi senden';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Deaktivieren, damit kein Roh-Audio an Omi gesendet wird. Transkripte und für Cloud-Funktionen benötigte Daten können weiterhin an Omi gesendet werden.';
 }

@@ -363,6 +363,7 @@ class TranscriptSocketServiceFactory {
       source: source,
       sttConfigId: sttConfigId,
       sttProvider: config.provider.name,
+      forwardRawAudioToSecondary: config.sendRawAudioToOmi,
     );
   }
 
@@ -489,6 +490,7 @@ class TranscriptSocketServiceFactory {
     String? source,
     String? sttConfigId,
     String? sttProvider,
+    required bool forwardRawAudioToSecondary,
   }) {
     final secondaryService = CustomSttTranscriptSegmentSocketService.create(
       sampleRate,
@@ -500,6 +502,7 @@ class TranscriptSocketServiceFactory {
       primarySocket: primarySocket,
       secondarySocket: secondaryService.socket,
       sttProvider: sttProvider,
+      forwardRawAudioToSecondary: forwardRawAudioToSecondary,
     );
     return TranscriptSegmentSocketService.withSocket(
       sampleRate,

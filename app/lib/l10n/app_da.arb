@@ -3213,5 +3213,7 @@
     "whisperModelSizeLarge": "Stor",
     "whisperModelSizeMedium": "Mellem",
     "whisperModelSizeSmall": "Lille",
-    "whisperModelSizeTiny": "Meget lille"
+    "whisperModelSizeTiny": "Meget lille",
+    "sendRawAudioToOmi": "Send rå lyd til Omi",
+    "sendRawAudioToOmiDescription": "Slå fra for at forhindre, at rå lyd sendes til Omi. Transskriptioner og data, som cloudfunktioner kræver, kan stadig blive sendt til Omi."
 }

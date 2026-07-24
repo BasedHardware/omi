@@ -10782,5 +10782,7 @@
     "whisperModelSizeLarge": "גדול",
     "whisperModelSizeMedium": "בינוני",
     "whisperModelSizeSmall": "קטן",
-    "whisperModelSizeTiny": "זעיר"
+    "whisperModelSizeTiny": "זעיר",
+    "sendRawAudioToOmi": "שליחת שמע גולמי ל-Omi",
+    "sendRawAudioToOmiDescription": "כבו כדי למנוע שליחת שמע גולמי ל-Omi. תמלילים ונתונים הדרושים לתכונות הענן עדיין עשויים להישלח ל-Omi."
 }

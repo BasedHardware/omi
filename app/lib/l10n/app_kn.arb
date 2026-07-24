@@ -10782,5 +10782,7 @@
     "whisperModelSizeLarge": "ದೊಡ್ಡದು",
     "whisperModelSizeMedium": "ಮಧ್ಯಮ",
     "whisperModelSizeSmall": "ಚಿಕ್ಕದು",
-    "whisperModelSizeTiny": "ಅತಿ ಚಿಕ್ಕದು"
+    "whisperModelSizeTiny": "ಅತಿ ಚಿಕ್ಕದು",
+    "sendRawAudioToOmi": "Omi ಗೆ ಕಚ್ಚಾ ಆಡಿಯೊ ಕಳುಹಿಸಿ",
+    "sendRawAudioToOmiDescription": "Omi ಗೆ ಕಚ್ಚಾ ಆಡಿಯೊ ಕಳುಹಿಸುವುದನ್ನು ತಡೆಯಲು ಇದನ್ನು ಆಫ್ ಮಾಡಿ. ಪ್ರತಿಲಿಪಿಗಳು ಮತ್ತು ಕ್ಲೌಡ್ ವೈಶಿಷ್ಟ್ಯಗಳಿಗೆ ಅಗತ್ಯವಾದ ಡೇಟಾವನ್ನು ಇನ್ನೂ Omi ಗೆ ಕಳುಹಿಸಬಹುದು."
 }
