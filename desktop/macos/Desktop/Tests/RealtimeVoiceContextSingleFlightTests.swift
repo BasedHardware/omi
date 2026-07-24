@@ -34,6 +34,27 @@ final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
     }
   }
 
+  @MainActor
+  private final class Signal {
+    private var didFire = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func fire() {
+      didFire = true
+      for waiter in waiters {
+        waiter.resume()
+      }
+      waiters.removeAll()
+    }
+
+    func wait() async {
+      guard !didFire else { return }
+      await withCheckedContinuation { continuation in
+        waiters.append(continuation)
+      }
+    }
+  }
+
   private func waitUntilStarted(_ gate: Gate) async {
     await gate.waitUntilStarted()
   }
@@ -41,10 +62,16 @@ final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
   func testCancelledTurnWaiterDoesNotCancelSharedReadiness() async {
     let singleFlight = RealtimeVoiceContextSingleFlight()
     let gate = Gate()
+    let turnWaiterJoined = Signal()
 
     let speculative = singleFlight.joinOrStart { await gate.run() }
-    let turnWaiter = Task { await singleFlight.joinOrStart { await gate.run() }.value }
+    let turnWaiter = Task {
+      let sharedReadiness = singleFlight.joinOrStart { await gate.run() }
+      turnWaiterJoined.fire()
+      return await sharedReadiness.value
+    }
     await waitUntilStarted(gate)
+    await turnWaiterJoined.wait()
 
     XCTAssertEqual(gate.startCount, 1)
     XCTAssertTrue(singleFlight.isRunning)
