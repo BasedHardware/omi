@@ -1699,22 +1699,6 @@
     "@lovingOmi": {
         "description": "Title for the app review prompt"
     },
-    "leaveReviewIos": "ہمیں مزید لوگوں تک پہنچنے میں مدد کریں App Store میں ریویو چھوڑ کر۔ آپ کی رائے ہمارے لیے بہت اہم ہے!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "ہمیں مزید لوگوں تک پہنچنے میں مدد کریں Google Play Store میں ریویو چھوڑ کر۔ آپ کی رائے ہمارے لیے بہت اہم ہے!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "App Store پر ریٹنگ دیں",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Google Play پر ریٹنگ دیں",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
-    },
     "maybeLater": "شاید بعد میں",
     "@maybeLater": {
         "description": "Button text to defer action"

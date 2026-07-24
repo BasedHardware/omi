@@ -1792,20 +1792,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get lovingOmi => 'Omi را دوست داشتید؟';
 
   @override
-  String get leaveReviewIos =>
-      'با گذاشتن نظری در App Store، کمک کنید ما به مردم بیشتری برسیم. بازخوردتان برای ما بسیار مهم است!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'با گذاشتن نظری در Google Play Store، کمک کنید ما به مردم بیشتری برسیم. بازخوردتان برای ما بسیار مهم است!';
-
-  @override
-  String get rateOnAppStore => 'در App Store امتیاز دهید';
-
-  @override
-  String get rateOnGooglePlay => 'در Google Play امتیاز دهید';
-
-  @override
   String get maybeLater => 'شاید بعداً';
 
   @override
@@ -2137,6 +2123,18 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ ویرایش خاطره';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'من دوست دارم بستنی بخورم...';

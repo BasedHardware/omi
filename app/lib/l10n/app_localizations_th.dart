@@ -1782,20 +1782,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get lovingOmi => 'ชอบ Omi ไหม?';
 
   @override
-  String get leaveReviewIos =>
-      'ช่วยเราเข้าถึงคนมากขึ้นด้วยการรีวิวใน App Store ความคิดเห็นของคุณมีความหมายมากสำหรับเรา!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'ช่วยเราเข้าถึงคนมากขึ้นด้วยการรีวิวใน Google Play Store ความคิดเห็นของคุณมีความหมายมากสำหรับเรา!';
-
-  @override
-  String get rateOnAppStore => 'ให้คะแนนบน App Store';
-
-  @override
-  String get rateOnGooglePlay => 'ให้คะแนนบน Google Play';
-
-  @override
   String get maybeLater => 'ไว้ทีหลัง';
 
   @override
@@ -2128,6 +2114,18 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ แก้ไขความทรงจำ';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'ฉันชอบกินไอศกรีม...';
