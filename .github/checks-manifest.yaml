@@ -19,6 +19,11 @@ checks:
     triggers: ["scripts/pre-push", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_pre_push_ci_prediction.py", "desktop/macos/scripts/desktop-flow-lint.py", "desktop/macos/scripts/desktop_flow_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9440: local CI prediction must select only bounded Flutter generator, desktop-flow, and Windows KG-worker checks for the final PR diff"
+  - id: pre-push-hatch-disclosure
+    command: ["python3", ".github/scripts/check_pre_push_hatch_disclosure.py"]
+    triggers: ["scripts/pre-push", ".github/scripts/check_pre_push_hatch_disclosure.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "make setup provisions no app toolchain while .github/checks-manifest.yaml is a ROUTING_INPUTS entry that wakes the Flutter codegen lane, so a docs-only PR hit 'run flutter pub get' with no mention of PRE_PUSH_SKIP_FLUTTER_GENERATED; actionlint's branch had the same omission, and a hatch nobody can find is not a hatch"
   - id: setup-pre-push-prerequisites
     command: ["bash", "scripts/test-make-setup.sh"]
     triggers: ["Makefile", "backend/scripts/sync-python-deps.sh", "scripts/pre-push", "scripts/test-make-setup.sh", ".github/checks-manifest.yaml"]
@@ -96,6 +101,11 @@ checks:
     triggers: ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "PRODUCT.md", "docs/agents/**", ".github/scripts/check_agent_doc_references.py"]
     lanes: ["local", "ci"]
     reason: "agents cannot tell a stale pointer from a live one; CLAUDE.md and the desktop/app guides had shipped dead paths"
+  - id: agent-doc-claims
+    command: ["python3", ".github/scripts/check_agent_doc_claims.py"]
+    triggers: [".cursor/cloud-agent-environment.md", "backend/test.sh", "backend/docs/test_isolation.md", ".github/scripts/check_agent_doc_claims.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a valid pointer proves nothing about the claim around it; .cursor/cloud-agent-environment.md described test.sh halting at the first failure long after it became an aggregating worker pool, and an agent read that and proposed replacing the per-file isolation the suite depends on"
   - id: diff-hygiene
     command: ["python3", ".github/scripts/check_diff_hygiene.py", "--changed-files", "{changed_files}", "--base", "{base}", "--head", "{head}"]
     triggers: ["all"]
@@ -321,9 +331,14 @@ checks:
     reason: "#9988: Pusher's Kubernetes deadline and workflow wait must cover chart-derived availability at the HPA ceiling"
   - id: pusher-rollout-quality-gate
     command: ["python3", "backend/scripts/verify_pusher_rollout_gate.py"]
-    triggers: ["backend/charts/pusher/**", "backend/utils/metrics.py", "backend/routers/pusher.py", "backend/utils/readiness.py", "backend/scripts/verify_pusher_rollout_gate.py", "backend/tests/unit/test_verify_pusher_rollout_gate.py", ".github/checks-manifest.yaml"]
+    triggers: ["backend/charts/pusher/**", "backend/utils/metrics.py", "backend/routers/pusher.py", "backend/utils/readiness.py", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", "backend/scripts/verify_pusher_rollout_gate.py", "backend/scripts/verify_pusher_source_closure.py", "backend/pusher/Dockerfile", "backend/tests/unit/test_verify_pusher_rollout_gate.py", "backend/tests/unit/test_pusher_deployment_control_workflow.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "SCA-39: static preflight that fails closed when a pusher rollout cannot be verified safe (capacity, image identity, readiness/health split, telemetry)"
+  - id: pusher-dev-bake-observability
+    command: ["python3", "backend/scripts/verify_pusher_dev_observability.py"]
+    triggers: ["backend/charts/pusher/dev_omi_pusher_values.yaml", "backend/charts/monitoring/kube-prometheus-stack/dev_omi_monitoring_values.yaml", "backend/charts/monitoring/dashboards/gke/pusher.json", "backend/utils/metrics.py", "backend/scripts/verify_pusher_dev_observability.py", "backend/tests/unit/test_verify_pusher_dev_observability.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-115: dev Pusher bake must retain isolated scrape plus connection, drain, and reconnect-circuit visibility"
   - id: shared-config-migration-preflight
     command: ["python3", "backend/scripts/verify_shared_config_migration.py", "preflight"]
     triggers: ["backend/charts/pusher/**", "backend/scripts/verify_shared_config_migration.py", "backend/tests/unit/test_verify_shared_config_migration.py", ".github/checks-manifest.yaml"]
@@ -341,9 +356,19 @@ checks:
     reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved"
   - id: desktop-candidate-source-gate
     command: ["python3", ".github/scripts/test_plan_desktop_release.py"]
-    triggers: [".github/scripts/plan-desktop-release.py", ".github/scripts/test_plan_desktop_release.py", ".github/workflows/desktop_auto_release.yml"]
+    triggers: [".github/scripts/plan-desktop-release.py", ".github/scripts/test_plan_desktop_release.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "candidate tags require successful Release Eligibility and both Desktop Swift checks for the exact newest queued releasable desktop SHA"
+  - id: desktop-candidate-source-identity
+    command: ["python3", ".github/scripts/test_desktop_release_source_identity.py"]
+    triggers: [".github/scripts/desktop-release-source-identity.py", ".github/scripts/test_desktop_release_source_identity.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-129 keeps a current-main candidate bound to the checked desktop source while rejecting a newer releasable desktop change"
+  - id: desktop-candidate-tag-transaction
+    command: ["python3", ".github/scripts/test_publish_desktop_candidate_tag.py"]
+    triggers: [".github/scripts/publish-desktop-candidate-tag.py", ".github/scripts/test_publish_desktop_candidate_tag.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-129 requires GitHub to atomically verify live main before creating an immutable candidate tag"
   - id: desktop-manifest-routes
     command: ["python3", ".github/scripts/test_desktop_manifest_routes.py"]
     triggers: [".github/workflows/desktop-swift-ci.yml", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_manifest_routes.py"]
