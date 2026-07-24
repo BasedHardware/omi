@@ -88,6 +88,21 @@ def test_fence_skip_is_a_skip_not_an_error(monkeypatch):
     complete.assert_called_once()
 
 
+def test_legacy_stamp_cas_loss_is_skipped_not_migrated(monkeypatch):
+    """A failed legacy admission-stamp CAS (row already stamped, status changed,
+    or absent) must report ``skipped``, not ``migrated``.  Only a successful
+    stamp — the row was actually migrated to the fenced admission instant —
+    counts as ``migrated`` (#10468 r5)."""
+    stamp, complete = _install(monkeypatch, [_candidate('uid', 'already-stamped-1', legacy=True)])
+    stamp.return_value = False
+
+    result = service.reconcile_stale_processing_conversations()
+
+    assert result == {'completed': 0, 'migrated': 0, 'skipped': 1, 'error': 0}
+    stamp.assert_called_once_with('uid', 'already-stamped-1', firestore_client=None)
+    complete.assert_not_called()
+
+
 def test_query_failure_is_fail_closed_and_records_an_error(monkeypatch):
     monkeypatch.setattr(service.jobs_db, 'get_stale_processing_orphan_after', lambda: timedelta(seconds=900))
     monkeypatch.setattr(
