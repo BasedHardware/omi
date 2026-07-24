@@ -960,23 +960,74 @@ STALE_PROCESSING_SWEEP_STATE_COLLECTION = 'conversation_recovery_state'
 STALE_PROCESSING_SWEEP_STATE_DOC = 'stale_processing_sweep'
 
 
-def get_stale_processing_sweep_cursor(*, firestore_client: Any = None) -> str | None:
-    """Return the persisted sweep cursor (last-examined conversation path)."""
+def get_stale_processing_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:
+    """Return the persisted sweep cursor and its CAS generation.
+
+    Returns ``{'resume_after_path': str | None, 'generation': int}``. The
+    generation is the compare-and-swap token a caller must hold to advance the
+    cursor; ``0`` when the document has never been written. Multiple backend-listen
+    pods share this single cursor, so the generation prevents a delayed scan from
+    rewinding another pod's advance.
+    """
     client = _client(firestore_client)
     snapshot = (
         client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(STALE_PROCESSING_SWEEP_STATE_DOC).get()
     )
     if not getattr(snapshot, 'exists', False):
-        return None
-    path = (snapshot.to_dict() or {}).get('resume_after_path')
-    return path if isinstance(path, str) else None
+        return {'resume_after_path': None, 'generation': 0}
+    data = snapshot.to_dict() or {}
+    path = data.get('resume_after_path')
+    return {
+        'resume_after_path': path if isinstance(path, str) else None,
+        'generation': int(data.get('generation', 0)),
+    }
 
 
-def save_stale_processing_sweep_cursor(resume_after_path: str | None, *, firestore_client: Any = None) -> None:
-    """Persist the sweep cursor; ``None`` rotates the next sweep back to the top."""
+def _advance_stale_processing_sweep_cursor_txn(
+    transaction: Any, doc_ref: Any, expected_generation: int, new_resume_after_path: str | None, now: datetime
+) -> bool:
+    """CAS-update the sweep cursor inside a Firestore transaction.
+
+    Returns ``True`` only when the persisted generation still equals
+    ``expected_generation`` — proving no other pod advanced the cursor between
+    this pod's read and write. On success the cursor advances and the generation
+    bumps, so a delayed competing writer holding the old generation is fenced out
+    (``False``) and cannot rewind progress.
+    """
+    snapshot = doc_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        current_generation = 0
+    else:
+        current_generation = int((snapshot.to_dict() or {}).get('generation', 0))
+    if current_generation != expected_generation:
+        return False
+    transaction.set(
+        doc_ref,
+        {'resume_after_path': new_resume_after_path, 'generation': current_generation + 1, 'updated_at': now},
+    )
+    return True
+
+
+def advance_stale_processing_sweep_cursor(
+    expected_generation: int, new_resume_after_path: str | None, *, firestore_client: Any = None
+) -> bool:
+    """Atomically advance the sweep cursor; ``None`` rotates the next sweep to the top.
+
+    Returns ``False`` when another pod already advanced the cursor (the CAS
+    generation changed). The caller's sweep work is still valid — the exact-
+    generation fence in ``complete_orphan_conversation`` prevents double-terminalization
+    — but the cursor does not advance from this pod's perspective, so the next sweep
+    safely re-scans the same window.
+    """
     client = _client(firestore_client)
-    client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(STALE_PROCESSING_SWEEP_STATE_DOC).set(
-        {'resume_after_path': resume_after_path, 'updated_at': _now()}
+    transaction = client.transaction()
+    transactional = firestore.transactional(_advance_stale_processing_sweep_cursor_txn)
+    return transactional(
+        transaction,
+        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(STALE_PROCESSING_SWEEP_STATE_DOC),
+        expected_generation,
+        new_resume_after_path,
+        _now(),
     )
 
 

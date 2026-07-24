@@ -123,10 +123,12 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
     result: dict[str, int] = {'completed': 0, 'migrated': 0, 'skipped': 0, 'error': 0}
     stale_after = jobs_db.get_stale_processing_orphan_after()
     try:
-        resume_after_path = jobs_db.get_stale_processing_sweep_cursor(firestore_client=firestore_client)
+        cursor = jobs_db.get_stale_processing_sweep_cursor(firestore_client=firestore_client)
     except Exception:
         logger.exception('stale processing sweep cursor read failed; sweeping from the top')
-        resume_after_path = None
+        cursor = {'resume_after_path': None, 'generation': 0}
+    resume_after_path = cursor.get('resume_after_path')
+    expected_generation = cursor.get('generation', 0)
     try:
         sweep = jobs_db.get_stale_processing_orphan_candidates(
             stale_after=stale_after, limit=limit, resume_after_path=resume_after_path, firestore_client=firestore_client
@@ -137,9 +139,11 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
         return result | {'error': 1}
     next_cursor = None if sweep['exhausted'] else sweep['resume_after_path']
     try:
-        jobs_db.save_stale_processing_sweep_cursor(next_cursor, firestore_client=firestore_client)
+        jobs_db.advance_stale_processing_sweep_cursor(
+            expected_generation, next_cursor, firestore_client=firestore_client
+        )
     except Exception:
-        logger.exception('stale processing sweep cursor persist failed; coverage is still guaranteed')
+        logger.exception('stale processing sweep cursor advance failed; coverage is still guaranteed')
     for candidate in sweep['candidates']:
         uid = candidate.get('uid')
         conversation_id = candidate.get('conversation_id')
