@@ -35,8 +35,12 @@ extension FloatingControlBarManager {
 
     // Auto-focus input if AI conversation is open.
     if let window, window.state.showingAIConversation && !window.state.showingAIResponse {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-        window.focusInputField()
+      if !window.focusInputField() {
+        // SwiftUI may still be attaching the text view. Retry on its next
+        // layout pass rather than relying on a fixed wall-clock delay.
+        DispatchQueue.main.async { [weak window] in
+          window?.focusInputField()
+        }
       }
     }
   }
