@@ -156,10 +156,18 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
             if candidate.get('legacy'):
                 # A stranded pre-fence row: stamp the server-owned admission
                 # instant so a later sweep bounds recovery by admission age. Never
-                # terminalize on first sight.
-                jobs_db.stamp_processing_admission_if_absent(uid, conversation_id, firestore_client=firestore_client)
-                result['migrated'] += 1
-                LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome='migrated').inc()
+                # terminalize on first sight.  Only a successful stamp counts as
+                # ``migrated``; a CAS loss (already stamped / status changed /
+                # absent) is an expected ``skipped`` fencing, never a migration.
+                stamped = jobs_db.stamp_processing_admission_if_absent(
+                    uid, conversation_id, firestore_client=firestore_client
+                )
+                if stamped:
+                    result['migrated'] += 1
+                    LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome='migrated').inc()
+                else:
+                    result['skipped'] += 1
+                    LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome='skipped').inc()
                 continue
             completed = jobs_db.complete_orphan_conversation(
                 uid,
