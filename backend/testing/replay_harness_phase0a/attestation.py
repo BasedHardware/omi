@@ -8,11 +8,22 @@ builder's summary assertions, the recorded event ``decision`` field, or an
 artifact-embedded topology hash.
 
 HONEST SCOPE (not over-claimed): the raw evidence is emitted by the in-process
-socket guard, which is itself part of the SUT under test. Therefore the
-attestation proves **self-consistency and summary-forgery rejection** (every
-summary is recomputed from raw evidence + checked-in contract, and any mismatch
-is rejected), **not** independent/third-party attestation of real kernel egress.
-The attestation mechanism composes end-to-end; it is not a security audit.
+socket guard and the runner launcher, both of which are part of the SUT under
+test. Therefore the attestation proves **self-consistency and summary-forgery
+rejection** — every summary field is recomputed from raw evidence + the
+checked-in contract, and any mismatch is rejected — **not** independent /
+third-party attestation of real kernel egress or of an OS listener. The
+attestation mechanism composes end-to-end; it is not a security audit.
+
+Role-readiness binding (honest limit): the artifact-controlled role summary and
+resolved ports map are bound to a raw ``role_allocated`` launcher/health-
+observation record, which is validated against the checked-in topology health
+contract (endpoint host, probe contract, and ready-success semantics — an HTTP
+500 readiness probe is rejected). This raises the forgery bar: a paired forgery
+of the summary and ports map no longer suffices. It does **not** independently
+witness that an OS process listened on the port — the ``role_allocated`` record
+is itself runner-emitted, so a fully coherent forgery of all raw evidence is
+outside what self-consistency attestation can detect.
 
 Guarded-scope claims:
 
@@ -141,6 +152,22 @@ def _recompute_decision(event: dict[str, Any], allow_endpoints: dict[str, frozen
     return "allow" if (host, port) in declared else "deny"
 
 
+def _health_success(health_contract: dict[str, Any], status: Any) -> bool:
+    """Does an observed HTTP status satisfy the topology health success contract?
+
+    Success semantics: the explicitly declared ``expected_status`` (an int or
+    list of ints) if present, otherwise any 2xx. TCP probes carry no status —
+    the connect success is the readiness observation.
+    """
+    if health_contract.get("type") != "http":
+        return True
+    expected = health_contract.get("expected_status")
+    if expected is not None:
+        allowed = expected if isinstance(expected, list) else [expected]
+        return status in allowed
+    return isinstance(status, int) and 200 <= status < 300
+
+
 def build_attestation(
     *,
     topology: dict[str, Any],
@@ -227,6 +254,15 @@ def validate_attestation(attestation: dict[str, Any], *, expected_topology: dict
     committed ``topology.json``). When supplied, the artifact's embedded topology
     must match it exactly, so a modified worker command with a recomputed
     embedded hash is rejected.
+
+    Role readiness is bound to a raw ``role_allocated`` launcher/health-
+    observation record (not merely to the artifact-controlled summary or ports
+    map): each role's summary port/pid/ready/probe and the resolved ports map
+    must cohere with the raw record, and the raw record's endpoint host, probe
+    contract, and observed HTTP status must satisfy the checked-in topology
+    health contract (an HTTP 500 readiness probe is rejected). The raw record is
+    runner-emitted, so this is summary-forgery rejection, not independent
+    witness of an OS listener.
     """
     violations: list[str] = []
 
@@ -326,49 +362,155 @@ def validate_attestation(attestation: dict[str, Any], *, expected_topology: dict
             "denied attempt(s) recomputed from raw evidence"
         )
 
-    # 4c. Bind each role's resolved port and health probe to the checked-in
-    #     topology contract — reject fabricated role-ready summaries, altered
-    #     resolved-port maps, and probes that do not match the declared contract.
+    # 4c. Bind role readiness/ports/probes to an explicit launcher
+    #     allocation/health-observation raw record AND the checked-in topology
+    #     health contract. The summary port/pid/probe and the resolved ports map
+    #     are all artifact-controlled, so a paired forgery of summary + ports map
+    #     defeats a summary-vs-summary check (changing ports[worker] and
+    #     roles[worker].port together to 7777 passed). Each role's summary is now
+    #     bound to a raw ``role_allocated`` record carrying role identity, endpoint
+    #     host, allocated port, probe contract, observed successful response, and
+    #     process identity. That raw record is itself validated against the
+    #     checked-in topology health contract (endpoint host, probe contract, and
+    #     ready-success semantics — an HTTP 500 is rejected).
+    #
+    #     HONEST SCOPE: the role_allocated record is emitted by the runner (the
+    #     trusted launcher), so it raises the forgery bar but does NOT
+    #     independently witness that an OS process listened on the port — a fully
+    #     coherent forgery of all raw evidence is outside what self-consistency
+    #     attestation can detect.
     topology_role_defs = topology.get("roles", {})
+    summary_by_name: dict[str, dict[str, Any]] = {}
     for role in roles:
-        rname = role.get("name")
-        if not isinstance(rname, str):
-            continue
-        role_def = topology_role_defs.get(rname)
-        if not isinstance(role_def, dict):
+        if isinstance(role, dict) and isinstance(role.get("name"), str):
+            summary_by_name[role["name"]] = role
+    # A summary role not declared in the topology contract is a fabrication.
+    for rname in summary_by_name:
+        if rname not in topology_role_defs:
             violations.append(f"role {rname!r} in attestation is not declared in the topology contract")
+
+    allocations: dict[str, dict[str, Any]] = {}
+    for e in raw:
+        if isinstance(e, dict) and e.get("event") == "role_allocated" and isinstance(e.get("role"), str):
+            allocations[e["role"]] = e
+
+    for rname in topology_role_defs:
+        role_def = topology_role_defs[rname]
+        if not isinstance(role_def, dict):
             continue
-        # Resolved port must match the ports map for this role.
-        if rname in ports:
-            if role.get("port") != ports[rname]:
+        health_contract = role_def.get("health", {})
+        if not isinstance(health_contract, dict):
+            health_contract = {}
+        summary = summary_by_name.get(rname)
+        allocation = allocations.get(rname)
+
+        if not isinstance(allocation, dict):
+            violations.append(
+                f"role {rname!r} has no role_allocated launcher/health-observation record in "
+                "raw_evidence; summary readiness is not bound to a raw allocation"
+            )
+            continue
+
+        # --- validate the raw allocation record against the topology contract ---
+        declared_host = health_contract.get("host")
+        if isinstance(declared_host, str) and allocation.get("host") != declared_host:
+            violations.append(
+                f"role {rname!r} allocation endpoint host {allocation.get('host')!r} does not "
+                f"match the topology-declared host {declared_host!r}"
+            )
+        alloc_health = allocation.get("health")
+        if isinstance(alloc_health, dict):
+            if alloc_health.get("type") != health_contract.get("type"):
                 violations.append(
-                    f"role {rname!r} port mismatch: summary reports {role.get('port')!r}, "
-                    f"resolved ports map reports {ports[rname]!r}"
+                    f"role {rname!r} allocation health type {alloc_health.get('type')!r} does not "
+                    f"match topology health type {health_contract.get('type')!r}"
                 )
-        # Health probe must match the topology health contract.
-        health = role_def.get("health", {})
-        probe = role.get("ready_probe")
-        if isinstance(probe, dict) and isinstance(health, dict):
-            if probe.get("type") != health.get("type"):
+            if health_contract.get("type") == "http":
+                if alloc_health.get("path") != health_contract.get("path"):
+                    violations.append(
+                        f"role {rname!r} allocation health path {alloc_health.get('path')!r} does not "
+                        f"match topology health path {health_contract.get('path')!r}"
+                    )
+                if alloc_health.get("expect_role") != health_contract.get("expect_role", rname):
+                    violations.append(
+                        f"role {rname!r} allocation health expect_role {alloc_health.get('expect_role')!r} "
+                        f"does not match topology expect_role {health_contract.get('expect_role', rname)!r}"
+                    )
+        # Topology health ready-success semantics must hold for the observed status.
+        if health_contract.get("type") == "http" and not _health_success(health_contract, allocation.get("status")):
+            expected = health_contract.get("expected_status", "2xx")
+            violations.append(
+                f"role {rname!r} health observation status {allocation.get('status')!r} does not satisfy "
+                f"the topology health success contract (expected {expected})"
+            )
+
+        # --- bind the artifact-controlled summary to the raw allocation record ---
+        if not isinstance(summary, dict):
+            continue
+        alloc_port = allocation.get("port")
+        if not isinstance(alloc_port, int):
+            violations.append(f"role {rname!r} allocation record has no integer allocated port")
+        else:
+            if rname in ports and ports[rname] != alloc_port:
                 violations.append(
-                    f"role {rname!r} ready_probe type {probe.get('type')!r} does not match "
-                    f"topology health type {health.get('type')!r}"
+                    f"role {rname!r} resolved ports map reports {ports[rname]!r} but the "
+                    f"allocation record reports allocated port {alloc_port!r}"
                 )
-            if health.get("type") == "http":
-                if probe.get("path") != health.get("path"):
+            if summary.get("port") != alloc_port:
+                violations.append(
+                    f"role {rname!r} summary port {summary.get('port')!r} does not cohere with "
+                    f"allocation record port {alloc_port!r}"
+                )
+        # Process identity must cohere.
+        if summary.get("pid") != allocation.get("pid"):
+            violations.append(
+                f"role {rname!r} summary pid {summary.get('pid')!r} does not cohere with "
+                f"allocation record pid {allocation.get('pid')!r}"
+            )
+        # Observed readiness must cohere.
+        if bool(summary.get("ready")) != bool(allocation.get("ready")):
+            violations.append(
+                f"role {rname!r} summary ready={summary.get('ready')!r} does not cohere with "
+                f"allocation record ready={allocation.get('ready')!r}"
+            )
+        # The summary probe must cohere with the allocation's contract + status.
+        probe = summary.get("ready_probe")
+        if isinstance(probe, dict) and isinstance(alloc_health, dict):
+            if probe.get("type") != alloc_health.get("type"):
+                violations.append(
+                    f"role {rname!r} summary probe type {probe.get('type')!r} does not cohere "
+                    f"with allocation health type {alloc_health.get('type')!r}"
+                )
+            if health_contract.get("type") == "http":
+                if probe.get("path") != alloc_health.get("path"):
                     violations.append(
-                        f"role {rname!r} ready_probe path {probe.get('path')!r} does not match "
-                        f"topology health path {health.get('path')!r}"
+                        f"role {rname!r} summary probe path {probe.get('path')!r} does not cohere "
+                        f"with allocation health path {alloc_health.get('path')!r}"
                     )
-                if probe.get("role") != health.get("expect_role", rname):
+                if probe.get("role") != alloc_health.get("expect_role"):
                     violations.append(
-                        f"role {rname!r} ready_probe role {probe.get('role')!r} does not match "
-                        f"topology health expect_role {health.get('expect_role', rname)!r}"
+                        f"role {rname!r} summary probe role {probe.get('role')!r} does not cohere "
+                        f"with allocation health expect_role {alloc_health.get('expect_role')!r}"
                     )
-    # Every dynamic role must carry a resolved port in the ports map.
+                if probe.get("status") != allocation.get("status"):
+                    violations.append(
+                        f"role {rname!r} summary probe status {probe.get('status')!r} does not cohere "
+                        f"with allocation observed status {allocation.get('status')!r}"
+                    )
+
+    # Every dynamic role must resolve a port that coheres with its allocation.
     for rname, role_def in topology_role_defs.items():
-        if isinstance(role_def, dict) and role_def.get("port") == "dynamic" and rname not in ports:
+        if not (isinstance(role_def, dict) and role_def.get("port") == "dynamic"):
+            continue
+        alloc = allocations.get(rname)
+        alloc_port = alloc.get("port") if isinstance(alloc, dict) else None
+        if rname not in ports:
             violations.append(f"dynamic topology role {rname!r} has no resolved port in the ports map")
+        elif not isinstance(alloc_port, int) or ports[rname] != alloc_port:
+            violations.append(
+                f"dynamic topology role {rname!r} ports map {ports[rname]!r} does not cohere "
+                f"with allocation record port {alloc_port!r}"
+            )
 
     # 5. Guard-installation evidence for every explicitly guarded Python role.
     guarded_roles = {

@@ -64,12 +64,13 @@ is loopback-only with no attestation. Phase 0A externalizes all three:
 ## Honest attestation scope (not over-claimed)
 
 The egress attestation is **self-consistent recomputation**, NOT an independent
-or third-party attestation of real kernel egress:
+or third-party attestation of real kernel egress or of an OS listener:
 
-- The raw evidence is emitted by the in-process socket guard, which is itself
-  part of the SUT under test. The attestation proves the attestation *mechanism*
-  composes end-to-end (every summary is recomputed from raw evidence + the
-  checked-in contract, and any mismatch is rejected); it is not a security audit.
+- The raw evidence is emitted by the in-process socket guard and the runner
+  launcher, both part of the SUT under test. The attestation proves the
+  attestation *mechanism* composes end-to-end (every summary is recomputed from
+  raw evidence + the checked-in contract, and any mismatch is rejected); it is
+  not a security audit.
 - The validator binds the artifact to the checked-in `topology.json` supplied
   independently, so a modified worker command with a recomputed embedded hash is
   rejected.
@@ -77,6 +78,15 @@ or third-party attestation of real kernel egress:
   a declared port is rejected), rather than trusting the recorded `decision`.
 - The validator requires `guard_installed` evidence for every explicitly guarded
   Python role and explicitly exempts non-Python roles.
+- The validator binds each role's artifact-controlled summary (port, pid,
+  ready, probe) and the resolved ports map to a raw `role_allocated` launcher/
+  health-observation record, which is itself validated against the checked-in
+  topology health contract — endpoint host, probe contract, and ready-success
+  semantics (an HTTP 500 readiness probe is rejected). This defeats a paired
+  forgery of the summary and ports map. **It does not independently witness that
+  an OS process listened on the port**: the `role_allocated` record is runner-
+  emitted, so a fully coherent forgery of all raw evidence is outside what
+  self-consistency attestation can detect.
 
 ## What it does NOT prove (feasibility-only boundaries)
 
