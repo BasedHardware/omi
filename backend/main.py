@@ -70,6 +70,7 @@ from routers import (
     tts,
     memory_admin,
     memory_product,
+    llm_usage,
     task_recommendations,
     conversation_finalization,
     public_shared_conversation_chat,
@@ -174,6 +175,7 @@ app.include_router(scores.router)
 app.include_router(tts.router)
 app.include_router(memory_admin.router)
 app.include_router(memory_product.router)
+app.include_router(llm_usage.router)
 app.include_router(task_recommendations.router)
 
 

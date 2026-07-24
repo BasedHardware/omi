@@ -1220,6 +1220,13 @@ export interface CustomerPortalSessionResponse {
   url: string;
 }
 
+export interface DailyLlmUsageResponse {
+  date: string;
+  features?: Record<string, LlmUsageCounters>;
+  has_data?: boolean;
+  total: LlmUsageCounters;
+}
+
 export interface DailySummariesResponse {
   summaries?: Array<DailySummaryResponse>;
 }
@@ -2005,6 +2012,13 @@ export interface LinkCalendarEventRequest {
 
 export interface LlmTotalCostResponse {
   total_cost_usd: number;
+}
+
+export interface LlmUsageCounters {
+  call_count?: number;
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
 }
 
 export interface LlmUsageFeatureResponse {
@@ -3864,6 +3878,7 @@ export interface OmiApiSchemas {
   "CreateTaskRequest": CreateTaskRequest;
   "CreateTaskResponse": CreateTaskResponse;
   "CustomerPortalSessionResponse": CustomerPortalSessionResponse;
+  "DailyLlmUsageResponse": DailyLlmUsageResponse;
   "DailySummariesResponse": DailySummariesResponse;
   "DailySummaryActionItem": DailySummaryActionItem;
   "DailySummaryDayStats": DailySummaryDayStats;
@@ -3970,6 +3985,7 @@ export interface OmiApiSchemas {
   "KnowledgeGraphResponse": KnowledgeGraphResponse;
   "LinkCalendarEventRequest": LinkCalendarEventRequest;
   "LlmTotalCostResponse": LlmTotalCostResponse;
+  "LlmUsageCounters": LlmUsageCounters;
   "LlmUsageFeatureResponse": LlmUsageFeatureResponse;
   "LlmUsageRecordResponse": LlmUsageRecordResponse;
   "LlmUsageResponse": LlmUsageResponse;
@@ -7187,6 +7203,16 @@ export interface OmiApiPaths {
       operationId: "record_llm_usage_bucket_v1_users_me_llm_usage_post";
       responses: {
         "200": LlmUsageRecordResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/me/llm-usage/daily": {
+    get: {
+      operationId: "get_daily_llm_usage_v1_users_me_llm_usage_daily_get";
+      responses: {
+        "200": DailyLlmUsageResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -13798,6 +13824,28 @@ export async function record_llm_usage_bucket_v1_users_me_llm_usage_post(header:
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_daily_llm_usage_v1_users_me_llm_usage_daily_get(query: { date?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<DailyLlmUsageResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/me/llm-usage/daily`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();

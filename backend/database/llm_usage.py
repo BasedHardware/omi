@@ -164,6 +164,91 @@ def get_daily_usage(uid: str, date: Optional[datetime] = None) -> Dict[str, Any]
     return {}
 
 
+def _sum_model_tokens(models: Dict) -> tuple:
+    """Sum (input_tokens, output_tokens, call_count) across a feature's per-model dicts.
+
+    Skips non-dict values (cost-only scalar buckets). Shared by get_usage_summary and
+    get_daily_usage_summary so token aggregation lives in one place and cannot drift.
+    """
+    total_in = total_out = total_calls = 0
+    for _model, tokens in models.items():
+        if isinstance(tokens, dict):
+            total_in += tokens.get("input_tokens", 0)
+            total_out += tokens.get("output_tokens", 0)
+            total_calls += tokens.get("call_count", 0)
+    return total_in, total_out, total_calls
+
+
+# Flat cost buckets written by record_llm_usage_bucket (token fields live directly on the
+# feature dict, not under per-model keys). Each also dual-writes a per-account alias
+# ("{bucket}_{account}") that restates the same totals for a per-account breakdown; only the
+# primary names below are summed so the alias documents do not double-count. Extend this set
+# when a new primary bucket is introduced.
+_PRIMARY_BUCKETS = {"desktop_chat"}
+
+
+def _sum_feature_tokens(feature: str, value: Dict) -> tuple:
+    """Sum (input_tokens, output_tokens, call_count) for one daily feature.
+
+    Handles both storage schemas that share a daily document:
+      - nested per-model:  {model: {input_tokens, output_tokens, call_count}}
+      - flat cost bucket:  {input_tokens, output_tokens, cache_read_tokens, total_tokens,
+                            cost_usd, call_count}
+
+    A flat bucket is detected by token fields on the feature dict itself. Only primary bucket
+    names contribute; "{bucket}_{account}" aliases restate the same totals and would
+    double-count, so they return zeros.
+    """
+    if "input_tokens" in value or "output_tokens" in value:
+        if feature not in _PRIMARY_BUCKETS:
+            return 0, 0, 0
+        return value.get("input_tokens", 0), value.get("output_tokens", 0), value.get("call_count", 0)
+    return _sum_model_tokens(value)
+
+
+def get_daily_usage_summary(uid: str, date: Optional[datetime] = None) -> Dict:
+    """Normalized per-feature LLM token usage for a single day, with day-level totals.
+
+    Wraps get_daily_usage and normalizes both storage schemas a daily document can hold:
+    nested per-model features (shared with get_usage_summary via _sum_model_tokens) and the
+    flat cost buckets written by record_llm_usage_bucket (e.g. desktop_chat), whose per-account
+    "{bucket}_{account}" aliases are skipped so they do not double-count. Returns
+    {date, features, total, has_data}; only features with nonzero usage are included.
+    """
+    if date is None:
+        date = datetime.now(timezone.utc)
+
+    raw = get_daily_usage(uid, date)
+    features: Dict[str, Dict[str, int]] = {}
+    total_in = total_out = total_calls = 0
+    for feature, value in raw.items():
+        if feature in ("last_updated", "date") or not isinstance(value, dict):
+            continue
+        f_in, f_out, f_calls = _sum_feature_tokens(feature, value)
+        if f_in or f_out or f_calls:
+            features[feature] = {
+                "input_tokens": f_in,
+                "output_tokens": f_out,
+                "total_tokens": f_in + f_out,
+                "call_count": f_calls,
+            }
+            total_in += f_in
+            total_out += f_out
+            total_calls += f_calls
+
+    return {
+        "date": f"{date.year}-{date.month:02d}-{date.day:02d}",
+        "features": features,
+        "total": {
+            "input_tokens": total_in,
+            "output_tokens": total_out,
+            "total_tokens": total_in + total_out,
+            "call_count": total_calls,
+        },
+        "has_data": bool(features),
+    }
+
+
 def _aggregate_summary(data: Dict[str, Any]) -> Dict[str, Dict[str, int]]:
     summary: Dict[str, Dict[str, int]] = {}
     for feature, models in data.items():
