@@ -1122,6 +1122,32 @@ def renew_processing_lease(uid: str, conversation_id: str, *, firestore_client: 
     return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now())
 
 
+def _reacquire_deferred_processing_txn(transaction: Any, conversation_ref: Any, now: datetime) -> bool:
+    """Atomically clear ``deferred`` and renew the admission lease.
+
+    This eliminates the window between clearing ``deferred`` and the first
+    heartbeat renewal where the orphan sweep could terminalize the row.  If
+    the row is no longer ``processing`` or was discarded, the transition
+    fails closed so a stale processor produces no derived side effects.
+    """
+    snapshot = conversation_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return False
+    data = snapshot.to_dict() or {}
+    if data.get('status') != 'processing' or data.get('discarded'):
+        return False
+    transaction.update(conversation_ref, {'deferred': False, 'processing_admitted_at': now})
+    return True
+
+
+def reacquire_deferred_processing(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
+    """Atomically clear deferred and renew the admission lease in one transaction."""
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_reacquire_deferred_processing_txn)
+    return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now())
+
+
 def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, float | int]:
     """Privacy-safe aggregate counts plus a bounded overdue-age sample."""
     client = _client(firestore_client)
