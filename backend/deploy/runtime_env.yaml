@@ -393,6 +393,9 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -513,6 +516,9 @@ environments:
               value: 'true'
               category: rollout
               provisional: true
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           forbidden_env:
             - HOSTED_PUSHER_API_URL
           secrets:
@@ -1065,6 +1071,9 @@ environments:
             MCP_OAUTH_CLAUDE_REDIRECT_URIS:
               env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
               category: oauth_metadata
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           secrets:
             DESKTOP_PREVIEW_PUBLISH_KEY:
               secret: DESKTOP_PREVIEW_PUBLISH_KEY
@@ -1211,6 +1220,9 @@ environments:
               value: 'true'
               category: rollout
               provisional: true
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           secrets:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
