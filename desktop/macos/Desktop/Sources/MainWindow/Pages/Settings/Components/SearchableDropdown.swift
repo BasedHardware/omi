@@ -14,6 +14,26 @@ struct SearchableDropdownOption: Identifiable, Hashable {
   }
 }
 
+enum SearchableDropdownFiltering {
+  static func filteredOptions(
+    _ options: [SearchableDropdownOption],
+    query: String
+  ) -> [SearchableDropdownOption] {
+    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return options }
+
+    return options.filter { option in
+      option.title.localizedCaseInsensitiveContains(trimmed)
+        || option.id.localizedCaseInsensitiveContains(trimmed)
+        || (option.subtitle?.localizedCaseInsensitiveContains(trimmed) ?? false)
+    }
+  }
+
+  static func usesSearchablePopover(optionCount: Int, threshold: Int = 8) -> Bool {
+    optionCount > threshold
+  }
+}
+
 struct SearchableDropdown: View {
   let title: String
   var label: String? = nil
@@ -135,14 +155,7 @@ private struct SearchableDropdownPopover: View {
   @FocusState private var searchIsFocused: Bool
 
   private var filteredOptions: [SearchableDropdownOption] {
-    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return options }
-
-    return options.filter { option in
-      option.title.localizedCaseInsensitiveContains(trimmed)
-        || option.id.localizedCaseInsensitiveContains(trimmed)
-        || (option.subtitle?.localizedCaseInsensitiveContains(trimmed) ?? false)
-    }
+    SearchableDropdownFiltering.filteredOptions(options, query: query)
   }
 
   private var listHeight: CGFloat {

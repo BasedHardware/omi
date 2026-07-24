@@ -114,6 +114,29 @@ enum AppsCatalogInitialSection {
   case exports
 }
 
+enum AppsPageCategoryFilter {
+  static let allCategoriesOptionId = ""
+  static let allCategoriesTitle = "All Categories"
+
+  enum Selection: Equatable {
+    case allCategories
+    case category(String)
+  }
+
+  static func categoryDropdownOptions(categories: [OmiAppCategory]) -> [SearchableDropdownOption] {
+    [SearchableDropdownOption(id: allCategoriesOptionId, title: allCategoriesTitle)]
+      + categories.map { SearchableDropdownOption(id: $0.id, title: $0.title) }
+  }
+
+  static func selectedCategoryDropdownId(_ selectedCategory: String?) -> String {
+    selectedCategory ?? allCategoriesOptionId
+  }
+
+  static func categorySelection(forOptionId optionId: String) -> Selection {
+    optionId.isEmpty ? .allCategories : .category(optionId)
+  }
+}
+
 struct AppsPage: View {
   @ObservedObject var appProvider: AppProvider
   var appState: AppState? = nil
@@ -538,16 +561,16 @@ struct AppsPage: View {
     SearchableDropdown(
       title: "Category",
       label: "Category",
-      options: [SearchableDropdownOption(id: "", title: "All Categories")]
-        + appProvider.categories.map { SearchableDropdownOption(id: $0.id, title: $0.title) },
-      selectedId: appProvider.selectedCategory ?? "",
+      options: AppsPageCategoryFilter.categoryDropdownOptions(categories: appProvider.categories),
+      selectedId: AppsPageCategoryFilter.selectedCategoryDropdownId(appProvider.selectedCategory),
       minWidth: 180
     ) { option in
       viewAllSection = nil
-      if option.id.isEmpty {
+      switch AppsPageCategoryFilter.categorySelection(forOptionId: option.id) {
+      case .allCategories:
         appProvider.clearCategoryFilter()
-      } else {
-        appProvider.selectedCategory = option.id
+      case .category(let categoryId):
+        appProvider.selectedCategory = categoryId
       }
       Task { await appProvider.searchApps() }
     }
