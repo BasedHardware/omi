@@ -139,7 +139,7 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
   @MainActor
   func testExistingAppleReminderDoesNotDeleteOmiActionItem() async throws {
     let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
-    store.makeReminder(id: "reminder-1", title: "Still here", completed: false)
+    _ = store.makeReminder(id: "reminder-1", title: "Still here", completed: false)
     let sync = AppleRemindersSyncStub(
       pending: AppleRemindersPendingSync(
         pendingExport: [],
