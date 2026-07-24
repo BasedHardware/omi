@@ -336,6 +336,35 @@ def _canonical_write_enabled_or_fail_closed(uid: str, *, db_client: Any) -> bool
     return False
 
 
+def _mirror_delete_into_legacy(uid: str, memory_ids: List[str], *, db_client: Any) -> None:
+    """Mirror a canonical delete into legacy while the user still reads legacy.
+
+    Canonical writes turn on at MEMORY_MODE=write, but GET /v3/memories keeps reading
+    legacy until MEMORY_MODE=read. In that dual-write stage a canonical-only delete is
+    invisible: the client drops the row optimistically and the next refresh re-reads
+    legacy, where it still exists, so the memory "comes back" seconds later (#10446).
+    Deleting is symmetric with dual-write, so mirror it until read cutover.
+
+    Best-effort by design: canonical is already authoritative and its delete has
+    committed, so a legacy cleanup failure must not fail the request the user
+    already saw succeed. Firestore deletes of absent documents are no-ops, so
+    canonical-only memories mirror harmlessly.
+    """
+    if not memory_ids:
+        return
+    if canonical_read_enabled(uid, db_client=db_client):
+        return
+    try:
+        memories_db.delete_memories_batch(uid, memory_ids)
+    except Exception:
+        logger.exception("legacy mirror delete failed uid=%s count=%d", sanitize_pii(uid), len(memory_ids))
+        return
+    try:
+        delete_memory_vectors_batch(uid, memory_ids)
+    except Exception:
+        logger.exception("legacy mirror vector delete failed uid=%s count=%d", sanitize_pii(uid), len(memory_ids))
+
+
 def _validate_memory(uid: str, memory_id: str) -> MemoryPayload:
     return fetch_memory_dict(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
 
@@ -812,6 +841,7 @@ def delete_memories_batch(
             raise HTTPException(status_code=413, detail='Memory batch is too large to delete atomically')
         except CanonicalMemoryNotFoundError:
             raise HTTPException(status_code=404, detail='Memory not found')
+        _mirror_delete_into_legacy(uid, memory_ids, db_client=db_client)
         return {'status': 'ok'}
 
     # Legacy cohort: enforce the same per-memory guard as _validate_memory, but via a
@@ -847,6 +877,7 @@ def delete_memory(
             MemoryService(db_client=db_client).delete(uid, memory_id)
         except ValueError:
             raise HTTPException(status_code=404, detail='Memory not found')
+        _mirror_delete_into_legacy(uid, [memory_id], db_client=db_client)
         return {'status': 'ok'}
 
     _validate_memory(uid, memory_id)
