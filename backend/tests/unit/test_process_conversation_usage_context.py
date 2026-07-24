@@ -219,6 +219,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         "get_reprocess_transcript_structure",
         "assign_conversation_to_folder",
         "extract_action_items",
+        "identified_participant_names",
     ]:
         setattr(conv_proc, attr, MagicMock())
     add("utils.llm.conversation_processing", conv_proc)

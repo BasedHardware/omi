@@ -570,10 +570,28 @@ Content:
 # =============================================
 
 
+def identified_participant_names(people=None) -> List[str]:
+    """Ordered, de-duplicated names of the people identified in a conversation.
+
+    Lets the title and summary prompts put the correct participants' names in the title
+    for ordinary conversations, not just scheduled calendar meetings (issue #3602). Only
+    people we actually identified are included (a transcript speaker was matched to a saved
+    person), so the prompt can be told to use these exact names and never invent or guess
+    one, which keeps the names correct.
+    """
+    names: List[str] = []
+    for person in people or []:
+        name = (getattr(person, 'name', '') or '').strip()
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
 def _build_conversation_context(
     transcript: str,
     photos: Optional[List[ConversationPhoto]] = None,
     calendar_meeting_context: Optional['CalendarMeetingContext'] = None,
+    participant_names: Optional[List[str]] = None,
 ) -> str:
     """Build the conversation context string shared across LLM prompts.
 
@@ -604,6 +622,13 @@ CALENDAR MEETING CONTEXT:
 {f'- Meeting Link: {calendar_meeting_context.meeting_link}' if calendar_meeting_context.meeting_link else ''}
 """.strip()
         context_parts.append(calendar_context_str)
+
+    if participant_names:
+        roster = ", ".join(participant_names)
+        context_parts.append(
+            "IDENTIFIED PARTICIPANTS (the people identified in this conversation; "
+            f"use these exact names and do not invent others): {roster}"
+        )
 
     if transcript and transcript.strip():
         context_parts.append(f"Transcript: ```{transcript.strip()}```")
@@ -994,12 +1019,13 @@ def get_transcript_structure(
     photos: Optional[List[ConversationPhoto]] = None,
     calendar_meeting_context: Optional['CalendarMeetingContext'] = None,
     output_language_code: Optional[str] = None,
+    participant_names: Optional[List[str]] = None,
 ) -> Structured:
     # Keep this import at the invocation boundary: selected unit tests load
     # this pure processing module in isolation without the full LLM package.
     from utils.llm.usage_tracker import Features, track_usage
 
-    conversation_context = _build_conversation_context(transcript, photos, calendar_meeting_context)
+    conversation_context = _build_conversation_context(transcript, photos, calendar_meeting_context, participant_names)
     if not conversation_context:
         return Structured()  # Should be caught by discard logic, but as a safeguard.
 
@@ -1019,8 +1045,13 @@ def get_transcript_structure(
     - Consider the meeting notes/description when analyzing the conversation's purpose
     - If there are 2-3 participants with known names, naturally mention them in the title (e.g., "Sarah and John Discuss Q2 Budget", "Team Meeting with Alex, Maria, and Chris")
 
-    For the title, Write a clear, compelling headline (≤ 10 words) that captures the central topic and outcome. Use Title Case, avoid filler words, and include a key noun + verb where possible (e.g., "Team Finalizes Q2 Budget" or "Family Plans Weekend Road Trip"). If calendar context provides participant names (2-3 people), naturally include them when relevant (e.g., "John and Sarah Plan Marketing Campaign").
-    For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details. When calendar context provides participant names, you MUST use their actual names instead of "Speaker 0" or "Speaker 1" to make the summary readable and personal. Analyze the transcript to understand who said what and match speakers to participant names.
+    IDENTIFIED PARTICIPANTS: When the content lists IDENTIFIED PARTICIPANTS (or participant names are available from calendar context), the conversation involves those specific, named people:
+    - Use their real names in the title, overview, and all generated content. Never use "Speaker 0", "Speaker 1", etc. when a name is available.
+    - Use ONLY names that are actually provided in the IDENTIFIED PARTICIPANTS list, the calendar participants, or the transcript. Never invent, guess, or assume a name that is not given. If you are unsure of a speaker's name, describe them by role or leave the name out rather than guessing.
+    - In the title, naturally include the most relevant participant name(s) when the conversation centers on specific people (e.g., "Sarah and John Discuss Q2 Budget", "Catch-up with Alex"). Prefer the names of the people the user spoke with.
+
+    For the title, Write a clear, compelling headline (≤ 10 words) that captures the central topic and outcome. Use Title Case, avoid filler words, and include a key noun + verb where possible (e.g., "Team Finalizes Q2 Budget" or "Family Plans Weekend Road Trip"). When participant names are known (from the IDENTIFIED PARTICIPANTS list or calendar context), naturally include the most relevant one or two names when the conversation centers on those people (e.g., "John and Sarah Plan Marketing Campaign"); use only names that were actually provided.
+    For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details. When participant names are known (from the IDENTIFIED PARTICIPANTS list or calendar context), you MUST use their actual names instead of "Speaker 0" or "Speaker 1" to make the summary readable and personal. Analyze the transcript to understand who said what and match speakers to participant names.
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
 
     For the category, classify the content into one of the available categories.
@@ -1089,6 +1120,7 @@ def get_reprocess_transcript_structure(
     title: str,
     photos: Optional[List[ConversationPhoto]] = None,
     output_language_code: Optional[str] = None,
+    participant_names: Optional[List[str]] = None,
 ) -> Structured:
     context_parts: List[str] = []
     if transcript and transcript.strip():
@@ -1102,14 +1134,22 @@ def get_reprocess_transcript_structure(
     if not context_parts:
         return Structured()
 
+    if participant_names:
+        roster = ", ".join(participant_names)
+        context_parts.insert(
+            0,
+            "IDENTIFIED PARTICIPANTS (the people identified in this conversation; "
+            f"use these exact names and do not invent others): {roster}",
+        )
+
     full_context = "\n\n".join(context_parts)
     response_language = output_language_code or language_code
 
     prompt_text = '''You are an expert content analyzer. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide structure and clarity.
     The content language is {language_code}. You MUST respond entirely in {response_language}.
 
-    For the title, use ```{title}```, if it is empty, use the main topic of the content.
-    For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details.
+    For the title, use ```{title}``` if it is non-empty (the user may have set it). If it is empty, use the main topic of the content, and when IDENTIFIED PARTICIPANTS are listed, naturally include the most relevant participant name(s). Use only names that are actually provided; never invent a name or use "Speaker 0"/"Speaker 1".
+    For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details. When IDENTIFIED PARTICIPANTS are listed, use their actual names instead of "Speaker 0" or "Speaker 1".
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
 
     For the category, classify the content into one of the available categories.
