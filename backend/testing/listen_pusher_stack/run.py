@@ -1009,7 +1009,7 @@ async def _rest_finalization_survives_listener_restart(stack: Stack) -> None:
     if (
         not process_events[0].get('persisted')
         or not process_events[0].get('force_process')
-        or not process_events[0].get('defer_memory_extraction')
+        or not process_events[0].get('defer_derived_effects')
     ):
         raise StackFailure('REST finalization lost its persisted processing and extraction policy')
     if len(_provider_events(stack, conversation_id, 'integration', 'completed')) != 1:

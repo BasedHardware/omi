@@ -92,6 +92,7 @@ async def finalize_persisted_conversation(
         # from WebSocket and Cloud Tasks event loops.
         resolved_language = language or getattr(conversation, 'language', None) or 'en'
         persistence: dict[str, bool] = {'owned': True}
+        derived_effects: list = []
         if conversation.status != ConversationStatus.completed:
             conversation = await run_blocking(
                 postprocess_executor,
@@ -100,8 +101,9 @@ async def finalize_persisted_conversation(
                 resolved_language,
                 conversation,
                 force_process=force_process,
-                defer_memory_extraction=True,
+                defer_derived_effects=True,
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
+                derived_effects_observer=derived_effects.append,
             )
         # If lifecycle persistence lost to discard/terminal state, no canonical
         # memory or derived side effect may happen.  process_conversation
@@ -118,9 +120,10 @@ async def finalize_persisted_conversation(
         # Ownership fence before any canonical side effect.  The lifecycle
         # transaction re-reads the durable conversation together with the job
         # lease, so a discard or superseding generation cannot slip between a
-        # stale pre-read and the memory/integration side effect.  This fence
-        # must precede extract_memories so a losing finalizer produces no
-        # canonical memory writes.
+        # stale pre-read and the derived-effect bundle.  This fence must
+        # precede every derived effect (calendar, usage/app, vector,
+        # action/goal, audio, webhook, memory) so a losing finalizer produces
+        # zero canonical side effects (#10468 r5).
         fanout = await run_blocking(
             db_executor,
             lifecycle_service.claim_finalization_fanout,
@@ -140,7 +143,14 @@ async def finalize_persisted_conversation(
         if fanout['status'] != 'claimed':
             raise ConversationFinalizationError('fanout_lease_conflict')
 
-        if not getattr(conversation, 'discarded', False):
+        # Ownership is now proven.  Emit every derived side effect — calendar,
+        # usage/app, vector, action/goal, audio artifact/enqueue, webhook, and
+        # memory extraction — only behind the winning claim.  A processing
+        # conversation hands the bundle back from process_conversation; an
+        # already-completed replay re-extracts memories behind the proven claim.
+        if derived_effects:
+            await run_blocking(postprocess_executor, derived_effects[0])
+        elif not getattr(conversation, 'discarded', False):
             # A finalization job owns a durable lease. Keep canonical memory
             # extraction inside that lease so a temporary fail-closed gate
             # leaves the job retryable instead of dropping the source.
