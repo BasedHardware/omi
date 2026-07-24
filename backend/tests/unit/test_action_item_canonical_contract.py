@@ -234,7 +234,7 @@ def test_action_item_router_writes_shared_contract_and_preserves_old_response(mo
     now = datetime(2026, 7, 9, tzinfo=timezone.utc)
     task_links.register_goal_existence_resolver(lambda uid, goal_id: goal_id == 'goal-1')
     monkeypatch.setattr(action_items_router, 'upsert_action_item_vector', lambda *args: None)
-    monkeypatch.setattr(action_items_router.db_executor, 'submit', lambda *args: None)
+    monkeypatch.setattr(action_items_router, 'submit_with_context', lambda *args: None)
     monkeypatch.setattr(action_items_router, 'send_action_item_data_message', lambda **kwargs: None)
     monkeypatch.setattr(
         action_items_router.action_items_db,
