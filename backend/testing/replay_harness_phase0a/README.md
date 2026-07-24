@@ -9,8 +9,8 @@ a parallel, **non-merge-blocking** experiment alongside the existing
 
 Phase 0A proves a **declarative topology contract** can launch the offline-sync
 SUT out-of-process with a **network Cloud Tasks control plane** and a
-**third-party-verifiable egress attestation** — capabilities the opaque
-merge-blocking gauntlet structurally cannot offer.
+**self-consistent egress attestation** — capabilities the opaque merge-blocking
+gauntlet structurally cannot offer.
 
 The existing gauntlet (`sync_cloud_tasks_stack`) already runs separate
 processes, but its topology is an opaque Python script (`run.py`), its Cloud
@@ -21,7 +21,7 @@ is loopback-only with no attestation. Phase 0A externalizes all three:
 |---|---|---|
 | Topology | Opaque `run.py` script | Declarative `topology.json` consumed by a generic launcher |
 | Cloud Tasks | In-memory recorder in admission process | Out-of-process HTTP scheduler service (third network process) |
-| Egress | Loopback-only block (any loopback peer) | Default-deny + enumerated allow-list + machine-verifiable attestation |
+| Egress | Loopback-only block (any loopback peer) | Default-deny + enumerated allow-list + self-consistent attestation |
 | Fault injection | Env-counter monkeypatches | Declared fault controls in the topology contract |
 
 ## What it proves
@@ -33,24 +33,50 @@ is loopback-only with no attestation. Phase 0A externalizes all three:
    ports, resolves placeholders, starts each role via its declared command, probes
    declared health endpoints, and builds an attestation. It contains zero
    sync-specific branching logic.
-3. **Default-deny egress**: every role installs a socket guard with an explicit
-   allow-list of declared fake endpoints. TCP connection-oriented sends
+3. **Default-deny egress**: every guarded Python role (admission, worker,
+   cloud-tasks-loopback) installs a socket guard with an explicit allow-list of
+   declared fake endpoints. TCP connection-oriented sends
    (`connect`, `connect_ex`, `create_connection`), DNS resolution
    (`getaddrinfo`, `gethostbyname`, `gethostbyname_ex`), and UDP unconnected
-   sends (`sendto`, `sendmsg`) are observed and enforced. Non-Python dependency
-   processes (Redis server, Firestore emulator JVM) are bind-constrained to
-   loopback by the runner but not per-connection observed. The attestation states
-   this scope explicitly and recomputes every egress decision from raw evidence.
-4. **Regression-sensitive mutant proof**: three scenarios prove the harness can
-   induce and catch a duplicate-STT defect, using the externally observable STT
-   invocation count as the sole black-box signal (no white-box marker):
+   sends (`sendto`, `sendmsg`) are observed and enforced. The attestation
+   recomputes every egress decision from raw evidence **and the checked-in
+   topology contract** (host+port, not just port), and rejects summary/decision
+   forgeries. The runner/orchestrator and non-Python dependency processes (Redis
+   server, Firestore emulator JVM) are bind-constrained to loopback but not
+   per-connection observed; this scope is stated explicitly.
+4. **Regression-sensitive mutant proof (real boundary, no self-calling fake)**:
+   three scenarios use the externally observable STT invocation count as the sole
+   black-box signal (no white-box marker, no provider fake that calls itself
+   twice):
    - **BASE** (unmutated, duplicate delivery): composition holds, STT = 1.
-   - **MUTANT_UNGUARDED** (STT double-invoke fault + duplicate delivery): the
-     deterministic STT leaf invokes the provider twice for the same audio,
-     inducing the defect, STT ≥ 2. The scenario FAILS unless the defect
-     surfaces — it is regression-sensitive.
-   - **MUTANT_GUARDED** (terminal guard bypassed, defenses active): the
-     content-ledger convergence acks the redelivery without re-running, STT = 1.
+   - **MUTANT_UNGUARDED** (`OMI_REPLAY_DEFEAT_IDEMPOTENCY` + duplicate delivery):
+     defeats the **actual** duplicate-delivery/idempotency/terminal-ownership
+     boundary in the composed SUT (terminal-status guard, content-ledger
+     convergence, staged-audio cleanup, processed-segment ledger). A real
+     duplicate delivery then genuinely re-runs the real pipeline; the
+     deterministic STT leaf invokes the provider once per real pipeline run, so
+     STT ≥ 2 arises **only** because two real deliveries each run the pipeline.
+     The scenario FAILS unless the real boundary defeat surfaces the defect.
+   - **MUTANT_GUARDED** (`OMI_REPLAY_TERMINAL_GUARD_BYPASSED`, deeper defenses
+     active): perturbs only the terminal guard; content-ledger convergence acks
+     the redelivery without re-running — STT = 1 (defense-in-depth holds).
+
+## Honest attestation scope (not over-claimed)
+
+The egress attestation is **self-consistent recomputation**, NOT an independent
+or third-party attestation of real kernel egress:
+
+- The raw evidence is emitted by the in-process socket guard, which is itself
+  part of the SUT under test. The attestation proves the attestation *mechanism*
+  composes end-to-end (every summary is recomputed from raw evidence + the
+  checked-in contract, and any mismatch is rejected); it is not a security audit.
+- The validator binds the artifact to the checked-in `topology.json` supplied
+  independently, so a modified worker command with a recomputed embedded hash is
+  rejected.
+- The validator recomputes each egress decision from host+port (a remote host on
+  a declared port is rejected), rather than trusting the recorded `decision`.
+- The validator requires `guard_installed` evidence for every explicitly guarded
+  Python role and explicitly exempts non-Python roles.
 
 ## What it does NOT prove (feasibility-only boundaries)
 
@@ -66,6 +92,8 @@ is loopback-only with no attestation. Phase 0A externalizes all three:
   `/v2/sync-local-files`, not replay of captured client traffic.
 - **No LC3 codec path**: PCM16 only.
 - **No release gate**: this experiment is advisory, not merge-blocking.
+- **No independent kernel-egress attestation**: evidence is SUT-emitted; see
+  Honest attestation scope above.
 - **`_tasks_client` seam**: production `_get_tasks_client()` has no endpoint
   override, so the admission process swaps the global client to an HTTP forwarder.
   This is a labeled feasibility-only seam, not a production transport.
@@ -86,15 +114,19 @@ The runner:
    - Cloud Tasks loopback (HTTP server, ephemeral port)
    - Worker ASGI (uvicorn, ephemeral port)
 3. Runs the **base** scenario (unmutated, duplicate delivery → STT = 1).
-4. Tears down, relaunches, runs the **mutant-unguarded** scenario (STT
-   double-invoke + duplicate delivery → STT ≥ 2, defect induced).
+4. Tears down, relaunches, runs the **mutant-unguarded** scenario (full
+   idempotency-boundary defeat + duplicate delivery → STT ≥ 2, defect induced).
 5. Tears down, relaunches, runs the **mutant-guarded** scenario (terminal guard
-   bypassed, defenses active, duplicate delivery → STT = 1, defense holds).
+   bypassed, deeper defenses active, duplicate delivery → STT = 1, defense holds).
 6. Builds and validates a topology/egress attestation for each scenario.
 7. Reports the feasibility outcome.
 
-Each scenario uses a unique state root, unique ports, and a unique Firestore
-project namespace — concurrent invocations cannot collide.
+Each scenario uses a unique state root, unique ephemeral ports, and a unique UID.
+All scenarios share the single Firestore emulator project namespace
+(`demo-omi-replay-harness`) within one emulator invocation; isolation across
+scenarios is by UID and state root, not by project namespace. Concurrent
+invocations of the harness cannot collide because each uses a fresh emulator and
+fresh ports.
 
 ## Files
 
@@ -106,7 +138,7 @@ project namespace — concurrent invocations cannot collide.
 | `egress_guard.py` | Default-deny + allow-list + logging socket guard |
 | `cloud_tasks_loopback.py` | Out-of-process Cloud Tasks HTTP scheduler service |
 | `apps.py` | Role-configured ASGI entrypoint (admission + worker) |
-| `attestation.py` | Attestation builder + independent checker |
+| `attestation.py` | Attestation builder + self-consistent checker |
 | `run.sh` | Firebase emulator wrapper |
 
 ## Design references
