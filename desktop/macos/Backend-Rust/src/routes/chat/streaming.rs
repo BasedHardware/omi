@@ -386,6 +386,11 @@ where
                                     None,
                                 );
                                 yield Ok(sse_line(&chunk_val));
+                                // Reasoning deltas reach the client as visible
+                                // reasoning_content, so they are semantic progress: a long
+                                // thinking phase must not be killed by the idle timer
+                                // (#9135's "a long answer is not an error", for reasoning).
+                                first_visible_at = Some(tokio::time::Instant::now());
                             }
                             AnthropicDelta::SignatureDelta {} => {
                                 // Thinking-block signature — internal; dropped.

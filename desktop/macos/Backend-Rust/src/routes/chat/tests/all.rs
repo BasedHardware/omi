@@ -2314,6 +2314,55 @@ async fn visible_stream_survives_budget_expiry() {
     assert!(!lines.iter().any(|line| line.contains("upstream_timeout")));
 }
 
+/// (c2) A long *reasoning* phase is visible progress too. `thinking_delta` chunks
+/// reach the client as `reasoning_content`, so they must refresh the semantic idle
+/// timer exactly like text deltas do. Before this, only text refreshed it, so a
+/// Claude reasoning stream that emitted reasoning for longer than
+/// STREAM_IDLE_TIMEOUT was killed as "no semantic progress" while the client was
+/// actively receiving output — the same regression #9135 forbids, for reasoning.
+#[tokio::test(start_paused = true)]
+async fn reasoning_only_stream_survives_the_semantic_idle_timer() {
+    let head = "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_think\",\"model\":\"claude-sonnet-4-6\",\"usage\":{}}}\n\n";
+    let tail = concat!(
+        "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":7}}\n\n",
+        "data: {\"type\":\"message_stop\"}\n\n",
+    );
+    let upstream = async_stream::stream! {
+        yield Ok::<Bytes, std::io::Error>(Bytes::from_static(head.as_bytes()));
+        // Reasoning only — no text deltas — spanning 200s, well past the 60s idle
+        // bound, with each individual gap inside it.
+        for _ in 0..4 {
+            tokio::time::sleep(Duration::from_secs(50)).await;
+            yield Ok(Bytes::from_static(b"data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"still reasoning\"}}\n\n"));
+        }
+        yield Ok(Bytes::from_static(tail.as_bytes()));
+    };
+
+    let output = translate_anthropic_sse_stream(
+        upstream,
+        "omi-sonnet".to_string(),
+        deadline_usage_context(),
+        RequestDeadline::new(Duration::from_secs(5)),
+    )
+    .collect::<Vec<_>>()
+    .await;
+    let lines = collect_lines(output);
+
+    // Every reasoning delta reached the client and the turn finished normally.
+    assert_eq!(
+        lines
+            .iter()
+            .filter(|line| line.contains("\"reasoning_content\":\"still reasoning\""))
+            .count(),
+        4
+    );
+    assert_eq!(lines.last().unwrap(), "data: [DONE]\n\n");
+    assert!(lines
+        .iter()
+        .any(|line| line.contains("\"finish_reason\":\"stop\"")));
+    assert!(!lines.iter().any(|line| line.contains("upstream_timeout")));
+}
+
 /// (d) The live gap this change closes: an upstream that only pings before
 /// `message_start` used to reset the raw-byte idle timer forever while the
 /// client saw nothing. It now hits the request budget and ends with a typed
