@@ -305,3 +305,16 @@ class TestStructureFunctionsTimezone:
             assert "do not re-interpret this timestamp as UTC" in text
             # The old buggy instruction asking the model to convert must be gone.
             assert "respond in user local timezone" not in text
+
+
+def test_gpt56_cache_buckets_are_fixed_and_never_include_request_content():
+    keys = {conv_proc._cache_bucket_key('omi-transcript-structure', now=offset * 15) for offset in range(8)}
+
+    assert keys == {
+        'omi-transcript-structure-v1-b0',
+        'omi-transcript-structure-v1-b1',
+        'omi-transcript-structure-v1-b2',
+        'omi-transcript-structure-v1-b3',
+    }
+    assert conv_proc._has_gpt56_cacheable_static_prefix('static ' * 1_100)
+    assert not conv_proc._has_gpt56_cacheable_static_prefix('short prefix')

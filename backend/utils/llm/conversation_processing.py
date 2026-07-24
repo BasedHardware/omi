@@ -1,11 +1,14 @@
 import hashlib
+import logging
 import os
+import time
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple, cast
 
+import tiktoken
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
@@ -20,7 +23,14 @@ from .clients import get_llm, get_llm_gateway_chat_structured, parser
 from utils.byok import has_byok_keys
 from utils.llm.gateway_client import record_chat_extraction_gateway_result
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
-import logging
+
+try:
+    from utils.llm.gateway_client import should_route_features_through_gateway
+except ImportError:  # pragma: no cover - isolated legacy tests provide only the shadow seam
+
+    def should_route_features_through_gateway() -> bool:
+        return False
+
 
 logger = logging.getLogger(__name__)
 CONVERSATION_STRUCTURE_SHADOW_FEATURE = 'conversation_structure.extract.shadow'
@@ -29,6 +39,42 @@ CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ST
 CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE = 'conversation_action_items.extract.shadow'
 CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED'
 CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE'
+GPT56_EXPLICIT_CACHE_OPTIONS = {'mode': 'explicit', 'ttl': '30m'}
+CONVERSATION_CACHE_BUCKET_COUNT = 4
+CONVERSATION_CACHE_BUCKET_SECONDS = 15
+GPT56_CACHE_MINIMUM_TOKENS = 1024
+
+
+def _cache_bucket_key(prefix: str, *, now: float | None = None) -> str:
+    """Return a fixed, opaque cache-routing bucket without user-derived input."""
+    slot = int(time.time() if now is None else now) // CONVERSATION_CACHE_BUCKET_SECONDS
+    return f'{prefix}-v1-b{slot % CONVERSATION_CACHE_BUCKET_COUNT}'
+
+
+def _gpt56_cacheable_system_message(content: str, *, cache_enabled: bool) -> tuple[str, Any]:
+    """Mark a static system prefix only when the request uses the GPT-5.6 gateway."""
+    if not cache_enabled:
+        return ('system', content)
+    return (
+        'system',
+        [
+            {
+                'type': 'text',
+                'text': content,
+                'prompt_cache_breakpoint': {'mode': 'explicit'},
+            }
+        ],
+    )
+
+
+def _has_gpt56_cacheable_static_prefix(content: str) -> bool:
+    """Use the model-family tokenizer as a conservative preflight for a cache write."""
+    try:
+        return len(tiktoken.get_encoding('o200k_base').encode(content)) >= GPT56_CACHE_MINIMUM_TOKENS
+    except AttributeError:
+        # Do not make a cache write merely because an optional tokenizer dependency is unavailable.
+        return len(content) >= GPT56_CACHE_MINIMUM_TOKENS * 4
+
 
 # =============================================
 #            FOLDER ASSIGNMENT
@@ -911,8 +957,34 @@ def extract_action_items(
     action_items_parser = PydanticOutputParser(pydantic_object=ActionItemsExtraction)
     # Second system message: conversation context + existing items (dynamic, per-conversation)
     context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}{existing_items_context}'
-    prompt = cast(Any, ChatPromptTemplate).from_messages([('system', instructions_text), ('system', context_message)])
-    chain = prompt | get_llm('conv_action_items', cache_key='omi-extract-actions') | action_items_parser
+    gateway_mode_enabled = should_route_features_through_gateway()
+    if gateway_mode_enabled:
+        instructions_text = instructions_text.format(
+            format_instructions=action_items_parser.get_format_instructions(),
+            commitment_capture_rules=commitment_capture_rules,
+            workflow_filter_rules=workflow_filter_rules,
+            live_work_exclusion_rules=live_work_exclusion_rules,
+            completion_targeting_rule=completion_targeting_rule,
+            quality_threshold_rules=quality_threshold_rules,
+            strict_filter_intro=strict_filter_intro,
+            timing_importance_rules=timing_importance_rules,
+        )
+    gateway_cache_enabled = gateway_mode_enabled and _has_gpt56_cacheable_static_prefix(instructions_text)
+    prompt = cast(Any, ChatPromptTemplate).from_messages(
+        [
+            _gpt56_cacheable_system_message(instructions_text, cache_enabled=gateway_cache_enabled),
+            ('system', context_message),
+        ]
+    )
+    if gateway_cache_enabled:
+        cache_key = _cache_bucket_key('omi-extract-actions')
+    elif gateway_mode_enabled:
+        cache_key = None
+    else:
+        cache_key = 'omi-extract-actions'
+    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if gateway_cache_enabled else None
+    action_items_llm = get_llm('conv_action_items', cache_key=cache_key, prompt_cache_options=cache_options)
+    chain = prompt | action_items_llm | action_items_parser
 
     current_time = datetime.now(timezone.utc)
 
@@ -931,21 +1003,26 @@ def extract_action_items(
     current_time_local = current_time.astimezone(user_tz)
     prompt_values = {
         'conversation_context': conversation_context,
-        'format_instructions': action_items_parser.get_format_instructions(),
         'language_code': language_code,
         'response_language': response_language,
         'started_at_local': started_at_local.replace(tzinfo=None).isoformat(),
         'current_time_local': current_time_local.replace(tzinfo=None).isoformat(),
         'tz': tz or 'UTC',
         'existing_items_context': existing_items_context,
-        'commitment_capture_rules': commitment_capture_rules,
-        'workflow_filter_rules': workflow_filter_rules,
-        'live_work_exclusion_rules': live_work_exclusion_rules,
-        'completion_targeting_rule': completion_targeting_rule,
-        'quality_threshold_rules': quality_threshold_rules,
-        'strict_filter_intro': strict_filter_intro,
-        'timing_importance_rules': timing_importance_rules,
     }
+    if not gateway_cache_enabled:
+        prompt_values.update(
+            {
+                'format_instructions': action_items_parser.get_format_instructions(),
+                'commitment_capture_rules': commitment_capture_rules,
+                'workflow_filter_rules': workflow_filter_rules,
+                'live_work_exclusion_rules': live_work_exclusion_rules,
+                'completion_targeting_rule': completion_targeting_rule,
+                'quality_threshold_rules': quality_threshold_rules,
+                'strict_filter_intro': strict_filter_intro,
+                'timing_importance_rules': timing_importance_rules,
+            }
+        )
 
     try:
         response = chain.invoke(prompt_values)
@@ -1045,26 +1122,47 @@ def get_transcript_structure(
     • Vague suggestions ("let's grab coffee soon")
     • Hypothetical scenarios ("if we meet Tuesday...")
 
-    For date context, this content was captured at {started_at}, which is already the user's local time ({tz}). Interpret it as-is and describe times of day in the title and overview accordingly; do not re-interpret this timestamp as UTC.
-
     {format_instructions}'''.replace(
         '    ', ''
     ).strip()
 
-    # Second system message: conversation context (dynamic, per-conversation)
-    context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}'
-    prompt = cast(Any, ChatPromptTemplate).from_messages([('system', instructions_text), ('system', context_message)])
+    # Second system message contains every per-conversation value, including timestamp.
+    context_message = (
+        'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\n'
+        'For date context, this content was captured at {started_at}, which is already the user\'s local time ({tz}). '
+        'Interpret it as-is and describe times of day in the title and overview accordingly; do not re-interpret this '
+        'timestamp as UTC.\n\nContent:\n{conversation_context}'
+    )
+    gateway_mode_enabled = should_route_features_through_gateway()
+    if gateway_mode_enabled:
+        instructions_text = instructions_text.format(format_instructions=parser.get_format_instructions())
+    gateway_cache_enabled = gateway_mode_enabled and _has_gpt56_cacheable_static_prefix(instructions_text)
+    prompt = cast(Any, ChatPromptTemplate).from_messages(
+        [
+            _gpt56_cacheable_system_message(instructions_text, cache_enabled=gateway_cache_enabled),
+            ('system', context_message),
+        ]
+    )
     legacy_prompt_values = {
         'conversation_context': conversation_context,
-        'format_instructions': parser.get_format_instructions(),
         'language_code': language_code,
         'response_language': response_language,
         'started_at': _local_started_at_iso(started_at, tz),
         'tz': tz or 'UTC',
     }
+    if not gateway_cache_enabled:
+        legacy_prompt_values['format_instructions'] = parser.get_format_instructions()
 
     with track_usage(uid, Features.CONVERSATION_STRUCTURE):
-        chain = prompt | get_llm('conv_structure', cache_key='omi-transcript-structure') | parser
+        if gateway_cache_enabled:
+            cache_key = _cache_bucket_key('omi-transcript-structure')
+        elif gateway_mode_enabled:
+            cache_key = None
+        else:
+            cache_key = 'omi-transcript-structure'
+        cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if gateway_cache_enabled else None
+        structure_llm = get_llm('conv_structure', cache_key=cache_key, prompt_cache_options=cache_options)
+        chain = prompt | structure_llm | parser
         response = _coerce_structured(chain.invoke(legacy_prompt_values))
     if _should_run_conversation_structure_shadow(uid, started_at, conversation_context):
         _submit_conversation_structure_shadow(
@@ -1144,7 +1242,13 @@ def get_reprocess_transcript_structure(
     ).strip()
 
     prompt = cast(Any, ChatPromptTemplate).from_messages([('system', prompt_text)])
-    chain = prompt | get_llm('conv_structure', cache_key='omi-transcript-structure') | parser
+    gateway_cache_enabled = should_route_features_through_gateway()
+    # Reprocessing has no eligible static prefix, so explicit mode avoids both
+    # cache reads and billable cache writes on the GPT-5.6 route.
+    cache_key = None if gateway_cache_enabled else 'omi-transcript-structure'
+    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if gateway_cache_enabled else None
+    structure_llm = get_llm('conv_structure', cache_key=cache_key, prompt_cache_options=cache_options)
+    chain = prompt | structure_llm | parser
 
     response = _coerce_structured(
         chain.invoke(
@@ -1195,7 +1299,13 @@ def get_app_result(transcript: str, photos: List[ConversationPhoto], app: App, l
     {full_context}
     '''
 
-    response = get_llm('conv_app_result', cache_key='omi-app-result').invoke(prompt)
+    gateway_cache_enabled = should_route_features_through_gateway()
+    # App-specific instructions vary at the start of the prompt. Explicit mode
+    # without a breakpoint keeps this route out of GPT-5.6's billable cache.
+    cache_key = None if gateway_cache_enabled else 'omi-app-result'
+    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if gateway_cache_enabled else None
+    app_result_llm = get_llm('conv_app_result', cache_key=cache_key, prompt_cache_options=cache_options)
+    response = app_result_llm.invoke(prompt)
     content = _content_str(response).replace('```json', '').replace('```', '')
     return content
 

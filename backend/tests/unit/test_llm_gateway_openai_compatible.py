@@ -11,10 +11,10 @@ from starlette.requests import Request
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.config_loader import load_gateway_config
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
-from llm_gateway.gateway.executor import ProviderRegistry
+from llm_gateway.gateway.executor import ProviderRegistry, provider_request_for
 from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
-from llm_gateway.gateway.schemas import FailureClass
+from llm_gateway.gateway.schemas import FailureClass, ProviderRef
 from llm_gateway.main import app
 from llm_gateway.routers import dependencies, openai_compatible
 from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction
@@ -133,6 +133,58 @@ def test_chat_completions_persists_cache_aware_attempt_with_authenticated_attrib
     assert trace.attempts[0].usage is not None
     assert trace.attempts[0].usage.cached_input_tokens == 40
     assert trace.attempts[0].usage.cache_status.value == 'partial_hit'
+
+
+def test_gateway_provider_body_forwards_validated_gpt56_cache_fields_unchanged():
+    request = valid_request(
+        prompt_cache_key='omi-extract-actions-v1-b0',
+        prompt_cache_options={'mode': 'explicit', 'ttl': '30m'},
+        messages=[
+            {
+                'role': 'system',
+                'content': [
+                    {
+                        'type': 'text',
+                        'text': 'Stable instructions.',
+                        'prompt_cache_breakpoint': {'mode': 'explicit'},
+                    }
+                ],
+            },
+            {'role': 'user', 'content': 'Dynamic content.'},
+        ],
+    )
+    resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
+    forwarded = provider_request_for(resolved, ProviderRef(provider='openai', model='gpt-5.6-luna'))
+
+    assert forwarded['prompt_cache_key'] == 'omi-extract-actions-v1-b0'
+    assert forwarded['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}
+    assert forwarded['messages'] == request['messages']
+
+
+def test_gateway_provider_body_strips_gpt56_cache_fields_for_legacy_route():
+    request = valid_request(
+        prompt_cache_key='omi-extract-actions-v1-b0',
+        prompt_cache_options={'mode': 'explicit', 'ttl': '30m'},
+        messages=[
+            {
+                'role': 'system',
+                'content': [
+                    {
+                        'type': 'text',
+                        'text': 'Stable instructions.',
+                        'prompt_cache_breakpoint': {'mode': 'explicit'},
+                    }
+                ],
+            },
+            {'role': 'user', 'content': 'Dynamic content.'},
+        ],
+    )
+    resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
+    forwarded = provider_request_for(resolved, ProviderRef(provider='openai', model='gpt-5.4-nano'))
+
+    assert forwarded['prompt_cache_key'] == 'omi-extract-actions-v1-b0'
+    assert 'prompt_cache_options' not in forwarded
+    assert forwarded['messages'][0]['content'] == [{'type': 'text', 'text': 'Stable instructions.'}]
 
 
 def test_metadata_feature_never_enters_the_accounting_context(monkeypatch):
