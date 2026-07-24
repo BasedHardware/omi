@@ -14,7 +14,7 @@ from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 from llm_gateway.gateway.executor import ProviderRegistry, provider_request_for
 from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
-from llm_gateway.gateway.schemas import FailureClass, ProviderRef
+from llm_gateway.gateway.schemas import FailureClass, ProviderRef, ProviderRejection
 from llm_gateway.main import app
 from llm_gateway.routers import dependencies, openai_compatible
 from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction
@@ -89,6 +89,51 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     assert provider.calls[0].request['temperature'] == 0
     assert provider.calls[0].request['max_completion_tokens'] == 64
     assert 'metadata' not in provider.calls[0].request
+
+
+@pytest.mark.parametrize(
+    ('failure_class', 'provider_rejection', 'expected_code'),
+    [
+        (
+            FailureClass.CAPABILITY_MISMATCH,
+            ProviderRejection.UNSUPPORTED_REASONING_EFFORT,
+            'capability_not_supported',
+        ),
+        (
+            FailureClass.PROVIDER_INVALID_REQUEST,
+            ProviderRejection.CONTEXT_LENGTH_EXCEEDED,
+            'provider_request_rejected',
+        ),
+    ],
+)
+def test_provider_rejection_preserves_exact_terminal_class_and_bounded_member(
+    monkeypatch,
+    failure_class,
+    provider_rejection,
+    expected_code,
+):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    recorded: list[dict] = []
+    provider = FakeChatCompletionProvider([ProviderFailure(failure_class, provider_rejection=provider_rejection)])
+    monkeypatch.setattr(openai_compatible, 'observe_error', lambda *_args, **kwargs: recorded.append(kwargs))
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(),
+            headers=auth_headers(),
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert response.json()['error']['code'] == expected_code
+    assert len(recorded) == 1
+    error = recorded[0]['error']
+    assert error.failure_class == failure_class
+    assert error.provider == 'openai'
+    assert error.model == 'gpt-5.4-nano'
+    assert error.provider_rejection == provider_rejection
 
 
 def test_chat_completions_persists_cache_aware_attempt_with_authenticated_attribution(monkeypatch):

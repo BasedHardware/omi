@@ -330,7 +330,7 @@ class PushToTalkManager: ObservableObject {
     log("PushToTalkManager: setup complete, micPermission=\(hasMicPermission)")
   }
 
-  private func configureVoiceTurnCoordinator(barState: FloatingControlBarState) {
+  func configureVoiceTurnCoordinator(barState: FloatingControlBarState) {
     voiceTurnCoordinator.configure(barState: barState)
     voiceTurnCoordinator.setEffectHandler { [weak self] effect in
       self?.handleVoiceTurnEffect(effect)
@@ -798,13 +798,6 @@ class PushToTalkManager: ObservableObject {
         captureGeneration: micCaptureGeneration)
     }
 
-    /// Installs the production voice-turn effect handler without starting a
-    /// physical or warm capture. Owner-boundary tests use this instead of
-    /// `beginPushToTalkForAutomation()` + `cleanup()`, which used to call
-    /// `startListening()` and could hang on polluted hub/singleton state in CI.
-    func installOwnerBoundaryEffectHandlerForTesting() {
-      ensureAutomationBarConfigured()
-    }
   #endif
 
   /// Cancel PTT without sending — used when conversation is closed mid-PTT.

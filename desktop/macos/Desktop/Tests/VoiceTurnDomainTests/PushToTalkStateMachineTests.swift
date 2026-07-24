@@ -149,7 +149,7 @@ final class PushToTalkStateMachineTests: XCTestCase {
       manager.cleanup()
       defer { manager.cleanup() }
 
-      manager.installOwnerBoundaryEffectHandlerForTesting()
+      manager.installOwnerBoundaryEffectHandlerFixture()
 
       XCTAssertNil(VoiceTurnCoordinator.shared.activeTurn)
       XCTAssertNil(manager.ownerBoundarySnapshot.activeTurnID)
@@ -164,9 +164,7 @@ final class PushToTalkStateMachineTests: XCTestCase {
       manager.cleanup()
       await transitionOwner(defaults: defaults, to: "owner-a")
 
-      // Install the production physical-effect handler without touching a real
-      // microphone, then admit an exact non-hub capture through the reducer.
-      manager.installOwnerBoundaryEffectHandlerForTesting()
+      manager.installOwnerBoundaryEffectHandlerFixture()
       let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
       VoiceTurnCoordinator.shared.publish(
         .selectRoute(turnID: turnID, route: .deepgramLive))
@@ -227,7 +225,7 @@ final class PushToTalkStateMachineTests: XCTestCase {
       manager.cleanup()
       await transitionOwner(defaults: defaults, to: "owner-a")
 
-      manager.installOwnerBoundaryEffectHandlerForTesting()
+      manager.installOwnerBoundaryEffectHandlerFixture()
       hub.installOwnerBoundaryFixture(ownerID: "owner-a")
       let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
       VoiceTurnCoordinator.shared.publish(
@@ -256,7 +254,7 @@ final class PushToTalkStateMachineTests: XCTestCase {
       manager.cleanup()
       await transitionOwner(defaults: defaults, to: "owner-a")
 
-      manager.installOwnerBoundaryEffectHandlerForTesting()
+      manager.installOwnerBoundaryEffectHandlerFixture()
       hub.installOwnerBoundaryFixture(ownerID: "owner-a")
       let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
       VoiceTurnCoordinator.shared.publish(
@@ -311,9 +309,7 @@ final class PushToTalkStateMachineTests: XCTestCase {
       manager.cleanup()
       await transitionOwner(defaults: defaults, to: "owner-a")
 
-      // Install the production terminal-effect handler without starting a real
-      // microphone capture, then model a begin whose receipt was lost to Swift.
-      manager.installOwnerBoundaryEffectHandlerForTesting()
+      manager.installOwnerBoundaryEffectHandlerFixture()
       let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
       hub.installOwnerBoundaryUnresolvedExternalRunFixture(
         ownerID: "owner-a",

@@ -10,6 +10,7 @@ from llm_gateway.gateway.errors import (
     GatewayCredentialFailureError,
     GatewayInvalidRouteConfigError,
     GatewayProviderFailureError,
+    GatewayProviderRequestRejectedError,
 )
 from llm_gateway.gateway.accounting import AttemptTrace
 from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion, selected_serving_route_artifact_id
@@ -171,6 +172,7 @@ async def test_executor_attempt_trace_retains_each_retry_and_fallback() -> None:
     [
         (FailureClass.INVALID_CONFIG, GatewayInvalidRouteConfigError),
         (FailureClass.CAPABILITY_MISMATCH, GatewayCapabilityMismatchError),
+        (FailureClass.PROVIDER_INVALID_REQUEST, GatewayProviderRequestRejectedError),
         (FailureClass.BYOK_AUTH, GatewayCredentialFailureError),
         (FailureClass.BYOK_QUOTA, GatewayCredentialFailureError),
         (FailureClass.BYOK_RATE_LIMIT, GatewayCredentialFailureError),
@@ -237,6 +239,7 @@ async def test_executor_uses_active_route_fallback_for_policy_allowed_failures(f
     [
         (FailureClass.INVALID_CONFIG, GatewayInvalidRouteConfigError),
         (FailureClass.CAPABILITY_MISMATCH, GatewayCapabilityMismatchError),
+        (FailureClass.PROVIDER_INVALID_REQUEST, GatewayProviderRequestRejectedError),
         (FailureClass.BYOK_AUTH, GatewayCredentialFailureError),
         (FailureClass.BYOK_QUOTA, GatewayCredentialFailureError),
         (FailureClass.BYOK_RATE_LIMIT, GatewayCredentialFailureError),
