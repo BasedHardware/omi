@@ -4,14 +4,27 @@ import XCTest
 
 @MainActor
 final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
+  @MainActor
   private final class Gate {
     var startCount = 0
     var continuation: CheckedContinuation<Bool, Never>?
+    var startedWaiters: [CheckedContinuation<Void, Never>] = []
 
     func run() async -> Bool {
-      startCount += 1
       return await withCheckedContinuation { continuation in
         self.continuation = continuation
+        startCount += 1
+        for waiter in startedWaiters {
+          waiter.resume()
+        }
+        startedWaiters.removeAll()
+      }
+    }
+
+    func waitUntilStarted() async {
+      guard startCount == 0 else { return }
+      await withCheckedContinuation { continuation in
+        startedWaiters.append(continuation)
       }
     }
 
@@ -21,19 +34,44 @@ final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
     }
   }
 
-  private func waitUntilStarted(_ gate: Gate) async {
-    for _ in 0..<100 where gate.startCount == 0 {
-      await Task.yield()
+  @MainActor
+  private final class Signal {
+    private var didFire = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func fire() {
+      didFire = true
+      for waiter in waiters {
+        waiter.resume()
+      }
+      waiters.removeAll()
     }
+
+    func wait() async {
+      guard !didFire else { return }
+      await withCheckedContinuation { continuation in
+        waiters.append(continuation)
+      }
+    }
+  }
+
+  private func waitUntilStarted(_ gate: Gate) async {
+    await gate.waitUntilStarted()
   }
 
   func testCancelledTurnWaiterDoesNotCancelSharedReadiness() async {
     let singleFlight = RealtimeVoiceContextSingleFlight()
     let gate = Gate()
+    let turnWaiterJoined = Signal()
 
     let speculative = singleFlight.joinOrStart { await gate.run() }
-    let turnWaiter = Task { await singleFlight.joinOrStart { await gate.run() }.value }
+    let turnWaiter = Task {
+      let sharedReadiness = singleFlight.joinOrStart { await gate.run() }
+      turnWaiterJoined.fire()
+      return await sharedReadiness.value
+    }
     await waitUntilStarted(gate)
+    await turnWaiterJoined.wait()
 
     XCTAssertEqual(gate.startCount, 1)
     XCTAssertTrue(singleFlight.isRunning)

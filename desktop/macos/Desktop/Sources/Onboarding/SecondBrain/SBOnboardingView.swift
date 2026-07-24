@@ -11,6 +11,8 @@ enum SBOnboardingRepository {
 struct SBOnboardingView: View {
   @Environment(\.sbTheme) private var sb
   @StateObject private var model: SBOnboardingModel
+  @ObservedObject private var importConnectorStatusStore: ImportConnectorStatusStore
+  @State private var selectedImportConnector: ImportConnector?
   /// Language step: false shows the detected default + Continue; true reveals the picker.
   @State private var languageChanging = false
 
@@ -20,9 +22,15 @@ struct SBOnboardingView: View {
     return NSImage(contentsOf: url)
   }()
 
-  init(appState: AppState, chatProvider: ChatProvider, onComplete: (() -> Void)?) {
+  init(
+    appState: AppState,
+    chatProvider: ChatProvider,
+    importConnectorStatusStore: ImportConnectorStatusStore,
+    onComplete: (() -> Void)?
+  ) {
     _model = StateObject(
       wrappedValue: SBOnboardingModel(appState: appState, chatProvider: chatProvider, onComplete: onComplete))
+    _importConnectorStatusStore = ObservedObject(wrappedValue: importConnectorStatusStore)
   }
 
   var body: some View {
@@ -62,10 +70,23 @@ struct SBOnboardingView: View {
       .padding(.top, 20).padding(.trailing, 24)
     }
     .onAppear { model.begin() }
-    // ChatGPT/Claude OAuth finishes in the browser — re-check the grants when
-    // the user comes back so their chip actually flips to "✓ on".
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-      if model.step == .context { model.refreshContextStates() }
+      if model.step == .context { refreshContextStates() }
+    }
+    .onChange(of: model.step) { _, step in
+      if step == .context { refreshContextStates() }
+    }
+    .onReceive(importConnectorStatusStore.connectorDidSync) { connectorID in
+      model.markContextImportConnected(connectorID)
+    }
+    .dismissableSheet(item: $selectedImportConnector) { connector in
+      ImportConnectorSheet(
+        connector: connector,
+        appState: nil,
+        statusStore: importConnectorStatusStore,
+        onDismiss: { selectedImportConnector = nil }
+      )
+      .frame(width: 520, height: 620)
     }
     // Safety net: the `.shortcut` step suspends global hotkeys and nulls the main
     // menu (restored only via the advance/skip/complete buttons). If the view is
@@ -514,8 +535,13 @@ struct SBOnboardingView: View {
     VStack(alignment: .leading, spacing: 12) {
       VStack(spacing: 0) {
         ForEach(Array(model.contextRows.enumerated()), id: \.element.id) { i, row in
-          connectRow(id: row.id, row.name, row.detail, state: model.contextStates[row.id] ?? "idle") {
-            model.connectContext(row.id)
+          connectRow(
+            id: row.id,
+            row.name,
+            model.contextDetails[row.id] ?? row.detail,
+            state: model.contextStates[row.id] ?? "idle"
+          ) {
+            connectContext(row.id)
           }
           if i < model.contextRows.count - 1 { Divider().overlay(sb.ink(.w08)) }
         }
@@ -525,6 +551,27 @@ struct SBOnboardingView: View {
       SBInkButton(title: "Continue") { model.answerContext() }
     }
     .frame(maxWidth: 380, alignment: .leading)
+  }
+
+  private func connectContext(_ id: String) {
+    switch SBOnboardingModel.contextConnectionRoute(for: id) {
+    case .importConnector(let connectorID):
+      selectedImportConnector = ImportConnector.all.first { $0.id == connectorID }
+    case .direct:
+      model.connectContext(id)
+    }
+  }
+
+  private func refreshContextStates() {
+    model.refreshContextStates()
+    importConnectorStatusStore.refreshPersistedManualImportMetrics()
+    for connectorID in ["chatgpt", "claude"] {
+      guard
+        let connector = ImportConnector.all.first(where: { $0.id == connectorID }),
+        importConnectorStatusStore.snapshot(for: connector).isConnected
+      else { continue }
+      model.markContextImportConnected(connectorID)
+    }
   }
 
   private func connectRow(id: String, _ name: String, _ detail: String, state: String, action: @escaping () -> Void)
@@ -556,6 +603,13 @@ struct SBOnboardingView: View {
     case "connecting": Text("…").geistMono(size: 13).foregroundStyle(sb.ink(.w4))
     case "checking": Text("checking…").geist(size: 12).foregroundStyle(sb.ink(.w35))
     case "unavailable": Text("not installed").geist(size: 12).foregroundStyle(sb.ink(.w35))
+    case "error":
+      Button(action: action) {
+        Text("Retry").geist(size: 13, weight: .semibold).foregroundStyle(sb.inkInverted)
+          .padding(.horizontal, 12).padding(.vertical, 4)
+          .background(RoundedRectangle(cornerRadius: 7).fill(sb.ink))
+      }
+      .buttonStyle(.plain)
     default:
       Button(action: action) {
         Text(state == "needsSignIn" ? "Retry" : "Connect").geist(size: 13, weight: .semibold).foregroundStyle(
