@@ -45,9 +45,15 @@ describe('helperProcess.dispose (C7 — no orphaned OCR helper on quit)', () => 
     // rejects it below).
     void helperProcess.windowInfo().catch(() => {})
     expect(spawnMock).toHaveBeenCalledTimes(1)
-    // The helper is a console-subsystem exe; it must be spawned with
-    // windowsHide so it never flashes a stray console window in the taskbar.
-    expect(spawnMock.mock.calls[0][2]).toMatchObject({ windowsHide: true })
+    const spawnOpts = spawnMock.mock.calls[0][2] as Record<string, unknown>
+    if (process.platform === 'linux') {
+      // Linux helper is a Node script run via Electron's bundled Node.
+      expect(spawnOpts.env).toMatchObject({ ELECTRON_RUN_AS_NODE: '1' })
+    } else {
+      // The Windows helper is a console-subsystem exe; it must be spawned with
+      // windowsHide so it never flashes a stray console window in the taskbar.
+      expect(spawnOpts).toMatchObject({ windowsHide: true })
+    }
 
     helperProcess.dispose()
     expect(child.kill).toHaveBeenCalledTimes(1)

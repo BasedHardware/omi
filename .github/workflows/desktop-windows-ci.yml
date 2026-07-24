@@ -117,6 +117,7 @@ jobs:
       - name: Verify Debian package contents
         run: |
           dpkg-deb -I dist/*.deb | grep -F 'tesseract-ocr'
+          dpkg-deb -I dist/*.deb | grep -F 'x11-utils'
           dpkg-deb -c dist/*.deb | grep -F 'resources/linux-ocr-helper/omi-ocr-helper'
       - name: Launch unpacked app on X11
         run: |
