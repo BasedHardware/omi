@@ -1,15 +1,19 @@
 use axum::{
+    body::Body,
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
+use serde_json::json;
 use std::time::Duration;
 
 use crate::auth::AuthUser;
 use crate::models::chat_completions::*;
+use crate::request_deadline::{send_with_deadline, DeadlineSendError, RequestDeadline};
 use crate::AppState;
 
 use super::request_translation::{compute_cost, translate_response};
+use super::response_or_500;
 
 /// Anthropic API base URL.
 const ANTHROPIC_API_URL: &str = "https://api.anthropic.com/v1/messages";
@@ -26,9 +30,59 @@ const ANTHROPIC_MAX_ATTEMPTS: usize = 3;
 /// request indefinitely.
 const ANTHROPIC_MAX_PAUSE_TURN_CONTINUATIONS: usize = 3;
 
+/// Connection establishment bound; also the floor below which a retry or
+/// continuation attempt is not worth starting — an attempt that cannot even
+/// finish its handshake inside the budget only delays the typed timeout.
+const ANTHROPIC_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Per-call cap for a non-streaming Anthropic response, bounded further by the
+/// request budget at each attempt.
+const ANTHROPIC_NON_STREAMING_CAP: Duration = Duration::from_secs(120);
+
+/// A retry/continuation attempt starts only if this much budget remains.
+pub(super) const ANTHROPIC_ATTEMPT_FLOOR: Duration = ANTHROPIC_CONNECT_TIMEOUT;
+
+/// The budget ran out before the first client-visible semantic event. Returned
+/// inside the platform bound so the gateway, not Cloud Run, owns the mapping.
+pub(super) fn chat_timeout_response() -> Response {
+    response_or_500(
+        Response::builder()
+            .status(StatusCode::GATEWAY_TIMEOUT)
+            .header("content-type", "application/json")
+            .header("retry-after", "5"),
+        Body::from(
+            json!({
+                "error": {
+                    "message": "The request exceeded the chat deadline budget before a response started. Please retry.",
+                    "type": "upstream_timeout",
+                    "code": 504
+                }
+            })
+            .to_string(),
+        ),
+    )
+}
+
+/// Failure surface of the budgeted Anthropic send path.
+pub(super) enum AnthropicSendError {
+    /// Budget exhausted pre-first-byte; callers return `chat_timeout_response()`.
+    DeadlineExpired,
+    /// Existing non-budget failure surface, unchanged.
+    Gateway(StatusCode),
+}
+
+impl AnthropicSendError {
+    pub(super) fn into_response_or_status(self) -> Result<Response, StatusCode> {
+        match self {
+            AnthropicSendError::DeadlineExpired => Ok(chat_timeout_response()),
+            AnthropicSendError::Gateway(status) => Err(status),
+        }
+    }
+}
+
 pub(super) fn new_anthropic_client() -> reqwest::Client {
     reqwest::Client::builder()
-        .connect_timeout(Duration::from_secs(10))
+        .connect_timeout(ANTHROPIC_CONNECT_TIMEOUT)
         .build()
         .unwrap_or_default()
 }
@@ -42,60 +96,124 @@ pub(super) fn retry_backoff(attempt: usize) -> Duration {
     Duration::from_millis(250u64 * (1u64 << attempt.saturating_sub(1).min(3)))
 }
 
+/// Outcome of one provider attempt inside the budgeted retry loop.
+pub(super) enum AttemptOutcome<T> {
+    /// Final answer (success, or a non-transient status passed through).
+    Success(T),
+    /// Transient status carrying the pass-through value: if no retry is
+    /// available the upstream error is returned as-is, exactly as before.
+    Transient { value: T, status: u16 },
+    /// Transport error within the budget; nothing to pass through.
+    TransportError,
+    /// The send hit the budget edge.
+    Expired,
+}
+
+/// Budget-aware retry policy, generic over the attempt so the policy is
+/// testable with a scripted attempt and `tokio::time::pause`.
+///
+/// - An attempt never starts on an expired budget.
+/// - A retry starts only if `remaining()` exceeds `floor` — an attempt that
+///   cannot finish its connect handshake only delays the typed timeout.
+/// - Backoff sleeps are truncated at the budget edge.
+pub(super) async fn retry_with_budget<T, F, Fut>(
+    deadline: &RequestDeadline,
+    max_attempts: usize,
+    floor: Duration,
+    mut attempt: F,
+) -> Result<T, AnthropicSendError>
+where
+    F: FnMut(usize) -> Fut,
+    Fut: std::future::Future<Output = AttemptOutcome<T>>,
+{
+    for attempt_number in 1..=max_attempts {
+        if deadline.expired() {
+            return Err(AnthropicSendError::DeadlineExpired);
+        }
+        let retry_available =
+            |d: &RequestDeadline| attempt_number < max_attempts && d.remaining() > floor;
+        match attempt(attempt_number).await {
+            AttemptOutcome::Success(value) => return Ok(value),
+            AttemptOutcome::Expired => return Err(AnthropicSendError::DeadlineExpired),
+            AttemptOutcome::Transient { value, status } => {
+                if !retry_available(deadline) {
+                    return Ok(value);
+                }
+                tracing::warn!(
+                    "chat_completions: Anthropic {} (attempt {}/{}), retrying",
+                    status,
+                    attempt_number,
+                    max_attempts
+                );
+                tokio::time::sleep(deadline.derive(retry_backoff(attempt_number))).await;
+            }
+            AttemptOutcome::TransportError => {
+                if !retry_available(deadline) {
+                    return Err(AnthropicSendError::Gateway(StatusCode::BAD_GATEWAY));
+                }
+                tokio::time::sleep(deadline.derive(retry_backoff(attempt_number))).await;
+            }
+        }
+    }
+    Err(AnthropicSendError::Gateway(StatusCode::BAD_GATEWAY))
+}
+
 /// Send the Anthropic request, retrying the INITIAL response on transient failures
 /// (network errors + 429/5xx/529). This is the chat fallback: a single Anthropic blip
 /// no longer fails the request. Safe to retry because no output has been produced yet
 /// (for streaming we retry before consuming the body). A transient status on the final
 /// attempt is returned as-is so the caller passes the upstream error through.
+/// Every attempt is bounded by the request budget (#9835).
 pub(super) async fn send_anthropic_with_retry(
     client: &reqwest::Client,
     api_key: &str,
     anthropic_req: &AnthropicRequest,
     streaming: bool,
-) -> Result<reqwest::Response, StatusCode> {
-    for attempt in 1..=ANTHROPIC_MAX_ATTEMPTS {
-        let mut builder = client
-            .post(ANTHROPIC_API_URL)
-            .header("x-api-key", api_key)
-            .header("anthropic-version", ANTHROPIC_API_VERSION)
-            .header("content-type", "application/json")
-            .json(anthropic_req);
-        // Bound non-streaming calls; a streaming response must NOT have a total-response
-        // timeout (it would abort long replies), only the client-level connect timeout.
-        if !streaming {
-            builder = builder.timeout(Duration::from_secs(120));
-        }
-        match builder.send().await {
-            Ok(resp) => {
-                let s = resp.status().as_u16();
-                if is_transient_status(s) && attempt < ANTHROPIC_MAX_ATTEMPTS {
+    deadline: &RequestDeadline,
+) -> Result<reqwest::Response, AnthropicSendError> {
+    retry_with_budget(
+        deadline,
+        ANTHROPIC_MAX_ATTEMPTS,
+        ANTHROPIC_ATTEMPT_FLOOR,
+        |attempt_number| async move {
+            let mut builder = client
+                .post(ANTHROPIC_API_URL)
+                .header("x-api-key", api_key)
+                .header("anthropic-version", ANTHROPIC_API_VERSION)
+                .header("content-type", "application/json")
+                .json(anthropic_req);
+            // Bound non-streaming calls inside the budget; a streaming response must
+            // NOT have a total-response timeout (it would abort long replies) — after
+            // headers, progress is governed by the semantic idle timer downstream.
+            if !streaming {
+                builder = builder.timeout(deadline.derive(ANTHROPIC_NON_STREAMING_CAP));
+            }
+            match send_with_deadline(builder, deadline).await {
+                Ok(resp) => {
+                    let status = resp.status().as_u16();
+                    if is_transient_status(status) {
+                        AttemptOutcome::Transient {
+                            value: resp,
+                            status,
+                        }
+                    } else {
+                        AttemptOutcome::Success(resp)
+                    }
+                }
+                Err(DeadlineSendError::Expired) => AttemptOutcome::Expired,
+                Err(DeadlineSendError::Transport(error)) => {
                     tracing::warn!(
-                        "chat_completions: Anthropic {} (attempt {}/{}), retrying",
-                        s,
-                        attempt,
-                        ANTHROPIC_MAX_ATTEMPTS
+                        "chat_completions: Anthropic request error (attempt {}/{}): {}",
+                        attempt_number,
+                        ANTHROPIC_MAX_ATTEMPTS,
+                        error
                     );
-                    tokio::time::sleep(retry_backoff(attempt)).await;
-                    continue;
+                    AttemptOutcome::TransportError
                 }
-                return Ok(resp);
             }
-            Err(e) => {
-                tracing::warn!(
-                    "chat_completions: Anthropic request error (attempt {}/{}): {}",
-                    attempt,
-                    ANTHROPIC_MAX_ATTEMPTS,
-                    e
-                );
-                if attempt < ANTHROPIC_MAX_ATTEMPTS {
-                    tokio::time::sleep(retry_backoff(attempt)).await;
-                    continue;
-                }
-                return Err(StatusCode::BAD_GATEWAY);
-            }
-        }
-    }
-    Err(StatusCode::BAD_GATEWAY)
+        },
+    )
+    .await
 }
 
 struct ParsedAnthropicResponse {
@@ -111,8 +229,10 @@ async fn receive_anthropic_response(
     client: &reqwest::Client,
     api_key: &str,
     anthropic_req: &AnthropicRequest,
-) -> Result<ParsedAnthropicResponse, StatusCode> {
-    let upstream_resp = send_anthropic_with_retry(client, api_key, anthropic_req, false).await?;
+    deadline: &RequestDeadline,
+) -> Result<ParsedAnthropicResponse, AnthropicSendError> {
+    let upstream_resp =
+        send_anthropic_with_retry(client, api_key, anthropic_req, false, deadline).await?;
     let status = upstream_resp.status();
     if !status.is_success() {
         let body = upstream_resp.text().await.unwrap_or_default();
@@ -121,7 +241,7 @@ async fn receive_anthropic_response(
             status,
             super::truncate_for_log(&body, 500)
         );
-        return Err(StatusCode::BAD_GATEWAY);
+        return Err(AnthropicSendError::Gateway(StatusCode::BAD_GATEWAY));
     }
 
     let raw_response: serde_json::Value = upstream_resp.json().await.map_err(|e| {
@@ -129,7 +249,7 @@ async fn receive_anthropic_response(
             "chat_completions: failed to parse Anthropic continuation response: {}",
             e
         );
-        StatusCode::BAD_GATEWAY
+        AnthropicSendError::Gateway(StatusCode::BAD_GATEWAY)
     })?;
     let raw_content = raw_response
         .get("content")
@@ -137,14 +257,14 @@ async fn receive_anthropic_response(
         .filter(|content| content.is_array())
         .ok_or_else(|| {
             tracing::error!("chat_completions: Anthropic response omitted content blocks");
-            StatusCode::BAD_GATEWAY
+            AnthropicSendError::Gateway(StatusCode::BAD_GATEWAY)
         })?;
     let response = serde_json::from_value(raw_response).map_err(|e| {
         tracing::error!(
             "chat_completions: failed to decode Anthropic continuation response: {}",
             e
         );
-        StatusCode::BAD_GATEWAY
+        AnthropicSendError::Gateway(StatusCode::BAD_GATEWAY)
     })?;
 
     Ok(ParsedAnthropicResponse {
@@ -194,7 +314,8 @@ pub(super) async fn complete_anthropic_server_tool_turn(
     client: &reqwest::Client,
     api_key: &str,
     anthropic_req: &AnthropicRequest,
-) -> Result<AnthropicResponse, StatusCode> {
+    deadline: &RequestDeadline,
+) -> Result<AnthropicResponse, AnthropicSendError> {
     let mut continuation_request = anthropic_req.clone();
     continuation_request.stream = false;
     let mut continuation_count = 0usize;
@@ -205,7 +326,7 @@ pub(super) async fn complete_anthropic_server_tool_turn(
         let ParsedAnthropicResponse {
             mut response,
             raw_content,
-        } = receive_anthropic_response(client, api_key, &continuation_request).await?;
+        } = receive_anthropic_response(client, api_key, &continuation_request, deadline).await?;
         aggregate_content.append(&mut response.content);
         accumulate_anthropic_usage(&mut aggregate_usage, &response.usage);
 
@@ -220,7 +341,17 @@ pub(super) async fn complete_anthropic_server_tool_turn(
                 max_continuations = ANTHROPIC_MAX_PAUSE_TURN_CONTINUATIONS,
                 "chat_completions: Anthropic pause_turn continuation limit reached"
             );
-            return Err(StatusCode::BAD_GATEWAY);
+            return Err(AnthropicSendError::Gateway(StatusCode::BAD_GATEWAY));
+        }
+
+        // A continuation is pre-first-visible-event work: it starts only if it
+        // can plausibly finish inside the budget.
+        if deadline.remaining() <= ANTHROPIC_ATTEMPT_FLOOR {
+            tracing::warn!(
+                "chat_completions: budget exhausted before pause_turn continuation {}",
+                continuation_count + 1
+            );
+            return Err(AnthropicSendError::DeadlineExpired);
         }
 
         continuation_count += 1;
@@ -240,9 +371,13 @@ pub(super) async fn handle_non_streaming(
     user: &AuthUser,
     state: &AppState,
     is_byok: bool,
+    deadline: &RequestDeadline,
 ) -> Result<Response, StatusCode> {
     let anthropic_resp =
-        complete_anthropic_server_tool_turn(client, api_key, anthropic_req).await?;
+        match complete_anthropic_server_tool_turn(client, api_key, anthropic_req, deadline).await {
+            Ok(resp) => resp,
+            Err(error) => return error.into_response_or_status(),
+        };
 
     // Log usage — skip for BYOK since the user pays their own bill and
     // including it would overstate Omi's spend in cost dashboards.
