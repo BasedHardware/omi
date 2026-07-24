@@ -557,8 +557,22 @@ def get_llm(
         cache_params['prompt_cache_key'] = cache_key
     # The direct route can still resolve to a pre-5.6 model.  Only the
     # gateway's GPT-5.6 lanes receive the explicit-cache API fields.
+    #
+    # prompt_cache_options travels in extra_body, not as a named argument.
+    # The SDK validates its keyword arguments before it builds the request, so
+    # a version that predates the argument raises TypeError in process and the
+    # call never reaches the gateway that understands the field. The pinned
+    # client is older than the argument even though newer releases accept it,
+    # which is why binding it directly failed only once deployed. extra_body
+    # carries the field in the request body on every version, and the body is
+    # where the gateway validator reads it from — the same reason retention
+    # travels this way where it is set.
+    #
+    # Binding extra_body replaces whatever the client was constructed with, so
+    # nothing else may be set on it. The gateway lane is built without one,
+    # which is what makes replacing it safe here.
     if prompt_cache_options and gateway_feature_mode:
-        cache_params['prompt_cache_options'] = prompt_cache_options
+        cache_params['extra_body'] = {'prompt_cache_options': prompt_cache_options}
     if cache_params:
         return result.bind(**cache_params)
     return result
