@@ -5,6 +5,7 @@
 // these seams — the same pure-core / electron-wiring split as synthesis.ts (and
 // the taskEmbeddingVector pattern the parity audit references).
 import type { AiUserProfileInput, AiUserProfileRecord } from '../../../shared/types'
+import { recordFallback } from '../../fallback'
 import {
   buildStage1Messages,
   buildStage2Messages,
@@ -45,17 +46,14 @@ export function describeError(e: unknown): string {
 
 // The two branches below are fail-open: they continue with a UX hit (degraded
 // correctness) rather than aborting. Per AGENTS.md ("silent UX healing is allowed;
-// silent ops is not") the degraded outcome must be named loudly. There is no
-// main-process fallback/telemetry emitter yet (the renderer's PostHog is
-// unreachable from main, and Sentry is for hard errors, not fail-open degrades),
-// so this is a single structured console.warn for now.
-// TODO(#10240 track3): route through a Windows recordFallback emitter once one exists.
+// silent ops is not") the degraded outcome must be named loudly, so they route through
+// the shared main-process fallback emitter rather than an ad-hoc warn string.
 export function warnDegraded(reason: string, detail: Record<string, unknown> = {}): void {
-  console.warn('[ai-profile] fallback', {
+  recordFallback({
     component: 'ai_profile',
-    outcome: 'degraded',
     reason,
-    ...detail
+    outcome: 'degraded',
+    detail
   })
 }
 

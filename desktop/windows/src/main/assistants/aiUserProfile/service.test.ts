@@ -81,13 +81,13 @@ describe('generateProfile (orchestrator core)', () => {
     expect(record.id).toBe(42)
     // The failed source was named as a degraded (not silent) outcome.
     expect(warn).toHaveBeenCalledWith(
-      '[ai-profile] fallback',
+      'omi_fallback_event',
       expect.objectContaining({
+        event: 'fallback',
         component: 'ai_profile',
         outcome: 'degraded',
         reason: 'source_fetch_failed',
-        source: 'memories',
-        error: 'HTTP 500'
+        detail: expect.objectContaining({ source: 'memories', error: 'HTTP 500' })
       })
     )
   })
@@ -113,12 +113,13 @@ describe('generateProfile (orchestrator core)', () => {
     await flush()
     // The sync failure surfaced as a degraded (not silent) outcome.
     expect(warn).toHaveBeenCalledWith(
-      '[ai-profile] fallback',
+      'omi_fallback_event',
       expect.objectContaining({
+        event: 'fallback',
         component: 'ai_profile',
         outcome: 'degraded',
         reason: 'backend_sync_failed',
-        op: 'generate'
+        detail: expect.objectContaining({ op: 'generate' })
       })
     )
   })
