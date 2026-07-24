@@ -361,7 +361,10 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                             if (!context.mounted) return;
                             if (!success) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(context.l10n.failedToSetLanguage), backgroundColor: Colors.red),
+                                SnackBar(
+                                  content: Text(context.l10n.failedToSetLanguage),
+                                  backgroundColor: Colors.red,
+                                ),
                               );
                               return;
                             }
