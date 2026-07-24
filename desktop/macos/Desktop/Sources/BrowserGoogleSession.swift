@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import GRDB
 import Security
 
 struct BrowserGoogleSession: Equatable {
@@ -7,6 +8,8 @@ struct BrowserGoogleSession: Equatable {
   let keychainService: String
   let keychainAccount: String
   let cookiePath: String
+
+  private static let recentBrowserMaxAge: TimeInterval = 30 * 24 * 60 * 60
 
   static let chromiumCookiePythonSupport = """
     import sys, json, os, sqlite3, hashlib, time
@@ -122,39 +125,60 @@ struct BrowserGoogleSession: Equatable {
         print(outfile)
     """
 
-  static func all() -> [BrowserGoogleSession] {
-    let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
-    return BrowserAutomationTargetResolver.knownTargets.flatMap { target in
-      guard let keychainIdentity = keychainIdentity(for: target) else {
-        return [BrowserGoogleSession]()
-      }
-      let userDataPath = target.profileRoot(homeDirectory: homeDirectory).path
-      return cookiePaths(in: userDataPath).map { cookiePath in
-        let cookieURL = URL(fileURLWithPath: cookiePath)
-        let profileURL =
-          cookieURL.deletingLastPathComponent().lastPathComponent == "Network"
-          ? cookieURL.deletingLastPathComponent().deletingLastPathComponent()
-          : cookieURL.deletingLastPathComponent()
-        let profileName = profileURL.lastPathComponent
-        let browserName = profileName == "Default" ? target.name : "\(target.name) (\(profileName))"
-        return BrowserGoogleSession(
-          browserName: browserName,
-          keychainService: keychainIdentity.service,
-          keychainAccount: keychainIdentity.account,
-          cookiePath: cookiePath
+  private static func recent(
+    targets: [BrowserAutomationTarget] = BrowserAutomationTargetResolver.installedTargets(),
+    homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+    now: Date = Date(),
+    maxAge: TimeInterval = recentBrowserMaxAge
+  ) -> [BrowserGoogleSession] {
+    let browsers: [(running: Bool, profiles: [(session: BrowserGoogleSession, activity: Date)])] = targets.compactMap {
+      target in
+      guard let keychainIdentity = keychainIdentity(for: target) else { return nil }
+      let userDataRoot = target.profileRoot(homeDirectory: homeDirectory)
+      let profiles = eligibleProfiles(in: userDataRoot, now: now)
+      guard !profiles.isEmpty else { return nil }
+      let sessions = profiles.map { profile in
+        let browserName = profile.name == "Default" ? target.name : "\(target.name) (\(profile.name))"
+        return (
+          BrowserGoogleSession(
+            browserName: browserName,
+            keychainService: keychainIdentity.service,
+            keychainAccount: keychainIdentity.account,
+            cookiePath: profile.cookieURL.path
+          ),
+          profile.activity
         )
       }
+      return (browserIsRunning(at: userDataRoot), sessions)
     }
+
+    let cutoff = now.addingTimeInterval(-maxAge)
+    let recentBrowsers: [(running: Bool, activity: Date, sessions: [BrowserGoogleSession])] = browsers.compactMap {
+      browser in
+      let profiles = browser.profiles.filter { $0.activity >= cutoff }
+      guard !profiles.isEmpty else { return nil }
+      return (browser.running, profiles.map(\.activity).max() ?? .distantPast, profiles.map(\.session))
+    }
+    if recentBrowsers.isEmpty {
+      return browsers.flatMap(\.profiles).max { $0.activity < $1.activity }.map { [$0.session] } ?? []
+    }
+    return recentBrowsers.sorted { lhs, rhs in
+      lhs.running == rhs.running ? lhs.activity > rhs.activity : lhs.running
+    }.flatMap(\.sessions)
   }
 
-  static func configsForPython(logPrefix: String) -> [[String: String]] {
-    all().compactMap { session in
-      guard FileManager.default.fileExists(atPath: session.cookiePath) else { return nil }
+  static func configsForPython(
+    logPrefix: String,
+    targets: [BrowserAutomationTarget] = BrowserAutomationTargetResolver.installedTargets(),
+    homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+    now: Date = Date(),
+    passwordLoader: (String, String) -> String? = {
+      BrowserKeychainCache.shared.password(for: $0, account: $1)
+    }
+  ) -> [[String: String]] {
+    recent(targets: targets, homeDirectory: homeDirectory, now: now).compactMap { session in
       guard
-        let password = BrowserKeychainCache.shared.password(
-          for: session.keychainService,
-          account: session.keychainAccount
-        )
+        let password = passwordLoader(session.keychainService, session.keychainAccount)
       else {
         log("\(logPrefix): No keychain password for \(session.browserName)")
         return nil
@@ -164,6 +188,112 @@ struct BrowserGoogleSession: Equatable {
         "db_path": session.cookiePath,
         "password": password,
       ]
+    }
+  }
+
+  private static func eligibleProfiles(in userDataRoot: URL, now: Date) -> [(
+    name: String, cookieURL: URL, activity: Date
+  )] {
+    let localState = localState(in: userDataRoot)
+    let profileState = localState?["profile"] as? [String: Any]
+    let infoCache = profileState?["info_cache"] as? [String: Any] ?? [:]
+    let cookieProfiles = cookiePaths(in: userDataRoot.path).compactMap { path -> (String, URL)? in
+      let cookieURL = URL(fileURLWithPath: path)
+      let profileURL =
+        cookieURL.deletingLastPathComponent().lastPathComponent == "Network"
+        ? cookieURL.deletingLastPathComponent().deletingLastPathComponent()
+        : cookieURL.deletingLastPathComponent()
+      return (profileURL.lastPathComponent, cookieURL)
+    }
+    let preferredNames =
+      ([profileState?["last_used"] as? String]
+      + (profileState?["last_active_profiles"] as? [String] ?? []).map(Optional.some))
+      .compactMap { $0 }
+
+    return cookieProfiles.compactMap { name, cookieURL in
+      let activity = profileActivity(profileName: name, cookieURL: cookieURL, infoCache: infoCache, now: now)
+      let info = infoCache[name] as? [String: Any]
+      guard !(info?["gaia_id"] as? String ?? "").isEmpty || hasGoogleAuthCookie(at: cookieURL)
+      else { return nil }
+      return (name, cookieURL, activity)
+    }.sorted { lhs, rhs in
+      let lhsPriority = preferredNames.firstIndex(of: lhs.name) ?? Int.max
+      let rhsPriority = preferredNames.firstIndex(of: rhs.name) ?? Int.max
+      return lhsPriority == rhsPriority ? lhs.activity > rhs.activity : lhsPriority < rhsPriority
+    }
+  }
+
+  private static func localState(in userDataRoot: URL) -> [String: Any]? {
+    let url = userDataRoot.appendingPathComponent("Local State")
+    guard let data = try? Data(contentsOf: url) else { return nil }
+    return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+  }
+
+  private static func profileActivity(
+    profileName: String,
+    cookieURL: URL,
+    infoCache: [String: Any],
+    now: Date
+  ) -> Date {
+    if let info = infoCache[profileName] as? [String: Any],
+      let activeTime = chromiumDate(info["active_time"], now: now)
+    {
+      return activeTime
+    }
+    let historyURL =
+      cookieURL.deletingLastPathComponent().lastPathComponent == "Network"
+      ? cookieURL.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("History")
+      : cookieURL.deletingLastPathComponent().appendingPathComponent("History")
+    return [cookieURL, historyURL]
+      .compactMap { try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }
+      .max() ?? .distantPast
+  }
+
+  private static func chromiumDate(_ value: Any?, now: Date) -> Date? {
+    let raw: Double?
+    if let number = value as? NSNumber {
+      raw = number.doubleValue
+    } else if let string = value as? String {
+      raw = Double(string)
+    } else {
+      raw = nil
+    }
+    guard let raw else { return nil }
+
+    let unixSeconds =
+      raw > 1_000_000_000_000
+      ? raw / 1_000_000 - 11_644_473_600
+      : raw > 10_000_000_000 ? raw - 11_644_473_600 : raw
+    let date = Date(timeIntervalSince1970: unixSeconds)
+    guard date >= Date(timeIntervalSince1970: 946_684_800),
+      date <= now.addingTimeInterval(24 * 60 * 60)
+    else { return nil }
+    return date
+  }
+
+  private static func hasGoogleAuthCookie(at cookieURL: URL) -> Bool {
+    var configuration = Configuration()
+    configuration.readonly = true
+    guard let database = try? DatabaseQueue(path: cookieURL.path, configuration: configuration)
+    else { return false }
+    return
+      (try? database.read { db in
+        try Bool.fetchOne(
+          db,
+          sql: """
+            SELECT EXISTS(
+              SELECT 1 FROM cookies
+              WHERE (host_key LIKE '%google.com%' OR host_key LIKE '%gmail.com%')
+                AND name IN ('SID', 'HSID', 'SSID', 'APISID', 'SAPISID', '__Secure-1PSID', '__Secure-3PSID')
+            )
+            """) ?? false
+      }) ?? false
+  }
+
+  private static func browserIsRunning(at userDataRoot: URL) -> Bool {
+    ["SingletonLock", "SingletonSocket", "SingletonCookie"].contains { name in
+      (try? FileManager.default.destinationOfSymbolicLink(
+        atPath: userDataRoot.appendingPathComponent(name).path)) != nil
     }
   }
 
