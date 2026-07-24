@@ -216,6 +216,68 @@ jobs:
       - name: Run Sync Cloud Tasks stack gauntlet
         run: npm run test:sync-cloud-tasks-stack:emulator
 
+  replay-harness-phase0a-gauntlet:
+    name: Replay Harness Phase 0A Feasibility (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: scope
+    if: needs.scope.outputs.applies == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/pylock*.toml
+
+      - name: Install backend dependencies in the gauntlet virtualenv
+        working-directory: backend
+        run: |
+          uv venv .venv
+          uv pip sync pylock.toml --python .venv/bin/python
+
+      - name: Set up Node.js for the Firestore emulator
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install pinned Firebase CLI dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Set up Java for the Firestore emulator
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install Redis server
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes redis-server
+
+      - name: Run Phase 0A replay harness feasibility experiment
+        run: npm run test:replay-harness-phase0a:emulator
+
+      - name: Show replay harness logs on failure
+        if: failure()
+        run: |
+          state_root="$RUNNER_TEMP/omi-replay-harness"
+          if [[ -d "$state_root" ]]; then
+            find "$state_root" -type f -name '*.log' -print -exec tail -n 160 {} \;
+          else
+            echo "Replay harness state directory was not retained."
+          fi
+
   merge-gate:
     name: Backend Hermetic Merge Gate
     runs-on: ubuntu-latest
