@@ -1,5 +1,6 @@
 version: 2
 name: memories
+tier: manual
 description: Memory tab — navigate sub-tabs (Memories, Conversations, Brain Map), search, filter (v0.12.119+ redesign)
 app: com.omi.computer-macos
 covers:
