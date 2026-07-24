@@ -57,7 +57,21 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kCompletePage = 11; // "You're all set" completion screen
 
   // Special index values used in comparisons
-  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+  static const List<int> kHiddenHeaderPages = [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+  ];
 
   TabController? _controller;
   late AnimationController _backgroundAnimationController;
@@ -84,18 +98,25 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       // Precache next image for smoother transitions
       _precacheNextImage(_controller!.index);
       if (_controller!.index == kSpeechProfilePage && _knowledgeGraphPrebuildFuture == null) {
-        _knowledgeGraphPrebuildFuture = _prebuildKnowledgeGraph().catchError((_) {});
+        _knowledgeGraphPrebuildFuture = _prebuildKnowledgeGraph().catchError(
+          (_) {},
+        );
       }
     });
 
     // Initialize animation controllers
-    _backgroundAnimationController = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
+    _backgroundAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
 
     // Initialize animations
-    _backgroundFadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _backgroundAnimationController, curve: Curves.easeInOut));
+    _backgroundFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _backgroundAnimationController,
+        curve: Curves.easeInOut,
+      ),
+    );
 
     // Start initial animations
     _backgroundAnimationController.forward();
@@ -141,7 +162,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       final granted = await arePermissionsGranted();
       if (!granted) {
         if (context.mounted) {
-          routeToPage(context, const PermissionsInterstitialPage(), replace: true);
+          routeToPage(
+            context,
+            const PermissionsInterstitialPage(),
+            replace: true,
+          );
         }
         return;
       }
@@ -279,7 +304,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // so an in-session re-login would otherwise leave it null until the
           // Plan & Usage page is opened (missing Pro badge).
           context.read<UsageProvider>().fetchSubscription();
-          IntercomManager.instance.loginIdentifiedUser(SharedPreferencesUtil().uid);
+          IntercomManager.instance.loginIdentifiedUser(
+            SharedPreferencesUtil().uid,
+          );
           // Consent is checked first regardless of server-side onboarding
           // state so a returning user signing in on a fresh install still
           // sees the consent screen before any AI processing begins.
@@ -296,7 +323,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         onAgree: () async {
           if (!mounted) return;
           SharedPreferencesUtil().aiConsentGiven = true;
-          PlatformManager.instance.analytics.onboardingStepCompleted('AI Consent');
+          PlatformManager.instance.analytics.onboardingStepCompleted(
+            'AI Consent',
+          );
           // If the server says this user already completed onboarding, jump
           // straight to home — their first-time onboarding ran in a previous
           // session and we don't want to re-run it.
@@ -321,13 +350,17 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       PrimaryLanguageWidget(
         goNext: () {
           _goNext(); // Go to Found Omi page
-          PlatformManager.instance.analytics.onboardingStepCompleted('Primary Language');
+          PlatformManager.instance.analytics.onboardingStepCompleted(
+            'Primary Language',
+          );
         },
       ),
       FoundOmiWidget(
         goNext: () {
           _goNext(); // Go to Permissions page
-          PlatformManager.instance.analytics.onboardingStepCompleted('Acquisition Source');
+          PlatformManager.instance.analytics.onboardingStepCompleted(
+            'Acquisition Source',
+          );
         },
       ),
       PermissionsWidget(
@@ -336,7 +369,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // The review step was removed from onboarding to comply with App Store
           // Guideline 5.6.3 (no rating prompts during onboarding).
           _controller!.animateTo(kSpeechProfilePage);
-          PlatformManager.instance.analytics.onboardingStepCompleted('Permissions');
+          PlatformManager.instance.analytics.onboardingStepCompleted(
+            'Permissions',
+          );
         },
       ),
       // Placeholder pages - not used in new flow but kept for index consistency
@@ -349,18 +384,24 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
               value: _speechProfileProvider!,
               child: SpeechProfileWidget(
                 goNext: () {
-                  PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile');
+                  PlatformManager.instance.analytics.onboardingStepCompleted(
+                    'Speech Profile',
+                  );
                   _controller!.animateTo(kKnowledgeGraphPage);
                 },
                 onSkip: () {
-                  PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile Skipped');
+                  PlatformManager.instance.analytics.onboardingStepCompleted(
+                    'Speech Profile Skipped',
+                  );
                   _controller!.animateTo(kKnowledgeGraphPage);
                 },
               ),
             ),
       OnboardingKnowledgeGraphStep(
         onContinue: () {
-          PlatformManager.instance.analytics.onboardingStepCompleted('Knowledge Graph');
+          PlatformManager.instance.analytics.onboardingStepCompleted(
+            'Knowledge Graph',
+          );
           _controller!.animateTo(kCompletePage);
         },
       ),
@@ -392,10 +433,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                         image: DecorationImage(
                           image: ResizeImage(
                             AssetImage(_currentBackgroundImage),
-                            width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio)
-                                .round(),
-                            height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio)
-                                .round(),
+                            width:
+                                (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
+                            height:
+                                (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio).round(),
                           ),
                           fit: BoxFit.cover,
                         ),
@@ -407,192 +448,227 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                 ],
               )
             : _controller!.index == kAiConsentPage ||
-                  _controller!.index == kNamePage ||
-                  _controller!.index == kPrimaryLanguagePage ||
-                  _controller!.index == kFoundOmiPage ||
-                  _controller!.index == kPermissionsPage ||
-                  _controller!.index == kUserReviewPage ||
-                  _controller!.index == kWelcomePage ||
-                  _controller!.index == kSpeechProfilePage ||
-                  _controller!.index == kKnowledgeGraphPage ||
-                  _controller!.index == kCompletePage
-            ? Stack(
-                children: [
-                  // Animated background image (skip for welcome and complete pages)
-                  if (_controller!.index != kWelcomePage && _controller!.index != kCompletePage)
-                    FadeTransition(
-                      opacity: _backgroundFadeAnimation,
-                      child: Container(
-                        height: MediaQuery.of(context).size.height,
-                        decoration: BoxDecoration(
-                          image: DecorationImage(
-                            image: ResizeImage(
-                              AssetImage(_currentBackgroundImage),
-                              width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio)
-                                  .round(),
-                              height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio)
-                                  .round(),
-                            ),
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                    ),
-                  // Page component (no transition for content)
-                  pages[_controller!.index],
-                  // Progress dots (hidden on AI consent and complete pages)
-                  if (_controller!.index != kCompletePage && _controller!.index != kAiConsentPage)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(9, (index) {
-                          int pageIndex = index + 2; // Name=2, Lang=3, ..., KnowledgeGraph=10
-                          return Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                            width: pageIndex == _controller!.index ? 12.0 : 8.0,
-                            height: pageIndex == _controller!.index ? 12.0 : 8.0,
+                    _controller!.index == kNamePage ||
+                    _controller!.index == kPrimaryLanguagePage ||
+                    _controller!.index == kFoundOmiPage ||
+                    _controller!.index == kPermissionsPage ||
+                    _controller!.index == kUserReviewPage ||
+                    _controller!.index == kWelcomePage ||
+                    _controller!.index == kSpeechProfilePage ||
+                    _controller!.index == kKnowledgeGraphPage ||
+                    _controller!.index == kCompletePage
+                ? Stack(
+                    children: [
+                      // Animated background image (skip for welcome and complete pages)
+                      if (_controller!.index != kWelcomePage && _controller!.index != kCompletePage)
+                        FadeTransition(
+                          opacity: _backgroundFadeAnimation,
+                          child: Container(
+                            height: MediaQuery.of(context).size.height,
                             decoration: BoxDecoration(
-                              color: pageIndex <= _controller!.index
-                                  ? Theme.of(context).colorScheme.secondary
-                                  : Colors.grey.shade400,
-                              shape: BoxShape.circle,
-                            ),
-                          );
-                        }),
-                      ),
-                    ),
-                  // Back button (hidden on complete page)
-                  if (_controller!.index > kNamePage && _controller!.index != kCompletePage)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 40, 0, 0),
-                      child: Align(
-                        alignment: Alignment.topLeft,
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            onPressed: () {
-                              if (_controller!.index == kSpeechProfilePage) {
-                                _speechProfileProvider?.close();
-                                _controller!.animateTo(kPermissionsPage);
-                              } else if (_controller!.index > kNamePage) {
-                                _controller!.animateTo(_controller!.index - 1);
-                              }
-                            },
-                            icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              )
-            : SingleChildScrollView(
-                child: Stack(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: ListView(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        children: [
-                          Consumer<OnboardingProvider>(
-                            builder: (context, onboardingProvider, child) {
-                              return DeviceAnimationWidget(
-                                animatedBackground: _controller!.index != -1 && onboardingProvider.isConnected,
-                                isConnected: onboardingProvider.isConnected,
-                                deviceName: onboardingProvider.deviceName,
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 24),
-                          kHiddenHeaderPages.contains(_controller?.index)
-                              ? const SizedBox.shrink()
-                              : Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                  child: Text(
-                                    context.l10n.personalGrowthJourney,
-                                    style: TextStyle(color: Colors.grey.shade300, fontSize: 24),
-                                    textAlign: TextAlign.center,
-                                  ),
+                              image: DecorationImage(
+                                image: ResizeImage(
+                                  AssetImage(_currentBackgroundImage),
+                                  width: (MediaQuery.of(context).size.width *
+                                          MediaQuery.of(
+                                            context,
+                                          ).devicePixelRatio)
+                                      .round(),
+                                  height: (MediaQuery.of(context).size.height *
+                                          MediaQuery.of(
+                                            context,
+                                          ).devicePixelRatio)
+                                      .round(),
                                 ),
-                          SizedBox(
-                            height: (_controller!.index == kFindDevicesPage || _controller!.index == kSpeechProfilePage)
-                                ? max(
-                                    MediaQuery.of(context).size.height - 500 - 10,
-                                    maxHeightWithTextScale(context, _controller!.index),
-                                  )
-                                : max(
-                                    MediaQuery.of(context).size.height - 500 - 30,
-                                    maxHeightWithTextScale(context, _controller!.index),
-                                  ),
-                            child: Padding(
-                              padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
-                              child: TabBarView(
-                                controller: _controller,
-                                physics: const NeverScrollableScrollPhysics(),
-                                children: pages,
+                                fit: BoxFit.cover,
                               ),
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                    if (_controller!.index > kNamePage)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 40, 0, 0),
-                        child: Align(
-                          alignment: Alignment.topLeft,
-                          child: Container(
-                            width: 36,
-                            height: 36,
-                            margin: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.withValues(alpha: 0.3),
-                              shape: BoxShape.circle,
-                            ),
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              onPressed: () {
-                                if (_controller!.index == kSpeechProfilePage) {
-                                  _speechProfileProvider?.close();
-                                  _controller!.animateTo(kPermissionsPage);
-                                } else if (_controller!.index > kNamePage) {
-                                  _controller!.animateTo(_controller!.index - 1);
-                                }
-                              },
-                              icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
-                            ),
+                        ),
+                      // Page component (no transition for content)
+                      pages[_controller!.index],
+                      // Progress dots (hidden on AI consent and complete pages)
+                      if (_controller!.index != kCompletePage && _controller!.index != kAiConsentPage)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(9, (index) {
+                              int pageIndex = index + 2; // Name=2, Lang=3, ..., KnowledgeGraph=10
+                              return Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                                width: pageIndex == _controller!.index ? 12.0 : 8.0,
+                                height: pageIndex == _controller!.index ? 12.0 : 8.0,
+                                decoration: BoxDecoration(
+                                  color: pageIndex <= _controller!.index
+                                      ? Theme.of(context).colorScheme.secondary
+                                      : Colors.grey.shade400,
+                                  shape: BoxShape.circle,
+                                ),
+                              );
+                            }),
                           ),
                         ),
-                      ),
-                    if (_controller!.index != kAuthPage && _controller!.index != kAiConsentPage)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(7, (index) {
-                            int pageIndex = index + 2; // Name=2, Lang=3, ..., Speech=8
-                            return Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                              width: pageIndex == _controller!.index ? 12.0 : 8.0,
-                              height: pageIndex == _controller!.index ? 12.0 : 8.0,
+                      // Back button (hidden on complete page)
+                      if (_controller!.index > kNamePage && _controller!.index != kCompletePage)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 40, 0, 0),
+                          child: Align(
+                            alignment: Alignment.topLeft,
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              margin: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: pageIndex <= _controller!.index
-                                    ? Theme.of(context).colorScheme.secondary
-                                    : Colors.grey.shade400,
+                                color: Colors.grey.withValues(alpha: 0.3),
                                 shape: BoxShape.circle,
                               ),
-                            );
-                          }),
+                              child: IconButton(
+                                padding: EdgeInsets.zero,
+                                onPressed: () {
+                                  if (_controller!.index == kSpeechProfilePage) {
+                                    _speechProfileProvider?.close();
+                                    _controller!.animateTo(kPermissionsPage);
+                                  } else if (_controller!.index > kNamePage) {
+                                    _controller!.animateTo(_controller!.index - 1);
+                                  }
+                                },
+                                icon: const FaIcon(
+                                  FontAwesomeIcons.arrowLeft,
+                                  size: 16.0,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                  ],
-                ),
-              ),
+                    ],
+                  )
+                : SingleChildScrollView(
+                    child: Stack(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: ListView(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            children: [
+                              Consumer<OnboardingProvider>(
+                                builder: (context, onboardingProvider, child) {
+                                  return DeviceAnimationWidget(
+                                    animatedBackground: _controller!.index != -1 && onboardingProvider.isConnected,
+                                    isConnected: onboardingProvider.isConnected,
+                                    deviceName: onboardingProvider.deviceName,
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 24),
+                              kHiddenHeaderPages.contains(_controller?.index)
+                                  ? const SizedBox.shrink()
+                                  : Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                      ),
+                                      child: Text(
+                                        context.l10n.personalGrowthJourney,
+                                        style: TextStyle(
+                                          color: Colors.grey.shade300,
+                                          fontSize: 24,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                              SizedBox(
+                                height:
+                                    (_controller!.index == kFindDevicesPage || _controller!.index == kSpeechProfilePage)
+                                        ? max(
+                                            MediaQuery.of(context).size.height - 500 - 10,
+                                            maxHeightWithTextScale(
+                                              context,
+                                              _controller!.index,
+                                            ),
+                                          )
+                                        : max(
+                                            MediaQuery.of(context).size.height - 500 - 30,
+                                            maxHeightWithTextScale(
+                                              context,
+                                              _controller!.index,
+                                            ),
+                                          ),
+                                child: Padding(
+                                  padding: EdgeInsets.only(
+                                    bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64,
+                                  ),
+                                  child: TabBarView(
+                                    controller: _controller,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    children: pages,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (_controller!.index > kNamePage)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 40, 0, 0),
+                            child: Align(
+                              alignment: Alignment.topLeft,
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                margin: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withValues(alpha: 0.3),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: IconButton(
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () {
+                                    if (_controller!.index == kSpeechProfilePage) {
+                                      _speechProfileProvider?.close();
+                                      _controller!.animateTo(kPermissionsPage);
+                                    } else if (_controller!.index > kNamePage) {
+                                      _controller!.animateTo(
+                                        _controller!.index - 1,
+                                      );
+                                    }
+                                  },
+                                  icon: const FaIcon(
+                                    FontAwesomeIcons.arrowLeft,
+                                    size: 16.0,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        if (_controller!.index != kAuthPage && _controller!.index != kAiConsentPage)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(7, (index) {
+                                int pageIndex = index + 2; // Name=2, Lang=3, ..., Speech=8
+                                return Container(
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 4.0,
+                                  ),
+                                  width: pageIndex == _controller!.index ? 12.0 : 8.0,
+                                  height: pageIndex == _controller!.index ? 12.0 : 8.0,
+                                  decoration: BoxDecoration(
+                                    color: pageIndex <= _controller!.index
+                                        ? Theme.of(context).colorScheme.secondary
+                                        : Colors.grey.shade400,
+                                    shape: BoxShape.circle,
+                                  ),
+                                );
+                              }),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
       ),
     );
   }
