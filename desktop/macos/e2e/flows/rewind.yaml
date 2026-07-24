@@ -1,5 +1,6 @@
 version: 2
 name: rewind
+tier: manual
 description: Rewind overlay — open via View menu (⌘⌥R), verify permission gate, search, date picker (v0.12.119+ redesign — Rewind is no longer in top nav)
 app: com.omi.computer-macos
 covers:
