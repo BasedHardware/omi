@@ -203,6 +203,38 @@ final class RealtimeHubSessionHandoffPolicyTests: XCTestCase {
   }
 
   @MainActor
+  @MainActor
+  func testBargeInFailoverExhaustedWhenAlternateProviderAlreadyActive() {
+    DesktopDiagnosticsManager.shared.resetForTests()
+    defer { DesktopDiagnosticsManager.shared.resetForTests() }
+
+    let controller = RealtimeHubController()
+    let turnID = VoiceTurnID()
+    let responseID = VoiceResponseID("barge-in-response")
+    controller.replacementAudioBuffer = RealtimeReplacementAudioBuffer(
+      turnID: turnID,
+      responseID: responseID,
+      identity: VoiceEffectIdentity(turnID: turnID, effectID: 1))
+    controller.voiceResponseID = responseID
+    controller.pendingBargeInOwnerScope = .signedOut
+    controller.fallbackProvider = .openai
+
+    XCTAssertFalse(
+      controller.failoverBargeInReplacement(
+        from: .openai,
+        reason: "quota",
+        mintAttemptId: "mint-42"))
+
+    let snapshot = DesktopDiagnosticsManager.shared.currentSnapshotsForSentry().last
+    XCTAssertEqual(snapshot?["event"] as? String, "fallback_triggered")
+    XCTAssertEqual(snapshot?["area"] as? String, "realtime_hub")
+    XCTAssertEqual(snapshot?["from"] as? String, "openai")
+    XCTAssertEqual(snapshot?["to"] as? String, "cascade")
+    XCTAssertEqual(snapshot?["outcome"] as? String, "exhausted")
+    XCTAssertEqual(snapshot?["mint_attempt_id"] as? String, "mint-42")
+  }
+
+  @MainActor
   func testDuplicateTransportTerminalCallbacksAndLateStaleCallbackFinishReducerOnce() async throws {
     let controller = RealtimeHubController()
     let fixture = try await installDelayedTransport(on: controller, ownerScope: .signedOut)

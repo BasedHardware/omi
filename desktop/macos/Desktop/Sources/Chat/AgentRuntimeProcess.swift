@@ -3376,7 +3376,7 @@ actor AgentRuntimeProcess {
         case .succeeded = executionResult
       {
         DesktopDiagnosticsManager.shared.recordFallback(
-          area: "other",
+          area: "agent_runtime",
           from: "spawn_agent",
           to: command.canonicalToolName,
           reason: "other",

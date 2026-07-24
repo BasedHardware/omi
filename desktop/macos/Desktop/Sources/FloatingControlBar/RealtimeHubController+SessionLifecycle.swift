@@ -291,11 +291,13 @@ extension RealtimeHubController {
         else { return }
         _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
         self.recordRealtimeMintFailure(
-          error, provider: providerParam, phase: "warm", context: "realtime_mint")
+          error, provider: providerParam, phase: "warm", context: "realtime_mint",
+          mintAttemptId: String(mintGeneration))
         if error.healthError.failureClass.isAccountWide {
           log("RealtimeHub: account credential failure during mint — staying on cascade")
         } else if !self.failoverToAlternateProvider(
-          reason: self.failoverReason(for: error.healthError.failureClass))
+          reason: self.failoverReason(for: error.healthError.failureClass),
+          mintAttemptId: String(mintGeneration))
         {
           log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
         }
@@ -312,11 +314,13 @@ extension RealtimeHubController {
           provider: providerParam,
           reason: error.failureClass.logValue,
           phase: "warm",
-          httpStatusCode: error.failureClass.httpStatusCode)
+          httpStatusCode: error.failureClass.httpStatusCode,
+          mintAttemptId: String(mintGeneration))
         if error.failureClass.isAccountWide {
           log("RealtimeHub: account credential failure during mint — staying on cascade")
         } else if !self.failoverToAlternateProvider(
-          reason: self.failoverReason(for: error.failureClass))
+          reason: self.failoverReason(for: error.failureClass),
+          mintAttemptId: String(mintGeneration))
         {
           log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
         }
@@ -334,8 +338,9 @@ extension RealtimeHubController {
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
           provider: providerParam,
           reason: "backend_transient",
-          phase: "warm")
-        if !self.failoverToAlternateProvider() {
+          phase: "warm",
+          mintAttemptId: String(mintGeneration))
+        if !self.failoverToAlternateProvider(mintAttemptId: String(mintGeneration)) {
           log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
         }
         return
@@ -1188,11 +1193,13 @@ extension RealtimeHubController {
           error,
           provider: providerParam,
           phase: "barge_in_replacement",
-          context: "realtime_barge_in_mint")
+          context: "realtime_barge_in_mint",
+          mintAttemptId: String(mintGeneration))
         if self.shouldFailoverToAlternate(for: error.healthError.failureClass),
           self.failoverBargeInReplacement(
             from: provider,
-            reason: self.failoverReason(for: error.healthError.failureClass))
+            reason: self.failoverReason(for: error.healthError.failureClass),
+            mintAttemptId: String(mintGeneration))
         {
           return
         }
@@ -1215,11 +1222,13 @@ extension RealtimeHubController {
           provider: providerParam,
           reason: error.failureClass.logValue,
           phase: "barge_in_replacement",
-          httpStatusCode: error.failureClass.httpStatusCode)
+          httpStatusCode: error.failureClass.httpStatusCode,
+          mintAttemptId: String(mintGeneration))
         if self.shouldFailoverToAlternate(for: error.failureClass),
           self.failoverBargeInReplacement(
             from: provider,
-            reason: self.failoverReason(for: error.failureClass))
+            reason: self.failoverReason(for: error.failureClass),
+            mintAttemptId: String(mintGeneration))
         {
           return
         }
@@ -1240,8 +1249,9 @@ extension RealtimeHubController {
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
           provider: providerParam,
           reason: "backend_transient",
-          phase: "barge_in_replacement")
-        if self.failoverBargeInReplacement(from: provider, reason: "other") {
+          phase: "barge_in_replacement",
+          mintAttemptId: String(mintGeneration))
+        if self.failoverBargeInReplacement(from: provider, reason: "other", mintAttemptId: String(mintGeneration)) {
           return
         }
         self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)

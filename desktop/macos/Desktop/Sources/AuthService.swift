@@ -1945,7 +1945,7 @@ class AuthService {
   private func recordTokenStorageFallback(reason: String) {
     guard tokenStorageHooks.recordsFallbackTelemetry else { return }
     DesktopDiagnosticsManager.shared.recordFallback(
-      area: "other",
+      area: "auth_storage",
       from: "keychain",
       to: "user_defaults",
       reason: "other",
