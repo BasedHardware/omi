@@ -2160,6 +2160,18 @@ class AppLocalizationsFr extends AppLocalizations {
   String get editMemory => '✏️ Modifier le souvenir';
 
   @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
+
+  @override
   String get memoryContentHint => 'J\'aime manger des glaces...';
 
   @override

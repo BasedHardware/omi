@@ -4149,6 +4149,30 @@ abstract class AppLocalizations {
   /// **'✏️ Edit Memory'**
   String get editMemory;
 
+  /// Label for pinning a memory as baseline
+  ///
+  /// In en, this message translates to:
+  /// **'Pin as Baseline'**
+  String get pinAsBaseline;
+
+  /// Label for unpinning a memory from baseline
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin from Baseline'**
+  String get unpinAsBaseline;
+
+  /// Label for baseline memory
+  ///
+  /// In en, this message translates to:
+  /// **'Baseline Memory'**
+  String get baselineMemory;
+
+  /// Description for baseline memory being always in context
+  ///
+  /// In en, this message translates to:
+  /// **'Always in context'**
+  String get alwaysInContext;
+
   /// Input hint
   ///
   /// In en, this message translates to:
