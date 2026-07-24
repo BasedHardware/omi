@@ -1,0 +1,43 @@
+version: 2
+name: home
+description: Home tab — embedded chat, insight cards, Capture/Listening status (v0.12.119+ redesign, replaces dashboard.yaml)
+app: com.omi.computer-macos
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Verify Home tab is active
+    do: "Verify the app shows the Home tab. Top nav bar should have Home, Memory, Tasks, Apps buttons. Home should be the active/selected tab."
+    expect:
+      interactive_count: { min: 6 }
+      text_visible:
+        - Home
+
+  - id: S2
+    name: Verify chat input area
+    do: "Verify the chat input area is present on the Home tab. There should be a text field for typing messages and an Attachments button. Look for the send/connect button."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S3
+    name: Verify Capture and Listening status
+    do: "Verify the top-right area shows Capture status (may say 'Capture Blocked' if permission not granted) and Listening status (should show 'Listening On' state). Both should be clickable buttons."
+    expect:
+      interactive_count: { min: 2 }
+
+  - id: S4
+    name: Verify insight cards
+    do: "Check the Home page content area for insight cards or status banners. These may include screen recording permission warnings, task suggestions, or conversation observations."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S5
+    name: Verify Settings gear accessible
+    do: "Click the Settings gear icon (label 'gearshape') in the top-right area. Verify Settings page opens. Then click Back to return to Home."
+    expect:
+      text_visible:
+        - Settings
