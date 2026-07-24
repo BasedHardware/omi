@@ -409,12 +409,20 @@ def persist_processing_result_with_lifecycle(
     conversation_data: dict,
     *,
     expected_statuses: set[str],
+    revive_discarded: bool = False,
 ) -> bool:
     """Persist a processor result only while its lifecycle generation remains current.
 
     A processor works from an in-memory snapshot.  This transaction fences that
     snapshot against a concurrent discard, delete, or terminal transition before
     merging generated content back into the conversation document.
+
+    ``revive_discarded`` is for the two callers whose whole purpose is to
+    reconsider a discard: a conversation discarded while it held nothing, then
+    filled with speech by a later sync, is revived by reprocessing it.  Fencing
+    those left the recording transcribed, untitled, and invisible to its owner
+    with no path back.  A run that is not reprocessing stays fenced, so an
+    ordinary finalizer still cannot overwrite a discard it never inspected.
     """
     conversation_data.pop('updated_at', None)
     if 'audio_base64_url' in conversation_data:
@@ -437,7 +445,9 @@ def persist_processing_result_with_lifecycle(
             return False
 
         existing = existing_snapshot.to_dict() or {}
-        if existing.get('discarded') or existing.get('status') not in expected_statuses:
+        if existing.get('discarded') and not revive_discarded:
+            return False
+        if existing.get('status') not in expected_statuses:
             return False
 
         # Generated processing content never owns user-managed fields.

@@ -1121,7 +1121,9 @@ def process_conversation(
     if is_initial_creation:
         persisted = lifecycle_service.create_completed_conversation(uid, conversation.dict(), idempotent=True)
     else:
-        persisted = lifecycle_service.persist_processed_conversation(uid, conversation.dict())
+        persisted = lifecycle_service.persist_processed_conversation(
+            uid, conversation.dict(), revive_discarded=is_reprocess
+        )
     report_persistence(persisted)
     if not persisted:
         logger.info(

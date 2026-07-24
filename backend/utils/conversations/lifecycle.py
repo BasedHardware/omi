@@ -111,11 +111,17 @@ def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *
     return True
 
 
-def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:
+def persist_processed_conversation(
+    uid: str, conversation_data: dict[str, Any], *, revive_discarded: bool = False
+) -> bool:
     """Persist a processing result and report whether its generation was still current.
 
     ``False`` fences a stale or discarded processor.  Callers must stop before
     emitting derived side effects such as webhooks or integration fanout.
+
+    ``revive_discarded`` carries a reprocess's intent to reconsider a discard;
+    tombstone eligibility stays the caller's contract, as it already is for a
+    conversation that was deleted without being discarded.
     """
     _require_status(
         conversation_data,
@@ -139,6 +145,7 @@ def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) 
         uid,
         conversation_data,
         expected_statuses=expected,
+        revive_discarded=revive_discarded,
     )
 
 
