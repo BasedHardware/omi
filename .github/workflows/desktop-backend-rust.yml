@@ -4,12 +4,18 @@ on:
   pull_request:
     paths:
       - "desktop/macos/Backend-Rust/**"
+      - "desktop/shared-rust/**"
+      - "desktop/Cargo.toml"
+      - "desktop/Cargo.lock"
       - ".github/workflows/desktop-backend-rust.yml"
   push:
     branches:
       - main
     paths:
       - "desktop/macos/Backend-Rust/**"
+      - "desktop/shared-rust/**"
+      - "desktop/Cargo.toml"
+      - "desktop/Cargo.lock"
       - ".github/workflows/desktop-backend-rust.yml"
 
 jobs:
@@ -17,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: desktop/macos/Backend-Rust
+        working-directory: desktop
     steps:
       - uses: actions/checkout@v7
 
@@ -29,10 +35,10 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: desktop/macos/Backend-Rust
+          workspaces: desktop
 
       - name: Clippy
-        run: cargo clippy -- -D warnings
+        run: cargo clippy -p omi-desktop-backend -- -D warnings
 
       - name: Test
-        run: cargo test --locked
+        run: cargo test --locked -p omi-desktop-backend

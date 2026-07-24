@@ -151,10 +151,9 @@ def _source_covers_asset(source: str, asset: str) -> bool:
     return asset == source or asset.startswith(f"{source}/")
 
 
-def _compile_time_assets(context: Path) -> tuple[set[Path], list[str]]:
+def _compile_time_assets(context: Path, source_root: Path) -> tuple[set[Path], list[str]]:
     assets: set[Path] = set()
     errors: list[str] = []
-    source_root = context / "src"
     if not source_root.exists():
         return assets, [f"Rust source directory does not exist: {source_root}"]
 
@@ -181,15 +180,16 @@ def _compile_time_assets(context: Path) -> tuple[set[Path], list[str]]:
     return assets, errors
 
 
-def validate_context(context: Path, dockerfile: Path) -> list[str]:
+def validate_context(context: Path, dockerfile: Path, source_root: Path | None = None) -> list[str]:
     """Return each Docker context contract violation for the supplied paths."""
 
     context = context.resolve()
     dockerfile = dockerfile.resolve()
+    source_root = (source_root or context / "src").resolve()
     if not dockerfile.is_file():
         return [f"Dockerfile does not exist: {dockerfile}"]
 
-    assets, errors = _compile_time_assets(context)
+    assets, errors = _compile_time_assets(context, source_root)
     copy_sources = _copy_sources(dockerfile)
     dockerignore_rules = _dockerignore_rules(context)
 
@@ -212,18 +212,20 @@ def main() -> int:
     default_context = Path(__file__).resolve().parents[1]
     parser.add_argument("--context", type=Path, default=default_context, help="Docker build context directory")
     parser.add_argument("--dockerfile", type=Path, help="Dockerfile to validate (defaults to <context>/Dockerfile)")
+    parser.add_argument("--source-root", type=Path, help="Rust source directory relative to the build context")
     args = parser.parse_args()
 
     context = args.context.resolve()
     dockerfile = (args.dockerfile or context / "Dockerfile").resolve()
-    errors = validate_context(context, dockerfile)
+    source_root = context / args.source_root if args.source_root else None
+    errors = validate_context(context, dockerfile, source_root)
     if errors:
         print("Docker context contract failed:", file=sys.stderr)
         for error in errors:
             print(f"- {error}", file=sys.stderr)
         return 1
 
-    assets, _ = _compile_time_assets(context)
+    assets, _ = _compile_time_assets(context, source_root or context / "src")
     print(f"Docker context contract passed: {len(assets)} compile-time asset(s) covered.")
     return 0
 

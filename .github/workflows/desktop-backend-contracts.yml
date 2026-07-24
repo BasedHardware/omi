@@ -14,6 +14,9 @@ on:
       - "contract_tests/**"
       - "desktop/macos/Backend-Rust/Cargo.lock"
       - "desktop/macos/Backend-Rust/Cargo.toml"
+      - "desktop/Cargo.lock"
+      - "desktop/Cargo.toml"
+      - "desktop/shared-rust/**"
       - "desktop/macos/Backend-Rust/src/models/**"
       - "desktop/macos/Backend-Rust/src/services/firestore.rs"
       - "desktop/macos/Backend-Rust/src/services/firestore/**"
@@ -75,4 +78,4 @@ jobs:
         run: python -m pytest backend/testing/contracts -v
 
       - name: Run Rust desktop backend contracts
-        run: cargo test --manifest-path desktop/macos/Backend-Rust/Cargo.toml contract
+        run: cargo test --manifest-path desktop/Cargo.toml -p omi-desktop-backend contract

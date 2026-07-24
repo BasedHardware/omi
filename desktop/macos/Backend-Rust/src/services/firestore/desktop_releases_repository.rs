@@ -87,7 +87,7 @@ impl FirestoreService {
         }
 
         // Sort by build number descending (newest first)
-        releases.sort_by(|a, b| b.build_number.cmp(&a.build_number));
+        releases.sort_by_key(|release| std::cmp::Reverse(release.build_number));
 
         Ok(releases)
     }

@@ -46,7 +46,7 @@ jobs:
 
       - name: Set up desktop Rust toolchain
         run: |
-          cd desktop/macos/Backend-Rust
+          cd desktop
           rustup show
 
       - name: Cache desktop Rust backend build
@@ -55,26 +55,25 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            desktop/macos/Backend-Rust/target
-          key: ${{ runner.os }}-desktop-rust-${{ hashFiles('desktop/macos/Backend-Rust/Cargo.lock') }}
+            desktop/target
+          key: ${{ runner.os }}-desktop-rust-${{ hashFiles('desktop/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-desktop-rust-
 
       - name: Check desktop Rust backend
         run: |
           FILES=$(while IFS= read -r file; do
-            if [[ "$file" =~ ^desktop/macos/Backend-Rust/.*\.rs$ ]] && [ -f "$file" ]; then
-              echo "${file#desktop/macos/Backend-Rust/}"
+            if [[ "$file" =~ ^desktop/(macos/Backend-Rust|shared-rust)/.*\.rs$ ]] && [ -f "$file" ]; then
+              echo "$file"
             fi
           done < /tmp/changed-files.txt)
           if [ -n "$FILES" ]; then
             (
-              cd desktop/macos/Backend-Rust
               printf '%s\n' "$FILES" | xargs -d '\n' rustfmt --edition 2021 --check
             )
           fi
-          cd desktop/macos/Backend-Rust
-          cargo check --locked
+          cd desktop
+          cargo check --locked -p omi-desktop-backend
 
   agent-runtime:
     name: Agent Runtime

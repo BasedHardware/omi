@@ -119,9 +119,9 @@ async fn main() {
     // Log active QoS tier
     tracing::info!(
         "Model QoS tier: {} | rate limits: soft={}, hard={}",
-        llm::model_qos::tier_description(),
-        llm::model_qos::daily_soft_limit(),
-        llm::model_qos::daily_hard_limit(),
+        omi_desktop_core::model_qos::tier_description(),
+        omi_desktop_core::model_qos::daily_soft_limit(),
+        omi_desktop_core::model_qos::daily_hard_limit(),
     );
 
     // Load and validate config

@@ -23,6 +23,7 @@ use crate::AppState;
 
 use super::llm_stub::{llm_stub_enabled, stub_gemini_proxy_response};
 use super::rate_limit::{self, RateDecision};
+use omi_desktop_core::model_qos;
 
 // Allowed Gemini API actions (suffix after model name)
 const GEMINI_ALLOWED_ACTIONS: &[&str] = &[
@@ -34,8 +35,7 @@ const GEMINI_ALLOWED_ACTIONS: &[&str] = &[
 
 // Allowed Gemini models — driven by model_qos (issue #6834).
 // Desktop app uses: gemini-2.5-flash or gemini-2.5-pro (tier-dependent), gemini-embedding-001.
-// Provider routing: stable models → Vertex AI, embeddings/preview → AI Studio.
-// Rate limiting may degrade requests above soft limit.
+// Provider routing: stable models → Vertex AI, embeddings/preview → AI Studio; rate limit may degrade.
 
 /// Maximum request body size for Gemini proxy routes (5 MB).
 /// Normal app payloads are 300-600 KB (base64 JPEG + prompt); 5 MB gives ~8x headroom.
@@ -404,7 +404,7 @@ async fn gemini_proxy(
     let byok_stripped = user.byok_stripped;
     let user: AuthUser = user.into();
     // Rewrite preview models to stable equivalents (old app compat)
-    let path = crate::llm::model_qos::rewrite_preview_model(&path);
+    let path = model_qos::rewrite_preview_model(&path);
 
     // Validate the action is in our allowlist
     let action = extract_gemini_action(&path);
@@ -472,7 +472,7 @@ async fn gemini_proxy(
         // Non-BYOK path: one absolute budget owns token acquisition, provider
         // fallback, send, and response drain. No work is detached, so dropping
         // this handler also drops the in-flight upstream request.
-        use crate::llm::model_qos::{resolve_route, Provider};
+        use model_qos::{resolve_route, Provider};
         let initial_provider = if resolve_route(model, action).provider == Provider::VertexAi {
             "vertex_ai"
         } else {
@@ -596,7 +596,7 @@ async fn gemini_proxy_server_key(
 ) -> Result<Response, ProxyError> {
     // Resolve provider route: single dispatch point for all provider-specific behavior.
     // Returns provider, action override, and body transforms needed.
-    use crate::llm::model_qos::{resolve_route, BodyTransform, Provider, ResponseTransform};
+    use model_qos::{resolve_route, BodyTransform, Provider, ResponseTransform};
     let route = resolve_route(model, action);
 
     // Apply request body transform if needed (e.g., embedContent → predict format)
@@ -773,7 +773,7 @@ async fn gemini_stream_proxy(
     let byok_stripped = user.byok_stripped;
     let user: AuthUser = user.into();
     // Rewrite preview models to stable equivalents (old app compat)
-    let path = crate::llm::model_qos::rewrite_preview_model(&path);
+    let path = model_qos::rewrite_preview_model(&path);
 
     // Validate the action
     let action = extract_gemini_action(&path);
@@ -912,7 +912,7 @@ async fn gemini_stream_server_key(
     query: &std::collections::HashMap<String, String>,
 ) -> Result<Response, ProxyError> {
     // Resolve provider route (same dispatch as non-streaming proxy)
-    use crate::llm::model_qos::{resolve_route, Provider};
+    use model_qos::{resolve_route, Provider};
     let route = resolve_route(model, action);
 
     // Track a Vertex-token → AI Studio heal so its fallback outcome can be
@@ -1076,7 +1076,7 @@ fn is_gemini_action_allowed(action: &str) -> bool {
 
 /// Check if a Gemini model is in the allowlist (issue #6624, #6834)
 fn is_gemini_model_allowed(model: &str) -> bool {
-    crate::llm::model_qos::gemini_proxy_allowed().contains(&model)
+    model_qos::gemini_proxy_allowed().contains(&model)
 }
 
 /// Sanitize a Gemini request body (issue #6624).
@@ -2528,7 +2528,7 @@ mod tests {
     /// and transforms, and the request/response transforms produce correct shapes.
     #[test]
     fn embed_vertex_route_end_to_end_composition() {
-        use crate::llm::model_qos::{resolve_route, BodyTransform, Provider, ResponseTransform};
+        use model_qos::{resolve_route, BodyTransform, Provider, ResponseTransform};
 
         // 1. resolve_route returns Vertex AI with :predict action and transforms
         let route = resolve_route("gemini-embedding-001", "embedContent");
@@ -2585,7 +2585,7 @@ mod tests {
     /// (old apps requesting preview get rewritten to flash → routed to Vertex).
     #[test]
     fn preview_rewrite_then_resolve_routes_to_vertex() {
-        use crate::llm::model_qos::{resolve_route, rewrite_preview_model, Provider};
+        use model_qos::{resolve_route, rewrite_preview_model, Provider};
 
         let original_path = "models/gemini-3-flash-preview:generateContent";
         let rewritten = rewrite_preview_model(original_path);

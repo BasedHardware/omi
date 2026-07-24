@@ -13,21 +13,28 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy manifests
-COPY Cargo.toml Cargo.lock* ./
+COPY Cargo.toml Cargo.lock ./
+COPY shared-rust/Cargo.toml shared-rust/Cargo.toml
+COPY macos/Backend-Rust/Cargo.toml macos/Backend-Rust/Cargo.toml
 
 # Create dummy src to cache dependencies
-RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN mkdir -p shared-rust/src macos/Backend-Rust/src \
+    && echo "pub fn placeholder() {}" > shared-rust/src/lib.rs \
+    && echo "fn main() {}" > macos/Backend-Rust/src/main.rs
 
 # Build dependencies only (cached layer)
-RUN cargo build --release --locked && rm -rf src
+RUN cargo build --release --locked -p omi-desktop-backend \
+    && rm -rf shared-rust/src macos/Backend-Rust/src
 
 # Copy actual source code, templates, and compile-time fixtures.
-COPY src ./src
-COPY templates ./templates
-COPY fixtures ./fixtures
+COPY shared-rust ./shared-rust
+COPY macos/Backend-Rust/src ./macos/Backend-Rust/src
+COPY macos/Backend-Rust/templates ./macos/Backend-Rust/templates
+COPY macos/Backend-Rust/fixtures ./macos/Backend-Rust/fixtures
 
 # Build the application
-RUN touch src/main.rs && cargo build --release --locked
+RUN touch shared-rust/src/lib.rs macos/Backend-Rust/src/main.rs \
+    && cargo build --release --locked -p omi-desktop-backend
 
 # Runtime stage
 FROM debian:bookworm-slim
@@ -44,7 +51,7 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /app/target/release/omi-desktop-backend /app/omi-desktop-backend
 
 # Copy Google credentials for Firestore access
-COPY google-credentials.json /app/google-credentials.json
+COPY macos/Backend-Rust/google-credentials.json /app/google-credentials.json
 
 # Expose port
 EXPOSE 8080
