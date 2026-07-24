@@ -68,6 +68,7 @@ from utils.http_client import (
     _webhook_circuit_breakers,
     _latest_wins_versions,
     _semaphores,
+    _SEMAPHORE_CACHE_MAX,
     _CIRCUIT_BREAKER_FAILURE_THRESHOLD,
     _CIRCUIT_BREAKER_RECOVERY_TIMEOUT,
 )
@@ -284,6 +285,44 @@ class TestSemaphoreGetters:
         sem1 = get_webhook_semaphore()
         sem2 = get_webhook_semaphore()
         assert sem1 is sem2
+
+    @pytest.mark.asyncio
+    async def test_pruning_keeps_the_running_loops_semaphore(self):
+        """Crossing the cache cap must not swap the live loop's existing semaphore.
+
+        The prune used _semaphores.clear(), which dropped the running loop's entries too.
+        A caller already holding permits on the old Semaphore kept them while the next
+        caller received a brand-new one, so the effective concurrency briefly doubled —
+        the opposite of what the cap exists for. The docstring already promised the main
+        loop's semaphores "are stable" and that only short-lived asyncio.run() entries
+        are pruned.
+        """
+        _semaphores.clear()
+        webhook_before = get_webhook_semaphore()
+        live_loop_id = id(asyncio.get_running_loop())
+
+        # Fill the cache past the cap with entries from other (destroyed) loops.
+        for i in range(_SEMAPHORE_CACHE_MAX + 5):
+            _semaphores[(live_loop_id + 1 + i, 'webhook')] = asyncio.Semaphore(1)
+
+        # A new name for this loop is what triggers the prune.
+        get_maps_semaphore()
+
+        assert get_webhook_semaphore() is webhook_before, 'the running loop lost its semaphore to the prune'
+
+    @pytest.mark.asyncio
+    async def test_pruning_still_bounds_the_cache(self):
+        """The prune must drop the foreign-loop entries it was added for."""
+        _semaphores.clear()
+        get_webhook_semaphore()
+        live_loop_id = id(asyncio.get_running_loop())
+        for i in range(_SEMAPHORE_CACHE_MAX + 5):
+            _semaphores[(live_loop_id + 1 + i, 'webhook')] = asyncio.Semaphore(1)
+
+        get_maps_semaphore()  # crosses the cap, triggering the prune
+
+        assert all(key[0] == live_loop_id for key in _semaphores), 'foreign-loop entries survived'
+        assert len(_semaphores) == 2  # webhook + maps, both for this loop
 
     def test_different_loops_return_different_instances(self):
         """Different asyncio.run() calls get isolated semaphores."""
