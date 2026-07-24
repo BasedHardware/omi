@@ -1,9 +1,12 @@
 import importlib.util
 import base64
 import json
+import os
 import stat
 import sys
 from pathlib import Path
+
+import pytest
 
 
 def _load_module():
@@ -106,6 +109,36 @@ def test_firebase_auth_exchange_failure_is_redacted(monkeypatch):
         raise AssertionError('expected a redacted Firebase exchange failure')
 
 
+def test_write_token_fails_closed_when_owner_only_permissions_are_unavailable(monkeypatch, tmp_path, capsys):
+    module = _load_module()
+    output = tmp_path / 'probe-token'
+    monkeypatch.setattr(
+        module,
+        'mint_probe_token',
+        lambda _secret_project, _firebase_project: 'firebase-id-token-that-must-not-leak',
+    )
+    monkeypatch.delattr(module.os, 'fchmod', raising=False)
+
+    exit_code = module.main(
+        [
+            '--secret-project',
+            'omi-deploy',
+            '--firebase-project',
+            'omi-prod',
+            '--token-output',
+            str(output),
+        ]
+    )
+
+    report = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert report == {'suite': 'omi_firebase_release_probe_token', 'stage': 'token_output', 'status': 'FAIL'}
+    assert not output.exists()
+
+
+@pytest.mark.skipif(
+    not callable(getattr(os, 'fchmod', None)), reason='owner-only descriptor modes require POSIX fchmod'
+)
 def test_write_token_uses_owner_only_permissions(tmp_path):
     module = _load_module()
     output = tmp_path / 'probe-token'
