@@ -586,6 +586,9 @@ pub fn stub_gemini_proxy_response(body: &Bytes, action: &str) -> Response {
 
 #[cfg(test)]
 mod tests {
+    // Tests may unwrap: the crate-level unwrap_used deny targets production
+    // code; a test failing on unwrap is the test doing its job.
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use crate::models::chat_completions::{
         ChatCompletionRequest, ChatMessage, FunctionDefinition, ToolDefinition,

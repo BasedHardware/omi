@@ -1,8 +1,9 @@
 import { ipcMain, desktopCapturer } from 'electron'
-import { readFile } from 'fs/promises'
 import { helperProcess } from '../ocr/helperProcess'
 import { getPrimarySourceId } from '../rewind/sourceId'
 import { getCurrentScreen, screenCacheFresh } from '../rewind/currentScreen'
+import { rewindRoot } from '../rewind/paths'
+import { readRewindFrame } from '../rewind/frameFile'
 import { latestRewindFrame } from './db'
 
 // Overall cap for a single read. The fast path (latest Rewind frame) is near-
@@ -61,7 +62,7 @@ async function readScreenText(): Promise<string> {
   // The stored frame exists but isn't OCR'd yet — OCR it once to bootstrap.
   if (frame) {
     try {
-      const jpeg = await readFile(frame.imagePath)
+      const jpeg = await readRewindFrame(rewindRoot(), frame.imagePath)
       const res = await helperProcess.ocr(jpeg)
       if (res.ok) return res.fullText
     } catch {

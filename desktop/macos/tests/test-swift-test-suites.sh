@@ -97,6 +97,13 @@ if [ "$suite" = "AlphaTests" ]; then
   exit 42
 fi
 
+if [ -n "${FAKE_XCRUN_HANG_SUITE:-}" ] && [ "$FAKE_XCRUN_HANG_SUITE" = "$suite" ]; then
+  sleep 30 &
+  child_pid=$!
+  echo "$child_pid" >"$FAKE_XCRUN_HANG_CHILD_PID_PATH"
+  wait "$child_pid"
+fi
+
 echo "$suite passed"
 SH
 chmod +x "$TMPDIR/bin/xcrun"
@@ -138,6 +145,26 @@ if "$RUNNER" >"$TMPDIR/default-runner.out" 2>"$TMPDIR/default-runner.err"; then
 fi
 if ! grep -q "Ran 6 Swift suites in isolation with 4 worker(s)." "$TMPDIR/default-runner.out"; then
   fail "runner did not default local suite execution to four workers"
+fi
+
+export OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS=1
+export FAKE_XCRUN_HANG_SUITE=BetaTests
+export FAKE_XCRUN_HANG_CHILD_PID_PATH="$TMPDIR/hanging-child.pid"
+if "$RUNNER" >"$TMPDIR/timeout-runner.out" 2>"$TMPDIR/timeout-runner.err"; then
+  fail "timeout fixture unexpectedly succeeded"
+fi
+if ! grep -q -- "--- FAILED: BetaTests ---" "$TMPDIR/timeout-runner.out"; then
+  fail "runner did not identify the timed-out suite"
+fi
+if ! grep -q "suite timed out after 1s" "$TMPDIR/timeout-runner.out"; then
+  fail "runner did not report the per-suite timeout"
+fi
+if [ ! -s "$FAKE_XCRUN_HANG_CHILD_PID_PATH" ]; then
+  fail "timeout fixture did not record its descendant process"
+fi
+hanging_child_pid="$(cat "$FAKE_XCRUN_HANG_CHILD_PID_PATH")"
+if kill -0 "$hanging_child_pid" 2>/dev/null; then
+  fail "runner left the timed-out suite's descendant process alive"
 fi
 
 echo "swift-test-suites tests passed"

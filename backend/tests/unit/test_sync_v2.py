@@ -450,6 +450,28 @@ class TestSyncJobsRedis:
         assert result.get('error') is None
         mock_redis.set.assert_not_called()
 
+    def test_never_dispatched_cloud_tasks_queued_job_goes_stale(self):
+        """#10033: a cloud_tasks job that never left 'queued' lost its task and
+        must become stale-eligible instead of zombieing until JOB_TTL expiry."""
+        mod, mock_redis = self._load_sync_jobs_module()
+        base = {
+            'job_id': 'q-lost',
+            'uid': 'uid',
+            'status': 'queued',
+            'dispatch_mode': 'cloud_tasks',
+            'started_at': None,
+            'created_at': time.time() - mod.QUEUED_DISPATCH_STALE_SECONDS - 100,
+            'updated_at': time.time() - mod.QUEUED_DISPATCH_STALE_SECONDS - 100,
+        }
+        assert mod.is_sync_job_stale(dict(base)) is True
+        # Under the dispatch threshold: not stale yet.
+        assert mod.is_sync_job_stale({**base, 'updated_at': time.time() - 60}) is False
+        # Inline queued jobs keep the #7469 contract at any age.
+        assert mod.is_sync_job_stale({**base, 'dispatch_mode': 'inline'}) is False
+        # A pending Cloud Tasks retry (worker re-queued between attempts) must
+        # never be flipped terminal by a poll, however long its backoff.
+        assert mod.is_sync_job_stale({**base, 'attempt': 2, 'started_at': time.time() - 4000}) is False
+
     def test_finalize_sync_job_sets_status(self):
         """finalize_sync_job must set correct terminal status."""
         mod, mock_redis = self._load_sync_jobs_module()
