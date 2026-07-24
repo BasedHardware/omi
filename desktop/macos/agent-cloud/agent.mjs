@@ -1251,7 +1251,28 @@ function startServer() {
             return;
           }
 
-          const cols = Object.keys(rows[0]);
+          // The desktop serializes each row with its NULL columns omitted
+          // (AgentSyncService skips .null so the VM applies its own defaults), so
+          // column sets differ row to row. Taking the whole batch's schema from
+          // rows[0] wrote every row with row 0's columns: a batch whose first
+          // screenshot was not yet OCR'd stripped ocrText/embedding from the other
+          // 99 rows that did have them — and /sync still answered success, so the
+          // desktop advanced its cursor and never resent them. Group by column set
+          // and write each row with exactly the columns it carries.
+          const columnGroups = new Map();
+          for (const row of rows) {
+            const rowCols = Object.keys(row).sort();
+            if (rowCols.length === 0) continue;  // all-NULL row carries nothing to write
+            const key = JSON.stringify(rowCols);
+            const group = columnGroups.get(key);
+            if (group) {
+              group.rows.push(row);
+            } else {
+              columnGroups.set(key, { cols: rowCols, rows: [row] });
+            }
+          }
+          const groups = [...columnGroups.values()];
+          const cols = [...new Set(groups.flatMap((g) => g.cols))];
 
           // Auto-add any columns missing from the table (handles schema migrations
           // where the VM has an older database than the desktop app).
@@ -1265,34 +1286,41 @@ function startServer() {
             }
           }
 
-          const placeholders = cols.map(() => "?").join(", ");
-          const sql = `INSERT OR REPLACE INTO "${table}" (${cols.map(c => `"${c}"`).join(", ")}) VALUES (${placeholders})`;
-
-          const stmt = db.prepare(sql);
-          const insertMany = db.transaction((rowList) => {
-            for (const row of rowList) {
-              const values = cols.map((col) => {
-                const val = row[col];
-                // Decode base64 embedding columns back to Buffer
-                if (col === "embedding" && typeof val === "string" && val.length > 0) {
-                  return Buffer.from(val, "base64");
-                }
-                if (val === null || val === undefined) return null;
-                return val;
-              });
-              stmt.run(...values);
-            }
+          const prepared = groups.map(({ cols: groupCols, rows: groupRows }) => {
+            const placeholders = groupCols.map(() => "?").join(", ");
+            const sql = `INSERT OR REPLACE INTO "${table}" (${groupCols.map(c => `"${c}"`).join(", ")}) VALUES (${placeholders})`;
+            return { cols: groupCols, rows: groupRows, stmt: db.prepare(sql) };
           });
 
-          insertMany(rows);
+          const insertMany = db.transaction((groupList) => {
+            let inserted = 0;
+            for (const { cols: groupCols, rows: groupRows, stmt } of groupList) {
+              for (const row of groupRows) {
+                const values = groupCols.map((col) => {
+                  const val = row[col];
+                  // Decode base64 embedding columns back to Buffer
+                  if (col === "embedding" && typeof val === "string" && val.length > 0) {
+                    return Buffer.from(val, "base64");
+                  }
+                  if (val === null || val === undefined) return null;
+                  return val;
+                });
+                stmt.run(...values);
+                inserted++;
+              }
+            }
+            return inserted;
+          });
+
+          const applied = insertMany(prepared);
 
           // FTS is kept in sync by triggers on the content tables.
           // INSERT OR REPLACE fires DELETE then INSERT triggers, which update FTS automatically.
 
           lastActivityAt = Date.now();
-          log(`Sync: ${rows.length} rows → ${table}`);
+          log(`Sync: ${applied} rows → ${table} (${groups.length} column set${groups.length === 1 ? "" : "s"})`);
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ applied: rows.length, table }));
+          res.end(JSON.stringify({ applied, table }));
         } catch (err) {
           log(`Sync error: ${err.message}`);
           res.writeHead(500, { "Content-Type": "application/json" });

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node agent.mjs --serve",
+    "test": "node sync-e2e.mjs",
     "cli": "node agent.mjs",
     "deploy": "bash scripts/deploy.sh",
     "upload-db": "bash scripts/upload-db.sh"

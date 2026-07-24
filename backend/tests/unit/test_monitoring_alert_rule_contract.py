@@ -36,9 +36,7 @@ PARAKEET_STREAMS_PER_READY_REPLICA = (
 PARAKEET_STREAM_CAPACITY_RUNBOOK = "backend/docs/runbooks/parakeet-stream-capacity.md"
 PARAKEET_CAPACITY_DASHBOARD = MONITORING / "dashboards/gke/parakeet-asr-monitoring.json"
 LIVE_TRANSCRIPTION_FAILURE_RULE = "omi-journey-live-transcription-fail"
-LIVE_TRANSCRIPTION_FAILURE_EXPR = (
-    'sum(increase(omi_live_stt_accepted_total[30m]))'
-)
+LIVE_TRANSCRIPTION_FAILURE_EXPR = 'sum(increase(omi_live_stt_accepted_total[30m]))'
 PARAKEET_READY_POD_NO_SUCCESS_RULE = "omi-parakeet-ready-pod-no-success"
 PARAKEET_READY_POD_NO_SUCCESS_EXPR = (
     '((sum by (pod) (increase(parakeet_requests_total{container="parakeet",namespace="prod-omi-backend",'

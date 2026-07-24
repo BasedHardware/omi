@@ -801,6 +801,33 @@ extension PostHogManager {
       ])
   }
 
+  // MARK: - Memory Assistant Telemetry (proactive screen-context assistant)
+
+  /// Emitted on a user-initiated persisted change to one of the two MemoryAssistant
+  /// settings that gate analysis (`enabled`, `notifications_enabled`). Makes the true
+  /// activation denominator (monitoring users who also enabled memory notifications)
+  /// measurable. Closed schema only — bounded `setting` + boolean `value`.
+  func memoryAssistantSettingChanged(setting: MemoryAssistantTelemetry.Setting, value: Bool) {
+    track(
+      MemoryAssistantTelemetry.settingChangedEventName,
+      properties: MemoryAssistantTelemetry.settingChangedPayload(setting: setting, value: value)
+    )
+  }
+
+  /// Emitted once per actual Gemini analysis attempt (not per captured frame, and not
+  /// on disabled/gated paths) with a closed terminal `outcome`. Supplements — does not
+  /// replace — the existing `Memory Extracted` success terminal. Confidence is bucketed
+  /// to a coarse decile range; raw model material is never sent.
+  func memoryAssistantAnalysisRun(
+    outcome: MemoryAssistantTelemetry.AnalysisOutcome,
+    confidence: Double? = nil
+  ) {
+    track(
+      MemoryAssistantTelemetry.analysisRunEventName,
+      properties: MemoryAssistantTelemetry.analysisRunPayload(outcome: outcome, confidence: confidence)
+    )
+  }
+
   func insightGenerated(category: String?) {
     var properties: [String: Any] = [:]
     if let cat = category { properties["category"] = cat }
