@@ -78,6 +78,10 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
   func testConnectionsExposeDistinctAppleSourcesWithoutReplacingGoogleCalendar() {
     XCTAssertEqual(ImportConnector.all.first { $0.id == "calendar" }?.subtitle, "Google Calendar")
     XCTAssertEqual(ImportConnector.all.first { $0.id == "apple-calendar" }?.title, "Apple Calendar")
+    XCTAssertEqual(
+      ImportConnector.all.first { $0.id == "apple-calendar" }?.description,
+      "Import local events; notes, attendees, and locations are saved as memories."
+    )
     XCTAssertEqual(ImportConnector.all.first { $0.id == "apple-reminders" }?.title, "Apple Reminders")
     XCTAssertEqual(ImportConnector.all.first { $0.id == "apple-notes" }?.title, "Apple Notes")
   }
@@ -128,6 +132,68 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
     let result = try await AppleEventKitReaderService(eventStore: store, remindersSync: sync).syncReminders()
 
     XCTAssertEqual(result.deleted, 1)
+    XCTAssertEqual(sync.deletedIDs, ["item-gone"])
+    XCTAssertTrue(sync.syncBatches.isEmpty)
+  }
+
+  @MainActor
+  func testExistingAppleReminderDoesNotDeleteOmiActionItem() async throws {
+    let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
+    store.makeReminder(id: "reminder-1", title: "Still here", completed: false)
+    let sync = AppleRemindersSyncStub(
+      pending: AppleRemindersPendingSync(
+        pendingExport: [],
+        syncedItems: [
+          .fixture(id: "item-1", description: "Still here", appleReminderId: "reminder-1")
+        ]
+      )
+    )
+
+    let result = try await AppleEventKitReaderService(eventStore: store, remindersSync: sync).syncReminders()
+
+    XCTAssertEqual(result.deleted, 0)
+    XCTAssertTrue(sync.deletedIDs.isEmpty)
+  }
+
+  @MainActor
+  func testMultipleMissingAppleRemindersDeleteAllLinkedActionItems() async throws {
+    let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
+    let sync = AppleRemindersSyncStub(
+      pending: AppleRemindersPendingSync(
+        pendingExport: [],
+        syncedItems: [
+          .fixture(id: "item-a", description: "First", appleReminderId: "missing-a"),
+          .fixture(id: "item-b", description: "Second", appleReminderId: "missing-b"),
+        ]
+      )
+    )
+
+    let result = try await AppleEventKitReaderService(eventStore: store, remindersSync: sync).syncReminders()
+
+    XCTAssertEqual(result.deleted, 2)
+    XCTAssertEqual(sync.deletedIDs, ["item-a", "item-b"])
+  }
+
+  @MainActor
+  func testMissingAppleReminderDeleteFailurePropagates() async {
+    let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
+    let sync = AppleRemindersSyncStub(
+      pending: AppleRemindersPendingSync(
+        pendingExport: [],
+        syncedItems: [
+          .fixture(id: "item-gone", description: "Deleted elsewhere", appleReminderId: "missing-reminder")
+        ]
+      ),
+      failDeleteForIDs: ["item-gone"]
+    )
+
+    do {
+      _ = try await AppleEventKitReaderService(eventStore: store, remindersSync: sync).syncReminders()
+      XCTFail("Expected delete failure to propagate")
+    } catch {
+      XCTAssertEqual(error as? AppleRemindersSyncStub.Error, .deleteFailed("item-gone"))
+    }
+
     XCTAssertEqual(sync.deletedIDs, ["item-gone"])
   }
 
@@ -221,15 +287,25 @@ private final class AppleEventKitStoreStub: AppleEventKitStore {
 
 @MainActor
 private final class AppleRemindersSyncStub: AppleRemindersSyncing {
-  enum Error: Swift.Error, Equatable { case forcedFailure }
+  enum Error: Swift.Error, Equatable {
+    case forcedFailure
+    case deleteFailed(String)
+  }
 
   var pending: AppleRemindersPendingSync
   var failAfterSyncCalls: Int?
+  var failDeleteForIDs: Set<String> = []
   private(set) var syncBatches: [[AppleRemindersSyncUpdate]] = []
   private(set) var deletedIDs: [String] = []
 
-  init(pending: AppleRemindersPendingSync) {
+  init(
+    pending: AppleRemindersPendingSync,
+    failAfterSyncCalls: Int? = nil,
+    failDeleteForIDs: Set<String> = []
+  ) {
     self.pending = pending
+    self.failAfterSyncCalls = failAfterSyncCalls
+    self.failDeleteForIDs = failDeleteForIDs
   }
 
   func getPendingAppleRemindersSync() async throws -> AppleRemindersPendingSync { pending }
@@ -243,6 +319,9 @@ private final class AppleRemindersSyncStub: AppleRemindersSyncing {
   }
 
   func deleteSyncedActionItem(id: String) async throws {
+    if failDeleteForIDs.contains(id) {
+      throw Error.deleteFailed(id)
+    }
     deletedIDs.append(id)
   }
 }
