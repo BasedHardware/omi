@@ -606,7 +606,6 @@ enum PreviewSimilarityThresholdPolicy {
   private static func isBrowser(bundleID: String, appName: String) -> Bool {
     if !bundleID.isEmpty, ConferencingApps.isBrowserBundleID(bundleID) { return true }
     return ConferencingApps.browserApps.contains(appName)
-      || TaskAssistantSettings.isBrowser(appName)
   }
 
   private static func isNote(bundleID: String, appName: String) -> Bool {

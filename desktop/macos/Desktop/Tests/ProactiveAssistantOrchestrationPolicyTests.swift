@@ -582,6 +582,24 @@ final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
       0.82)
   }
 
+  func testPreviewSimilarityThresholdPolicyKeepsSmallTextEdits() {
+    let now = Date(timeIntervalSinceReferenceDate: 10_000)
+    var trigger = ProactiveCaptureTrigger(
+      idleThreshold: 60, heartbeatInterval: 3, appSwitchDebounce: 0.5)
+
+    trigger.recordPreviewHash(0x1234, at: now)
+    let oneBitChangeSimilarity = trigger.previewSimilarity(to: 0x1235)
+    XCTAssertEqual(oneBitChangeSimilarity, 63.0 / 64.0, accuracy: 1e-9)
+
+    // Notes/docs tier: one flipped dHash bit must still capture (typical text edit).
+    let notesThreshold = PreviewSimilarityThresholdPolicy.threshold(
+      bundleID: "com.apple.Notes", appName: "Notes")
+    XCTAssertFalse(trigger.shouldSkipPreview(0x1235, similarityThreshold: notesThreshold))
+
+    // Old coarse default (0.92) would have skipped this edit — regression guard.
+    XCTAssertTrue(trigger.shouldSkipPreview(0x1235, similarityThreshold: 0.92))
+  }
+
   func testPreviewSimilarityThresholdPolicyBrowserWindowTitle() {
     // Docs in browser → notes tier.
     XCTAssertEqual(
