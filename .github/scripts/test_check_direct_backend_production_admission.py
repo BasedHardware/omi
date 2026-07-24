@@ -70,6 +70,48 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
                     target.write_text(target.read_text(encoding="utf-8") + "\n" + mutation, encoding="utf-8")
                     self.assertTrue(CHECKER.validate(root))
 
+    def test_gateway_rejects_release_sha_admission_bypasses(self) -> None:
+        mutations = (
+            (
+                CHECKER.GATEWAY_RELEASE_SHA_INPUT,
+                "",
+                "gateway deploy must expose a production-only release_sha input",
+            ),
+            (
+                '[[ ! "$DEPLOY_SHA" =~ $sha_pattern || "$DEPLOY_SHA" == "0000000000000000000000000000000000000000" ]]',
+                '[[ -z "$DEPLOY_SHA" ]]',
+                "gateway production admission must reject malformed or missing release_sha",
+            ),
+            (
+                'git merge-base --is-ancestor "$DEPLOY_SHA" "$main_sha"',
+                'git merge-base --is-ancestor HEAD "$main_sha"',
+                "gateway production admission must require release_sha to be merged into fresh main",
+            ),
+            (
+                ".github/scripts/verify_backend_release_admission.py",
+                "true # proof bypass",
+                "gateway production admission must verify the Release Eligibility proof",
+            ),
+            (
+                'git checkout --detach "$DEPLOY_SHA"',
+                'git checkout --detach main',
+                "gateway production admission must check out the admitted SHA",
+            ),
+        )
+        for old, new, expected in mutations:
+            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                for relative in CHECKER.WORKFLOWS:
+                    source = ROOT / relative
+                    target = root / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, target)
+                target = root / CHECKER.GATEWAY_WORKFLOW
+                text = target.read_text(encoding="utf-8")
+                self.assertIn(old, text)
+                target.write_text(text.replace(old, new, 1), encoding="utf-8")
+                self.assertIn(expected, CHECKER.validate(root))
+
 
 if __name__ == "__main__":
     unittest.main()

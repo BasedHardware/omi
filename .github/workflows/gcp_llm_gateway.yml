@@ -11,6 +11,10 @@ on:
         description: 'Branch to deploy from'
         required: true
         default: 'main'
+      release_sha:
+        description: 'Production only: exact main SHA with a successful first-attempt Release Eligibility proof'
+        required: false
+        default: ''
 
 # LLM Gateway deployment reapplies shared backend-secrets, so it joins the
 # full backend mutation domain for the selected environment.
@@ -26,6 +30,7 @@ jobs:
   deploy:
     environment: ${{ github.event.inputs.environment }}
     permissions:
+      actions: 'read'
       contents: 'read'
       id-token: 'write'
 
@@ -43,19 +48,49 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          # Production starts from fresh main only to validate the requested
+          # immutable SHA; development retains its caller-selected branch.
           ref: ${{ github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch }}
           fetch-depth: 0
 
-      - name: Admit checked-out production source and image identity
+      - name: Admit production source and image identity
+        env:
+          DEPLOY_SHA: ${{ github.event.inputs.release_sha }}
+          DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          CHECKED_OUT_SHA=$(git rev-parse HEAD)
-          if [[ "${{ github.event.inputs.environment }}" == prod ]]; then
-            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-            if ! git merge-base --is-ancestor "$CHECKED_OUT_SHA" origin/main; then
-              echo "ERROR: checked-out HEAD $CHECKED_OUT_SHA is not an ancestor of fresh origin/main $(git rev-parse origin/main)." >&2
+          sha_pattern='^[0-9a-f]{40}$'
+          if [[ "$DEPLOY_ENVIRONMENT" == prod ]]; then
+            if [[ ! "$DEPLOY_SHA" =~ $sha_pattern || "$DEPLOY_SHA" == "0000000000000000000000000000000000000000" ]]; then
+              echo "ERROR: release_sha must be one non-zero, lowercase, full commit SHA." >&2
               exit 1
             fi
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+            git cat-file -e "${DEPLOY_SHA}^{commit}"
+            if ! git merge-base --is-ancestor "$DEPLOY_SHA" "$main_sha"; then
+              echo "ERROR: release_sha is not an ancestor of fresh origin/main; only merged code may deploy." >&2
+              exit 1
+            fi
+            proof_path="${RUNNER_TEMP}/release-eligibility-${DEPLOY_SHA}.json"
+            gh api -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}&per_page=100" \
+              > "$proof_path"
+            python3 .github/scripts/verify_backend_release_admission.py \
+              --sha "$DEPLOY_SHA" \
+              --repository "$GITHUB_REPOSITORY" \
+              --workflow-runs "$proof_path"
+            git checkout --detach "$DEPLOY_SHA"
+          fi
+          CHECKED_OUT_SHA=$(git rev-parse HEAD)
+          if [[ "$DEPLOY_ENVIRONMENT" == prod && "$CHECKED_OUT_SHA" != "$DEPLOY_SHA" ]]; then
+            echo "ERROR: checked-out HEAD $CHECKED_OUT_SHA does not match admitted release_sha $DEPLOY_SHA." >&2
+            exit 1
+          fi
+          if [[ "$DEPLOY_ENVIRONMENT" == prod ]] && ! git merge-base --is-ancestor "$CHECKED_OUT_SHA" origin/main; then
+            echo "ERROR: checked-out HEAD $CHECKED_OUT_SHA is not an ancestor of fresh origin/main $(git rev-parse origin/main)." >&2
+            exit 1
           fi
           IMAGE_TAG=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")
           echo "Admitted deployment source: $CHECKED_OUT_SHA"
