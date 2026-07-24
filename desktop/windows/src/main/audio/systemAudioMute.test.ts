@@ -16,9 +16,11 @@ vi.mock('./resolveHelperPath', () => ({
 }))
 // The bridge emits a durable Sentry diagnostic when the helper is confirmed
 // missing/incompatible — a field user's "PTT doesn't mute my music" must not be
-// silent. Mock it so we can assert it fires (exactly once, behind the guard).
-const captureMessageMock = vi.fn()
-vi.mock('../sentry', () => ({ captureMessage: (...a: unknown[]) => captureMessageMock(...a) }))
+// silent. PTT still works without muting, so this is a fail-open degrade and routes
+// through the shared fallback emitter rather than Sentry (#10240). Mock it so we can
+// assert it fires (exactly once, behind the guard).
+const recordFallbackMock = vi.fn()
+vi.mock('../fallback', () => ({ recordFallback: (...a: unknown[]) => recordFallbackMock(...a) }))
 
 type FakeChild = EventEmitter & {
   stdout: EventEmitter
@@ -66,7 +68,7 @@ async function loadBridge(): Promise<typeof import('./systemAudioMute')> {
 
 beforeEach(() => {
   spawnMock.mockReset()
-  captureMessageMock.mockReset()
+  recordFallbackMock.mockReset()
 })
 
 describe('systemAudioMuteBridge — helper binary absent', () => {
@@ -90,12 +92,15 @@ describe('systemAudioMuteBridge — helper binary absent', () => {
     // unavailable (otherwise every hold would re-spawn a missing exe and log).
     expect(spawnMock).toHaveBeenCalledTimes(1)
 
-    // And the degrade is durable, not just a console line: exactly one Sentry
-    // diagnostic (behind the unavailable guard) despite three mute/restore calls.
-    expect(captureMessageMock).toHaveBeenCalledTimes(1)
-    expect(captureMessageMock).toHaveBeenCalledWith(
-      expect.stringContaining('win-audio-helper'),
-      expect.objectContaining({ area: 'ptt-audio-mute', level: 'warning' })
+    // And the degrade is durable, not just a console line: exactly one fallback
+    // record (behind the unavailable guard) despite three mute/restore calls.
+    expect(recordFallbackMock).toHaveBeenCalledTimes(1)
+    expect(recordFallbackMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        component: 'ptt_audio_mute',
+        reason: 'config_incomplete',
+        outcome: 'degraded'
+      })
     )
   })
 
@@ -176,15 +181,15 @@ describe('systemAudioMuteBridge — live helper', () => {
     await systemAudioMuteBridge.muteSystemAudio()
     expect(opcodes).not.toContain(OP_MUTE) // never muted through the stale helper
 
-    // The stale-helper degrade is also durable: exactly one Sentry diagnostic,
-    // behind the unavailable guard, naming the protocol-mismatch reason.
-    expect(captureMessageMock).toHaveBeenCalledTimes(1)
-    expect(captureMessageMock).toHaveBeenCalledWith(
-      expect.stringContaining('protocol mismatch'),
+    // The stale-helper degrade is also durable: exactly one fallback record,
+    // behind the unavailable guard, naming the capability-mismatch reason.
+    expect(recordFallbackMock).toHaveBeenCalledTimes(1)
+    expect(recordFallbackMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        area: 'ptt-audio-mute',
-        level: 'warning',
-        extra: expect.objectContaining({ reason: 'protocol_mismatch' })
+        component: 'ptt_audio_mute',
+        outcome: 'degraded',
+        reason: 'capability_mismatch',
+        detail: expect.objectContaining({ helper: 2, expected: 3 })
       })
     )
   })

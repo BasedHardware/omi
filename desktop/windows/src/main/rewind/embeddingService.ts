@@ -26,6 +26,7 @@ import {
 } from './embedQueue'
 import { embedBatch, embedOne, type EmbedSession } from './embeddingClient'
 import { linkRewindEmbedding, rewindFramesNeedingEmbedding, upsertRewindEmbedding } from '../ipc/db'
+import { recordFallback } from '../fallback'
 
 /** How often the flush timer checks the queue (the 60s deadline lives in the queue). */
 const TICK_MS = 5_000
@@ -242,13 +243,19 @@ async function drain(current: EmbedSession, force: boolean): Promise<void> {
     try {
       await flushBatch(batch, current, mine)
     } catch (e) {
-      // Degrade quietly: these frames stay unembedded (keyword search still
-      // finds them) and the sweep moves on. There is no Windows recordFallback
-      // emitter to route this through yet (#10240; see the Track 3 TODO in
-      // assistants/aiUserProfile/orchestrate.ts), so a log is the honest option.
+      // Degrade quietly for the user: these frames stay unembedded (keyword search
+      // still finds them) and the sweep moves on — but name the degrade for ops
+      // through the shared fallback emitter rather than only a local log.
       if (generation !== mine) return // torn down mid-request; not the new session's failure
       for (const item of batch) failedThisLaunch.add(item.frameId)
-      console.warn(`[rewind-embed] batch of ${batch.length} failed: ${(e as Error).message}`)
+      recordFallback({
+        component: 'rewind_embedding',
+        from: 'semantic_search',
+        to: 'keyword_search',
+        reason: 'other',
+        outcome: 'degraded',
+        detail: { batchSize: batch.length, message: (e as Error).message }
+      })
       return
     }
     if (!force && !queue.shouldFlush(Date.now())) return

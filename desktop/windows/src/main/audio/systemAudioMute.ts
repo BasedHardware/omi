@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import { resolveAudioHelperPath } from './resolveHelperPath'
 import { encodeRequest, FrameDecoder } from '../ocr/helperProtocol'
 import { OP_MUTE, OP_RESTORE, OP_HELLO, PROTOCOL_VERSION } from './protocol'
-import { captureMessage } from '../sentry'
+import { recordFallback } from '../fallback'
 import { recordVoiceFlight } from '../voice/flightRecorder'
 
 // Track-2-owned bridge to win-audio-helper.exe — mutes the default output device
@@ -92,14 +92,15 @@ class SystemAudioMuteBridge {
           )
           // Durable signal: a field user's "PTT doesn't mute my music" otherwise
           // records nothing. Inside the !unavailable guard, so it fires at most once.
-          // TODO(#10240 track3): route through a Windows main-process recordFallback emitter
-          // as outcome:'degraded' once one exists (see warnDegraded note in
-          // src/main/assistants/aiUserProfile/orchestrate.ts:46-52). Until then
-          // captureMessage is the correct call (Sentry for developer-facing degrades).
-          captureMessage('win-audio-helper binary not found — PTT system-audio mute disabled', {
-            area: 'ptt-audio-mute',
-            level: 'warning',
-            extra: { reason: 'enoent' }
+          // PTT still works without muting, so this is a fail-open degrade and belongs
+          // in the shared fallback emitter rather than Sentry (hard errors only).
+          recordFallback({
+            component: 'ptt_audio_mute',
+            from: 'system_audio_mute',
+            to: 'none',
+            reason: 'config_incomplete',
+            outcome: 'degraded',
+            detail: { cause: 'helper_binary_missing' }
           })
         }
         this.unavailable = true
@@ -134,19 +135,16 @@ class SystemAudioMuteBridge {
         )
         if (!this.unavailable) {
           // Durable signal for a stale helper build in the field. Guarded so it
-          // fires at most once (before we latch unavailable below).
-          // TODO(#10240 track3): route through a Windows main-process recordFallback emitter
-          // as outcome:'degraded' once one exists (see warnDegraded note in
-          // src/main/assistants/aiUserProfile/orchestrate.ts:46-52). Until then
-          // captureMessage is the correct call (Sentry for developer-facing degrades).
-          captureMessage('win-audio-helper protocol mismatch — PTT system-audio mute disabled', {
-            area: 'ptt-audio-mute',
-            level: 'warning',
-            extra: {
-              reason: 'protocol_mismatch',
-              helper: protocolVersion,
-              expected: PROTOCOL_VERSION
-            }
+          // fires at most once (before we latch unavailable below). PTT still works
+          // without muting, so this is a fail-open degrade for the shared fallback
+          // emitter rather than Sentry (hard errors only).
+          recordFallback({
+            component: 'ptt_audio_mute',
+            from: 'system_audio_mute',
+            to: 'none',
+            reason: 'capability_mismatch',
+            outcome: 'degraded',
+            detail: { helper: protocolVersion, expected: PROTOCOL_VERSION }
           })
         }
         this.unavailable = true
