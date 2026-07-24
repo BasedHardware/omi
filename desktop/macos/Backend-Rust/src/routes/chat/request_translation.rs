@@ -48,10 +48,14 @@ impl ReasoningEffort {
         }
     }
 }
-/// Anthropic server-side web search tool type (same version the Python
-/// backend's agentic chat uses). Executed entirely upstream by Anthropic —
-/// the OpenAI-side client never sees or executes it.
-const WEB_SEARCH_TOOL_TYPE: &str = "web_search_20260209";
+/// Anthropic's direct server-side web search tool. Executed entirely upstream
+/// by Anthropic — the OpenAI-side client never sees or executes it.
+///
+/// Keep this on the basic-search version while the gateway's response parser
+/// owns only the direct `server_tool_use` + `web_search_tool_result` contract.
+/// `web_search_20260209` defaults to code-execution callers and cannot safely
+/// be selected as the direct tool this compatibility route requires.
+const WEB_SEARCH_TOOL_TYPE: &str = "web_search_20250305";
 
 /// Max web searches per request (matches the Python backend's agentic chat).
 const WEB_SEARCH_MAX_USES: u32 = 5;
@@ -64,15 +68,8 @@ fn web_search_tool_def() -> AnthropicToolDef {
         "type": WEB_SEARCH_TOOL_TYPE,
         "name": "web_search",
         "max_uses": WEB_SEARCH_MAX_USES,
-        // Force direct execution. As of web_search_20260209, `allowed_callers`
-        // defaults to ["code_execution_20260120"]: on a programmatic-tool-calling
-        // model (sonnet-4-6 / opus-4-6, the only models we route web search to)
-        // Anthropic runs the search *inside* code execution and returns
-        // `code_execution_tool_result` blocks. Our AnthropicContentBlock enum has
-        // no variant (and no serde(other)) for those, so `receive_anthropic_response`
-        // fails to deserialize and 502s the whole turn. "direct" keeps the search a
-        // plain server tool that returns the `server_tool_use` + `web_search_tool_result`
-        // blocks the parser already handles.
+        // Make the parser contract explicit. The basic tool supports direct
+        // execution and returns the server-tool blocks handled below.
         "allowed_callers": ["direct"],
     }))
 }
