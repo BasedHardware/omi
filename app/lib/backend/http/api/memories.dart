@@ -109,3 +109,15 @@ Future<bool> editMemoryServer(String memoryId, String value) async {
   Logger.debug('editMemory response: ${response.body}');
   return response.statusCode == 200;
 }
+
+Future<bool> updateMemoryBaselineServer(String memoryId, bool value) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v3/memories/$memoryId/baseline?value=$value',
+    headers: {},
+    method: 'PATCH',
+    body: '',
+  );
+  if (response == null) return false;
+  Logger.debug('updateMemoryBaseline response: ${response.body}');
+  return response.statusCode == 200;
+}

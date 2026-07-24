@@ -173,6 +173,19 @@ extension SBOnboardingModel {
     }
   }
 
+  /// Fire a single throwaway ScreenCaptureKit capture the first time Screen
+  /// Recording is confirmed granted during onboarding, so macOS surfaces the
+  /// "bypass the private window picker" consent here — while the user is already
+  /// granting screen access — instead of mid-question during the live screen demo
+  /// (the exact spot users hit it). See `ScreenCaptureService.primeCaptureConsent`.
+  func primeScreenCaptureConsentIfNeeded() {
+    guard !didPrimeScreenCapture else { return }
+    didPrimeScreenCapture = true
+    if #available(macOS 14.0, *) {
+      Task.detached { await ScreenCaptureService.primeCaptureConsent() }
+    }
+  }
+
   func isGranted(_ key: String) -> Bool {
     switch key {
     case "microphone": return appState.hasMicrophonePermission
@@ -189,8 +202,14 @@ extension SBOnboardingModel {
   func setPermOn(_ key: String) {
     switch key {
     case "microphone": micState = .on
-    case "system_audio": sysState = .on
-    case "screen_recording": scrState = .on
+    case "system_audio":
+      sysState = .on
+      // System audio shares Screen Recording TCC; once it's on, the ScreenCaptureKit
+      // capture consent can be primed so the demo doesn't surface it later.
+      primeScreenCaptureConsentIfNeeded()
+    case "screen_recording":
+      scrState = .on
+      primeScreenCaptureConsentIfNeeded()
     case "full_disk_access":
       fdaState = .on
       // The Files connector row shares the FDA grant; reflect it here so the row
@@ -299,10 +318,10 @@ extension SBOnboardingModel {
     [
       // ⌘O is registered as its own always-on Carbon hotkey (GlobalShortcutManager
       // .registerCommandO), so it reliably summons Omi globally — the natural,
-      // expected "open" chord. Offer it first.
+      // expected "open" chord. Offer it first. (⌘J was dropped: onboarding testers
+      // read it as arbitrary/random with no mnemonic, unlike ⌘O = "open".)
       ("cmdO", ShortcutSettings.askOmiCommandOShortcut, "tap to open"),
       ("cmdReturn", ShortcutSettings.askOmiCommandReturnShortcut, "tap to open"),
-      ("cmdJ", ShortcutSettings.askOmiCommandJShortcut, "tap to open"),
     ]
   }
 
@@ -445,12 +464,25 @@ extension SBOnboardingModel {
     resetFloatingBarConversation()
     if let bar = FloatingControlBarManager.shared.barState {
       PushToTalkManager.shared.setup(barState: bar)
-      // Mark the demo done the first time Omi actually responds in the notch, so
-      // the Continue button only appears once the user has seen it work.
-      voiceCancellable = bar.$showingAIResponse
-        .filter { $0 }
-        .receive(on: DispatchQueue.main)
-        .sink { [weak self] _ in self?.screenDemoDone = true }
+      // Mark the demo done the first time Omi actually answers, so the Continue
+      // button appears once the user has seen it work. The demo forces push-to-talk
+      // (`pttTranscriptionModeDemoOverride = .live`), and a *voice* answer surfaces
+      // through `voiceProjection` (the notch response phase) — it never flips
+      // `showingAIResponse`, which is only set by the typed/`.mainResponse` path.
+      // Watching only `showingAIResponse` is why the demo never advanced. Observe
+      // BOTH signals so either a voice or a typed answer reveals Continue.
+      // `resetFloatingBarConversation()` above cleared `showingAIResponse`, so its
+      // subscribe-time value is already false. `voiceProjection` has no such reset,
+      // and @Published replays its CURRENT value on subscribe — so on a resume/
+      // re-entry of the demo a stale `isResponseActive` would fire immediately and
+      // reveal Continue before the user does anything. `dropFirst()` ignores that
+      // replayed value; a real answer is always a later emission.
+      voiceCancellable = Publishers.Merge(
+        bar.$showingAIResponse.filter { $0 }.map { _ in () },
+        bar.$voiceProjection.dropFirst().filter { $0.isResponseActive }.map { _ in () }
+      )
+      .receive(on: DispatchQueue.main)
+      .sink { [weak self] _ in self?.screenDemoDone = true }
     }
     ShortcutSettings.shared.pttTranscriptionModeDemoOverride = .live
     Task { await chatProvider.warmupBridge() }

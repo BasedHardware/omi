@@ -214,13 +214,17 @@ def test_rollback_processing_admission_respects_discard(lifecycle_store):
     assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.processing.value
 
 
-def test_discard_fences_a_stale_processing_result_and_completion(lifecycle_store):
+def test_a_discard_does_not_fence_a_processing_result_or_completion(lifecycle_store):
+    # A discard records that a conversation held nothing when it was judged, and
+    # a later sync can arrive carrying the speech it was missing. Treating it as
+    # terminal stranded those: transcribed, untitled, and invisible to their
+    # owner, with the reprocess meant to recover them hitting the same fence.
     lifecycle_store.put_conversation(
         'uid',
         'conversation',
         status=ConversationStatus.processing.value,
         discarded=True,
-        title='user-kept terminal state',
+        title='judged empty when it was judged',
     )
 
     persisted = lifecycle_service.persist_processed_conversation(
@@ -229,18 +233,15 @@ def test_discard_fences_a_stale_processing_result_and_completion(lifecycle_store
             'id': 'conversation',
             'status': ConversationStatus.completed,
             'discarded': False,
-            'title': 'stale processor output',
+            'title': 'what the sync filled it with',
             'data_protection_level': 'standard',
         },
     )
 
-    assert persisted is False
-    assert lifecycle_service.complete('uid', 'conversation') is False
-    assert lifecycle_store.conversation('uid', 'conversation') == {
-        'status': ConversationStatus.processing.value,
-        'discarded': True,
-        'title': 'user-kept terminal state',
-    }
+    assert persisted is True
+    stored = lifecycle_store.conversation('uid', 'conversation')
+    assert stored['discarded'] is False
+    assert stored['title'] == 'what the sync filled it with'
 
 
 def test_missing_conversation_fences_processing_result_without_resurrection(lifecycle_store):

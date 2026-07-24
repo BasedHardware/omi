@@ -1,7 +1,8 @@
-import { unlink } from 'fs/promises'
 import { retentionCutoff } from './retentionSelection'
 import { deleteRewindFramesOlderThan } from '../ipc/db'
 import { getRewindSettings } from './captureService'
+import { rewindRoot } from './paths'
+import { removeRewindFrame } from './frameFile'
 
 const PRUNE_INTERVAL_MS = 60 * 60 * 1000 // hourly
 
@@ -11,7 +12,7 @@ export async function pruneRewindOnce(): Promise<number> {
   const removed = deleteRewindFramesOlderThan(cutoff)
   await Promise.all(
     removed.map((f) =>
-      unlink(f.imagePath).catch((error: NodeJS.ErrnoException) => {
+      removeRewindFrame(rewindRoot(), f.imagePath).catch((error: NodeJS.ErrnoException) => {
         // ENOENT is idempotent (frame already gone). Other failures need a log
         // so retention cannot silently leave disk growth undiagnosed.
         if (error?.code !== 'ENOENT') {
