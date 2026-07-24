@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "harness": "omi-replay-harness",
+  "phase": "0A",
+  "feasibility_only": true,
+  "description": "Declarative capability/topology contract for the Phase 0A offline-sync out-of-process feasibility experiment. The generic launcher (runner.py) reads this descriptor, allocates ports, resolves placeholders, starts each role via its declared command, probes health, and builds an attestation. No sync-specific logic lives in the launcher.",
+  "roles": {
+    "redis": {
+      "command": ["redis-server", "--bind", "127.0.0.1", "--port", "${port:redis}", "--save", "", "--appendonly", "no", "--protected-mode", "yes"],
+      "health": {"type": "tcp"},
+      "port": "dynamic"
+    },
+    "cloud-tasks-loopback": {
+      "command": ["${python}", "-m", "testing.replay_harness_phase0a.cloud_tasks_loopback"],
+      "health": {"type": "http", "path": "/__replay/health", "expect_role": "cloud-tasks-loopback"},
+      "port": "dynamic",
+      "feasibility_only": true,
+      "label": "out-of-process Cloud Tasks scheduler model (NOT a faithful control plane)"
+    },
+    "worker": {
+      "command": ["${python}", "-m", "uvicorn", "testing.replay_harness_phase0a.worker_app:app", "--host", "127.0.0.1", "--port", "${port:worker}"],
+      "health": {"type": "http", "path": "/__replay/health", "expect_role": "worker"},
+      "port": "dynamic",
+      "startup_timeout_seconds": 120
+    },
+    "admission": {
+      "command": ["${python}", "-m", "uvicorn", "testing.replay_harness_phase0a.admission_app:app", "--host", "127.0.0.1", "--port", "${port:admission}"],
+      "health": {"type": "http", "path": "/__replay/health", "expect_role": "admission"},
+      "port": "dynamic",
+      "startup_timeout_seconds": 45
+    }
+  },
+  "capabilities": [
+    {"name": "google.auth.default", "install": "anonymous_credentials", "feasibility_only": false, "reason": "block ADC/metadata discovery for Firestore emulator"},
+    {"name": "google.cloud.storage.Client", "install": "local_filesystem", "feasibility_only": false, "reason": "replace GCS boundary with local storage"},
+    {"name": "cloud_tasks._tasks_client", "install": "http_loopback_client", "feasibility_only": true, "reason": "forward create_task to out-of-process loopback scheduler; no production Cloud Tasks emulator seam exists"},
+    {"name": "id_token.verify_oauth2_token", "install": "one_exact_local_token", "feasibility_only": true, "reason": "signature/issuer/expiry verification remains outside scope"},
+    {"name": "vad_is_empty", "install": "deterministic_wav_reader", "feasibility_only": true, "reason": "deterministic VAD leaf, not a fidelity oracle"},
+    {"name": "prerecorded", "install": "deterministic_single_word", "feasibility_only": true, "reason": "deterministic STT leaf, not a fidelity oracle"},
+    {"name": "process_conversation", "install": "declared_finalizer_fake", "feasibility_only": true, "reason": "marks conversation completed via real lifecycle; real gateway/LLM excluded from feasibility"}
+  ],
+  "egress_allow_list": [
+    {"role": "admission", "to": "firestore", "purpose": "firestore-emulator"},
+    {"role": "admission", "to": "redis", "purpose": "redis"},
+    {"role": "admission", "to": "cloud-tasks-loopback", "purpose": "cloud-tasks-loopback"},
+    {"role": "worker", "to": "firestore", "purpose": "firestore-emulator"},
+    {"role": "worker", "to": "redis", "purpose": "redis"},
+    {"role": "cloud-tasks-loopback", "to": "worker", "purpose": "worker-route"}
+  ],
+  "fault_controls": [
+    {
+      "name": "terminal_guard_bypassed",
+      "type": "mutant",
+      "env_var": "OMI_REPLAY_TERMINAL_GUARD_BYPASSED",
+      "black_box_reachable": true,
+      "description": "When enabled, the worker's terminal-status guard is bypassed, simulating a regression where completed jobs are re-processed on duplicate delivery. The loopback scheduler delivers the same task twice (at-least-once). Without the fault: exactly one STT invocation (idempotency holds). With the fault: two STT invocations (defect caught)."
+    },
+    {
+      "name": "duplicate_delivery",
+      "type": "transport_fault",
+      "env_var": "OMI_REPLAY_DUPLICATE_DELIVERY",
+      "black_box_reachable": true,
+      "description": "The loopback scheduler delivers the same task body twice with retry_count 0 and 1, simulating Cloud Tasks at-least-once delivery."
+    }
+  ],
+  "non_goals": [
+    "persist-before-send (residue until operation-scoped storage-fault seam exists)",
+    "capture/WS transport coverage",
+    "STT or LLM wire-fidelity oracle",
+    "LC3 codec path",
+    "client consumer harness",
+    "broad scenario corpus",
+    "release gate",
+    "production Cloud Tasks control-plane fidelity"
+  ]
+}
