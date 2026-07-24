@@ -25,6 +25,10 @@ TERMINAL_JOB_STATUSES = frozenset({'completed', 'dead_letter'})
 NONTERMINAL_JOB_STATUSES = frozenset({'queued', 'leased', 'blocked_byok'})
 DEFAULT_LEASE_SECONDS = 1500
 DEFAULT_RECONCILE_STALE_SECONDS = 300
+# Conservative: the synchronous legacy route admits processing with no durable
+# job, and its request thread is not killed by the HTTP timeout, so the orphan
+# window must exceed any plausible live synchronous process_conversation run.
+DEFAULT_ORPHAN_RECONCILE_STALE_SECONDS = 900
 
 
 class FinalizationIntent(TypedDict):
@@ -74,6 +78,27 @@ def get_finalization_reconcile_stale_after() -> timedelta:
     return timedelta(seconds=max(30, seconds))
 
 
+def get_stale_processing_orphan_after() -> timedelta:
+    """Return the bounded delay before a bare-`processing` row is a crash orphan.
+
+    Bounds the authoritative, server-owned admission fence
+    (``processing_admitted_at``), never caller-controlled ``created_at``. Distinct
+    from the durable-job replay window (which a lease already bounds); this path
+    owns no lease, so the value is clamped to a conservative floor (300s, longer
+    than any plausible live synchronous ``process_conversation`` run) and a
+    one-day ceiling so an operator misconfiguration cannot defer recovery for an
+    unbounded period. Classified as a reliability recovery knob; deploy default
+    is unset so the floor applies.
+    """
+    try:
+        seconds = int(
+            os.getenv('LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS', str(DEFAULT_ORPHAN_RECONCILE_STALE_SECONDS))
+        )
+    except ValueError:
+        seconds = DEFAULT_ORPHAN_RECONCILE_STALE_SECONDS
+    return timedelta(seconds=min(86_400, max(300, seconds)))
+
+
 def _claim_result(
     status: str,
     lease_epoch: int | None = None,
@@ -97,6 +122,14 @@ def _client(firestore_client: Any = None) -> Any:
 
 def _conversation_ref(client: Any, uid: str, conversation_id: str) -> Any:
     return client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION).document(conversation_id)
+
+
+def _uid_from_conversation_path(path: str) -> str | None:
+    """Return the uid from a ``users/{uid}/conversations/{conversation_id}`` path."""
+    parts = path.split('/')
+    if len(parts) == 4 and parts[0] == 'users' and parts[2] == CONVERSATIONS_COLLECTION:
+        return parts[1]
+    return None
 
 
 def _job_ref(client: Any, job_id: str) -> Any:
@@ -817,6 +850,302 @@ def get_finalization_replay_candidates(*, limit: int = 100, firestore_client: An
         if job.get('status') in {'queued', 'leased'}:
             result.append(job | {'job_id': snapshot.id})
     return result
+
+
+def get_stale_processing_orphan_candidates(
+    *,
+    stale_after: timedelta,
+    limit: int = 100,
+    max_scan: int = 2000,
+    resume_after_path: str | None = None,
+    firestore_client: Any = None,
+) -> dict[str, Any]:
+    """Return a bounded window of actionable bare-`processing` conversations.
+
+    Eligibility is bounded by the authoritative, server-owned admission fence
+    ``processing_admitted_at`` — never caller-controlled ``created_at``. A bare
+    ``processing`` row (no ``finalization_job_id``) that is not ``deferred`` is:
+
+    * returned with ``legacy=False`` when its admission age exceeds
+      ``stale_after`` (a genuine crash orphan ready for exactly one terminal), and
+    * returned with ``legacy=True`` when it predates the admission stamp (a
+      stranded legacy row the caller must migrate by stamping the fence, never
+      terminalized on first sight).
+
+    Fresh admissions under ``stale_after`` are filtered out and never returned.
+
+    The cross-user sweep is a single-equality ``collection_group`` query on
+    ``status == 'processing'``. A single-field equality query is served by
+    Firestore's automatic single-field index, so no composite index is registered
+    or deployed and the query is deliberately not collection-scoped. Because
+    client-side exclusion (deferred / durable-job-owned / fresh / legacy) happens
+    after the page cap, the sweep pages with a ``start_after`` cursor so a stable
+    first page of excluded rows cannot starve a later eligible orphan.
+
+    Eventual discovery is guaranteed by a **persisted, rotated sweep cursor**.
+    Each invocation resumes from ``resume_after_path`` (the last-examined row) and
+    examines at most ``max_scan`` rows; when the collection is exhausted the
+    cursor wraps (``exhausted=True``), so a stable excluded prefix larger than any
+    per-invocation bound cannot permanently hide a later orphan — repeated bounded
+    sweeps cover the whole collection. The caller persists ``resume_after_path``
+    (or ``None`` once ``exhausted``) between invocations.
+
+    Returns ``{'candidates', 'resume_after_path', 'exhausted'}``.
+    """
+    client = _client(firestore_client)
+    cutoff = _now() - stale_after
+    page_size = max(1, min(limit, 100))
+    collected: list[dict[str, Any]] = []
+    scanned = 0
+    last_path: str | None = None
+    exhausted = False
+
+    cursor_snapshot: Any = None
+    if resume_after_path:
+        fetched = client.document(resume_after_path).get()
+        if getattr(fetched, 'exists', False):
+            cursor_snapshot = fetched  # resume the collection-group scan
+        # A vanished cursor document wraps the sweep back to the top (safe re-scan).
+
+    while len(collected) < limit and scanned < max_scan:
+        query = client.collection_group(CONVERSATIONS_COLLECTION).where(
+            filter=firestore.FieldFilter('status', '==', 'processing')
+        )
+        query = query.limit(page_size)
+        if cursor_snapshot is not None:
+            query = query.start_after(cursor_snapshot)
+        page = list(query.stream())
+        if not page:
+            exhausted = True  # reached the tail of the collection from the cursor
+            break
+        for snapshot in page:
+            scanned += 1
+            if scanned > max_scan:
+                break
+            last_path = snapshot.reference.path
+            uid = _uid_from_conversation_path(snapshot.reference.path)
+            if uid is None:
+                continue
+            data = snapshot.to_dict() or {}
+            if data.get('deferred') or data.get('finalization_job_id'):
+                continue
+            admitted_at = data.get('processing_admitted_at')
+            if isinstance(admitted_at, datetime):
+                if admitted_at > cutoff:
+                    continue  # fresh admission still under the conservative threshold
+                collected.append(
+                    {'uid': uid, 'conversation_id': snapshot.id, 'processing_admitted_at': admitted_at, 'legacy': False}
+                )
+            else:
+                collected.append(
+                    {'uid': uid, 'conversation_id': snapshot.id, 'processing_admitted_at': None, 'legacy': True}
+                )
+            if len(collected) >= limit:
+                break
+        if scanned > max_scan:
+            break  # bounded work for this invocation; the cursor persists progress
+        if len(page) < page_size:
+            exhausted = True  # partial page => reached the tail
+            break
+        cursor_snapshot = page[-1]
+
+    return {
+        'candidates': collected,
+        'resume_after_path': None if exhausted else last_path,
+        'exhausted': exhausted,
+    }
+
+
+STALE_PROCESSING_SWEEP_STATE_COLLECTION = 'conversation_recovery_state'
+STALE_PROCESSING_SWEEP_STATE_DOC = 'stale_processing_sweep'
+
+
+def get_stale_processing_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:
+    """Return the persisted sweep cursor and its CAS generation.
+
+    Returns ``{'resume_after_path': str | None, 'generation': int}``. The
+    generation is the compare-and-swap token a caller must hold to advance the
+    cursor; ``0`` when the document has never been written. Multiple backend-listen
+    pods share this single cursor, so the generation prevents a delayed scan from
+    rewinding another pod's advance.
+    """
+    client = _client(firestore_client)
+    snapshot = (
+        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(STALE_PROCESSING_SWEEP_STATE_DOC).get()
+    )
+    if not getattr(snapshot, 'exists', False):
+        return {'resume_after_path': None, 'generation': 0}
+    data = snapshot.to_dict() or {}
+    path = data.get('resume_after_path')
+    return {
+        'resume_after_path': path if isinstance(path, str) else None,
+        'generation': int(data.get('generation', 0)),
+    }
+
+
+def _advance_stale_processing_sweep_cursor_txn(
+    transaction: Any, doc_ref: Any, expected_generation: int, new_resume_after_path: str | None, now: datetime
+) -> bool:
+    """CAS-update the sweep cursor inside a Firestore transaction.
+
+    Returns ``True`` only when the persisted generation still equals
+    ``expected_generation`` — proving no other pod advanced the cursor between
+    this pod's read and write. On success the cursor advances and the generation
+    bumps, so a delayed competing writer holding the old generation is fenced out
+    (``False``) and cannot rewind progress.
+    """
+    snapshot = doc_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        current_generation = 0
+    else:
+        current_generation = int((snapshot.to_dict() or {}).get('generation', 0))
+    if current_generation != expected_generation:
+        return False
+    transaction.set(
+        doc_ref,
+        {'resume_after_path': new_resume_after_path, 'generation': current_generation + 1, 'updated_at': now},
+    )
+    return True
+
+
+def advance_stale_processing_sweep_cursor(
+    expected_generation: int, new_resume_after_path: str | None, *, firestore_client: Any = None
+) -> bool:
+    """Atomically advance the sweep cursor; ``None`` rotates the next sweep to the top.
+
+    Returns ``False`` when another pod already advanced the cursor (the CAS
+    generation changed). The caller's sweep work is still valid — the exact-
+    generation fence in ``complete_orphan_conversation`` prevents double-terminalization
+    — but the cursor does not advance from this pod's perspective, so the next sweep
+    safely re-scans the same window.
+    """
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_advance_stale_processing_sweep_cursor_txn)
+    return transactional(
+        transaction,
+        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(STALE_PROCESSING_SWEEP_STATE_DOC),
+        expected_generation,
+        new_resume_after_path,
+        _now(),
+    )
+
+
+def _stamp_processing_admission_if_absent_txn(transaction: Any, conversation_ref: Any, now: datetime) -> bool:
+    """Server-owned migration: stamp the admission fence on a legacy processing row.
+
+    Returns ``True`` only when a bare ``processing`` row lacking a valid
+    ``processing_admitted_at`` was stamped with ``now``. A row already stamped, in
+    any other lifecycle state, or absent is left untouched. The stamp is the sole
+    authority the orphan sweep trusts; it never terminalizes a row here.
+    """
+    snapshot = conversation_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return False
+    data = snapshot.to_dict() or {}
+    if data.get('status') != 'processing':
+        return False
+    if isinstance(data.get('processing_admitted_at'), datetime):
+        return False
+    transaction.update(conversation_ref, {'processing_admitted_at': now})
+    return True
+
+
+def stamp_processing_admission_if_absent(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
+    """Stamp the authoritative admission fence on a legacy processing conversation."""
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_stamp_processing_admission_if_absent_txn)
+    return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now())
+
+
+def _complete_orphan_conversation_txn(
+    transaction: Any, conversation_ref: Any, expected_admitted_at: datetime | None, now: datetime
+) -> bool:
+    """Terminalize exactly the scanned orphan generation, fencing every live owner.
+
+    Verified immediately before the write, inside the transaction:
+    * still ``processing`` (not already completed/discarded/merging),
+    * not ``deferred`` (a desktop lazy row that intentionally stays on processing),
+    * no ``finalization_job_id`` (a finalizer attached durable ownership after
+      discovery), and
+    * ``processing_admitted_at`` still equals the scanned generation (the processor
+      has not renewed its lease or been re-admitted).
+
+    Only when every assumption still holds is the row moved to ``completed``. Any
+    divergence is an expected CAS fencing (``False``), never a terminalization of
+    live or durable-owned work.
+    """
+    del now  # the terminal write carries no timestamp; the fence is the generation
+    snapshot = conversation_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return False
+    data = snapshot.to_dict() or {}
+    if data.get('status') != 'processing':
+        return False
+    if data.get('discarded') or data.get('deferred') or data.get('finalization_job_id'):
+        return False
+    admitted_at = data.get('processing_admitted_at')
+    if not isinstance(admitted_at, datetime) or admitted_at != expected_admitted_at:
+        return False
+    transaction.update(conversation_ref, {'status': 'completed'})
+    return True
+
+
+def complete_orphan_conversation(
+    uid: str, conversation_id: str, *, expected_admitted_at: datetime | None, firestore_client: Any = None
+) -> bool:
+    """Close one crash orphan through the generation/ownership fence."""
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_complete_orphan_conversation_txn)
+    return transactional(transaction, _conversation_ref(client, uid, conversation_id), expected_admitted_at, _now())
+
+
+def _renew_processing_lease_txn(transaction: Any, conversation_ref: Any, now: datetime) -> bool:
+    """Refresh the admission lease on a still-processing row owned by a live processor."""
+    snapshot = conversation_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return False
+    data = snapshot.to_dict() or {}
+    if data.get('status') != 'processing' or data.get('discarded'):
+        return False
+    transaction.update(conversation_ref, {'processing_admitted_at': now})
+    return True
+
+
+def renew_processing_lease(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
+    """Renew the server-owned admission lease so recovery cannot mistake a live processor for a crash."""
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_renew_processing_lease_txn)
+    return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now())
+
+
+def _reacquire_deferred_processing_txn(transaction: Any, conversation_ref: Any, now: datetime) -> bool:
+    """Atomically clear ``deferred`` and renew the admission lease.
+
+    This eliminates the window between clearing ``deferred`` and the first
+    heartbeat renewal where the orphan sweep could terminalize the row.  If
+    the row is no longer ``processing`` or was discarded, the transition
+    fails closed so a stale processor produces no derived side effects.
+    """
+    snapshot = conversation_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return False
+    data = snapshot.to_dict() or {}
+    if data.get('status') != 'processing' or data.get('discarded'):
+        return False
+    transaction.update(conversation_ref, {'deferred': False, 'processing_admitted_at': now})
+    return True
+
+
+def reacquire_deferred_processing(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
+    """Atomically clear deferred and renew the admission lease in one transaction."""
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_reacquire_deferred_processing_txn)
+    return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now())
 
 
 def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, float | int]:

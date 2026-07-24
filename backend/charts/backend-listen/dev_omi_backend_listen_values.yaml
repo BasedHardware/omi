@@ -151,6 +151,8 @@ env:
     value: "false"
   - name: MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
     value: "true"
+  - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
+    value: "900"
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:

@@ -75,3 +75,62 @@ def test_merge_does_not_abort_when_no_source_is_deleted(monkeypatch):
     merge.perform_merge_async('u1', ['c1', 'c2'])
 
     create.assert_called_once()  # got past the deleted guard into the build step
+
+
+def test_merge_renews_processing_lease_during_live_processing(monkeypatch):
+    """A merged conversation admitted to processing must keep its admission lease
+    fresh while process_conversation runs (#10461 ownership fence for every live
+    producer). Behavioral test through perform_merge_async, not the context manager."""
+    import sys
+    import threading
+
+    lease_renewed = threading.Event()
+
+    def fake_renew(_uid, _conversation_id):
+        lease_renewed.set()
+        return True
+
+    monkeypatch.setattr(merge.lifecycle_service.jobs_db, 'renew_processing_lease', fake_renew)
+    monkeypatch.setattr(merge.lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
+
+    sources = {
+        'c1': {'id': 'c1', 'status': 'completed', 'started_at': None},
+        'c2': {'id': 'c2', 'status': 'completed', 'started_at': None},
+    }
+    monkeypatch.setattr(merge.conversations_db, "get_conversation", lambda uid, cid: sources.get(cid))
+    monkeypatch.setattr(merge, "_handle_merge_failure", MagicMock())
+    monkeypatch.setattr(merge, "_normalize_conversation_timestamps", lambda convs: convs)
+    monkeypatch.setattr(merge, "_merge_transcript_segments", lambda convs: [])
+    monkeypatch.setattr(merge, "_collect_all_photos", lambda uid, convs: [])
+    monkeypatch.setattr(merge, "_copy_audio_chunks_for_merge", lambda uid, convs, new_id: [])
+    monkeypatch.setattr(merge, "_determine_visibility", lambda convs: 'private')
+    monkeypatch.setattr(merge, "_shared_client_device_provenance", lambda convs: (None, None))
+    monkeypatch.setattr(
+        merge,
+        "Conversation",
+        lambda **kw: MagicMock(
+            **{
+                'model_dump.return_value': {'id': 'new-merge-id', 'language': 'en'},
+                'id': 'new-merge-id',
+                'language': 'en',
+            }
+        ),
+    )
+    monkeypatch.setattr(merge.lifecycle_service, "create_processing_conversation", MagicMock(return_value=True))
+    monkeypatch.setattr(merge, "is_audio_merge_dispatch_enabled", lambda: False)
+    monkeypatch.setattr(merge, "_delete_conversation_and_related_data", MagicMock())
+
+    import utils.notifications as notif_mod
+
+    monkeypatch.setattr(notif_mod, 'send_merge_completed_message', MagicMock())
+
+    def blocking_process(uid, language, conversation, **kwargs):
+        assert lease_renewed.wait(timeout=5.0), 'lease not renewed during merge processing'
+        return conversation
+
+    pc_mod = sys.modules['utils.conversations.process_conversation']
+    monkeypatch.setattr(pc_mod, 'process_conversation', blocking_process)
+
+    merge.perform_merge_async('u1', ['c1', 'c2'], reprocess=True)
+
+    assert lease_renewed.is_set()

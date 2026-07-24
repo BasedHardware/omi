@@ -34,11 +34,16 @@ trap 'rm -f "$emulator_config"' EXIT
 node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({emulators: {firestore: {host: "127.0.0.1", port: Number(process.argv[2])}}}))' \
   "$emulator_config" "$emulator_port"
 
-runner_command="PYTHONPATH=backend backend/.venv/bin/python -m testing.listen_pusher_stack.run"
+# CI passes ``--state-dir`` (and any other runner argument) to the listen-pusher
+# runner only, never to the subsequent pytest command.  Appending after ``&&``
+# would leak the flag into pytest, which does not understand it.
+runner_args=""
 for argument in "$@"; do
   printf -v escaped_argument ' %q' "$argument"
-  runner_command+="$escaped_argument"
+  runner_args+="$escaped_argument"
 done
+
+runner_command="PYTHONPATH=backend backend/.venv/bin/python -m testing.listen_pusher_stack.run${runner_args} && PYTHONPATH=backend backend/.venv/bin/python -m pytest backend/tests/unit/test_stale_processing_emulator_concurrency.py -v"
 
 npx --no-install firebase emulators:exec --only firestore --project demo-omi-listen-stack --config "$emulator_config" \
   "$runner_command"

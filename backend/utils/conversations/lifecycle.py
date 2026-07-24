@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
+from datetime import datetime, timezone
 from contextlib import contextmanager
 from typing import Any, Mapping
 
@@ -96,6 +98,12 @@ def create_in_progress_conversation(uid: str, conversation_data: dict[str, Any],
 def create_processing_conversation(uid: str, conversation_data: dict[str, Any], *, idempotent: bool = False) -> bool:
     """Create a server/import/merge conversation already admitted to processing."""
     _require_status(conversation_data, ConversationStatus.processing)
+    # Stamp the authoritative, server-owned admission fence so the stale
+    # reconciler bounds recovery by admission age rather than caller-controlled
+    # ``created_at`` (which is the recording start time for from-segments and
+    # sync imports, not the processing admission instant). ``setdefault`` keeps a
+    # server-owned stamp if the caller already provided one.
+    conversation_data.setdefault('processing_admitted_at', datetime.now(timezone.utc))
     if idempotent:
         return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
     conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
@@ -169,12 +177,18 @@ def transition(
 
 def admit_processing(uid: str, conversation_id: str, *, extra_updates: dict[str, Any] | None = None) -> bool:
     """The single compare-and-swap admission point for finalization processing."""
+    updates = dict(extra_updates or {})
+    # The synchronous legacy route has no durable job, so a hard crash after
+    # admission strands the row on ``processing``. Stamp the admission instant so
+    # the stale reconciler can bound recovery to genuine crashes by admission age
+    # rather than document-creation age (which is stale for listen-created rows).
+    updates.setdefault('processing_admitted_at', datetime.now(timezone.utc))
     return transition(
         uid,
         conversation_id,
         ConversationStatus.processing,
         expected=ConversationStatus.in_progress,
-        extra_updates=extra_updates,
+        extra_updates=updates,
     )
 
 
@@ -227,30 +241,99 @@ def rollback_processing_admission(uid: str, conversation_id: str) -> bool:
     )
 
 
+def _processing_lease_renewal_interval() -> float:
+    """Seconds between admission-lease renewals for a live synchronous processor.
+
+    Renewed well within the crash-orphan recovery floor, so a processor that is
+    still alive always looks fresh to the sweep and can never be terminalized,
+    while a hard-crashed processor stops renewing and its lease ages out.
+    """
+    stale_after = jobs_db.get_stale_processing_orphan_after()
+    return max(60.0, stale_after.total_seconds() / 4.0)
+
+
+def _run_processing_lease_heartbeat(
+    uid: str,
+    conversation_id: str,
+    *,
+    stop_event: threading.Event,
+    wait,
+    renew,
+    interval: float,
+) -> None:
+    """Renew the admission lease until the guarded block signals stop.
+
+    ``wait`` is ``stop_event.wait``: it returns ``True`` the moment the processor
+    finishes (or raises), so the loop exits without a trailing renewal. Returning
+    ``False`` means the interval elapsed with no stop signal -> renew the lease.
+    A persistent renewal error stops the heartbeat so a failing write cannot hot-loop.
+    """
+    while not stop_event.is_set():
+        if wait(interval):
+            return
+        try:
+            renew(uid, conversation_id)
+        except Exception:
+            logger.exception('processing lease renewal failed uid=%s conversation=%s', uid, conversation_id)
+            return
+
+
 @contextmanager
-def processing_admission_guard(uid: str, conversation_id: str):
+def processing_admission_guard(uid: str, conversation_id: str, *, rollback_on_failure: bool = True):
     """Guard an inline (in-request) processing run against stranding its admission.
 
     Wrap the synchronous ``process_conversation`` call with this; if it raises,
     the lifecycle owner rolls the admission back to ``in_progress`` and re-raises.
     A rollback error (e.g. the conversation was deleted mid-processing) is
     logged instead of replacing the original processing exception.
+
+    While the guarded block runs, a daemon heartbeat renews the server-owned
+    admission lease (``processing_admitted_at``). A live — even slow — processor
+    therefore always looks fresh to the crash-orphan sweep and can never be
+    terminalized; only a processor that hard-crashes stops renewing, so its lease
+    ages out and the row becomes a recoverable orphan. The exact-generation fence
+    in ``complete_orphan_conversation`` is the second layer of defense.
     """
+    stop_event = threading.Event()
+    interval = _processing_lease_renewal_interval()
+    thread = threading.Thread(
+        target=_run_processing_lease_heartbeat,
+        args=(uid, conversation_id),
+        kwargs={
+            'stop_event': stop_event,
+            'wait': stop_event.wait,
+            'renew': jobs_db.renew_processing_lease,
+            'interval': interval,
+        },
+        name=f'processing-lease-{conversation_id}',
+        daemon=True,
+    )
+    thread.start()
     try:
         yield
     except Exception:
-        try:
-            rolled_back = rollback_processing_admission(uid, conversation_id)
-        except Exception:
-            logger.exception('processing admission rollback failed uid=%s conversation=%s', uid, conversation_id)
-            rolled_back = False
-        logger.exception(
-            'synchronous conversation processing failed uid=%s conversation=%s rolled_back=%s',
-            uid,
-            conversation_id,
-            rolled_back,
-        )
+        if rollback_on_failure:
+            try:
+                rolled_back = rollback_processing_admission(uid, conversation_id)
+            except Exception:
+                logger.exception('processing admission rollback failed uid=%s conversation=%s', uid, conversation_id)
+                rolled_back = False
+            logger.exception(
+                'synchronous conversation processing failed uid=%s conversation=%s rolled_back=%s',
+                uid,
+                conversation_id,
+                rolled_back,
+            )
+        else:
+            logger.exception(
+                'synchronous conversation processing failed uid=%s conversation=%s (no rollback: producer owns recovery)',
+                uid,
+                conversation_id,
+            )
         raise
+    finally:
+        stop_event.set()
+        thread.join(timeout=max(5.0, interval))
 
 
 def fail_and_discard_processing(uid: str, conversation_id: str) -> bool:
@@ -267,6 +350,19 @@ def fail_and_discard_processing(uid: str, conversation_id: str) -> bool:
         ConversationStatus.failed,
         extra_updates={'discarded': True},
     )
+
+
+def reacquire_deferred_processing(uid: str, conversation_id: str) -> bool:
+    """Atomically clear deferred and renew the admission lease.
+
+    Deferred enrichment must clear ``deferred`` and renew its processing lease
+    in one guarded transition.  A plain ``update(deferred=False)`` followed by a
+    delayed first heartbeat leaves a window where the stale-processing sweep
+    can terminalize the row; the stale processor would then persist derived
+    side effects after ownership loss.  This transaction closes that window and
+    fails closed if the row is no longer ``processing`` or was discarded.
+    """
+    return jobs_db.reacquire_deferred_processing(uid, conversation_id)
 
 
 def begin_merge(uid: str, conversation_id: str) -> bool:

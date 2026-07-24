@@ -1738,9 +1738,16 @@ def _create_conversation_from_segments(
             client_platform=resolved_client_platform,
         )
 
-    # Process conversation
+    # Process conversation. The idempotent (client_session_id) path creates a
+    # processing row; the admission guard's lease heartbeat keeps it fresh so the
+    # crash-orphan sweep can never terminalize active work. rollback_on_failure is
+    # False because this path owns its own recovery (delete on exception below).
     try:
-        conversation = process_conversation(uid, language_code, create_conversation_obj)
+        if conversation_id:
+            with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
+                conversation = process_conversation(uid, language_code, create_conversation_obj)
+        else:
+            conversation = process_conversation(uid, language_code, create_conversation_obj)
     except Exception:
         if request.client_session_id and conversation_id:
             conversations_db.delete_conversation(uid, conversation_id)

@@ -508,6 +508,70 @@ class Stack:
             raise StackFailure('inline finalization hold was not configured')
         self.inline_finalization_release_file.touch()
 
+    def seed_bare_processing_conversation(
+        self,
+        uid: str,
+        conversation_id: str,
+        *,
+        admitted_at: datetime,
+        finalization_job_id: str | None = None,
+        legacy: bool = False,
+        deferred: bool = False,
+    ) -> None:
+        """Seed the crash-window state: a bare `processing` row with no durable job.
+
+        Mirrors what the synchronous legacy route leaves behind when the process
+        hard-crashes between admission and completion. ``admitted_at`` controls the
+        admission age the reconciler thresholds on. ``legacy`` omits the
+        server-owned ``processing_admitted_at`` stamp (a pre-fence stranded row the
+        reconciler must migrate, never complete on first sight). ``deferred`` marks
+        a desktop lazy row that intentionally lives on ``processing`` and must be
+        excluded from the sweep.
+        """
+        document = {
+            'id': conversation_id,
+            'created_at': admitted_at,
+            'started_at': admitted_at,
+            'finished_at': admitted_at,
+            'status': 'processing',
+            'source': 'omi',
+            'language': 'en',
+            'has_content': True,
+            'transcript_segments': [],
+            'structured': {
+                'title': 'Stale orphan recording',
+                'overview': '',
+                'emoji': '🧠',
+                'category': 'other',
+                'action_items': [],
+                'events': [],
+            },
+        }
+        if not legacy:
+            document['processing_admitted_at'] = admitted_at
+        if finalization_job_id:
+            document['finalization_job_id'] = finalization_job_id
+        if deferred:
+            document['deferred'] = True
+        self.firestore.collection('users').document(uid).collection('conversations').document(conversation_id).set(
+            document
+        )
+
+    async def conversation_via_api(self, uid: str, conversation_id: str) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
+            response = await client.get(
+                f'http://127.0.0.1:{self.backend_port}/v1/conversations/{conversation_id}',
+                headers={'Authorization': f'Bearer {ADMIN_KEY}{uid}'},
+            )
+        if response.status_code != 200:
+            raise StackFailure(
+                f'GET /v1/conversations/{conversation_id} returned {response.status_code}: {response.text[:160]}'
+            )
+        body = response.json()
+        if not isinstance(body, dict):
+            raise StackFailure(f'GET /v1/conversations/{conversation_id} returned non-object JSON')
+        return body
+
 
 def _one_job(stack: Stack, uid: str, conversation_id: str) -> dict[str, Any]:
     jobs = stack.jobs_for(uid, conversation_id)
@@ -945,7 +1009,7 @@ async def _rest_finalization_survives_listener_restart(stack: Stack) -> None:
     if (
         not process_events[0].get('persisted')
         or not process_events[0].get('force_process')
-        or not process_events[0].get('defer_memory_extraction')
+        or not process_events[0].get('defer_derived_effects')
     ):
         raise StackFailure('REST finalization lost its persisted processing and extraction policy')
     if len(_provider_events(stack, conversation_id, 'integration', 'completed')) != 1:
@@ -1110,6 +1174,170 @@ async def _integration_retry_preserves_processed_conversation(stack: Stack) -> N
         raise StackFailure('integration retry did not preserve one idempotency key across both delivery attempts')
 
 
+async def _stale_processing_orphan_reconciled(stack: Stack) -> None:
+    """#10461: a bare-`processing` row orphaned by a sync-route crash reaches one terminal.
+
+    Covers the revised authority/saturation contract: eligibility is bounded by
+    the server-owned admission fence (never caller-controlled created_at), legacy
+    rows migrate before they complete, deferred rows are excluded, a backlog of
+    excluded rows cannot starve a later eligible orphan, and every outcome is
+    reached through the lifecycle CAS alone — no durable job, worker, or fanout.
+    """
+    if stack.finalization_mode != 'cloud_tasks':
+        raise StackFailure('stale-processing orphan recovery requires the Cloud Tasks stack')
+
+    uid = 'stack-stale-orphan'
+    saturation_uid = 'stack-stale-saturation'
+    stack.seed_user(uid)
+    stack.seed_user(saturation_uid)
+
+    now = datetime.now(timezone.utc)
+    aged_id = 'stale-orphan-aged'
+    fresh_id = 'stale-orphan-fresh'
+    durable_id = 'stale-orphan-durable-job'
+    legacy_id = 'stale-orphan-legacy'
+    deferred_id = 'stale-orphan-deferred'
+
+    # Aged admission: admitted long enough ago that only a genuine crash could
+    # still be on `processing` with no durable job.
+    stack.seed_bare_processing_conversation(uid, aged_id, admitted_at=now - timedelta(seconds=1000))
+    # Fresh admission under the conservative threshold: must be left alone.
+    stack.seed_bare_processing_conversation(uid, fresh_id, admitted_at=now - timedelta(seconds=10))
+    # A durable job still owns this row: the orphan sweep must never double-finalize it.
+    stack.seed_bare_processing_conversation(
+        uid, durable_id, admitted_at=now - timedelta(seconds=1000), finalization_job_id='stale-orphan-durable-job-id'
+    )
+    # A legacy row predating the admission fence: must be migrated (stamped), never
+    # completed on first sight even though its caller-controlled created_at is ancient.
+    stack.seed_bare_processing_conversation(uid, legacy_id, admitted_at=now - timedelta(days=30), legacy=True)
+    # A desktop lazy row that intentionally lives on `processing`: must be excluded.
+    stack.seed_bare_processing_conversation(uid, deferred_id, admitted_at=now - timedelta(seconds=1000), deferred=True)
+    # Saturation: 120 excluded (deferred) rows ahead of one aged eligible orphan. The
+    # sweep must page past the excluded first page and still reach the orphan.
+    for i in range(120):
+        stack.seed_bare_processing_conversation(
+            saturation_uid, f'saturation-deferred-{i:03d}', admitted_at=now - timedelta(seconds=1000), deferred=True
+        )
+    saturation_orphan_id = 'saturation-orphan'
+    stack.seed_bare_processing_conversation(
+        saturation_uid, saturation_orphan_id, admitted_at=now - timedelta(seconds=1000)
+    )
+
+    # The startup drain re-runs on restart and is the deterministic reconciler trigger.
+    stack.restart_backend()
+
+    def completed(target_uid: str, target_id: str) -> Callable[[], bool]:
+        def check() -> bool:
+            conversation = stack.conversation(target_uid, target_id)
+            return bool(conversation and conversation.get('status') == 'completed')
+
+        return check
+
+    _wait_until(completed(uid, aged_id), label='aged orphan reconciled to completed', timeout=30.0)
+    _wait_until(
+        completed(saturation_uid, saturation_orphan_id),
+        label='saturation orphan reached past the excluded backlog',
+        timeout=30.0,
+    )
+
+    aged = stack.conversation(uid, aged_id)
+    if not aged or aged.get('status') != 'completed':
+        raise StackFailure('stale processing reconciler did not close the aged orphan')
+    # Exactly one terminal, reached through the lifecycle CAS alone — no durable
+    # job is created and no worker/enrichment runs (re-enrichment is a follow-up).
+    if stack.jobs_for(uid, aged_id):
+        raise StackFailure('stale processing reconciler created a durable job for the orphan')
+    if _provider_events(stack, aged_id, 'process', 'completed'):
+        raise StackFailure('stale processing reconciler invoked the durable finalization worker')
+    if _provider_events(stack, aged_id, 'integration', 'completed'):
+        raise StackFailure('stale processing reconciler duplicated an integration fanout')
+
+    # The conservative threshold is respected: a too-recent admission is left on `processing`.
+    fresh = stack.conversation(uid, fresh_id)
+    if not fresh or fresh.get('status') != 'processing':
+        raise StackFailure('stale processing reconciler swept an admission under the conservative threshold')
+
+    # A durable job still owns its row: the orphan sweep never double-finalizes it.
+    durable = stack.conversation(uid, durable_id)
+    if not durable or durable.get('status') != 'processing':
+        raise StackFailure('stale processing reconciler touched a durable-job-owned conversation')
+
+    # Deferred rows are excluded in every case — single and across the saturation backlog.
+    deferred = stack.conversation(uid, deferred_id)
+    if not deferred or deferred.get('status') != 'processing':
+        raise StackFailure('stale processing reconciler swept a deferred desktop row')
+    leftover_deferred = stack.conversation(saturation_uid, 'saturation-deferred-000')
+    if not leftover_deferred or leftover_deferred.get('status') != 'processing':
+        raise StackFailure('stale processing reconciler swept a backlog deferred row')
+
+    # The legacy row is migrated, not completed on first sight: it now carries the
+    # server-owned admission fence but is still on `processing`.
+    legacy = stack.conversation(uid, legacy_id)
+    if not legacy or legacy.get('status') != 'processing':
+        raise StackFailure('stale processing reconciler terminalized a legacy row on first sight')
+    if not legacy.get('processing_admitted_at'):
+        raise StackFailure('stale processing reconciler did not stamp the admission fence on the legacy row')
+
+    # The terminal conversation is retrievable through the public read path.
+    retrieved = await stack.conversation_via_api(uid, aged_id)
+    if retrieved.get('status') != 'completed' or retrieved.get('id') != aged_id:
+        raise StackFailure('GET /v1/conversations/{id} did not return the reconciled terminal conversation')
+
+    # The legacy row, once its stamped admission has aged, is recovered on a later
+    # sweep — proving the two-phase legacy path without waiting the real threshold.
+    stack.firestore.collection('users').document(uid).collection('conversations').document(legacy_id).update(
+        {'processing_admitted_at': datetime.now(timezone.utc) - timedelta(seconds=1000)}
+    )
+    stack.restart_backend()
+    _wait_until(completed(uid, legacy_id), label='legacy row recovered after its fence aged', timeout=30.0)
+    if _provider_events(stack, legacy_id, 'process', 'completed') or _provider_events(
+        stack, legacy_id, 'integration', 'completed'
+    ):
+        raise StackFailure('legacy row recovery produced a worker or integration fanout')
+
+    # Re-running the sweep is a no-op: completed orphans stay on their single terminal.
+    stack.restart_backend()
+    _wait_until(completed(uid, aged_id), label='aged orphan still completed after re-sweep', timeout=30.0)
+    if stack.conversation(uid, aged_id).get('status') != 'completed' or stack.jobs_for(uid, aged_id):
+        raise StackFailure('stale processing reconciler was not idempotent across sweeps')
+
+
+async def _stale_processing_orphan_reconciled_inline(stack: Stack) -> None:
+    """The orphan reconciler also runs without Cloud Tasks (inline deployments).
+
+    Proves the periodic/startup sweep is not gated on durable dispatch: an aged
+    orphan reaches one terminal, a fresh admission is left alone, a legacy row is
+    migrated, and a deferred row is excluded.
+    """
+    uid = 'stack-inline-stale-orphan'
+    stack.seed_user(uid)
+    now = datetime.now(timezone.utc)
+    aged_id = 'inline-aged'
+    fresh_id = 'inline-fresh'
+    legacy_id = 'inline-legacy'
+    deferred_id = 'inline-deferred'
+    stack.seed_bare_processing_conversation(uid, aged_id, admitted_at=now - timedelta(seconds=1000))
+    stack.seed_bare_processing_conversation(uid, fresh_id, admitted_at=now - timedelta(seconds=10))
+    stack.seed_bare_processing_conversation(uid, legacy_id, admitted_at=now - timedelta(days=30), legacy=True)
+    stack.seed_bare_processing_conversation(uid, deferred_id, admitted_at=now - timedelta(seconds=1000), deferred=True)
+
+    stack.restart_backend()
+
+    def aged_completed() -> bool:
+        conversation = stack.conversation(uid, aged_id)
+        return bool(conversation and conversation.get('status') == 'completed')
+
+    _wait_until(aged_completed, label='inline aged orphan reconciled to completed', timeout=30.0)
+
+    if stack.conversation(uid, fresh_id).get('status') != 'processing':
+        raise StackFailure('inline reconciler swept a fresh admission')
+    legacy = stack.conversation(uid, legacy_id)
+    if legacy.get('status') != 'processing' or not legacy.get('processing_admitted_at'):
+        raise StackFailure('inline reconciler did not migrate the legacy row without completing it')
+    if stack.conversation(uid, deferred_id).get('status') != 'processing':
+        raise StackFailure('inline reconciler swept a deferred row')
+
+
 async def run_inline_scenarios(stack: Stack) -> None:
     await _normal_and_terminal_reconnect(stack)
     await _empty_recording(stack)
@@ -1165,6 +1393,12 @@ def main() -> int:
             scenario=_inline_finalization_survives_source_close,
         )
         _run_stack_scenario(
+            state_dir / 'inline-stale-orphan',
+            finalization_mode='inline',
+            finalizer_failures=None,
+            scenario=_stale_processing_orphan_reconciled_inline,
+        )
+        _run_stack_scenario(
             state_dir / 'cloud-rest-restart',
             finalization_mode='cloud_tasks',
             finalizer_failures=None,
@@ -1189,6 +1423,12 @@ def main() -> int:
             finalization_mode='cloud_tasks',
             finalizer_failures={'integration': 1},
             scenario=_integration_retry_preserves_processed_conversation,
+        )
+        _run_stack_scenario(
+            state_dir / 'cloud-stale-orphan',
+            finalization_mode='cloud_tasks',
+            finalizer_failures=None,
+            scenario=_stale_processing_orphan_reconciled,
         )
         print(f'listen-pusher stack gauntlet passed; evidence: {state_dir}')
         return 0
