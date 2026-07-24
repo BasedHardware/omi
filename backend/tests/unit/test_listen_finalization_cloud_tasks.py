@@ -1167,7 +1167,9 @@ async def test_finalizer_retries_canonical_memory_extraction_before_fanout(monke
     )
     process = MagicMock(return_value=conversation)
     extract = MagicMock(side_effect=RuntimeError('canonical write gate unavailable'))
-    claim_fanout = MagicMock()
+    claim_fanout = MagicMock(
+        return_value={'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'}
+    )
     monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
     monkeypatch.setattr(
         persisted_finalizer.conversations_db,
@@ -1190,5 +1192,95 @@ async def test_finalizer_retries_canonical_memory_extraction_before_fanout(monke
         )
 
     assert process.call_args.kwargs['defer_memory_extraction'] is True
+    # The ownership fence (fanout claim) now runs before extract_memories;
+    # a failing canonical extraction still raises for retry, and the fanout
+    # lease is left for the next delivery to re-claim.
+    claim_fanout.assert_called_once_with('job-1', 2, 3)
     extract.assert_called_once_with('uid-1', conversation)
+
+
+@pytest.mark.anyio
+async def test_finalizer_fences_before_memory_extraction_on_fanout_loss(monkeypatch):
+    """#10468 r4: extract_memories must not run when the durable fanout claim
+    loses to discard/terminal state.  The ownership fence must precede every
+    canonical memory side effect."""
+
+    async def inline_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    conversation = SimpleNamespace(
+        id='conversation-1', status=ConversationStatus.processing, language='en', discarded=False
+    )
+    extract = MagicMock()
+    claim_fanout = MagicMock(
+        return_value={'status': 'fenced', 'fanout_key': 'conversation:conversation-1:finalization'}
+    )
+    monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
+    monkeypatch.setattr(
+        persisted_finalizer.conversations_db,
+        'get_conversation',
+        lambda *args: {'id': 'conversation-1', 'status': ConversationStatus.processing.value, 'discarded': False},
+    )
+    monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
+    monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
+    monkeypatch.setattr(persisted_finalizer, 'process_conversation', lambda *args, **kwargs: conversation)
+    monkeypatch.setattr(persisted_finalizer, 'extract_memories', extract)
+    monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'claim_finalization_fanout', claim_fanout)
+
+    disposition = await persisted_finalizer.finalize_persisted_conversation(
+        'uid-1',
+        'conversation-1',
+        finalization_job_id='job-1',
+        dispatch_generation=2,
+        lease_epoch=3,
+    )
+
+    assert disposition == ConversationFinalizationDisposition.fenced
+    claim_fanout.assert_called_once_with('job-1', 2, 3)
+    extract.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_finalizer_fences_before_memory_extraction_on_persistence_loss(monkeypatch):
+    """#10468 r4: when process_conversation reports that lifecycle persistence
+    lost (discard/terminal), the finalizer must skip extract_memories entirely
+    without even attempting the fanout claim."""
+
+    async def inline_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    conversation = SimpleNamespace(
+        id='conversation-1', status=ConversationStatus.processing, language='en', discarded=False
+    )
+    extract = MagicMock()
+    claim_fanout = MagicMock()
+
+    def losing_process(_uid, _lang, conv, **kwargs):
+        observer = kwargs.get('persistence_observer')
+        if observer:
+            observer(False)
+        return conv
+
+    monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
+    monkeypatch.setattr(
+        persisted_finalizer.conversations_db,
+        'get_conversation',
+        lambda *args: {'id': 'conversation-1', 'status': ConversationStatus.processing.value, 'discarded': False},
+    )
+    monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
+    monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
+    monkeypatch.setattr(persisted_finalizer, 'process_conversation', losing_process)
+    monkeypatch.setattr(persisted_finalizer, 'extract_memories', extract)
+    monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'claim_finalization_fanout', claim_fanout)
+
+    disposition = await persisted_finalizer.finalize_persisted_conversation(
+        'uid-1',
+        'conversation-1',
+        finalization_job_id='job-1',
+        dispatch_generation=2,
+        lease_epoch=3,
+    )
+
+    assert disposition == ConversationFinalizationDisposition.fenced
+    extract.assert_not_called()
     claim_fanout.assert_not_called()

@@ -91,6 +91,7 @@ async def finalize_persisted_conversation(
         # validated live BYOK keys) while isolating this expensive sync path
         # from WebSocket and Cloud Tasks event loops.
         resolved_language = language or getattr(conversation, 'language', None) or 'en'
+        persistence: dict[str, bool] = {'owned': True}
         if conversation.status != ConversationStatus.completed:
             conversation = await run_blocking(
                 postprocess_executor,
@@ -100,16 +101,26 @@ async def finalize_persisted_conversation(
                 conversation,
                 force_process=force_process,
                 defer_memory_extraction=True,
+                persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
             )
-        if not getattr(conversation, 'discarded', False):
-            # A finalization job owns a durable lease. Keep canonical memory
-            # extraction inside that lease so a temporary fail-closed gate
-            # leaves the job retryable instead of dropping the source.
-            await run_blocking(postprocess_executor, extract_memories, uid, conversation)
-        # This is deliberately the only fanout admission read. The lifecycle
+        # If lifecycle persistence lost to discard/terminal state, no canonical
+        # memory or derived side effect may happen.  process_conversation
+        # reports this through the observer and returns without side effects;
+        # the finalizer must honour that result before touching memories.
+        if not persistence['owned']:
+            logger.info(
+                'persisted conversation finalization fenced: lifecycle persistence lost uid=%s conversation=%s',
+                uid,
+                conversation_id,
+            )
+            return ConversationFinalizationDisposition.fenced
+
+        # Ownership fence before any canonical side effect.  The lifecycle
         # transaction re-reads the durable conversation together with the job
         # lease, so a discard or superseding generation cannot slip between a
-        # stale pre-read and the integration side effect.
+        # stale pre-read and the memory/integration side effect.  This fence
+        # must precede extract_memories so a losing finalizer produces no
+        # canonical memory writes.
         fanout = await run_blocking(
             db_executor,
             lifecycle_service.claim_finalization_fanout,
@@ -117,31 +128,38 @@ async def finalize_persisted_conversation(
             dispatch_generation,
             lease_epoch,
         )
-        if fanout['status'] == 'claimed':
-            await trigger_external_integrations(
-                uid,
-                conversation,
-                idempotency_key=fanout['fanout_key'],
-                require_delivery=True,
-            )
-            fanout_completed = await run_blocking(
-                db_executor,
-                lifecycle_service.complete_finalization_fanout,
-                finalization_job_id,
-                dispatch_generation,
-                lease_epoch,
-            )
-            if not fanout_completed:
-                raise ConversationFinalizationError('fanout_completion_conflict')
-        elif fanout['status'] == 'fenced':
+        if fanout['status'] == 'completed':
+            return ConversationFinalizationDisposition.completed
+        if fanout['status'] == 'fenced':
             logger.info(
-                'persisted conversation finalization fenced before fanout uid=%s conversation=%s',
+                'persisted conversation finalization fenced before memory extraction uid=%s conversation=%s',
                 uid,
                 conversation_id,
             )
             return ConversationFinalizationDisposition.fenced
-        elif fanout['status'] != 'completed':
+        if fanout['status'] != 'claimed':
             raise ConversationFinalizationError('fanout_lease_conflict')
+
+        if not getattr(conversation, 'discarded', False):
+            # A finalization job owns a durable lease. Keep canonical memory
+            # extraction inside that lease so a temporary fail-closed gate
+            # leaves the job retryable instead of dropping the source.
+            await run_blocking(postprocess_executor, extract_memories, uid, conversation)
+        await trigger_external_integrations(
+            uid,
+            conversation,
+            idempotency_key=fanout['fanout_key'],
+            require_delivery=True,
+        )
+        fanout_completed = await run_blocking(
+            db_executor,
+            lifecycle_service.complete_finalization_fanout,
+            finalization_job_id,
+            dispatch_generation,
+            lease_epoch,
+        )
+        if not fanout_completed:
+            raise ConversationFinalizationError('fanout_completion_conflict')
         return ConversationFinalizationDisposition.completed
     except Exception as error:
         # Provider and validation exceptions can contain transcript excerpts.
