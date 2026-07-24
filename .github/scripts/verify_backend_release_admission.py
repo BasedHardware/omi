@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 MAIN_BRANCH = "main"
 RELEASE_WORKFLOW_NAME = "Release Eligibility"
 RELEASE_WORKFLOW_PATH = ".github/workflows/release-eligibility.yml"
@@ -52,6 +51,7 @@ def is_admitted_run(run: object, *, sha: str, repository: str) -> bool:
         and run.get("event") == "push"
         and run.get("status") == "completed"
         and run.get("conclusion") == "success"
+        and run.get("run_attempt") == 1
         and run.get("head_branch") == MAIN_BRANCH
         and run.get("head_sha") == sha
         and _head_repository_name(run) == repository
