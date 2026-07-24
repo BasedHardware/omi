@@ -1320,11 +1320,11 @@ struct DashboardPage: View {
     guard !useLegacyHomeDesign else { return }
     openHomeChat()
   }
-
   private func openHomeChat(focusInput: Bool = true) {
-    guard homeMode != .chat else { return }
-    OmiMotion.withGated(Self.homeStageAnimation) {
-      homeMode = .chat
+    if homeMode != .chat {
+      OmiMotion.withGated(Self.homeStageAnimation) {
+        homeMode = .chat
+      }
     }
     if focusInput {
       focusHomeAskFieldAfterStageTransition()
