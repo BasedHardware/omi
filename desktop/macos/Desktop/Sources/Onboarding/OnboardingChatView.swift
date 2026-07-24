@@ -336,7 +336,7 @@ struct OnboardingChatView: View {
                   .background(OmiColors.accent)
                   .cornerRadius(OmiChrome.smallControlRadius)
               }
-              .buttonStyle(.plain)
+              .buttonStyle(.plain).keyboardShortcut(.defaultAction)
               .padding(.top, OmiSpacing.md)
             }
 
