@@ -219,7 +219,7 @@ struct SBOnboardingView: View {
         trustRow("YOURS") { Text("Pause me anytime. Delete anything, forever.") }
       }
       .overlay(RoundedRectangle(cornerRadius: 13).stroke(sb.ink(.w1), lineWidth: 1))
-      SBInkButton(title: "Set up Omi →") { model.answerPromise() }
+      SBInkButton(title: "Set up Omi →", isDefaultAction: true) { model.answerPromise() }
     }
   }
 
@@ -262,7 +262,7 @@ struct SBOnboardingView: View {
           Text(draft).geist(size: 17, weight: .medium).foregroundStyle(sb.ink)
           Text("· detected").geist(size: 12.5).foregroundStyle(sb.ink(.w4))
         }
-        SBInkButton(title: "Continue") {
+        SBInkButton(title: "Continue", isDefaultAction: true) {
           if let m = all.first(where: { $0.name.lowercased() == draft.lowercased() }) {
             model.pickLanguage(code: m.code, name: m.name)
           } else {
@@ -359,6 +359,7 @@ struct SBOnboardingView: View {
           .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .keyboardShortcut(.defaultAction)
       } else {
         Button {
           if state == .ask { model.requestPerm(key) }
@@ -460,7 +461,9 @@ struct SBOnboardingView: View {
       // just a quiet Skip so the user is never stuck.
       Group {
         if model.shortcutPressed {
-          SBInkButton(title: "Continue") { isTalk ? model.answerShortcutTalk() : model.answerShortcutOpen() }
+          SBInkButton(title: "Continue", isDefaultAction: true) {
+            isTalk ? model.answerShortcutTalk() : model.answerShortcutOpen()
+          }
         } else {
           Button {
             isTalk ? model.answerShortcutTalk() : model.answerShortcutOpen()
@@ -494,7 +497,7 @@ struct SBOnboardingView: View {
       // demo doesn't fire (it used to be a tiny, easily-missed text link).
       Group {
         if model.screenDemoDone {
-          SBInkButton(title: "Continue") { model.answerScreenDemo() }
+          SBInkButton(title: "Continue", isDefaultAction: true) { model.answerScreenDemo() }
         } else {
           Button {
             model.answerScreenDemo()
@@ -526,7 +529,7 @@ struct SBOnboardingView: View {
       }
       .padding(.horizontal, 14)
       .overlay(RoundedRectangle(cornerRadius: 13).stroke(sb.ink(.w1), lineWidth: 1))
-      SBInkButton(title: "Continue") { model.answerAgents() }
+      SBInkButton(title: "Continue", isDefaultAction: true) { model.answerAgents() }
     }
     .frame(maxWidth: 380, alignment: .leading)
   }
@@ -548,7 +551,7 @@ struct SBOnboardingView: View {
       }
       .padding(.horizontal, 14)
       .overlay(RoundedRectangle(cornerRadius: 13).stroke(sb.ink(.w1), lineWidth: 1))
-      SBInkButton(title: "Continue") { model.answerContext() }
+      SBInkButton(title: "Continue", isDefaultAction: true) { model.answerContext() }
     }
     .frame(maxWidth: 380, alignment: .leading)
   }

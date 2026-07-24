@@ -91,6 +91,7 @@ struct SBInkButton: View {
   var size: CGFloat = 14
   var horizontalPadding: CGFloat = 18
   var verticalPadding: CGFloat = 9
+  var isDefaultAction = false
   let action: () -> Void
 
   var body: some View {
@@ -105,6 +106,20 @@ struct SBInkButton: View {
         )
     }
     .buttonStyle(.plain)
+    .modifier(SBDefaultActionKeyboardShortcut(enabled: isDefaultAction))
+  }
+}
+
+private struct SBDefaultActionKeyboardShortcut: ViewModifier {
+  let enabled: Bool
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if enabled {
+      content.keyboardShortcut(.defaultAction)
+    } else {
+      content
+    }
   }
 }
 
