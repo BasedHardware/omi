@@ -1410,6 +1410,23 @@ export interface DeveloperActionItem {
   updated_at?: string | null;
 }
 
+export interface DeveloperAskRequest {
+  limit?: number;
+  question: string;
+  timezone?: string;
+}
+
+export interface DeveloperAskResponse {
+  answer: string;
+  sources: Array<DeveloperAskSource>;
+}
+
+export interface DeveloperAskSource {
+  created_at?: string | null;
+  id: string;
+  title: string;
+}
+
 export interface DeveloperConversation {
   created_at: string;
   finished_at: string | null;
@@ -3910,6 +3927,9 @@ export interface OmiApiSchemas {
   "DevApiKeyCreate": DevApiKeyCreate;
   "DevApiKeyCreated": DevApiKeyCreated;
   "DeveloperActionItem": DeveloperActionItem;
+  "DeveloperAskRequest": DeveloperAskRequest;
+  "DeveloperAskResponse": DeveloperAskResponse;
+  "DeveloperAskSource": DeveloperAskSource;
   "DeveloperConversation": DeveloperConversation;
   "DeveloperConversationActionItem": DeveloperConversationActionItem;
   "DeveloperConversationEvent": DeveloperConversationEvent;
@@ -5565,6 +5585,16 @@ export interface OmiApiPaths {
         "200": DeveloperSuccessResponse;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/dev/user/ask": {
+    post: {
+      operationId: "ask";
+      responses: {
+        "200": DeveloperAskResponse;
+        "401": void;
         "422": HTTPValidationError;
       };
     };
@@ -10722,6 +10752,23 @@ export async function deleteActionItem(path: { action_item_id: string }, init?: 
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
     },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function ask(body: DeveloperAskRequest, init?: OmiApiClientInit): Promise<DeveloperAskResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/dev/user/ask`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();

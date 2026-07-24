@@ -29,9 +29,12 @@ EXEMPT_DESKTOP_PATHS = {
 # `no-changelog-needed` PR label only satisfies the PR run, so post-merge push
 # runs of this gate must exempt these paths by path or they redden main
 # (qualify-desktop-beta.sh timeout bump #10374 tripped tests/ on the merge push).
+# Generated OpenAPI type files are mechanical regenerations of a backend contract change,
+# never an independent user-facing desktop change, so they must not require a changelog.
 EXEMPT_DESKTOP_PATH_PREFIXES = (
     "desktop/macos/Backend-Rust/",
     "desktop/macos/tests/",
+    "desktop/macos/Desktop/Sources/Generated/",
 )
 
 
