@@ -290,6 +290,14 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             "manifest checks must use the pushed-before SHA on main pushes and the PR base on pull requests",
         )
 
+    def test_pr_changelog_metadata_is_owned_by_the_canonical_preflight(self):
+        """#10501 run 30121300487: the macOS lane has no live PR label metadata."""
+        job = self.jobs["desktop-swift-static"]
+
+        self.assertIn('if [ "${{ github.event_name }}" = "pull_request" ]; then', job)
+        self.assertIn("MANIFEST_ARGS+=(--skip-changelog)", job)
+        self.assertIn('"${MANIFEST_ARGS[@]}"', job)
+
     def test_xcode_version_probe_does_not_close_its_pipe_early(self):
         """head(1) aborts Xcode 16.4 under pipefail; sed reads the full output."""
         runner = _runner_text()
