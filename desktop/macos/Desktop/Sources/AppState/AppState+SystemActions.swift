@@ -139,7 +139,6 @@ extension AppState {
   /// This clears onboarding state without touching production data or system permissions.
   nonisolated func resetOnboardingAndRestart() {
     log("Resetting onboarding state for current app...")
-    let graphAuthorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
 
     // Update live @AppStorage-backed state on the main thread *before* clearing
     // UserDefaults. DesktopHomeView handles .resetOnboardingRequested by setting
@@ -169,40 +168,16 @@ extension AppState {
     log("Cleared onboarding chat persistence")
 
     Task { @MainActor [self] in
-      // Clear knowledge graph (local + server) so the onboarding chart starts fresh
-      if let graphAuthorizationSnapshot {
-        let authorization = LocalMutationAuthorization {
-          RuntimeOwnerIdentity.isAuthorizationCurrent(graphAuthorizationSnapshot)
-        }
-        do {
-          try await KnowledgeGraphStorage.shared.clearAll(authorization: authorization)
-          log("Cleared local knowledge graph storage")
-        } catch LocalMutationAuthorizationError.revoked {
-          log("Skipped stale-owner local knowledge graph reset")
-        } catch {
-          logError("Failed to clear local knowledge graph during onboarding reset", error: error)
-        }
-      } else {
-        log("Skipped local knowledge graph reset without an authenticated owner")
-      }
-      do {
-        try await APIClient.shared.deleteKnowledgeGraph()
-        log("Cleared server knowledge graph")
-      } catch {
-        logError("Failed to clear server knowledge graph during onboarding reset", error: error)
-      }
-
-      // Clear the default stream through the kernel journal's durable,
-      // generation-fenced delete outbox. No UI surface may write or delete
-      // backend chat state directly.
+      // Clear only setup-owned local conversation state. A re-walkthrough must
+      // never mutate the user's normal local or backend chat history.
       if let chatProvider = ChatProvider.mainInstance {
-        if await chatProvider.clearDefaultJournalForOnboardingReset() {
-          log("Queued default chat reset through kernel journal")
+        if await chatProvider.clearOnboardingJournal() {
+          log("Cleared onboarding journal")
         } else {
-          log("Failed to queue default chat reset through kernel journal")
+          log("Failed to clear onboarding journal")
         }
       } else {
-        log("Default chat reset deferred: main chat provider unavailable")
+        log("Onboarding journal reset deferred: main chat provider unavailable")
       }
 
       try? await Task.sleep(nanoseconds: 150_000_000)
@@ -394,12 +369,36 @@ extension AppState {
     hasSystemAudioPermission = status == .granted
   }
 
-  /// Check system audio permission support and keep the last observed tap result fresh.
+  /// Prime the same Core Audio tap used by real capture and reconcile its
+  /// observed outcome into the shared permission state.
+  func primeSystemAudioPermission() async -> Bool {
+    guard #available(macOS 14.4, *) else {
+      recordSystemAudioCaptureOutcome(.unsupported)
+      return false
+    }
+
+    return await reconcileSystemAudioPermission {
+      await SystemAudioCaptureService.primePermission()
+    }
+  }
+
+  /// Injectable production seam for reconciling a real tap attempt. Keeping
+  /// this at AppState makes onboarding and normal capture share one owner.
+  func reconcileSystemAudioPermission(
+    testPermission: @escaping @Sendable () async -> Bool
+  ) async -> Bool {
+    let granted = await testPermission()
+    recordSystemAudioCaptureOutcome(granted ? .granted : .denied)
+    return granted
+  }
+
+  /// Check system audio support and retain the last observed tap result.
   ///
   /// Core Audio process taps (macOS 14.4+) do not provide a preflight API. Unlike
   /// Screen Recording, the truthful product state comes from a real tap outcome.
-  /// If no tap is currently running, a previously granted outcome is no longer a
-  /// fresh assertion, so refreshes return to unknown until the next tap succeeds.
+  /// An idle refresh cannot produce newer evidence, so it must not erase the
+  /// successful prime performed during onboarding. A later real tap failure
+  /// replaces this state through `recordSystemAudioCaptureOutcome`.
   func checkSystemAudioPermission() {
     guard #available(macOS 14.4, *) else {
       recordSystemAudioCaptureOutcome(.unsupported)
@@ -408,8 +407,6 @@ extension AppState {
 
     if let service = systemAudioCaptureService as? SystemAudioCaptureService, service.capturing {
       recordSystemAudioCaptureOutcome(.granted)
-    } else if systemAudioPermissionStatus == .granted {
-      recordSystemAudioCaptureOutcome(.unknown)
     }
   }
 

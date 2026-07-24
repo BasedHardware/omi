@@ -9,81 +9,6 @@ import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/logger.dart';
 
-/// Base language codes eligible for live multi-language auto-detection.
-/// Mirrors the backend live STT capability policy
-/// (backend/config/stt_provider_policy.py MODULATE_SUPPORTED_LANGUAGES, #10022);
-/// regional variants ("pt-BR") are normalized to their base code before lookup.
-const multiLanguageSupported = {
-  'multi',
-  'af',
-  'ar',
-  'az',
-  'be',
-  'bg',
-  'bn',
-  'bs',
-  'ca',
-  'cs',
-  'cy',
-  'da',
-  'de',
-  'el',
-  'en',
-  'es',
-  'et',
-  'eu',
-  'fa',
-  'fi',
-  'fr',
-  'gl',
-  'gu',
-  'he',
-  'hi',
-  'hr',
-  'hu',
-  'id',
-  'it',
-  'ja',
-  'kk',
-  'kn',
-  'ko',
-  'lt',
-  'lv',
-  'mk',
-  'ml',
-  'mr',
-  'ms',
-  'nl',
-  'no',
-  'pa',
-  'pl',
-  'pt',
-  'ro',
-  'ru',
-  'sk',
-  'sl',
-  'sq',
-  'sr',
-  'sv',
-  'sw',
-  'ta',
-  'te',
-  'th',
-  'tl',
-  'tr',
-  'uk',
-  'ur',
-  'vi',
-  'zh',
-};
-
-/// Whether a (possibly regional) language code may enter live multi-language
-/// mode, matching the backend's normalized policy check.
-bool supportsLiveMultilingualMode(String languageCode) {
-  final base = languageCode.split('-').first.split('_').first.toLowerCase();
-  return multiLanguageSupported.contains(base);
-}
-
 class HomeProvider extends ChangeNotifier {
   int _sessionGeneration = 0;
   int selectedIndex = 0;
@@ -316,17 +241,17 @@ class HomeProvider extends ChangeNotifier {
 
   Future<bool> updateUserPrimaryLanguage(String languageCode, {UserProvider? userProvider}) async {
     try {
-      final success = await setUserPrimaryLanguage(languageCode);
-      if (success) {
+      final serverSingleLanguageMode = await setUserPrimaryLanguage(languageCode);
+      if (serverSingleLanguageMode != null) {
         userPrimaryLanguage = languageCode;
         hasSetPrimaryLanguage = true;
         SharedPreferencesUtil().userPrimaryLanguage = languageCode;
         SharedPreferencesUtil().hasSetPrimaryLanguage = true;
         PlatformManager.instance.analytics.setUserAttribute('Primary Language', languageCode);
 
-        // Backend auto-sets single_language_mode — sync local state to match
-        final singleLanguageMode = !supportsLiveMultilingualMode(languageCode);
-        userProvider?.updateSingleLanguageModeLocally(singleLanguageMode);
+        // The server decides single_language_mode from the live STT policy
+        // (#10022); local state mirrors its response, never a client-side list.
+        userProvider?.updateSingleLanguageModeLocally(serverSingleLanguageMode);
 
         notifyListeners();
         return true;

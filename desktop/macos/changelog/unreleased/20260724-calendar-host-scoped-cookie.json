@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Google Calendar imports incorrectly treating a valid browser session as expired when profiles contain host-scoped Google cookies"
+}

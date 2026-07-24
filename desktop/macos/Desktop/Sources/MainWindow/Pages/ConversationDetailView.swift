@@ -839,7 +839,7 @@ struct ConversationDetailView: View {
           .foregroundColor(OmiColors.textSecondary)
       }
 
-      SelectableMarkdown(text: displayConversation.overview, sender: .ai)
+      OmiMarkdown(text: displayConversation.overview, sender: .ai)
         .textSelection(.enabled)
         .environment(\.colorScheme, .dark)
         .frame(maxWidth: .infinity, alignment: .leading)

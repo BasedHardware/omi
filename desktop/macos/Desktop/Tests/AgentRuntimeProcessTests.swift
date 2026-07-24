@@ -205,6 +205,24 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(snapshot.ownerSynchronizations, 1)
   }
 
+  func testNamedBundleStartupUsesValidSeededCredentialWithoutForcedRefresh() {
+    XCTAssertFalse(
+      AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(
+        isNonProduction: true,
+        isDesktopLocalProfile: false),
+      "a named bundle has no Firebase SDK session to satisfy a forced refresh")
+    XCTAssertFalse(
+      AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(
+        isNonProduction: true,
+        isDesktopLocalProfile: true),
+      "the local harness owns its credential lifecycle")
+    XCTAssertTrue(
+      AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(
+        isNonProduction: false,
+        isDesktopLocalProfile: false),
+      "production and Beta starts must continue forcing a fresh credential")
+  }
+
   func testKernelJournalMutationClosesTheRuntimeReplayBoundary() async throws {
     let runtime = AgentRuntimeProcess()
     let turn = try XCTUnwrap(
@@ -1008,11 +1026,16 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
+    let whitespaceNormalizedSource = source.split(whereSeparator: \.isWhitespace).joined(separator: " ")
 
     XCTAssertTrue(source.contains("Self.removeInheritedBYOKEnvironment(from: &env)"))
     XCTAssertTrue(source.contains("let byok = await Self.usableBYOKEnvironment()"))
     XCTAssertTrue(
-      source.contains("let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled"))
+      whitespaceNormalizedSource.contains(
+        "let forceRefreshToken = preferredAdapterId == .piMono "
+          + "&& AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup("
+      ))
+    XCTAssertTrue(source.contains("isDesktopLocalProfile: DesktopLocalProfile.isEnabled"))
     XCTAssertTrue(source.contains("getAuthHeader("))
     XCTAssertTrue(source.contains("forceRefresh: forceRefreshToken"))
     XCTAssertTrue(source.contains("expectedUserId: authorizationSnapshot.ownerID"))

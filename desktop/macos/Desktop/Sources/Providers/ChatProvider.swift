@@ -1127,6 +1127,7 @@ class ChatProvider: ObservableObject {
 
   /// Set to true during onboarding so the ACP session ID is persisted for restart recovery.
   var isOnboarding = false
+  var preOnboardingMainMessages: [ChatMessage]?
   @Published var sessionsLoadError: String?
   @Published var selectedAppId: String? {
     didSet { restoreDraftForCurrentContextIfNeeded() }
@@ -1719,16 +1720,15 @@ class ChatProvider: ObservableObject {
     sessionId: String?,
     systemPromptStyle: ChatSystemPromptStyle
   ) -> AgentSurfaceReference {
-    if let surfaceRef {
-      return surfaceRef
+    switch Self.querySurfaceChoice(
+      hasSurfaceRef: surfaceRef != nil, isOnboarding: isOnboarding,
+      isFloating: systemPromptStyle == .floating)
+    {
+    case .onboarding: return .onboarding()
+    case .explicit: return surfaceRef ?? .mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
+    case .floatingMain: return mainChatSurfaceReference()
+    case .defaultMain: return .mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
     }
-    if isOnboarding {
-      return .onboarding()
-    }
-    if systemPromptStyle == .floating {
-      return mainChatSurfaceReference()
-    }
-    return .mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
   }
 
   private func journalOrigin(for surface: AgentSurfaceReference) -> String {
@@ -5921,19 +5921,6 @@ class ChatProvider: ObservableObject {
   }
 
   // MARK: - Clear Chat
-
-  /// Reset onboarding's legacy default backend stream through the same
-  /// generation-fenced journal deletion path as every other chat clear.
-  /// The app may restart before the physical DELETE returns; the daemon's
-  /// durable outbox resumes that exact operation on the next launch.
-  func clearDefaultJournalForOnboardingReset() async -> Bool {
-    let surface = AgentSurfaceReference.mainChat(chatId: "default")
-    AgentRuntimeStatusStore.shared.clear(surface: surface)
-    // Local-only: an onboarding re-walkthrough resets the local chat view but
-    // must never hard-delete the user's server-side chat history. The backend
-    // stays authoritative and rehydrates the thread via reconcile.
-    return await kernelTurnProjection.clear(surface: surface, deleteBackend: false)
-  }
 
   /// Clear current session messages (delete and create new)
   func clearChat() async {

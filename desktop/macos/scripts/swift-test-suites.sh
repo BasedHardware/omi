@@ -15,10 +15,24 @@ PACKAGE_PATH="${OMI_SWIFT_TEST_PACKAGE_PATH:-Desktop}"
 # diagnosis (`OMI_SWIFT_TEST_SUITE_WORKERS=1`).
 WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-${SWIFT_TEST_SUITE_WORKERS:-4}}"
 PREBUILD="${OMI_SWIFT_TEST_PREBUILD:-1}"
+SUITE_TIMEOUT_SECONDS="${OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS:-120}"
 
 fail() {
   echo "FAIL: $*" >&2
   exit 1
+}
+
+terminate_process_tree() {
+  local pid="$1"
+  local signal="$2"
+  local children child
+  children="$(pgrep -P "$pid" 2>/dev/null || true)"
+  for child in $children; do
+    terminate_process_tree "$child" "$signal"
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "-$signal" "$pid" 2>/dev/null || true
+  fi
 }
 
 run_suite() {
@@ -26,6 +40,7 @@ run_suite() {
   local suite="$2"
   local log_path="$log_dir/$suite.log"
   local status_path="$log_dir/$suite.status"
+  local timeout_path="$log_dir/$suite.timeout"
   local -a skip_args=()
 
   while IFS= read -r skip_arg; do
@@ -40,8 +55,26 @@ run_suite() {
     command+=("${skip_args[@]}")
   fi
   set +e
-  "${command[@]}" >"$log_path" 2>&1
+  "${command[@]}" >"$log_path" 2>&1 &
+  local command_pid=$!
+  (
+    sleep "$SUITE_TIMEOUT_SECONDS"
+    if kill -0 "$command_pid" 2>/dev/null; then
+      touch "$timeout_path"
+      terminate_process_tree "$command_pid" TERM
+      sleep 5
+      terminate_process_tree "$command_pid" KILL
+    fi
+  ) &
+  local watchdog_pid=$!
+  wait "$command_pid"
   local status=$?
+  kill "$watchdog_pid" 2>/dev/null || true
+  wait "$watchdog_pid" 2>/dev/null || true
+  if [ -f "$timeout_path" ]; then
+    echo "suite timed out after ${SUITE_TIMEOUT_SECONDS}s" >>"$log_path"
+    status=124
+  fi
   set -e
   echo "$status" >"$status_path"
   exit "$status"
@@ -57,6 +90,11 @@ if [ "$WORKERS" -lt 1 ]; then
 fi
 if [ "$PREBUILD" != "0" ] && [ "$PREBUILD" != "1" ]; then
   fail "OMI_SWIFT_TEST_PREBUILD must be 0 or 1, got '$PREBUILD'"
+fi
+[[ "$SUITE_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] \
+  || fail "OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS must be a positive integer, got '$SUITE_TIMEOUT_SECONDS'"
+if [ "$SUITE_TIMEOUT_SECONDS" -lt 1 ]; then
+  fail "OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS must be at least 1"
 fi
 
 # Static guardrails are part of the authoritative Swift component suite, not a

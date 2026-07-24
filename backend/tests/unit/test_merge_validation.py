@@ -187,13 +187,14 @@ class TestCoerceDt:
 # ---------------------------------------------------------------------------
 
 
-def _conv(conv_id="c1", started=None, finished=None, status="completed", locked=False):
+def _conv(conv_id="c1", started=None, finished=None, status="completed", locked=False, deleted=False):
     return {
         "id": conv_id,
         "started_at": started,
         "finished_at": finished,
         "status": status,
         "is_locked": locked,
+        "deleted": deleted,
     }
 
 
@@ -238,6 +239,22 @@ class TestValidateGateChecks:
         ok, err, warn = merge.validate_merge_compatibility(convs)
         assert ok is False
         assert "locked" in err.lower()
+
+    def test_rejects_deleted_conversation(self, merge):
+        # A soft-deleted tombstone must never be a merge source: merging it
+        # resurrects deleted content into a new visible conversation (#10119
+        # guards the sync merge path; this guards the user-initiated merge).
+        convs = [_conv("c1", deleted=True), _conv("c2")]
+        ok, err, warn = merge.validate_merge_compatibility(convs)
+        assert ok is False
+        assert "deleted" in err.lower()
+        assert warn is None
+
+    def test_allows_non_deleted_conversations(self, merge):
+        # Baseline: the deleted guard must not reject ordinary sources.
+        ok, err, warn = merge.validate_merge_compatibility([_conv("c1"), _conv("c2")])
+        assert ok is True
+        assert err is None
 
     def test_rejects_non_completed_conversation(self, merge):
         convs = [_conv("c1"), _conv("c2", status="processing")]

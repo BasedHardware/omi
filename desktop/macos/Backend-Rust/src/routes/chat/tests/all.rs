@@ -1,3 +1,7 @@
+// Tests may unwrap: the crate-level unwrap_used deny targets production
+// code; a test failing on unwrap is the test doing its job.
+#![allow(clippy::unwrap_used)]
+
 use super::*;
 
 use axum::{body::Bytes, http::StatusCode};
@@ -984,14 +988,11 @@ fn test_translate_request_forces_required_web_search_without_client_tools() {
 }
 
 #[test]
-fn test_injected_web_search_tool_forces_direct_caller() {
-    // Regression: web_search_20260209 defaults allowed_callers to
-    // ["code_execution_20260120"] on programmatic-tool-calling models
-    // (sonnet-4-6 / opus-4-6). Under that default Anthropic returns
-    // code_execution_tool_result blocks our AnthropicContentBlock enum can't
-    // deserialize, so every forced web-search turn 502s. The injected tool must
-    // pin the direct caller so the search returns server_tool_use +
-    // web_search_tool_result blocks the parser already handles.
+fn test_injected_web_search_tool_uses_direct_compatible_version() {
+    // Regression: web_search_20260209 only allowed code-execution callers in
+    // the live provider route, so selecting web_search directly returned 400
+    // before the model could answer. The gateway parser owns the basic direct
+    // server-tool contract, so keep its definition on that compatible version.
     let req = test_request(vec![user_message("search the web for HumanPost")]);
 
     let result = translate_request_inner(
@@ -1005,12 +1006,11 @@ fn test_injected_web_search_tool_forces_direct_caller() {
     let tools = result.tools.unwrap();
     let web_search = serde_json::to_value(&tools[0]).unwrap();
     assert_eq!(web_search["name"], "web_search");
-    assert_eq!(web_search["type"], "web_search_20260209");
+    assert_eq!(web_search["type"], "web_search_20250305");
     assert_eq!(
         web_search["allowed_callers"],
         json!(["direct"]),
-        "web_search must pin the direct caller; the default code-execution caller \
-         returns blocks the response parser cannot deserialize (502s the turn)"
+        "web_search must stay on the direct server-tool path the parser handles"
     );
 }
 

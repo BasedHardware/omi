@@ -215,6 +215,7 @@ struct FileIndexingView: View {
             .shadow(color: OmiColors.accent.opacity(0.4), radius: 16, x: 0, y: 4)
         }
         .buttonStyle(.plain)
+        .keyboardShortcut(.defaultAction)
         .padding(.bottom, OmiSpacing.page)
       }
 

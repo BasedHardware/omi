@@ -12,6 +12,7 @@ actually import and call the real production functions to verify:
 6. Dynamic sections actually vary per user (otherwise the split is pointless)
 """
 
+import asyncio
 import os
 import sys
 import types
@@ -19,7 +20,7 @@ import importlib
 import importlib.util
 from datetime import timedelta, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -853,6 +854,74 @@ def test_anthropic_cache_control_not_5min_default():
         # Must NOT be the bare {"type": "ephemeral"} form
         if '"type": "ephemeral"' in line or "'type': 'ephemeral'" in line:
             assert "ttl" in line, f"cache_control line missing ttl field: {line.strip()}"
+
+
+async def test_anthropic_agent_loop_moves_automatic_cache_breakpoint_across_tool_iterations():
+    """The production loop asks Anthropic to cache the latest cacheable message on every call."""
+    agentic_mod = _get_agentic_module()
+    calls = []
+    responses = [
+        types.SimpleNamespace(
+            stop_reason="tool_use",
+            content=[
+                types.SimpleNamespace(
+                    type="tool_use",
+                    id="tool-1",
+                    name="lookup",
+                    input={"query": "omi"},
+                )
+            ],
+        ),
+        types.SimpleNamespace(stop_reason="end_turn", content=[]),
+    ]
+
+    class FakeStream:
+        def __init__(self, response):
+            self.response = response
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        def __aiter__(self):
+            async def events():
+                if False:
+                    yield None
+
+            return events()
+
+        async def get_final_message(self):
+            return self.response
+
+    def stream(**kwargs):
+        calls.append(kwargs)
+        return FakeStream(responses[len(calls) - 1])
+
+    callback = agentic_mod.AsyncStreamingCallback()
+    safety_guard = MagicMock()
+    safety_guard.should_warn_user.return_value = None
+    safety_guard.get_stats.return_value = {}
+
+    with patch.object(agentic_mod.anthropic_client.messages, "stream", side_effect=stream), patch.object(
+        agentic_mod, "_execute_tool", new=AsyncMock(return_value="tool result")
+    ):
+        await agentic_mod._run_anthropic_agent_stream(
+            "SYSTEM",
+            [{"role": "user", "content": "question"}],
+            [],
+            {"lookup": MagicMock()},
+            callback,
+            [],
+            safety_guard,
+            {},
+        )
+
+    assert len(calls) == 2
+    assert all(call["cache_control"] == {"type": "ephemeral", "ttl": "1h"} for call in calls)
+    assert calls[0]["system"][0]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
+    assert calls[1]["messages"][-1]["content"][0]["type"] == "tool_result"
 
 
 # ---------------------------------------------------------------------------

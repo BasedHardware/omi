@@ -229,11 +229,7 @@ fn value_as_numeric_code(value: Option<&serde_json::Value>) -> Option<String> {
 }
 
 fn http_client() -> reqwest::Client {
-    reqwest::Client::builder()
-        .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(15))
-        .build()
-        .unwrap_or_default()
+    crate::services::http::bounded_client(Duration::from_secs(15))
 }
 
 async fn mint_session(

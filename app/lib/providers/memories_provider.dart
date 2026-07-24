@@ -426,6 +426,20 @@ class MemoriesProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> toggleMemoryBaseline(Memory memory, bool isBaseline) async {
+    final success = await updateMemoryBaselineServer(memory.id, isBaseline);
+
+    if (success) {
+      final idx = _memories.indexWhere((m) => m.id == memory.id);
+      if (idx != -1) {
+        _memories[idx].isBaseline = isBaseline;
+        notifyListeners();
+        _setCategories();
+      }
+    }
+    return success;
+  }
+
   Future<bool> editMemory(Memory memory, String value, [MemoryCategory? category]) async {
     final success = await editMemoryServer(memory.id, value);
 

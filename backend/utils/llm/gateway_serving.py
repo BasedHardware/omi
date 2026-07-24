@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 import time
 import uuid
@@ -427,6 +428,41 @@ def _gateway_call_kwargs(kwargs: Mapping[str, Any]) -> tuple[dict[str, Any], str
     return gateway_kwargs, request_id
 
 
+def _legacy_cache_compatible_call(
+    messages: list[BaseMessage], kwargs: Mapping[str, Any]
+) -> tuple[list[BaseMessage], dict[str, Any]]:
+    """Remove GPT-5.6-only cache fields before the pre-5.6 recovery path."""
+    legacy_messages: list[BaseMessage] = []
+    for message in messages:
+        content = getattr(message, 'content', None)
+        if not isinstance(content, list):
+            legacy_messages.append(message)
+            continue
+        cleaned_content: list[Any] = []
+        changed = False
+        for part in content:
+            if isinstance(part, Mapping) and 'prompt_cache_breakpoint' in part:
+                cleaned_part = dict(part)
+                cleaned_part.pop('prompt_cache_breakpoint')
+                cleaned_content.append(cleaned_part)
+                changed = True
+            else:
+                cleaned_content.append(part)
+        if not changed:
+            legacy_messages.append(message)
+            continue
+        if hasattr(message, 'model_copy'):
+            legacy_messages.append(message.model_copy(update={'content': cleaned_content}))
+        else:  # pragma: no cover - compatibility for older LangChain message objects
+            copied_message = copy.copy(message)
+            copied_message.content = cleaned_content
+            legacy_messages.append(copied_message)
+
+    legacy_kwargs = dict(kwargs)
+    legacy_kwargs.pop('prompt_cache_options', None)
+    return legacy_messages, legacy_kwargs
+
+
 def _canonical_request_id(value: object) -> str:
     if isinstance(value, str):
         try:
@@ -456,11 +492,14 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         gateway_kwargs, request_id = _gateway_call_kwargs(kwargs)
+        legacy_messages, legacy_kwargs = _legacy_cache_compatible_call(messages, kwargs)
         if not gateway_circuit.allow_request():
             return _run_legacy_fallback(
                 feature=self.feature,
                 gateway_reason='circuit_open',
-                call=lambda: self.legacy_model._generate(messages, stop=stop, run_manager=run_manager, **kwargs),
+                call=lambda: self.legacy_model._generate(
+                    legacy_messages, stop=stop, run_manager=run_manager, **legacy_kwargs
+                ),
                 request_id=request_id,
                 credential_source=self.credential_source,
             )
@@ -483,7 +522,9 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
             return _run_legacy_fallback(
                 feature=self.feature,
                 gateway_reason=_fallback_reason(exc),
-                call=lambda: self.legacy_model._generate(messages, stop=stop, run_manager=run_manager, **kwargs),
+                call=lambda: self.legacy_model._generate(
+                    legacy_messages, stop=stop, run_manager=run_manager, **legacy_kwargs
+                ),
                 request_id=request_id,
                 credential_source=self.credential_source,
             )
@@ -508,11 +549,14 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         gateway_kwargs, request_id = _gateway_call_kwargs(kwargs)
+        legacy_messages, legacy_kwargs = _legacy_cache_compatible_call(messages, kwargs)
         if not gateway_circuit.allow_request():
             return await _run_legacy_fallback_async(
                 feature=self.feature,
                 gateway_reason='circuit_open',
-                call=lambda: self.legacy_model._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs),
+                call=lambda: self.legacy_model._agenerate(
+                    legacy_messages, stop=stop, run_manager=run_manager, **legacy_kwargs
+                ),
                 request_id=request_id,
                 credential_source=self.credential_source,
             )
@@ -545,7 +589,9 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
             return await _run_legacy_fallback_async(
                 feature=self.feature,
                 gateway_reason=_fallback_reason(exc),
-                call=lambda: self.legacy_model._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs),
+                call=lambda: self.legacy_model._agenerate(
+                    legacy_messages, stop=stop, run_manager=run_manager, **legacy_kwargs
+                ),
                 request_id=request_id,
                 credential_source=self.credential_source,
             )
@@ -572,11 +618,12 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
         yielded = False
         stream = None
         gateway_kwargs, request_id = _gateway_call_kwargs(kwargs)
+        legacy_messages, legacy_kwargs = _legacy_cache_compatible_call(messages, kwargs)
         if not gateway_circuit.allow_request():
             yield from _iter_legacy_fallback(
                 feature=self.feature,
                 gateway_reason='circuit_open',
-                stream=self.legacy_model._stream(messages, stop=stop, run_manager=run_manager, **kwargs),
+                stream=self.legacy_model._stream(legacy_messages, stop=stop, run_manager=run_manager, **legacy_kwargs),
                 request_id=request_id,
                 credential_source=self.credential_source,
             )
@@ -642,7 +689,7 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
         yield from _iter_legacy_fallback(
             feature=self.feature,
             gateway_reason=gateway_reason,
-            stream=self.legacy_model._stream(messages, stop=stop, run_manager=run_manager, **kwargs),
+            stream=self.legacy_model._stream(legacy_messages, stop=stop, run_manager=run_manager, **legacy_kwargs),
             request_id=request_id,
             credential_source=self.credential_source,
         )
@@ -657,11 +704,12 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
         yielded = False
         stream = None
         gateway_kwargs, request_id = _gateway_call_kwargs(kwargs)
+        legacy_messages, legacy_kwargs = _legacy_cache_compatible_call(messages, kwargs)
         if not gateway_circuit.allow_request():
             legacy_stream = _aiter_legacy_fallback(
                 feature=self.feature,
                 gateway_reason='circuit_open',
-                stream=self.legacy_model._astream(messages, stop=stop, run_manager=run_manager, **kwargs),
+                stream=self.legacy_model._astream(legacy_messages, stop=stop, run_manager=run_manager, **legacy_kwargs),
                 request_id=request_id,
                 credential_source=self.credential_source,
             )
@@ -732,7 +780,7 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
         legacy_stream = _aiter_legacy_fallback(
             feature=self.feature,
             gateway_reason=gateway_reason,
-            stream=self.legacy_model._astream(messages, stop=stop, run_manager=run_manager, **kwargs),
+            stream=self.legacy_model._astream(legacy_messages, stop=stop, run_manager=run_manager, **legacy_kwargs),
             request_id=request_id,
             credential_source=self.credential_source,
         )

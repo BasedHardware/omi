@@ -9,6 +9,7 @@ covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+SystemActions.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+OnboardingJournal.swift
 preconditions:
   - automation_bridge_ready
   - auth_ready

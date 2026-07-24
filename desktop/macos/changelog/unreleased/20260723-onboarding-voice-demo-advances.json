@@ -1,0 +1,3 @@
+{
+  "change": "The onboarding screen demo now advances once Omi answers your spoken question — the Continue button appears on voice answers (not just typed ones), and the fallback Skip is a clear button instead of an easily-missed link"
+}

@@ -50,7 +50,7 @@ final class FailLoudConfigTests: XCTestCase {
   // MARK: BL-047 — system audio permission truth
 
   /// Core Audio process taps do not expose a preflight API. The app must not
-  /// proxy this through Screen Recording; it reports the last real tap outcome.
+  /// proxy this through Screen Recording; it retains the last real tap outcome.
   func testCheckSystemAudioPermissionUsesObservedTapOutcome() throws {
     let src = try source(relativePath: "Sources/AppState/AppState+SystemActions.swift")
 
@@ -74,9 +74,9 @@ final class FailLoudConfigTests: XCTestCase {
     XCTAssertTrue(
       body.contains("service.capturing"),
       "active system audio capture should preserve a granted state")
-    XCTAssertTrue(
+    XCTAssertFalse(
       body.contains("recordSystemAudioCaptureOutcome(.unknown)"),
-      "refreshes without an active tap must not keep stale granted state")
+      "an idle refresh has no new evidence and must not erase onboarding's successful tap")
   }
 
   func testSystemAudioCaptureOutcomesUpdatePermissionState() throws {
@@ -114,9 +114,9 @@ final class FailLoudConfigTests: XCTestCase {
   }
 
   @MainActor
-  func testSystemAudioOutcomeMappingAndIdleDowngrade() {
+  func testSystemAudioOutcomeMappingAndIdleReconciliation() {
     // Behavioral contract (BL-047): status follows OBSERVED tap outcomes and
-    // never claims granted while idle.
+    // an idle refresh cannot discard the last real observation.
     let state = AppState()
     state.recordSystemAudioCaptureOutcome(.granted)
     XCTAssertEqual(state.systemAudioPermissionStatus, .granted)
@@ -126,13 +126,12 @@ final class FailLoudConfigTests: XCTestCase {
     XCTAssertEqual(state.systemAudioPermissionStatus, .denied)
     XCTAssertFalse(state.hasSystemAudioPermission)
 
-    // A stale granted (no live capture) must downgrade to unknown on re-check,
-    // never persist as granted — and idle unknown must not count as a missing
-    // permission (it would permanently suppress the all-granted banner).
+    // A successful onboarding prime remains authoritative across the transition
+    // to the main app. There is no idle preflight that can contradict it.
     state.recordSystemAudioCaptureOutcome(.granted)
     state.checkSystemAudioPermission()
-    XCTAssertEqual(state.systemAudioPermissionStatus, .unknown)
-    XCTAssertFalse(state.hasSystemAudioPermission)
+    XCTAssertEqual(state.systemAudioPermissionStatus, .granted)
+    XCTAssertTrue(state.hasSystemAudioPermission)
     XCTAssertFalse(state.missingPermissions.contains("System Audio"))
 
     // A proven denial DOES count as missing, and persists through re-checks
@@ -142,6 +141,21 @@ final class FailLoudConfigTests: XCTestCase {
     state.checkSystemAudioPermission()
     XCTAssertEqual(state.systemAudioPermissionStatus, .denied)
     XCTAssertTrue(state.missingPermissions.contains("System Audio"))
+  }
+
+  @MainActor
+  func testSystemAudioPrimeReconcilesSuccessAndFailureThroughSharedState() async {
+    let state = AppState()
+
+    let granted = await state.reconcileSystemAudioPermission { true }
+    XCTAssertTrue(granted)
+    XCTAssertEqual(state.systemAudioPermissionStatus, .granted)
+    XCTAssertTrue(state.hasSystemAudioPermission)
+
+    let denied = await state.reconcileSystemAudioPermission { false }
+    XCTAssertFalse(denied)
+    XCTAssertEqual(state.systemAudioPermissionStatus, .denied)
+    XCTAssertFalse(state.hasSystemAudioPermission)
   }
 
   @available(macOS 14.4, *)

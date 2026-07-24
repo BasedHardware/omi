@@ -309,10 +309,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     LocalAgentAPIServer.shared.startIfNeeded()
     publishNamedBundleRuntimeManifest()
 
-    // Strip com.apple.provenance xattrs that macOS adds when Sparkle extracts updates.
-    // These break the code signature seal, causing the NEXT update to fail with
-    // "An error occurred while running the updater."
-    stripProvenanceXattrs()
+    runStartupSystemMaintenance()
 
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
@@ -365,16 +362,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       icon.draw(in: contentRect)
       maskedIcon.unlockFocus()
       NSApp.applicationIconImage = maskedIcon
-      if let cfURL = Bundle.main.bundleURL as CFURL? {
-        LSRegisterURL(cfURL, true)
-      }
       log("AppDelegate: Set application icon with squircle mask")
     }
-
-    // One-time icon cache reset: forces macOS to pick up the new squircle icon.
-    // Without this, users who had the old square icon see it cached indefinitely
-    // in the Dock, notifications, and Sparkle updater.
-    resetIconCacheIfNeeded()
 
     // Initialize NotificationService early to set up UNUserNotificationCenterDelegate
     // This ensures notifications display properly when app is in foreground
@@ -400,6 +389,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       options.enableAppHangTracking = !isDev
       options.enableWatchdogTerminationTracking = !isDev
       options.environment = isDev ? "development" : "production"
+      // Build-attributable native events (#10425): bind every native crash / app-hang /
+      // watchdog event to the exact version+build (`v{version}+{build}-macos`, the same
+      // tag Codemagic publishes) and the release channel (`stable`/`beta`). Without these,
+      // Sentry's Release/Build filters return nothing for native events and beta+stable
+      // are indistinguishable (both report environment="production").
+      if let releaseTag = AppBuild.releaseTag {
+        options.releaseName = releaseTag
+      }
+      options.dist = AppBuild.currentUpdateChannel
       // Disable automatic HTTP client error capture — the SDK creates noisy events
       // for every 4xx/5xx response (e.g. Cloud Run 503 cold starts on /v1/crisp/unread).
       // App code already handles HTTP errors and reports meaningful ones explicitly.
@@ -421,6 +419,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
           exceptions: (event.exceptions ?? []).map { (type: $0.type, value: $0.value) })
         return drop ? nil : event
       }
+    }
+    // Tag every Sentry event (including native crashes, which bypass app code) with
+    // the release channel and bundle identity so a release cohort can be sliced without
+    // relying on `dist` alone (#10425).
+    SentrySDK.configureScope { scope in
+      scope.setTag(value: AppBuild.currentUpdateChannel, key: "update_channel")
+      scope.setTag(value: AppBuild.bundleIdentifier, key: "bundle_id")
     }
     log(
       "Sentry initialized (environment: \(isDev ? "development" : "production"), nativeHandlers=\(!isDev))"
@@ -720,65 +725,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     MainActor.assumeIsolated { window.title.lowercased().hasPrefix("omi") }
   }
 
-  /// Strip com.apple.provenance extended attributes from our own bundle.
-  /// macOS adds these when Sparkle extracts the update ZIP, which breaks the code
-  /// signature seal and causes subsequent updates to fail.
-  private func stripProvenanceXattrs() {
+  /// Run the narrow, bundle-local maintenance required for update integrity.
+  /// Startup must never restart shared macOS services or mutate global caches.
+  private func runStartupSystemMaintenance() {
     let bundlePath = Bundle.main.bundlePath
+    let commands = StartupSystemMaintenancePolicy.commands(bundlePath: bundlePath)
     DispatchQueue.global(qos: .utility).async {
-      // A silent failure here breaks the code-signature seal and causes future
-      // Sparkle updates to fail, so surface it (BL-022) instead of dropping it.
-      SystemCommand.runLogging(
-        "AppDelegate: strip provenance xattrs",
-        executable: "/usr/bin/xattr", arguments: ["-cr", bundlePath])
-    }
-  }
-
-  /// One-time icon cache reset to force macOS to pick up the new squircle icon.
-  /// Runs lsregister unregister/register + kills iconservicesagent (auto-restarts).
-  /// Includes a safety net to restart the Dock if it crashes during the reset.
-  private func resetIconCacheIfNeeded() {
-    let key = "hasResetIconCache_v2"
-    guard !UserDefaults.standard.bool(forKey: key) else { return }
-    UserDefaults.standard.set(true, forKey: key)
-    log("AppDelegate: Running one-time icon cache reset")
-
-    let appPath = Bundle.main.bundlePath
-    let lsregister =
-      "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-
-    DispatchQueue.global(qos: .utility).async {
-      // Best-effort cosmetic maintenance. Capture each step's outcome instead of
-      // dropping it with `try?`, but keep it at info level — some steps exit
-      // non-zero benignly (e.g. killall when the agent isn't running), so this is
-      // not routed through the failure path (BL-022).
-      log(
-        "Icon cache: lsregister unregister \(SystemCommand.run(executable: lsregister, arguments: ["-u", appPath]).summary)"
-      )
-      log(
-        "Icon cache: lsregister register \(SystemCommand.run(executable: lsregister, arguments: ["-f", appPath]).summary)"
-      )
-      log(
-        "Icon cache: kill iconservicesagent \(SystemCommand.run(executable: "/usr/bin/killall", arguments: ["iconservicesagent"]).summary)"
-      )
-
-      // Safety net: verify the Dock is still running after 2 seconds.
-      // iconservicesagent restart can occasionally crash the Dock. pgrep exits
-      // non-zero when Dock isn't found, which is the signal we branch on.
-      Thread.sleep(forTimeInterval: 2.0)
-      let dockRunning = SystemCommand.run(
-        executable: "/usr/bin/pgrep", arguments: ["-x", "Dock"]
-      ).isSuccess
-
-      if !dockRunning {
-        // Dock is not running — restart it
-        log("AppDelegate: Dock not running after icon cache reset, restarting")
-        log(
-          "Icon cache: restart Dock \(SystemCommand.run(executable: "/usr/bin/open", arguments: ["-a", "Dock"]).summary)"
+      for command in commands {
+        // A silent failure here can break future update integrity, so surface it
+        // instead of dropping it.
+        SystemCommand.runLogging(
+          command.label,
+          executable: command.executable,
+          arguments: command.arguments
         )
       }
-
-      log("AppDelegate: Icon cache reset complete")
     }
   }
 

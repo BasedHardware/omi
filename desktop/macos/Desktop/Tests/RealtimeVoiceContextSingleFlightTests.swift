@@ -4,17 +4,27 @@ import XCTest
 
 @MainActor
 final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
-  // An actor (Sendable) so it can cross into the nonisolated single-flight
-  // closures without tripping Swift's sending/data-race checks; serialized
-  // access also closes the startCount/continuation race the class form had.
-  private actor Gate {
+  @MainActor
+  private final class Gate {
     var startCount = 0
     var continuation: CheckedContinuation<Bool, Never>?
+    var startedWaiters: [CheckedContinuation<Void, Never>] = []
 
     func run() async -> Bool {
-      startCount += 1
       return await withCheckedContinuation { continuation in
         self.continuation = continuation
+        startCount += 1
+        for waiter in startedWaiters {
+          waiter.resume()
+        }
+        startedWaiters.removeAll()
+      }
+    }
+
+    func waitUntilStarted() async {
+      guard startCount == 0 else { return }
+      await withCheckedContinuation { continuation in
+        startedWaiters.append(continuation)
       }
     }
 
@@ -24,27 +34,50 @@ final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
     }
   }
 
-  private func waitUntilStarted(_ gate: Gate) async {
-    for _ in 0..<100 {
-      if await gate.startCount != 0 { break }
-      await Task.yield()
+  @MainActor
+  private final class Signal {
+    private var didFire = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func fire() {
+      didFire = true
+      for waiter in waiters {
+        waiter.resume()
+      }
+      waiters.removeAll()
     }
+
+    func wait() async {
+      guard !didFire else { return }
+      await withCheckedContinuation { continuation in
+        waiters.append(continuation)
+      }
+    }
+  }
+
+  private func waitUntilStarted(_ gate: Gate) async {
+    await gate.waitUntilStarted()
   }
 
   func testCancelledTurnWaiterDoesNotCancelSharedReadiness() async {
     let singleFlight = RealtimeVoiceContextSingleFlight()
     let gate = Gate()
+    let turnWaiterJoined = Signal()
 
     let speculative = singleFlight.joinOrStart { await gate.run() }
-    let turnWaiter = Task { await singleFlight.joinOrStart { await gate.run() }.value }
+    let turnWaiter = Task {
+      let sharedReadiness = singleFlight.joinOrStart { await gate.run() }
+      turnWaiterJoined.fire()
+      return await sharedReadiness.value
+    }
     await waitUntilStarted(gate)
+    await turnWaiterJoined.wait()
 
-    let startedCount = await gate.startCount
-    XCTAssertEqual(startedCount, 1)
+    XCTAssertEqual(gate.startCount, 1)
     XCTAssertTrue(singleFlight.isRunning)
 
     turnWaiter.cancel()
-    await gate.finish(true)
+    gate.finish(true)
 
     let speculativeResult = await speculative.value
     let turnWaiterResult = await turnWaiter.value
@@ -52,8 +85,7 @@ final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
     XCTAssertTrue(turnWaiterResult)
     await Task.yield()
     XCTAssertFalse(singleFlight.isRunning)
-    let finalCount = await gate.startCount
-    XCTAssertEqual(finalCount, 1)
+    XCTAssertEqual(gate.startCount, 1)
   }
 
   func testForcedRefreshDoesNotReuseAnOlderSpeculativeRead() async {
@@ -66,14 +98,12 @@ final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
     let forced = singleFlight.restart { await forcedGate.run() }
     await waitUntilStarted(forcedGate)
 
-    let speculativeStarted = await speculativeGate.startCount
-    let forcedStarted = await forcedGate.startCount
-    XCTAssertEqual(speculativeStarted, 1)
-    XCTAssertEqual(forcedStarted, 1)
+    XCTAssertEqual(speculativeGate.startCount, 1)
+    XCTAssertEqual(forcedGate.startCount, 1)
     XCTAssertTrue(singleFlight.isRunning)
 
-    await speculativeGate.finish(false)
-    await forcedGate.finish(true)
+    speculativeGate.finish(false)
+    forcedGate.finish(true)
 
     let speculativeResult = await speculative.value
     let forcedResult = await forced.value
@@ -89,16 +119,15 @@ final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
 
     let failed = singleFlight.joinOrStart { await failedGate.run() }
     await waitUntilStarted(failedGate)
-    await failedGate.finish(false)
+    failedGate.finish(false)
     let failedResult = await failed.value
     XCTAssertFalse(failedResult)
     XCTAssertFalse(singleFlight.isRunning)
 
     let retry = singleFlight.joinOrStart { await retryGate.run() }
     await waitUntilStarted(retryGate)
-    let retryStarted = await retryGate.startCount
-    XCTAssertEqual(retryStarted, 1)
-    await retryGate.finish(true)
+    XCTAssertEqual(retryGate.startCount, 1)
+    retryGate.finish(true)
     let retryResult = await retry.value
     XCTAssertTrue(retryResult)
   }
