@@ -4,6 +4,8 @@ tier: manual
 description: Apps/Integrations marketplace flow — browse apps, filter by category, search, view app details
 app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Connections/AppleEventKitReaderService.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Connections/ImportConnector.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ManualInstallationDisclosure.swift
   - desktop/macos/Desktop/Sources/ConferencingApps.swift
@@ -14,7 +16,7 @@ preconditions:
 steps:
   - id: S1
     name: Navigate to Apps page
-    do: "Click the Apps sidebar icon (identifier: sidebar_apps) to navigate to the Apps/Integrations page. Verify the marketplace loads with app cards, search bar, category filter, and Installed/Create App buttons."
+    do: "Click the Apps sidebar icon (identifier: sidebar_apps) to navigate to the Apps/Integrations page. Verify the marketplace and Connections section load, including Apple Calendar, Apple Reminders, and Apple Notes."
     expect:
       interactive_count: { min: 10 }
       text_visible:

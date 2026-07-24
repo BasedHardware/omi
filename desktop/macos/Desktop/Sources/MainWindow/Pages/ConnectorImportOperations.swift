@@ -207,6 +207,46 @@ enum ConnectorImportOperations {
   }
 
   @MainActor
+  static func importAppleCalendar(progress: ConnectorImportRunner.ProgressSink) async -> Outcome {
+    do {
+      let events = try await AppleEventKitReaderService.shared.readCalendarEvents()
+      progress.update(
+        title: "Importing Apple Calendar",
+        detail: "Saving event notes, attendees, and locations as memories."
+      )
+      let result = await AppleEventKitReaderService.shared.saveCalendarAsMemories(events: events)
+      guard result.failed == 0 else {
+        return .failure(message: "Apple Calendar was read, but its events couldn't be saved. Try again.")
+      }
+      return .success(
+        SyncResult(sourceCount: events.count, memoryCount: result.saved, newItems: nil),
+        message:
+          "Imported \(events.count.formatted()) Apple Calendar events and saved \(result.saved.formatted()) memories."
+      )
+    } catch {
+      return .failure(message: error.localizedDescription)
+    }
+  }
+
+  @MainActor
+  static func importAppleReminders(progress: ConnectorImportRunner.ProgressSink) async -> Outcome {
+    do {
+      progress.update(
+        title: "Syncing Apple Reminders",
+        detail: "Keeping Omi tasks and Apple Reminders up to date."
+      )
+      let result = try await AppleEventKitReaderService.shared.syncReminders()
+      let changed = result.exported + result.updated + result.deleted
+      return .success(
+        SyncResult(sourceCount: result.total, memoryCount: nil, newItems: result.exported),
+        message: "Synced \(changed.formatted()) Omi tasks with Apple Reminders."
+      )
+    } catch {
+      return .failure(message: error.localizedDescription)
+    }
+  }
+
+  @MainActor
   static func importAppleNotes(progress: ConnectorImportRunner.ProgressSink) async -> Outcome {
     do {
       return try await runAppleNotesImport(progress: progress)

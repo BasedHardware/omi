@@ -1086,6 +1086,11 @@
             ],
             "title": "Invalid At"
           },
+          "is_baseline": {
+            "default": false,
+            "title": "Is Baseline",
+            "type": "boolean"
+          },
           "is_locked": {
             "default": false,
             "title": "Is Locked",

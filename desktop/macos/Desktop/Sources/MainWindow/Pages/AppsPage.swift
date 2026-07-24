@@ -713,98 +713,6 @@ struct AppsPage: View {
 
 // MARK: - Imports Section
 
-struct ImportConnector: Identifiable {
-  let id: String
-  let title: String
-  let subtitle: String
-  let description: String
-  let brand: ConnectorBrand
-  let statusText: String
-  let metricText: String?
-  let actionTitle: String
-  let isConnected: Bool
-
-  static let all: [ImportConnector] = [
-    ImportConnector(
-      id: "calendar",
-      title: "Calendar",
-      subtitle: "Google Calendar",
-      description: "Import events and recurring routines.",
-      brand: .calendar,
-      statusText: "Not connected",
-      metricText: nil,
-      actionTitle: "Connect",
-      isConnected: false
-    ),
-    ImportConnector(
-      id: "email",
-      title: "Email",
-      subtitle: "Gmail",
-      description: "Import email history and follow-ups.",
-      brand: .gmail,
-      statusText: "Not connected",
-      metricText: nil,
-      actionTitle: "Connect",
-      isConnected: false
-    ),
-    ImportConnector(
-      id: "local-files",
-      title: "Local files",
-      subtitle: "This Mac",
-      description: "Index documents, code, and working folders.",
-      brand: .localFiles,
-      statusText: "Not connected",
-      metricText: nil,
-      actionTitle: "Connect",
-      isConnected: false
-    ),
-    ImportConnector(
-      id: "apple-notes",
-      title: "Apple Notes",
-      subtitle: "Private notes",
-      description: "Import notes and private written context.",
-      brand: .appleNotes,
-      statusText: "Not connected",
-      metricText: nil,
-      actionTitle: "Connect",
-      isConnected: false
-    ),
-    ImportConnector(
-      id: "x",
-      title: "X (Twitter)",
-      subtitle: "Your posts & bookmarks",
-      description: "Connect your X account so Omi learns from your tweets and bookmarks.",
-      brand: .x,
-      statusText: "Not connected",
-      metricText: nil,
-      actionTitle: "Connect",
-      isConnected: false
-    ),
-    ImportConnector(
-      id: "chatgpt",
-      title: "ChatGPT",
-      subtitle: "Memory import",
-      description: "Paste a memory export into Omi.",
-      brand: .chatgpt,
-      statusText: "Optional",
-      metricText: nil,
-      actionTitle: "Connect",
-      isConnected: false
-    ),
-    ImportConnector(
-      id: "claude",
-      title: "Claude",
-      subtitle: "Memory import",
-      description: "Paste a memory export into Omi.",
-      brand: .claude,
-      statusText: "Optional",
-      metricText: nil,
-      actionTitle: "Connect",
-      isConnected: false
-    ),
-  ]
-}
-
 @MainActor
 final class ImportConnectorStatusStore: ObservableObject {
   struct ConnectorMetrics {
@@ -930,6 +838,8 @@ final class ImportConnectorStatusStore: ObservableObject {
     refreshPersistedManualImportMetrics()
     await refreshLocalFilesMetrics()
     await refreshAppleNotesMetrics()
+    await refreshAppleEventKitMetrics(source: .calendar, connectorID: "apple-calendar")
+    await refreshAppleEventKitMetrics(source: .reminders, connectorID: "apple-reminders")
   }
 
   func refreshPersistedManualImportMetrics() {
@@ -1136,6 +1046,28 @@ final class ImportConnectorStatusStore: ObservableObject {
     }
   }
 
+  private func refreshAppleEventKitMetrics(source: AppleEventKitSource, connectorID: String) async {
+    applyAppleEventKitStatus(
+      await AppleEventKitReaderService.shared.connectionStatus(for: source), connectorID: connectorID)
+  }
+
+  func applyAppleEventKitStatus(_ status: AppleEventKitConnectionStatus, connectorID: String) {
+    var metrics = metricsByID[connectorID] ?? ConnectorMetrics()
+    switch status {
+    case .connected:
+      metrics.availabilityText = "Local access verified"
+      defaults.set(
+        "Local access verified",
+        forKey: storageKey(prefix: availabilityTextKeyPrefix, connectorID: connectorID)
+      )
+    case .needsAccess(_, let reasonCode), .error(_, let reasonCode):
+      log("ImportConnectorStatusStore: \(connectorID) refresh unavailable code=\(reasonCode)")
+      metrics.availabilityText = nil
+      defaults.removeObject(forKey: storageKey(prefix: availabilityTextKeyPrefix, connectorID: connectorID))
+    }
+    metricsByID[connectorID] = metrics
+  }
+
   private func isConnected(connector: ImportConnector, metrics: ConnectorMetrics) -> Bool {
     if metrics.lastSyncedAt != nil {
       return true
@@ -1198,7 +1130,7 @@ final class ImportConnectorStatusStore: ObservableObject {
 
   private func sourceLabel(for connector: ImportConnector, count: Int) -> String {
     switch connector.id {
-    case "calendar":
+    case "calendar", "apple-calendar":
       return count == 1 ? "event" : "events"
     case "email":
       return count == 1 ? "email" : "emails"
@@ -1206,6 +1138,8 @@ final class ImportConnectorStatusStore: ObservableObject {
       return count == 1 ? "file indexed" : "files indexed"
     case "apple-notes":
       return count == 1 ? "note" : "notes"
+    case "apple-reminders":
+      return count == 1 ? "reminder" : "reminders"
     case "x":
       return count == 1 ? "post" : "posts"
     default:
@@ -1581,6 +1515,10 @@ struct ImportConnectorSheet: View {
     switch connector.id {
     case "calendar":
       return isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Calendar")
+    case "apple-calendar":
+      return isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Apple Calendar")
+    case "apple-reminders":
+      return isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Apple Reminders")
     case "email":
       return isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Gmail")
     case "apple-notes":
@@ -1602,6 +1540,20 @@ struct ImportConnectorSheet: View {
         detail: "Reading past events and upcoming commitments for memory extraction."
       ) { progress in
         await ConnectorImportOperations.importCalendar(progress: progress)
+      }
+    case "apple-calendar":
+      startRun(
+        title: "Connecting to Apple Calendar",
+        detail: "Full Calendar access reads notes, attendees, and locations and saves them as memories."
+      ) { progress in
+        await ConnectorImportOperations.importAppleCalendar(progress: progress)
+      }
+    case "apple-reminders":
+      startRun(
+        title: "Connecting to Apple Reminders",
+        detail: "Requesting access to local reminders."
+      ) { progress in
+        await ConnectorImportOperations.importAppleReminders(progress: progress)
       }
     case "email":
       startRun(
