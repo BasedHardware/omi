@@ -1,5 +1,6 @@
 version: 2
 name: apps-marketplace
+tier: manual
 description: Apps tab — Imports, Exports, search, filters, Create App (v0.12.119+ redesign)
 app: com.omi.computer-macos
 covers:
