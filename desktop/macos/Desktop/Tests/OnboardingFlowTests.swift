@@ -387,6 +387,44 @@ final class OnboardingFlowTests: XCTestCase {
     }
   }
 
+  /// Static tripwire: keyboard shortcut registration is a SwiftUI wiring
+  /// contract, so assert every visible onboarding proceed action remains the
+  /// default action without trying to synthesize AppKit key events in a unit test.
+  func testOnboardingProceedActionsUseDefaultActionKeyboardShortcut() throws {
+    // omi-test-quality: source-inspection -- static contract: verifies SwiftUI default-action wiring on every visible onboarding proceed control
+    let chatSource = try desktopSourceFile("Onboarding/OnboardingChatView.swift")
+    XCTAssertTrue(
+      chatSource.contains("handleOnboardingComplete()\n              })")
+        && chatSource.contains(".keyboardShortcut(.defaultAction)\n              .padding(.top"),
+      "the conversational onboarding Continue button must accept Return")
+
+    let fileIndexingSource = try desktopSourceFile("FileIndexing/FileIndexingView.swift")
+    XCTAssertTrue(
+      fileIndexingSource.contains("onComplete(totalFilesScanned)")
+        && fileIndexingSource.contains(".keyboardShortcut(.defaultAction)\n        .padding(.bottom"),
+      "the file-index onboarding Continue button must accept Return")
+
+    let secondBrainSource = try desktopSourceFile("Onboarding/SecondBrain/SBOnboardingView.swift")
+    for title in ["Set up Omi →", "Continue"] {
+      XCTAssertTrue(
+        secondBrainSource.contains("SBInkButton(title: \"\\(title)\", isDefaultAction: true)"),
+        "the second-brain \(title) action must accept Return")
+    }
+    XCTAssertEqual(
+      secondBrainSource.components(separatedBy: "isDefaultAction: true").count - 1,
+      6,
+      "every visible second-brain proceed action must register Return")
+    XCTAssertTrue(
+      secondBrainSource.contains("Text(\"Continue →\")")
+        && secondBrainSource.contains(".keyboardShortcut(.defaultAction)\n      } else {"),
+      "the granted-permission Continue action must accept Return")
+
+    let componentsSource = try desktopSourceFile("MainWindow/SecondBrain/SBComponents.swift")
+    XCTAssertTrue(
+      componentsSource.contains("content.keyboardShortcut(.defaultAction)"),
+      "SBInkButton must wire opted-in proceed actions to Return")
+  }
+
   // Regression: arrow navigation must be computed from persisted step state and
   // applied by the mounted view — the NSEvent monitor's captured view copy drops
   // @AppStorage writes on some macOS versions. These cover the extracted
@@ -440,11 +478,15 @@ final class OnboardingFlowTests: XCTestCase {
   }
 
   private func onboardingSourceFile(_ name: String) throws -> String {
+    try desktopSourceFile("Onboarding/\(name)")
+  }
+
+  private func desktopSourceFile(_ relativePath: String) throws -> String {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("Sources/Onboarding")
-      .appendingPathComponent(name)
+      .appendingPathComponent("Sources")
+      .appendingPathComponent(relativePath)
     // omi-test-quality: source-inspection -- static contract: forbids uncancellable deferred-advance patterns in step views
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
