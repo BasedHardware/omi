@@ -49,7 +49,7 @@ steps:
 
   - id: S5
     name: Open Settings via gear icon
-    do: "Click the Settings gear icon (agent-swift find text 'gearshape' click). Verify Settings page opens with sidebar showing section names: General, Account & Plan, Transcription, Floating Bar, Notifications & Privacy, Rewind, Shortcuts, Advanced, About."
+    do: "Click the Settings gear icon (agent-swift find text 'gearshape' click). Verify Settings page opens showing section names: General, Account & Plan, Transcription, Floating Bar, Notifications & Privacy, Rewind, Shortcuts, Advanced, About."
     expect:
       interactive_count: { min: 9 }
       text_visible:

@@ -12,7 +12,7 @@ preconditions:
 steps:
   - id: S1
     name: Open Settings via gear icon
-    do: "Click the Settings gear icon (label 'gearshape') in the top-right of the nav bar. Verify Settings page opens with sidebar showing all 9 section names."
+    do: "Click the Settings gear icon (label 'gearshape') in the top-right of the nav bar. Verify Settings page opens showing all 9 section names."
     expect:
       interactive_count: { min: 9 }
       text_visible:
@@ -21,21 +21,21 @@ steps:
 
   - id: S2
     name: Navigate to General section
-    do: "Click 'General' in the Settings sidebar. Verify General settings load with app preferences and startup behavior options."
+    do: "Click 'General' in the Settings section list. Verify General settings load with app preferences and startup behavior options."
     expect:
       text_visible:
         - General
 
   - id: S3
     name: Navigate to Account & Plan section
-    do: "Click 'Account & Plan' in the Settings sidebar. Verify account information shows user name, email, Sign Out and Delete buttons. Plan and Usage section should show current subscription."
+    do: "Click 'Account & Plan' in the Settings section list. Verify account information shows user name, email, Sign Out and Delete buttons. Plan and Usage section should show current subscription."
     expect:
       text_visible:
         - Account & Plan
 
   - id: S4
     name: Navigate to Transcription section
-    do: "Click 'Transcription' in the Settings sidebar. Verify Language Mode card appears with 'Auto-Detect (Multi-Language)' and 'Single Language (Better Accuracy)' options. Voice Assistant Languages and Custom Vocabulary sections should be visible."
+    do: "Click 'Transcription' in the Settings section list. Verify Language Mode card appears with 'Auto-Detect (Multi-Language)' and 'Single Language (Better Accuracy)' options. Voice Assistant Languages and Custom Vocabulary sections should be visible."
     expect:
       text_visible:
         - Transcription
@@ -43,21 +43,21 @@ steps:
 
   - id: S5
     name: Navigate to Floating Bar section
-    do: "Click 'Floating Bar' in the Settings sidebar. Verify Floating Bar settings load with toggles for show/hide, background style, draggable, typed questions, screen sharing, and voice selection."
+    do: "Click 'Floating Bar' in the Settings section list. Verify Floating Bar settings load with toggles for show/hide, background style, draggable, typed questions, screen sharing, and voice selection."
     expect:
       text_visible:
         - Floating Bar
 
   - id: S6
     name: Navigate to Notifications & Privacy section
-    do: "Click 'Notifications & Privacy' in the Settings sidebar. Verify notification preferences appear with frequency slider, focus/task/insight/memory notification toggles, and Daily Summary settings."
+    do: "Click 'Notifications & Privacy' in the Settings section list. Verify notification preferences appear with frequency slider, focus/task/insight/memory notification toggles, and Daily Summary settings."
     expect:
       text_visible:
         - Notifications & Privacy
 
   - id: S7
     name: Navigate to Rewind section
-    do: "Click 'Rewind' in the Settings sidebar. Verify Rewind settings show storage info (frames count, size) and Excluded Apps list with Reset to Defaults button."
+    do: "Click 'Rewind' in the Settings section list. Verify Rewind settings show storage info (frames count, size) and Excluded Apps list with Reset to Defaults button."
     expect:
       text_visible:
         - Rewind
@@ -65,14 +65,14 @@ steps:
 
   - id: S8
     name: Navigate to Shortcuts section
-    do: "Click 'Shortcuts' in the Settings sidebar. Verify shortcut settings show Open Omi Shortcut options, Push to Talk key options, PTT microphone selector, and toggle options."
+    do: "Click 'Shortcuts' in the Settings section list. Verify shortcut settings show Open Omi Shortcut options, Push to Talk key options, PTT microphone selector, and toggle options."
     expect:
       text_visible:
         - Shortcuts
 
   - id: S9
     name: Navigate to Advanced section
-    do: "Click 'Advanced' in the Settings sidebar. Verify Advanced settings show AI Setup section with Voice Model and AI Provider dropdowns, Workspace browser, Browser Extension toggle, and Dev Mode toggle."
+    do: "Click 'Advanced' in the Settings section list. Verify Advanced settings show AI Setup section with Voice Model and AI Provider dropdowns, Workspace browser, Browser Extension toggle, and Dev Mode toggle."
     expect:
       text_visible:
         - Advanced
@@ -80,7 +80,7 @@ steps:
 
   - id: S10
     name: Navigate to About section
-    do: "Click 'About' in the Settings sidebar. Verify About section shows app name, version info, links (What's New, Visit Website, Help Center, Privacy Policy, Terms of Service), Software Updates with Check Now button, and Update Channel."
+    do: "Click 'About' in the Settings section list. Verify About section shows app name, version info, links (What's New, Visit Website, Help Center, Privacy Policy, Terms of Service), Software Updates with Check Now button, and Update Channel."
     expect:
       text_visible:
         - About

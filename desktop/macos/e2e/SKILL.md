@@ -411,7 +411,7 @@ agent-swift snapshot -i --json                       # see what's on screen
 |---------|---------|---------|
 | `snapshot -i --json` | See all interactive elements with refs, types, labels | `agent-swift snapshot -i --json` |
 | `click @ref` | CGEvent click — SwiftUI elements (NavigationLink, gestures) | `agent-swift click @e3` |
-| `press @ref` | AXPress — AppKit buttons, Settings sidebar items | `agent-swift press @e5` |
+| `press @ref` | AXPress — AppKit buttons only | `agent-swift press @e5` |
 | `find role/text/key VALUE` | Find element and chain action | `agent-swift find text "Settings" click` |
 | `fill @ref "text"` | Type into text field | `agent-swift fill @e7 "search"` |
 | `scroll down/up` | Scroll current view | `agent-swift scroll down` |
@@ -450,7 +450,7 @@ Main Window — Top Navigation Bar (use `click` for all nav buttons)
 └── Settings gear icon (⚙️ top-right) → opens Settings page
     └── Back button returns to previous tab
 
-Settings (SettingsPage.swift) — use `click` for sidebar sections
+Settings (SettingsPage.swift) — use `click` for section rows
 ├── General — app preferences, startup behavior
 ├── Account & Plan — user info, sign out, delete account, subscription/plan, billing
 ├── Transcription — Language Mode (Auto-Detect / Single Language), Voice Assistant Languages, Custom Vocabulary
@@ -483,7 +483,7 @@ System Tray Menu (menu bar icon)
 - Settings: click the gear icon button (label `gearshape`) in top-right area
 - Use `click` — these are SwiftUI Button views
 
-**Settings sidebar navigation:**
+**Settings section navigation:**
 - Sections are `AXButton` type elements with section name labels
 - Use `click` for navigation — these are SwiftUI views that respond to CGEvent clicks
 - Section labels: General, Account & Plan, Transcription, Floating Bar, Notifications & Privacy, Rewind, Shortcuts, Advanced, About
