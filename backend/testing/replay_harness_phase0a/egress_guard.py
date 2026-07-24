@@ -28,18 +28,35 @@ from typing import Any, Callable
 # --------------------------------------------------------------------------- #
 
 
-def _parse_allow_list(raw: str) -> frozenset[int]:
+def _canonical_host(host: object) -> str:
+    """Normalize a connection host to its canonical string identity for exact
+    host+port matching against the declared allow-list.
+
+    Identity is preserved, NOT folded to loopback: an undeclared ``localhost`` or
+    ``::1`` alias must not canonicalize to a declared ``127.0.0.1``. Only bytes
+    decoding and bracket/whitespace stripping are applied so the comparison is
+    against the exact declared endpoint identity.
+    """
+    if host is None:
+        return ""
+    if isinstance(host, bytes):
+        host = host.decode("idna", errors="replace")
+    return str(host).strip().strip("[]")
+
+
+def _parse_allow_list(raw: str) -> frozenset[tuple[str, int]]:
     """Parse a JSON list of {"host": "127.0.0.1", "port": 51001} entries.
 
-    Returns a set of allowed ports — the DNS guard already enforces loopback,
-    so the port alone identifies the declared fake endpoint.
+    Returns the set of allowed canonical (host, port) endpoints — host identity
+    is preserved so an undeclared ``localhost``/``::1`` alias on a declared port
+    is NOT accepted. The DNS guard separately enforces loopback for resolution.
     """
     if not raw:
         return frozenset()
-    ports: set[int] = set()
+    endpoints: set[tuple[str, int]] = set()
     for item in json.loads(raw):
-        ports.add(int(item["port"]))
-    return frozenset(ports)
+        endpoints.add((_canonical_host(item["host"]), int(item["port"])))
+    return frozenset(endpoints)
 
 
 def _is_loopback(host: object) -> bool:
@@ -115,8 +132,12 @@ _original_gethostbyname = socket.gethostbyname
 _original_gethostbyname_ex = socket.gethostbyname_ex
 
 
-def install_default_deny_guard(*, role: str, allow: frozenset[int], sink: Callable[[dict[str, Any]], None]) -> None:
-    """Patch socket entrypoints: default-deny, allow only declared ports, log every attempt."""
+def install_default_deny_guard(
+    *, role: str, allow: frozenset[tuple[str, int]], sink: Callable[[dict[str, Any]], None]
+) -> None:
+    """Patch socket entrypoints: default-deny, allow only declared canonical
+    host+port endpoints, log every attempt. Undeclared loopback aliases
+    (localhost/::1) on a declared port are denied."""
 
     def _check_and_log(sock: socket.socket | None, address: object) -> bool:
         host = _host_from_address(address)
@@ -125,7 +146,14 @@ def install_default_deny_guard(*, role: str, allow: frozenset[int], sink: Callab
             port = address[1]
         is_unix = _is_unix_socket(sock) if sock is not None else False
         is_lb = is_unix or _is_loopback(host)
-        in_allow = is_lb and port in allow if port is not None else is_unix
+        if is_unix:
+            in_allow = True
+        elif port is not None:
+            # Enforce canonical host+port endpoint identity, not port alone: an
+            # undeclared localhost/::1 alias on a declared port is denied.
+            in_allow = (_canonical_host(host), port) in allow
+        else:
+            in_allow = False
         sink(
             {
                 "event": "egress_attempt",
