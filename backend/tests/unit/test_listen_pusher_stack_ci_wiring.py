@@ -57,6 +57,10 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     assert "state_dir / 'inline-stale-orphan'" in runner
     assert "'task_already_exists'" in task_seam
     assert 'OMI_STACK_FINALIZATION_RACE_PARTIES' in listener_entrypoint
+    # #10468 r4: the emulator concurrency tests are chained after the gauntlet
+    # in the same Firestore emulator session, not left as a skipped pytest.
+    run_sh = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'run.sh').read_text(encoding='utf-8')
+    assert 'test_stale_processing_emulator_concurrency.py' in run_sh
 
 
 def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:
