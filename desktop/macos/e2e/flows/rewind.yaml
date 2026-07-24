@@ -1,49 +1,37 @@
 version: 2
 name: rewind
-tier: manual
-description: Rewind (Screen Capture) flow — navigate to Rewind page, verify permission state, explore timeline controls
+description: Rewind overlay — open via View menu (⌘⌥R), verify permission gate, search, date picker (v0.12.119+ redesign — Rewind is no longer in top nav)
 app: com.omi.computer-macos
 covers:
-  - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
-  - desktop/macos/Desktop/Sources/Rewind/Core/RewindOCRService.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
-  - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage+CaptureHealth.swift
-  - desktop/macos/Desktop/Sources/Rewind/UI/RewindCaptureState.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindViewModel.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Rewind.swift
-  - desktop/macos/Desktop/Sources/Rewind/UI/AppIconView.swift
-  - desktop/macos/Desktop/Sources/Rewind/UI/InteractiveTimelineBar.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindSearchBar.swift
-  - desktop/macos/Desktop/Sources/Rewind/UI/RewindTimelinePlayerView.swift
-  - desktop/macos/Desktop/Sources/Rewind/UI/RewindTimelineView.swift
-  - desktop/macos/Desktop/Sources/Rewind/UI/ScreenshotThumbnailView.swift
-  - desktop/macos/Desktop/Sources/Rewind/UI/SearchResultsFilmstrip.swift
 preconditions:
   - auth_ready
 
 steps:
   - id: S1
-    name: Navigate to Rewind page
-    do: "Click the Rewind sidebar icon (identifier: sidebar_rewind) to navigate to the Rewind page. Verify the page loads showing Rewind status and permission controls."
+    name: Open Rewind via View menu
+    do: "Open Rewind by pressing the View → Rewind menu item (agent-swift press on the Rewind menu item under View), or via keyboard shortcut ⌘⌥R. Verify the Rewind overlay appears over the current tab content."
     expect:
-      interactive_count: { min: 5 }
+      text_visible:
+        - Rewind
 
   - id: S2
-    name: Verify permission state
-    do: "Check the Rewind page for permission status. If Screen Recording permission is not granted, a 'Grant Permission' or 'Grant' button should be visible. Note the current Rewind status (On/Off), and if monitoring is on but the current window cannot be captured, verify the visible Capture paused or Recovering state explains that Rewind is not recording."
+    name: Verify Rewind overlay controls
+    do: "Verify the Rewind overlay shows: search bar ('Search your screen history...'), date picker (showing today's date), settings gear icon, and a toggle. The keyboard shortcut badge (⌘⌥R) should be visible near the Rewind title."
     expect:
       interactive_count: { min: 3 }
 
   - id: S3
-    name: Check Rewind settings gear
-    do: "Look for a settings/gear icon on the Rewind page. Click it if found to see Rewind configuration options (capture interval, storage, excluded apps)."
+    name: Verify permission gate or timeline
+    do: "Check the Rewind content area. If Screen Recording permission is not granted, verify 'Screen Recording Permission Required' message with 'Grant Permission' button (orange). If permission is granted, verify timeline content with screenshot thumbnails and time markers."
     expect:
-      interactive_count: { min: 3 }
+      interactive_count: { min: 1 }
 
   - id: S4
-    name: Return to Dashboard
-    do: "Click the Dashboard sidebar icon (identifier: sidebar_dashboard) to return to the Dashboard page."
+    name: Close Rewind and return
+    do: "Close the Rewind overlay (press Escape or click outside, or navigate to a tab). Verify the previous tab content is visible again with the top nav bar."
     expect:
-      interactive_count: { min: 5 }
       text_visible:
-        - Dashboard
+        - Home
