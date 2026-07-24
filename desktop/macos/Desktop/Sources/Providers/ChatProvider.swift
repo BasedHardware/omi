@@ -860,13 +860,20 @@ struct ChatMessage: Identifiable {
 
 extension ChatMessage {
   var copyableText: String {
-    let structuredText =
+    // A completed assistant turn can contain internal reasoning and transient
+    // tool/lifecycle blocks alongside its user-visible answer. The message
+    // copy affordance promises the answer, so retain only final text blocks.
+    let finalOutput =
       contentBlocks
-      .compactMap(\.copyableText)
+      .compactMap { block -> String? in
+        guard case .text(_, let text) = block else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+      }
       .joined(separator: "\n")
       .trimmingCharacters(in: .whitespacesAndNewlines)
-    if !structuredText.isEmpty {
-      return structuredText
+    if !finalOutput.isEmpty {
+      return finalOutput
     }
     return text.trimmingCharacters(in: .whitespacesAndNewlines)
   }
@@ -876,33 +883,6 @@ extension ChatMessage {
       return resources
     }
     return attachments.map(ChatResource.attachment)
-  }
-}
-
-extension ChatContentBlock {
-  var copyableText: String? {
-    switch self {
-    case .text(_, let text):
-      let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-      return trimmed.isEmpty ? nil : trimmed
-    case .thinking(_, let text):
-      let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-      return trimmed.isEmpty ? nil : "Thinking:\n\(trimmed)"
-    case .discoveryCard(_, let title, _, let fullText):
-      let trimmed = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
-      return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
-    case .agentSpawn(_, _, _, _, let title, let objective, _):
-      let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
-      return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
-    case .agentCompletion(_, _, _, _, let title, let promptSnippet, let output, _):
-      let body = [promptSnippet, output]
-        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        .filter { !$0.isEmpty }
-        .joined(separator: "\n")
-      return body.isEmpty ? title : "\(title)\n\(body)"
-    case .toolCall:
-      return nil
-    }
   }
 }
 
@@ -1998,7 +1978,18 @@ class ChatProvider: ObservableObject {
 
     claudeAuthLaunchRequested = true
     log("ChatProvider: Opening validated Claude OAuth URL in browser")
+    AnalyticsManager.shared.claudeOAuthBrowserOpened(
+      harness: activeBridgeHarness,
+      bridgeMode: bridgeMode
+    )
     NSWorkspace.shared.open(url)
+  }
+
+  private static func providerAuthRequiredUserMessage(isUserClaudeMode: Bool) -> String {
+    if isUserClaudeMode {
+      return "Claude sign-in is required. Reconnect Claude, then try again."
+    }
+    return "This chat uses Claude and needs sign-in. Start a new chat with Omi AI or reconnect Claude in Settings."
   }
 
   private func handleClaudeAuthRequired(methods: [[String: Any]], authUrl: String?) {
@@ -2011,14 +2002,26 @@ class ChatProvider: ObservableObject {
     }
     claudeAuthMethods = methods
     claudeAuthUrl = authUrl
-    isClaudeAuthRequired = true
-    startClaudeAuth()
+    // Provider auth is distinct from the Pro upgrade sheet.
+    isClaudeAuthRequired = false
+
+    let sessionAdapterId = activeChatTelemetryAttempt?.attempt.resolvedSessionAdapterId
+    AnalyticsManager.shared.providerAuthRequired(
+      sessionAdapterId: sessionAdapterId,
+      harness: activeBridgeHarness,
+      bridgeMode: bridgeMode,
+      oauthUrlValid: Self.validatedClaudeOAuthURL(authUrl) != nil
+    )
   }
 
   private func handleClaudeAuthSuccess() {
     isClaudeAuthRequired = false
     claudeAuthLaunchRequested = false
     claudeAuthUrl = nil
+    AnalyticsManager.shared.claudeOAuthCallbackReceived(
+      harness: activeBridgeHarness,
+      bridgeMode: bridgeMode
+    )
     checkClaudeConnectionStatus()
   }
 
@@ -3765,6 +3768,8 @@ class ChatProvider: ObservableObject {
     let accountingPolicy = ChatRunAccountingPolicy(
       pinnedAdapterID: pinnedSession.profile.adapterId
     )
+    telemetryAttempt.bindSessionAdapter(pinnedSession.profile.adapterId)
+    telemetryAttempt.bindBridgeModePreference(bridgeMode)
     let turnUsesOmiAccount = accountingPolicy.usesOmiAccountQuota
     if turnUsesOmiAccount, usageLimiter.serverQuota == nil {
       await usageLimiter.syncQuota()
@@ -3902,7 +3907,11 @@ class ChatProvider: ObservableObject {
             if toolStallAbortFired {
               telemetryAttempt.fail(errorClass: .toolStall, partialResponse: partialResponse)
             } else if watchdogFired {
-              telemetryAttempt.fail(errorClass: .timeout, partialResponse: partialResponse)
+              telemetryAttempt.fail(
+                errorClass: .timeout,
+                partialResponse: partialResponse,
+                watchdogFired: true
+              )
             } else {
               telemetryAttempt.finish(
                 stopReason: turnLifecycle.stopReason ?? self.stopReason(for: sendGen),
@@ -4495,7 +4504,8 @@ class ChatProvider: ObservableObject {
           } else if watchdogFiredBeforeResult {
             telemetryAttempt.fail(
               errorClass: .timeout,
-              partialResponse: hadPartialResponse
+              partialResponse: hadPartialResponse,
+              watchdogFired: true
             )
           } else {
             telemetryAttempt.finish(
@@ -4746,7 +4756,8 @@ class ChatProvider: ObservableObject {
           } else if watchdogFired {
             telemetryAttempt.fail(
               errorClass: .timeout,
-              partialResponse: hadPartialResponse
+              partialResponse: hadPartialResponse,
+              watchdogFired: true
             )
           } else {
             telemetryAttempt.finish(
@@ -4837,7 +4848,11 @@ class ChatProvider: ObservableObject {
         )
         switch telemetryDisposition {
         case .failed(let errorClass):
-          telemetryAttempt.fail(errorClass: errorClass, partialResponse: hadPartialResponse)
+          telemetryAttempt.fail(
+            errorClass: errorClass,
+            partialResponse: hadPartialResponse,
+            watchdogFired: watchdogFired
+          )
           logError(
             "Failed to get AI response attempt_id=\(telemetryAttempt.context.attemptId) error_class=\(errorClass.rawValue)",
             error: error
@@ -4927,6 +4942,13 @@ class ChatProvider: ObservableObject {
         lastFailedPrompt = nil
         currentError = nil
         errorMessage = nil
+      } else if let bridgeError = error as? BridgeError,
+        case .agentRuntimeFailure(let failure) = bridgeError,
+        failure.failureCode == .authentication
+      {
+        currentError = nil
+        errorMessage = Self.providerAuthRequiredUserMessage(isUserClaudeMode: isUserClaudeMode)
+        lastFailedPrompt = trimmedText
       } else if let bridgeError = error as? BridgeError,
         let card = ChatErrorState.from(bridgeError)
       {

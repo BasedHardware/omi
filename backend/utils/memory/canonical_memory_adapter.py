@@ -21,7 +21,7 @@ from utils.client_device import DeviceScopeRequest
 from utils.memory.device_scope_filter import filter_items_by_device_scope
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 from database.memory_collections import MemoryCollections
-from database.memory_apply_store import apply_long_term_patch_firestore, atomic_bump_source_generation
+from database.memory_apply_store import apply_long_term_patch_firestore, atomic_bump_source_generation, transactional
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from models.memory_domain import (
     MemoryLayer as DomainMemoryLayer,
@@ -63,6 +63,14 @@ logger = logging.getLogger(__name__)
 _ALLOWED_MEMORY_VISIBILITIES = {"private", "public", "shared"}
 Payload = Dict[str, Any]
 SortKey = tuple[int, datetime | int]
+
+
+class CanonicalBatchMutationLimitError(ValueError):
+    """Raised before commit when a canonical batch cannot fit one transaction."""
+
+
+class CanonicalMemoryNotFoundError(ValueError):
+    """Raised when an item is absent or inactive during an atomic batch read."""
 
 
 def _payload_or_empty(value: object) -> Payload:
@@ -197,6 +205,7 @@ def read_canonical_memories(
     db_client: Any = None,
     device_scope_request: Optional[DeviceScopeRequest] = None,
     include_pending_processing: bool = False,
+    now: Optional[datetime] = None,
 ) -> List[MemoryDB]:
     """Read canonical items, optionally exposing explicit pending submissions.
 
@@ -208,9 +217,9 @@ def read_canonical_memories(
     device_scope = device_scope_request.device_scope if device_scope_request else "all"
     client_device_id = device_scope_request.client_device_id if device_scope_request else None
     items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
-    now = datetime.now(timezone.utc)
+    current_time = now or datetime.now(timezone.utc)
     policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
-    visible = filter_canonical_default_visible_items(items, policy=policy, now=now)
+    visible = filter_canonical_default_visible_items(items, policy=policy, now=current_time)
     if include_pending_processing:
         visible_by_id = {item.memory_id: item for item in visible}
         for item in items:
@@ -970,6 +979,103 @@ def delete_canonical_memory(uid: str, memory_id: str, *, db_client: Any = None) 
         raise ValueError(f"canonical memory not found: {memory_id}")
     _tombstone_memory_item(uid, item, db_client=client, reason="canonical_memory_delete")
     invalidate_kg_for_memory_retraction(uid, [memory_id], db_client=client)
+
+
+def delete_canonical_memories_batch(uid: str, memory_ids: List[str], *, db_client: Any = None) -> None:
+    """Atomically tombstone a bounded set of active canonical memories.
+
+    Firestore transactions retry when any read document changes, so a concurrent
+    delete between validation and commit cannot leave a partially applied batch.
+    Derived-index cleanup runs only after the authoritative transaction commits
+    and remains best-effort, matching the single-delete cleanup contract.
+    """
+    if not memory_ids:
+        return
+
+    client = db_client if db_client is not None else default_db_client
+    collections = MemoryCollections(uid=uid)
+    trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=client)
+    account_generation = trusted.account_generation if trusted.read_error_reason is None else 1
+    projection_commit_id = trusted.head_commit_id or "head0"
+    transaction = client.transaction()
+
+    @transactional
+    def apply_batch(write_transaction: Any) -> None:
+        items: List[MemoryItem] = []
+        for memory_id in memory_ids:
+            item_ref = client.document(f"{collections.memory_items}/{memory_id}")
+            snapshot = item_ref.get(transaction=write_transaction)
+            if not getattr(snapshot, "exists", False):
+                raise CanonicalMemoryNotFoundError(f"canonical memory not found: {memory_id}")
+            item = MemoryItem(**_snapshot_payload(snapshot))
+            if item.status != MemoryItemStatus.active or item.memory_id != memory_id:
+                raise CanonicalMemoryNotFoundError(f"canonical memory not found: {memory_id}")
+            items.append(item)
+
+        mutation_count = sum(len(item.evidence) + 2 for item in items)
+        if mutation_count > 500:
+            raise CanonicalBatchMutationLimitError(
+                "canonical memory batch exceeds Firestore's 500-mutation transaction limit"
+            )
+
+        now = datetime.now(timezone.utc)
+        for item in items:
+            tombstoned_evidence: List[MemoryEvidence] = []
+            for evidence in item.evidence:
+                next_evidence = evidence.model_copy(
+                    update={
+                        "source_state": SourceState.tombstoned,
+                        "source_state_reason": SourceStateReason.deleted_by_user,
+                    }
+                )
+                tombstoned_evidence.append(next_evidence)
+                evidence_ref = client.document(f"{collections.memory_evidence}/{evidence.evidence_id}")
+                write_transaction.set(evidence_ref, next_evidence.model_dump(mode="json"))
+
+            updated_item = _validated_memory_item_copy(
+                item,
+                {
+                    "status": MemoryItemStatus.tombstoned,
+                    "source_state": SourceState.tombstoned,
+                    "content": None,
+                    "evidence": tombstoned_evidence,
+                    "updated_at": now,
+                },
+            )
+            item_ref = client.document(f"{collections.memory_items}/{item.memory_id}")
+            write_transaction.set(item_ref, updated_item.model_dump(mode="json"))
+
+            purge_candidates = [
+                {
+                    "vector_id": neutral_vector_id_for_memory(item.memory_id),
+                    "memory_id": item.memory_id,
+                    "reason": "canonical_memory_delete_batch",
+                    "required_projection_commit_id": projection_commit_id,
+                    "required_account_generation": account_generation,
+                    "authoritative_account_generation": account_generation,
+                }
+            ]
+            for record in build_vector_repair_purge_outbox_records(uid=uid, candidates=purge_candidates):
+                write_transaction.set(client.document(record["outbox_path"]), record)
+
+    apply_batch(transaction)
+
+    for memory_id in memory_ids:
+        try:
+            delete_canonical_memory_vector(uid, memory_id)
+            delete_atom_keyword_doc(uid, memory_id, db_client=client)
+            purge_stale_review_conflicts_for_memories(
+                uid,
+                [memory_id],
+                reason="canonical_memory_delete_batch",
+                db_client=client,
+            )
+        except Exception:
+            logger.exception("canonical batch derived cleanup failed uid=%s memory_id=%s", uid, memory_id)
+    try:
+        invalidate_kg_for_memory_retraction(uid, memory_ids, db_client=client)
+    except Exception:
+        logger.exception("canonical batch KG cleanup failed uid=%s count=%d", uid, len(memory_ids))
 
 
 def delete_all_canonical_memories(uid: str, *, db_client: Any = None) -> None:

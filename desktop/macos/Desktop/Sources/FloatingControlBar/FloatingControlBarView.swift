@@ -2061,9 +2061,9 @@ private struct AgentMainChatView: View {
     } else {
       let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
       if !trimmed.isEmpty {
-        Markdown(trimmed)
-          .markdownTheme(.aiMessage(scale: 0.88))
+        SelectableMarkdown(text: trimmed, sender: .ai)
           .textSelection(.enabled)
+          .environment(\.fontScale, 0.88)
           .fixedSize(horizontal: false, vertical: true)
           .frame(maxWidth: .infinity, alignment: .leading)
       }

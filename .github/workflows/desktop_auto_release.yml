@@ -22,9 +22,14 @@ on:
       - '.github/workflows/desktop_auto_release.yml'
       - '.github/workflows/desktop-swift-ci.yml'
   schedule:
-    # Backstop retry so a change that lands inside the quiet window (or while a
-    # release is active/qualifying) is still picked up after those fences clear.
-    - cron: '17 * * * *'
+    # Poll every 15 min. The push trigger fires immediately on merge, but at that
+    # instant the change is inside the quiet window AND its required CI checks
+    # (Build & Tests / Release Compile / Release Eligibility, ~10-20 min) are not
+    # yet green, so the planner fail-closes. This frequent backstop re-evaluates
+    # shortly after those checks settle and the active-release fence clears, so a
+    # candidate reliably cuts without waiting for the next hour. Builds stay
+    # serialized by the one-active-release fence, so this cannot pile up builds.
+    - cron: '*/15 * * * *'
 
 permissions:
   contents: write

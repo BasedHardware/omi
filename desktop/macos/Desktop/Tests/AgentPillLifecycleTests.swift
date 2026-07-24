@@ -390,8 +390,8 @@ import XCTest
     XCTAssertTrue(source.contains("private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup]"))
     XCTAssertTrue(source.contains("ToolCallsGroup(calls: calls, compact: true)"))
     XCTAssertTrue(source.contains("ThinkingBlock(text: text)"))
-    XCTAssertTrue(source.contains("Markdown(trimmed)"))
-    XCTAssertTrue(source.contains(".markdownTheme(.aiMessage(scale: 0.88))"))
+    XCTAssertTrue(source.contains("SelectableMarkdown(text: trimmed, sender: .ai)"))
+    XCTAssertTrue(source.contains(".environment(\\.fontScale, 0.88)"))
     XCTAssertTrue(source.contains(".frame(width: 36, height: 36)"))
     XCTAssertTrue(source.contains(".contentShape(Rectangle())"))
     XCTAssertTrue(source.contains("let onBackToAgentRows: () -> Void"))
@@ -1296,8 +1296,9 @@ import XCTest
       ),
       "Provider quota failures should try alternate provider regardless of socket age")
     XCTAssertTrue(
-      hubSource.contains("let shouldRedactProviderMessage: Bool"),
-      "Credential close logs must redact raw provider auth/quota payloads")
+      hubSource.contains("let reportingPlan = RealtimeHubFailureReportingPlan.make(")
+        && hubSource.contains("logError(reportingPlan.sentryMessage)"),
+      "Credential close reporting must send only the bounded reporting plan to Sentry")
     XCTAssertTrue(
       hubSource.contains("func shouldFailoverToAlternate(for failureClass: CredentialFailureClass?) -> Bool"),
       "Provider switching must be centralized and limited to stable credential/quota failures")
@@ -1610,6 +1611,40 @@ import XCTest
     XCTAssertTrue(chatBubbleSource.contains(".table { configuration in"))
     XCTAssertTrue(chatBubbleSource.contains(".markdownTableBorderStyle"))
     XCTAssertTrue(chatBubbleSource.contains(".markdownTableBackgroundStyle"))
+  }
+
+  func testSelectableMarkdownRenderBoundarySkipsParentOnlyFeedbackUpdates() {
+    let baseline = SelectableMarkdownContent(text: "Final answer", sender: .ai, fontScale: 1)
+
+    XCTAssertEqual(
+      baseline,
+      SelectableMarkdownContent(text: "Final answer", sender: .ai, fontScale: 1),
+      "unchanged message inputs must not rebuild SelectionOverlay when parent copy feedback changes"
+    )
+    XCTAssertNotEqual(
+      baseline,
+      SelectableMarkdownContent(text: "Updated answer", sender: .ai, fontScale: 1)
+    )
+    XCTAssertNotEqual(
+      baseline,
+      SelectableMarkdownContent(text: "Final answer", sender: .user, fontScale: 1)
+    )
+    XCTAssertNotEqual(
+      baseline,
+      SelectableMarkdownContent(text: "Final answer", sender: .ai, fontScale: 1.1)
+    )
+  }
+
+  func testSelectableMarkdownProvidesAnIndependentCodeCopyControl() throws {
+    // omi-test-quality: source-inspection -- static contract: the reusable SwiftUI code-block
+    // renderer owns a leaf-state copy affordance; clipboard writes are exercised manually in the app.
+    let source = try selectableMarkdownSource()
+
+    XCTAssertTrue(source.contains("private func codeBlockView(_ code: String, language: String?)"))
+    XCTAssertTrue(source.contains("private struct CodeBlockCopyButton: View"))
+    XCTAssertTrue(source.contains("@State private var copied = false"))
+    XCTAssertTrue(source.contains("NSPasteboard.general.setString(code, forType: .string)"))
+    XCTAssertTrue(source.contains(".help(\"Copy code\")"))
   }
 
   func testNonProductionBundlesDoNotInstallNativeSentryHandlers() throws {

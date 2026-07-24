@@ -251,7 +251,7 @@ struct DashboardPage: View {
   @AppStorage("systemAudioCaptureMode") private var systemAudioCaptureModeRaw =
     AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
-  @State private var homeMode: HomeStageMode = .chat
+  @State private var homeMode: HomeStageMode = .hub
   @FocusState private var homeAskFieldFocused: Bool
 
   /// Rotation index for the home knows-list; a timer advances it so the hub
@@ -546,6 +546,12 @@ struct DashboardPage: View {
       .onChange(of: chatProvider.messages.count) { _, _ in
         autoOpenChatForExistingHistoryIfNeeded()
       }
+      // The journal projection is installed before the initial-load flag is
+      // cleared. Observe the flag as well so Home reveals the atomic snapshot
+      // only after restoration is complete.
+      .onChange(of: chatProvider.isLoading) { _, _ in
+        autoOpenChatForExistingHistoryIfNeeded()
+      }
       // Clicking into the ask bar reveals the inline chat; the same is true
       // when focus lands there via keyboard (Tab / Full Keyboard Access).
       .onChange(of: homeAskFieldFocused) { _, focused in
@@ -745,11 +751,12 @@ struct DashboardPage: View {
     return Group {
       if homeMode == .hub {
         homeHubStage(stageWidth: stageWidth, askBarWidth: askBarWidth)
+          .transition(.homeHubStage)
       } else {
         homePanelStage(stageWidth: stageWidth, askBarWidth: askBarWidth)
       }
     }
-    .padding(.top, Self.homeStageTopPadding)
+    .padding(.top, homeMode == .hub ? Self.homeStageTopPadding : OmiSpacing.lg)
     .padding(.bottom, Self.homeStageBottomPadding)
   }
 
@@ -805,7 +812,7 @@ struct DashboardPage: View {
         switch homeMode {
         case .chat:
           homeChatPanel(width: askBarWidth)
-            .transition(.homeDropFromTop)
+            .transition(.homeChatRise)
         case .connect:
           homeConnectPanel(stageWidth: stageWidth)
             .transition(.homeDropFromTop)
@@ -1291,10 +1298,20 @@ struct DashboardPage: View {
     }
   }
 
-  /// Home no longer auto-opens the last conversation — it always rests on the
-  /// greeting hero. Retained as a no-op so the page-lifecycle call sites stay
-  /// stable; chats are entered explicitly instead.
-  private func autoOpenChatForExistingHistoryIfNeeded() {}
+  /// Keep the useful insights hub visible while the canonical journal restores.
+  /// Once the atomic snapshot is ready, existing history becomes Home without
+  /// exposing the generic transcript loading spinner.
+  private func autoOpenChatForExistingHistoryIfNeeded() {
+    guard
+      HomeHistoryPresentationPolicy.restingMode(
+        isLoading: chatProvider.isLoading,
+        messageCount: chatProvider.messages.count
+      ) == .chat,
+      homeMode == .hub,
+      chatProvider.onboardingOpener == nil
+    else { return }
+    openHomeChat(focusInput: false)
+  }
 
   /// Floating-bar "Continue in Omi": land directly on the chat panel instead
   /// of whatever surface Home was resting on.
@@ -1332,7 +1349,10 @@ struct DashboardPage: View {
   /// Home opens directly in the continuous chat (no greeting hero). Rolling
   /// suggestions sit above the ask bar while the chat is empty.
   private var homeRestingMode: HomeStageMode {
-    .chat
+    HomeHistoryPresentationPolicy.restingMode(
+      isLoading: chatProvider.isLoading,
+      messageCount: chatProvider.messages.count
+    )
   }
 
   /// User-facing collapse (click outside, Esc, connect ×) and the automation
@@ -2214,67 +2234,6 @@ private enum HomeDestinationProminence {
   case quiet
 }
 
-enum HomeStageMode: Equatable {
-  case hub
-  case chat
-  case connect
-
-  /// Whether the user-facing collapse catchers (click-outside + Esc) mount.
-  /// Only a panel that can collapse to a *different* resting surface gets a
-  /// catcher. The hub is the base surface, never an overlay: mounting a
-  /// catcher over hub-with-history would invert the gesture and make a stray
-  /// click or Esc *open* the chat.
-  static func collapseCatcherActive(mode: HomeStageMode, resting: HomeStageMode) -> Bool {
-    mode != resting && mode != .hub
-  }
-
-  var automationLabel: String {
-    switch self {
-    case .hub: return "hub"
-    case .chat: return "chat"
-    case .connect: return "connect"
-    }
-  }
-}
-
-/// Shared "drop from the top" motion for stage panels: a short slide with a
-/// slight top-anchored scale and fade — deliberate, not a full-height fly-in.
-private struct HomeStageDropModifier: ViewModifier {
-  let offsetY: CGFloat
-  let scale: CGFloat
-  let opacity: Double
-
-  func body(content: Content) -> some View {
-    content
-      .offset(y: offsetY)
-      .scaleEffect(scale, anchor: .top)
-      .opacity(opacity)
-  }
-}
-
-extension AnyTransition {
-  fileprivate static var homeDropFromTop: AnyTransition {
-    .modifier(
-      active: HomeStageDropModifier(offsetY: -46, scale: 0.97, opacity: 0),
-      identity: HomeStageDropModifier(offsetY: 0, scale: 1, opacity: 1)
-    )
-  }
-
-  fileprivate static var homeHubFade: AnyTransition {
-    .modifier(
-      active: HomeStageDropModifier(offsetY: 14, scale: 1, opacity: 0),
-      identity: HomeStageDropModifier(offsetY: 0, scale: 1, opacity: 1)
-    )
-  }
-
-  fileprivate static var homeSuggestionsFade: AnyTransition {
-    .modifier(
-      active: HomeStageDropModifier(offsetY: 10, scale: 1, opacity: 0),
-      identity: HomeStageDropModifier(offsetY: 0, scale: 1, opacity: 1)
-    )
-  }
-}
-
 /// The persistent home ask bar: a pill-shaped chat input with attachments
 /// (paperclip + drag-drop, same limits as the chat page), a send/stop action,
 /// and the Connect toggle living inside the pill.
@@ -2319,34 +2278,48 @@ struct HomeAskBar: View {
         .padding(.horizontal, OmiSpacing.md)
       }
 
-      HStack(spacing: OmiSpacing.sm) {
+      HStack(alignment: .bottom, spacing: OmiSpacing.sm) {
         Button(action: pickFiles) {
           Image(systemName: "paperclip")
             .scaledFont(size: OmiType.subheading, weight: .medium)
             .foregroundStyle(isFocused ? HomePalette.secondary : HomePalette.muted)
-            .frame(width: 24, height: 24)
+            .frame(width: 24, height: 34)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(attachments.count >= kMaxChatAttachments)
         .help("Attach files")
 
+        // Auto-growing input: `axis: .vertical` + `lineLimit(1...6)` grow the pill
+        // as text wraps (scrolls past six lines). Return submits, Shift+Return
+        // newlines — via onKeyPress, since a vertical field would otherwise insert
+        // a newline on Return and never fire onSubmit.
         TextField(
           "",
           text: $text,
-          prompt: Text("Ask omi anything").foregroundColor(HomePalette.muted)
+          prompt: Text("Ask omi anything").foregroundColor(HomePalette.muted),
+          axis: .vertical
         )
         .textFieldStyle(.plain)
         .font(.system(size: 15))
         .foregroundStyle(HomePalette.ink)
+        .lineLimit(1...6)
         .focused(focus)
-        .onSubmit(handleSubmit)
+        .padding(.vertical, 7)
+        .onKeyPress(phases: .down) { press in
+          guard press.key == .return else { return .ignored }
+          // Shift+Return falls through to the field's newline handling.
+          if press.modifiers.contains(.shift) { return .ignored }
+          handleSubmit()
+          return .handled
+        }
 
         actionButton
       }
       .padding(.leading, OmiSpacing.lg)
       .padding(.trailing, OmiSpacing.sm)
-      .frame(height: 58)
+      .padding(.vertical, 12)
+      .frame(minHeight: 58)
     }
     .background(
       RoundedRectangle(cornerRadius: 29, style: .continuous)

@@ -51,6 +51,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatInputView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/SelectableMarkdown.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatErrorCard.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeCredentialPolicy.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
   - desktop/macos/Desktop/Sources/Chat/AgentClient.swift
   - desktop/macos/Desktop/Sources/Generated/GeneratedToolCapabilities.swift

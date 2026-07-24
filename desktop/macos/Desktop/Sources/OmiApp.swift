@@ -400,6 +400,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       options.enableAppHangTracking = !isDev
       options.enableWatchdogTerminationTracking = !isDev
       options.environment = isDev ? "development" : "production"
+      // Build-attributable native events (#10425): bind every native crash / app-hang /
+      // watchdog event to the exact version+build (`v{version}+{build}-macos`, the same
+      // tag Codemagic publishes) and the release channel (`stable`/`beta`). Without these,
+      // Sentry's Release/Build filters return nothing for native events and beta+stable
+      // are indistinguishable (both report environment="production").
+      if let releaseTag = AppBuild.releaseTag {
+        options.releaseName = releaseTag
+      }
+      options.dist = AppBuild.currentUpdateChannel
       // Disable automatic HTTP client error capture — the SDK creates noisy events
       // for every 4xx/5xx response (e.g. Cloud Run 503 cold starts on /v1/crisp/unread).
       // App code already handles HTTP errors and reports meaningful ones explicitly.
@@ -421,6 +430,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
           exceptions: (event.exceptions ?? []).map { (type: $0.type, value: $0.value) })
         return drop ? nil : event
       }
+    }
+    // Tag every Sentry event (including native crashes, which bypass app code) with
+    // the release channel and bundle identity so a release cohort can be sliced without
+    // relying on `dist` alone (#10425).
+    SentrySDK.configureScope { scope in
+      scope.setTag(value: AppBuild.currentUpdateChannel, key: "update_channel")
+      scope.setTag(value: AppBuild.bundleIdentifier, key: "bundle_id")
     }
     log(
       "Sentry initialized (environment: \(isDev ? "development" : "production"), nativeHandlers=\(!isDev))"
@@ -1631,63 +1647,5 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       guard !Task.isCancelled else { return }
       await SettingsSyncManager.shared.syncFromServer()
     }
-  }
-}
-
-extension AppDelegate {
-  /// Pure Sentry `beforeSend` triage (SET-05): decides whether an event must be
-  /// dropped (`beforeSend` returns nil). Extracted from the SDK closure so the drop
-  /// list is unit-testable; it takes only the event fields the closure inspects, so
-  /// no Sentry `Event` needs constructing in tests. Keep in lockstep with the
-  /// `options.beforeSend` closure in `applicationDidFinishLaunching`.
-  static func shouldDropSentryEvent(
-    isUserReport: Bool,
-    isDev: Bool,
-    urlTag: String?,
-    messageFormatted: String?,
-    exceptions: [(type: String, value: String)]
-  ) -> Bool {
-    // Always keep user feedback (dev + prod).
-    if isUserReport { return false }
-    // Never send other events from dev builds — they pollute production Sentry data.
-    if isDev { return true }
-    // Drop HTTP errors targeting dev/local URLs — noise when tunnels or local backends are down.
-    if let urlTag,
-      urlTag.contains("localhost") || urlTag.contains("127.0.0.1")
-        || urlTag.contains("trycloudflare.com")
-    {
-      return true
-    }
-    // Drop transient network/socket errors captured as exceptions (offline, timeouts,
-    // dropped connections, cancellations) — not actionable, dominate event volume.
-    let transientNetworkCodes: [(domain: String, codes: [String])] = [
-      ("NSURLErrorDomain", ["-999", "-1001", "-1003", "-1004", "-1005", "-1009", "-1011", "-1020"]),
-      ("NSPOSIXErrorDomain", ["54", "57", "89"]),
-    ]
-    if exceptions.contains(where: { exc in
-      transientNetworkCodes.contains { entry in
-        exc.type == entry.domain
-          && entry.codes.contains { exc.value.contains("Code=\($0)") || exc.value.contains("Code: \($0)") }
-      }
-    }) {
-      return true
-    }
-    // Drop backend Gemini key-expiry/auth failures — server-side key rotation, not a
-    // per-client bug; one bad key otherwise floods Sentry with one event per request.
-    if let lower = messageFormatted?.lowercased(),
-      lower.contains("api key expired") || lower.contains("renew the api key")
-        || lower.contains("api_key_invalid")
-        || lower.contains("ai service authentication error")
-        || lower.contains("invalid_auth")
-    {
-      return true
-    }
-    // Drop AuthError.notSignedIn — transient refresh failure; the 30s timer retries.
-    if exceptions.contains(where: {
-      $0.type == "Omi_Computer.AuthError" && $0.value.contains("notSignedIn")
-    }) {
-      return true
-    }
-    return false
   }
 }

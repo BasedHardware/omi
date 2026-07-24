@@ -373,7 +373,7 @@ def send_message(
     messages = list(
         reversed(
             Message.deserialize_many_safe(
-                chat_db.get_messages(uid, limit=10, app_id=compat_app_id),
+                chat_db.get_cache_aligned_messages(uid, app_id=compat_app_id, chat_session_id=message.chat_session_id),
                 on_error=lambda record, exc: logger.warning(
                     'Skipping malformed chat message %s for uid=%s: %s',
                     record.get('id') if isinstance(record, dict) else None,

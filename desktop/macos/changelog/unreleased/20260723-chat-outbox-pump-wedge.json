@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a chat freeze where a single corrupt sync record could wedge the agent forever, leaving replies stuck mid-stream with a spinning loader"
+}

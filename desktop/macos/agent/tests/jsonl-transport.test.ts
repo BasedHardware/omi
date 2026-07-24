@@ -120,6 +120,9 @@ describe("JsonlTransport kernel-owned query contract", () => {
       ownerId: session.ownerId,
     });
     expect(sent.at(-1)).toMatchObject({ type: "cancel_ack", accepted: false });
+    // The transport owns the correlated terminal result; the surface then
+    // accepts/discards final visible material through journal_terminalize_turn.
+    // Until that acknowledgement, the row must remain bound and streaming.
     expect(store.getRow(
       "SELECT producing_run_id, producing_attempt_id FROM conversation_turns WHERE turn_id = ?",
       ["turn-admitted-r1"],
@@ -400,6 +403,69 @@ describe("JsonlTransport kernel-owned query contract", () => {
       expect(sent.filter((message) => message.type === "error")).toEqual([]);
       store.close();
     }
+  });
+
+  it("emits one authoritative failed result when an adapter reports an error before throwing", async () => {
+    const { store, adapter, session, sent, transport } = fixture();
+    const conversationId = "conv-adapter-error-terminal";
+    store.insertSurfaceConversation({
+      ownerId: session.ownerId,
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+      conversationId,
+      agentSessionId: session.sessionId,
+      createdAtMs: 1,
+      lastActiveAtMs: 1,
+    });
+    recordJournalTurn(store, {
+      ownerId: session.ownerId,
+      conversationId,
+      turnId: "turn-adapter-error-terminal",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "streaming",
+      content: "Working",
+      contentBlocks: [],
+      createdAtMs: 2,
+    });
+    adapter.eventBeforeExecutionError = {
+      type: "error",
+      message: "adapter exploded",
+    };
+    adapter.failNextExecutionError = new Error("adapter exploded");
+
+    await transport.handleQuery(query(session.sessionId, {
+      requestId: "request-adapter-error-terminal",
+      producingTurnId: "turn-adapter-error-terminal",
+    }));
+
+    const terminalMessages = sent.filter(
+      (message) => message.type === "result" || message.type === "error",
+    );
+    expect(terminalMessages).toHaveLength(1);
+    expect(terminalMessages[0]).toMatchObject({
+      type: "result",
+      requestId: "request-adapter-error-terminal",
+      clientId: "client-1",
+      runId: expect.stringMatching(/^run_/),
+      attemptId: expect.stringMatching(/^att_/),
+      terminalStatus: "failed",
+      failure: {
+        code: expect.stringMatching(/^[a-z0-9_.:-]{1,64}$/i),
+        userMessage: "adapter exploded",
+      },
+    });
+    expect(store.getRow(
+      "SELECT producing_run_id, producing_attempt_id, status FROM conversation_turns WHERE turn_id = ?",
+      ["turn-adapter-error-terminal"],
+    )).toMatchObject({
+      producing_run_id: (terminalMessages[0] as { runId?: string }).runId,
+      producing_attempt_id: (terminalMessages[0] as { attemptId?: string }).attemptId,
+      status: "streaming",
+    });
+    store.close();
   });
 
   it("fails and discards an admitted producing turn when an unexpected post-bind step throws", async () => {

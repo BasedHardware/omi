@@ -643,6 +643,10 @@ export interface BatchDeleteActionItemsResponse {
   status: string;
 }
 
+export interface BatchDeleteMemoriesRequest {
+  memory_ids: Array<string>;
+}
+
 export interface BatchMemoriesRequest {
   memories: Array<CreateMemoryRequest>;
 }
@@ -3774,6 +3778,7 @@ export interface OmiApiSchemas {
   "BatchCreateActionItemsResponse": BatchCreateActionItemsResponse;
   "BatchDeleteActionItemsRequest": BatchDeleteActionItemsRequest;
   "BatchDeleteActionItemsResponse": BatchDeleteActionItemsResponse;
+  "BatchDeleteMemoriesRequest": BatchDeleteMemoriesRequest;
   "BatchMemoriesRequest": BatchMemoriesRequest;
   "BatchMemoriesResponse": BatchMemoriesResponse;
   "BatchMigrationRequest": BatchMigrationRequest;
@@ -7914,6 +7919,14 @@ export interface OmiApiPaths {
       operationId: "create_memories_batch_v3_memories_batch_post";
       responses: {
         "200": routers__memories__BatchMemoriesResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_memories_batch_v3_memories_batch_delete";
+      responses: {
+        "200": MemoryMutationResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -15289,6 +15302,27 @@ export async function create_memories_batch_v3_memories_batch_post(header: { aut
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function delete_memories_batch_v3_memories_batch_delete(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: BatchDeleteMemoriesRequest, init?: OmiApiClientInit): Promise<MemoryMutationResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v3/memories/batch`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function list_memory_review_queue_v3_memories_review_queue_get(query: { status?: string, limit?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<Record<string, unknown>>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v3/memories/review-queue`;
@@ -15541,4 +15575,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 381 client methods generated.
+// Total: 382 client methods generated.

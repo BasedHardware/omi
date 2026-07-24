@@ -30,6 +30,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     /// Installed only for the lifetime of one local-profile `ptt_test_turn`.
     /// Production builds have no provider-warm bypass surface.
     var localProfileTransportAuthority: RealtimeLocalProfileTransportAuthority?
+    /// Hermetic observation seam for controller lifecycle tests. Production
+    /// replacement always enters `ensureWarm`.
+    var testingWarmAfterDrain: (() -> Void)?
   #endif
   var sessionOwnerScope: RealtimeHubOwnerScope? {
     guard let session, let binding = sessionOwnerBinding,
@@ -83,8 +86,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   var lastScreenEvidenceProtocolCompletion: RealtimeScreenEvidenceProtocolCompletion = .notRun
   var authorizedRealtimeScreenshotImages: [String: RealtimeScreenEvidenceAttachment] = [:]
   var screenFailurePresented = false
-  var voiceContextPrefetchTask: Task<Void, Never>?
-  var voiceContextRefreshGeneration: UInt64 = 0
+  let voiceContextSingleFlight = RealtimeVoiceContextSingleFlight()
   var turnPreparationTask: Task<Void, Never>?
   /// (b) Genuinely local: in-flight write Tasks + optional completion receipts.
   /// Receipts shadow kernel acceptance only until consumed; on relaunch they are
@@ -109,6 +111,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// real PTT press bypasses this delay and preserves its captured audio.
   var idleVoiceContextRefreshTask: Task<Void, Never>?
   var canceledTurnRewarmTask: Task<Void, Never>?
+  /// Sole owner of ordinary physical-session replacement. A replacement cannot
+  /// warm until the detached transport queue has closed and drained.
+  let sessionReplacementGate = RealtimeHubTransportReplacementGate()
+  #if DEBUG
+    var testingSessionStartAfterDrain: ((RealtimeHubProvider, HubAuth, RealtimeHubOwnerScope) -> Bool)?
+  #endif
   var bargeInContinuityTask: Task<Void, Never>?
   var bargeInReplacementGeneration: UInt64 = 0
   var pendingBargeInProvider: RealtimeHubProvider?
@@ -340,7 +348,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if let turnID = VoiceTurnCoordinator.shared.activeTurnID {
       _ = VoiceTurnCoordinator.shared.requireCurrentOwner(for: turnID)
     }
-    teardownSession()
     prefetchedVoiceContext = ""
     prefetchedVoiceContextSessionID = ""
     prefetchedVoiceContextFreshnessIdentity = ""
@@ -350,6 +357,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     prefetchedVoiceSemanticGuidance = ""
     prefetchedVoiceContextTurnIDs.removeAll()
     prefetchedVoiceContextOwnerScope = nil
+    replaceSessionAfterDrain()
   }
 
   /// Hard physical owner boundary. Persisted defaults still name the previous
@@ -379,7 +387,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       }
     }
     ownerBoundaryGeneration &+= 1
-    voiceContextRefreshGeneration &+= 1
     turnPersistenceLedger.cancelAll()
     turnEpoch &+= 1
     realtimePlaybackEpoch &+= 1
@@ -387,8 +394,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     minting = false
     mintOwnerScope = nil
 
-    voiceContextPrefetchTask?.cancel()
-    voiceContextPrefetchTask = nil
+    voiceContextSingleFlight.cancel()
     turnPreparationTask?.cancel()
     turnPreparationTask = nil
     legacyVoiceJournalImportTask?.cancel()
@@ -397,6 +403,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     deferredSessionRefreshTask = nil
     canceledTurnRewarmTask?.cancel()
     canceledTurnRewarmTask = nil
+    sessionReplacementGate.cancel()
     earlyLIDTask?.cancel()
     earlyLIDTask = nil
     fullLIDTask?.cancel()
@@ -441,6 +448,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       await detachedSession.stopAndWait()
       detachedSessionsAwaitingDrain.removeValue(forKey: ObjectIdentifier(detachedSession))
     }
+    // A replacement already in flight owns its detached session through the
+    // same terminal acknowledgement. Do not return the owner boundary while
+    // that cancelled gate still advertises "pending", or the new owner's first
+    // warm request can be coalesced and then lost.
+    await sessionReplacementGate.waitUntilIdle()
     await drainExternalRunTerminalizations(
       previousOwnerID: previousOwnerID,
       cleanupCapability: cleanupCapability)
@@ -592,7 +604,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         prefetchedContextIsEmpty: prefetchedVoiceContext.isEmpty,
         hasPendingOwnerWork: pendingSessionRefreshReason != nil
           || !turnPersistenceLedger.pendingContinuityKeys.isEmpty
-          || voiceContextPrefetchTask != nil
+          || voiceContextSingleFlight.isRunning
           || turnPreparationTask != nil
           || !detachedSessionsAwaitingDrain.isEmpty
           || externalRunAuthorityState != nil
@@ -656,32 +668,35 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Returns true if a failover was started. Only fires once per chain (primary →
   /// alternate); if the alternate also fails we stop and let PTT use the Claude cascade.
   @discardableResult
-  func failoverToAlternateProvider(reason: String = "other") -> Bool {
+  func failoverToAlternateProvider(reason: String = "other", mintAttemptId: String? = nil) -> Bool {
     guard fallbackProvider == nil else {
+      var exhaustedExtra: [String: Any] = ["user_visible": false]
+      if let mintAttemptId { exhaustedExtra["mint_attempt_id"] = mintAttemptId }
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "realtime_hub",
         from: effectiveProvider.rawValue,
         to: "cascade",
         reason: reason,
         outcome: .exhausted,
-        extra: ["user_visible": false])
+        extra: exhaustedExtra)
       return false  // already on the alternate → cascade
     }
     let primary = RealtimeHubSettings.shared.provider
     fallbackProvider = primary.alternate
     pendingFailoverReason = reason
+    var degradedExtra: [String: Any] = ["user_visible": false]
+    if let mintAttemptId { degradedExtra["mint_attempt_id"] = mintAttemptId }
     DesktopDiagnosticsManager.shared.recordFallback(
       area: "realtime_hub",
       from: primary.rawValue,
       to: primary.alternate.rawValue,
       reason: reason,
       outcome: .degraded,
-      extra: ["user_visible": false])
+      extra: degradedExtra)
     log(
       "RealtimeHub: \(primary.displayName) unavailable — failing over to \(primary.alternate.displayName)"
     )
-    teardownSession()
-    ensureWarm()
+    replaceSessionAfterDrain()
     return true
   }
 
@@ -700,10 +715,17 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   @discardableResult
   func failoverBargeInReplacement(
     from provider: RealtimeHubProvider,
-    reason: String
+    reason: String,
+    mintAttemptId: String? = nil
   ) -> Bool {
-    guard fallbackProvider == nil,
-      let pendingTurn = replacementAudioBuffer,
+    guard fallbackProvider == nil else {
+      recordBargeInReplacementFailoverExhausted(
+        from: provider,
+        reason: reason,
+        mintAttemptId: mintAttemptId)
+      return false
+    }
+    guard let pendingTurn = replacementAudioBuffer,
       let replacementOwnerScope = pendingBargeInOwnerScope,
       isOwnerScopeCurrent(replacementOwnerScope),
       let responseID = voiceResponseID
@@ -712,38 +734,69 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let alternate = provider.alternate
     fallbackProvider = alternate
     pendingFailoverReason = reason
+    var degradedExtra: [String: Any] = ["user_visible": false]
+    if let mintAttemptId { degradedExtra["mint_attempt_id"] = mintAttemptId }
     DesktopDiagnosticsManager.shared.recordFallback(
       area: "realtime_hub",
       from: provider.rawValue,
       to: alternate.rawValue,
       reason: reason,
       outcome: .degraded,
-      extra: ["user_visible": false])
+      extra: degradedExtra)
     log(
       "RealtimeHub: preserving barge-in turn while failing over "
         + "\(provider.displayName) → \(alternate.displayName)")
 
-    teardownSession()
-    replacementAudioBuffer = pendingTurn
-    voiceResponseID = responseID
-    pendingBargeInOwnerScope = replacementOwnerScope
-
     if let key = APIKeyService.byokKey(alternate.byokProvider) {
       pendingBargeInProvider = alternate
       pendingBargeInAuth = .byokKey(key)
+      replacementAudioBuffer = pendingTurn
+      voiceResponseID = responseID
+      pendingBargeInOwnerScope = replacementOwnerScope
+      replaceSessionAfterDrain(
+        preservingBargeInReplacement: true,
+        rewarmAfterDrain: false)
       startReplacementSessionForBargeIn(
         provider: alternate,
         auth: .byokKey(key),
         ownerScope: replacementOwnerScope)
       return true
     }
-    guard AuthService.shared.isSignedIn else { return false }
+    guard AuthService.shared.isSignedIn else {
+      recordBargeInReplacementFailoverExhausted(
+        from: alternate,
+        reason: reason,
+        mintAttemptId: mintAttemptId)
+      return false
+    }
     pendingBargeInProvider = alternate
     // Marker only: a newer PTT can rotate continuity while the real alternate
     // one-use token is still minting. The start path always remints this case.
     pendingBargeInAuth = .ephemeral("")
+    replacementAudioBuffer = pendingTurn
+    voiceResponseID = responseID
+    pendingBargeInOwnerScope = replacementOwnerScope
+    replaceSessionAfterDrain(
+      preservingBargeInReplacement: true,
+      rewarmAfterDrain: false)
     remintReplacementSessionForBargeIn(provider: alternate)
     return true
+  }
+
+  func recordBargeInReplacementFailoverExhausted(
+    from provider: RealtimeHubProvider,
+    reason: String,
+    mintAttemptId: String?
+  ) {
+    var exhaustedExtra: [String: Any] = ["user_visible": false]
+    if let mintAttemptId { exhaustedExtra["mint_attempt_id"] = mintAttemptId }
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "realtime_hub",
+      from: provider.rawValue,
+      to: "cascade",
+      reason: reason,
+      outcome: .exhausted,
+      extra: exhaustedExtra)
   }
 
   func shouldFailoverToAlternate(for failureClass: CredentialFailureClass?) -> Bool {
@@ -760,7 +813,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     _ error: RealtimeTokenMintError,
     provider providerParam: String,
     phase: String,
-    context: String
+    context: String,
+    mintAttemptId: String? = nil
   ) {
     CredentialHealthManager.shared.record(error.healthError, context: context)
     DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
@@ -771,34 +825,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       backendRoute: error.payload?.backendRoute,
       upstreamStatusCode: error.payload?.upstreamStatusCode,
       providerCode: error.payload?.code,
-      retryable: error.payload?.retryable)
-  }
-
-  /// True only when a physical provider socket is authenticated. This is a
-  /// latency hint, never authority to open input; every turn still obtains a
-  /// context-bound admission before audio leaves its buffer.
-  var isTransportReady: Bool {
-    // Drive a turn only when the hub is actually CONNECTED + authenticated for the
-    // selected provider OR the failover provider we switched to. A turn never enters hub
-    // mode on a key/token that can't connect (stale/revoked key, failed mint, mid-
-    // reconnect, or a just-switched provider): PTT transparently uses the legacy cascade
-    // instead, so a broken hub never costs the user a turn. The hub re-warms in the
-    // background and flips this true once it connects.
-    guard
-      RealtimeHubOwnerFence.canReuseWarmSession(
-        sessionOwner: sessionOwnerScope,
-        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
-    else {
-      if session != nil {
-        log("RealtimeHub: refusing warm socket owned by a previous authenticated user")
-        discardSessionAfterOwnerChange()
-        ensureWarm()
-      }
-      return false
-    }
-    return hubConnected
-      && (sessionProvider == RealtimeHubSettings.shared.provider
-        || sessionProvider == fallbackProvider)
+      retryable: error.payload?.retryable,
+      mintAttemptId: mintAttemptId)
   }
 
   /// PTT must distinguish a merely authenticated socket from a session that can
@@ -1414,8 +1442,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       } else {
         log("RealtimeHub: handoff requested reason=\(reason.rawValue) mode=idle")
       }
-      if session != nil { teardownSession(preservingReconnectAudio: hasBufferedTurn) }
-      ensureWarm()
+      replaceSessionAfterDrain(preservingReconnectAudio: hasBufferedTurn)
     }
   }
 
@@ -1451,6 +1478,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// and retries if either a new turn or a new write appears across an await.
   /// Callers decide when it is safe to release any stronger reconnect gate.
   func refreshVoiceContextAfterPersistenceFence(reason: String) async -> Bool {
+    let fenceOwnerScope = currentOwnerScope
     while !Task.isCancelled {
       let observedTurnEpoch = turnEpoch
       let observedPersistenceGeneration = turnPersistenceLedger.generation
@@ -1465,6 +1493,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
       guard await refreshVoiceContextSnapshot() else {
         if Task.isCancelled { return false }
+        // The snapshot cannot resolve once this fence no longer owns its original
+        // authenticated scope (sign-out / owner swap). Retrying then spins
+        // agent-bridge startup at full speed, so stop instead of looping.
+        guard
+          RealtimeHubLifecyclePolicy.canRetryPersistenceFence(
+            taskCancelled: Task.isCancelled,
+            fenceOwnerScope: fenceOwnerScope,
+            currentOwnerScope: currentOwnerScope
+          )
+        else {
+          pendingSessionRefreshReason = reason
+          return false
+        }
         continue
       }
       guard !Task.isCancelled,

@@ -556,7 +556,6 @@ export class JsonlTransport {
       case "tool_activity":
       case "tool_result_display":
       case "thinking_delta":
-      case "error":
         this.send(this.withCorrelation({
           ...adapterEvent,
           type,
@@ -567,6 +566,14 @@ export class JsonlTransport {
           runId: event.runId,
           attemptId: event.attemptId ?? context.attemptId,
         }));
+        break;
+      case "error":
+        // Adapter errors are progress inside an admitted kernel run, not a
+        // second query-terminal protocol. executeRun terminalizes the canonical
+        // run/attempt and handleQuery emits its one correlated failed result.
+        // Forwarding this early error made Swift release the request before that
+        // authoritative result arrived, leaving the producing journal turn
+        // durably stuck in `streaming`.
         break;
       case "tool_use":
         if (!this.suppressToolUseEvents && context.adapterId !== "pi-mono") {
@@ -627,14 +634,13 @@ export class JsonlTransport {
     if (!this.isRecoverableError || !this.onRecoverableError || this.maxRecoverableRetries === 0) {
       return undefined;
     }
-    let recoveries = 0;
     return async (error) => {
-      if (recoveries >= this.maxRecoverableRetries || !this.isRecoverableError?.(error, adapterId)) {
+      if (!this.isRecoverableError?.(error, adapterId)) {
         return false;
       }
-      recoveries += 1;
       await this.onRecoverableError?.(error, adapterId);
-      return true;
+      // Provider auth is terminal for the active turn; OAuth must not block retries.
+      return false;
     };
   }
 }

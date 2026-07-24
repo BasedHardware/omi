@@ -110,6 +110,14 @@ enum RealtimeHubProviderLogTag {
 enum RealtimeHubCloseCategory: String {
   case expectedIdleTeardown = "expected_idle_teardown"
   case expectedSessionRotation = "expected_session_rotation"
+  case localAddressUnavailable = "local_address_unavailable"
+  case transportConfiguration = "transport_configuration"
+  case transportConnect = "transport_connect"
+  case transportHandshake = "transport_handshake"
+  case transportReceive = "transport_receive"
+  case transportSend = "transport_send"
+  case transportProtocolViolation = "transport_protocol_violation"
+  case providerError = "provider_error"
   case providerAuthFailed = "provider_auth_failed"
   case providerQuotaExceeded = "provider_quota_exceeded"
   case providerPolicyCloseFast = "provider_policy_close_fast"
@@ -122,6 +130,100 @@ enum RealtimeHubCloseCategory: String {
 enum RealtimeHubSessionRotationPlan: Equatable {
   case rewarmIdleTransport
   case terminateActiveTurnAndRewarm
+}
+
+struct RealtimeHubFailureReportingPlan: Equatable {
+  let localMessage: String
+  let sentryMessage: String
+
+  static func make(
+    failure: RealtimeHubTransportFailure,
+    category: RealtimeHubCloseCategory?,
+    provider: String,
+    aliveFor: TimeInterval,
+    activeTurn: Bool
+  ) -> Self {
+    let categoryText = category?.rawValue ?? "unclassified"
+    let bounded =
+      "RealtimeHub: session error"
+      + " category=\(categoryText)"
+      + " provider=\(provider)"
+      + " activeTurn=\(activeTurn)"
+    return Self(
+      localMessage:
+        "RealtimeHub: session closed"
+        + " category=\(categoryText)"
+        + " provider=\(provider)"
+        + " aliveFor=\(Int(aliveFor))s"
+        + " detail=\(failure.message)",
+      sentryMessage: bounded)
+  }
+}
+
+/// Serializes physical transport replacement. The old transport must finish
+/// close before `start` can create its successor, and duplicate replacement
+/// requests coalesce behind the one authoritative drain.
+@MainActor
+final class RealtimeHubTransportReplacementGate {
+  private var task: Task<Void, Never>?
+  private var generation: UInt64 = 0
+  private var idleWaiters: [CheckedContinuation<Void, Never>] = []
+
+  var isPending: Bool { task != nil }
+
+  @discardableResult
+  func replace(
+    reconnectDelayNanoseconds: UInt64 = 0,
+    stop: @escaping @MainActor () async -> Void,
+    start: @escaping @MainActor () -> Void
+  ) -> Bool {
+    guard task == nil else { return false }
+    generation &+= 1
+    let admittedGeneration = generation
+    task = Task { @MainActor [weak self] in
+      await stop()
+      guard let self else { return }
+      guard !Task.isCancelled, self.generation == admittedGeneration else {
+        self.finish()
+        return
+      }
+      if reconnectDelayNanoseconds > 0 {
+        do {
+          try await Task.sleep(nanoseconds: reconnectDelayNanoseconds)
+        } catch {
+          self.finish()
+          return
+        }
+      }
+      guard !Task.isCancelled, self.generation == admittedGeneration else {
+        self.finish()
+        return
+      }
+      self.finish()
+      start()
+    }
+    return true
+  }
+
+  func waitUntilIdle() async {
+    guard task != nil else { return }
+    await withCheckedContinuation { idleWaiters.append($0) }
+  }
+
+  func cancel() {
+    generation &+= 1
+    task?.cancel()
+  }
+
+  private func finish() {
+    guard task != nil else { return }
+    task = nil
+    let waiters = idleWaiters
+    idleWaiters.removeAll()
+    for waiter in waiters {
+      waiter.resume()
+    }
+  }
 }
 
 /// Realtime provider tool schemas are immutable per physical session. A
@@ -149,6 +251,39 @@ enum RealtimeHubSchemaRefreshPolicy {
 
 enum RealtimeHubCloseClassifier {
   static let idleTeardownThreshold: TimeInterval = 60
+
+  static func category(
+    failure: RealtimeHubTransportFailure,
+    aliveFor: TimeInterval,
+    hasActiveTurn: Bool = false,
+    provider: RealtimeHubProvider = .openai
+  ) -> RealtimeHubCloseCategory? {
+    switch failure.kind {
+    case .localAddressUnavailable:
+      return .localAddressUnavailable
+    case .configuration:
+      return .transportConfiguration
+    case .connect:
+      return .transportConnect
+    case .handshake:
+      return .transportHandshake
+    case .receive:
+      return .transportReceive
+    case .send:
+      return .transportSend
+    case .protocolViolation:
+      return .transportProtocolViolation
+    case .providerError:
+      return .providerError
+    case .providerClose, .unknown:
+      break
+    }
+    return category(
+      message: failure.message,
+      aliveFor: aliveFor,
+      hasActiveTurn: hasActiveTurn,
+      provider: provider)
+  }
 
   static func category(
     message: String,
@@ -478,6 +613,27 @@ enum RealtimeHubLifecyclePolicy {
 
   static func canStartGeneralWarmSession(replacementPending: Bool) -> Bool {
     !replacementPending
+  }
+
+  /// Whether the persistence-fence refresh loop may retry after a kernel
+  /// snapshot failed to resolve.
+  ///
+  /// Retrying is only safe while the fence still owns the authenticated scope it
+  /// started under. Once the owner changes or signs out (session invalidation),
+  /// the kernel snapshot can never resolve — the agent bridge refuses to start
+  /// without a current authorization — so the snapshot fails *instantly* on
+  /// every iteration. Looping in that state spins agent-bridge startup at full
+  /// speed (thousands of "sign in to use AI chat" failures per minute). Signed-in
+  /// snapshot failures are naturally rate-limited by their network round-trip, so
+  /// this owner-scope gate is what prevents the busy-loop.
+  static func canRetryPersistenceFence(
+    taskCancelled: Bool,
+    fenceOwnerScope: RealtimeHubOwnerScope,
+    currentOwnerScope: RealtimeHubOwnerScope
+  ) -> Bool {
+    guard !taskCancelled else { return false }
+    guard case .authenticated = currentOwnerScope else { return false }
+    return fenceOwnerScope == currentOwnerScope
   }
 
 }

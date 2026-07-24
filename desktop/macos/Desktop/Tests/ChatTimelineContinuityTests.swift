@@ -81,6 +81,46 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertFalse(settled.contains(where: isToolCalls))
   }
 
+  func testCopyableTextIncludesOnlyFinalAssistantOutput() {
+    let message = ChatMessage(
+      text: "Fallback answer",
+      sender: .ai,
+      contentBlocks: [
+        .thinking(id: "thinking_1", text: "Internal reasoning"),
+        .toolCall(id: "tool_1", name: "search", status: .completed, output: "Raw tool result"),
+        .text(id: "answer_1", text: "Visible final answer"),
+        .agentCompletion(
+          id: "agent_1",
+          pillId: nil,
+          sessionId: nil,
+          runId: nil,
+          title: "Background agent",
+          promptSnippet: "Internal agent prompt",
+          output: "Agent-only result",
+          status: "completed"
+        ),
+      ]
+    )
+
+    XCTAssertEqual(message.copyableText, "Visible final answer")
+  }
+
+  func testFloatingResponseCopiesTheSharedFinalOutputProjection() throws {
+    let root = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    // omi-test-quality: source-inspection -- static contract: floating copy controls use ChatMessage.copyableText.
+    let source = try String(
+      contentsOf: root.appendingPathComponent("Sources/FloatingControlBar/AIResponseView.swift"),
+      encoding: .utf8
+    )
+
+    XCTAssertTrue(source.contains("let finalOutput = message.copyableText"))
+    XCTAssertTrue(source.contains("A: \\(finalOutput)"))
+    XCTAssertTrue(source.contains("Button(action: { [finalOutput] in copyText(finalOutput) })"))
+    XCTAssertFalse(source.contains("setString(message.text, forType: .string)"))
+  }
+
   private func isToolCalls(_ group: ContentBlockGroup) -> Bool {
     if case .toolCalls = group { return true }
     return false

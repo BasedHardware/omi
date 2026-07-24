@@ -1,0 +1,3 @@
+{
+  "change": "Fixed chat web searches failing when the assistant tried to look something up online"
+}
