@@ -1699,22 +1699,6 @@
     "@lovingOmi": {
         "description": "Title for the app review prompt"
     },
-    "leaveReviewIos": "App Store இல் ஒரு மதிப்பாய்வு விட்டு மேலும் நபர்களை அடைய எங்களுக்கு உதவவும். உங்கள் பதிப்பு எங்களுக்கு உலகத்தைக் குறிக்கிறது!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Google Play Store இல் ஒரு மதிப்பாய்வு விட்டு மேலும் நபர்களை அடைய எங்களுக்கு உதவவும். உங்கள் பதிப்பு எங்களுக்கு உலகத்தைக் குறிக்கிறது!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "App Store இல் மதிப்பிடவும்",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Google Play இல் மதிப்பிடவும்",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
-    },
     "maybeLater": "ஒருவேளை பிறகு",
     "@maybeLater": {
         "description": "Button text to defer action"

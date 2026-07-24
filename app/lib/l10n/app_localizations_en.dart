@@ -1788,20 +1788,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lovingOmi => 'Loving Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Help us reach more people by leaving a review in the App Store. Your feedback means the world to us!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Help us reach more people by leaving a review in the Google Play Store. Your feedback means the world to us!';
-
-  @override
-  String get rateOnAppStore => 'Rate on App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Rate on Google Play';
-
-  @override
   String get maybeLater => 'Maybe Later';
 
   @override
@@ -2136,6 +2122,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Edit Memory';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'I like to eat ice cream...';

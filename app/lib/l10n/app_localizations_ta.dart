@@ -1800,20 +1800,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get lovingOmi => 'Omi ஐ விரும்புகிறீர்களா?';
 
   @override
-  String get leaveReviewIos =>
-      'App Store இல் ஒரு மதிப்பாய்வு விட்டு மேலும் நபர்களை அடைய எங்களுக்கு உதவவும். உங்கள் பதிப்பு எங்களுக்கு உலகத்தைக் குறிக்கிறது!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Google Play Store இல் ஒரு மதிப்பாய்வு விட்டு மேலும் நபர்களை அடைய எங்களுக்கு உதவவும். உங்கள் பதிப்பு எங்களுக்கு உலகத்தைக் குறிக்கிறது!';
-
-  @override
-  String get rateOnAppStore => 'App Store இல் மதிப்பிடவும்';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play இல் மதிப்பிடவும்';
-
-  @override
   String get maybeLater => 'ஒருவேளை பிறகு';
 
   @override
@@ -2151,6 +2137,18 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ பதிவை திருத்தவும்';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'நான் ஐஸ் கிரீம் சாப்பிட விரும்புவேன்...';

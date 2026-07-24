@@ -22,7 +22,6 @@ import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
-import 'package:omi/pages/onboarding/user_review_page.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
@@ -366,22 +365,17 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
       PermissionsWidget(
         goNext: () {
-          _goNext(); // Go to User Review page
+          // Go directly to Speech Profile (skip device steps - we use phone mic now).
+          // The review step was removed from onboarding to comply with App Store
+          // Guideline 5.6.3 (no rating prompts during onboarding).
+          _controller!.animateTo(kSpeechProfilePage);
           PlatformManager.instance.analytics.onboardingStepCompleted(
             'Permissions',
           );
         },
       ),
-      UserReviewPage(
-        goNext: () {
-          // Go directly to Speech Profile (skip device steps - we use phone mic now)
-          _controller!.animateTo(kSpeechProfilePage);
-          PlatformManager.instance.analytics.onboardingStepCompleted(
-            'User Review',
-          );
-        },
-      ),
       // Placeholder pages - not used in new flow but kept for index consistency
+      Container(), // UserReviewPage placeholder (removed for App Store Guideline 5.6.3)
       Container(), // WelcomePage placeholder
       Container(), // FindDevicesPage placeholder
       widget.forceAuthPage
@@ -534,7 +528,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                 onPressed: () {
                                   if (_controller!.index == kSpeechProfilePage) {
                                     _speechProfileProvider?.close();
-                                    _controller!.animateTo(kUserReviewPage);
+                                    _controller!.animateTo(kPermissionsPage);
                                   } else if (_controller!.index > kNamePage) {
                                     _controller!.animateTo(_controller!.index - 1);
                                   }
@@ -633,7 +627,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                   onPressed: () {
                                     if (_controller!.index == kSpeechProfilePage) {
                                       _speechProfileProvider?.close();
-                                      _controller!.animateTo(kUserReviewPage);
+                                      _controller!.animateTo(kPermissionsPage);
                                     } else if (_controller!.index > kNamePage) {
                                       _controller!.animateTo(
                                         _controller!.index - 1,

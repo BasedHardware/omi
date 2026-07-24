@@ -1790,20 +1790,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get lovingOmi => 'Omi ভালোবাসছেন?';
 
   @override
-  String get leaveReviewIos =>
-      'অ্যাপ স্টোরে পর্যালোচনা রেখে আমাদের আরও মানুষের কাছে পৌঁছাতে সাহায্য করুন। আপনার প্রতিক্রিয়া আমাদের কাছে বিশ্ব মানে!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Google Play স্টোরে পর্যালোচনা রেখে আমাদের আরও মানুষের কাছে পৌঁছাতে সাহায্য করুন। আপনার প্রতিক্রিয়া আমাদের কাছে বিশ্ব মানে!';
-
-  @override
-  String get rateOnAppStore => 'অ্যাপ স্টোরে রেটিং দিন';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play তে রেটিং দিন';
-
-  @override
   String get maybeLater => 'হয়তো পরে';
 
   @override
@@ -2138,6 +2124,18 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ স্মৃতি সম্পাদনা করুন';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'আমি আইসক্রিম খেতে পছন্দ করি...';
