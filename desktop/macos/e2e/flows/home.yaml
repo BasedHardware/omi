@@ -1,5 +1,6 @@
 version: 2
 name: home
+tier: manual
 description: Home tab — embedded chat, insight cards, Capture/Listening status (v0.12.119+ redesign, replaces dashboard.yaml)
 app: com.omi.computer-macos
 covers:
