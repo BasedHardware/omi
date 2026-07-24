@@ -42,9 +42,13 @@ def _install(monkeypatch, candidates) -> tuple[MagicMock, MagicMock]:
         'get_stale_processing_orphan_candidates',
         lambda **kwargs: {'candidates': list(candidates), 'resume_after_path': None, 'exhausted': True},
     )
-    monkeypatch.setattr(service.jobs_db, 'get_stale_processing_sweep_cursor', lambda **kwargs: None)
-    save_cursor = MagicMock()
-    monkeypatch.setattr(service.jobs_db, 'save_stale_processing_sweep_cursor', save_cursor)
+    monkeypatch.setattr(
+        service.jobs_db,
+        'get_stale_processing_sweep_cursor',
+        lambda **kwargs: {'resume_after_path': None, 'generation': 0},
+    )
+    advance_cursor = MagicMock(return_value=True)
+    monkeypatch.setattr(service.jobs_db, 'advance_stale_processing_sweep_cursor', advance_cursor)
     stamp = MagicMock()
     monkeypatch.setattr(service.jobs_db, 'stamp_processing_admission_if_absent', stamp)
     complete = MagicMock()
@@ -86,7 +90,11 @@ def test_fence_skip_is_a_skip_not_an_error(monkeypatch):
 
 def test_query_failure_is_fail_closed_and_records_an_error(monkeypatch):
     monkeypatch.setattr(service.jobs_db, 'get_stale_processing_orphan_after', lambda: timedelta(seconds=900))
-    monkeypatch.setattr(service.jobs_db, 'get_stale_processing_sweep_cursor', lambda **kwargs: None)
+    monkeypatch.setattr(
+        service.jobs_db,
+        'get_stale_processing_sweep_cursor',
+        lambda **kwargs: {'resume_after_path': None, 'generation': 0},
+    )
 
     def _boom(**kwargs):
         raise RuntimeError('firestore unavailable')
@@ -132,21 +140,26 @@ def test_outcomes_increment_the_privacy_safe_reconciliation_counter(monkeypatch)
     assert outcomes == ['migrated', 'completed', 'skipped']
 
 
-def test_sweep_persists_and_rotates_the_cursor_across_invocations(monkeypatch):
-    """The service threads the persisted cursor: it resumes from the saved
-    position and wraps (saves None) once a window is exhausted, so repeated
-    bounded sweeps guarantee eventual discovery."""
+def test_sweep_advances_and_rotates_the_cursor_with_cas_generation(monkeypatch):
+    """The service threads the persisted cursor with CAS generation: it resumes
+    from the saved position, bumps the generation on each advance, and wraps
+    (saves None) once a window is exhausted — so repeated bounded sweeps
+    guarantee eventual discovery. The generation prevents multi-pod rewind."""
     monkeypatch.setattr(service.jobs_db, 'get_stale_processing_orphan_after', lambda: timedelta(seconds=900))
-    cursor_log: list = []
+    cursor_state = {'resume_after_path': None, 'generation': 0}
+    advance_log: list[tuple[int, str | None]] = []
 
     def _fake_get_cursor(**kwargs):
-        return cursor_log[-1] if cursor_log else None
+        return dict(cursor_state)
 
-    def _fake_save_cursor(path, **kwargs):
-        cursor_log.append(path)
+    def _fake_advance(expected_generation, new_path, **kwargs):
+        advance_log.append((expected_generation, new_path))
+        cursor_state['resume_after_path'] = new_path
+        cursor_state['generation'] = expected_generation + 1
+        return True
 
     monkeypatch.setattr(service.jobs_db, 'get_stale_processing_sweep_cursor', _fake_get_cursor)
-    monkeypatch.setattr(service.jobs_db, 'save_stale_processing_sweep_cursor', _fake_save_cursor)
+    monkeypatch.setattr(service.jobs_db, 'advance_stale_processing_sweep_cursor', _fake_advance)
     windows = [
         {'candidates': [], 'resume_after_path': 'users/u/conversations/a', 'exhausted': False},
         {'candidates': [], 'resume_after_path': 'users/u/conversations/b', 'exhausted': False},
@@ -170,7 +183,7 @@ def test_sweep_persists_and_rotates_the_cursor_across_invocations(monkeypatch):
     # Third sweep wraps (exhausted) and recovers the later orphan.
     result = service.reconcile_stale_processing_conversations()
 
-    assert cursor_log == ['users/u/conversations/a', 'users/u/conversations/b', None]
+    assert advance_log == [(0, 'users/u/conversations/a'), (1, 'users/u/conversations/b'), (2, None)]
     assert result['completed'] == 1
     # Each discovery call received the cursor persisted by the previous sweep.
     assert call['i'] == 3
