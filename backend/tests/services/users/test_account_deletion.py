@@ -108,7 +108,9 @@ def test_start_account_deletion_preserves_order_and_enqueues_background_wipe(mon
 
 
 def test_start_account_deletion_enqueues_cloud_task_when_enabled(monkeypatch):
-    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value=_new_wipe_intent()))
+    monkeypatch.setattr(
+        account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value=_new_wipe_intent())
+    )
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_started', MagicMock(return_value=True))
     monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
     monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
@@ -131,7 +133,9 @@ def test_start_account_deletion_accepts_durable_intent_when_cloud_task_enqueue_f
     The persisted marker is deliberately retained as ``failed`` so the
     reconciler can recover delivery later; queue dispatch is an acceleration.
     """
-    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value=_new_wipe_intent()))
+    monkeypatch.setattr(
+        account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value=_new_wipe_intent())
+    )
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_started', MagicMock(return_value=True))
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', MagicMock())
     monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
@@ -185,7 +189,9 @@ def test_start_account_deletion_tolerates_feedback_failure_and_missing_firebase_
 
 
 def test_start_account_deletion_blocks_when_subscription_lookup_fails(monkeypatch):
-    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value=_new_wipe_intent()))
+    monkeypatch.setattr(
+        account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value=_new_wipe_intent())
+    )
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_started', MagicMock(return_value=True))
     monkeypatch.setattr(
         account_deletion.users_db, 'get_user_subscription', MagicMock(side_effect=Exception('read down'))
@@ -207,7 +213,9 @@ def test_start_account_deletion_blocks_when_subscription_lookup_fails(monkeypatc
 
 def test_start_account_deletion_blocks_when_stripe_cancel_returns_none(monkeypatch):
     sub = types.SimpleNamespace(stripe_subscription_id='sub_123')
-    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value=_new_wipe_intent()))
+    monkeypatch.setattr(
+        account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value=_new_wipe_intent())
+    )
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_started', MagicMock(return_value=True))
     monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=sub))
     monkeypatch.setattr(account_deletion.stripe_utils, 'cancel_subscription', MagicMock(return_value=None))
@@ -252,7 +260,9 @@ def test_start_account_deletion_raises_when_marker_persist_fails(monkeypatch):
 def test_start_account_deletion_raises_when_pending_marker_persist_fails_before_auth(monkeypatch):
     """Do not enqueue or report success unless the actionable pending marker exists."""
     monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
-    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value=_new_wipe_intent()))
+    monkeypatch.setattr(
+        account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value=_new_wipe_intent())
+    )
     monkeypatch.setattr(
         account_deletion.users_db, 'mark_user_deletion_wipe_started', MagicMock(side_effect=Exception('db down'))
     )
@@ -275,7 +285,9 @@ def test_start_account_deletion_raises_when_pending_marker_persist_fails_before_
 def test_start_account_deletion_never_calls_firebase_in_the_request_thread(monkeypatch):
     """Firebase deletion belongs only to the claimed durable worker."""
     monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
-    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value=_new_wipe_intent()))
+    monkeypatch.setattr(
+        account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value=_new_wipe_intent())
+    )
     mark_started = MagicMock(return_value=True)
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_started', mark_started)
     cancel_wipe = MagicMock()
