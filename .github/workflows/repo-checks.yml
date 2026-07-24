@@ -166,6 +166,18 @@ jobs:
           pip install -q pyyaml
           python3 .github/scripts/check-release-process-guards.py
 
+      # The guard passing says nothing about its own self-suite, which asserts WHICH
+      # bypasses the lock rejects. That suite ran in no lane, so 9 of its 87 cases
+      # failed silently on main while the guard itself stayed green (#10351). Run it
+      # beside the guard so the two can never drift apart again.
+      - name: Test release process guards
+        run: |
+          pip install -q pyyaml pytest
+          # --noconftest: pytest runs from the repo root, where it would otherwise collect
+          # backend/tests/unit/conftest.py and fail importing backend-only dependencies
+          # this lane does not install. The suite needs no conftest fixtures.
+          python3 -m pytest .github/scripts/test_check_release_process_guards.py -q --noconftest
+
       - name: Check GitHub Actions workflows
         if: needs.changes.outputs.has_workflows == 'true'
         run: |
