@@ -468,31 +468,15 @@ class TestGetOrCreateLlmBehavioral:
             _llm_cache.clear()
             _llm_cache.update(saved)
 
-    def test_explicit_cache_options_travel_in_extra_body(self):
-        """Explicit cache options ride in extra_body, never as a named argument.
+    def test_explicit_cache_options_are_not_sent_to_the_gateway(self):
+        """The caller accepts explicit cache options and sends none of them.
 
-        The SDK validates keyword arguments while building the request, so a
-        client older than the argument raises TypeError in process and the call
-        never reaches the gateway that understands the field. Conversation
-        structuring failed that way for every request in production while
-        passing locally, because the pinned client is older than the one
-        developed against. extra_body carries the field on every version, so
-        this asserts against the pinned client rather than the installed one.
+        The field is a contract between this caller and the gateway, and the
+        two deploy from separate pipelines, so a gateway predating the field
+        rejects the whole request. Sending it broke conversation structuring for
+        every request that routed through the gateway. Accepting the argument
+        keeps the call sites unchanged while nothing goes on the wire.
         """
-        import inspect
-        import re
-        from pathlib import Path
-
-        from openai.resources.chat.completions import Completions
-
-        pin = re.search(
-            r'^openai==(\S+)$',
-            Path(__file__).resolve().parents[2].joinpath('requirements.txt').read_text(),
-            re.MULTILINE,
-        )
-        assert pin, 'openai must stay pinned so the supported arguments are knowable'
-        assert 'extra_body' in inspect.signature(Completions.create).parameters
-
         from unittest.mock import patch as _patch
 
         import utils.llm.clients as clients_mod
@@ -512,8 +496,8 @@ class TestGetOrCreateLlmBehavioral:
         ):
             clients_mod.get_llm('conv_structure', prompt_cache_options=options)
 
-        assert 'prompt_cache_options' not in captured, 'must not be bound as a named SDK argument'
-        assert captured['extra_body']['prompt_cache_options'] == options
+        assert 'prompt_cache_options' not in captured, 'must not be bound as a named argument'
+        assert 'prompt_cache_options' not in captured.get('extra_body', {}), 'must not travel in the request body'
 
     def test_streaming_instance_has_streaming_flag(self):
         from unittest.mock import patch as _patch
