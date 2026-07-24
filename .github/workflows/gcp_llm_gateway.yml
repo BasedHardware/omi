@@ -80,7 +80,8 @@ jobs:
             python3 .github/scripts/verify_backend_release_admission.py \
               --sha "$DEPLOY_SHA" \
               --repository "$GITHUB_REPOSITORY" \
-              --workflow-runs "$proof_path"
+              --workflow-runs "$proof_path" \
+              --require-first-attempt
             git checkout --detach "$DEPLOY_SHA"
           fi
           CHECKED_OUT_SHA=$(git rev-parse HEAD)
