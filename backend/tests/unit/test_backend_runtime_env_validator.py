@@ -1593,6 +1593,53 @@ def test_repo_rendered_cloud_run_matches_manifest():
     assert validator.validate_runtime_env(env='prod', check_rendered_cloud_run=True) == []
 
 
+# Every service that deploys the backend image (`uvicorn main:app`) runs the
+# stale-processing reconciliation scheduler registered in main.py startup, so it
+# reads LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS. A scheduler surface that omits
+# it silently falls back to the code default, breaking the source-controlled
+# reliability contract. When a new main.py surface is added, extend this list.
+_MAIN_APP_SCHEDULER_SURFACES: dict[str, list[tuple[str, str]]] = {
+    'dev': [
+        ('gke', 'backend-listen'),
+        ('cloud_run', 'backend'),
+        ('cloud_run', 'backend-sync'),
+        ('cloud_run', 'backend-sync-backfill'),
+        ('cloud_run', 'backend-integration'),
+    ],
+    'prod': [
+        ('gke', 'backend-listen'),
+        ('cloud_run', 'backend'),
+        ('cloud_run', 'backend-sync'),
+        ('cloud_run', 'backend-sync-backfill'),
+        ('cloud_run', 'backend-integration'),
+    ],
+}
+
+
+def _scheduler_surface_env_block(env_config: dict, section: str, service: str) -> dict:
+    if section == 'gke':
+        return ((env_config.get('gke') or {}).get(service) or {}).get('env') or {}
+    services = (env_config.get('cloud_run') or {}).get('services') or {}
+    return (services.get(service) or {}).get('env') or {}
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_scheduler_runtime_surfaces_declare_orphan_stale_setting(env):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    env_config = manifest['environments'][env]
+    for section, service in _MAIN_APP_SCHEDULER_SURFACES[env]:
+        env_block = _scheduler_surface_env_block(env_config, section, service)
+        entry = env_block.get('LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS')
+        assert entry is not None, (
+            f'{env}/{section}/{service} runs the stale-processing scheduler but '
+            f'omits LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS'
+        )
+        assert (
+            entry.get('category') == 'reliability'
+        ), f'{env}/{section}/{service} must classify the recovery setting as reliability'
+
+
 def test_parakeet_selected_without_endpoint_is_rejected_for_all_cloud_run_validation_modes(tmp_path):
     validator = load_validator()
     manifest = copy.deepcopy(validator._load_yaml(ROOT / 'deploy/runtime_env.yaml'))
