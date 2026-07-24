@@ -1026,11 +1026,16 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
+    let whitespaceNormalizedSource = source.split(whereSeparator: \.isWhitespace).joined(separator: " ")
 
     XCTAssertTrue(source.contains("Self.removeInheritedBYOKEnvironment(from: &env)"))
     XCTAssertTrue(source.contains("let byok = await Self.usableBYOKEnvironment()"))
     XCTAssertTrue(
-      source.contains("let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled"))
+      whitespaceNormalizedSource.contains(
+        "let forceRefreshToken = preferredAdapterId == .piMono "
+          + "&& AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup("
+      ))
+    XCTAssertTrue(source.contains("isDesktopLocalProfile: DesktopLocalProfile.isEnabled"))
     XCTAssertTrue(source.contains("getAuthHeader("))
     XCTAssertTrue(source.contains("forceRefresh: forceRefreshToken"))
     XCTAssertTrue(source.contains("expectedUserId: authorizationSnapshot.ownerID"))
