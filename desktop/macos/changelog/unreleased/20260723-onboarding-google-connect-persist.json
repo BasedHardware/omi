@@ -1,0 +1,3 @@
+{
+  "change": "Connecting Google Calendar or Gmail during onboarding now runs the same import + persistence as the Apps page, so a connection made in onboarding actually stays connected in the app (instead of showing connected during setup but 'Not connected' afterward). A real connection error (vs. no signed-in browser session) also no longer opens a dead sign-in page."
+}

@@ -121,3 +121,40 @@ final class ConnectorImportRunner: ObservableObject {
     runs[connectorID] = state
   }
 }
+
+extension ConnectorImportRunner {
+  /// Run a connector import through the shared runner AND persist its connected
+  /// state via `markSynced`, so every surface that connects a connector writes the
+  /// one `lastSyncedAt` latch the whole app reads for "connected". Extracted from
+  /// the Apps page's connector sheet so onboarding uses the IDENTICAL seam:
+  /// onboarding used to only probe `verifyConnection()` and flip an in-memory chip,
+  /// never persisting — so a connector connected during onboarding still read
+  /// "Not connected" on the Apps page. Both surfaces now go through here.
+  @MainActor
+  @discardableResult
+  static func startPersistingImport(
+    connectorID: String,
+    statusStore: ImportConnectorStatusStore,
+    title: String,
+    detail: String,
+    availabilityText: String? = nil,
+    runner: ConnectorImportRunner = .shared,
+    operation: @escaping @MainActor (ProgressSink) async -> ConnectorImportOperations.Outcome
+  ) -> Task<Void, Never>? {
+    runner.start(connectorID: connectorID, progressTitle: title, progressDetail: detail) { progress in
+      switch await operation(progress) {
+      case .success(let result, let message):
+        statusStore.markSynced(
+          connectorID: connectorID,
+          sourceCount: result.sourceCount,
+          memoryCount: result.memoryCount,
+          lastDeltaCount: result.newItems,
+          availabilityText: availabilityText
+        )
+        return .success(message: message)
+      case .failure(let message):
+        return .failure(message: message)
+      }
+    }
+  }
+}

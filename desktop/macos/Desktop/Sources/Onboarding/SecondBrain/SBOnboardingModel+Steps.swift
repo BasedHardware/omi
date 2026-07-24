@@ -615,6 +615,19 @@ extension SBOnboardingModel {
       {
         self.contextStates["applenotes"] = "on"
       }
+      // A connection persisted earlier (here or in the app's Apps page) already
+      // wrote the shared `lastSyncedAt` latch — reflect it so onboarding and the app
+      // agree. (Onboarding "gmail" maps to the store's "email" connector.)
+      if let cal = ImportConnector.all.first(where: { $0.id == "calendar" }),
+        self.importStatusStore.snapshot(for: cal).isConnected
+      {
+        self.contextStates["calendar"] = "on"
+      }
+      if let email = ImportConnector.all.first(where: { $0.id == "email" }),
+        self.importStatusStore.snapshot(for: email).isConnected
+      {
+        self.contextStates["gmail"] = "on"
+      }
       let cal = await CalendarReaderService.shared.verifyConnection()
       if cal.isConnected { self.markContextConnected("calendar") }
       let gmail = await GmailReaderService.shared.verifyConnection()
@@ -659,16 +672,22 @@ extension SBOnboardingModel {
     )
   }
 
-  /// Resolve a cookie-based Google connector (Calendar, Gmail). These don't OAuth —
-  /// they read your existing browser Google session — so a "not signed in" result
-  /// isn't an error to shrug at: OPEN the Google page so the user can actually sign
-  /// in, then Retry picks up the new session. (An `.error`, e.g. a not-yet-loaded
-  /// API key, just leaves a Retry button — opening Google wouldn't help.)
+  /// Onboarding uses the connector id `"gmail"`, but the app-wide import pipeline
+  /// and status store use `"email"`. Map so a Gmail connect writes the exact key the
+  /// Apps page reads (writing `"gmail"` would persist to a key nothing reads).
+  nonisolated static func statusStoreConnectorID(forOnboardingID id: String) -> String {
+    id == "gmail" ? "email" : id
+  }
+
+  /// Resolve a cookie-based Google connector. `googleContextResolution` decides the
+  /// chip state + actionable detail and whether to open the Google sign-in page; on a
+  /// successful connect we ALSO run the same import+persist seam the Apps page uses,
+  /// so the `lastSyncedAt` latch is written and both surfaces agree (previously
+  /// onboarding showed "on" while the app showed "Not connected" — nothing persisted).
   private func resolveGoogleConnect(
-    _ id: String,
-    connected: Bool,
-    needsSignIn: Bool,
-    signInURL: String
+    _ id: String, connected: Bool, needsSignIn: Bool, signInURL: String,
+    importTitle: String, importDetail: String,
+    operation: @escaping @MainActor (ConnectorImportRunner.ProgressSink) async -> ConnectorImportOperations.Outcome
   ) {
     let resolution = Self.googleContextResolution(
       connectorID: id,
@@ -677,6 +696,13 @@ extension SBOnboardingModel {
     )
     contextStates[id] = resolution.state
     contextDetails[id] = resolution.detail
+    if resolution.state == "on" {
+      // Fire-and-forget: the runner survives this step and dedups per connector.
+      ConnectorImportRunner.startPersistingImport(
+        connectorID: Self.statusStoreConnectorID(forOnboardingID: id),
+        statusStore: importStatusStore,
+        title: importTitle, detail: importDetail, operation: operation)
+    }
     if resolution.shouldOpenSignIn, let url = URL(string: signInURL) {
       NSWorkspace.shared.open(url)
     }
@@ -702,11 +728,11 @@ extension SBOnboardingModel {
           }
         }()
         self?.resolveGoogleConnect(
-          "calendar",
-          connected: s.isConnected,
-          needsSignIn: needsSignIn,
-          signInURL: "https://calendar.google.com"
-        )
+          "calendar", connected: s.isConnected, needsSignIn: needsSignIn,
+          signInURL: "https://calendar.google.com",
+          importTitle: "Importing calendar events",
+          importDetail: "Saving events as memories and generating summaries.",
+          operation: { await ConnectorImportOperations.importCalendar(progress: $0) })
       }
     case "gmail":
       Task { [weak self] in
@@ -720,11 +746,11 @@ extension SBOnboardingModel {
           }
         }()
         self?.resolveGoogleConnect(
-          "gmail",
-          connected: s.isConnected,
-          needsSignIn: needsSignIn,
-          signInURL: "https://mail.google.com"
-        )
+          "gmail", connected: s.isConnected, needsSignIn: needsSignIn,
+          signInURL: "https://mail.google.com",
+          importTitle: "Importing Gmail history",
+          importDetail: "Saving recent emails as memories and generating follow-ups.",
+          operation: { await ConnectorImportOperations.importGmail(progress: $0) })
       }
     case "applenotes":
       Task { [weak self] in

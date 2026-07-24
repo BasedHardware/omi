@@ -84,6 +84,10 @@ final class SBOnboardingModel: ObservableObject {
   // ("idle" | "connecting" | "on" | "unavailable" | "needsSignIn").
   @Published var agentStates: [String: String] = [:]
   @Published var contextStates: [String: String] = [:]
+  /// The same persisted connector-status latch the Apps page reads. Onboarding's
+  /// Calendar/Gmail connect writes `lastSyncedAt` here (via the shared runner seam)
+  /// so a connection made during onboarding actually shows connected in the app.
+  let importStatusStore = ImportConnectorStatusStore()
   /// Actionable connector detail replaces the generic row subtitle after a
   /// failed functional probe. Values use bounded product copy; raw cookie,
   /// response, and exception data never reaches this projection.

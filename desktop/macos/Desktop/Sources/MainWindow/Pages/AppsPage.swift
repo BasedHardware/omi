@@ -1678,27 +1678,16 @@ struct ImportConnectorSheet: View {
     availabilityText: String? = nil,
     operation: @escaping @MainActor (ConnectorImportRunner.ProgressSink) async -> ConnectorImportOperations.Outcome
   ) {
-    let connectorID = connector.id
-    let statusStore = statusStore
-    ConnectorImportRunner.shared.start(
-      connectorID: connectorID,
-      progressTitle: title,
-      progressDetail: detail
-    ) { progress in
-      switch await operation(progress) {
-      case .success(let result, let message):
-        statusStore.markSynced(
-          connectorID: connectorID,
-          sourceCount: result.sourceCount,
-          memoryCount: result.memoryCount,
-          lastDeltaCount: result.newItems,
-          availabilityText: availabilityText
-        )
-        return .success(message: message)
-      case .failure(let message):
-        return .failure(message: message)
-      }
-    }
+    // Shared run+persist seam (also used by onboarding) so both surfaces write the
+    // same `lastSyncedAt` latch and agree on "connected".
+    ConnectorImportRunner.startPersistingImport(
+      connectorID: connector.id,
+      statusStore: statusStore,
+      title: title,
+      detail: detail,
+      availabilityText: availabilityText,
+      operation: operation
+    )
   }
 
   private func openAndCopyPrompt(for source: OnboardingMemoryLogSource) {
