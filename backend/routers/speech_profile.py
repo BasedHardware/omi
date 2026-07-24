@@ -7,7 +7,7 @@ from fastapi import APIRouter, UploadFile, Depends, HTTPException
 from pydantic import BaseModel
 from pydub import AudioSegment
 
-from database.redis_db import set_speech_profile_duration
+from database.redis_db import set_speech_profile_duration, get_speech_profile_duration
 from database.users import set_user_speaker_embedding
 from utils.other import endpoints as auth
 from utils.other.storage import (
@@ -53,6 +53,26 @@ def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
 @router.get('/v4/speech-profile', tags=['v3'], response_model=SpeechProfileResponse)
 def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
     return {'url': get_profile_audio_if_exists(uid, download=False)}
+
+
+@router.get('/v3/speech-profile/status', tags=['v3'])
+def get_speech_profile_status(uid: str = Depends(auth.get_current_user_uid)):
+    """Consolidated speech-profile status for the settings UI.
+
+    Surfaces users:{uid}:speech_profile_duration (written on upload but currently read by
+    nothing) and folds together data split across GET /v3/speech-profile (existence) and
+    GET /v4/speech-profile (url).
+    """
+    has_profile = get_user_has_speech_profile(uid)
+    # Gate the cached duration on the actual profile existing. The duration is written
+    # write-ahead (before upload_profile_audio completes) and can outlive a deleted profile,
+    # so surfacing it when has_profile is False would report an inconsistent state (no profile
+    # but a positive duration) to the settings UI.
+    return {
+        'has_profile': has_profile,
+        'duration_seconds': (get_speech_profile_duration(uid) or 0.0) if has_profile else 0.0,
+        'url': get_profile_audio_if_exists(uid, download=False),
+    }
 
 
 # ******************************************
