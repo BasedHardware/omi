@@ -135,7 +135,19 @@ jobs:
 
       - name: Run macOS-scoped manifest checks
         run: |
-          python3 .github/scripts/run_checks.py --lane ci --platform macos --base "${{ needs.changes.outputs.diff_base }}" --skip-pr-body-checks
+          MANIFEST_ARGS=()
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Repo Checks owns PR metadata enforcement and reruns it for label
+            # changes. This macOS-only lane has no live PR metadata, so it must
+            # not independently reject the supported no-changelog-needed label.
+            MANIFEST_ARGS+=(--skip-changelog)
+          fi
+          python3 .github/scripts/run_checks.py \
+            --lane ci \
+            --platform macos \
+            --base "${{ needs.changes.outputs.diff_base }}" \
+            --skip-pr-body-checks \
+            "${MANIFEST_ARGS[@]}"
 
       - name: Save Swift formatter and linter tools after checks
         if: ${{ always() && steps.swift-tools-cache.outputs.cache-hit != 'true' }}

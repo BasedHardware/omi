@@ -21,6 +21,7 @@ lanes:
         - byok_unsupported_provider
         - missing_byok_key
         - capability_mismatch
+        - provider_invalid_request
         - invalid_config
     active_route: route.public_shared_conversation_chat.2026_07_19.001
     last_known_good: route.public_shared_conversation_chat.2026_07_19.001
@@ -49,6 +50,7 @@ lanes:
         - byok_unsupported_provider
         - missing_byok_key
         - capability_mismatch
+        - provider_invalid_request
         - invalid_config
     active_route: route.chat_structured.2026_06_27.001
     last_known_good: route.chat_structured.2026_06_20.001

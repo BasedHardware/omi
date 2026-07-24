@@ -269,6 +269,7 @@ def _error_type_for_code(code: GatewayErrorCode) -> str:
         GatewayErrorCode.INVALID_ROUTE_CONFIG,
         GatewayErrorCode.UNSUPPORTED_MODEL,
         GatewayErrorCode.CAPABILITY_NOT_SUPPORTED,
+        GatewayErrorCode.PROVIDER_REQUEST_REJECTED,
     }:
         return 'invalid_request_error'
     return 'api_error'
@@ -281,6 +282,7 @@ def _status_code_for_error(exc: GatewayError) -> int:
         GatewayErrorCode.INVALID_REQUEST,
         GatewayErrorCode.UNSUPPORTED_MODEL,
         GatewayErrorCode.CAPABILITY_NOT_SUPPORTED,
+        GatewayErrorCode.PROVIDER_REQUEST_REJECTED,
     }:
         return 400
     if exc.code == GatewayErrorCode.CREDENTIAL_FAILURE:
@@ -478,7 +480,7 @@ async def _prepared_streaming_iterator(
                 cache_requested=cache_requested_for_openai_request(provider_request),
             )
         except ProviderFailure as exc:
-            last_error = _map_provider_failure(exc, credentials)
+            last_error = _map_provider_failure(exc, credentials, provider_ref)
             attempt_trace.record(
                 provider=provider_ref.provider,
                 configured_model=provider_ref.model,
