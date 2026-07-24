@@ -73,18 +73,28 @@ def _wait_for_port(
     timeout: float = 20.0,
     child: 'Child | None' = None,
 ) -> None:
+    def child_diagnostics() -> str:
+        if child is None:
+            return ''
+        try:
+            lines = child.log_path.read_text(encoding='utf-8', errors='replace').splitlines()
+        except OSError as error:
+            return f'; could not read child log {child.log_path}: {error}'
+        tail = '\n'.join(lines[-120:]) or '<child log is empty>'
+        return f'; last {min(len(lines), 120)} line(s) from {child.log_path}:\n{tail}'
+
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if child and child.process.poll() is not None:
             raise StackFailure(
-                f'{label} exited with status {child.process.returncode} before listening; inspect {child.log_path}'
+                f'{label} exited with status {child.process.returncode} before listening{child_diagnostics()}'
             )
         try:
             with socket.create_connection(('127.0.0.1', port), timeout=0.25):
                 return
         except OSError:
             time.sleep(0.1)
-    raise StackFailure(f'{label} did not listen on 127.0.0.1:{port} within {timeout:.0f}s')
+    raise StackFailure(f'{label} did not listen on 127.0.0.1:{port} within {timeout:.0f}s{child_diagnostics()}')
 
 
 def _wait_until(predicate: Callable[[], bool], *, label: str, timeout: float = 20.0) -> None:
