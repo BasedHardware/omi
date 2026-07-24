@@ -1,12 +1,14 @@
 """Behavioral contract for the stale bare-processing crash-orphan reconciler.
 
-These tests pin the #10461 revision: eligibility is bounded by the
-server-owned admission fence, legacy rows migrate rather than complete on
-sight, each aged orphan reaches exactly one terminal, query failure is
-fail-closed, and outcomes surface on a privacy-safe reconciliation counter.
-The deeper saturation / timestamp-authority / index contracts live in
-``test_conversation_finalization_jobs.py``; the end-to-end no-fanout proof
-lives in the hermetic listen_pusher_stack gauntlet.
+These tests pin the #10461 revision: eligibility is bounded by the server-owned
+admission fence, legacy rows migrate rather than complete on sight, each aged
+orphan reaches exactly one terminal through a generation/ownership fence, query
+failure is fail-closed, a persisted sweep cursor guarantees eventual discovery,
+unexpected per-row failures are counted as errors distinct from expected CAS
+skips, and outcomes surface on a privacy-safe reconciliation counter. The deeper
+saturation / timestamp-authority / cursor-wraparound / fence contracts live in
+``test_conversation_finalization_jobs.py``; the end-to-end no-fanout proof lives
+in the hermetic listen_pusher_stack gauntlet.
 """
 
 from __future__ import annotations
@@ -29,12 +31,24 @@ def _candidate(uid: str, cid: str, *, legacy: bool = False) -> dict:
 
 
 def _install(monkeypatch, candidates) -> tuple[MagicMock, MagicMock]:
+    """Wire the service to a fixed candidate window and a fake fenced completion.
+
+    ``complete`` mocks ``jobs_db.complete_orphan_conversation`` (the generation /
+    ownership fence), distinct from the legacy ``lifecycle.complete`` CAS.
+    """
     monkeypatch.setattr(service.jobs_db, 'get_stale_processing_orphan_after', lambda: timedelta(seconds=900))
-    monkeypatch.setattr(service.jobs_db, 'get_stale_processing_orphan_candidates', lambda **kwargs: list(candidates))
+    monkeypatch.setattr(
+        service.jobs_db,
+        'get_stale_processing_orphan_candidates',
+        lambda **kwargs: {'candidates': list(candidates), 'resume_after_path': None, 'exhausted': True},
+    )
+    monkeypatch.setattr(service.jobs_db, 'get_stale_processing_sweep_cursor', lambda **kwargs: None)
+    save_cursor = MagicMock()
+    monkeypatch.setattr(service.jobs_db, 'save_stale_processing_sweep_cursor', save_cursor)
     stamp = MagicMock()
     monkeypatch.setattr(service.jobs_db, 'stamp_processing_admission_if_absent', stamp)
     complete = MagicMock()
-    monkeypatch.setattr(service.lifecycle_service, 'complete', complete)
+    monkeypatch.setattr(service.jobs_db, 'complete_orphan_conversation', complete)
     return stamp, complete
 
 
@@ -49,42 +63,54 @@ def test_legacy_orphan_is_migrated_not_completed(monkeypatch):
     complete.assert_not_called()
 
 
-def test_aged_orphan_reaches_exactly_one_terminal(monkeypatch):
+def test_aged_orphan_reaches_exactly_one_terminal_through_the_fence(monkeypatch):
     _stamp, complete = _install(monkeypatch, [_candidate('uid', 'aged-1', legacy=False)])
     complete.return_value = True
 
     result = service.reconcile_stale_processing_conversations()
 
     assert result['completed'] == 1
-    complete.assert_called_once_with('uid', 'aged-1')
+    complete.assert_called_once_with('uid', 'aged-1', expected_admitted_at=_ADMITTED, firestore_client=None)
 
 
-def test_already_terminal_orphan_is_fenced_without_a_second_terminal(monkeypatch):
+def test_fence_skip_is_a_skip_not_an_error(monkeypatch):
+    """An expected CAS fencing (the row moved on) is a skip, not an error."""
     _stamp, complete = _install(monkeypatch, [_candidate('uid', 'fenced-1', legacy=False)])
     complete.return_value = False
 
     result = service.reconcile_stale_processing_conversations()
 
-    assert result['completed'] == 0
-    assert result['skipped'] == 1
+    assert result == {'completed': 0, 'migrated': 0, 'skipped': 1, 'error': 0}
     complete.assert_called_once()
 
 
 def test_query_failure_is_fail_closed_and_records_an_error(monkeypatch):
     monkeypatch.setattr(service.jobs_db, 'get_stale_processing_orphan_after', lambda: timedelta(seconds=900))
+    monkeypatch.setattr(service.jobs_db, 'get_stale_processing_sweep_cursor', lambda **kwargs: None)
 
     def _boom(**kwargs):
         raise RuntimeError('firestore unavailable')
 
     monkeypatch.setattr(service.jobs_db, 'get_stale_processing_orphan_candidates', _boom)
     complete = MagicMock()
-    monkeypatch.setattr(service.lifecycle_service, 'complete', complete)
+    monkeypatch.setattr(service.jobs_db, 'complete_orphan_conversation', complete)
 
     result = service.reconcile_stale_processing_conversations()
 
     assert result['error'] == 1
     # A failed sweep never terminalizes anything.
     complete.assert_not_called()
+
+
+def test_unexpected_per_row_exception_is_an_error_not_a_skip(monkeypatch):
+    """An unexpected completion failure (e.g. Firestore unavailable for one row)
+    is counted as an error, distinct from an expected CAS fencing skip."""
+    _stamp, complete = _install(monkeypatch, [_candidate('uid', 'boom-1', legacy=False)])
+    complete.side_effect = RuntimeError('transaction aborted')
+
+    result = service.reconcile_stale_processing_conversations()
+
+    assert result == {'completed': 0, 'migrated': 0, 'skipped': 0, 'error': 1}
 
 
 def test_outcomes_increment_the_privacy_safe_reconciliation_counter(monkeypatch):
@@ -104,3 +130,47 @@ def test_outcomes_increment_the_privacy_safe_reconciliation_counter(monkeypatch)
 
     outcomes = [call.kwargs['outcome'] for call in metric.labels.call_args_list]
     assert outcomes == ['migrated', 'completed', 'skipped']
+
+
+def test_sweep_persists_and_rotates_the_cursor_across_invocations(monkeypatch):
+    """The service threads the persisted cursor: it resumes from the saved
+    position and wraps (saves None) once a window is exhausted, so repeated
+    bounded sweeps guarantee eventual discovery."""
+    monkeypatch.setattr(service.jobs_db, 'get_stale_processing_orphan_after', lambda: timedelta(seconds=900))
+    cursor_log: list = []
+
+    def _fake_get_cursor(**kwargs):
+        return cursor_log[-1] if cursor_log else None
+
+    def _fake_save_cursor(path, **kwargs):
+        cursor_log.append(path)
+
+    monkeypatch.setattr(service.jobs_db, 'get_stale_processing_sweep_cursor', _fake_get_cursor)
+    monkeypatch.setattr(service.jobs_db, 'save_stale_processing_sweep_cursor', _fake_save_cursor)
+    windows = [
+        {'candidates': [], 'resume_after_path': 'users/u/conversations/a', 'exhausted': False},
+        {'candidates': [], 'resume_after_path': 'users/u/conversations/b', 'exhausted': False},
+        {'candidates': [_candidate('uid', 'later-orphan')], 'resume_after_path': None, 'exhausted': True},
+    ]
+    call = {'i': 0}
+
+    def _fake_candidates(**kwargs):
+        window = windows[call['i']]
+        call['i'] += 1
+        return window
+
+    monkeypatch.setattr(service.jobs_db, 'get_stale_processing_orphan_candidates', _fake_candidates)
+    complete = MagicMock(return_value=True)
+    monkeypatch.setattr(service.jobs_db, 'complete_orphan_conversation', complete)
+
+    # First sweep resumes from None (nothing persisted), advances the cursor.
+    service.reconcile_stale_processing_conversations()
+    # Second sweep resumes from the persisted cursor, advances again.
+    service.reconcile_stale_processing_conversations()
+    # Third sweep wraps (exhausted) and recovers the later orphan.
+    result = service.reconcile_stale_processing_conversations()
+
+    assert cursor_log == ['users/u/conversations/a', 'users/u/conversations/b', None]
+    assert result['completed'] == 1
+    # Each discovery call received the cursor persisted by the previous sweep.
+    assert call['i'] == 3

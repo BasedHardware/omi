@@ -10,6 +10,7 @@ import pytest
 from google.api_core.exceptions import AlreadyExists
 
 import database.conversations as conversations_db
+from database import conversation_finalization_jobs as jobs_db
 from models.conversation_enums import ConversationStatus
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.merge_conversations import validate_merge_compatibility
@@ -316,3 +317,46 @@ def test_merge_rejects_processing_conversations():
 
     assert (is_valid, warning_message) == (False, None)
     assert error_message == 'Conversation processing is not ready (status: processing). Wait for it to complete.'
+
+
+def test_processing_admission_guard_renews_the_lease_while_the_processor_is_alive(monkeypatch):
+    """A live synchronous processor must keep its admission lease fresh so the
+    crash-orphan sweep can never mistake it for a stranded row (#10461 ownership
+    fence). The guard renews the lease on a heartbeat while the guarded block runs.
+    """
+    renewed = threading.Event()
+    renew_calls: list[tuple[str, str]] = []
+
+    def fake_renew(uid, conversation_id):
+        renew_calls.append((uid, conversation_id))
+        renewed.set()
+        return True
+
+    monkeypatch.setattr(jobs_db, 'renew_processing_lease', fake_renew)
+    monkeypatch.setattr(lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
+
+    with lifecycle_service.processing_admission_guard('uid', 'conversation'):
+        # Block inside the guarded block until the heartbeat has renewed at least once.
+        assert renewed.wait(timeout=5.0)
+
+    assert renew_calls
+
+
+def test_processing_admission_guard_stops_the_heartbeat_when_the_processor_finishes(monkeypatch):
+    """On exit the guard must stop the heartbeat so a finished processor releases its lease."""
+    renew_calls: list[tuple[str, str]] = []
+    stop_seen = threading.Event()
+
+    def fake_renew(uid, conversation_id):
+        renew_calls.append((uid, conversation_id))
+        return True
+
+    monkeypatch.setattr(jobs_db, 'renew_processing_lease', fake_renew)
+    monkeypatch.setattr(lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
+
+    with lifecycle_service.processing_admission_guard('uid', 'conversation'):
+        pass  # the guarded block finishes immediately; the heartbeat should not hot-loop
+    # After exit, allow a brief window for any in-flight renewal to settle, then snapshot.
+    snapshot_after_exit = len(renew_calls)
+    stop_seen.wait(timeout=0.05)
+    assert len(renew_calls) == snapshot_after_exit
