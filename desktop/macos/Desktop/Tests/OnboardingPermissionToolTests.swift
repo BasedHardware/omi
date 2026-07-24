@@ -59,16 +59,16 @@ final class OnboardingPermissionToolTests: XCTestCase {
   }
 
   @MainActor
-  func testRepeatedSystemAudioPollingCancelsTheOlderConsentTask() {
+  func testRepeatedSystemAudioPollingCancelsTheOlderConsentTask() throws {
     let model = SBOnboardingModel(
       appState: AppState(),
       chatProvider: ChatProvider(),
       onComplete: nil)
 
     model.pollPermission("system_audio")
-    let first = model.pollTasks["system_audio"]!
+    let first = try XCTUnwrap(model.pollTasks["system_audio"])
     model.pollPermission("system_audio")
-    let second = model.pollTasks["system_audio"]!
+    let second = try XCTUnwrap(model.pollTasks["system_audio"])
     defer { second.cancel() }
 
     XCTAssertTrue(first.isCancelled)
