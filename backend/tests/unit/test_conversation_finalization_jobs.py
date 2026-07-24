@@ -754,3 +754,243 @@ def test_replay_candidates_use_a_server_side_bounded_due_query():
     assert collection.where_calls == [('reconcile_after_at', '<=')]
     assert collection.limit_value == 100
     assert candidates == [{'status': 'queued', 'job_id': 'queued-job'}]
+
+
+# ---------------------------------------------------------------------------
+# Stale bare-processing orphan recovery (#10461 revision): authoritative
+# server-owned admission fence, bounded cursor pagination, and legacy migration.
+# ---------------------------------------------------------------------------
+
+
+class _OrphanSnapshot:
+    def __init__(self, uid: str, conversation_id: str, data: dict):
+        self.id = conversation_id
+        self._data = dict(data)
+        self.reference = SimpleNamespace(path=f'users/{uid}/conversations/{conversation_id}')
+
+    def to_dict(self) -> dict:
+        return dict(self._data)
+
+
+def _processing_snapshot(
+    uid: str,
+    conversation_id: str,
+    *,
+    admitted_at: datetime | None,
+    deferred: bool = False,
+    finalization_job_id: str | None = None,
+    created_at: datetime | None = None,
+) -> _OrphanSnapshot:
+    data: dict = {'status': 'processing', 'created_at': created_at or admitted_at}
+    if admitted_at is not None:
+        data['processing_admitted_at'] = admitted_at
+    if deferred:
+        data['deferred'] = True
+    if finalization_job_id:
+        data['finalization_job_id'] = finalization_job_id
+    return _OrphanSnapshot(uid, conversation_id, data)
+
+
+class _OrphanQuery:
+    """Fake collection-group query: single equality + cursor pagination."""
+
+    def __init__(self, snapshots: list[_OrphanSnapshot]):
+        self._all = snapshots
+        self.where_count = 0
+        self.where_filters: list[Any] = []
+        self.order_by_count = 0
+        self.limit_calls: list[int] = []
+        self.start_after_calls: list[_OrphanSnapshot] = []
+        self._limit: int | None = None
+        self._after: _OrphanSnapshot | None = None
+
+    def where(self, *args, filter=None, **kwargs):
+        self.where_count += 1
+        self.where_filters.append(filter)
+        return self
+
+    def order_by(self, *args, **kwargs):
+        self.order_by_count += 1
+        return self
+
+    def limit(self, value: int):
+        self.limit_calls.append(value)
+        self._limit = value
+        return self
+
+    def start_after(self, snapshot):
+        self.start_after_calls.append(snapshot)
+        self._after = snapshot
+        return self
+
+    def stream(self):
+        rows = self._all
+        if self._after is not None:
+            idx = rows.index(self._after)
+            rows = rows[idx + 1 :]
+        if self._limit is not None:
+            rows = rows[: self._limit]
+        return list(rows)
+
+
+class _OrphanClient:
+    def __init__(self, snapshots: list[_OrphanSnapshot]):
+        self._snapshots = snapshots
+        self.queries: list[_OrphanQuery] = []
+        self.collection_group_calls: list[str] = []
+        self.collection_calls: list[str] = []
+
+    def collection_group(self, name: str) -> _OrphanQuery:
+        self.collection_group_calls.append(name)
+        query = _OrphanQuery(self._snapshots)
+        self.queries.append(query)
+        return query
+
+    def collection(self, name: str):
+        self.collection_calls.append(name)
+        raise AssertionError('stale orphan sweep must not use a collection-scoped query')
+
+
+def test_stale_orphan_query_is_a_single_field_collection_group_equality():
+    """A single-equality collection-group query rides Firestore's automatic
+    single-field index: no composite index, no collection-scoped entry."""
+    now = _now()
+    client = _OrphanClient([_processing_snapshot('uid', 'eligible', admitted_at=now - timedelta(hours=1))])
+
+    jobs.get_stale_processing_orphan_candidates(stale_after=timedelta(seconds=900), firestore_client=client)
+
+    assert client.collection_group_calls == ['conversations']
+    assert client.collection_calls == []
+    assert len(client.queries) >= 1
+    assert all(query.where_count == 1 for query in client.queries)
+    assert all(query.order_by_count == 0 for query in client.queries)
+
+
+def test_orphan_stale_after_is_clamped_to_a_safe_floor_and_ceiling(monkeypatch):
+    """The recovery window is bounded so an operator cannot defer recovery
+    unbounded nor tighten it below any plausible live synchronous run."""
+    assert jobs.get_stale_processing_orphan_after() == timedelta(seconds=900)
+    monkeypatch.setenv('LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS', '10')
+    assert jobs.get_stale_processing_orphan_after() == timedelta(seconds=300)
+    monkeypatch.setenv('LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS', '9999999')
+    assert jobs.get_stale_processing_orphan_after() == timedelta(seconds=86_400)
+    monkeypatch.setenv('LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS', 'not-a-number')
+    assert jobs.get_stale_processing_orphan_after() == timedelta(seconds=900)
+
+
+def test_stale_orphan_age_authority_is_processing_admitted_at_not_created_at(monkeypatch):
+    """Only the server-owned admission stamp bounds age; caller-controlled
+    created_at is never the authority, and legacy rows migrate rather than
+    complete."""
+    now = _now()
+    monkeypatch.setattr(jobs, '_now', lambda: now)
+    stale_after = timedelta(seconds=900)
+    snapshots = [
+        # Fresh admission, ancient caller-controlled created_at: must NOT act.
+        _processing_snapshot(
+            'uid',
+            'fresh-admit-old-create',
+            admitted_at=now - timedelta(seconds=10),
+            created_at=now - timedelta(days=30),
+        ),
+        # Aged admission, fresh created_at: the genuine orphan — must act.
+        _processing_snapshot(
+            'uid',
+            'aged-admit-fresh-create',
+            admitted_at=now - timedelta(seconds=1000),
+            created_at=now - timedelta(seconds=5),
+        ),
+        # Legacy row with no admission stamp: migrate, never complete on sight.
+        _processing_snapshot('uid', 'legacy-no-admit', admitted_at=None, created_at=now - timedelta(days=30)),
+    ]
+    client = _OrphanClient(snapshots)
+
+    candidates = jobs.get_stale_processing_orphan_candidates(stale_after=stale_after, firestore_client=client)
+
+    by_id = {candidate['conversation_id']: candidate for candidate in candidates}
+    assert 'fresh-admit-old-create' not in by_id
+    eligible = by_id['aged-admit-fresh-create']
+    assert eligible['legacy'] is False
+    assert eligible['processing_admitted_at'] == now - timedelta(seconds=1000)
+    legacy = by_id['legacy-no-admit']
+    assert legacy['legacy'] is True
+    assert legacy['processing_admitted_at'] is None
+
+
+def test_stale_orphan_candidates_exclude_deferred_and_durable_job_rows():
+    now = _now()
+    aged = now - timedelta(seconds=1000)
+    snapshots = [
+        _processing_snapshot('uid', 'deferred', admitted_at=aged, deferred=True),
+        _processing_snapshot('uid', 'durable', admitted_at=aged, finalization_job_id='job-x'),
+        _processing_snapshot('uid', 'orphan', admitted_at=aged),
+    ]
+    client = _OrphanClient(snapshots)
+
+    candidates = jobs.get_stale_processing_orphan_candidates(
+        stale_after=timedelta(seconds=900), firestore_client=client
+    )
+
+    assert [candidate['conversation_id'] for candidate in candidates] == ['orphan']
+
+
+def test_stale_orphan_candidates_page_past_excluded_rows_to_reach_a_later_orphan():
+    """A stable first page of excluded rows cannot hide a later eligible orphan."""
+    now = _now()
+    aged = now - timedelta(seconds=1000)
+    snapshots = [_processing_snapshot('uid', f'deferred-{i}', admitted_at=aged, deferred=True) for i in range(120)]
+    snapshots.append(_processing_snapshot('uid', 'later-orphan', admitted_at=aged))
+    client = _OrphanClient(snapshots)
+
+    candidates = jobs.get_stale_processing_orphan_candidates(
+        stale_after=timedelta(seconds=900), firestore_client=client
+    )
+
+    assert [candidate['conversation_id'] for candidate in candidates] == ['later-orphan']
+    # The first page was entirely excluded, so at least two query pages were issued.
+    assert len(client.queries) >= 2
+    assert client.queries[1].start_after_calls
+
+
+def test_stale_orphan_candidates_bound_total_scan():
+    """The per-sweep scan bound prevents an unbounded walk under backlog."""
+    now = _now()
+    aged = now - timedelta(seconds=1000)
+    snapshots = [_processing_snapshot('uid', f'deferred-{i}', admitted_at=aged, deferred=True) for i in range(50)]
+    snapshots.append(_processing_snapshot('uid', 'later-orphan', admitted_at=aged))
+
+    bounded = _OrphanClient(snapshots)
+    candidates = jobs.get_stale_processing_orphan_candidates(
+        stale_after=timedelta(seconds=900), max_scan=10, firestore_client=bounded
+    )
+    # The bound stops scanning before the orphan at index 50 is reached.
+    assert candidates == []
+
+    unbounded = _OrphanClient(snapshots)
+    recovered = jobs.get_stale_processing_orphan_candidates(
+        stale_after=timedelta(seconds=900), max_scan=10_000, firestore_client=unbounded
+    )
+    # The same population recovers the orphan once the bound is lifted.
+    assert [candidate['conversation_id'] for candidate in recovered] == ['later-orphan']
+
+
+def test_stamp_processing_admission_if_absent_only_stamps_a_legacy_processing_row():
+    transaction = _Transaction()
+    now = _now()
+    legacy = _Ref('legacy', {'status': 'processing', 'created_at': now - timedelta(days=1)})
+
+    stamped = jobs._stamp_processing_admission_if_absent_txn(transaction, legacy, now)
+
+    assert stamped is True
+    assert transaction.updates == [(legacy, {'processing_admitted_at': now})]
+
+
+def test_stamp_processing_admission_if_absent_is_idempotent_and_fences_non_processing():
+    transaction = _Transaction()
+    now = _now()
+    already = _Ref('already', {'status': 'processing', 'processing_admitted_at': now - timedelta(hours=2)})
+    terminal = _Ref('terminal', {'status': 'completed'})
+
+    assert jobs._stamp_processing_admission_if_absent_txn(transaction, already, now) is False
+    assert jobs._stamp_processing_admission_if_absent_txn(transaction, terminal, now) is False
+    assert transaction.updates == []
