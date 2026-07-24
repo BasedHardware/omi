@@ -1792,20 +1792,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get lovingOmi => 'Omi را دوست داشتید؟';
 
   @override
-  String get leaveReviewIos =>
-      'با گذاشتن نظری در App Store، کمک کنید ما به مردم بیشتری برسیم. بازخوردتان برای ما بسیار مهم است!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'با گذاشتن نظری در Google Play Store، کمک کنید ما به مردم بیشتری برسیم. بازخوردتان برای ما بسیار مهم است!';
-
-  @override
-  String get rateOnAppStore => 'در App Store امتیاز دهید';
-
-  @override
-  String get rateOnGooglePlay => 'در Google Play امتیاز دهید';
-
-  @override
   String get maybeLater => 'شاید بعداً';
 
   @override

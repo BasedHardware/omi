@@ -699,6 +699,14 @@ final class UpdaterViewModel: ObservableObject {
     didSet { UpdaterViewModel._isUpdateInProgress = updateSessionInProgress }
   }
 
+  /// Whether a user can start a new manual update check from Settings.
+  var canManuallyCheckForUpdates: Bool {
+    Self.allowsManualCheck(
+      canCheckForUpdates: canCheckForUpdates,
+      updateSessionInProgress: updateSessionInProgress
+    )
+  }
+
   /// Nonisolated snapshot for cross-actor reads
   private nonisolated(unsafe) static var _isUpdateInProgress: Bool = false
 
@@ -798,6 +806,13 @@ final class UpdaterViewModel: ObservableObject {
   /// Quick check if Sparkle is mid-update (safe to call from anywhere)
   nonisolated static var isUpdateInProgress: Bool {
     _isUpdateInProgress
+  }
+
+  nonisolated static func allowsManualCheck(
+    canCheckForUpdates: Bool,
+    updateSessionInProgress: Bool
+  ) -> Bool {
+    canCheckForUpdates && !updateSessionInProgress
   }
 
   /// Manually check for updates

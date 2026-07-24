@@ -1793,20 +1793,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get lovingOmi => 'Omi ಪಸಂದ ಮಾಡುತ್ತಿದ್ದೀರೆ?';
 
   @override
-  String get leaveReviewIos =>
-      'App Store ನಲ್ಲಿ ವಿಮರ್ಶೆ ಬಿಡುವುದರ ಮೂಲಕ ನಮಗೆ ಹೆಚ್ಚಿನ ಜನರ ಬಳಿ ತಲುಪಲು ಸಾಹಾಯ್ಯ ಮಾಡಿ. ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆ ನಮಗೆ ಬೇಸರ ಬರುತ್ತದೆ!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Google Play Store ನಲ್ಲಿ ವಿಮರ್ಶೆ ಬಿಡುವುದರ ಮೂಲಕ ನಮಗೆ ಹೆಚ್ಚಿನ ಜನರ ಬಳಿ ತಲುಪಲು ಸಾಹಾಯ್ಯ ಮಾಡಿ. ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆ ನಮಗೆ ಬೇಸರ ಬರುತ್ತದೆ!';
-
-  @override
-  String get rateOnAppStore => 'App Store ನಲ್ಲಿ ರೇಟ್ ಮಾಡಿ';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play ನಲ್ಲಿ ರೇಟ್ ಮಾಡಿ';
-
-  @override
   String get maybeLater => 'ಬಹುಶಃ ನಂತರ';
 
   @override

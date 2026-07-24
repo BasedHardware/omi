@@ -1796,20 +1796,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get lovingOmi => 'Omi ని ఇష్టపడుతున్నారా?';
 
   @override
-  String get leaveReviewIos =>
-      'App Store లో సమీక్ష ఇవ్వడం ద్వారా మాకు మరిన్ని ప్రజలకు చేరుకోవడానికి సహాయం చేయండి. మీ ఫీడ్‌బ్యాక్ మాకు ప్రపంచానికి అర్థమైనది!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Google Play Store లో సమీక్ష ఇవ్వడం ద్వారా మాకు మరిన్ని ప్రజలకు చేరుకోవడానికి సహాయం చేయండి. మీ ఫీడ్‌బ్యాక్ మాకు ప్రపంచానికి అర్థమైనది!';
-
-  @override
-  String get rateOnAppStore => 'App Store లో రేట్ చేయండి';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play లో రేట్ చేయండి';
-
-  @override
   String get maybeLater => 'బహుశా తర్వాత';
 
   @override

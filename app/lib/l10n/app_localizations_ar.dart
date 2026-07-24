@@ -1777,20 +1777,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get lovingOmi => 'تحب Omi؟';
 
   @override
-  String get leaveReviewIos =>
-      'ساعدنا في الوصول إلى المزيد من الأشخاص من خلال ترك تقييم في App Store. ملاحظاتك تعني لنا الكثير!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'ساعدنا في الوصول إلى المزيد من الأشخاص من خلال ترك تقييم في Google Play Store. ملاحظاتك تعني لنا الكثير!';
-
-  @override
-  String get rateOnAppStore => 'التقييم على App Store';
-
-  @override
-  String get rateOnGooglePlay => 'التقييم على Google Play';
-
-  @override
   String get maybeLater => 'ربما لاحقاً';
 
   @override

@@ -1784,18 +1784,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get lovingOmi => 'Elsker du Omi?';
 
   @override
-  String get leaveReviewIos => 'Efterlad en anmeldelse på App Store';
-
-  @override
-  String get leaveReviewAndroid => 'Efterlad en anmeldelse på Google Play';
-
-  @override
-  String get rateOnAppStore => 'Bedøm på App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Bedøm på Google Play';
-
-  @override
   String get maybeLater => 'Måske senere';
 
   @override

@@ -1790,20 +1790,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get lovingOmi => 'Pidätkö Omista?';
 
   @override
-  String get leaveReviewIos =>
-      'Auta meitä tavoittamaan lisää ihmisiä jättämällä arvostelu App Storeen. Palautteesi on meille tärkeää!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Auta meitä tavoittamaan lisää ihmisiä jättämällä arvostelu Google Play -kauppaan. Palautteesi on meille tärkeää!';
-
-  @override
-  String get rateOnAppStore => 'Arvostele App Storessa';
-
-  @override
-  String get rateOnGooglePlay => 'Arvostele Google Playssa';
-
-  @override
   String get maybeLater => 'Ehkä myöhemmin';
 
   @override

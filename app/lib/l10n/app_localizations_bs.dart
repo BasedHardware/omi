@@ -1791,20 +1791,6 @@ class AppLocalizationsBs extends AppLocalizations {
   String get lovingOmi => 'Vam se sviđa Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Pomozite nam da dosegnemo više ljudi ostavljanjem recenzije u App Store-u. Vaša povratna informacija znači nam sve!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Pomozite nam da dosegnemo više ljudi ostavljanjem recenzije u Google Play Store-u. Vaša povratna informacija znači nam sve!';
-
-  @override
-  String get rateOnAppStore => 'Oceni u App Store-u';
-
-  @override
-  String get rateOnGooglePlay => 'Oceni na Google Play';
-
-  @override
   String get maybeLater => 'Možda kasnije';
 
   @override

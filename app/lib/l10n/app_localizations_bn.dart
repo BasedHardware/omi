@@ -1790,20 +1790,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get lovingOmi => 'Omi ভালোবাসছেন?';
 
   @override
-  String get leaveReviewIos =>
-      'অ্যাপ স্টোরে পর্যালোচনা রেখে আমাদের আরও মানুষের কাছে পৌঁছাতে সাহায্য করুন। আপনার প্রতিক্রিয়া আমাদের কাছে বিশ্ব মানে!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Google Play স্টোরে পর্যালোচনা রেখে আমাদের আরও মানুষের কাছে পৌঁছাতে সাহায্য করুন। আপনার প্রতিক্রিয়া আমাদের কাছে বিশ্ব মানে!';
-
-  @override
-  String get rateOnAppStore => 'অ্যাপ স্টোরে রেটিং দিন';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play তে রেটিং দিন';
-
-  @override
   String get maybeLater => 'হয়তো পরে';
 
   @override

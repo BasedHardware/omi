@@ -1793,20 +1793,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get lovingOmi => 'Älskar du Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Hjälp oss att nå fler människor genom att lämna en recension i App Store. Din återkoppling betyder världen för oss!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Hjälp oss att nå fler människor genom att lämna en recension i Google Play Store. Din återkoppling betyder världen för oss!';
-
-  @override
-  String get rateOnAppStore => 'Betygsätt i App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Betygsätt i Google Play';
-
-  @override
   String get maybeLater => 'Kanske senare';
 
   @override

@@ -1699,22 +1699,6 @@
     "@lovingOmi": {
         "description": "Title for the app review prompt"
     },
-    "leaveReviewIos": "Tumulong sa amin na maabot ang mas maraming tao sa pamamagitan ng pag-iwan ng review sa App Store. Ang iyong feedback ay napakahalagang para sa amin!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Tumulong sa amin na maabot ang mas maraming tao sa pamamagitan ng pag-iwan ng review sa Google Play Store. Ang iyong feedback ay napakahalagang para sa amin!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "Mag-rate sa App Store",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Mag-rate sa Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
-    },
     "maybeLater": "Siguro mamaya",
     "@maybeLater": {
         "description": "Button text to defer action"

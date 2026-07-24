@@ -1761,18 +1761,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get lovingOmi => 'Omi가 마음에 드시나요?';
 
   @override
-  String get leaveReviewIos => 'App Store에 리뷰를 남겨 더 많은 사람들에게 다가가도록 도와주세요. 귀하의 피드백은 저희에게 큰 의미가 있습니다!';
-
-  @override
-  String get leaveReviewAndroid => 'Google Play 스토어에 리뷰를 남겨 더 많은 사람들에게 다가가도록 도와주세요. 귀하의 피드백은 저희에게 큰 의미가 있습니다!';
-
-  @override
-  String get rateOnAppStore => 'App Store에서 평가하기';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play에서 평가하기';
-
-  @override
   String get maybeLater => '나중에';
 
   @override

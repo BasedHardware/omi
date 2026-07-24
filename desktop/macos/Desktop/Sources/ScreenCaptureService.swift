@@ -130,27 +130,20 @@ final class ScreenCaptureService: Sendable {
 
   /// Open System Preferences to Screen Recording settings
   static func openScreenRecordingPreferences() {
-    Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+    guard
+      let url = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+    else { return }
 
-    if let url = URL(
-      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
-    {
-      let opened = NSWorkspace.shared.open(url)
-      if opened {
+    Task { @MainActor in
+      do {
+        let settingsApp = try await NSWorkspace.shared.open(url, configuration: .init())
         log("Opened Screen Recording preferences via URL scheme")
-        // Bring System Settings to front after a brief moment to ensure it's visible
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-          if let settingsApp = NSRunningApplication.runningApplications(
-            withBundleIdentifier: "com.apple.systempreferences"
-          ).first
-            ?? NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Preferences").first
-          {
-            settingsApp.activate()
-          }
-        }
-      } else {
+        settingsApp.activate()
+        await PermissionDragGuidance.presentDragToGrantHelper(
+          settingsPID: settingsApp.processIdentifier)
+      } catch {
         log("Failed to open Screen Recording preferences via URL scheme — trying fallback")
-        // Fallback: open System Settings directly
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:")!)
       }
     }
@@ -247,10 +240,6 @@ final class ScreenCaptureService: Sendable {
       Task {
         _ = await requestScreenCaptureKitPermission()
       }
-    }
-
-    if !CGPreflightScreenCaptureAccess() {
-      Task { await PermissionDragGuidance.presentDragToGrantHelper() }
     }
 
     // Note: callers are responsible for opening System Settings

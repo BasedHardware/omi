@@ -1775,18 +1775,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get lovingOmi => 'Omi पसंद आ रहा है?';
 
   @override
-  String get leaveReviewIos => 'ऐप स्टोर पर समीक्षा छोड़ कर अधिक लोगों तक पहुँचने में हमारी मदद करें।';
-
-  @override
-  String get leaveReviewAndroid => 'Google Play पर समीक्षा छोड़ कर अधिक लोगों तक पहुँचने में हमारी मदद करें।';
-
-  @override
-  String get rateOnAppStore => 'ऐप स्टोर पर रेट करें';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play पर रेट करें';
-
-  @override
   String get maybeLater => 'शायद बाद में';
 
   @override

@@ -1796,20 +1796,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get lovingOmi => 'Вам се допаѓа Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Помогнете ни да дојдеме до повеќе луѓе со оставување рецензија во App Store. Вашата повратна информација ни значи многу!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Помогнете ни да дојдеме до повеќе луѓе со оставување рецензија во Google Play Store. Вашата повратна информација ни значи многу!';
-
-  @override
-  String get rateOnAppStore => 'Оценете во App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Оценете на Google Play';
-
-  @override
   String get maybeLater => 'Можеби подоцна';
 
   @override

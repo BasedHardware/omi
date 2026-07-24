@@ -1796,20 +1796,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get lovingOmi => 'Menyukai Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Bantu kami menjangkau lebih banyak orang dengan meninggalkan ulasan di App Store. Masukan Anda sangat berarti bagi kami!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Bantu kami menjangkau lebih banyak orang dengan meninggalkan ulasan di Google Play Store. Masukan Anda sangat berarti bagi kami!';
-
-  @override
-  String get rateOnAppStore => 'Beri Nilai di App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Beri Nilai di Google Play';
-
-  @override
   String get maybeLater => 'Mungkin nanti';
 
   @override

@@ -1800,20 +1800,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get lovingOmi => 'Vă place Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Ajută-ne să ajungem la mai mulți oameni lăsând o recenzie în App Store. Feedback-ul tău înseamnă enorm pentru noi!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Ajutați-ne să ajungem la mai multe persoane lăsând o recenzie în Google Play Store. Feedback-ul dvs. înseamnă enorm pentru noi!';
-
-  @override
-  String get rateOnAppStore => 'Evaluează în App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Evaluează pe Google Play';
-
-  @override
   String get maybeLater => 'Poate mai târziu';
 
   @override

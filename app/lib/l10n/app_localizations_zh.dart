@@ -1759,18 +1759,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lovingOmi => '喜欢 Omi 吗？';
 
   @override
-  String get leaveReviewIos => '在 App Store 留下评论，帮助我们。';
-
-  @override
-  String get leaveReviewAndroid => '在 Google Play 留下评论，帮助我们。';
-
-  @override
-  String get rateOnAppStore => '在 App Store 评价';
-
-  @override
-  String get rateOnGooglePlay => '在 Google Play 评价';
-
-  @override
   String get maybeLater => '以后再说';
 
   @override

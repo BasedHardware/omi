@@ -1795,20 +1795,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get lovingOmi => 'Ben je blij met Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Help ons meer mensen te bereiken door een review achter te laten in de App Store. Je feedback betekent enorm veel voor ons!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Help ons meer mensen te bereiken door een review achter te laten in de Google Play Store. Je feedback betekent enorm veel voor ons!';
-
-  @override
-  String get rateOnAppStore => 'Beoordelen in App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Beoordelen in Google Play';
-
-  @override
   String get maybeLater => 'Misschien later';
 
   @override

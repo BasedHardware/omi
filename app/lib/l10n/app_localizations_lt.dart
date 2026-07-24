@@ -1790,20 +1790,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get lovingOmi => 'Patinka Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Padėkite mums pasiekti daugiau žmonių palikdami atsiliepimą App Store. Jūsų atsiliepimas mums reiškia labai daug!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Padėkite mums pasiekti daugiau žmonių palikdami atsiliepimą „Google Play\" parduotuvėje. Jūsų atsiliepimas mums reiškia labai daug!';
-
-  @override
-  String get rateOnAppStore => 'Įvertinti App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Įvertinti „Google Play\"';
-
-  @override
   String get maybeLater => 'Gal vėliau';
 
   @override

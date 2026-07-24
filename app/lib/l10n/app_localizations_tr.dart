@@ -1796,20 +1796,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get lovingOmi => 'Omi\'yi Beğeniyor musunuz?';
 
   @override
-  String get leaveReviewIos =>
-      'App Store\'da bir yorum bırakarak daha fazla insana ulaşmamıza yardımcı olun. Geri bildiriminiz bizim için çok değerli!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Google Play Store\'da bir yorum bırakarak daha fazla insana ulaşmamıza yardımcı olun. Geri bildiriminiz bizim için çok değerli!';
-
-  @override
-  String get rateOnAppStore => 'App Store\'da Değerlendir';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play\'de Değerlendir';
-
-  @override
   String get maybeLater => 'Belki sonra';
 
   @override

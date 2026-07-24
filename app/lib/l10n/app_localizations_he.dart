@@ -1779,19 +1779,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get lovingOmi => 'אוהב את Omi?';
 
   @override
-  String get leaveReviewIos => 'עזור לנו להגיע ליותר אנשים על ידי השארת ביקורת ב-App Store. המשוב שלך אומר לנו הרבה!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'עזור לנו להגיע ליותר אנשים על ידי השארת ביקורת ב-Google Play Store. המשוב שלך אומר לנו הרבה!';
-
-  @override
-  String get rateOnAppStore => 'דרג ב-App Store';
-
-  @override
-  String get rateOnGooglePlay => 'דרג ב-Google Play';
-
-  @override
   String get maybeLater => 'אולי מאוחר יותר';
 
   @override

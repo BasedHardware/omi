@@ -1782,20 +1782,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get lovingOmi => 'ชอบ Omi ไหม?';
 
   @override
-  String get leaveReviewIos =>
-      'ช่วยเราเข้าถึงคนมากขึ้นด้วยการรีวิวใน App Store ความคิดเห็นของคุณมีความหมายมากสำหรับเรา!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'ช่วยเราเข้าถึงคนมากขึ้นด้วยการรีวิวใน Google Play Store ความคิดเห็นของคุณมีความหมายมากสำหรับเรา!';
-
-  @override
-  String get rateOnAppStore => 'ให้คะแนนบน App Store';
-
-  @override
-  String get rateOnGooglePlay => 'ให้คะแนนบน Google Play';
-
-  @override
   String get maybeLater => 'ไว้ทีหลัง';
 
   @override
