@@ -56,6 +56,16 @@ async def _sync_to_cloud_service(
     uid: str, app_key: str, integration: Dict[str, Any], action_item: Dict[str, Any]
 ) -> Dict[str, Any]:
     """Create task in external service using shared task integration ops."""
+    # A retried POST /v1/action-items dedups the Firestore document by idempotency key but still
+    # submits auto-sync, and create_task_internal has no idempotency key of its own. Re-read the
+    # persisted export state and skip the external call when the item was already exported, so a
+    # retry does not create a second task in the user's Todoist/Asana/ClickUp/Google Tasks.
+    item_id = action_item.get("id")
+    if item_id:
+        existing = await run_blocking(db_executor, action_items_db.get_action_item, uid, item_id)
+        if existing and existing.get("exported"):
+            return {"synced": True, "platform": app_key, "reason": "already_exported"}
+
     async with httpx.AsyncClient(timeout=10.0) as client:
         result = await create_task_internal(
             uid=uid,
