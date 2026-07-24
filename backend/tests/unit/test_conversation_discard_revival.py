@@ -1,15 +1,14 @@
-"""A discard is the system's verdict about content, not a state to defend.
+"""Only deletion refuses a processor's write.
 
-``discarded`` is set only by the system deciding a conversation held nothing —
-there is no endpoint through which a user discards one; users delete, which is a
-separate field. Every processor re-derives that verdict from the content in
-front of it, so a write cannot resurrect something still empty.
+Lifecycle state does not: a discard is the system's own verdict that a
+conversation held nothing, and a status records which generation ran. Fencing on
+either stranded conversations a later sync had filled with speech — transcribed,
+untitled, invisible to their owner, and beyond the in-app reprocess meant to
+recover them, which hit the same fence — to prevent races never observed in
+production.
 
-Fencing writes on it stranded conversations a later sync had filled with speech:
-transcribed, untitled, invisible to their owner, and beyond the reach of the
-in-app reprocess that exists to recover them, because it hit the same fence.
-
-The guards that remain are about generations, not verdicts.
+Deletion is different in kind. It is a decision its owner made, and a merge
+write to a missing document would create it.
 """
 
 import os
@@ -75,7 +74,6 @@ def _persist(monkeypatch, existing):
             # Present so the protection-level decorator skips its user lookup.
             'data_protection_level': 'standard',
         },
-        expected_statuses={'processing', 'merging', 'completed'},
     )
     return persisted, ref
 
@@ -88,24 +86,18 @@ def test_a_discarded_conversation_can_be_rewritten(monkeypatch):
     assert ref.written['discarded'] is False, 'the write carries the fresh verdict, which is what unhides it'
 
 
-def test_a_stale_generation_is_still_fenced(monkeypatch):
-    # The status guard is what fences a stale processor, and it is untouched:
-    # a generation that already reached a terminal state stays owned by it.
-    persisted, ref = _persist(monkeypatch, {'discarded': False, 'status': 'failed'})
-
-    assert persisted is False
-    assert ref.written is None
-
-
-def test_a_stale_generation_is_fenced_even_when_discarded(monkeypatch):
-    persisted, ref = _persist(monkeypatch, {'discarded': True, 'status': 'failed'})
-
-    assert persisted is False
-    assert ref.written is None
-
-
 def test_a_deleted_conversation_is_not_recreated(monkeypatch):
     persisted, ref = _persist(monkeypatch, None)
 
     assert persisted is False
     assert ref.written is None
+
+
+def test_a_dead_lettered_conversation_can_be_rewritten(monkeypatch):
+    # A finalization that exhausted its attempts leaves the conversation failed
+    # and discarded. Fencing on either state made that terminal, so a later sync
+    # carrying the speech it was missing could never revive it.
+    persisted, ref = _persist(monkeypatch, {'discarded': True, 'status': 'failed'})
+
+    assert persisted is True
+    assert ref.written is not None
