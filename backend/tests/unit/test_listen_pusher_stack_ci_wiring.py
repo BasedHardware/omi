@@ -61,6 +61,15 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     # in the same Firestore emulator session, not left as a skipped pytest.
     run_sh = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'run.sh').read_text(encoding='utf-8')
     assert 'test_stale_processing_emulator_concurrency.py' in run_sh
+    # #10468 r5: CI's --state-dir (and any other runner argument) must route to
+    # the listen-pusher runner only, never leak into the pytest command after &&.
+    command_lines = [line for line in run_sh.splitlines() if line.lstrip().startswith('runner_command=')]
+    assert len(command_lines) == 1, 'run.sh must define a single runner_command'
+    command_line = command_lines[0]
+    runner_side = command_line.split('&&')[0]
+    pytest_side = command_line.split('&&', 1)[1]
+    assert '${runner_args}' in runner_side, 'runner_args must land on the runner side of &&'
+    assert 'runner_args' not in pytest_side, 'runner_args must not leak into the pytest command'
 
 
 def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:
