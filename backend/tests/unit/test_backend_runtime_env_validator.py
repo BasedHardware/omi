@@ -97,6 +97,15 @@ def with_sync_ledger_fence_mode(payload: str) -> str:
     )
 
 
+def with_listen_finalization_orphan_env(payload: str) -> str:
+    """Keep offline Cloud Run state fixtures aligned with the reliability recovery setting."""
+    return payload.replace(
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS", "value": "900"},',
+    )
+
+
 GOOGLE_OAUTH_SECRETS = '''\
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
@@ -104,7 +113,9 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
-        with_backend_pusher_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+        with_backend_pusher_env(
+            with_listen_finalization_orphan_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+        )
     )
     return re.sub(
         r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
