@@ -428,6 +428,66 @@ def test_fenced_completion_submits_no_derived_work(monkeypatch):
     assert observed_persistence == [False]
 
 
+def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch):
+    """#10468 r5: with defer_derived_effects=True, process_conversation persists
+    the result and hands back the entire derived-effect bundle as a deferred
+    runner, emitting zero side effects inline.  Only invoking the runner (after
+    the durable finalizer has transactionally claimed ownership) emits calendar,
+    usage/app, vector, action/goal, audio, webhook, and memory work.  A losing
+    claim that never invokes the runner is a no-side-effect outcome."""
+    input_conversation = MagicMock()
+    input_conversation.source = "omi"
+    input_conversation.get_person_ids.return_value = []
+
+    completed_conversation = MagicMock()
+    completed_conversation.id = "conversation-deferred"
+    completed_conversation.dict.return_value = {"id": "conversation-deferred", "status": "completed"}
+    completed_conversation.structured = None  # skip analytics counting
+    completed_conversation.apps_results = []
+    completed_conversation.suggested_summarization_apps = []
+    completed_conversation.private_cloud_sync_enabled = False
+    completed_conversation.folder_id = "existing-folder"  # skip folder assignment
+
+    persistence = MagicMock(return_value=True)
+    submit = MagicMock()
+    trigger_apps = MagicMock()
+    create_audio_files = MagicMock()
+    update_conversation = MagicMock()
+    extract_memories = MagicMock()
+    captured: list = []
+    monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed_conversation)
+    monkeypatch.setattr(process_conversation.lifecycle_service, "persist_processed_conversation", persistence)
+    monkeypatch.setattr(process_conversation, "submit_with_context", submit)
+    monkeypatch.setattr(process_conversation, "_trigger_apps", trigger_apps)
+    monkeypatch.setattr(process_conversation.conversations_db, "create_audio_files_from_chunks", create_audio_files)
+    monkeypatch.setattr(process_conversation.conversations_db, "update_conversation", update_conversation)
+    monkeypatch.setattr(process_conversation, "_extract_memories", extract_memories)
+
+    result = process_conversation.process_conversation(
+        "uid",
+        "en",
+        input_conversation,
+        defer_derived_effects=True,
+        derived_effects_observer=captured.append,
+    )
+
+    assert result is completed_conversation
+    persistence.assert_called_once()
+    # ZERO side effects emitted inline — the entire bundle is deferred.
+    submit.assert_not_called()
+    trigger_apps.assert_not_called()
+    create_audio_files.assert_not_called()
+    update_conversation.assert_not_called()
+    extract_memories.assert_not_called()
+    assert len(captured) == 1, "exactly one derived-effects runner must be captured"
+
+    # Invoking the runner (ownership proven) emits every derived effect.
+    captured[0]()
+    trigger_apps.assert_called_once()
+    assert submit.call_count >= 4  # vectors, memory, action items, goals, webhook
+
+
 def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch):
     new_request = CreateConversation(
         started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
