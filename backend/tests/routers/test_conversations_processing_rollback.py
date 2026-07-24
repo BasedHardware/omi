@@ -7,6 +7,7 @@ by the worker and lifecycle contracts.
 """
 
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -87,3 +88,43 @@ def test_rollback_error_does_not_mask_the_original_processing_exception(monkeypa
 
     with pytest.raises(RuntimeError, match='processor crashed'):
         conversations_router.process_in_progress_conversation(request=None, uid='uid1')
+
+
+def test_deferred_enrichment_renews_processing_lease_during_live_processing(monkeypatch):
+    """Lazy enrichment of a deferred conversation must keep its admission lease
+    fresh while process_conversation runs in the background thread (#10461
+    ownership fence for every live producer). Behavioral test through the actual
+    _enrich_deferred_conversation path, not the context manager."""
+    import threading
+
+    from database import conversation_finalization_jobs as jobs_db
+
+    lease_renewed = threading.Event()
+
+    def fake_renew(_uid, _conversation_id):
+        lease_renewed.set()
+        return True
+
+    monkeypatch.setattr(jobs_db, 'renew_processing_lease', fake_renew)
+    monkeypatch.setattr(lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
+
+    enrichment_done = threading.Event()
+
+    def blocking_process(_uid, _language, conversation, **kwargs):
+        assert lease_renewed.wait(timeout=5.0), 'lease not renewed during deferred enrichment'
+        enrichment_done.set()
+        return conversation
+
+    monkeypatch.setattr(conversations_router, 'process_conversation', blocking_process)
+    monkeypatch.setattr(conversations_router.conversations_db, 'update_conversation', MagicMock())
+
+    conv_obj = SimpleNamespace(id='deferred-conv-1', language='en', deferred=False)
+    monkeypatch.setattr(conversations_router, 'deserialize_conversation', lambda data: conv_obj)
+
+    conversations_router._enrich_deferred_conversation(
+        'uid1', {'id': 'deferred-conv-1', 'status': 'processing', 'deferred': True, 'language': 'en'}
+    )
+
+    # The enrichment runs in a background thread; wait for it to prove the lease was renewed.
+    assert enrichment_done.wait(timeout=10.0), 'deferred enrichment did not complete'
+    assert lease_renewed.is_set()

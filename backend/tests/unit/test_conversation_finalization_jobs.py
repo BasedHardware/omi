@@ -1153,3 +1153,42 @@ def test_renew_processing_lease_refreshes_only_a_live_processing_row():
     assert jobs._renew_processing_lease_txn(transaction, discarded, now) is False
     # Only the still-processing, non-discarded row was refreshed.
     assert transaction.updates == [(processing, {'processing_admitted_at': now})]
+
+
+def test_advance_cursor_succeeds_when_generation_matches():
+    """CAS cursor advance: a writer holding the current generation commits and bumps it."""
+    transaction = _Transaction()
+    ref = _Ref('cursor', {'resume_after_path': 'users/u/c/a', 'generation': 3})
+    now = _now()
+
+    result = jobs._advance_stale_processing_sweep_cursor_txn(transaction, ref, 3, 'users/u/c/b', now)
+
+    assert result is True
+    assert len(transaction.sets) == 1
+    assert transaction.sets[0][1]['resume_after_path'] == 'users/u/c/b'
+    assert transaction.sets[0][1]['generation'] == 4
+    assert transaction.sets[0][1]['updated_at'] == now
+
+
+def test_advance_cursor_fails_when_generation_changed():
+    """CAS cursor advance: a writer with a stale generation is fenced out — no rewind."""
+    transaction = _Transaction()
+    # Another pod already advanced the cursor to generation 5.
+    ref = _Ref('cursor', {'resume_after_path': 'users/u/c/x', 'generation': 5})
+
+    result = jobs._advance_stale_processing_sweep_cursor_txn(transaction, ref, 3, 'users/u/c/b', _now())
+
+    assert result is False
+    assert transaction.sets == []
+
+
+def test_advance_cursor_succeeds_on_first_write_when_doc_absent():
+    """First-ever cursor advance: absent doc is generation 0, expected 0 succeeds."""
+    transaction = _Transaction()
+    ref = _Ref('cursor', None)  # doc does not exist
+
+    result = jobs._advance_stale_processing_sweep_cursor_txn(transaction, ref, 0, 'users/u/c/first', _now())
+
+    assert result is True
+    assert transaction.sets[0][1]['generation'] == 1
+    assert transaction.sets[0][1]['resume_after_path'] == 'users/u/c/first'
