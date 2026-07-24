@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "harness": "omi-replay-harness",
   "phase": "0A",
   "feasibility_only": true,
@@ -8,12 +8,17 @@
     "redis": {
       "command": ["redis-server", "--bind", "127.0.0.1", "--port", "${port:redis}", "--save", "", "--appendonly", "no", "--protected-mode", "yes"],
       "health": {"type": "tcp"},
-      "port": "dynamic"
+      "port": "dynamic",
+      "runtime": "non-python",
+      "guarded": false,
+      "guard_exempt_reason": "Redis server is a non-Python dependency process bind-constrained to loopback by the runner; its own outbound egress is not per-connection observed by the in-process guard."
     },
     "cloud-tasks-loopback": {
       "command": ["${python}", "-m", "testing.replay_harness_phase0a.cloud_tasks_loopback"],
       "health": {"type": "http", "path": "/__replay/health", "expect_role": "cloud-tasks-loopback"},
       "port": "dynamic",
+      "runtime": "python",
+      "guarded": true,
       "feasibility_only": true,
       "label": "out-of-process Cloud Tasks scheduler model (NOT a faithful control plane)"
     },
@@ -21,13 +26,17 @@
       "command": ["${python}", "-m", "uvicorn", "testing.replay_harness_phase0a.worker_app:app", "--host", "127.0.0.1", "--port", "${port:worker}"],
       "health": {"type": "http", "path": "/__replay/health", "expect_role": "worker"},
       "port": "dynamic",
-      "startup_timeout_seconds": 120
+      "startup_timeout_seconds": 120,
+      "runtime": "python",
+      "guarded": true
     },
     "admission": {
       "command": ["${python}", "-m", "uvicorn", "testing.replay_harness_phase0a.admission_app:app", "--host", "127.0.0.1", "--port", "${port:admission}"],
       "health": {"type": "http", "path": "/__replay/health", "expect_role": "admission"},
       "port": "dynamic",
-      "startup_timeout_seconds": 45
+      "startup_timeout_seconds": 45,
+      "runtime": "python",
+      "guarded": true
     }
   },
   "capabilities": [
@@ -36,7 +45,7 @@
     {"name": "cloud_tasks._tasks_client", "install": "http_loopback_client", "feasibility_only": true, "reason": "forward create_task to out-of-process loopback scheduler; no production Cloud Tasks emulator seam exists"},
     {"name": "id_token.verify_oauth2_token", "install": "one_exact_local_token", "feasibility_only": true, "reason": "signature/issuer/expiry verification remains outside scope"},
     {"name": "vad_is_empty", "install": "deterministic_wav_reader", "feasibility_only": true, "reason": "deterministic VAD leaf, not a fidelity oracle"},
-    {"name": "prerecorded", "install": "deterministic_single_word", "feasibility_only": true, "reason": "deterministic STT leaf, not a fidelity oracle"},
+    {"name": "prerecorded", "install": "deterministic_single_word", "feasibility_only": true, "reason": "deterministic STT leaf invoked once per real pipeline run, not a fidelity oracle"},
     {"name": "process_conversation", "install": "declared_finalizer_fake", "feasibility_only": true, "reason": "marks conversation completed via real lifecycle; real gateway/LLM excluded from feasibility"}
   ],
   "egress_allow_list": [
@@ -49,18 +58,18 @@
   ],
   "fault_controls": [
     {
-      "name": "stt_double_invoke",
-      "type": "defect_induction",
-      "env_var": "OMI_REPLAY_STT_DOUBLE_INVOKE",
+      "name": "defeat_idempotency",
+      "type": "boundary_defeat",
+      "env_var": "OMI_REPLAY_DEFEAT_IDEMPOTENCY",
       "black_box_reachable": true,
-      "description": "When enabled, the deterministic STT leaf invokes the provider twice for the same audio within a single delivery, inducing the externally observable duplicate-STT defect (STT count > 1). Used by MUTANT_UNGUARDED to prove regression-sensitivity: the scenario FAILS unless the defect surfaces. The STT invocation count is the sole black-box observable."
+      "description": "Defeats the actual duplicate-delivery/idempotency/terminal-ownership boundary in the composed SUT: bypasses the terminal-status guard, forces the legacy non-fenced path (disabling content-claim ownership and content-ledger convergence that otherwise ack a redelivery without re-running), neutralizes staged-audio cleanup, and empties processed-segment ledger reads, so a REAL duplicate Cloud Tasks delivery genuinely re-runs the REAL pipeline. The deterministic STT leaf invokes the provider exactly once per real pipeline run; STT > 1 arises ONLY because two real deliveries each run the pipeline — never from a self-calling provider fake. Used by MUTANT_UNGUARDED to prove regression-sensitivity: the scenario FAILS unless the real boundary defeat surfaces the externally observable duplicate-STT defect."
     },
     {
       "name": "terminal_guard_bypassed",
-      "type": "mutant",
+      "type": "boundary_perturbation",
       "env_var": "OMI_REPLAY_TERMINAL_GUARD_BYPASSED",
       "black_box_reachable": true,
-      "description": "When enabled, the worker's terminal-status guard returns a non-terminal view of completed jobs so a duplicate Cloud Tasks delivery re-enters the handler. Alone (defenses active) the content-ledger convergence acks the redelivery without re-running: STT stays at 1 (defense-in-depth holds). Used by MUTANT_GUARDED to prove a specific defense layer catches a specific fault."
+      "description": "Perturbs only the terminal-status guard (returns a non-terminal view of completed jobs) so a duplicate Cloud Tasks delivery re-enters the handler past the real idempotency boundary. With deeper defenses active, content-ledger convergence acks the redelivery without re-running: STT stays at 1 (defense-in-depth holds). Used by MUTANT_GUARDED to prove a specific defense layer catches a specific boundary perturbation."
     },
     {
       "name": "duplicate_delivery",
@@ -70,6 +79,11 @@
       "description": "The loopback scheduler delivers the same task body twice with retry_count 0 and 1, simulating Cloud Tasks at-least-once delivery."
     }
   ],
+  "egress_scope_notes": {
+    "guarded_roles": ["admission", "worker", "cloud-tasks-loopback"],
+    "runner": "The runner/orchestrator is the trusted launcher; it is NOT per-connection guarded by the in-process socket guard.",
+    "evidence_provenance": "Raw egress evidence is emitted by the in-process socket guard (part of the SUT). The attestation proves self-consistency and summary-forgery rejection, NOT independent attestation of real kernel egress."
+  },
   "non_goals": [
     "persist-before-send (residue until operation-scoped storage-fault seam exists)",
     "capture/WS transport coverage",
@@ -78,6 +92,7 @@
     "client consumer harness",
     "broad scenario corpus",
     "release gate",
-    "production Cloud Tasks control-plane fidelity"
+    "production Cloud Tasks control-plane fidelity",
+    "independent/third-party kernel-egress attestation (evidence is SUT-emitted)"
   ]
 }

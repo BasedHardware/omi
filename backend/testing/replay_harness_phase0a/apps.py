@@ -12,7 +12,8 @@ Capabilities installed (all feasibility-only unless noted):
   - Cloud Tasks _tasks_client → HTTP client to out-of-process loopback scheduler
   - id_token.verify_oauth2_token → one exact local token (feasibility-only)
   - VAD/STT/process_conversation → deterministic leaves (feasibility-only finalizer fake)
-  - terminal_guard_bypassed → declared fault control (mutant injection)
+  - terminal_guard_bypassed → declared fault control (real idempotency-boundary perturbation)
+  - defeat_idempotency → declared fault control (full duplicate-delivery boundary defeat)
 """
 
 from __future__ import annotations
@@ -280,6 +281,7 @@ else:
 
     _TRANSCRIPT_TOKEN = os.getenv("OMI_REPLAY_TRANSCRIPT_TOKEN", "replay-harness-transcript")
     _TERMINAL_GUARD_BYPASSED = os.getenv("OMI_REPLAY_TERMINAL_GUARD_BYPASSED", "false").lower() == "true"
+    _DEFEAT_IDEMPOTENCY = os.getenv("OMI_REPLAY_DEFEAT_IDEMPOTENCY", "false").lower() == "true"
 
     def _job_id_from_path(path: str) -> str:
         return Path(path).parent.name
@@ -355,37 +357,27 @@ else:
     sync_pipeline.prerecorded = _local_prerecorded
     sync_pipeline.process_conversation = _local_process_conversation
 
-    # ---- DECLARED FAULT CONTROL: stt_double_invoke (defect induction) ----
-    # When enabled, the deterministic STT leaf invokes the provider twice for the
-    # same audio within a single delivery, simulating a regression where the
-    # idempotency boundary fails to deduplicate STT calls.  This induces the
-    # externally observable duplicate-STT defect (STT count > 1) that the
-    # regression-sensitivity scenario must detect.  The STT invocation count is
-    # the sole black-box observable — no white-box marker is used.
-    _STT_DOUBLE_INVOKE = os.getenv("OMI_REPLAY_STT_DOUBLE_INVOKE", "false").lower() == "true"
-    if _STT_DOUBLE_INVOKE:
-        _original_prerecorded = _local_prerecorded
-
-        def _double_invoke_prerecorded(audio_url: str, **kwargs: Any) -> Any:
-            """FEASIBILITY-ONLY mutant: invoke the STT leaf twice for the same audio."""
-            first = _original_prerecorded(audio_url, **kwargs)
-            _original_prerecorded(audio_url, **kwargs)  # second invocation: defect
-            return first
-
-        sync_pipeline.prerecorded = _double_invoke_prerecorded
-
-    # ---- DECLARED FAULT CONTROL: terminal_guard_bypassed (mutant injection) ----
+    # ---- DECLARED FAULT CONTROL: terminal_guard_bypassed (boundary perturbation) ----
     # When enabled, the worker's terminal-status guard returns a non-terminal view
-    # of completed jobs, so a duplicate Cloud Tasks delivery re-enters the handler.
-    # Alone (defenses active), the content-ledger convergence acks the redelivery
+    # of completed jobs, so a duplicate Cloud Tasks delivery re-enters the handler
+    # past the real idempotency boundary at routers/sync.py run_sync_job. Alone
+    # (deeper defenses active), the content-ledger convergence acks the redelivery
     # without re-running the pipeline — STT stays at 1 (defense-in-depth holds).
-    # This proves the harness can observe whether a specific defense layer catches
-    # a specific fault.
-    if _TERMINAL_GUARD_BYPASSED:
+    # Used by MUTANT_GUARDED to prove a specific defense layer catches a specific
+    # boundary perturbation. The STT leaf itself is never altered.
+    _apply_terminal_guard_bypass = _TERMINAL_GUARD_BYPASSED or _DEFEAT_IDEMPOTENCY
+    if _apply_terminal_guard_bypass:
         _original_get_sync_job = sync_router.get_sync_job
 
         def _mutated_get_sync_job(job_id: str, *_args: Any, **_kwargs: Any) -> dict[str, Any] | None:
-            """FEASIBILITY-ONLY mutant: return a non-terminal view of completed jobs."""
+            """FEASIBILITY-ONLY mutant: return a non-terminal view of completed jobs.
+
+            This perturbs the real terminal-ownership boundary (the
+            ``job['status'] in TERMINAL_STATUSES`` check in run_sync_job) so a
+            duplicate delivery is not acked as already-terminal. It does NOT touch
+            the STT leaf — any duplicate-STT defect must arise from the composed
+            SUT re-running the real pipeline on the redelivery.
+            """
             result = _original_get_sync_job(job_id, *_args, **_kwargs)
             if result and result.get("status") in ("completed", "done"):
                 if _egress_sink:
@@ -396,3 +388,70 @@ else:
             return result
 
         sync_router.get_sync_job = _mutated_get_sync_job
+
+    # ---- DECLARED FAULT CONTROL: defeat_idempotency (full boundary defeat) ----
+    # When enabled, the duplicate-delivery idempotency boundary in the composed
+    # SUT is defeated so a real duplicate Cloud Tasks delivery genuinely re-runs
+    # the real STT leaf once per delivery:
+    #   1. terminal-status READ guard (above) — redelivery is not acked as terminal;
+    #   2. terminal-ownership WRITE guard (update_sync_job) — a completed job can be
+    #      re-opened (mark_job_processing) so the redelivery re-enters the pipeline;
+    #   3. ledger fence — the job is forced onto the legacy (non-fenced) path, so
+    #      there is no content-claim ownership and no content-ledger convergence
+    #      (convergence is what otherwise acks a redelivery without re-running);
+    #   4. staged-audio cleanup — no-op so the redelivery can re-download audio;
+    #   5. processed-segment ledger reads — empty so segments are not skipped.
+    # The STT leaf (_local_prerecorded) is unchanged: it invokes the provider
+    # exactly once per real pipeline run. STT > 1 therefore arises ONLY because
+    # two real deliveries each run the real pipeline — not from a self-calling
+    # fake. Used by MUTANT_UNGUARDED to prove the scenario is regression-
+    # sensitive: it FAILS unless the real boundary defeat surfaces the defect.
+    if _DEFEAT_IDEMPOTENCY:
+        _original_uses_fence = sync_router.sync_job_uses_ledger_fence
+
+        def _defeated_uses_fence(_job: Any) -> bool:
+            """FEASIBILITY-ONLY mutant: force the legacy non-fenced path.
+
+            Removing the ledger fence disables content-claim ownership and
+            content-ledger convergence — the real boundary that otherwise acks a
+            redelivery from the durable ledger without re-running the pipeline.
+            The non-fenced run-lock + finalization still operate, so the
+            redelivery re-runs the pipeline and reaches a terminal cleanly.
+            """
+            if _egress_sink:
+                _egress_sink({"event": "idempotency_boundary_defeated", "checkpoint": "ledger_fence"})
+            return False
+
+        sync_router.sync_job_uses_ledger_fence = _defeated_uses_fence
+        # Defeat the WRITE-level terminal-ownership boundary: update_sync_job
+        # (database/sync_jobs.py) rejects any mutation of a job whose status is in
+        # TERMINAL_STATUSES — the real guard that prevents re-opening a completed
+        # job. Emptying the module global lets a redelivery mark-job-processing
+        # and finalize on the legacy path. (The handler-level READ guard is
+        # defeated separately by the terminal-guard bypass above.)
+        import database.sync_jobs as _sync_jobs_db  # noqa: E402
+
+        _sync_jobs_db.TERMINAL_STATUSES = ()
+        if _egress_sink:
+            _egress_sink({"event": "idempotency_boundary_defeated", "checkpoint": "write_level_terminal_guard"})
+
+        async def _noop_delete_blobs(_paths: Any) -> None:
+            """FEASIBILITY-ONLY mutant: keep staged audio so a redelivery re-downloads."""
+            if _egress_sink:
+                _egress_sink({"event": "idempotency_boundary_defeated", "checkpoint": "staged_audio_cleanup"})
+
+        sync_router._delete_staged_blobs_async = _noop_delete_blobs
+
+        _original_get_processed = sync_pipeline.get_processed_segments
+        _original_get_durable = sync_pipeline.get_processed_sync_segment_ids
+
+        def _empty_processed(_job_id: str) -> set[str]:
+            if _egress_sink:
+                _egress_sink({"event": "idempotency_boundary_defeated", "checkpoint": "processed_segment_ledger"})
+            return set()
+
+        def _empty_durable(_uid: str, _content_id: str) -> set[str]:
+            return set()
+
+        sync_pipeline.get_processed_segments = _empty_processed
+        sync_pipeline.get_processed_sync_segment_ids = _empty_durable
