@@ -330,7 +330,7 @@ class PushToTalkManager: ObservableObject {
     log("PushToTalkManager: setup complete, micPermission=\(hasMicPermission)")
   }
 
-  private func configureVoiceTurnCoordinator(barState: FloatingControlBarState) {
+  func configureVoiceTurnCoordinator(barState: FloatingControlBarState) {
     voiceTurnCoordinator.configure(barState: barState)
     voiceTurnCoordinator.setEffectHandler { [weak self] effect in
       self?.handleVoiceTurnEffect(effect)
