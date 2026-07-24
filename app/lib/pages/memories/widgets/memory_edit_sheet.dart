@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'delete_confirmation.dart';
@@ -21,10 +22,12 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
   late final TextEditingController contentController;
   bool _isSaving = false;
   bool _saveFailed = false;
+  late bool _isBaseline;
 
   @override
   void initState() {
     super.initState();
+    _isBaseline = widget.memory.isBaseline;
     contentController = TextEditingController(text: widget.memory.content.decodeString);
     contentController.selection = TextSelection.fromPosition(TextPosition(offset: contentController.text.length));
   }
@@ -33,6 +36,22 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
   void dispose() {
     contentController.dispose();
     super.dispose();
+  }
+
+  Future<void> _toggleBaseline() async {
+    final newState = !_isBaseline;
+    setState(() {
+      _isBaseline = newState;
+    });
+
+    final success = await widget.provider.toggleMemoryBaseline(widget.memory, newState);
+
+    if (!success && mounted) {
+      setState(() {
+        _isBaseline = !newState;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update baseline status')));
+    }
   }
 
   @override
@@ -52,27 +71,66 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.label_outline, size: 14, color: Colors.white),
-                      const SizedBox(width: 4),
-                      Text(
-                        widget.memory.category.toString().split('.').last,
-                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.label_outline, size: 14, color: Colors.white),
+                          const SizedBox(width: 4),
+                          Text(
+                            widget.memory.category.toString().split('.').last,
+                            style: const TextStyle(color: Colors.white, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_isBaseline) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.blue.withValues(alpha: 0.5), width: 1),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.flag, size: 14, color: Colors.blue),
+                            const SizedBox(width: 4),
+                            Text(
+                              context.l10n.baselineMemory,
+                              style: const TextStyle(color: Colors.blue, fontSize: 14, fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  onPressed: () => _showDeleteConfirmation(context),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        _isBaseline ? Icons.flag : Icons.flag_outlined,
+                        color: _isBaseline ? Colors.blue : Colors.white,
+                      ),
+                      onPressed: _toggleBaseline,
+                      tooltip: _isBaseline ? context.l10n.unpinAsBaseline : context.l10n.pinAsBaseline,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      onPressed: () => _showDeleteConfirmation(context),
+                    ),
+                  ],
                 ),
               ],
             ),

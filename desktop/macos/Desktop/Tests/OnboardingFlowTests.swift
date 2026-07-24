@@ -407,7 +407,7 @@ final class OnboardingFlowTests: XCTestCase {
     let secondBrainSource = try desktopSourceFile("Onboarding/SecondBrain/SBOnboardingView.swift")
     for title in ["Set up Omi →", "Continue"] {
       XCTAssertTrue(
-        secondBrainSource.contains("SBInkButton(title: \"\\(title)\", isDefaultAction: true)"),
+        secondBrainSource.contains("SBInkButton(title: \"\(title)\", isDefaultAction: true)"),
         "the second-brain \(title) action must accept Return")
     }
     XCTAssertEqual(

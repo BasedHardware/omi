@@ -1,6 +1,5 @@
 import Combine
 @preconcurrency import GRDB
-@preconcurrency import MarkdownUI
 import OmiTheme
 import SwiftUI
 
@@ -1760,9 +1759,7 @@ struct GmailInsightsCard: View {
           .padding(.horizontal, OmiSpacing.sm)
 
         ScrollView {
-          Markdown(text)
-            .markdownTheme(.aiMessage())
-            .textSelection(.enabled)
+          OmiMarkdown(text: text, style: .assistant)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.sm)
         }
@@ -1836,9 +1833,7 @@ struct CalendarInsightsCard: View {
           .padding(.horizontal, OmiSpacing.sm)
 
         ScrollView {
-          Markdown(text)
-            .markdownTheme(.aiMessage())
-            .textSelection(.enabled)
+          OmiMarkdown(text: text, style: .assistant)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.sm)
         }
@@ -1906,9 +1901,7 @@ struct OnboardingChatBubble: View {
             if message.contentBlocks.isEmpty {
               // Fallback for messages loaded from backend (no contentBlocks, only flat text)
               if !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Markdown(message.text)
-                  .markdownTheme(.aiMessage())
-                  .textSelection(.enabled)
+                OmiMarkdown(text: message.text, style: .assistant)
                   .padding(.horizontal, OmiSpacing.md)
                   .padding(.vertical, OmiSpacing.sm)
                   .background(OmiColors.backgroundSecondary)
@@ -1920,9 +1913,7 @@ struct OnboardingChatBubble: View {
               let allText = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
 
               if !allText.isEmpty {
-                Markdown(allText)
-                  .markdownTheme(.aiMessage())
-                  .textSelection(.enabled)
+                OmiMarkdown(text: allText, style: .assistant)
                   .padding(.horizontal, OmiSpacing.md)
                   .padding(.vertical, OmiSpacing.sm)
                   .background(OmiColors.backgroundSecondary)
@@ -1950,14 +1941,7 @@ struct OnboardingChatBubble: View {
             }
           } else {
             if !message.text.isEmpty {
-              Markdown(message.text)
-                .markdownTheme(
-                  .userMessage().text {
-                    ForegroundColor(OmiColors.backgroundPrimary)
-                    FontSize(14)
-                  }
-                )
-                .textSelection(.enabled)
+              OmiMarkdown(text: message.text, style: .onboardingUser)
                 .padding(.horizontal, OmiSpacing.md)
                 .padding(.vertical, OmiSpacing.sm)
                 .background(OmiColors.accent)
@@ -2179,9 +2163,7 @@ struct ExplorationProfileCard: View {
           .padding(.horizontal, OmiSpacing.sm)
 
         ScrollView {
-          Markdown(text)
-            .markdownTheme(.aiMessage())
-            .textSelection(.enabled)
+          OmiMarkdown(text: text, style: .assistant)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.sm)
         }

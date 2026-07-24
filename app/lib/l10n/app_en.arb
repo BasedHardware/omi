@@ -2200,6 +2200,22 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
+    "pinAsBaseline": "Pin as Baseline",
+    "@pinAsBaseline": {
+        "description": "Label for pinning a memory as baseline"
+    },
+    "unpinAsBaseline": "Unpin from Baseline",
+    "@unpinAsBaseline": {
+        "description": "Label for unpinning a memory from baseline"
+    },
+    "baselineMemory": "Baseline Memory",
+    "@baselineMemory": {
+        "description": "Label for baseline memory"
+    },
+    "alwaysInContext": "Always in context",
+    "@alwaysInContext": {
+        "description": "Description for baseline memory being always in context"
+    },
     "memoryContentHint": "I like to eat ice cream...",
     "@memoryContentHint": {
         "description": "Input hint"

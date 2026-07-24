@@ -1441,7 +1441,9 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
                             job_id=job_id,
                             uid=uid,
                             content_id=locked_job.get('content_id'),
-                            error_code='sync_worker_stale',
+                            error_code=(
+                                'sync_dispatch_lost' if locked_job.get('status') == 'queued' else 'sync_worker_stale'
+                            ),
                             outcome=TranscriptionOutcome.UPSTREAM_ERROR,
                             provider=locked_job.get('stt_provider', 'unknown'),
                             model=locked_job.get('stt_model', 'unknown'),
