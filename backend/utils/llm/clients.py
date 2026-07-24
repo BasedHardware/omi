@@ -449,7 +449,12 @@ def _get_or_create_openrouter_llm(
     return get_or_create_openai_compatible_llm('openrouter', model_name, streaming, options)
 
 
-def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = None) -> BaseChatModel:
+def get_llm(
+    feature: str,
+    streaming: bool = False,
+    cache_key: Optional[str] = None,
+    prompt_cache_options: Optional[dict[str, str]] = None,
+) -> BaseChatModel:
     """Get the LLM client for a feature based on the active Model QoS profile.
 
     Works for OpenAI, Gemini, OpenRouter, and other registered OpenAI-compatible
@@ -547,8 +552,15 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
         legacy_model=result,
     )
 
+    cache_params: Dict[str, Any] = {}
     if cache_key and supports_prompt_cache(model):
-        return result.bind(prompt_cache_key=cache_key)
+        cache_params['prompt_cache_key'] = cache_key
+    # The direct route can still resolve to a pre-5.6 model.  Only the
+    # gateway's GPT-5.6 lanes receive the explicit-cache API fields.
+    if prompt_cache_options and gateway_feature_mode:
+        cache_params['prompt_cache_options'] = prompt_cache_options
+    if cache_params:
+        return result.bind(**cache_params)
     return result
 
 

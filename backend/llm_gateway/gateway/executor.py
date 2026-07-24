@@ -359,9 +359,37 @@ def _provider_request(
     if resolved_route.validated_request.response_format is not None:
         provider_request['response_format'] = dict(resolved_route.validated_request.response_format)
     provider_request.update(dict(resolved_route.validated_request.forwarded_params))
+    if not provider_ref.model.startswith('gpt-5.6'):
+        _remove_gpt56_cache_fields(provider_request)
     if apply_budget:
         provider_request, _ = apply_output_budget(provider_request, route.output_budget)
     return provider_request
+
+
+def _remove_gpt56_cache_fields(provider_request: dict[str, Any]) -> None:
+    """Keep GPT-5.6 explicit-cache fields off a legacy route or fallback."""
+    provider_request.pop('prompt_cache_options', None)
+    raw_messages = provider_request.get('messages')
+    if not isinstance(raw_messages, list):
+        return
+    sanitized_messages: list[Any] = []
+    for message in raw_messages:
+        if not isinstance(message, Mapping):
+            sanitized_messages.append(message)
+            continue
+        sanitized_message = dict(message)
+        content = sanitized_message.get('content')
+        if isinstance(content, list):
+            sanitized_message['content'] = [
+                (
+                    {key: value for key, value in part.items() if key != 'prompt_cache_breakpoint'}
+                    if isinstance(part, Mapping)
+                    else part
+                )
+                for part in content
+            ]
+        sanitized_messages.append(sanitized_message)
+    provider_request['messages'] = sanitized_messages
 
 
 def _apply_provider_options(provider_request: dict[str, Any], provider_options: Mapping[str, Any]) -> None:

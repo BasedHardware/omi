@@ -7,7 +7,7 @@ import httpx
 import pytest
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import Field
 
@@ -73,6 +73,29 @@ class _StreamChatModel(BaseChatModel):
             yield ChatGeneration(message=AIMessage(content=chunk))
         if self.fail_after_chunks:
             raise httpx.ReadError('stream reset')
+
+
+def test_legacy_fallback_strips_gpt56_only_cache_fields_without_changing_text_content():
+    messages, kwargs = gateway_serving._legacy_cache_compatible_call(
+        [
+            HumanMessage(
+                content=[
+                    {
+                        'type': 'text',
+                        'text': 'Stable instructions.',
+                        'prompt_cache_breakpoint': {'mode': 'explicit'},
+                    }
+                ]
+            )
+        ],
+        {
+            'prompt_cache_key': 'omi-extract-actions-v1-b0',
+            'prompt_cache_options': {'mode': 'explicit', 'ttl': '30m'},
+        },
+    )
+
+    assert messages[0].content == [{'type': 'text', 'text': 'Stable instructions.'}]
+    assert kwargs == {'prompt_cache_key': 'omi-extract-actions-v1-b0'}
 
 
 def test_gateway_serving_stream_records_serving_mode_on_success(monkeypatch):
