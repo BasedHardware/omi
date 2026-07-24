@@ -169,7 +169,7 @@ struct SBOnboardingView: View {
         model.answerAccessibility()
       }
     case .automation:
-      permStepWidget("automation", "Automation", "drive your other apps to get things done") {
+      permStepWidget("automation", "Automation", "help with tasks in the apps you choose") {
         model.answerAutomation()
       }
     case .shortcutOpen: shortcutWidget(isTalk: false)
@@ -195,7 +195,7 @@ struct SBOnboardingView: View {
         Divider().overlay(sb.ink(.w08))
         trustRow("PRIVATE") { Text("Your data is encrypted, and only yours.") }
         Divider().overlay(sb.ink(.w08))
-        trustRow("YOURS") { Text("Pause me from the notch. Delete anything, forever.") }
+        trustRow("YOURS") { Text("Pause me anytime. Delete anything, forever.") }
       }
       .overlay(RoundedRectangle(cornerRadius: 13).stroke(sb.ink(.w1), lineWidth: 1))
       SBInkButton(title: "Set up Omi →") { model.answerPromise() }
@@ -295,7 +295,7 @@ struct SBOnboardingView: View {
 
   private var roleWidget: some View {
     VStack(alignment: .leading, spacing: 10) {
-      FlowChips(items: ["Student", "Sales", "Consultant", "Founder", "Engineer", "Creator"]) { r in
+      FlowChips(items: ["Student", "Sales", "Consultant", "Founder", "Engineer", "Analyst", "Creator", "Other"]) { r in
         model.pickRole(r)
       }
       HStack(spacing: 8) {
@@ -464,12 +464,13 @@ struct SBOnboardingView: View {
           ForEach(model.voiceChordTokens, id: \.self) { tok in keycap(tok) }
           Text("and ask me about it, out loud.").geist(size: 14).foregroundStyle(sb.ink(.w85))
         }
-        Text("Try \u{201c}what's on my screen right now?\u{201d} I can see it, and I answer up in the notch.")
+        Text("Try \u{201c}what's on my screen right now?\u{201d} I can see it, and I answer at the top of your screen.")
           .geist(size: 12.5).foregroundStyle(sb.ink(.w45))
           .fixedSize(horizontal: false, vertical: true)
       }
-      // Continue only appears once Omi has actually answered in the notch — before
-      // that, a quiet "Skip for now" so the user doesn't blow past the live demo.
+      // Continue appears once Omi has actually answered — before that, an always-
+      // tappable, clearly-visible "Skip for now" so the user is never stuck if the
+      // demo doesn't fire (it used to be a tiny, easily-missed text link).
       Group {
         if model.screenDemoDone {
           SBInkButton(title: "Continue") { model.answerScreenDemo() }
@@ -477,7 +478,10 @@ struct SBOnboardingView: View {
           Button {
             model.answerScreenDemo()
           } label: {
-            Text("Skip for now").geist(size: 13).foregroundStyle(sb.ink(.w35))
+            Text("Skip for now").geist(size: 14, weight: .medium).foregroundStyle(sb.ink(.w85))
+              .frame(maxWidth: .infinity).padding(.vertical, 11)
+              .overlay(RoundedRectangle(cornerRadius: 11).stroke(sb.ink(.w18), lineWidth: 1))
+              .contentShape(Rectangle())
           }
           .buttonStyle(.plain)
         }

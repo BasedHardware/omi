@@ -56,6 +56,11 @@ final class SBOnboardingModel: ObservableObject {
 
   var launchAtLogin: Bool = LaunchAtLoginManager.shared.isEnabled
 
+  /// One-shot guard: fire a single throwaway ScreenCaptureKit capture to surface
+  /// the "bypass the private window picker" consent in-context once Screen
+  /// Recording is granted, so the live screen demo doesn't hit that prompt.
+  var didPrimeScreenCapture = false
+
   // Summon shortcut
   @Published var shortcutTokens: [String] = []
   @Published var shortcutPicked = false
@@ -157,11 +162,12 @@ final class SBOnboardingModel: ObservableObject {
     case .screen:
       return "Let me see your screen, so I can help with whatever you're looking at."
     case .files:
-      return "Let me read your files, so I can point to your real documents. Read-only."
+      return
+        "Let me read your files, so I can point to your real documents. Read-only, it stays on this Mac, and you can turn it off anytime."
     case .accessibility:
       return "Turn on Accessibility, so I can use your shortcut and click and type for you."
     case .automation:
-      return "Turn on Automation, so I can control your other apps and get things done."
+      return "Turn on Automation, so I can help with tasks in the apps you choose."
     case .shortcutOpen:
       return "How do you want to open me? Just press one of these to set it."
     case .shortcutTalk:
@@ -416,9 +422,13 @@ final class SBOnboardingModel: ObservableObject {
     chatProvider.stopAgent(owner: .mainChat)
     UserDefaults.standard.set(true, forKey: DefaultsKey.onboardingJustCompleted)
     UserDefaults.standard.removeObject(forKey: Self.resumeStepKey)
-    if !AppBuild.usesLazyDevPermissions {
-      UserDefaults.standard.set(true, forKey: DefaultsKey.hasCompletedFileIndexing)
-    }
+    // Do NOT mark file indexing complete here. Onboarding never actually scans, so
+    // setting this flag "faked" the Files connector as connected while indexing
+    // nothing — and, worse, permanently suppressed the Home view's automatic
+    // first-run backfill (`scheduleInitialFileIndexing`, gated on this flag being
+    // false) and every later rescan. Leaving it false lets that existing silent
+    // backfill actually index the standard folders once the app is up, so the
+    // Files connector becomes truly connected with real content.
     chatProvider.isOnboarding = false
     // Greet the user in the Home chat with the personalized opener + starters.
     chatProvider.presentOnboardingOpener()
@@ -453,13 +463,10 @@ final class SBOnboardingModel: ObservableObject {
       if startListening { appState.startTranscription() }
       await appState.reconcileCapture()
     }
-    Task {
-      let welcome = "Run omi for two days to start receiving helpful insights"
-      let exists = await ActionItemStorage.shared.actionItemExists(description: welcome)
-      if !exists {
-        _ = await TasksStore.shared.createTask(description: welcome, dueAt: Date(), priority: "low")
-      }
-    }
+    // NOTE: previously this created a "Run omi for two days…" welcome task. That
+    // seeded onboarding scaffolding into the user's real Tasks surface (there is no
+    // hidden/system-task concept to hang it on), so it's been removed — onboarding
+    // must not leave artifacts in product data.
   }
 
   /// Apply the user's launch-at-login selection at completion — **preserve** their
