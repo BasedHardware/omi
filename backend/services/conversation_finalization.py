@@ -12,7 +12,6 @@ import logging
 from typing import Any
 
 from database import conversation_finalization_jobs as jobs_db
-from utils.conversations import lifecycle as lifecycle_service
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
     get_listen_finalization_tasks_max_attempts,
@@ -104,30 +103,49 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
     never be terminalized. A legacy row predating the fence is migrated by
     stamping the fence and deferred to a later sweep rather than completed on
     sight. Each aged orphan is driven through the truthful terminal ownership CAS
-    (``lifecycle.complete``): a row already completed, discarded, or superseded by
-    a newer generation is fenced out, so the orphan reaches exactly one terminal
-    and its recording stays retrievable. Re-enrichment is a separate follow-up;
-    this safety net only ends the stuck lifecycle. It needs no durable dispatch,
-    so it runs in every deployment mode.
+    (``complete_orphan_conversation``): a row already completed, discarded,
+    superseded by a newer generation, or since bound to a durable job is fenced
+    out, so the orphan reaches exactly one terminal and its recording stays
+    retrievable. Re-enrichment is a separate follow-up; this safety net only ends
+    the stuck lifecycle. It needs no durable dispatch, so it runs in every
+    deployment mode.
+
+    Eventual discovery is guaranteed by a persisted, rotated sweep cursor: each
+    periodic invocation resumes a bounded window from the cursor and wraps to the
+    top once the collection is exhausted, so a stable excluded prefix larger than
+    the per-invocation bound cannot permanently hide a later orphan.
 
     Outcomes are recorded on ``LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL``
     (privacy-safe: aggregate counts only, no user identifiers in success logs).
+    Unexpected per-row failures are counted as ``error``; an expected CAS fencing
+    (the row moved on) is ``skipped``.
     """
     result: dict[str, int] = {'completed': 0, 'migrated': 0, 'skipped': 0, 'error': 0}
     stale_after = jobs_db.get_stale_processing_orphan_after()
     try:
-        candidates = jobs_db.get_stale_processing_orphan_candidates(
-            stale_after=stale_after, limit=limit, firestore_client=firestore_client
+        resume_after_path = jobs_db.get_stale_processing_sweep_cursor(firestore_client=firestore_client)
+    except Exception:
+        logger.exception('stale processing sweep cursor read failed; sweeping from the top')
+        resume_after_path = None
+    try:
+        sweep = jobs_db.get_stale_processing_orphan_candidates(
+            stale_after=stale_after, limit=limit, resume_after_path=resume_after_path, firestore_client=firestore_client
         )
     except Exception:
         logger.exception('stale processing conversation reconciliation query failed')
         LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome='error').inc()
         return result | {'error': 1}
-    for candidate in candidates:
+    next_cursor = None if sweep['exhausted'] else sweep['resume_after_path']
+    try:
+        jobs_db.save_stale_processing_sweep_cursor(next_cursor, firestore_client=firestore_client)
+    except Exception:
+        logger.exception('stale processing sweep cursor persist failed; coverage is still guaranteed')
+    for candidate in sweep['candidates']:
         uid = candidate.get('uid')
         conversation_id = candidate.get('conversation_id')
         if not isinstance(uid, str) or not isinstance(conversation_id, str):
             result['skipped'] += 1
+            LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome='skipped').inc()
             continue
         try:
             if candidate.get('legacy'):
@@ -138,11 +156,18 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
                 result['migrated'] += 1
                 LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome='migrated').inc()
                 continue
-            completed = lifecycle_service.complete(uid, conversation_id)
+            completed = jobs_db.complete_orphan_conversation(
+                uid,
+                conversation_id,
+                expected_admitted_at=candidate.get('processing_admitted_at'),
+                firestore_client=firestore_client,
+            )
         except Exception:
+            # An unexpected per-row failure (e.g. Firestore unavailable) is an
+            # error, distinct from an expected CAS fencing skip below.
             logger.exception('stale processing conversation reconciliation failed for one row')
-            result['skipped'] += 1
-            LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome='skipped').inc()
+            result['error'] += 1
+            LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome='error').inc()
             continue
         if completed:
             result['completed'] += 1
