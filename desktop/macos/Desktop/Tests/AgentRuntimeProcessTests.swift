@@ -205,6 +205,24 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(snapshot.ownerSynchronizations, 1)
   }
 
+  func testNamedBundleStartupUsesValidSeededCredentialWithoutForcedRefresh() {
+    XCTAssertFalse(
+      AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(
+        isNonProduction: true,
+        isDesktopLocalProfile: false),
+      "a named bundle has no Firebase SDK session to satisfy a forced refresh")
+    XCTAssertFalse(
+      AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(
+        isNonProduction: true,
+        isDesktopLocalProfile: true),
+      "the local harness owns its credential lifecycle")
+    XCTAssertTrue(
+      AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(
+        isNonProduction: false,
+        isDesktopLocalProfile: false),
+      "production and Beta starts must continue forcing a fresh credential")
+  }
+
   func testKernelJournalMutationClosesTheRuntimeReplayBoundary() async throws {
     let runtime = AgentRuntimeProcess()
     let turn = try XCTUnwrap(
