@@ -365,6 +365,45 @@ def _mirror_delete_into_legacy(uid: str, memory_ids: List[str], *, db_client: An
         logger.exception("legacy mirror vector delete failed uid=%s count=%d", sanitize_pii(uid), len(memory_ids))
 
 
+def _purge_legacy_memories(uid: str) -> None:
+    """Delete every legacy memory for a user, plus its vectors.
+
+    Collects ids before the Firestore delete so the Pinecone vectors can be purged too —
+    otherwise orphaned vectors become search noise nothing ever cleans up.
+    """
+    memory_ids: List[str] = []
+    offset = 0
+    batch_size = 1000
+    while True:
+        memories = memories_db.get_memories(uid, limit=batch_size, offset=offset, include_invalidated=True)
+        if not memories:
+            break
+        memory_ids.extend([memory_id for m in memories if isinstance((memory_id := m.get('id')), str) and memory_id])
+        offset += batch_size
+
+    memories_db.delete_all_memories(uid)
+
+    if memory_ids:
+        delete_memory_vectors_batch(uid, memory_ids)
+
+
+def _mirror_delete_all_into_legacy(uid: str, *, db_client: Any) -> None:
+    """Mirror a canonical delete-all into legacy while the user still reads legacy.
+
+    Same window and reasoning as _mirror_delete_into_legacy: at MEMORY_MODE=write the
+    canonical wipe is invisible because GET /v3/memories still reads legacy, so "delete
+    everything" leaves the user's list intact on the next refresh (#10446). No-ops after
+    read cutover, and best-effort because canonical is authoritative and already
+    committed.
+    """
+    if canonical_read_enabled(uid, db_client=db_client):
+        return
+    try:
+        _purge_legacy_memories(uid)
+    except Exception:
+        logger.exception("legacy mirror delete-all failed uid=%s", sanitize_pii(uid))
+
+
 def _validate_memory(uid: str, memory_id: str) -> MemoryPayload:
     return fetch_memory_dict(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
 
@@ -898,27 +937,10 @@ def delete_memories(
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         MemoryService(db_client=db_client).delete_all(uid)
+        _mirror_delete_all_into_legacy(uid, db_client=db_client)
         return {'status': 'ok'}
 
-    # Collect all memory IDs before Firestore delete so we can also purge
-    # their Pinecone vectors — otherwise orphaned vectors become search
-    # noise that never gets cleaned up.
-    memory_ids: List[str] = []
-    offset = 0
-    batch_size = 1000
-    while True:
-        memories = memories_db.get_memories(uid, limit=batch_size, offset=offset, include_invalidated=True)
-        if not memories:
-            break
-        batch_ids = [memory_id for m in memories if isinstance((memory_id := m.get('id')), str) and memory_id]
-        memory_ids.extend(batch_ids)
-        offset += batch_size
-
-    memories_db.delete_all_memories(uid)
-
-    if memory_ids:
-        delete_memory_vectors_batch(uid, memory_ids)
-
+    _purge_legacy_memories(uid)
     return {'status': 'ok'}
 
 
