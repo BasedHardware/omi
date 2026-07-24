@@ -2123,6 +2123,18 @@ class AppLocalizationsHe extends AppLocalizations {
   String get editMemory => '✏️ עריכת זכרון';
 
   @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
+
+  @override
   String get memoryContentHint => 'אני אוהב לאכול גלידה...';
 
   @override

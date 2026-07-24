@@ -2101,6 +2101,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get editMemory => '✏️ 메모리 편집';
 
   @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
+
+  @override
   String get memoryContentHint => '아이스크림 먹는 걸 좋아해요...';
 
   @override

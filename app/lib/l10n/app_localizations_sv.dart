@@ -2143,6 +2143,18 @@ class AppLocalizationsSv extends AppLocalizations {
   String get editMemory => '✏️ Redigera minne';
 
   @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
+
+  @override
   String get memoryContentHint => 'Jag gillar att äta glass...';
 
   @override
