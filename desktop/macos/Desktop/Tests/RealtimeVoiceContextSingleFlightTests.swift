@@ -4,14 +4,27 @@ import XCTest
 
 @MainActor
 final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
+  @MainActor
   private final class Gate {
     var startCount = 0
     var continuation: CheckedContinuation<Bool, Never>?
+    var startedWaiters: [CheckedContinuation<Void, Never>] = []
 
     func run() async -> Bool {
       startCount += 1
+      for waiter in startedWaiters {
+        waiter.resume()
+      }
+      startedWaiters.removeAll()
       return await withCheckedContinuation { continuation in
         self.continuation = continuation
+      }
+    }
+
+    func waitUntilStarted() async {
+      guard startCount == 0 else { return }
+      await withCheckedContinuation { continuation in
+        startedWaiters.append(continuation)
       }
     }
 
@@ -22,9 +35,7 @@ final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
   }
 
   private func waitUntilStarted(_ gate: Gate) async {
-    for _ in 0..<100 where gate.startCount == 0 {
-      await Task.yield()
-    }
+    await gate.waitUntilStarted()
   }
 
   func testCancelledTurnWaiterDoesNotCancelSharedReadiness() async {
