@@ -267,7 +267,7 @@ def _drain_stale_processing_conversations():
     """Best-effort recovery of bare-`processing` conversations orphaned by a sync-route crash."""
     try:
         result = reconcile_stale_processing_conversations()
-        if result.get('completed'):
+        if result.get('completed') or result.get('migrated'):
             logger.info(f"Startup stale-processing reconciliation: {result}")
     except Exception as e:
         logger.error(f"Startup stale-processing reconciliation failed: {e}")
@@ -285,7 +285,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int = 300):
             logger.error(f"Periodic listen-finalization reconciliation failed: {e}")
         try:
             stale_result = await run_blocking(db_executor, reconcile_stale_processing_conversations)
-            if stale_result.get('completed'):
+            if stale_result.get('completed') or stale_result.get('migrated'):
                 logger.info(f"Periodic stale-processing reconciliation: {stale_result}")
         except Exception as e:
             logger.error(f"Periodic stale-processing reconciliation failed: {e}")

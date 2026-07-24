@@ -97,6 +97,12 @@ def create_in_progress_conversation(uid: str, conversation_data: dict[str, Any],
 def create_processing_conversation(uid: str, conversation_data: dict[str, Any], *, idempotent: bool = False) -> bool:
     """Create a server/import/merge conversation already admitted to processing."""
     _require_status(conversation_data, ConversationStatus.processing)
+    # Stamp the authoritative, server-owned admission fence so the stale
+    # reconciler bounds recovery by admission age rather than caller-controlled
+    # ``created_at`` (which is the recording start time for from-segments and
+    # sync imports, not the processing admission instant). ``setdefault`` keeps a
+    # server-owned stamp if the caller already provided one.
+    conversation_data.setdefault('processing_admitted_at', datetime.now(timezone.utc))
     if idempotent:
         return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
     conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)

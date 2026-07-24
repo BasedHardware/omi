@@ -79,12 +79,16 @@ def get_finalization_reconcile_stale_after() -> timedelta:
 
 
 def get_stale_processing_orphan_after() -> timedelta:
-    """Return the conservative delay before a bare-`processing` row is a crash orphan.
+    """Return the bounded delay before a bare-`processing` row is a crash orphan.
 
-    Bounds admission age (``processing_admitted_at``, falling back to
-    ``created_at``), not document creation. Distinct from the durable-job replay
-    window (which a lease already bounds); this path owns no lease, so the floor
-    stays conservative.
+    Bounds the authoritative, server-owned admission fence
+    (``processing_admitted_at``), never caller-controlled ``created_at``. Distinct
+    from the durable-job replay window (which a lease already bounds); this path
+    owns no lease, so the value is clamped to a conservative floor (300s, longer
+    than any plausible live synchronous ``process_conversation`` run) and a
+    one-day ceiling so an operator misconfiguration cannot defer recovery for an
+    unbounded period. Classified as a reliability recovery knob; deploy default
+    is unset so the floor applies.
     """
     try:
         seconds = int(
@@ -92,7 +96,7 @@ def get_stale_processing_orphan_after() -> timedelta:
         )
     except ValueError:
         seconds = DEFAULT_ORPHAN_RECONCILE_STALE_SECONDS
-    return timedelta(seconds=max(300, seconds))
+    return timedelta(seconds=min(86_400, max(300, seconds)))
 
 
 def _claim_result(
@@ -118,6 +122,14 @@ def _client(firestore_client: Any = None) -> Any:
 
 def _conversation_ref(client: Any, uid: str, conversation_id: str) -> Any:
     return client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION).document(conversation_id)
+
+
+def _uid_from_conversation_path(path: str) -> str | None:
+    """Return the uid from a ``users/{uid}/conversations/{conversation_id}`` path."""
+    parts = path.split('/')
+    if len(parts) == 4 and parts[0] == 'users' and parts[2] == CONVERSATIONS_COLLECTION:
+        return parts[1]
+    return None
 
 
 def _job_ref(client: Any, job_id: str) -> Any:
@@ -841,41 +853,102 @@ def get_finalization_replay_candidates(*, limit: int = 100, firestore_client: An
 
 
 def get_stale_processing_orphan_candidates(
-    *, stale_after: timedelta, limit: int = 100, firestore_client: Any = None
+    *, stale_after: timedelta, limit: int = 100, max_scan: int = 2000, firestore_client: Any = None
 ) -> list[dict[str, Any]]:
-    """Return a bounded page of bare-`processing` conversations with no durable job.
+    """Return actionable bare-`processing` conversations with no durable job.
 
-    These rows were admitted by the synchronous legacy route (or a server/merge
-    create) and then stranded by a hard crash: ``status == processing`` with no
-    ``finalization_job_id``. The cross-user sweep uses a single equality filter so
-    it rides the automatic single-field index (no composite index registration);
-    ``deferred`` desktop rows (which intentionally live on ``processing``), rows
-    still owned by a durable job, and rows younger than ``stale_after`` are
-    filtered client-side. ``stale_after`` bounds admission age
-    (``processing_admitted_at``, falling back to ``created_at``).
+    Eligibility is bounded by the authoritative, server-owned admission fence
+    ``processing_admitted_at`` — never caller-controlled ``created_at``. A bare
+    ``processing`` row (no ``finalization_job_id``) that is not ``deferred`` is:
+
+    * returned with ``legacy=False`` when its admission age exceeds
+      ``stale_after`` (a genuine crash orphan ready for exactly one terminal), and
+    * returned with ``legacy=True`` when it predates the admission stamp (a
+      stranded legacy row the caller must migrate by stamping the fence, never
+      terminalized on first sight).
+
+    Fresh admissions under ``stale_after`` are filtered out and never returned.
+
+    The cross-user sweep is a single-equality ``collection_group`` query on
+    ``status == 'processing'``. A single-field equality query is served by
+    Firestore's automatic single-field index, so no composite index is registered
+    or deployed and the query is deliberately not collection-scoped. Because
+    client-side exclusion (deferred / durable-job-owned / fresh / legacy) happens
+    after the page cap, the sweep pages with a ``start_after`` cursor so a stable
+    first page of excluded rows cannot starve a later eligible orphan. Total
+    examined rows are bounded by ``max_scan``.
     """
     client = _client(firestore_client)
     cutoff = _now() - stale_after
-    result: list[dict[str, Any]] = []
-    query = (
-        client.collection_group(CONVERSATIONS_COLLECTION)
-        .where(filter=firestore.FieldFilter('status', '==', 'processing'))
-        .limit(max(1, min(limit, 100)))
-    )
-    for snapshot in query.stream():
-        data = snapshot.to_dict() or {}
-        if data.get('deferred') or data.get('finalization_job_id'):
-            continue
-        admitted_at = data.get('processing_admitted_at')
-        age_reference = admitted_at if isinstance(admitted_at, datetime) else data.get('created_at')
-        if not isinstance(age_reference, datetime) or age_reference > cutoff:
-            continue
-        path_parts = snapshot.reference.path.split('/')
-        # users/{uid}/conversations/{conversation_id}
-        if len(path_parts) != 4 or path_parts[0] != 'users' or path_parts[2] != CONVERSATIONS_COLLECTION:
-            continue
-        result.append({'uid': path_parts[1], 'conversation_id': snapshot.id, 'created_at': data.get('created_at')})
-    return result
+    page_size = max(1, min(limit, 100))
+    collected: list[dict[str, Any]] = []
+    scanned = 0
+    last_snapshot: Any = None
+    while len(collected) < limit and scanned < max_scan:
+        query = client.collection_group(CONVERSATIONS_COLLECTION).where(
+            filter=firestore.FieldFilter('status', '==', 'processing')
+        )
+        query = query.limit(page_size)
+        if last_snapshot is not None:
+            query = query.start_after(last_snapshot)
+        page = list(query.stream())
+        if not page:
+            break
+        for snapshot in page:
+            scanned += 1
+            if scanned > max_scan:
+                break
+            uid = _uid_from_conversation_path(snapshot.reference.path)
+            if uid is None:
+                continue
+            data = snapshot.to_dict() or {}
+            if data.get('deferred') or data.get('finalization_job_id'):
+                continue
+            admitted_at = data.get('processing_admitted_at')
+            if isinstance(admitted_at, datetime):
+                if admitted_at > cutoff:
+                    continue  # fresh admission still under the conservative threshold
+                collected.append(
+                    {'uid': uid, 'conversation_id': snapshot.id, 'processing_admitted_at': admitted_at, 'legacy': False}
+                )
+            else:
+                collected.append(
+                    {'uid': uid, 'conversation_id': snapshot.id, 'processing_admitted_at': None, 'legacy': True}
+                )
+            if len(collected) >= limit:
+                break
+        if len(page) < page_size:
+            break  # query exhausted: no further rows exist
+        last_snapshot = page[-1]
+    return collected
+
+
+def _stamp_processing_admission_if_absent_txn(transaction: Any, conversation_ref: Any, now: datetime) -> bool:
+    """Server-owned migration: stamp the admission fence on a legacy processing row.
+
+    Returns ``True`` only when a bare ``processing`` row lacking a valid
+    ``processing_admitted_at`` was stamped with ``now``. A row already stamped, in
+    any other lifecycle state, or absent is left untouched. The stamp is the sole
+    authority the orphan sweep trusts; it never terminalizes a row here.
+    """
+    snapshot = conversation_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return False
+    data = snapshot.to_dict() or {}
+    if data.get('status') != 'processing':
+        return False
+    if isinstance(data.get('processing_admitted_at'), datetime):
+        return False
+    transaction.update(conversation_ref, {'processing_admitted_at': now})
+    return True
+
+
+def stamp_processing_admission_if_absent(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
+    """Stamp the authoritative admission fence on a legacy processing conversation."""
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_stamp_processing_admission_if_absent_txn)
+    return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now())
 
 
 def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, float | int]:
