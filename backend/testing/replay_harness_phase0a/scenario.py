@@ -5,20 +5,26 @@ Runs three scenario instances against isolated topology launches:
   1. BASE (unmutated SUT, duplicate delivery): proves out-of-process composition
      — one upload → network loopback delivery → durable, retrievable terminal.
      Production idempotency holds: exactly one STT invocation.
-  2. MUTANT_UNGUARDED (terminal_guard_bypassed + all anti-duplicate-STT defenses
-     neutralized, duplicate delivery): proves the declared fault actually induces
-     the externally observable duplicate-STT defect — STT > 1.  This is the
-     regression-sensitivity proof: the scenario FAILS unless the defect surfaces.
-  3. MUTANT_GUARDED (terminal_guard_bypassed, defenses active, duplicate delivery):
-     proves defense-in-depth catches the bypass — STT stays at 1 despite the
-     terminal guard being bypassed (the content-ledger convergence acks the
-     redelivery without re-running the pipeline).
+  2. MUTANT_UNGUARDED (OMI_REPLAY_DEFEAT_IDEMPOTENCY, duplicate delivery): defeats
+     the ACTUAL duplicate-delivery/idempotency/terminal-ownership boundary in the
+     composed SUT — terminal-status guard, content-ledger convergence, staged-audio
+     cleanup, and processed-segment ledger are all neutralized, so a REAL duplicate
+     delivery genuinely re-runs the REAL pipeline. The deterministic STT leaf
+     invokes the provider exactly once per real pipeline run, so STT > 1 arises ONLY
+     because two real deliveries each run the pipeline — never from a self-calling
+     provider fake. This is the regression-sensitivity proof: the scenario FAILS
+     unless the real boundary defeat surfaces the externally observable defect.
+  3. MUTANT_GUARDED (OMI_REPLAY_TERMINAL_GUARD_BYPASSED, defenses active, duplicate
+     delivery): perturbs only the terminal guard; content-ledger convergence acks the
+     redelivery without re-running the pipeline — STT stays at 1 (defense-in-depth).
 
 The STT invocation count is the sole black-box observable for the mutant proof —
-no white-box monkeypatch marker is used as evidence.
+no white-box monkeypatch marker is used as evidence, and no provider fake calls
+itself twice.
 
 Every fake/shortcut is labeled feasibility-only. No claim of STT/LLM fidelity,
-persist-before-send, or production Cloud Tasks control-plane equivalence.
+persist-before-send, production Cloud Tasks control-plane equivalence, or
+independent/third-party kernel-egress attestation (raw evidence is SUT-emitted).
 """
 
 from __future__ import annotations
@@ -167,6 +173,25 @@ def _poll_terminal(harness: Harness, uid: str, job_id: str, *, timeout: float = 
     )
 
 
+def _wait_for_duplicate_delivery(harness: Harness, *, expected_deliveries: int = 2, timeout: float = 30.0) -> None:
+    """Wait for the Cloud Tasks loopback transport to deliver both copies.
+
+    This is transport-level settlement, independent of STT count or job terminal
+    status. The defect-induction scenario waits for both at-least-once deliveries
+    to reach the worker, then observes the externally observable STT count. A
+    real boundary defeat causes the second delivery to re-run the real STT leaf;
+    an intact boundary acks the redelivery without re-running, so STT stays low
+    and the regression-sensitive assertion fails.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        delivered = sum(1 for e in harness.read_events() if e.get("event") == "task_delivered")
+        if delivered >= expected_deliveries:
+            return
+        time.sleep(0.3)
+    raise HarnessFailure(f"loopback did not deliver {expected_deliveries} copies within {timeout:.0f}s")
+
+
 def _assert_durable_terminal(harness: Harness, uid: str, job_id: str) -> str:
     """Assert the job reached a durable, retrievable completed terminal. Returns conversation_id."""
     status = _poll_terminal(harness, uid, job_id)
@@ -204,7 +229,9 @@ def _run_scenario_instance(
     ``expected_stt`` is the exact STT invocation count the scenario must observe,
     unless ``min_stt`` is set, in which case it is a lower bound (defect induced).
     When ``assert_composition`` is true, the job must reach a durable single-
-    conversation terminal; otherwise any terminal status suffices.
+    conversation terminal; otherwise the scenario waits for the at-least-once
+    transport to deliver both copies, then observes the black-box STT count
+    (a boundary defeat may leave the job non-terminal, which is expected).
     """
     print(f"\n{'='*60}", file=sys.stderr)
     print(f"  Phase 0A scenario: {label}", file=sys.stderr)
@@ -227,8 +254,12 @@ def _run_scenario_instance(
             conversation_id = _assert_durable_terminal(harness, uid, job_id)
             print(f"  durable terminal: conversation_id={conversation_id}", file=sys.stderr)
         else:
-            _poll_terminal(harness, uid, job_id)
-            print(f"  terminal reached (composition assertions skipped for defect-induction scenario)", file=sys.stderr)
+            # Defect-induction scenario: wait for the at-least-once transport to
+            # deliver both copies, then observe the externally observable STT count.
+            # The job may not reach terminal under a boundary defeat; terminal
+            # composition is not what the regression-sensitivity proof observes.
+            _wait_for_duplicate_delivery(harness, expected_deliveries=2)
+            print(f"  duplicate delivery settled; observing black-box STT count", file=sys.stderr)
 
         stt_count = harness.stt_invocation_count()
         print(f"  STT invocations: {stt_count}", file=sys.stderr)
@@ -284,19 +315,22 @@ def run_phase0a(topology_path: Path, state_root: Path) -> int:
         all_passed = False
         print(f"\n  BASE: FAILED — {exc}", file=sys.stderr)
 
-    # Scenario 2: MUTANT_UNGUARDED — STT double-invoke fault + duplicate delivery.
-    # The deterministic STT leaf invokes the provider twice for the same audio,
-    # inducing the externally observable duplicate-STT defect: STT > 1.
-    # This is the regression-sensitivity proof — the scenario FAILS unless the
-    # defect actually surfaces.  The STT invocation count is the sole black-box
-    # observable; no white-box monkeypatch marker is used as evidence.
+    # Scenario 2: MUTANT_UNGUARDED — full idempotency-boundary defeat + duplicate delivery.
+    # ALL duplicate-delivery deduplication checkpoints in the composed SUT are
+    # neutralized (terminal-status guard, content-ledger convergence, staged-audio
+    # cleanup, processed-segment ledger) so a REAL duplicate delivery genuinely
+    # re-runs the REAL pipeline. The deterministic STT leaf invokes the provider
+    # exactly once per real pipeline run — STT > 1 arises ONLY because two real
+    # deliveries each run the pipeline, never from a self-calling fake. This is the
+    # regression-sensitivity proof: the scenario FAILS unless the real boundary
+    # defeat surfaces the externally observable duplicate-STT defect.
     try:
         att = _run_scenario_instance(
             topology_path,
             state_root / "mutant-unguarded",
             fault_controls={
                 "OMI_REPLAY_DUPLICATE_DELIVERY": "1",
-                "OMI_REPLAY_STT_DOUBLE_INVOKE": "true",
+                "OMI_REPLAY_DEFEAT_IDEMPOTENCY": "true",
             },
             expected_stt=2,
             min_stt=True,
@@ -329,11 +363,14 @@ def run_phase0a(topology_path: Path, state_root: Path) -> int:
         all_passed = False
         print(f"\n  MUTANT_GUARDED: FAILED — {exc}", file=sys.stderr)
 
-    # Validate attestations independently.
+    # Validate attestations against the checked-in topology contract supplied
+    # independently of each artifact (binds embedded topology to the committed
+    # contract; rejects a modified worker command with a recomputed hash).
     from testing.replay_harness_phase0a.attestation import validate_attestation
 
+    expected_topology = json.loads(topology_path.read_text())
     for i, att in enumerate(attestations):
-        violations = validate_attestation(att)
+        violations = validate_attestation(att, expected_topology=expected_topology)
         if violations:
             all_passed = False
             print(f"\n  Attestation {i} violations: {violations}", file=sys.stderr)
@@ -349,11 +386,11 @@ def run_phase0a(topology_path: Path, state_root: Path) -> int:
         print("    - Network Cloud Tasks loopback delivers to the worker", file=sys.stderr)
         print("    - One sync job replay reaches a durable, retrievable terminal", file=sys.stderr)
         print("    - Default-deny egress + allow-list verified by attestation", file=sys.stderr)
-        print("    - Regression-sensitive mutant proof:", file=sys.stderr)
-        print("      MUTANT_UNGUARDED induces the duplicate-STT defect (STT >= 2);", file=sys.stderr)
-        print("      MUTANT_GUARDED proves defense-in-depth catches it (STT = 1)", file=sys.stderr)
-        print("  Bounded: finalizer fake is feasibility-only; no STT/LLM fidelity,", file=sys.stderr)
-        print("    persist-before-send, or production Cloud Tasks equivalence claimed.", file=sys.stderr)
+        print("    - Regression-sensitive mutant proof (real boundary, no self-calling fake):", file=sys.stderr)
+        print("      MUTANT_UNGUARDED defeats the real idempotency boundary so a real", file=sys.stderr)
+        print("      duplicate delivery re-runs the real STT leaf (STT >= 2);", file=sys.stderr)
+        print("      MUTANT_GUARDED proves defense-in-depth catches the bypass (STT = 1)", file=sys.stderr)
+        print("    - Self-consistent egress attestation (not independent kernel audit)", file=sys.stderr)
     else:
         print("  FEASIBILITY OUTCOME: BLOCKED — see errors above", file=sys.stderr)
     print(f"{'='*60}\n", file=sys.stderr)
