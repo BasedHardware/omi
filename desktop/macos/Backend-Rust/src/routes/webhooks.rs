@@ -724,6 +724,9 @@ pub fn webhook_routes() -> Router<AppState> {
 
 #[cfg(test)]
 mod tests {
+    // Tests may unwrap: the crate-level unwrap_used deny targets production
+    // code; a test failing on unwrap is the test doing its job.
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]
