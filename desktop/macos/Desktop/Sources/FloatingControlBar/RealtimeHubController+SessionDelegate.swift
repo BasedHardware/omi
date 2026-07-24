@@ -1329,13 +1329,26 @@ extension RealtimeHubController {
       provider: providerTag,
       aliveFor: aliveFor,
       activeTurn: hasActiveTurn)
-    DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
+    let closeAttemptID = DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
       provider: providerTag,
       category: closeCategory?.rawValue,
       aliveFor: aliveFor,
       activeTurn: hasActiveTurn,
       authMode: authMode,
       failureClass: credentialFailureClass)
+    func recordCloseResolution(
+      turnOutcome: RealtimeProviderCloseTurnOutcome,
+      recoveryAction: RealtimeProviderCloseRecoveryAction,
+      recoveryResult: RealtimeProviderCloseRecoveryResult
+    ) {
+      DesktopDiagnosticsManager.shared.recordRealtimeProviderCloseResolution(
+        closeAttemptID: closeAttemptID,
+        provider: providerTag,
+        activeTurn: hasActiveTurn,
+        turnOutcome: turnOutcome,
+        recoveryAction: recoveryAction,
+        recoveryResult: recoveryResult)
+    }
     if RealtimeHubCloseClassifier.shouldReportToSentry(closeCategory) {
       // Keep the provider/system payload in the private local log. The Sentry
       // message is constructed only from bounded enums and scalars.
@@ -1353,6 +1366,10 @@ extension RealtimeHubController {
       hasActiveTurn: hasActiveTurn)
     {
       recoverFromExpectedSessionRotation(sessionRotationPlan, activeTurn: activeTurn)
+      recordCloseResolution(
+        turnOutcome: sessionRotationPlan == .terminateActiveTurnAndRewarm ? .failed : .notInterrupted,
+        recoveryAction: .sessionRewarm,
+        recoveryResult: .started)
       return
     }
     if replacementAudioBuffer != nil, let failedProvider = provider {
@@ -1363,12 +1380,23 @@ extension RealtimeHubController {
           from: failedProvider,
           reason: replacementFailoverReason)
       {
+        recordCloseResolution(
+          turnOutcome: .pendingReplacement,
+          recoveryAction: .providerFailover,
+          recoveryResult: .started)
         return
       }
       failBargeInReplacement(provider: failedProvider, reason: message)
       teardownSession()
+      recordCloseResolution(
+        turnOutcome: .failed,
+        recoveryAction: .cascade,
+        recoveryResult: .exhausted)
       return
     }
+    let turnOutcome: RealtimeProviderCloseTurnOutcome =
+      ownsActiveHubTurn && !resolvedScreenProtocol && activeTurn?.providerFinished != true
+      ? .failed : .notInterrupted
     if ownsActiveHubTurn, !resolvedScreenProtocol, activeTurn?.providerFinished != true {
       terminateActiveHubTurn(activeTurn)
     }
@@ -1376,13 +1404,33 @@ extension RealtimeHubController {
     // context. Only switch for stable credential/quota classes; transient fast closes
     // re-warm the same provider and rely on the shared continuity packet.
     if case .providerAuthFailed = credentialFailureClass {
-      if aliveFor < 10, failoverToAlternateProvider(reason: "auth") { return }
+      if aliveFor < 10, failoverToAlternateProvider(reason: "auth") {
+        recordCloseResolution(
+          turnOutcome: turnOutcome,
+          recoveryAction: .providerFailover,
+          recoveryResult: .started)
+        return
+      }
       teardownSession()
+      recordCloseResolution(
+        turnOutcome: turnOutcome,
+        recoveryAction: .cascade,
+        recoveryResult: .exhausted)
       return
     }
     if case .providerQuotaExceeded = credentialFailureClass {
-      if failoverToAlternateProvider(reason: "quota") { return }
+      if failoverToAlternateProvider(reason: "quota") {
+        recordCloseResolution(
+          turnOutcome: turnOutcome,
+          recoveryAction: .providerFailover,
+          recoveryResult: .started)
+        return
+      }
       teardownSession()
+      recordCloseResolution(
+        turnOutcome: turnOutcome,
+        recoveryAction: .cascade,
+        recoveryResult: .exhausted)
       return
     }
     // Re-warm so the NEXT PTT uses the hub, not the STT cascade. Gemini idle-closes
@@ -1398,11 +1446,19 @@ extension RealtimeHubController {
     }
     guard !reconnectPending, hubReconnectStrikes < Self.maxReconnectStrikes else {
       teardownSession()
+      recordCloseResolution(
+        turnOutcome: turnOutcome,
+        recoveryAction: .sessionRewarm,
+        recoveryResult: .exhausted)
       return
     }
     hubReconnectStrikes += 1
     reconnectPending = true
     replaceSessionAfterDrain(reconnectDelayNanoseconds: 1_500_000_000)
+    recordCloseResolution(
+      turnOutcome: turnOutcome,
+      recoveryAction: .sessionRewarm,
+      recoveryResult: .started)
   }
 
   /// OpenAI limits realtime sessions to sixty minutes. Rotation is a normal

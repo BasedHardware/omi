@@ -1292,14 +1292,14 @@ import XCTest
       "Mint failure must clear minting before failover starts the alternate provider")
     XCTAssertTrue(
       hubSource.contains(
-        "if case .providerAuthFailed = credentialFailureClass {\n      if aliveFor < 10, failoverToAlternateProvider(reason: \"auth\") { return }"
+        "if case .providerAuthFailed = credentialFailureClass {\n      if aliveFor < 10, failoverToAlternateProvider(reason: \"auth\") {\n        recordCloseResolution("
       ),
-      "Provider auth failures should try alternate provider before stopping reconnect")
+      "Provider auth failures should record the alternate-provider recovery before stopping reconnect")
     XCTAssertTrue(
       hubSource.contains(
-        "if case .providerQuotaExceeded = credentialFailureClass {\n      if failoverToAlternateProvider(reason: \"quota\") { return }"
+        "if case .providerQuotaExceeded = credentialFailureClass {\n      if failoverToAlternateProvider(reason: \"quota\") {\n        recordCloseResolution("
       ),
-      "Provider quota failures should try alternate provider regardless of socket age")
+      "Provider quota failures should record the alternate-provider recovery regardless of socket age")
     XCTAssertTrue(
       hubSource.contains("let reportingPlan = RealtimeHubFailureReportingPlan.make(")
         && hubSource.contains("logError(reportingPlan.sentryMessage)"),
