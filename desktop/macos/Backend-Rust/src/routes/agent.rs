@@ -671,6 +671,22 @@ mod tests {
         assert_eq!(err, StatusCode::INTERNAL_SERVER_ERROR);
     }
 
+    #[tokio::test]
+    async fn authoritative_agent_vm_transition_fails_closed_in_async_handler() {
+        async fn apply_authoritative_transition(
+            write: Result<(), &'static str>,
+        ) -> Result<(), StatusCode> {
+            fail_closed_firestore_transition(write, "Failed to mark stopped VM provisioning")?;
+            Ok(())
+        }
+
+        assert!(apply_authoritative_transition(Ok(())).await.is_ok());
+        assert_eq!(
+            apply_authoritative_transition(Err("simulated firestore write failure")).await,
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        );
+    }
+
     #[test]
     fn recovered_vm_external_ip_requires_nonempty_nat_ip() {
         let good = serde_json::json!({
