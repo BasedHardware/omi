@@ -3195,5 +3195,7 @@
     "whisperModelSizeLarge": "ใหญ่",
     "whisperModelSizeMedium": "กลาง",
     "whisperModelSizeSmall": "เล็ก",
-    "whisperModelSizeTiny": "เล็กมาก"
+    "whisperModelSizeTiny": "เล็กมาก",
+    "sendRawAudioToOmi": "ส่งเสียงดิบไปยัง Omi",
+    "sendRawAudioToOmiDescription": "ปิดเพื่อไม่ให้ส่งเสียงดิบไปยัง Omi ข้อความถอดเสียงและข้อมูลที่ฟีเจอร์คลาวด์ต้องใช้อาจยังถูกส่งไปยัง Omi"
 }

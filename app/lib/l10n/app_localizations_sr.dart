@@ -9787,4 +9787,11 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Повезивање са тим микрофоном није успело. Проверите да ли је повезан у подешавањима iPhone-а.';
+
+  @override
+  String get sendRawAudioToOmi => 'Шаљи необрађени звук у Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Искључите да бисте спречили слање необрађеног звука у Omi. Транскрипти и подаци потребни за функције у облаку и даље се могу слати у Omi.';
 }

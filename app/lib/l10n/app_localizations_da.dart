@@ -9758,4 +9758,11 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Der kunne ikke oprettes forbindelse til mikrofonen. Sørg for, at den er tilsluttet i iPhone-indstillinger.';
+
+  @override
+  String get sendRawAudioToOmi => 'Send rå lyd til Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Slå fra for at forhindre, at rå lyd sendes til Omi. Transskriptioner og data, som cloudfunktioner kræver, kan stadig blive sendt til Omi.';
 }

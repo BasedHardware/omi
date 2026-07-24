@@ -9805,4 +9805,11 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'ಆ ಮೈಕ್ರೊಫೋನ್‌ಗೆ ಸಂಪರ್ಕಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಅದು iPhone ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಸಂಪರ್ಕಗೊಂಡಿದೆಯೇ ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಿ.';
+
+  @override
+  String get sendRawAudioToOmi => 'Omi ಗೆ ಕಚ್ಚಾ ಆಡಿಯೊ ಕಳುಹಿಸಿ';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Omi ಗೆ ಕಚ್ಚಾ ಆಡಿಯೊ ಕಳುಹಿಸುವುದನ್ನು ತಡೆಯಲು ಇದನ್ನು ಆಫ್ ಮಾಡಿ. ಪ್ರತಿಲಿಪಿಗಳು ಮತ್ತು ಕ್ಲೌಡ್ ವೈಶಿಷ್ಟ್ಯಗಳಿಗೆ ಅಗತ್ಯವಾದ ಡೇಟಾವನ್ನು ಇನ್ನೂ Omi ಗೆ ಕಳುಹಿಸಬಹುದು.';
 }

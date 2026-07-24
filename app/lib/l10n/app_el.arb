@@ -3195,5 +3195,7 @@
     "whisperModelSizeLarge": "Μεγάλο",
     "whisperModelSizeMedium": "Μεσαίο",
     "whisperModelSizeSmall": "Μικρό",
-    "whisperModelSizeTiny": "Μικροσκοπικό"
+    "whisperModelSizeTiny": "Μικροσκοπικό",
+    "sendRawAudioToOmi": "Αποστολή ακατέργαστου ήχου στο Omi",
+    "sendRawAudioToOmiDescription": "Απενεργοποιήστε το για να μην αποστέλλεται ακατέργαστος ήχος στο Omi. Οι απομαγνητοφωνήσεις και τα δεδομένα που απαιτούν οι λειτουργίες cloud ενδέχεται να συνεχίσουν να αποστέλλονται στο Omi."
 }

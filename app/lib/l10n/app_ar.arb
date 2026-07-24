@@ -3171,5 +3171,7 @@
     "whisperModelSizeLarge": "كبير",
     "whisperModelSizeMedium": "متوسط",
     "whisperModelSizeSmall": "صغير",
-    "whisperModelSizeTiny": "صغير جدًا"
+    "whisperModelSizeTiny": "صغير جدًا",
+    "sendRawAudioToOmi": "إرسال الصوت الخام إلى Omi",
+    "sendRawAudioToOmiDescription": "أوقف هذا الخيار لمنع إرسال الصوت الخام إلى Omi. قد يستمر إرسال النصوص والبيانات اللازمة للميزات السحابية إلى Omi."
 }

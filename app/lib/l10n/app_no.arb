@@ -3195,5 +3195,7 @@
     "whisperModelSizeLarge": "Stor",
     "whisperModelSizeMedium": "Medium",
     "whisperModelSizeSmall": "Liten",
-    "whisperModelSizeTiny": "Veldig liten"
+    "whisperModelSizeTiny": "Veldig liten",
+    "sendRawAudioToOmi": "Send rå lyd til Omi",
+    "sendRawAudioToOmiDescription": "Slå av for å hindre at rå lyd sendes til Omi. Transkripsjoner og data som skyfunksjoner trenger, kan fortsatt bli sendt til Omi."
 }

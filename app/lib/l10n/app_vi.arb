@@ -3200,5 +3200,7 @@
     "whisperModelSizeLarge": "Lớn",
     "whisperModelSizeMedium": "Trung bình",
     "whisperModelSizeSmall": "Nhỏ",
-    "whisperModelSizeTiny": "Rất nhỏ"
+    "whisperModelSizeTiny": "Rất nhỏ",
+    "sendRawAudioToOmi": "Gửi âm thanh thô đến Omi",
+    "sendRawAudioToOmiDescription": "Tắt để ngăn âm thanh thô được gửi đến Omi. Bản chép lời và dữ liệu cần cho các tính năng đám mây vẫn có thể được gửi đến Omi."
 }

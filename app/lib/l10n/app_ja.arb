@@ -3171,5 +3171,7 @@
     "rayBanMetaMicPickerDescription": "メガネの Bluetooth マイクを選択してください。Omi の使用中は音楽が一時停止します。",
     "rayBanMetaMicPickerEmpty": "Bluetooth マイクが見つかりません。iPhone の設定でメガネを接続してから、もう一度お試しください。",
     "rayBanMetaMicPickerLoadError": "Bluetooth マイクを読み込めませんでした。Bluetooth がオンになっていることを確認して、もう一度お試しください。",
-    "rayBanMetaMicPickerConnectError": "そのマイクに接続できませんでした。iPhone の設定で接続されていることを確認してください。"
+    "rayBanMetaMicPickerConnectError": "そのマイクに接続できませんでした。iPhone の設定で接続されていることを確認してください。",
+    "sendRawAudioToOmi": "未処理の音声を Omi に送信",
+    "sendRawAudioToOmiDescription": "オフにすると、未処理の音声は Omi に送信されません。文字起こしとクラウド機能に必要なデータは、引き続き Omi に送信される場合があります。"
 }

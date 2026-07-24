@@ -9793,4 +9793,11 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Не вдалося підключитися до цього мікрофона. Переконайтеся, що його підключено в параметрах iPhone.';
+
+  @override
+  String get sendRawAudioToOmi => 'Надсилати необроблений звук до Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Вимкніть, щоб необроблений звук не надсилався до Omi. Транскрипти й дані, потрібні хмарним функціям, усе ще можуть надсилатися до Omi.';
 }

@@ -11570,5 +11570,13 @@
     "rayBanMetaMicPickerConnectError": "Could not connect to that microphone. Make sure it is connected in iPhone Settings.",
     "@rayBanMetaMicPickerConnectError": {
         "description": "Error shown when the selected Bluetooth HFP microphone cannot connect"
+    },
+    "sendRawAudioToOmi": "Send raw audio to Omi",
+    "@sendRawAudioToOmi": {
+        "description": "Toggle label controlling whether Custom STT raw audio is also sent to Omi"
+    },
+    "sendRawAudioToOmiDescription": "Turn off to prevent raw audio from being sent to Omi. Transcripts and data needed by cloud features may still be sent to Omi.",
+    "@sendRawAudioToOmiDescription": {
+        "description": "Explains that disabling raw audio forwarding preserves transcript-based cloud features"
     }
 }

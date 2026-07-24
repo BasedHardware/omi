@@ -9795,4 +9795,11 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Neizdevās izveidot savienojumu ar šo mikrofonu. Pārliecinieties, ka tas ir pievienots iPhone iestatījumos.';
+
+  @override
+  String get sendRawAudioToOmi => 'Sūtīt neapstrādātu audio uz Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Izslēdziet, lai neapstrādāts audio netiktu sūtīts uz Omi. Transkripcijas un mākoņfunkcijām nepieciešamie dati joprojām var tikt sūtīti uz Omi.';
 }

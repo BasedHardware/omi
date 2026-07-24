@@ -9769,4 +9769,11 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Không thể kết nối với micrô đó. Hãy đảm bảo micrô đã được kết nối trong Cài đặt iPhone.';
+
+  @override
+  String get sendRawAudioToOmi => 'Gửi âm thanh thô đến Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Tắt để ngăn âm thanh thô được gửi đến Omi. Bản chép lời và dữ liệu cần cho các tính năng đám mây vẫn có thể được gửi đến Omi.';
 }

@@ -3173,5 +3173,7 @@
     "whisperModelSizeLarge": "Velký",
     "whisperModelSizeMedium": "Střední",
     "whisperModelSizeSmall": "Malý",
-    "whisperModelSizeTiny": "Nejmenší"
+    "whisperModelSizeTiny": "Nejmenší",
+    "sendRawAudioToOmi": "Odesílat nezpracovaný zvuk do Omi",
+    "sendRawAudioToOmiDescription": "Vypnutím zabráníte odesílání nezpracovaného zvuku do Omi. Přepisy a data potřebná pro cloudové funkce se mohou do Omi nadále odesílat."
 }

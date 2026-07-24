@@ -9822,4 +9822,11 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'ఆ మైక్రోఫోన్‌కు కనెక్ట్ కాలేకపోయాము. అది iPhone సెట్టింగ్‌లలో కనెక్ట్ అయిందని నిర్ధారించుకోండి.';
+
+  @override
+  String get sendRawAudioToOmi => 'ముడి ఆడియోను Omiకి పంపండి';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'ముడి ఆడియో Omiకి పంపబడకుండా ఉండటానికి దీన్ని ఆఫ్ చేయండి. ట్రాన్స్‌క్రిప్ట్‌లు మరియు క్లౌడ్ ఫీచర్లకు అవసరమైన డేటా ఇప్పటికీ Omiకి పంపబడవచ్చు.';
 }

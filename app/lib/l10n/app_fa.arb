@@ -10782,5 +10782,7 @@
     "whisperModelSizeLarge": "بزرگ",
     "whisperModelSizeMedium": "متوسط",
     "whisperModelSizeSmall": "کوچک",
-    "whisperModelSizeTiny": "خیلی کوچک"
+    "whisperModelSizeTiny": "خیلی کوچک",
+    "sendRawAudioToOmi": "ارسال صدای خام به Omi",
+    "sendRawAudioToOmiDescription": "برای جلوگیری از ارسال صدای خام به Omi این گزینه را خاموش کنید. متن پیاده‌شده و داده‌های مورد نیاز قابلیت‌های ابری ممکن است همچنان به Omi ارسال شوند."
 }
