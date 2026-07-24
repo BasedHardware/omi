@@ -468,6 +468,53 @@ class TestGetOrCreateLlmBehavioral:
             _llm_cache.clear()
             _llm_cache.update(saved)
 
+    def test_explicit_cache_options_travel_in_extra_body(self):
+        """Explicit cache options ride in extra_body, never as a named argument.
+
+        The SDK validates keyword arguments while building the request, so a
+        client older than the argument raises TypeError in process and the call
+        never reaches the gateway that understands the field. Conversation
+        structuring failed that way for every request in production while
+        passing locally, because the pinned client is older than the one
+        developed against. extra_body carries the field on every version, so
+        this asserts against the pinned client rather than the installed one.
+        """
+        import inspect
+        import re
+        from pathlib import Path
+
+        from openai.resources.chat.completions import Completions
+
+        pin = re.search(
+            r'^openai==(\S+)$',
+            Path(__file__).resolve().parents[2].joinpath('requirements.txt').read_text(),
+            re.MULTILINE,
+        )
+        assert pin, 'openai must stay pinned so the supported arguments are knowable'
+        assert 'extra_body' in inspect.signature(Completions.create).parameters
+
+        from unittest.mock import patch as _patch
+
+        import utils.llm.clients as clients_mod
+
+        captured: dict = {}
+
+        class _Recorder:
+            def bind(self, **kwargs):
+                captured.update(kwargs)
+                return self
+
+        options = {'mode': 'explicit', 'ttl': '30m'}
+        with _patch.object(clients_mod, 'should_route_features_through_gateway', return_value=True), _patch.object(
+            clients_mod, 'get_or_create_omi_gateway_llm', return_value=_Recorder()
+        ), _patch.object(clients_mod, 'wrap_gateway_with_legacy_fallback', return_value=_Recorder()), _patch.object(
+            clients_mod, 'maybe_wrap_dev_gateway_shadow', return_value=_Recorder()
+        ):
+            clients_mod.get_llm('conv_structure', prompt_cache_options=options)
+
+        assert 'prompt_cache_options' not in captured, 'must not be bound as a named SDK argument'
+        assert captured['extra_body']['prompt_cache_options'] == options
+
     def test_streaming_instance_has_streaming_flag(self):
         from unittest.mock import patch as _patch
 
