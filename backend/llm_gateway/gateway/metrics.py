@@ -10,7 +10,7 @@ from prometheus_client import Counter, Histogram
 from llm_gateway.gateway.accounting import AccountingEvent
 from llm_gateway.gateway.errors import GatewayError
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, output_budget_bucket
-from llm_gateway.gateway.schemas import FailureClass
+from llm_gateway.gateway.schemas import FailureClass, ProviderRejection
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,7 @@ _REQUEST_LABELS = [
     'fallback_reason',
     'outcome',
     'error_class',
+    'provider_rejection',
     'budget_source',
     'output_budget',
     'completion_size',
@@ -151,14 +152,15 @@ def observe_error(
         started_at,
         lane_id=lane_id,
         route_artifact_id=route_artifact_id,
-        provider='none',
-        model='none',
+        provider=error.provider,
+        model=error.model,
         credential_source=credential_source,
         used_lkg=False,
         fallback_used=False,
         fallback_reason=error.failure_class,
         outcome='error',
         error_class=error.code.value,
+        provider_rejection=error.provider_rejection,
         request_id=request_id,
         api_surface=api_surface,
         streaming=streaming,
@@ -183,6 +185,7 @@ def observe_route_result(
     api_surface: str,
     streaming: bool,
     phase: str,
+    provider_rejection: ProviderRejection | str = ProviderRejection.NONE,
     ttfb_seconds: float | None = None,
     budget_source: str = 'none',
     output_budget: str = 'none',
@@ -203,6 +206,7 @@ def observe_route_result(
         'fallback_reason': _enum_label(fallback_reason, default='none'),
         'outcome': _bounded(outcome),
         'error_class': _bounded(error_class),
+        'provider_rejection': _provider_rejection_label(provider_rejection),
         'budget_source': _budget_source_label(budget_source),
         'output_budget': _output_budget_label(output_budget),
         'completion_size': _completion_size_label(completion_size),
@@ -220,6 +224,7 @@ def observe_route_result(
     terminal_log(
         'llm_gateway_terminal request_id=%s surface=%s streaming=%s phase=%s lane=%s route=%s provider=%s '
         'model=%s credential_source=%s outcome=%s error_class=%s failure_class=%s fallback_used=%s '
+        'provider_rejection=%s '
         'budget_source=%s output_budget=%s completion_size=%s finish_reason=%s ttfb_seconds=%s',
         request_id,
         _bounded(api_surface),
@@ -234,6 +239,7 @@ def observe_route_result(
         labels['error_class'],
         labels['fallback_reason'],
         labels['fallback_used'],
+        labels['provider_rejection'],
         labels['budget_source'],
         labels['output_budget'],
         labels['completion_size'],
@@ -298,6 +304,14 @@ def _enum_label(value: object, *, default: str = 'unknown') -> str:
     if raw_value is None:
         return default
     return _bounded(str(raw_value))
+
+
+def _provider_rejection_label(value: object) -> str:
+    raw_value = getattr(value, 'value', value)
+    try:
+        return ProviderRejection(str(raw_value)).value
+    except ValueError:
+        return ProviderRejection.OTHER_4XX.value
 
 
 def _bounded(value: str) -> str:
