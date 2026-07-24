@@ -1,0 +1,18 @@
+[workspace]
+members = [
+    "agent-runtime-rust",
+    "shared-rust",
+    "macos/Backend-Rust",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+rust-version = "1.88"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+regex = "1"

@@ -1,0 +1,22 @@
+[package]
+name = "omi-agent-runtime"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait = "0.1"
+futures = "0.3"
+rx4 = { version = "=0.3.19", default-features = false, features = ["providers"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+regex.workspace = true
+rusqlite = { version = "0.32", features = ["bundled"] }
+sha2 = "0.10"
+tokio = { version = "1", features = ["io-std", "io-util", "macros", "rt-multi-thread", "sync"] }
+uuid = { version = "1", features = ["v4"] }
+
+[lints.clippy]
+unwrap_used = "deny"
