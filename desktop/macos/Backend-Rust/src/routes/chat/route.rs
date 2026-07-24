@@ -103,6 +103,7 @@ fn attach_request_id(response: &mut Response, request_id: &str) {
 
 async fn chat_completions(
     State(state): State<AppState>,
+    deadline: crate::request_deadline::RequestDeadline,
     user: PaywalledAuthUser,
     headers: HeaderMap,
     Json(req): Json<ChatCompletionRequest>,
@@ -115,7 +116,7 @@ async fn chat_completions(
         reasoning_effort = ?inbound_reasoning_effort(&headers, &req),
         "chat completion received"
     );
-    let response = chat_completions_inner(state, user, headers, req).await;
+    let response = chat_completions_inner(state, user, headers, req, deadline).await;
     response.map(|mut response| {
         attach_request_id(&mut response, &request_id);
         response
@@ -127,6 +128,7 @@ async fn chat_completions_inner(
     user: PaywalledAuthUser,
     headers: HeaderMap,
     req: ChatCompletionRequest,
+    deadline: crate::request_deadline::RequestDeadline,
 ) -> Result<Response, StatusCode> {
     let byok_stripped = user.byok_stripped;
     let user: AuthUser = user.into();
@@ -245,6 +247,7 @@ async fn chat_completions_inner(
             &user,
             &state,
             is_byok,
+            &deadline,
         )
         .await
     } else if req.stream {
@@ -256,6 +259,7 @@ async fn chat_completions_inner(
             &user,
             &state,
             is_byok,
+            &deadline,
         )
         .await
     } else {
@@ -267,6 +271,7 @@ async fn chat_completions_inner(
             &user,
             &state,
             is_byok,
+            &deadline,
         )
         .await
     }
@@ -276,6 +281,11 @@ pub(crate) fn chat_completions_routes() -> Router<AppState> {
     Router::new()
         .route("/v2/chat/completions", post(chat_completions))
         .layer(DefaultBodyLimit::max(CHAT_COMPLETIONS_MAX_BODY_SIZE))
+        // Outermost for this route: the budget must exist before extractors and
+        // body extraction so auth/paywall waits are inside it (#9835).
+        .layer(axum::middleware::from_fn(
+            crate::request_deadline::attach_request_deadline,
+        ))
 }
 
 #[cfg(test)]

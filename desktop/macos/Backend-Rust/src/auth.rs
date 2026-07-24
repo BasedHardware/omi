@@ -98,6 +98,8 @@ impl IntoResponse for AuthError {
             StatusCode::FORBIDDEN
         } else if self.error == "jwks_refresh_failed" {
             StatusCode::SERVICE_UNAVAILABLE
+        } else if self.error == "request_deadline_exceeded" {
+            StatusCode::GATEWAY_TIMEOUT
         } else {
             StatusCode::UNAUTHORIZED
         };
@@ -480,6 +482,29 @@ pub struct PaywalledAuthUser {
     pub byok_stripped: bool,
 }
 
+/// Bound one extractor stage by the request budget when the route admitted one
+/// (#9835). Routes without the deadline middleware keep today's behavior; the
+/// unknown-kid refresh cooldown and cache TTLs are policy clocks and stay
+/// independent — only this request's wait is bounded.
+async fn within_request_deadline<T, F>(
+    deadline: Option<&crate::request_deadline::RequestDeadline>,
+    stage: &str,
+    future: F,
+) -> Result<T, AuthError>
+where
+    F: std::future::Future<Output = T>,
+{
+    match deadline {
+        None => Ok(future.await),
+        Some(d) => tokio::time::timeout(d.remaining(), future)
+            .await
+            .map_err(|_| AuthError {
+                error: "request_deadline_exceeded".to_string(),
+                message: format!("Request deadline budget exhausted during {stage}"),
+            }),
+    }
+}
+
 #[async_trait]
 impl<S> FromRequestParts<S> for PaywalledAuthUser
 where
@@ -488,6 +513,10 @@ where
     type Rejection = AuthError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let deadline = parts
+            .extensions
+            .get::<crate::request_deadline::RequestDeadline>()
+            .copied();
         // Get + extract bearer token
         let auth_header = parts
             .headers
@@ -514,7 +543,12 @@ where
                 message: "Firebase auth not configured".to_string(),
             })?;
 
-        let (uid, name, email) = firebase_auth.0.verify_token(token).await?;
+        let (uid, name, email) = within_request_deadline(
+            deadline.as_ref(),
+            "token verification",
+            firebase_auth.0.verify_token(token),
+        )
+        .await??;
 
         // BYOK fingerprint validation (issue #7357).
         // Validates SHA-256 fingerprints against Firestore enrollment.
@@ -523,7 +557,12 @@ where
         if let Some(byok_ext) = parts.extensions.get::<crate::byok::ByokCacheExt>() {
             // Get the Firestore service from the paywall checker (shares the same Arc)
             if let Some(checker) = parts.extensions.get::<crate::paywall::PaywallCheckerExt>() {
-                let byok_state = byok_ext.0.get_or_fetch(&uid, &checker.0.firestore).await;
+                let byok_state = within_request_deadline(
+                    deadline.as_ref(),
+                    "BYOK state fetch",
+                    byok_ext.0.get_or_fetch(&uid, &checker.0.firestore),
+                )
+                .await?;
 
                 match crate::byok::validate_byok_request(&uid, &parts.headers, &byok_state) {
                     Ok(crate::byok::ByokValidation::Active) => {
@@ -544,12 +583,16 @@ where
         }
 
         // Paywall check — fail open if Firestore is unreachable so a backend
-        // outage never makes paying users look paywalled.
+        // outage never makes paying users look paywalled. Budget exhaustion is
+        // different from an outage: the typed timeout is returned instead of
+        // spending provider budget on a request that can no longer finish.
         if let Some(checker) = parts.extensions.get::<crate::paywall::PaywallCheckerExt>() {
-            if checker
-                .0
-                .is_paywalled(&uid, &parts.headers, byok_stripped)
-                .await
+            if within_request_deadline(
+                deadline.as_ref(),
+                "paywall check",
+                checker.0.is_paywalled(&uid, &parts.headers, byok_stripped),
+            )
+            .await?
             {
                 return Err(AuthError {
                     error: "trial_expired".to_string(),

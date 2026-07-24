@@ -9,6 +9,7 @@ use std::{sync::Arc, time::Duration};
 
 use crate::auth::AuthUser;
 use crate::models::chat_completions::*;
+use crate::request_deadline::RequestDeadline;
 use crate::services::FirestoreService;
 use crate::AppState;
 
@@ -17,18 +18,32 @@ use super::response_or_500;
 use super::sse::{drain_sse_events, make_chunk, sse_line, stream_termination_chunks};
 use super::transport::{complete_anthropic_server_tool_turn, log_usage, send_anthropic_with_retry};
 
-/// How long a streaming turn may go without a single byte from Anthropic before we end it.
+/// How long a streaming turn may go without SEMANTIC progress before we end it.
 ///
 /// Streaming deliberately sets no total response timeout (a long answer is not a stuck one), so
-/// this idle bound is the only thing that catches a stalled upstream. Anthropic emits `ping`
-/// events every few seconds throughout a generation, so a gap this long means the stream is
-/// dead, not slow.
+/// this idle bound is the only thing that catches a stalled upstream after the first visible
+/// event. Progress means a client-visible chunk (role, text delta, tool delta, finish) — raw
+/// bytes and Anthropic `ping` events emit nothing downstream and do not reset this timer, so a
+/// provider cannot ping indefinitely while the client sees nothing (#9835). Before the first
+/// visible event the request budget governs instead. This is a policy clock, not part of the
+/// request deadline.
 const STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub(super) struct StreamUsageContext {
     pub(super) uid: String,
     pub(super) upstream_model: String,
     pub(super) firestore: Option<Arc<FirestoreService>>,
+}
+
+/// Detached work spawned during a request must NEVER inherit the request
+/// deadline: the usage write outlives the response and runs under its own
+/// bounded background policy (#9835). This seam exists so that contract is
+/// testable without a live Firestore.
+pub(super) fn spawn_detached_usage_write<F>(write: F)
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
+    tokio::spawn(write);
 }
 
 pub(super) async fn handle_server_tool_streaming(
@@ -39,9 +54,15 @@ pub(super) async fn handle_server_tool_streaming(
     user: &AuthUser,
     state: &AppState,
     is_byok: bool,
+    deadline: &RequestDeadline,
 ) -> Result<Response, StatusCode> {
+    // Public-web pause-turn synthesis is pre-first-visible-byte work: the whole
+    // turn stays inside the request budget.
     let anthropic_resp =
-        complete_anthropic_server_tool_turn(client, api_key, anthropic_req).await?;
+        match complete_anthropic_server_tool_turn(client, api_key, anthropic_req, deadline).await {
+            Ok(resp) => resp,
+            Err(error) => return error.into_response_or_status(),
+        };
 
     if !is_byok {
         let cost = compute_cost(&anthropic_resp.usage, route.upstream_model);
@@ -154,6 +175,7 @@ pub(super) fn translate_anthropic_sse_stream<S, E>(
     byte_stream: S,
     public_model: String,
     usage_context: StreamUsageContext,
+    deadline: RequestDeadline,
 ) -> impl Stream<Item = Result<Bytes, std::io::Error>>
 where
     S: Stream<Item = Result<Bytes, E>>,
@@ -176,12 +198,42 @@ where
         // Terminal state of the turn, so a stream that dies mid-flight still ends the SSE body.
         let mut sent_finish = false;
         let mut sent_done = false;
+        // Until the first client-visible chunk, the request budget governs the
+        // wait — raw bytes and pings do not extend it. Afterwards the semantic
+        // idle timer governs, reset only by visible chunks.
+        let mut first_visible_at: Option<tokio::time::Instant> = None;
         loop {
-            let next = match tokio::time::timeout(STREAM_IDLE_TIMEOUT, byte_stream.next()).await {
+            let wait = match first_visible_at {
+                None => deadline.remaining(),
+                Some(last_visible) => {
+                    STREAM_IDLE_TIMEOUT.saturating_sub(last_visible.elapsed())
+                }
+            };
+            let next = match tokio::time::timeout(wait, byte_stream.next()).await {
                 Ok(next) => next,
+                Err(_) if first_visible_at.is_none() => {
+                    // The budget ran out before the first visible event — a
+                    // ping-only or silent upstream. HTTP 200 is already on the
+                    // wire, so the typed timeout is a terminal SSE error event.
+                    tracing::error!(
+                        "chat_completions: budget exhausted before first visible event for user {}",
+                        usage_context.uid
+                    );
+                    let err_chunk = json!({
+                        "error": {
+                            "message": "The stream produced no visible output within the chat deadline budget. Please retry.",
+                            "type": "upstream_timeout",
+                            "code": 504
+                        }
+                    });
+                    yield Ok(sse_line(&err_chunk));
+                    yield Ok(Bytes::from_static(b"data: [DONE]\n\n"));
+                    sent_done = true;
+                    break;
+                }
                 Err(_) => {
                     tracing::error!(
-                        "chat_completions: no bytes from Anthropic for {}s, ending stalled turn for user {}",
+                        "chat_completions: no semantic progress from Anthropic for {}s, ending stalled turn for user {}",
                         STREAM_IDLE_TIMEOUT.as_secs(),
                         usage_context.uid
                     );
@@ -241,6 +293,7 @@ where
                                 None,
                             );
                             yield Ok::<Bytes, std::io::Error>(sse_line(&chunk_val));
+                            first_visible_at = Some(tokio::time::Instant::now());
                         }
                     }
 
@@ -273,6 +326,7 @@ where
                                     None,
                                 );
                                 yield Ok(sse_line(&chunk_val));
+                                first_visible_at = Some(tokio::time::Instant::now());
                             }
                             AnthropicContentBlock::Text { .. } => {
                                 // text_start — no chunk needed, text comes via deltas
@@ -314,6 +368,7 @@ where
                                     None,
                                 );
                                 yield Ok(sse_line(&chunk_val));
+                                first_visible_at = Some(tokio::time::Instant::now());
                             }
                             AnthropicDelta::CitationsDelta {} => {
                                 // Web-search citation metadata — no OpenAI equivalent.
@@ -331,6 +386,11 @@ where
                                     None,
                                 );
                                 yield Ok(sse_line(&chunk_val));
+                                // Reasoning deltas reach the client as visible
+                                // reasoning_content, so they are semantic progress: a long
+                                // thinking phase must not be killed by the idle timer
+                                // (#9135's "a long answer is not an error", for reasoning).
+                                first_visible_at = Some(tokio::time::Instant::now());
                             }
                             AnthropicDelta::SignatureDelta {} => {
                                 // Thinking-block signature — internal; dropped.
@@ -359,6 +419,7 @@ where
                                         None,
                                     );
                                     yield Ok(sse_line(&chunk_val));
+                                    first_visible_at = Some(tokio::time::Instant::now());
                                 }
                             }
                         }
@@ -397,6 +458,7 @@ where
                         );
                         yield Ok(sse_line(&chunk_val));
                         sent_finish = true;
+                        first_visible_at = Some(tokio::time::Instant::now());
 
                         // Send usage chunk
                         if let Some(ref fu) = final_usage {
@@ -429,7 +491,7 @@ where
                             let cost = compute_cost(&merged, &usage_context.upstream_model);
                             let uid_clone = usage_context.uid.clone();
                             let fs = firestore.clone();
-                            tokio::spawn(async move {
+                            spawn_detached_usage_write(async move {
                                 if let Err(e) = fs.record_llm_usage(
                                     &uid_clone,
                                     merged.input_tokens,
@@ -485,8 +547,13 @@ pub(super) async fn handle_streaming(
     user: &AuthUser,
     state: &AppState,
     is_byok: bool,
+    deadline: &RequestDeadline,
 ) -> Result<Response, StatusCode> {
-    let upstream_resp = send_anthropic_with_retry(client, api_key, anthropic_req, true).await?;
+    let upstream_resp =
+        match send_anthropic_with_retry(client, api_key, anthropic_req, true, deadline).await {
+            Ok(resp) => resp,
+            Err(error) => return error.into_response_or_status(),
+        };
 
     let status = upstream_resp.status();
     if !status.is_success() {
@@ -514,6 +581,7 @@ pub(super) async fn handle_streaming(
         upstream_resp.bytes_stream(),
         route.public_model.to_string(),
         usage_context,
+        *deadline,
     );
     let body = Body::from_stream(translated_stream);
 

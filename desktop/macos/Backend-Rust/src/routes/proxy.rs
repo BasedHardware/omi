@@ -13,12 +13,14 @@ use axum::{
     routing::post,
     Router,
 };
-use std::future::Future;
 use std::time::{Duration, Instant};
 
 use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::byok;
 use crate::fallback::{record_fallback, FallbackOutcome};
+use crate::request_deadline::{
+    attach_request_deadline, within_deadline, DeadlineElapsed, RequestDeadline, REQUEST_BUDGET,
+};
 use crate::AppState;
 
 use super::llm_stub::{llm_stub_enabled, stub_gemini_proxy_response};
@@ -51,57 +53,23 @@ const MAX_OUTPUT_TOKENS_CAP: u64 = 8192;
 /// explicitly on all production paths.
 const DEFAULT_THINKING_BUDGET: u64 = 1024;
 
-/// Cloud Run's configured request timeout for `desktop-backend`.
-const CLOUD_RUN_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
-
-/// Headroom reserved under the platform deadline so the proxy, rather than
-/// Cloud Run, owns timeout mapping and can return the typed, retryable
-/// `upstream_timeout` response.
-const GEMINI_PLATFORM_HEADROOM: Duration = Duration::from_secs(60);
-
-/// One end-to-end budget for non-streaming Gemini work. It derives from the
-/// Cloud Run request contract and includes token acquisition, provider
+/// One end-to-end budget for non-streaming Gemini work: the shared
+/// per-route-class admission budget (#9835). It derives from the Cloud Run
+/// request contract and includes extractor waits, token acquisition, provider
 /// selection/fallback, request send, and body drain. Long-context calls can
 /// legitimately spend more than 90 seconds thinking before their first byte.
-const GEMINI_TOTAL_TIMEOUT: Duration =
-    Duration::from_secs(CLOUD_RUN_REQUEST_TIMEOUT.as_secs() - GEMINI_PLATFORM_HEADROOM.as_secs());
-
+/// The budget is admitted in route middleware and carried by `RequestDeadline`.
+///
 /// Per-attempt defense inside the logical budget. There are no post-dispatch
 /// retries: generateContent may have completed (and incurred cost) even when its
 /// response is lost, so replaying it is not known-safe.
 const GEMINI_ATTEMPT_HEADROOM: Duration = Duration::from_secs(5);
 const GEMINI_ATTEMPT_TIMEOUT: Duration =
-    Duration::from_secs(GEMINI_TOTAL_TIMEOUT.as_secs() - GEMINI_ATTEMPT_HEADROOM.as_secs());
+    Duration::from_secs(REQUEST_BUDGET.as_secs() - GEMINI_ATTEMPT_HEADROOM.as_secs());
 
 /// Bound TCP/TLS setup for all Gemini proxy calls. Streaming requests must not
 /// use a total response timeout because long SSE replies are expected.
 const GEMINI_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct GeminiDeadlineElapsed;
-
-async fn within_gemini_deadline<F, T>(
-    budget: Duration,
-    future: F,
-) -> Result<T, GeminiDeadlineElapsed>
-where
-    F: Future<Output = T>,
-{
-    race_gemini_deadline(tokio::time::sleep(budget), future).await
-}
-
-async fn race_gemini_deadline<D, F, T>(deadline: D, future: F) -> Result<T, GeminiDeadlineElapsed>
-where
-    D: Future<Output = ()>,
-    F: Future<Output = T>,
-{
-    tokio::pin!(deadline);
-    tokio::pin!(future);
-    tokio::select! {
-        value = &mut future => Ok(value),
-        () = &mut deadline => Err(GeminiDeadlineElapsed),
-    }
-}
 
 /// Emits exactly one bounded outcome for a logical non-streaming provider call.
 /// A request id is useful for log correlation but must never become a metric
@@ -396,6 +364,7 @@ fn deadline_outcome(phase: &str) -> (&'static str, &'static str, ProxyError) {
 /// Rate-limited per user: Tier 1 (allow), Tier 2 (degrade Pro→Flash), Tier 3 (reject 429).
 async fn gemini_proxy(
     State(state): State<AppState>,
+    deadline: RequestDeadline,
     user: PaywalledAuthUser,
     headers: HeaderMap,
     Path(path): Path<String>,
@@ -480,8 +449,8 @@ async fn gemini_proxy(
         };
         let mut telemetry =
             GeminiRequestTelemetry::new(initial_provider, model, action, sanitized_body.len());
-        let result = within_gemini_deadline(
-            GEMINI_TOTAL_TIMEOUT,
+        let result = within_deadline(
+            &deadline,
             gemini_proxy_server_key(
                 &state,
                 &effective_path,
@@ -508,7 +477,7 @@ async fn gemini_proxy(
                 telemetry.complete(outcome, status_class);
                 return Ok(error_response_with_request_id(error, &telemetry.request_id));
             }
-            Err(GeminiDeadlineElapsed) => {
+            Err(DeadlineElapsed) => {
                 let (outcome, status_class, error) = deadline_outcome(telemetry.phase);
                 telemetry.complete(outcome, status_class);
                 return Ok(error_response_with_request_id(error, &telemetry.request_id));
@@ -544,7 +513,7 @@ async fn gemini_proxy(
     let mut telemetry =
         GeminiRequestTelemetry::new("ai_studio_byok", model, action, sanitized_body.len());
     telemetry.set_phase("provider");
-    let result = within_gemini_deadline(GEMINI_TOTAL_TIMEOUT, async {
+    let result = within_deadline(&deadline, async {
         let upstream = state
             .gemini_client
             .post(&url)
@@ -572,7 +541,7 @@ async fn gemini_proxy(
             telemetry.complete(outcome, status_class);
             return Ok(error_response_with_request_id(error, &telemetry.request_id));
         }
-        Err(GeminiDeadlineElapsed) => {
+        Err(DeadlineElapsed) => {
             let (outcome, status_class, error) = deadline_outcome(telemetry.phase);
             telemetry.complete(outcome, status_class);
             return Ok(error_response_with_request_id(error, &telemetry.request_id));
@@ -1352,6 +1321,10 @@ pub fn proxy_routes() -> Router<AppState> {
         // Issue #6624: 5 MB body size limit for proxy routes only (not global).
         // Normal app payloads are 300-600 KB; 5 MB gives ~8x headroom.
         .layer(DefaultBodyLimit::max(GEMINI_MAX_BODY_SIZE))
+        // Outermost: the shared request budget exists before extractors, so
+        // auth/paywall waits are inside it (#9835). The streaming proxy uses it
+        // for extractor waits only — long SSE replies keep no total timeout.
+        .layer(axum::middleware::from_fn(attach_request_deadline))
 }
 
 #[cfg(test)]
@@ -1360,6 +1333,7 @@ mod tests {
     // code; a test failing on unwrap is the test doing its job.
     #![allow(clippy::unwrap_used)]
     use super::*;
+    use crate::request_deadline::{race_deadline, PLATFORM_HEADROOM, PLATFORM_REQUEST_TIMEOUT};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::{TcpListener, TcpStream};
     use tokio::sync::oneshot;
@@ -1417,14 +1391,14 @@ mod tests {
     #[test]
     fn gemini_upstream_timeout_stays_below_cloud_run_deadline() {
         assert!(GEMINI_CONNECT_TIMEOUT < GEMINI_ATTEMPT_TIMEOUT);
-        assert!(GEMINI_ATTEMPT_TIMEOUT < GEMINI_TOTAL_TIMEOUT);
-        assert!(GEMINI_TOTAL_TIMEOUT < CLOUD_RUN_REQUEST_TIMEOUT);
+        assert!(GEMINI_ATTEMPT_TIMEOUT < REQUEST_BUDGET);
+        assert!(REQUEST_BUDGET < PLATFORM_REQUEST_TIMEOUT);
         assert!(
-            CLOUD_RUN_REQUEST_TIMEOUT - GEMINI_TOTAL_TIMEOUT >= GEMINI_PLATFORM_HEADROOM,
+            PLATFORM_REQUEST_TIMEOUT - REQUEST_BUDGET >= PLATFORM_HEADROOM,
             "reserve enough time to flush the proxy-owned timeout response"
         );
         assert!(
-            GEMINI_TOTAL_TIMEOUT >= Duration::from_secs(180),
+            REQUEST_BUDGET >= Duration::from_secs(180),
             "long-context Gemini calls must not be cut off at the old 70-second deadline"
         );
     }
@@ -1525,7 +1499,7 @@ mod tests {
         let client = local_test_client();
         let (deadline_tx, deadline_rx) = oneshot::channel();
         let work = tokio::spawn(async move {
-            race_gemini_deadline(
+            race_deadline(
                 async move {
                     let _ = deadline_rx.await;
                 },
@@ -1543,7 +1517,7 @@ mod tests {
             .await
             .expect("deadline work must finish")
             .unwrap();
-        assert_eq!(result.unwrap_err(), GeminiDeadlineElapsed);
+        assert_eq!(result.unwrap_err(), DeadlineElapsed);
         tokio::time::timeout(Duration::from_secs(1), disconnected)
             .await
             .expect("deadline must drop the upstream request")
@@ -1556,8 +1530,8 @@ mod tests {
         let (url, request_seen, disconnected, server) = spawn_hanging_upstream().await;
         let client = local_test_client();
         let proxy_work = tokio::spawn(async move {
-            within_gemini_deadline(
-                Duration::from_secs(30),
+            within_deadline(
+                &RequestDeadline::new(Duration::from_secs(30)),
                 client.post(url).body(Vec::new()).send(),
             )
             .await
@@ -1587,8 +1561,8 @@ mod tests {
                 let client = client.clone();
                 let upstream_url = upstream_url.clone();
                 async move {
-                    let _ = within_gemini_deadline(
-                        Duration::from_secs(30),
+                    let _ = within_deadline(
+                        &RequestDeadline::new(Duration::from_secs(30)),
                         client.post(upstream_url).body(Vec::new()).send(),
                     )
                     .await;
@@ -1629,7 +1603,7 @@ mod tests {
         let (dispatch_tx, dispatch_rx) = oneshot::channel();
         let (deadline_tx, deadline_rx) = oneshot::channel();
         let work = tokio::spawn(async move {
-            race_gemini_deadline(
+            race_deadline(
                 async move {
                     let _ = deadline_rx.await;
                 },
@@ -1652,7 +1626,7 @@ mod tests {
             .await
             .expect("total budget work must finish")
             .unwrap();
-        assert_eq!(result.unwrap_err(), GeminiDeadlineElapsed);
+        assert_eq!(result.unwrap_err(), DeadlineElapsed);
         tokio::time::timeout(Duration::from_secs(1), disconnected)
             .await
             .expect("total budget must cancel the dispatched remainder")
