@@ -1,9 +1,15 @@
 """Default-deny egress guard with explicit loopback allow-list and logging.
 
+Patches TCP connection-oriented entrypoints (connect, connect_ex,
+create_connection), DNS resolution (getaddrinfo, gethostbyname,
+gethostbyname_ex), and UDP unconnected sends (sendto, sendmsg) in the Python
+SUT / runner / loopback processes.  Every attempt is logged then allowed or
+denied.
+
 FEASIBILITY-ONLY: process-level socket monkeypatch; cannot observe egress from
-non-Python dependency processes (Redis, Firestore JVM).  Those are bind-constrained
-to loopback by the runner and excluded from per-connection observation.  The
-attestation states this scope explicitly.
+non-Python dependency processes (Redis server, Firestore emulator JVM).  Those
+are bind-constrained to loopback by the runner and excluded from
+per-connection observation.  The attestation states this scope explicitly.
 """
 
 from __future__ import annotations
@@ -99,6 +105,8 @@ def _make_sink(state_dir: str, role: str) -> Callable[[dict[str, Any]], None]:
 # Default-deny guard installation
 # --------------------------------------------------------------------------- #
 
+_original_sendto = socket.socket.sendto
+_original_sendmsg = socket.socket.sendmsg
 _original_connect = socket.socket.connect
 _original_connect_ex = socket.socket.connect_ex
 _original_create_connection = socket.create_connection
@@ -144,6 +152,21 @@ def install_default_deny_guard(*, role: str, allow: frozenset[int], sink: Callab
             raise OSError(f"[replay-harness] denied egress to {address!r}")
         return _original_create_connection(address, *args, **kwargs)
 
+    def guarded_sendto(sock: socket.socket, data: Any, *args: Any) -> Any:
+        # sendto(data, address) or sendto(data, flags, address); address is last positional.
+        if args:
+            address = args[-1]
+            if isinstance(address, tuple) and not _check_and_log(sock, address):
+                raise OSError(f"[replay-harness] denied UDP sendto to {_host_from_address(address)!r}:{address}")
+        return _original_sendto(sock, data, *args)
+
+    def guarded_sendmsg(
+        sock: socket.socket, buffers: Any, ancdata: Any = (), flags: int = 0, address: Any = None
+    ) -> Any:
+        if isinstance(address, tuple) and not _check_and_log(sock, address):
+            raise OSError(f"[replay-harness] denied UDP sendmsg to {_host_from_address(address)!r}:{address}")
+        return _original_sendmsg(sock, buffers, ancdata, flags, address)
+
     def guarded_getaddrinfo(host: Any, *args: Any, **kwargs: Any) -> Any:
         # DNS resolution to non-loopback is always denied; loopback is always allowed
         # (the port-level check happens at connect time).
@@ -177,6 +200,8 @@ def install_default_deny_guard(*, role: str, allow: frozenset[int], sink: Callab
     socket.socket.connect = guarded_connect
     socket.socket.connect_ex = guarded_connect_ex
     socket.create_connection = guarded_create_connection
+    socket.socket.sendto = guarded_sendto
+    socket.socket.sendmsg = guarded_sendmsg
     socket.getaddrinfo = guarded_getaddrinfo
     socket.gethostbyname = guarded_gethostbyname
     socket.gethostbyname_ex = guarded_gethostbyname_ex
