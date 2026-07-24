@@ -388,6 +388,36 @@ def get_action_item(uid: str, action_item_id: str) -> Optional[Dict[str, Any]]:
     return _prepare_action_item_for_read(data)
 
 
+def get_action_items_count(uid: str) -> Dict[str, int]:
+    """Return total / completed / incomplete action-item counts for a user.
+
+    Uses Firestore count() aggregation so clients can show a badge or summary
+    without fetching every item. Soft-retired items (``deleted: true``) are hidden
+    from the list/read paths (``get_action_items`` skips ``data.get('deleted')``),
+    so they are excluded here too; otherwise badge/summary counts would drift from
+    what clients can actually list. ``incomplete`` is derived as total - completed
+    (never negative) so the three values are always internally consistent.
+    """
+    items_ref = db.collection('users').document(uid).collection(action_items_collection)
+    total = int(items_ref.count().get()[0][0].value)
+    completed = int(items_ref.where(filter=FieldFilter('completed', '==', True)).count().get()[0][0].value)
+
+    # Soft-retired items are rare (task-intelligence retirement), so stream just that subset and
+    # subtract, instead of requiring a (completed, deleted) composite index for a filtered aggregation.
+    # A plain `deleted != true` / `== false` count would also wrongly drop the items that never set
+    # the field at all, which are visible.
+    deleted_total = 0
+    deleted_completed = 0
+    for doc in items_ref.where(filter=FieldFilter('deleted', '==', True)).stream():
+        deleted_total += 1
+        if (doc.to_dict() or {}).get('completed'):
+            deleted_completed += 1
+
+    total = max(0, total - deleted_total)
+    completed = max(0, completed - deleted_completed)
+    return {'total': total, 'completed': completed, 'incomplete': max(0, total - completed)}
+
+
 def get_action_items(
     uid: str,
     conversation_id: Optional[str] = None,

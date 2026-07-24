@@ -37,6 +37,7 @@ from models.action_item import (
     ActionItemCreateRequest,
     ActionItemResponse,
     ActionItemUpdateRequest,
+    ActionItemsCountResponse,
     ActionItemsResponse,
     ActionItemsSearchResponse,
     ConversationActionItemsResponse,
@@ -402,6 +403,16 @@ def list_action_item_ids(uid: str = Depends(auth.get_current_user_uid)):
     captured as an action item id.
     """
     return {"ids": action_items_db.get_action_item_ids(uid)}
+
+
+@router.get("/v1/action-items/count", response_model=ActionItemsCountResponse, tags=['action-items'])
+def get_action_items_count(uid: str = Depends(auth.get_current_user_uid)):
+    """Return total / completed / incomplete action-item counts for the user.
+
+    A lightweight badge/summary source that avoids paging the full list. Declared before
+    /v1/action-items/{action_item_id} so the static path is not captured as an action item id.
+    """
+    return action_items_db.get_action_items_count(uid)
 
 
 @router.get("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
