@@ -25,7 +25,7 @@ cd desktop/macos
 The seeded bundle boots already signed-in and past onboarding, with Omi Dev's shortcuts/settings — no browser. The captured Firebase idToken expires (~1h); re-run `omi-auth-dump.sh` after signing in again if backend calls start 401ing. **Scope:** this is for dev iteration only — when validating the onboarding or auth flows themselves (or running flow-walker E2E), use the real flow per Guard Conditions below.
 
 ### 2. Jump straight to any screen (automation bridge)
-The app runs a local HTTP control bridge (`DesktopAutomationBridge.swift`) that **auto-enables on every non-production bundle** (off on prod). `scripts/omi-ctl` drives it — jump to a screen in ~150ms instead of clicking through the sidebar:
+The app runs a local HTTP control bridge (`DesktopAutomationBridge.swift`) that **auto-enables on every non-production bundle** (off on prod). `scripts/omi-ctl` drives it — jump to a screen in ~150ms instead of clicking through the top nav bar:
 ```bash
 ./scripts/omi-ctl wait-ready                 # block until app reaches "main" state
 ./scripts/omi-ctl navigate rewind            # jump to the Rewind screen
@@ -421,8 +421,8 @@ agent-swift snapshot -i --json                       # see what's on screen
 | `screenshot PATH` | Capture app window | `agent-swift screenshot /tmp/screen.png` |
 
 **Key rules:**
-- `click` = CGEvent mouse click (SwiftUI). Use for main sidebar icons, NavigationLink.
-- `press` = AXPress action (AppKit). Use for Settings sidebar sections.
+- `click` = CGEvent mouse click (SwiftUI). Use for top nav bar buttons, Settings section rows, NavigationLink.
+- `press` = AXPress action (AppKit). Use for AppKit-style buttons only.
 - Refs go stale after any mutation — always re-snapshot before the next interaction.
 - `find` with chained action is more stable than hardcoded `@ref` numbers.
 - `--json` flag on any command gives structured output for parsing.
