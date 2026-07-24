@@ -113,33 +113,28 @@ export async function ingestRewindFrame(jpeg: Buffer): Promise<IngestResult> {
   // even while Omi is focused. The dedup hash below still skips unchanged frames.
 
   let win = { app: '', title: '', processName: '' }
-  try {
-    const info = await helperProcess.windowInfo()
-    // Prefer the friendly app name ("Google Chrome") over the exe ("chrome");
-    // keep the raw process name in its own field.
-    win = { app: info.app || info.processName, title: info.title, processName: info.processName }
-  } catch {
-    /* helper unavailable; fall back below */
-  }
-  // The C# helper isn't always running (OCR is shelved), so windowInfo() often
-  // yields nothing → every frame would read "Unknown app". Fall back to the
-  // always-available koffi/user32 foreground reader (same source app-usage uses)
-  // and derive a name from the foreground exe.
-  if (!win.app) {
-    const exe = getForegroundExePath()
-    if (exe) {
-      const proc = basename(exe).replace(/\.exe$/i, '')
-      win = {
-        app: proc ? proc.charAt(0).toUpperCase() + proc.slice(1) : '',
-        title: win.title,
-        processName: win.processName || proc
-      }
+  const exe = getForegroundExePath()
+  if (exe) {
+    const proc = basename(exe).replace(/\.exe$/i, '')
+    win = {
+      app: proc ? proc.charAt(0).toUpperCase() + proc.slice(1) : '',
+      title: '',
+      processName: proc
     }
   }
-  // The helper rarely runs (OCR shelved), so the title is usually empty — but the
-  // window title is what catches login/private-browsing screens in a normal
-  // browser. Read it directly from user32 (GetWindowTextW) as a fallback.
-  if (!win.title) win.title = getForegroundWindowTitle() ?? ''
+  win.title = getForegroundWindowTitle() ?? ''
+  if (!win.app || !win.title) {
+    try {
+      const info = await helperProcess.windowInfo()
+      if (!win.app) {
+        win.app = info.app || info.processName || ''
+        win.processName = win.processName || info.processName || ''
+      }
+      if (!win.title) win.title = info.title || ''
+    } catch {
+      /* helper unavailable */
+    }
+  }
 
   const image = nativeImage.createFromBuffer(jpeg)
   if (image.isEmpty()) return { captured: false, reason: 'decode-failed' }

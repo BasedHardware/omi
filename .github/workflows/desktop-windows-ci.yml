@@ -90,3 +90,47 @@ jobs:
           path: desktop/windows/dist/win-unpacked
           if-no-files-found: warn
           retention-days: 7
+
+  build-linux:
+    name: Linux package · helper smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: desktop/windows/pnpm-lock.yaml
+      - name: Install Linux runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
+      - name: Provision .env
+        run: cp .env.example .env
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build Linux packages
+        run: pnpm run build:linux
+      - name: Verify Debian package contents
+        run: |
+          dpkg-deb -I dist/*.deb | grep -F 'tesseract-ocr'
+          dpkg-deb -c dist/*.deb | grep -F 'resources/linux-ocr-helper/omi-ocr-helper'
+      - name: Launch unpacked app on X11
+        run: |
+          xvfb-run -a bash -euo pipefail -c '
+            dist/linux-unpacked/omi-windows --no-sandbox &
+            app_pid=$!
+            sleep 10
+            kill -0 "$app_pid"
+            kill "$app_pid"
+            wait "$app_pid" || true
+          '
+      - name: Smoke X11 helper protocol
+        run: |
+          convert -size 480x120 xc:white -font DejaVu-Sans -pointsize 40 -fill black -gravity center -annotate 0 'Omi OCR smoke' /tmp/omi-ocr-smoke.jpg
+          xvfb-run -a bash -euo pipefail -c 'OMI_HELPER_OCR_FIXTURE=/tmp/omi-ocr-smoke.jpg OMI_HELPER_EXPECT_TEXT="Omi OCR smoke" pnpm exec vitest run src/main/ocr/linuxHelper.integration.test.ts'
+      - name: Verify Wayland degradation contracts
+        run: pnpm exec vitest run src/main/rewind/rewindSettings.wayland.test.ts src/main/usage/nativeForeground.degrade.test.ts
