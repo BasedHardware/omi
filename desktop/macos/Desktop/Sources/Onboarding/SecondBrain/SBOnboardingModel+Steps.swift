@@ -434,9 +434,15 @@ extension SBOnboardingModel {
       // `showingAIResponse`, which is only set by the typed/`.mainResponse` path.
       // Watching only `showingAIResponse` is why the demo never advanced. Observe
       // BOTH signals so either a voice or a typed answer reveals Continue.
+      // `resetFloatingBarConversation()` above cleared `showingAIResponse`, so its
+      // subscribe-time value is already false. `voiceProjection` has no such reset,
+      // and @Published replays its CURRENT value on subscribe — so on a resume/
+      // re-entry of the demo a stale `isResponseActive` would fire immediately and
+      // reveal Continue before the user does anything. `dropFirst()` ignores that
+      // replayed value; a real answer is always a later emission.
       voiceCancellable = Publishers.Merge(
         bar.$showingAIResponse.filter { $0 }.map { _ in () },
-        bar.$voiceProjection.filter { $0.isResponseActive }.map { _ in () }
+        bar.$voiceProjection.dropFirst().filter { $0.isResponseActive }.map { _ in () }
       )
       .receive(on: DispatchQueue.main)
       .sink { [weak self] _ in self?.screenDemoDone = true }
