@@ -293,11 +293,11 @@ def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: 
 
 
 def mark_user_deletion_wipe_started(uid: str):
-    """Mark that the background data wipe has been queued but not yet completed.
+    """Mark that the background data wipe has been durably accepted.
 
     Persisted in the top-level ``account_deletions`` collection so it survives a
-    deploy or pod restart. A reconciliation worker can query for documents where
-    ``wipe_status == 'pending'`` and re-enqueue incomplete wipes.
+    deploy or pod restart. A reconciliation worker can query for a ``pending``
+    document and enqueue incomplete wipes after a dispatch failure.
 
     The worker transitions the marker to ``'running'`` (via
     ``mark_user_deletion_wipe_running``) as soon as it actually starts
@@ -331,6 +331,26 @@ def mark_user_deletion_wipe_running(uid: str):
 
 @transactional
 def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) -> str:
+    snapshot = doc_ref.get(transaction=transaction)
+    if snapshot.exists:
+        data = snapshot.to_dict() or {}
+        existing_job_id = data.get('wipe_job_id')
+        # A repeat request must join the existing durable deletion authority,
+        # never reset a claimed/running/completed job backwards.
+        if (
+            data.get('wipe_status')
+            in {
+                'deleting_auth',
+                'pending',
+                'retrying',
+                'running',
+                'failed',
+                'completed',
+            }
+            and isinstance(existing_job_id, str)
+            and existing_job_id
+        ):
+            return existing_job_id
     transaction.set(
         doc_ref,
         {
@@ -344,16 +364,15 @@ def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) 
 
 
 def mark_user_deletion_wipe_intent(uid: str) -> str:
-    """Persist a non-actionable deletion intent *before* auth deletion.
+    """Create or join the durable account-deletion authority.
 
-    Written BEFORE ``auth.delete_account()`` succeeds. The reconciler only
-    recovers stale ``'deleting_auth'`` records *after* verifying the Firebase
-    auth user is actually gone, so a crash between this write and the confirmed
-    auth deletion cannot trigger a premature data wipe for a user whose Firebase
-    account still exists.
+    Repeated requests reuse an existing active job id rather than moving a
+    claimed, running, failed, or completed wipe backwards. The caller promotes
+    a new intent to ``pending`` before it attempts queue acceleration; the
+    claimed worker is the only path that deletes Firebase Auth or user data.
 
-    Call ``mark_user_deletion_wipe_started`` to transition the marker to the
-    actionable ``'pending'`` state once auth deletion is confirmed.
+    ``deleting_auth`` remains a legacy recovery state for records written by
+    older workers; new request handling promotes it immediately.
     """
     wipe_job_id = uuid.uuid4().hex
     doc_ref = db.collection('account_deletions').document(uid)
@@ -1137,10 +1156,12 @@ def _delete_collection_recursive(collection_ref, batch_size: int = 450):
 
 def delete_user_data(uid: str):
     user_ref = db.collection('users').document(uid)
-    if not user_ref.get().exists:
-        return {'status': 'error', 'message': 'User not found'}
+    root_exists = user_ref.get().exists
 
-    # Enumerate subcollections live instead of hardcoding a list — picks up
+    # Enumerate subcollections live even when the root document is missing.
+    # Firestore permits immediate children to survive a parent deletion; an
+    # early "User not found" return would falsely mark the deletion complete.
+    # This picks up
     # everything the user has written (conversations, memories, action_items,
     # folders, goals, integrations, task_integrations, fcm_tokens, fair_use_*,
     # hourly_usage, meetings, screen_activity, files, people, chat_sessions,
@@ -1149,8 +1170,9 @@ def delete_user_data(uid: str):
         logger.info(f"Deleting subcollection {sub.id} for user {uid}")
         _delete_collection_recursive(sub)
 
-    logger.info(f"Deleting user document: {uid}")
-    user_ref.delete()
+    if root_exists:
+        logger.info(f"Deleting user document: {uid}")
+        user_ref.delete()
     return {'status': 'ok', 'message': 'Account deleted successfully'}
 
 

@@ -71,8 +71,6 @@ finally:
 
 def test_start_account_deletion_preserves_order_and_enqueues_background_wipe(monkeypatch):
     calls = []
-    sub = types.SimpleNamespace(stripe_subscription_id='sub_123')
-
     monkeypatch.setattr(
         account_deletion.users_db,
         'set_user_deletion_feedback',
@@ -89,16 +87,6 @@ def test_start_account_deletion_preserves_order_and_enqueues_background_wipe(mon
         lambda uid: calls.append(('wipe_started', uid)),
     )
     monkeypatch.setattr(
-        account_deletion.users_db, 'get_user_subscription', lambda uid: calls.append(('sub', uid)) or sub
-    )
-    monkeypatch.setattr(
-        account_deletion.stripe_utils,
-        'cancel_subscription',
-        lambda sub_id: calls.append(('stripe', sub_id)) or object(),
-    )
-    monkeypatch.setattr(account_deletion.auth, 'delete_account', lambda uid: calls.append(('auth', uid)))
-
-    monkeypatch.setattr(
         account_deletion,
         'submit_with_context',
         lambda executor, target, uid: calls.append(('enqueue', executor, target, uid)),
@@ -110,9 +98,6 @@ def test_start_account_deletion_preserves_order_and_enqueues_background_wipe(mon
     assert calls == [
         ('feedback', 'uid1', 'unused', 'details'),
         ('wipe_intent', 'uid1'),
-        ('sub', 'uid1'),
-        ('stripe', 'sub_123'),
-        ('auth', 'uid1'),
         ('wipe_started', 'uid1'),
         ('enqueue', account_deletion.cleanup_executor, account_deletion.background_wipe_user_data, 'uid1'),
     ]
@@ -137,6 +122,11 @@ def test_start_account_deletion_enqueues_cloud_task_when_enabled(monkeypatch):
 
 
 def test_start_account_deletion_raises_when_cloud_task_enqueue_fails(monkeypatch):
+    """A queue NotFound must leave every irreversible boundary untouched.
+
+    The persisted marker is deliberately retained as ``failed`` so the
+    reconciler, rather than a caller retry, can recover delivery later.
+    """
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value='job-1'))
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_started', MagicMock())
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', MagicMock())
@@ -158,6 +148,8 @@ def test_start_account_deletion_raises_when_cloud_task_enqueue_fails(monkeypatch
 
     account_deletion.users_db.mark_user_deletion_wipe_started.assert_called_once_with('uid1')
     account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    account_deletion.auth.delete_account.assert_not_called()
+    account_deletion.users_db.get_user_subscription.assert_not_called()
     submit.assert_not_called()
 
 
@@ -203,16 +195,13 @@ def test_start_account_deletion_blocks_when_subscription_lookup_fails(monkeypatc
     monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
     monkeypatch.setattr(account_deletion.time, 'sleep', lambda *_: None)
 
-    try:
-        account_deletion.start_account_deletion('uid1')
-    except Exception as exc:
-        assert str(exc) == 'read down'
-    else:
-        raise AssertionError('expected subscription lookup failure to raise')
+    result = account_deletion.start_account_deletion('uid1')
 
-    account_deletion.users_db.mark_user_deletion_billing_failed.assert_called_once_with('uid1', None, 'read down')
+    assert result['status'] == 'ok'
+    account_deletion.users_db.mark_user_deletion_billing_failed.assert_not_called()
+    account_deletion.users_db.get_user_subscription.assert_not_called()
     account_deletion.auth.delete_account.assert_not_called()
-    submit.assert_not_called()
+    submit.assert_called_once()
 
 
 def test_start_account_deletion_blocks_when_stripe_cancel_returns_none(monkeypatch):
@@ -226,18 +215,14 @@ def test_start_account_deletion_blocks_when_stripe_cancel_returns_none(monkeypat
     monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
     monkeypatch.setattr(account_deletion.time, 'sleep', lambda *_: None)
 
-    try:
-        account_deletion.start_account_deletion('uid1')
-    except Exception as exc:
-        assert 'stripe cancel returned no subscription' in str(exc)
-    else:
-        raise AssertionError('expected stripe cancellation failure to raise')
+    result = account_deletion.start_account_deletion('uid1')
 
-    account_deletion.users_db.mark_user_deletion_billing_failed.assert_called_once_with(
-        'uid1', 'sub_123', 'stripe cancel returned no subscription'
-    )
+    assert result['status'] == 'ok'
+    account_deletion.users_db.mark_user_deletion_billing_failed.assert_not_called()
+    account_deletion.users_db.get_user_subscription.assert_not_called()
+    account_deletion.stripe_utils.cancel_subscription.assert_not_called()
     account_deletion.auth.delete_account.assert_not_called()
-    submit.assert_not_called()
+    submit.assert_called_once()
 
 
 def test_start_account_deletion_raises_when_marker_persist_fails(monkeypatch):
@@ -262,7 +247,7 @@ def test_start_account_deletion_raises_when_marker_persist_fails(monkeypatch):
     submit.assert_not_called()
 
 
-def test_start_account_deletion_raises_when_pending_marker_persist_fails_after_auth(monkeypatch):
+def test_start_account_deletion_raises_when_pending_marker_persist_fails_before_auth(monkeypatch):
     """Do not enqueue or report success unless the actionable pending marker exists."""
     monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value='job-1'))
@@ -281,12 +266,12 @@ def test_start_account_deletion_raises_when_pending_marker_persist_fails_after_a
     else:
         raise AssertionError('expected pending marker failure to raise')
 
-    account_deletion.auth.delete_account.assert_called_once_with('uid1')
+    account_deletion.auth.delete_account.assert_not_called()
     submit.assert_not_called()
 
 
-def test_start_account_deletion_raises_unexpected_firebase_error(monkeypatch):
-    """Firebase errors propagate. The intent IS written first, then cancelled on failure; Phase 2 is never reached."""
+def test_start_account_deletion_never_calls_firebase_in_the_request_thread(monkeypatch):
+    """Firebase deletion belongs only to the claimed durable worker."""
     monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock(return_value='job-1'))
     mark_started = MagicMock()
@@ -298,31 +283,18 @@ def test_start_account_deletion_raises_unexpected_firebase_error(monkeypatch):
     monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
     monkeypatch.setattr(account_deletion.time, 'sleep', lambda *_: None)
 
-    try:
-        account_deletion.start_account_deletion('uid1')
-    except Exception as exc:
-        assert str(exc) == 'permission denied'
-    else:
-        raise AssertionError('expected firebase error to propagate')
+    result = account_deletion.start_account_deletion('uid1')
 
-    submit.assert_not_called()
-    # Phase 1 intent IS written BEFORE Firebase deletion.
+    assert result['status'] == 'ok'
+    submit.assert_called_once()
     account_deletion.users_db.mark_user_deletion_wipe_intent.assert_called_once_with('uid1')
-    # On Firebase failure, the intent is cancelled so the record doesn't linger.
-    cancel_wipe.assert_called_once_with('uid1')
-    # Phase 2 (transition to 'pending') is never reached on auth failure.
-    mark_started.assert_not_called()
+    cancel_wipe.assert_not_called()
+    mark_started.assert_called_once_with('uid1')
+    account_deletion.auth.delete_account.assert_not_called()
 
 
-def test_start_account_deletion_writes_intent_before_pending(monkeypatch):
-    """P1 safety: the non-actionable 'deleting_auth' intent is written before
-    auth deletion, and the actionable 'pending' marker is written only after
-    auth deletion is confirmed.
-
-    This verifies the two-phase ordering that prevents a crash between the
-    intent write and auth deletion from leaving an actionable 'pending' marker
-    that the reconciler could prematurely act on.
-    """
+def test_start_account_deletion_writes_pending_authority_before_dispatch(monkeypatch):
+    """The durable marker exists before the queue acceleration attempt."""
     call_log = []
     intent_mock = MagicMock(side_effect=lambda uid: call_log.append('intent') or 'job-1')
     started_mock = MagicMock(side_effect=lambda uid: call_log.append('started'))
@@ -330,15 +302,15 @@ def test_start_account_deletion_writes_intent_before_pending(monkeypatch):
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_started', started_mock)
     monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
     monkeypatch.setattr(
-        account_deletion.auth, 'delete_account', MagicMock(side_effect=lambda uid: call_log.append('auth'))
+        account_deletion,
+        'submit_with_context',
+        MagicMock(side_effect=lambda *_args: call_log.append('enqueue')),
     )
-    monkeypatch.setattr(account_deletion, 'submit_with_context', MagicMock())
     monkeypatch.setattr(account_deletion.time, 'sleep', lambda *_: None)
 
     account_deletion.start_account_deletion('uid1')
 
-    # Intent is written before auth, started is written after auth.
-    assert call_log == ['intent', 'auth', 'started']
+    assert call_log == ['intent', 'started', 'enqueue']
     intent_mock.assert_called_once_with('uid1')
     started_mock.assert_called_once_with('uid1')
 
@@ -348,9 +320,15 @@ def test_background_wipe_user_data_preserves_order(monkeypatch):
     monkeypatch.setattr(
         account_deletion.users_db, 'mark_user_deletion_wipe_running', lambda uid: calls.append(('running', uid))
     )
+    monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', lambda uid: None)
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', lambda uid: calls.append(('auth', uid)))
     monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', lambda uid: calls.append(('twilio', uid)))
     monkeypatch.setattr(account_deletion, 'purge_derived_user_data', lambda uid: calls.append(('purge', uid)))
-    monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', lambda uid: calls.append(('firestore', uid)))
+    monkeypatch.setattr(
+        account_deletion.users_db,
+        'delete_user_data',
+        lambda uid: calls.append(('firestore', uid)) or {'status': 'ok'},
+    )
     monkeypatch.setattr(
         account_deletion.users_db, 'mark_user_deletion_wipe_completed', lambda uid: calls.append(('wipe_done', uid))
     )
@@ -359,6 +337,7 @@ def test_background_wipe_user_data_preserves_order(monkeypatch):
 
     assert calls == [
         ('running', 'uid1'),
+        ('auth', 'uid1'),
         ('twilio', 'uid1'),
         ('purge', 'uid1'),
         ('firestore', 'uid1'),
@@ -383,20 +362,22 @@ def test_background_wipe_user_data_swallows_failures(monkeypatch):
     account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
 
 
-def test_background_wipe_continues_when_running_marker_persist_fails(monkeypatch):
-    """A failure to transition to ``running`` is non-fatal — the wipe still runs."""
+def test_background_wipe_fails_closed_when_running_marker_persist_fails(monkeypatch):
+    """Without a running marker, a second worker could not be fenced safely."""
     monkeypatch.setattr(
         account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock(side_effect=Exception('firestore down'))
     )
     monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', MagicMock())
     monkeypatch.setattr(account_deletion, 'purge_derived_user_data', MagicMock())
     monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', MagicMock())
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock())
 
-    # Should not raise — the wipe proceeds even if the running marker can't be written.
-    account_deletion.background_wipe_user_data('uid1')
+    assert account_deletion.background_wipe_user_data('uid1') is False
 
-    account_deletion.users_db.mark_user_deletion_wipe_completed.assert_called_once_with('uid1')
+    account_deletion.delete_user_caller_ids.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
 
 
 def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(monkeypatch):
@@ -546,6 +527,29 @@ def test_background_wipe_user_data_does_not_complete_when_required_derived_purge
     account_deletion.background_wipe_user_data('uid1')
 
     account_deletion.users_db.delete_user_data.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
+
+
+def test_background_wipe_user_data_does_not_complete_when_firestore_wipe_returns_error(monkeypatch):
+    """A normal structured wipe failure is terminally unsafe, not success."""
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', MagicMock())
+    monkeypatch.setattr(
+        account_deletion,
+        'purge_derived_user_data',
+        MagicMock(return_value={'required_failures': [], 'best_effort_failures': []}),
+    )
+    monkeypatch.setattr(
+        account_deletion.users_db,
+        'delete_user_data',
+        MagicMock(return_value={'status': 'error', 'message': 'root user document missing'}),
+    )
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock())
+
+    assert account_deletion.background_wipe_user_data('uid1') is False
+
     account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
     account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
 

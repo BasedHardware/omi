@@ -8,6 +8,7 @@ import re
 from typing import Any, Callable
 
 import pytest
+from google.api_core.exceptions import NotFound
 from google.cloud import tasks_v2
 
 _PROJECT = "test-e2e-project"
@@ -26,6 +27,7 @@ class _CapturedCloudTasksClient:
         self.queue_path_calls: list[tuple[str, str, str]] = []
         self.task_path_calls: list[tuple[str, str, str, str]] = []
         self._assert_pending_marker: Callable[[str], None] | None = None
+        self.create_error: Exception | None = None
 
     def queue_path(self, project: str, location: str, queue: str) -> str:
         assert (project, location, queue) == (_PROJECT, _LOCATION, _QUEUE)
@@ -40,6 +42,8 @@ class _CapturedCloudTasksClient:
     def create_task(self, *, parent: str, task: Any) -> None:
         from utils.cloud_tasks import DISPATCH_DEADLINE_SECONDS
 
+        if self.create_error is not None:
+            raise self.create_error
         assert parent == f"projects/{_PROJECT}/locations/{_LOCATION}/queues/{_QUEUE}"
         assert isinstance(task, tasks_v2.Task)
         assert task.http_request.http_method == tasks_v2.HttpMethod.POST
@@ -337,3 +341,87 @@ def test_account_deletion_cloud_task_retries_required_purge_failure_without_losi
     assert redelivery.json() == {"status": "dropped", "reason": "completed"}
     assert len(claimed_markers) == 2
     assert purge_calls == [test_uid, test_uid]
+
+
+def test_queue_not_found_preserves_auth_and_reconciles_from_the_marker(
+    client,
+    fake_firestore,
+    monkeypatch,
+    account_deletion_identity,
+    cloud_tasks_client,
+):
+    """A real route request proves queue failure cannot strand an auth-less user."""
+    from services.users import account_deletion
+
+    test_uid, auth_headers = account_deletion_identity
+    _configure_durable_account_deletion(monkeypatch)
+    _stub_external_deletion_boundaries(monkeypatch)
+    _seed_deletable_user(fake_firestore, test_uid)
+    auth_deletions: list[str] = []
+    monkeypatch.setattr(account_deletion.auth, "delete_account", lambda uid: auth_deletions.append(uid))
+    monkeypatch.setattr(
+        account_deletion,
+        "purge_derived_user_data",
+        lambda _uid: {"required_failures": [], "best_effort_failures": []},
+    )
+    cloud_tasks_client.create_error = NotFound("account-deletion queue is absent")
+
+    rejected = client.delete("/v1/users/delete-account", headers=auth_headers)
+
+    assert rejected.status_code == 500, rejected.text
+    assert auth_deletions == []
+    assert _read_marker(fake_firestore, test_uid)["wipe_status"] == "failed"
+    assert fake_firestore.collection("users").document(test_uid).get().exists
+
+    cloud_tasks_client.create_error = None
+    cloud_tasks_client.queue_path_calls.clear()
+    cloud_tasks_client.task_path_calls.clear()
+    cloud_tasks_client.create_calls.clear()
+    recovered = account_deletion.reconcile_pending_deletion_wipes()
+    assert recovered == {"requeued": 1, "skipped": 0}
+    assert auth_deletions == []
+    wipe_job_id = _read_marker(fake_firestore, test_uid)["wipe_job_id"]
+    payload = _assert_enqueued_task_schema(cloud_tasks_client, wipe_job_id)
+
+    completed = client.post(
+        "/v1/users/account-deletion-wipes/run", json=payload, headers=_worker_headers(retry_count=0)
+    )
+    assert completed.status_code == 200, completed.text
+    assert auth_deletions == [test_uid]
+    assert _read_marker(fake_firestore, test_uid)["wipe_status"] == "completed"
+    _assert_user_data_deleted(fake_firestore, test_uid)
+
+
+def test_missing_root_document_does_not_hide_immediate_child_data(
+    client,
+    fake_firestore,
+    monkeypatch,
+    account_deletion_identity,
+    cloud_tasks_client,
+):
+    """The production worker must delete children even when their root is absent."""
+    from services.users import account_deletion
+
+    test_uid, auth_headers = account_deletion_identity
+    _configure_durable_account_deletion(monkeypatch)
+    _stub_external_deletion_boundaries(monkeypatch)
+    orphan_child = fake_firestore.collection("users").document(test_uid).collection("memories").document("orphan")
+    orphan_child.set({"id": "orphan", "uid": test_uid})
+    assert not fake_firestore.collection("users").document(test_uid).get().exists
+    monkeypatch.setattr(
+        account_deletion,
+        "purge_derived_user_data",
+        lambda _uid: {"required_failures": [], "best_effort_failures": []},
+    )
+
+    admitted = client.delete("/v1/users/delete-account", headers=auth_headers)
+    assert admitted.status_code == 200, admitted.text
+    wipe_job_id = _read_marker(fake_firestore, test_uid)["wipe_job_id"]
+    payload = _assert_enqueued_task_schema(cloud_tasks_client, wipe_job_id)
+
+    completed = client.post(
+        "/v1/users/account-deletion-wipes/run", json=payload, headers=_worker_headers(retry_count=0)
+    )
+    assert completed.status_code == 200, completed.text
+    assert _read_marker(fake_firestore, test_uid)["wipe_status"] == "completed"
+    assert not orphan_child.get().exists
