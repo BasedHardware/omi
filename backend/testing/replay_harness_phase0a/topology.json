@@ -49,11 +49,18 @@
   ],
   "fault_controls": [
     {
+      "name": "stt_double_invoke",
+      "type": "defect_induction",
+      "env_var": "OMI_REPLAY_STT_DOUBLE_INVOKE",
+      "black_box_reachable": true,
+      "description": "When enabled, the deterministic STT leaf invokes the provider twice for the same audio within a single delivery, inducing the externally observable duplicate-STT defect (STT count > 1). Used by MUTANT_UNGUARDED to prove regression-sensitivity: the scenario FAILS unless the defect surfaces. The STT invocation count is the sole black-box observable."
+    },
+    {
       "name": "terminal_guard_bypassed",
       "type": "mutant",
       "env_var": "OMI_REPLAY_TERMINAL_GUARD_BYPASSED",
       "black_box_reachable": true,
-      "description": "When enabled, the worker's terminal-status guard is bypassed, simulating a regression where completed jobs are re-processed on duplicate delivery. The loopback scheduler delivers the same task twice (at-least-once). Without the fault: exactly one STT invocation (idempotency holds). With the fault: two STT invocations (defect caught)."
+      "description": "When enabled, the worker's terminal-status guard returns a non-terminal view of completed jobs so a duplicate Cloud Tasks delivery re-enters the handler. Alone (defenses active) the content-ledger convergence acks the redelivery without re-running: STT stays at 1 (defense-in-depth holds). Used by MUTANT_GUARDED to prove a specific defense layer catches a specific fault."
     },
     {
       "name": "duplicate_delivery",

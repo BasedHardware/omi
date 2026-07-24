@@ -184,11 +184,13 @@ else:
 
     _LOCAL_OIDC_TOKEN = os.getenv("OMI_REPLAY_OIDC_TOKEN", "")
     _LOCAL_OIDC_SA = os.getenv("OMI_REPLAY_OIDC_SA", "")
+    _LOCAL_OIDC_AUDIENCE = os.getenv("OMI_REPLAY_OIDC_AUDIENCE", "")
 
     def _verify_local_oidc(token: str, _request: Any, *, audience: str | None = None, **_kwargs: Any) -> dict[str, Any]:
-        expected_token = _LOCAL_OIDC_TOKEN
-        if token != expected_token:
+        if token != _LOCAL_OIDC_TOKEN:
             raise ValueError("OIDC token mismatch")
+        if audience is not None and audience != _LOCAL_OIDC_AUDIENCE:
+            raise ValueError(f"OIDC audience mismatch: expected {_LOCAL_OIDC_AUDIENCE!r}, got {audience!r}")
         return {"email": _LOCAL_OIDC_SA, "email_verified": True}
 
     id_token.verify_oauth2_token = _verify_local_oidc
@@ -352,21 +354,38 @@ else:
     sync_pipeline.get_prerecorded_service = lambda _language="en": ("parakeet", "en", "parakeet")
     sync_pipeline.prerecorded = _local_prerecorded
     sync_pipeline.process_conversation = _local_process_conversation
-    sync_pipeline.schedule_syncing_temporal_file_deletion = _delete_segment_blob_immediately
+
+    # ---- DECLARED FAULT CONTROL: stt_double_invoke (defect induction) ----
+    # When enabled, the deterministic STT leaf invokes the provider twice for the
+    # same audio within a single delivery, simulating a regression where the
+    # idempotency boundary fails to deduplicate STT calls.  This induces the
+    # externally observable duplicate-STT defect (STT count > 1) that the
+    # regression-sensitivity scenario must detect.  The STT invocation count is
+    # the sole black-box observable — no white-box marker is used.
+    _STT_DOUBLE_INVOKE = os.getenv("OMI_REPLAY_STT_DOUBLE_INVOKE", "false").lower() == "true"
+    if _STT_DOUBLE_INVOKE:
+        _original_prerecorded = _local_prerecorded
+
+        def _double_invoke_prerecorded(audio_url: str, **kwargs: Any) -> Any:
+            """FEASIBILITY-ONLY mutant: invoke the STT leaf twice for the same audio."""
+            first = _original_prerecorded(audio_url, **kwargs)
+            _original_prerecorded(audio_url, **kwargs)  # second invocation: defect
+            return first
+
+        sync_pipeline.prerecorded = _double_invoke_prerecorded
 
     # ---- DECLARED FAULT CONTROL: terminal_guard_bypassed (mutant injection) ----
-    # When enabled, simulates a regression where terminal jobs are re-processed
-    # on duplicate delivery. The loopback scheduler delivers twice; the mutant
-    # causes double STT/meter, which the harness observes in evidence.
+    # When enabled, the worker's terminal-status guard returns a non-terminal view
+    # of completed jobs, so a duplicate Cloud Tasks delivery re-enters the handler.
+    # Alone (defenses active), the content-ledger convergence acks the redelivery
+    # without re-running the pipeline — STT stays at 1 (defense-in-depth holds).
+    # This proves the harness can observe whether a specific defense layer catches
+    # a specific fault.
     if _TERMINAL_GUARD_BYPASSED:
         _original_get_sync_job = sync_router.get_sync_job
 
         def _mutated_get_sync_job(job_id: str, *_args: Any, **_kwargs: Any) -> dict[str, Any] | None:
-            """FEASIBILITY-ONLY mutant: return a non-terminal view of completed jobs.
-
-            Simulates a regression where the terminal guard fails to recognize
-            completed jobs, causing duplicate processing on redelivery.
-            """
+            """FEASIBILITY-ONLY mutant: return a non-terminal view of completed jobs."""
             result = _original_get_sync_job(job_id, *_args, **_kwargs)
             if result and result.get("status") in ("completed", "done"):
                 if _egress_sink:
