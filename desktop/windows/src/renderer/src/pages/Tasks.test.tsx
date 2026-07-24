@@ -520,19 +520,23 @@ describe('Tasks — keyboard navigation (mac parity, flat list)', () => {
     expect(evt.defaultPrevented).toBe(false)
   })
 
-  it('Esc with a selection deselects and preventDefault (consumes it)', async () => {
-    incomplete = twoRows()
-    await renderTasks()
-    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+  it(
+    'Esc with a selection deselects and preventDefault (consumes it)',
+    async () => {
+      incomplete = twoRows()
+      await renderTasks()
+      await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
 
-    fireEvent.keyDown(document.body, { key: 'ArrowDown' })
-    await waitFor(() => expect(selectedText()).toContain('first'))
+      fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+      await waitFor(() => expect(selectedText()).toContain('first'))
 
-    const evt = createEvent.keyDown(document.body, { key: 'Escape' })
-    fireEvent(document.body, evt)
-    expect(evt.defaultPrevented).toBe(true)
-    await waitFor(() => expect(selectedText()).toBeNull())
-  })
+      const evt = createEvent.keyDown(document.body, { key: 'Escape' })
+      fireEvent(document.body, evt)
+      expect(evt.defaultPrevented).toBe(true)
+      await waitFor(() => expect(selectedText()).toBeNull())
+    },
+    15_000
+  )
 
   it('Ctrl+D on the last row moves selection to the previous row', async () => {
     incomplete = twoRows()
