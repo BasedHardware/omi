@@ -6,21 +6,29 @@
 # deletes them. `delete_agent_vm` only clears the Firestore `agentVm` field
 # (services/firestore.rs) — it never calls the GCE delete API, and there is no
 # deprovision route. VMs auto-stop when idle (→ TERMINATED) but linger forever,
-# so every user who ever opened the feature left a permanent VM. This grew to
-# ~280 instances (~$2.7k/mo).
+# so every user who ever opened the feature left a permanent ~50 GB pd-balanced
+# boot disk (~$5/mo each). `autoDelete: true` only fires on instance *delete*.
 #
-# This CronJob bounds the fleet hourly:
-#   - delete every TERMINATED omi-agent VM (idle-stopped; the client re-provisions
-#     and re-uploads its DB on next use — the status path already handles a
-#     NOT_FOUND VM gracefully by clearing Firestore, agent.rs ~line 269).
-#   - delete RUNNING omi-agent VMs older than REAP_RUNNING_AGE_DAYS (abandoned;
-#     nobody runs a multi-day continuous agent session).
+# This CronJob bounds the fleet hourly (see backend/scripts/agent_vm_reaper.py):
+#   - delete TERMINATED omi-agent VMs whose lastStopTimestamp is older than
+#     REAP_TERMINATED_MIN_AGE_HOURS (grace so same-day resume can still
+#     start_stopped_vm; after grace the status NOT_FOUND path clears Firestore
+#     and AgentVMService re-provisions + re-uploads the DB).
+#
+# RUNNING VMs are intentionally NOT reaped: agent-proxy keeps active sessions
+# RUNNING via /ping keep-alive, and the reaper has no heartbeat signal to
+# safely distinguish a long-lived session from an abandoned one.
+#
+# Install / IAM / ConfigMap sync (refuse-by-default):
+#   AGENT_VM_REAPER_APPLY=1 bash backend/scripts/apply-agent-vm-reaper.sh
+# Enable deletes after reviewing dry-run job logs:
+#   AGENT_VM_REAPER_APPLY=1 AGENT_VM_REAPER_LIVE=1 bash backend/scripts/apply-agent-vm-reaper.sh
 #
 # Permanent source fix (separate, larger change): make `delete_agent_vm` issue a
 # real GCE delete + add a `/v2/agent/deprovision` route the desktop client calls
 # on sign-out/quit. This reaper is the backstop that also catches crashes.
 #
-# Set DRY_RUN=true to log what would be deleted without deleting.
+# Checked-in default is DRY_RUN=true so a bare `kubectl apply -f` is log-only.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -44,53 +52,29 @@ spec:
             env:
             - name: GCE_PROJECT
               value: "based-hardware"
-            - name: REAP_RUNNING_AGE_DAYS
-              value: "2"
+            - name: REAP_TERMINATED_MIN_AGE_HOURS
+              value: "12"
+            # Safe default: log-only. Flip via apply-agent-vm-reaper.sh LIVE=1.
             - name: DRY_RUN
-              value: "false"
-            command: ["/bin/bash", "-c"]
-            args:
-            - |
-              set -euo pipefail
-              echo "agent-vm-reaper start project=$GCE_PROJECT running_age_days=$REAP_RUNNING_AGE_DAYS dry_run=$DRY_RUN"
-
-              # RUNNING older than threshold (abandoned) + all TERMINATED (idle-stopped).
-              CUTOFF=$(date -u -d "${REAP_RUNNING_AGE_DAYS} days ago" +%Y-%m-%dT%H:%M:%SZ)
-              FILTER="name~^omi-agent- AND ( status=TERMINATED OR ( status=RUNNING AND creationTimestamp<${CUTOFF} ) )"
-
-              mapfile -t TARGETS < <(gcloud compute instances list \
-                --project="$GCE_PROJECT" \
-                --filter="$FILTER" \
-                --format="value(name,zone)")
-
-              echo "found ${#TARGETS[@]} reapable omi-agent VMs"
-              [ "${#TARGETS[@]}" -eq 0 ] && { echo "nothing to reap"; exit 0; }
-
-              for row in "${TARGETS[@]}"; do
-                name=$(echo "$row" | awk '{print $1}')
-                zone=$(echo "$row" | awk '{print $2}')
-                if [ "$DRY_RUN" = "true" ]; then
-                  echo "DRY_RUN would delete $name ($zone)"
-                else
-                  gcloud compute instances delete "$name" --zone="$zone" \
-                    --project="$GCE_PROJECT" --quiet \
-                    && echo "deleted $name ($zone)" \
-                    || echo "FAILED to delete $name ($zone)"
-                fi
-              done
-              echo "agent-vm-reaper done"
+              value: "true"
+            # Required together with DRY_RUN=false for the Python live gate.
+            - name: AGENT_VM_REAPER_LIVE
+              value: "1"
+            volumeMounts:
+            - name: reaper-script
+              mountPath: /scripts
+              readOnly: true
+            command: ["python3"]
+            args: ["/scripts/agent_vm_reaper.py"]
+          volumes:
+          - name: reaper-script
+            configMap:
+              name: prod-agent-vm-reaper-script
+              defaultMode: 0555
 ---
-# Workload-identity SA bound to a GCP SA that can delete GCE instances.
-# After apply, bind it (one-time):
-#   gcloud iam service-accounts add-iam-policy-binding \
-#     agent-vm-reaper@based-hardware.iam.gserviceaccount.com \
-#     --role roles/iam.workloadIdentityUser \
-#     --member "serviceAccount:based-hardware.svc.id.goog[prod-omi-backend/prod-agent-vm-reaper-sa]"
-#   gcloud projects add-iam-policy-binding based-hardware \
-#     --member "serviceAccount:agent-vm-reaper@based-hardware.iam.gserviceaccount.com" \
-#     --role roles/compute.instanceAdmin.v1
-# (Or, if the GKE node default compute SA already has compute.instanceAdmin,
-#  drop the annotation and serviceAccountName and the job uses node creds.)
+# Workload-identity KSA. GSA + IAM bindings are created by
+# backend/scripts/apply-agent-vm-reaper.sh (node default SA only has compute.viewer
+# and cannot delete instances).
 apiVersion: v1
 kind: ServiceAccount
 metadata:
