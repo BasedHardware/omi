@@ -84,6 +84,10 @@ final class SBOnboardingModel: ObservableObject {
   // ("idle" | "connecting" | "on" | "unavailable" | "needsSignIn").
   @Published var agentStates: [String: String] = [:]
   @Published var contextStates: [String: String] = [:]
+  /// Actionable connector detail replaces the generic row subtitle after a
+  /// failed functional probe. Values use bounded product copy; raw cookie,
+  /// response, and exception data never reaches this projection.
+  @Published var contextDetails: [String: String] = [:]
 
   unowned let appState: AppState
   let chatProvider: ChatProvider
@@ -108,7 +112,7 @@ final class SBOnboardingModel: ObservableObject {
     // Isolate any onboarding chat/voice turns to the throwaway `.onboarding()`
     // journal surface so they never pollute the real Chat tab. Cleared on
     // complete()/skip(), after which the Chat tab reloads the clean default surface.
-    chatProvider.isOnboarding = true
+    chatProvider.beginOnboardingJournal()
     // Detect the user's real name automatically (mirrors the legacy paged intro):
     // seed the editable field from what we already know, kick a backend fetch if we
     // don't have it yet, and adopt an async arrival — so onboarding greets by name
@@ -391,7 +395,6 @@ final class SBOnboardingModel: ObservableObject {
     chatProvider.stopAgent(owner: .mainChat)
     UserDefaults.standard.set(true, forKey: DefaultsKey.onboardingJustCompleted)
     UserDefaults.standard.removeObject(forKey: Self.resumeStepKey)
-    chatProvider.isOnboarding = false
     // Greet the user in the Home chat with the personalized opener + starters.
     chatProvider.presentOnboardingOpener()
     ChatToolExecutor.onboardingAppState = nil
@@ -399,12 +402,9 @@ final class SBOnboardingModel: ObservableObject {
     ChatDraftStore.shared.clear(.onboardingMain)
     ChatDraftStore.shared.clear(.onboardingFloating)
     onComplete?()
-    // Wipe the default main-chat journal so the Chat tab opens clean (any stray
-    // demo turns lived on the .onboarding() surface; this clears the default
-    // surface the tab actually loads) before we reveal it.
     Task { [weak self] in
       guard let self else { return }
-      _ = await self.chatProvider.clearDefaultJournalForOnboardingReset()
+      await self.chatProvider.finishOnboardingJournal()
       self.appState.hasCompletedOnboarding = true
     }
   }
@@ -419,7 +419,6 @@ final class SBOnboardingModel: ObservableObject {
     if !AppBuild.usesLazyDevPermissions {
       UserDefaults.standard.set(true, forKey: DefaultsKey.hasCompletedFileIndexing)
     }
-    chatProvider.isOnboarding = false
     // Greet the user in the Home chat with the personalized opener + starters.
     chatProvider.presentOnboardingOpener()
     ChatToolExecutor.onboardingAppState = nil
@@ -428,10 +427,9 @@ final class SBOnboardingModel: ObservableObject {
     ChatDraftStore.shared.clear(.onboardingFloating)
 
     onComplete?()
-    // Wipe the default main-chat journal so the Chat tab opens clean before reveal.
     Task { [weak self] in
       guard let self else { return }
-      _ = await self.chatProvider.clearDefaultJournalForOnboardingReset()
+      await self.chatProvider.finishOnboardingJournal()
       self.appState.hasCompletedOnboarding = true
     }
 
@@ -452,13 +450,6 @@ final class SBOnboardingModel: ObservableObject {
     Task { [appState] in
       if startListening { appState.startTranscription() }
       await appState.reconcileCapture()
-    }
-    Task {
-      let welcome = "Run omi for two days to start receiving helpful insights"
-      let exists = await ActionItemStorage.shared.actionItemExists(description: welcome)
-      if !exists {
-        _ = await TasksStore.shared.createTask(description: welcome, dueAt: Date(), priority: "low")
-      }
     }
   }
 
@@ -482,7 +473,9 @@ final class SBOnboardingModel: ObservableObject {
   /// Cancel every live task/monitor this model owns. Safe to call repeatedly.
   private func teardownAll() {
     streamTask?.cancel()
-    pollTasks.values.forEach { $0.cancel() }
+    for pollTask in pollTasks.values {
+      pollTask.cancel()
+    }
     pollTasks.removeAll()
     disarmShortcutSummon()
     teardownVoiceDemo()

@@ -370,6 +370,15 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     XCTAssertFalse(app.contains("RecurringTaskScheduler.shared.start()"))
   }
 
+  func testAppStartupDoesNotMutateSharedLaunchServicesOrSystemProcesses() throws {
+    // omi-test-quality: source-inspection -- static startup boundary prevents
+    // direct macOS-global mutations from bypassing the command policy.
+    let app = try sourceFile("OmiApp.swift")
+    XCTAssertFalse(app.contains("LSRegisterURL("))
+    XCTAssertFalse(app.contains("iconservicesagent"))
+    XCTAssertFalse(app.contains("\"/usr/bin/killall\""))
+  }
+
   private func sourceFile(_ relativePath: String) throws -> String {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()

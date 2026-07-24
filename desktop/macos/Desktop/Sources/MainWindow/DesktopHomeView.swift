@@ -128,7 +128,10 @@ struct DesktopHomeView: View {
           }
         } else {
           SBOnboardingView(
-            appState: appState, chatProvider: viewModelContainer.chatProvider, onComplete: nil
+            appState: appState,
+            chatProvider: viewModelContainer.chatProvider,
+            importConnectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
+            onComplete: nil
           )
           .onAppear {
             log("DesktopHomeView: Showing SBOnboardingView (signed in, not onboarded)")
