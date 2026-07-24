@@ -88,6 +88,7 @@ from utils.executors import (
 from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from services.conversation_finalization import reconcile_listen_finalization_jobs
+from services.conversation_finalization import reconcile_stale_processing_conversations
 from services.users.account_deletion import reconcile_pending_deletion_wipes
 
 # Log LangSmith tracing status at startup
@@ -219,6 +220,10 @@ async def startup_event():
         run_blocking(db_executor, _drain_listen_finalization_jobs),
         name='startup_listen_finalization_reconcile',
     )
+    start_background_task(
+        run_blocking(db_executor, _drain_stale_processing_conversations),
+        name='startup_stale_processing_reconcile',
+    )
     start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
 
 
@@ -258,6 +263,16 @@ def _drain_listen_finalization_jobs():
         logger.error(f"Startup listen-finalization reconciliation failed: {e}")
 
 
+def _drain_stale_processing_conversations():
+    """Best-effort recovery of bare-`processing` conversations orphaned by a sync-route crash."""
+    try:
+        result = reconcile_stale_processing_conversations()
+        if result.get('completed'):
+            logger.info(f"Startup stale-processing reconciliation: {result}")
+    except Exception as e:
+        logger.error(f"Startup stale-processing reconciliation failed: {e}")
+
+
 async def _periodic_listen_finalization_reconcile(interval_seconds: int = 300):
     """Replay stale finalization leases and publish durable backlog metrics."""
     while True:
@@ -268,6 +283,12 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int = 300):
                 logger.info(f"Periodic listen-finalization reconciliation: {result}")
         except Exception as e:
             logger.error(f"Periodic listen-finalization reconciliation failed: {e}")
+        try:
+            stale_result = await run_blocking(db_executor, reconcile_stale_processing_conversations)
+            if stale_result.get('completed'):
+                logger.info(f"Periodic stale-processing reconciliation: {stale_result}")
+        except Exception as e:
+            logger.error(f"Periodic stale-processing reconciliation failed: {e}")
 
 
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring

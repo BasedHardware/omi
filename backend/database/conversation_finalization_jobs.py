@@ -25,6 +25,10 @@ TERMINAL_JOB_STATUSES = frozenset({'completed', 'dead_letter'})
 NONTERMINAL_JOB_STATUSES = frozenset({'queued', 'leased', 'blocked_byok'})
 DEFAULT_LEASE_SECONDS = 1500
 DEFAULT_RECONCILE_STALE_SECONDS = 300
+# Conservative: the synchronous legacy route admits processing with no durable
+# job, and its request thread is not killed by the HTTP timeout, so the orphan
+# window must exceed any plausible live synchronous process_conversation run.
+DEFAULT_ORPHAN_RECONCILE_STALE_SECONDS = 900
 
 
 class FinalizationIntent(TypedDict):
@@ -72,6 +76,23 @@ def get_finalization_reconcile_stale_after() -> timedelta:
     except ValueError:
         seconds = DEFAULT_RECONCILE_STALE_SECONDS
     return timedelta(seconds=max(30, seconds))
+
+
+def get_stale_processing_orphan_after() -> timedelta:
+    """Return the conservative delay before a bare-`processing` row is a crash orphan.
+
+    Bounds admission age (``processing_admitted_at``, falling back to
+    ``created_at``), not document creation. Distinct from the durable-job replay
+    window (which a lease already bounds); this path owns no lease, so the floor
+    stays conservative.
+    """
+    try:
+        seconds = int(
+            os.getenv('LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS', str(DEFAULT_ORPHAN_RECONCILE_STALE_SECONDS))
+        )
+    except ValueError:
+        seconds = DEFAULT_ORPHAN_RECONCILE_STALE_SECONDS
+    return timedelta(seconds=max(300, seconds))
 
 
 def _claim_result(
@@ -816,6 +837,44 @@ def get_finalization_replay_candidates(*, limit: int = 100, firestore_client: An
         job = snapshot.to_dict() or {}
         if job.get('status') in {'queued', 'leased'}:
             result.append(job | {'job_id': snapshot.id})
+    return result
+
+
+def get_stale_processing_orphan_candidates(
+    *, stale_after: timedelta, limit: int = 100, firestore_client: Any = None
+) -> list[dict[str, Any]]:
+    """Return a bounded page of bare-`processing` conversations with no durable job.
+
+    These rows were admitted by the synchronous legacy route (or a server/merge
+    create) and then stranded by a hard crash: ``status == processing`` with no
+    ``finalization_job_id``. The cross-user sweep uses a single equality filter so
+    it rides the automatic single-field index (no composite index registration);
+    ``deferred`` desktop rows (which intentionally live on ``processing``), rows
+    still owned by a durable job, and rows younger than ``stale_after`` are
+    filtered client-side. ``stale_after`` bounds admission age
+    (``processing_admitted_at``, falling back to ``created_at``).
+    """
+    client = _client(firestore_client)
+    cutoff = _now() - stale_after
+    result: list[dict[str, Any]] = []
+    query = (
+        client.collection_group(CONVERSATIONS_COLLECTION)
+        .where(filter=firestore.FieldFilter('status', '==', 'processing'))
+        .limit(max(1, min(limit, 100)))
+    )
+    for snapshot in query.stream():
+        data = snapshot.to_dict() or {}
+        if data.get('deferred') or data.get('finalization_job_id'):
+            continue
+        admitted_at = data.get('processing_admitted_at')
+        age_reference = admitted_at if isinstance(admitted_at, datetime) else data.get('created_at')
+        if not isinstance(age_reference, datetime) or age_reference > cutoff:
+            continue
+        path_parts = snapshot.reference.path.split('/')
+        # users/{uid}/conversations/{conversation_id}
+        if len(path_parts) != 4 or path_parts[0] != 'users' or path_parts[2] != CONVERSATIONS_COLLECTION:
+            continue
+        result.append({'uid': path_parts[1], 'conversation_id': snapshot.id, 'created_at': data.get('created_at')})
     return result
 
 
