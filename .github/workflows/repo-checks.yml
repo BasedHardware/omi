@@ -173,7 +173,10 @@ jobs:
       - name: Test release process guards
         run: |
           pip install -q pyyaml pytest
-          python3 -m pytest .github/scripts/test_check_release_process_guards.py -q
+          # --noconftest: pytest runs from the repo root, where it would otherwise collect
+          # backend/tests/unit/conftest.py and fail importing backend-only dependencies
+          # this lane does not install. The suite needs no conftest fixtures.
+          python3 -m pytest .github/scripts/test_check_release_process_guards.py -q --noconftest
 
       - name: Check GitHub Actions workflows
         if: needs.changes.outputs.has_workflows == 'true'
