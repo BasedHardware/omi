@@ -4,7 +4,10 @@ import XCTest
 
 @MainActor
 final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
-  private final class Gate {
+  // An actor (Sendable) so it can cross into the nonisolated single-flight
+  // closures without tripping Swift's sending/data-race checks; serialized
+  // access also closes the startCount/continuation race the class form had.
+  private actor Gate {
     var startCount = 0
     var continuation: CheckedContinuation<Bool, Never>?
 
@@ -22,7 +25,8 @@ final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
   }
 
   private func waitUntilStarted(_ gate: Gate) async {
-    for _ in 0..<100 where gate.startCount == 0 {
+    for _ in 0..<100 {
+      if await gate.startCount != 0 { break }
       await Task.yield()
     }
   }
@@ -35,11 +39,12 @@ final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
     let turnWaiter = Task { await singleFlight.joinOrStart { await gate.run() }.value }
     await waitUntilStarted(gate)
 
-    XCTAssertEqual(gate.startCount, 1)
+    let startedCount = await gate.startCount
+    XCTAssertEqual(startedCount, 1)
     XCTAssertTrue(singleFlight.isRunning)
 
     turnWaiter.cancel()
-    gate.finish(true)
+    await gate.finish(true)
 
     let speculativeResult = await speculative.value
     let turnWaiterResult = await turnWaiter.value
@@ -47,7 +52,8 @@ final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
     XCTAssertTrue(turnWaiterResult)
     await Task.yield()
     XCTAssertFalse(singleFlight.isRunning)
-    XCTAssertEqual(gate.startCount, 1)
+    let finalCount = await gate.startCount
+    XCTAssertEqual(finalCount, 1)
   }
 
   func testForcedRefreshDoesNotReuseAnOlderSpeculativeRead() async {
@@ -60,12 +66,14 @@ final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
     let forced = singleFlight.restart { await forcedGate.run() }
     await waitUntilStarted(forcedGate)
 
-    XCTAssertEqual(speculativeGate.startCount, 1)
-    XCTAssertEqual(forcedGate.startCount, 1)
+    let speculativeStarted = await speculativeGate.startCount
+    let forcedStarted = await forcedGate.startCount
+    XCTAssertEqual(speculativeStarted, 1)
+    XCTAssertEqual(forcedStarted, 1)
     XCTAssertTrue(singleFlight.isRunning)
 
-    speculativeGate.finish(false)
-    forcedGate.finish(true)
+    await speculativeGate.finish(false)
+    await forcedGate.finish(true)
 
     let speculativeResult = await speculative.value
     let forcedResult = await forced.value
@@ -81,15 +89,16 @@ final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
 
     let failed = singleFlight.joinOrStart { await failedGate.run() }
     await waitUntilStarted(failedGate)
-    failedGate.finish(false)
+    await failedGate.finish(false)
     let failedResult = await failed.value
     XCTAssertFalse(failedResult)
     XCTAssertFalse(singleFlight.isRunning)
 
     let retry = singleFlight.joinOrStart { await retryGate.run() }
     await waitUntilStarted(retryGate)
-    XCTAssertEqual(retryGate.startCount, 1)
-    retryGate.finish(true)
+    let retryStarted = await retryGate.startCount
+    XCTAssertEqual(retryStarted, 1)
+    await retryGate.finish(true)
     let retryResult = await retry.value
     XCTAssertTrue(retryResult)
   }
