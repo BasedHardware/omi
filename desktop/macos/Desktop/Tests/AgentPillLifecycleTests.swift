@@ -1302,8 +1302,12 @@ import XCTest
       "Provider quota failures should record the alternate-provider recovery regardless of socket age")
     XCTAssertTrue(
       hubSource.contains("let reportingPlan = RealtimeHubFailureReportingPlan.make(")
-        && hubSource.contains("logError(reportingPlan.sentryMessage)"),
-      "Credential close reporting must send only the bounded reporting plan to Sentry")
+        && hubSource.contains(
+          "DesktopDiagnosticsManager.shared.recordRealtimeProviderCloseResolution(\n        closeAttemptID: closeAttemptID,"
+        )
+        && hubSource.contains(
+          "if shouldCaptureProviderCloseToSentry {\n        logError(reportingPlan.sentryMessage)"),
+      "Credential close reporting must record the bounded recovery decision before Sentry captures its attachment")
     XCTAssertTrue(
       hubSource.contains("func shouldFailoverToAlternate(for failureClass: CredentialFailureClass?) -> Bool"),
       "Provider switching must be centralized and limited to stable credential/quota failures")

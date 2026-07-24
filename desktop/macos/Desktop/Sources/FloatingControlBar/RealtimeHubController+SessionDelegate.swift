@@ -1329,6 +1329,7 @@ extension RealtimeHubController {
       provider: providerTag,
       aliveFor: aliveFor,
       activeTurn: hasActiveTurn)
+    let shouldCaptureProviderCloseToSentry = RealtimeHubCloseClassifier.shouldReportToSentry(closeCategory)
     let closeAttemptID = DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
       provider: providerTag,
       category: closeCategory?.rawValue,
@@ -1348,15 +1349,17 @@ extension RealtimeHubController {
         turnOutcome: turnOutcome,
         recoveryAction: recoveryAction,
         recoveryResult: recoveryResult)
+      // `logError` synchronously builds the Sentry attachment. Capture only after
+      // this paired decision exists so the incident carries its bounded recovery
+      // outcome as well as the raw provider-close classification.
+      if shouldCaptureProviderCloseToSentry {
+        logError(reportingPlan.sentryMessage)
+      }
     }
-    if RealtimeHubCloseClassifier.shouldReportToSentry(closeCategory) {
-      // Keep the provider/system payload in the private local log. The Sentry
-      // message is constructed only from bounded enums and scalars.
-      log(reportingPlan.localMessage)
-      logError(reportingPlan.sentryMessage)
-    } else {
-      log(reportingPlan.localMessage)
-    }
+    // Keep the provider/system payload in the private local log. The Sentry
+    // message is constructed only from bounded enums and scalars, after the
+    // recovery decision is available for its synchronous attachment.
+    log(reportingPlan.localMessage)
     log(
       "RealtimeHub: provider close terminal state tool=\(terminalToolName) "
         + "tool_error=\(terminalToolErrorCode) accepted_spawn=\(terminalHadAcceptedSpawn)"
