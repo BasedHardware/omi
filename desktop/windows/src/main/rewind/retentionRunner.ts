@@ -10,7 +10,15 @@ export async function pruneRewindOnce(): Promise<number> {
   const cutoff = retentionCutoff(Date.now(), retentionDays)
   const removed = deleteRewindFramesOlderThan(cutoff)
   await Promise.all(
-    removed.map((f) => unlink(f.imagePath).catch(() => undefined)) // file may already be gone
+    removed.map((f) =>
+      unlink(f.imagePath).catch((error: NodeJS.ErrnoException) => {
+        // ENOENT is idempotent (frame already gone). Other failures need a log
+        // so retention cannot silently leave disk growth undiagnosed.
+        if (error?.code !== 'ENOENT') {
+          console.warn('[rewind] failed to delete pruned frame:', f.imagePath, error)
+        }
+      })
+    )
   )
   return removed.length
 }

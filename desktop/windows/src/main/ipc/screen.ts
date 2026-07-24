@@ -15,7 +15,10 @@ const READ_TIMEOUT_MS = 4500
 // used when Rewind has no frame yet (capture just enabled / disabled).
 async function desktopCapturerOcr(): Promise<string> {
   try {
-    const primaryId = await getPrimarySourceId().catch(() => null)
+    const primaryId = await getPrimarySourceId().catch((error: unknown) => {
+      console.warn('[screen:readNow] primary source lookup failed; falling back to first screen:', error)
+      return null
+    })
     const sources = await desktopCapturer.getSources({
       types: ['screen'],
       thumbnailSize: { width: 1920, height: 1080 }

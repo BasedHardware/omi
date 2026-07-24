@@ -490,13 +490,29 @@ async fn auth_token(
     };
 
     if form.use_custom_token {
-        match generate_custom_token(&state, &credentials).await {
-            Ok(token) => response.custom_token = Some(token),
-            Err(e) => tracing::warn!("Failed to generate custom token: {}", e),
-        }
+        response.custom_token = Some(require_custom_token(
+            generate_custom_token(&state, &credentials).await,
+        )?);
     }
 
     Ok(Json(response))
+}
+
+/// `use_custom_token=true` must fail closed: never return a partial token
+/// payload when minting fails or is unimplemented.
+fn require_custom_token(
+    mint_result: Result<String, Box<dyn std::error::Error + Send + Sync>>,
+) -> Result<String, ErrorResponse> {
+    match mint_result {
+        Ok(token) => Ok(token),
+        Err(e) => {
+            tracing::error!("Failed to generate custom token: {}", e);
+            Err(ErrorResponse {
+                error: "custom_token_unavailable".to_string(),
+                message: e.to_string(),
+            })
+        }
+    }
 }
 
 async fn exchange_apple_code(
@@ -774,14 +790,14 @@ async fn generate_custom_token(
 
     tracing::info!("Firebase sign-in successful, UID: {}", firebase_uid);
 
-    // For custom token generation, we need Firebase Admin SDK
-    // In Rust, we'd need to use the service account to create a custom token
-    // For now, return an error indicating this needs server-side implementation
-    // The Python version uses firebase_admin.auth.create_custom_token()
-
-    // TODO: Implement custom token generation using service account
-    // This requires signing a JWT with the service account private key
-    Err("Custom token generation requires Firebase Admin SDK - not yet implemented in Rust".into())
+    // Custom-token minting needs Firebase Admin JWT signing with the service
+    // account private key (Python: firebase_admin.auth.create_custom_token).
+    // Do not fail open with a partial token response — callers that set
+    // use_custom_token=true require the custom token or a hard error.
+    Err(format!(
+        "custom token minting is not implemented for uid {firebase_uid}; use id_token exchange instead"
+    )
+    .into())
 }
 
 /// Escape a value for safe interpolation into a double-quoted JavaScript string
@@ -983,5 +999,22 @@ mod tests {
         assert!(!html.contains("</script><script>"));
         assert!(!html.contains("code\"injected"));
         assert!(!html.contains("evil\";document"));
+    }
+
+    #[test]
+    fn require_custom_token_fails_closed_on_mint_error() {
+        let err: Box<dyn std::error::Error + Send + Sync> =
+            "custom token minting is not implemented".into();
+        let result = require_custom_token(Err(err));
+        let error = result.expect_err("mint failure must not fail open");
+        assert_eq!(error.error, "custom_token_unavailable");
+        assert!(error.message.contains("not implemented"));
+    }
+
+    #[test]
+    fn require_custom_token_returns_token_on_success() {
+        let token = require_custom_token(Ok("minted-custom-token".to_string()))
+            .expect("successful mint should surface the token");
+        assert_eq!(token, "minted-custom-token");
     }
 }
