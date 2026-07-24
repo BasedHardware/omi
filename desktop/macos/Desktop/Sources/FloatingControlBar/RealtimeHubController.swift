@@ -814,6 +814,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     provider providerParam: String,
     phase: String,
     context: String,
+    outcome: DesktopFallbackOutcome,
     mintAttemptId: String? = nil
   ) {
     CredentialHealthManager.shared.record(error.healthError, context: context)
@@ -826,6 +827,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       upstreamStatusCode: error.payload?.upstreamStatusCode,
       providerCode: error.payload?.code,
       retryable: error.payload?.retryable,
+      outcome: outcome,
       mintAttemptId: mintAttemptId)
   }
 
