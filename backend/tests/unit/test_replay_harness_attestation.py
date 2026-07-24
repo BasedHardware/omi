@@ -354,3 +354,176 @@ class TestScopeAccuracy:
         scope = record["egress"]["scope"].lower()
         assert "independently verif" not in scope
         assert "third-party" not in scope
+
+
+# --------------------------------------------------------------------------- #
+# Final-review 1 — a feasible outcome must require zero denied egress
+# --------------------------------------------------------------------------- #
+
+
+class TestOutcomeEgressBinding:
+    """A ``feasible`` outcome must be invalid if any denied egress attempt exists.
+
+    The validator previously accepted a self-consistent artifact that honestly
+    reported ``no_denied_egress=false`` alongside an honest denied remote attempt,
+    because it only checked summary consistency — not that a feasible outcome
+    requires every required safety invariant (including zero denied egress) to
+    hold. This is the honest-raw-denied-attempt-with-self-consistent-false-summary
+    adversarial case.
+    """
+
+    def test_feasible_outcome_with_honest_denied_remote_rejected(self):
+        record = _valid_attestation()
+        record["raw_evidence"].append(
+            {
+                "event": "egress_attempt",
+                "role": "worker",
+                "host": "10.0.0.1",
+                "port": 443,
+                "loopback": False,
+                "decision": "deny",
+            }
+        )
+        # Honest summary: recompute to reflect the denied attempt so the artifact
+        # is internally self-consistent — the only defect is outcome=feasible.
+        record["egress"]["denied"] = record["egress"].get("denied", 0) + 1
+        record["egress"]["attempts_observed"] = record["egress"].get("attempts_observed", 0) + 1
+        record["invariants"]["no_denied_egress"] = False
+        record["invariants"]["no_undeclared_loopback_peer"] = False
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        assert violations
+        assert any("feasible" in v.lower() for v in violations)
+
+    def test_non_feasible_outcome_with_denied_egress_not_outcome_violation(self):
+        """A non-feasible outcome (e.g. blocked) may honestly carry denied egress
+        without tripping the outcome-binding check (it must still be self-consistent)."""
+        record = _valid_attestation()
+        record["outcome"] = "blocked"
+        record["raw_evidence"].append(
+            {
+                "event": "egress_attempt",
+                "role": "worker",
+                "host": "10.0.0.1",
+                "port": 443,
+                "loopback": False,
+                "decision": "deny",
+            }
+        )
+        record["egress"]["denied"] = record["egress"].get("denied", 0) + 1
+        record["egress"]["attempts_observed"] = record["egress"].get("attempts_observed", 0) + 1
+        record["invariants"]["no_denied_egress"] = False
+        record["invariants"]["no_undeclared_loopback_peer"] = False
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        # Self-consistent: the only violations, if any, must NOT be the outcome binding.
+        assert not any("feasible" in v.lower() for v in violations)
+
+
+# --------------------------------------------------------------------------- #
+# Final-review 2 — undeclared loopback aliases rejected at the attestation layer
+# --------------------------------------------------------------------------- #
+
+
+class TestEgressAliasRejection:
+    """Undeclared ``localhost``/``::1`` aliases on a declared port must recompute to
+    deny at the attestation layer, with identical semantics to the runtime guard.
+    The topology declares only ``127.0.0.1`` endpoints; an alias is not a declared
+    endpoint.
+    """
+
+    def test_localhost_alias_on_declared_port_rejected(self):
+        record = _valid_attestation()
+        record["raw_evidence"].append(
+            {
+                "event": "egress_attempt",
+                "role": "worker",
+                "host": "localhost",
+                "port": 6390,  # redis declared on 127.0.0.1:6390, not localhost:6390
+                "loopback": True,
+                "decision": "allow",
+            }
+        )
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        assert any("localhost" in v.lower() or "not a declared" in v.lower() for v in violations)
+
+    def test_ipv6_loopback_alias_on_declared_port_rejected(self):
+        record = _valid_attestation()
+        record["raw_evidence"].append(
+            {
+                "event": "egress_attempt",
+                "role": "worker",
+                "host": "::1",
+                "port": 6390,  # redis declared on 127.0.0.1:6390, not [::1]:6390
+                "loopback": True,
+                "decision": "allow",
+            }
+        )
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        assert any("not a declared" in v.lower() or "host" in v.lower() for v in violations)
+
+
+# --------------------------------------------------------------------------- #
+# Final-review 3 — bind role readiness/ports/probes to the checked-in topology
+# --------------------------------------------------------------------------- #
+
+
+class TestRolePortProbeBinding:
+    """Role readiness, resolved ports, and health probes must be bound to the
+    independently supplied checked-in topology. The validator previously accepted
+    fabricated role-ready summaries and arbitrary resolved ports because it checked
+    only truthiness.
+    """
+
+    def test_role_port_not_matching_resolved_ports_rejected(self):
+        record = _valid_attestation()
+        for r in record["roles"]:
+            if r["name"] == "worker":
+                r["port"] = 9999  # ports["worker"] is 8090
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        assert any("worker" in v.lower() and "port" in v.lower() for v in violations)
+
+    def test_altered_resolved_port_map_rejected(self):
+        record = _valid_attestation()
+        record["ports"]["worker"] = 7777  # summary still reports 8090
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        assert any("worker" in v.lower() and "port" in v.lower() for v in violations)
+
+    def test_ready_probe_type_mismatch_rejected(self):
+        record = _valid_attestation()
+        for r in record["roles"]:
+            if r["name"] == "worker":
+                r["ready_probe"] = {"type": "tcp"}  # topology declares http
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        assert any("worker" in v.lower() and ("probe" in v.lower() or "health" in v.lower()) for v in violations)
+
+    def test_ready_probe_http_path_mismatch_rejected(self):
+        record = _valid_attestation()
+        for r in record["roles"]:
+            if r["name"] == "worker":
+                r["ready_probe"] = {"type": "http", "path": "/wrong", "status": 200, "role": "worker"}
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        assert any("worker" in v.lower() and ("probe" in v.lower() or "health" in v.lower()) for v in violations)
+
+    def test_ready_probe_http_role_mismatch_rejected(self):
+        record = _valid_attestation()
+        for r in record["roles"]:
+            if r["name"] == "worker":
+                r["ready_probe"] = {
+                    "type": "http",
+                    "path": "/__replay/health",
+                    "status": 200,
+                    "role": "not-worker",  # topology expect_role is "worker"
+                }
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        assert any("worker" in v.lower() and ("probe" in v.lower() or "health" in v.lower()) for v in violations)
+
+    def test_fabricated_role_not_in_topology_rejected(self):
+        record = _valid_attestation()
+        record["roles"].append({"name": "evil", "pid": 1, "port": 1, "ready": True, "ready_probe": {"type": "tcp"}})
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        assert any("evil" in v.lower() for v in violations)
+
+    def test_dynamic_role_missing_from_resolved_ports_rejected(self):
+        record = _valid_attestation()
+        del record["ports"]["redis"]
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        assert any("redis" in v.lower() and "port" in v.lower() for v in violations)

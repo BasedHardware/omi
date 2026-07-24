@@ -316,6 +316,59 @@ def validate_attestation(attestation: dict[str, Any], *, expected_topology: dict
         )
     if recomputed_allowed == 0 and recomputed_denied == 0:
         violations.append("zero egress attempts observed — guard may not have been installed")
+    # 4b. Outcome binding: a feasible outcome requires every required safety
+    #     invariant to hold — including zero denied egress. A self-consistent
+    #     artifact that honestly reports a denied attempt must still be invalid
+    #     as feasible; summary consistency alone is not sufficient.
+    if attestation.get("outcome") == "feasible" and recomputed_denied > 0:
+        violations.append(
+            f"outcome 'feasible' requires zero denied egress, but {recomputed_denied} "
+            "denied attempt(s) recomputed from raw evidence"
+        )
+
+    # 4c. Bind each role's resolved port and health probe to the checked-in
+    #     topology contract — reject fabricated role-ready summaries, altered
+    #     resolved-port maps, and probes that do not match the declared contract.
+    topology_role_defs = topology.get("roles", {})
+    for role in roles:
+        rname = role.get("name")
+        if not isinstance(rname, str):
+            continue
+        role_def = topology_role_defs.get(rname)
+        if not isinstance(role_def, dict):
+            violations.append(f"role {rname!r} in attestation is not declared in the topology contract")
+            continue
+        # Resolved port must match the ports map for this role.
+        if rname in ports:
+            if role.get("port") != ports[rname]:
+                violations.append(
+                    f"role {rname!r} port mismatch: summary reports {role.get('port')!r}, "
+                    f"resolved ports map reports {ports[rname]!r}"
+                )
+        # Health probe must match the topology health contract.
+        health = role_def.get("health", {})
+        probe = role.get("ready_probe")
+        if isinstance(probe, dict) and isinstance(health, dict):
+            if probe.get("type") != health.get("type"):
+                violations.append(
+                    f"role {rname!r} ready_probe type {probe.get('type')!r} does not match "
+                    f"topology health type {health.get('type')!r}"
+                )
+            if health.get("type") == "http":
+                if probe.get("path") != health.get("path"):
+                    violations.append(
+                        f"role {rname!r} ready_probe path {probe.get('path')!r} does not match "
+                        f"topology health path {health.get('path')!r}"
+                    )
+                if probe.get("role") != health.get("expect_role", rname):
+                    violations.append(
+                        f"role {rname!r} ready_probe role {probe.get('role')!r} does not match "
+                        f"topology health expect_role {health.get('expect_role', rname)!r}"
+                    )
+    # Every dynamic role must carry a resolved port in the ports map.
+    for rname, role_def in topology_role_defs.items():
+        if isinstance(role_def, dict) and role_def.get("port") == "dynamic" and rname not in ports:
+            violations.append(f"dynamic topology role {rname!r} has no resolved port in the ports map")
 
     # 5. Guard-installation evidence for every explicitly guarded Python role.
     guarded_roles = {
