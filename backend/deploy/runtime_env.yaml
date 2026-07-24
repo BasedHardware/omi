@@ -616,6 +616,9 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           forbidden_env:
             - HOSTED_PUSHER_API_URL
           secrets:
@@ -1317,6 +1320,9 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           secrets:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
