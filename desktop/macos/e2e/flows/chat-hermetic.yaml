@@ -12,14 +12,14 @@ preconditions:
   - automation_bridge_ready
 
 steps:
-  - id: S0
+  - id: S1
     name: Reset main chat for flow isolation
     bridge.action:
       name: reset_main_chat
     expect:
       result.detail.reset: "true"
 
-  - id: S1
+  - id: S2
     name: Navigate to Home (chat is embedded here)
     bridge.navigate:
       target: dashboard
@@ -27,7 +27,7 @@ steps:
     wait:
       state.selectedTabIndex: 0
 
-  - id: S2
+  - id: S3
     name: Send marker chat query
     bridge.action:
       name: ask_main_chat
@@ -36,7 +36,7 @@ steps:
     expect:
       result.detail.sent: "Reply with exactly [[MARKER:chat-hermetic]]"
 
-  - id: S3
+  - id: S4
     name: Wait for chat idle
     bridge.action:
       name: wait_main_chat_idle
@@ -45,7 +45,7 @@ steps:
     expect:
       result.detail.idle: "true"
 
-  - id: S4
+  - id: S5
     name: Assert deterministic exact stub reply
     bridge.action:
       name: main_chat_snapshot
@@ -54,7 +54,7 @@ steps:
     expect:
       result.detail.last_assistant_text: "MARKER:chat-hermetic"
 
-  - id: S5
+  - id: S6
     name: Logs clean
     log.expect:
       absent:
