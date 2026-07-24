@@ -7,6 +7,7 @@
     "test:desktop-beta-admission:emulator": "bash backend/testing/desktop_beta_admission/run.sh",
     "test:listen-pusher-stack:emulator": "backend/testing/listen_pusher_stack/run.sh",
     "test:sync-cloud-tasks-stack:emulator": "backend/testing/sync_cloud_tasks_stack/run.sh",
+    "test:replay-harness-phase0a:emulator": "backend/testing/replay_harness_phase0a/run.sh",
     "test:memory-vector-repair-outbox:emulator": "firebase emulators:exec --only firestore --project demo-memory \"python3 backend/scripts/vector_repair_outbox_emulator_test.py\"",
     "test:memory-vector-repair-outbox-rules:emulator": "firebase emulators:exec --only firestore --project demo-memory \"node backend/scripts/firestore_rules_emulator_test.mjs\"",
     "test:memory-vector-repair-outbox-lease:emulator": "firebase emulators:exec --only firestore --project demo-memory \"python3 backend/scripts/vector_repair_outbox_lease_emulator_test.py\"",
