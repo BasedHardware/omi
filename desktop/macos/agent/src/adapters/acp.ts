@@ -154,6 +154,42 @@ export function isAcpProviderAuthFailure(error: unknown): boolean {
 /** @deprecated Renamed to {@link isAcpProviderAuthFailure}; classify-only, no in-band recovery. */
 export const isRecoverableAcpAuthError = isAcpProviderAuthFailure;
 
+/** Seams for {@link beginProviderAuthWithoutBlocking}. */
+export type ProviderAuthKickoffDeps = {
+  /** Tell the host provider auth is required, so a pending turn can terminalize now. */
+  signalAuthRequired: () => void;
+  /**
+   * Run the OAuth flow: local callback server, token exchange, credential
+   * storage, ACP restart. It emits its own `auth_required` carrying the
+   * bridge-issued `authUrl` once one exists.
+   */
+  startAuthFlow: () => Promise<void>;
+  logErr: (message: string) => void;
+};
+
+/**
+ * Begin provider auth without blocking the caller.
+ *
+ * `initialize` used to `await` the OAuth flow, so a cold start with expired
+ * credentials sat inside init for the whole callback timeout with no turn on
+ * the wire to terminalize — the user's first send hung instead of failing fast
+ * (#10407). Signalling first lets that send terminalize as `authentication`
+ * immediately.
+ *
+ * The flow is still *started*, just not awaited: the host's sign-in button needs
+ * the `authUrl` only this flow can mint (Swift `ChatProvider.startClaudeAuth`
+ * refuses to open sign-in without one), so dropping the call outright would
+ * strand the user in an auth-required state with no way out.
+ */
+export function beginProviderAuthWithoutBlocking(deps: ProviderAuthKickoffDeps): void {
+  deps.signalAuthRequired();
+  // Detached on purpose — awaiting is the bug. The rejection is swallowed here so
+  // a failed flow can never surface as an unhandled rejection.
+  void deps.startAuthFlow().catch((error) => {
+    deps.logErr(`ACP background auth flow failed: ${error instanceof Error ? error.message : String(error)}`);
+  });
+}
+
 const MAX_RECENT_STDERR_CHARS = 2_000;
 
 const EXTERNAL_TERMINAL_HTTP_FAILURE = /^\s*HTTP\s+([45]\d{2})\s*:\s*(?:\{|\[)/i;
