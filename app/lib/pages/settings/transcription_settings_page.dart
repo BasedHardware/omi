@@ -46,6 +46,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _showAdvanced = false;
   bool _showLogs = true;
   bool _isSaving = false;
+  bool _sendRawAudioToOmi = true;
   String? _validationError;
 
   // On-device model download state
@@ -193,6 +194,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     _hostController.text = config?.host ?? '127.0.0.1';
     _portController.text = (config?.port ?? 8080).toString();
     _urlController.text = config?.url ?? '';
+    _sendRawAudioToOmi = config?.sendRawAudioToOmi ?? true;
 
     // Auto-detect model for on-device whisper if not set
     if (_selectedProvider == SttProvider.onDeviceWhisper && _urlController.text.isEmpty) {
@@ -375,6 +377,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     String? url,
     String? host,
     int? port,
+    bool? sendRawAudioToOmi,
   }) {
     final current = _configsPerProvider[_selectedProvider];
     final providerDefaults = SttProviderConfig.get(_selectedProvider);
@@ -392,6 +395,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       params: current?.params,
       audioFieldName: current?.audioFieldName,
       schemaJson: current?.schemaJson,
+      sendRawAudioToOmi: sendRawAudioToOmi ?? current?.sendRawAudioToOmi ?? _sendRawAudioToOmi,
     );
   }
 
@@ -459,6 +463,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       params: params,
       audioFieldName: audioFieldName,
       schemaJson: schemaJson,
+      sendRawAudioToOmi: _sendRawAudioToOmi,
     );
   }
 
@@ -611,6 +616,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       if (config.params != null) 'params': config.params,
       if (config.audioFieldName != null) 'audio_field_name': config.audioFieldName,
       if (config.schemaJson != null) 'schema': config.schemaJson,
+      'send_raw_audio_to_omi': config.sendRawAudioToOmi,
     };
 
     final jsonString = const JsonEncoder.withIndent('  ').convert(exportableConfig);
@@ -739,6 +745,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         _urlController.text = config.url ?? '';
         _hostController.text = config.host ?? '127.0.0.1';
         _portController.text = (config.port ?? 8080).toString();
+        _sendRawAudioToOmi = config.sendRawAudioToOmi;
 
         // Update JSON configs
         if (config.requestType != null || config.headers != null || config.params != null) {
@@ -820,6 +827,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     _buildProviderSection(),
                     const SizedBox(height: 20),
                     _buildConfigSection(),
+                    const SizedBox(height: 20),
+                    _buildRawAudioForwardingSetting(),
                     const SizedBox(height: 10),
                     _buildAdvancedSection(),
                     _buildLogsSection(),
@@ -1024,9 +1033,13 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
     if (!proceed) return;
 
+    await _saveCurrentProviderConfig();
+    if (!mounted) return;
+
     setState(() {
       _useCustomStt = true;
       _selectedProvider = SttProvider.onDeviceWhisper;
+      _populateUIFromConfig(_configsPerProvider[_selectedProvider]);
       if (!isIOS) {
         _checkLocalModel();
       }
@@ -1056,7 +1069,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     }
   }
 
-  void _selectMode(TranscriptionMode mode) {
+  Future<void> _selectMode(TranscriptionMode mode) async {
     switch (mode) {
       case TranscriptionMode.omi:
         setState(() {
@@ -1066,15 +1079,20 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'omi');
         break;
       case TranscriptionMode.onDevice:
-        _switchToOnDevice();
+        await _switchToOnDevice();
         break;
       case TranscriptionMode.cloudProvider:
+        if (_selectedProvider == SttProvider.onDeviceWhisper) {
+          await _saveCurrentProviderConfig();
+          if (!mounted) return;
+        }
         setState(() {
           _useCustomStt = true;
           _omiParakeet = false;
           // Leaving on-device: fall back to a real BYO cloud provider.
           if (_selectedProvider == SttProvider.onDeviceWhisper) {
             _selectedProvider = SttProvider.openai;
+            _populateUIFromConfig(_configsPerProvider[_selectedProvider]);
           }
         });
         PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'custom_cloud');
@@ -1115,8 +1133,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               items: TranscriptionMode.values
                   .map((m) => DropdownMenuItem<TranscriptionMode>(value: m, child: Text(_modeLabel(m))))
                   .toList(),
-              onChanged: (m) {
-                if (m != null && m != mode) _selectMode(m);
+              onChanged: (m) async {
+                if (m != null && m != mode) await _selectMode(m);
               },
             ),
           ),
@@ -1298,6 +1316,32 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [_buildApiKeyInput(), const SizedBox(height: 20), _buildLanguageSelector()],
+    );
+  }
+
+  Widget _buildRawAudioForwardingSetting() {
+    return Material(
+      color: const Color(0xFF1A1A1A),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.grey.shade800),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SwitchListTile(
+        value: _sendRawAudioToOmi,
+        onChanged: (value) {
+          setState(() {
+            _sendRawAudioToOmi = value;
+            _updateCurrentProviderConfig(sendRawAudioToOmi: value);
+          });
+        },
+        secondary: const Icon(Icons.cloud_upload_outlined, color: Colors.white70),
+        title: Text(context.l10n.sendRawAudioToOmi, style: const TextStyle(color: Colors.white, fontSize: 14)),
+        subtitle: Text(
+          context.l10n.sendRawAudioToOmiDescription,
+          style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+        ),
+      ),
     );
   }
 
@@ -2002,6 +2046,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               params: null,
               audioFieldName: null,
               schemaJson: current.schemaJson,
+              sendRawAudioToOmi: current.sendRawAudioToOmi,
             );
           }
           _regenerateRequestJson(_selectedProvider);
@@ -2164,6 +2209,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 params: current.params,
                 audioFieldName: current.audioFieldName,
                 schemaJson: schemaJson,
+                sendRawAudioToOmi: current.sendRawAudioToOmi,
               );
             } catch (_) {}
           }
