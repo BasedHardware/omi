@@ -26,8 +26,14 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from database import conversation_finalization_jobs as jobs_db
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from utils.conversations import lifecycle as lifecycle_service
 from firebase_admin import firestore
+from google.api_core.exceptions import Aborted
+
+# Only expected Firestore transaction contention may be treated as a CAS loss.
+# Any other exception is a real failure and must surface, never be swallowed.
+_CONTENTION = (Aborted, FirestoreContentionExhausted)
 
 _EMULATOR = os.getenv('FIRESTORE_EMULATOR_HOST')
 pytestmark = pytest.mark.skipif(not _EMULATOR, reason='requires FIRESTORE_EMULATOR_HOST')
@@ -64,15 +70,19 @@ def test_competing_cursor_writers_cas_prevents_rewind():
     assert cursor == {'resume_after_path': None, 'generation': 0}
 
     results: dict[str, bool] = {}
+    errors: list[BaseException] = []
     barrier = threading.Barrier(2)
 
     def pod(name: str, new_path: str):
         barrier.wait()
         try:
             results[name] = jobs_db.advance_stale_processing_sweep_cursor(0, new_path)
-        except Exception:
-            # Contention exhaustion under concurrent load: the other pod's
-            # commit won, so this one lost (equivalent to a CAS False).
+        except _CONTENTION:
+            # Expected transaction contention: the other pod's commit won, so
+            # this one lost (equivalent to a CAS False).
+            results[name] = False
+        except Exception as error:
+            errors.append(error)
             results[name] = False
 
     t1 = threading.Thread(target=pod, args=('pod-a', 'users/u1/conversations/c1'))
@@ -82,6 +92,8 @@ def test_competing_cursor_writers_cas_prevents_rewind():
     t1.join(timeout=10)
     t2.join(timeout=10)
 
+    # Unexpected failures must surface — only expected contention may be a CAS loss.
+    assert not errors, f'unexpected emulator failures surfaced: {errors}'
     # Exactly one writer committed.
     assert sum(v for v in results.values()) == 1, f'expected exactly one winner, got {results}'
 
@@ -147,13 +159,17 @@ def test_production_finalizer_vs_orphan_race_exactly_one_wins():
     )
 
     results: dict[str, object] = {}
+    errors: list[BaseException] = []
     barrier = threading.Barrier(2)
 
     def orphan_terminalize():
         barrier.wait()
         try:
             results['orphan'] = jobs_db.complete_orphan_conversation(uid, cid, expected_admitted_at=old_admitted)
-        except Exception:
+        except _CONTENTION:
+            results['orphan'] = False
+        except Exception as error:
+            errors.append(error)
             results['orphan'] = False
 
     def production_finalizer():
@@ -166,7 +182,10 @@ def test_production_finalizer_vs_orphan_race_exactly_one_wins():
                 finalization_admission=lambda conv: lifecycle_service._finalization_admission(conv, cid),
             )
             results['finalizer'] = bool(intent.get('job_id'))
-        except Exception:
+        except _CONTENTION:
+            results['finalizer'] = False
+        except Exception as error:
+            errors.append(error)
             results['finalizer'] = False
 
     t1 = threading.Thread(target=orphan_terminalize)
@@ -176,6 +195,8 @@ def test_production_finalizer_vs_orphan_race_exactly_one_wins():
     t1.join(timeout=15)
     t2.join(timeout=15)
 
+    # Unexpected failures must surface — only expected contention may fence a racer.
+    assert not errors, f'unexpected emulator failures surfaced: {errors}'
     orphan_won = bool(results.get('orphan'))
     finalizer_won = bool(results.get('finalizer'))
     assert orphan_won != finalizer_won, f'expected exactly one winner, got {results}'
@@ -221,20 +242,27 @@ def test_deferred_reacquire_prevents_orphan_terminalization():
     )
 
     results: dict[str, object] = {}
+    errors: list[BaseException] = []
     barrier = threading.Barrier(2)
 
     def orphan_terminalize():
         barrier.wait()
         try:
             results['orphan'] = jobs_db.complete_orphan_conversation(uid, cid, expected_admitted_at=old_admitted)
-        except Exception:
+        except _CONTENTION:
+            results['orphan'] = False
+        except Exception as error:
+            errors.append(error)
             results['orphan'] = False
 
     def deferred_reacquire():
         barrier.wait()
         try:
             results['reacquire'] = jobs_db.reacquire_deferred_processing(uid, cid)
-        except Exception:
+        except _CONTENTION:
+            results['reacquire'] = False
+        except Exception as error:
+            errors.append(error)
             results['reacquire'] = False
 
     t1 = threading.Thread(target=orphan_terminalize)
@@ -243,6 +271,9 @@ def test_deferred_reacquire_prevents_orphan_terminalization():
     t2.start()
     t1.join(timeout=15)
     t2.join(timeout=15)
+
+    # Unexpected failures must surface — only expected contention may fence a racer.
+    assert not errors, f'unexpected emulator failures surfaced: {errors}'
 
     # reacquire always wins: it atomically clears deferred and renews the lease.
     # The orphan is fenced: either by deferred=True (if it reads before
