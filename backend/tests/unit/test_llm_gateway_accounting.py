@@ -159,6 +159,14 @@ def test_anthropic_tool_cache_control_marks_an_explicit_cache_attempt() -> None:
     assert cache_write_ttl_for_anthropic_request(request) == '1h'
 
 
+def test_anthropic_automatic_cache_control_is_accounted() -> None:
+    from llm_gateway.gateway.accounting import cache_requested_for_anthropic_request
+
+    request = {'cache_control': {'type': 'ephemeral', 'ttl': '1h'}, 'messages': []}
+    assert cache_requested_for_anthropic_request(request)
+    assert cache_write_ttl_for_anthropic_request(request) == '1h'
+
+
 def test_rate_card_estimate_uses_cached_input_price_and_never_priceless_unknowns() -> None:
     context = _context()
     trace = AttemptTrace()
