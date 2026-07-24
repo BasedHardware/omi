@@ -43,6 +43,23 @@ def test_missing_and_stale_errors_both_carry_the_surface(tmp_path, surface):
     assert f"--surface {surface}" in str(stale.value)
 
 
+def test_check_spec_stays_callable_without_surface(tmp_path):
+    """Backward compatibility: check_spec must remain callable without `surface`.
+
+    Making `surface` keyword-only-required broke existing callers
+    (test_openapi_contract.py::test_check_spec_detects_stale_file) with a
+    TypeError. It defaults to 'public' — matching the --surface default — while
+    the production caller still passes surface explicitly.
+    """
+    path = tmp_path / "openapi.json"
+    path.write_text("stale\n")
+
+    with pytest.raises(export_openapi.OpenAPIContractError) as stale:
+        export_openapi.check_spec(path, "fresh\n")  # no surface kwarg
+    assert "is stale" in str(stale.value)
+    assert "--surface public" in str(stale.value)
+
+
 def test_a_non_public_hint_is_never_the_bare_public_default():
     """The regression itself: the app-client hint must not be a command that writes public.
 

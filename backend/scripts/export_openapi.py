@@ -999,7 +999,10 @@ def regenerate_hint(path: Path, surface: str) -> str:
     return f'backend/scripts/export_openapi.py --surface {surface} --write {path}'
 
 
-def check_spec(path: Path, generated: str, *, surface: str) -> None:
+def check_spec(path: Path, generated: str, *, surface: str = 'public') -> None:
+    # Default matches the --surface default so existing callers (and the public
+    # contract test) stay valid; the production caller passes surface explicitly
+    # so a non-public surface never silently gets the public regenerate hint.
     hint = regenerate_hint(path, surface)
     if not path.exists():
         raise OpenAPIContractError(f'{path} does not exist; run {hint}')
