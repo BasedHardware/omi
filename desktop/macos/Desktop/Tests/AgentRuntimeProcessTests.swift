@@ -1029,8 +1029,13 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertTrue(source.contains("Self.removeInheritedBYOKEnvironment(from: &env)"))
     XCTAssertTrue(source.contains("let byok = await Self.usableBYOKEnvironment()"))
-    XCTAssertTrue(
-      source.contains("let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled"))
+    // The inline `!DesktopLocalProfile.isEnabled` was refactored into
+    // `AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(...)`; this static
+    // tripwire was left asserting the old string (it fails on upstream too, where
+    // this suite is skipped). Match the current source's equivalent.
+    XCTAssertTrue(source.contains("let forceRefreshToken ="))
+    XCTAssertTrue(source.contains("preferredAdapterId == .piMono"))
+    XCTAssertTrue(source.contains("AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup("))
     XCTAssertTrue(source.contains("getAuthHeader("))
     XCTAssertTrue(source.contains("forceRefresh: forceRefreshToken"))
     XCTAssertTrue(source.contains("expectedUserId: authorizationSnapshot.ownerID"))
