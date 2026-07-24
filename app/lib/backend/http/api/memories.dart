@@ -121,3 +121,4 @@ Future<bool> updateMemoryBaselineServer(String memoryId, bool value) async {
   Logger.debug('updateMemoryBaseline response: ${response.body}');
   return response.statusCode == 200;
 }
+

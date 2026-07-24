@@ -119,10 +119,7 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
                 Row(
                   children: [
                     IconButton(
-                      icon: Icon(
-                        _isBaseline ? Icons.flag : Icons.flag_outlined,
-                        color: _isBaseline ? Colors.blue : Colors.white,
-                      ),
+                      icon: Icon(_isBaseline ? Icons.flag : Icons.flag_outlined, color: _isBaseline ? Colors.blue : Colors.white),
                       onPressed: _toggleBaseline,
                       tooltip: _isBaseline ? context.l10n.unpinAsBaseline : context.l10n.pinAsBaseline,
                     ),

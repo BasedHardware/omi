@@ -5,7 +5,12 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 
-BtDevice _device({required String id, required String name, DeviceType type = DeviceType.omi, int rssi = -60}) =>
+BtDevice _device({
+  required String id,
+  required String name,
+  DeviceType type = DeviceType.omi,
+  int rssi = -60,
+}) =>
     BtDevice(id: id, name: name, type: type, rssi: rssi);
 
 void main() {

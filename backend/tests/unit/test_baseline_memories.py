@@ -18,6 +18,7 @@ isolation primitives from testing/import_isolation.py.
 import pytest
 from unittest.mock import patch
 
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -227,9 +228,9 @@ class TestBaselineMemoryInjection:
         ):
             _, memories_str = mem_module.get_prompt_memories('user-1')
 
-        assert (
-            'baseline' not in memories_str.lower()
-        ), "Prompt must not include a baseline section when no baseline memories exist"
+        assert 'baseline' not in memories_str.lower(), (
+            "Prompt must not include a baseline section when no baseline memories exist"
+        )
         assert 'A regular fact' in memories_str
 
     def test_locked_memories_excluded_from_all_buckets(self, mem_module):

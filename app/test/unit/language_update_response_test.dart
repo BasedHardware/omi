@@ -8,15 +8,22 @@ import 'package:omi/backend/schema/gen/users_wire.g.dart';
 /// that trust safe.
 void main() {
   test('language update response carries the server-decided mode', () {
-    final multilingual = GeneratedUserLanguageUpdateResponse.fromJson({'status': 'ok', 'single_language_mode': false});
+    final multilingual = GeneratedUserLanguageUpdateResponse.fromJson(
+      {'status': 'ok', 'single_language_mode': false},
+    );
     expect(multilingual.status, 'ok');
     expect(multilingual.singleLanguageMode, isFalse);
 
-    final single = GeneratedUserLanguageUpdateResponse.fromJson({'status': 'ok', 'single_language_mode': true});
+    final single = GeneratedUserLanguageUpdateResponse.fromJson(
+      {'status': 'ok', 'single_language_mode': true},
+    );
     expect(single.singleLanguageMode, isTrue);
   });
 
   test('a response without the mode field fails loudly instead of defaulting', () {
-    expect(() => GeneratedUserLanguageUpdateResponse.fromJson({'status': 'ok'}), throwsA(isA<Object>()));
+    expect(
+      () => GeneratedUserLanguageUpdateResponse.fromJson({'status': 'ok'}),
+      throwsA(isA<Object>()),
+    );
   });
 }
