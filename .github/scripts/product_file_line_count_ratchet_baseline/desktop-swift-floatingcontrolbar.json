@@ -4,7 +4,7 @@
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": 2638,
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": 4829,
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": 2584,
-    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionDelegate.swift": 1506,
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionDelegate.swift": 1509,
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": 1536,
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": 1584
   },
