@@ -151,6 +151,13 @@ struct ConversationDetailView: View {
             RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
               .stroke(OmiColors.backgroundTertiary.opacity(0.3), lineWidth: 1)
           )
+          .overlay(alignment: .top) {
+            if isEnrichingDeferred {
+              deferredProcessingSection
+                .padding(OmiSpacing.xxl)
+                .allowsHitTesting(false)
+            }
+          }
           .shadow(color: Color.black.opacity(0.1), radius: 20, x: 0, y: 8)
           .padding(OmiSpacing.xxl)
         }
@@ -579,13 +586,6 @@ struct ConversationDetailView: View {
 
   @ViewBuilder
   private var summaryContent: some View {
-    // Lazy processing: while the deferred conversation is being enriched (polled) on first
-    // open, show a loader where the summary will appear. Cleared when enrichment completes or
-    // the poll times out, so it never spins forever.
-    if isEnrichingDeferred {
-      deferredProcessingSection
-    }
-
     // Overview section
     if !displayConversation.overview.isEmpty {
       overviewSection
@@ -804,7 +804,8 @@ struct ConversationDetailView: View {
 
   // MARK: - Deferred Processing Loader
 
-  /// Shown while a lazily-deferred conversation is being enriched on first open.
+  /// Overlaid while a lazily-deferred conversation is enriched, preserving the
+  /// position of details that may already be available from the local cache.
   private var deferredProcessingSection: some View {
     HStack(spacing: OmiSpacing.md) {
       ProgressView()

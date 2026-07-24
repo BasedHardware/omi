@@ -99,23 +99,30 @@ struct FocusPage: View {
   private let countdownTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
   var body: some View {
-    if viewModel.isLoading && storage.sessions.isEmpty {
-      // Show loading when initially loading with no cached data
+    focusContent
+      .overlay {
+        if viewModel.isLoading && storage.sessions.isEmpty {
+          initialLoadingOverlay
+        }
+      }
+  }
+
+  /// Keep the page geometry in place during its first refresh. Replacing the
+  /// whole page with a spinner makes the header and content jump into place.
+  private var initialLoadingOverlay: some View {
+    ZStack {
+      Color.clear
       VStack(spacing: 14) {
-        Spacer()
         ProgressView()
           .scaleEffect(1.1)
           .tint(sb.ink(.w55))
         Text("Loading focus data…")
           .geist(size: 14)
           .foregroundStyle(sb.ink(.w45))
-        Spacer()
       }
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(Color.clear)
-    } else {
-      focusContent
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .allowsHitTesting(false)
   }
 
   private var focusContent: some View {

@@ -3488,6 +3488,18 @@ struct TasksPage: View {
         await viewModel.loadTasks()
         await suggestedStore.load()
       }
+      .overlay(alignment: .topTrailing) {
+        if SuggestedTasksPresentationPolicy.showsFloatingLoadingIndicator(
+          isLoading: suggestedStore.isLoading,
+          candidateCount: suggestedStore.candidates.count
+        ) {
+          SuggestedTasksLoadingIndicator()
+            .padding(.top, OmiSpacing.sm)
+            .padding(.trailing, OmiSpacing.lg)
+            .allowsHitTesting(false)
+            .transition(.opacity)
+        }
+      }
       .onAppear {
         viewModel.scrollProxy = proxy
         schedulePendingDashboardNavigation(proxy: proxy)
