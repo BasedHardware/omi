@@ -43,6 +43,7 @@ class FailureClass(str, Enum):
     TIMEOUT_BEFORE_OUTPUT = 'timeout_before_output'
     PROVIDER_429_OMI_PAID = 'provider_429_omi_paid'
     PROVIDER_5XX_OMI_PAID = 'provider_5xx_omi_paid'
+    PROVIDER_INVALID_REQUEST = 'provider_invalid_request'
     BYOK_AUTH = 'byok_auth'
     BYOK_QUOTA = 'byok_quota'
     BYOK_RATE_LIMIT = 'byok_rate_limit'
@@ -50,6 +51,36 @@ class FailureClass(str, Enum):
     MISSING_BYOK_KEY = 'missing_byok_key'
     CAPABILITY_MISMATCH = 'capability_mismatch'
     INVALID_CONFIG = 'invalid_config'
+
+
+class ProviderRejection(str, Enum):
+    """Privacy-safe classification of an upstream provider's rejected request."""
+
+    NONE = 'none'
+    CONTEXT_LENGTH_EXCEEDED = 'context_length_exceeded'
+    MODEL_NOT_FOUND = 'model_not_found'
+    INVALID_REQUEST = 'invalid_request'
+    INVALID_MODEL = 'invalid_model'
+    INVALID_MESSAGES = 'invalid_messages'
+    INVALID_RESPONSE_FORMAT = 'invalid_response_format'
+    INVALID_REASONING_EFFORT = 'invalid_reasoning_effort'
+    INVALID_TEMPERATURE = 'invalid_temperature'
+    INVALID_OUTPUT_LIMIT = 'invalid_output_limit'
+    INVALID_PROMPT_CACHE = 'invalid_prompt_cache'
+    INVALID_TOOLS = 'invalid_tools'
+    INVALID_STREAM = 'invalid_stream'
+    INVALID_OTHER = 'invalid_other'
+    UNSUPPORTED_MODEL = 'unsupported_model'
+    UNSUPPORTED_MESSAGES = 'unsupported_messages'
+    UNSUPPORTED_RESPONSE_FORMAT = 'unsupported_response_format'
+    UNSUPPORTED_REASONING_EFFORT = 'unsupported_reasoning_effort'
+    UNSUPPORTED_TEMPERATURE = 'unsupported_temperature'
+    UNSUPPORTED_OUTPUT_LIMIT = 'unsupported_output_limit'
+    UNSUPPORTED_PROMPT_CACHE = 'unsupported_prompt_cache'
+    UNSUPPORTED_TOOLS = 'unsupported_tools'
+    UNSUPPORTED_STREAM = 'unsupported_stream'
+    UNSUPPORTED_OTHER = 'unsupported_other'
+    OTHER_4XX = 'other_4xx'
 
 
 class BenchmarkSource(str, Enum):
