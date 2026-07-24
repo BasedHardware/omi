@@ -324,12 +324,10 @@ async fn get_agent_status(
                             "VM {} no longer exists in GCP — clearing Firestore record",
                             vm.vm_name
                         );
-                        if let Err(status) = fail_closed_firestore_transition(
+                        fail_closed_firestore_transition(
                             state.firestore.delete_agent_vm(&user.uid).await,
                             &format!("Failed to clear missing VM {} from Firestore", vm.vm_name),
-                        ) {
-                            return Err(status);
-                        }
+                        )?;
                         return Ok(Json(None));
                     }
                     Ok(gce_status)
