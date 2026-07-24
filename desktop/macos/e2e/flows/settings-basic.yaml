@@ -5,6 +5,7 @@ description: Settings navigation smoke — open Settings via gear icon, navigate
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+General.swift
   - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
 preconditions:
   - auth_ready
