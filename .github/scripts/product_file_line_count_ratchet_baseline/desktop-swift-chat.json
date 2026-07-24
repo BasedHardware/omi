@@ -1,7 +1,7 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2216,
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4330
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4304
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": "deleteBackend flag threaded through both clearJournalTurns variants so a reset is local-only",
