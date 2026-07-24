@@ -1127,6 +1127,7 @@ class ChatProvider: ObservableObject {
 
   /// Set to true during onboarding so the ACP session ID is persisted for restart recovery.
   var isOnboarding = false
+  private var preOnboardingMainMessages: [ChatMessage]?
   @Published var sessionsLoadError: String?
   @Published var selectedAppId: String? {
     didSet { restoreDraftForCurrentContextIfNeeded() }
@@ -5922,17 +5923,33 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Clear Chat
 
-  /// Reset onboarding's legacy default backend stream through the same
-  /// generation-fenced journal deletion path as every other chat clear.
-  /// The app may restart before the physical DELETE returns; the daemon's
-  /// durable outbox resumes that exact operation on the next launch.
-  func clearDefaultJournalForOnboardingReset() async -> Bool {
-    let surface = AgentSurfaceReference.mainChat(chatId: "default")
+  func beginOnboardingJournal() {
+    guard !isOnboarding else { return }
+    preOnboardingMainMessages = messages
+    isOnboarding = true
+  }
+
+  /// Delete only setup-owned conversation state. Onboarding is a local-only
+  /// journal surface, so this can never enqueue a backend chat deletion or
+  /// mutate the user's normal main-chat history.
+  func clearOnboardingJournal() async -> Bool {
+    let surface = AgentSurfaceReference.onboarding()
     AgentRuntimeStatusStore.shared.clear(surface: surface)
-    // Local-only: an onboarding re-walkthrough resets the local chat view but
-    // must never hard-delete the user's server-side chat history. The backend
-    // stays authoritative and rehydrates the thread via reconcile.
     return await kernelTurnProjection.clear(surface: surface, deleteBackend: false)
+  }
+
+  /// Leave the setup-only chat surface, purge its local transcript, and restore
+  /// the authoritative main-chat projection before the product UI is revealed.
+  func finishOnboardingJournal() async {
+    let fallbackMessages = preOnboardingMainMessages ?? []
+    _ = await clearOnboardingJournal()
+    isOnboarding = false
+    let reloaded = await kernelTurnProjection.reload(surface: mainChatSurfaceReference())
+    if !reloaded {
+      messages = fallbackMessages
+      resetMessagesPagination()
+    }
+    preOnboardingMainMessages = nil
   }
 
   /// Clear current session messages (delete and create new)
