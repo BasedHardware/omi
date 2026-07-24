@@ -120,6 +120,7 @@ _stub_module("utils.other.endpoints")
 sys.modules["utils.other.endpoints"].get_current_user_uid = MagicMock()
 
 import database.redis_db as redis_db
+import routers.action_items as action_items_router
 from routers.action_items import (
     share_action_items,
     get_shared_action_items,
@@ -706,3 +707,45 @@ class TestSyncBatchSkipsLocked:
         call_args = mock_db.batch_sync_update_action_items.call_args[0]
         assert len(call_args[1]) == 1
         assert call_args[1][0]['id'] == 't1'
+
+    def test_sync_batch_distinguishes_explicit_due_date_clear_from_omission(self):
+        batch_result = types.SimpleNamespace(
+            updated_ids=["t1"],
+            missing_ids=[],
+            noop_ids=[],
+            updated_count=1,
+        )
+        batch_result.model = lambda: {
+            "updated_count": 1,
+            "updated_ids": ["t1"],
+            "missing_ids": [],
+            "noop_ids": [],
+        }
+
+        with patch.object(action_items_router, 'action_items_db') as mock_db:
+            mock_db.get_action_item.side_effect = [
+                {
+                    "id": "t1",
+                    "description": "Clear the deadline",
+                    "is_locked": False,
+                },
+                {
+                    "id": "t2",
+                    "description": "Leave the deadline unchanged",
+                    "is_locked": False,
+                },
+            ]
+            mock_db.batch_sync_update_action_items.return_value = batch_result
+            request = action_items_router.SyncBatchRequest(
+                items=[
+                    action_items_router.SyncBatchItem.model_validate({'id': 't1', 'due_at': None}),
+                    action_items_router.SyncBatchItem.model_validate({'id': 't2'}),
+                ]
+            )
+
+            action_items_router.sync_batch_update(request, uid='test-uid')
+
+        updates = mock_db.batch_sync_update_action_items.call_args.args[1]
+        assert updates == [
+            {'id': 't1', 'data': {'due_at': None}}
+        ], 'an explicit null due_at must reach storage instead of being treated as an omitted field'
