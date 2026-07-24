@@ -1699,22 +1699,6 @@
     "@lovingOmi": {
         "description": "Title for the app review prompt"
     },
-    "leaveReviewIos": "Pomozite nam da dosegnemo više ljudi ostavljanjem recenzije u App Store-u. Vaša povratna informacija znači nam sve!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Pomozite nam da dosegnemo više ljudi ostavljanjem recenzije u Google Play Store-u. Vaša povratna informacija znači nam sve!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "Oceni u App Store-u",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Oceni na Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
-    },
     "maybeLater": "Možda kasnije",
     "@maybeLater": {
         "description": "Button text to defer action"

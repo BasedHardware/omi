@@ -1699,22 +1699,6 @@
     "@lovingOmi": {
         "description": "Title for the app review prompt"
     },
-    "leaveReviewIos": "Дапамажыце нам дасягнуць больш людзей, пакідаючы водгук ў App Store. Ваш водгук значыць шмат для нас!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Дапамажыце нам дасягнуць больш людзей, пакідаючы водгук ў Google Play Store. Ваш водгук значыць шмат для нас!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "Агранізавіць ў App Store",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Агранізавіць ў Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
-    },
     "maybeLater": "Магчыма пазней",
     "@maybeLater": {
         "description": "Button text to defer action"

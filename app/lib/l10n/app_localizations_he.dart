@@ -1779,19 +1779,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get lovingOmi => 'אוהב את Omi?';
 
   @override
-  String get leaveReviewIos => 'עזור לנו להגיע ליותר אנשים על ידי השארת ביקורת ב-App Store. המשוב שלך אומר לנו הרבה!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'עזור לנו להגיע ליותר אנשים על ידי השארת ביקורת ב-Google Play Store. המשוב שלך אומר לנו הרבה!';
-
-  @override
-  String get rateOnAppStore => 'דרג ב-App Store';
-
-  @override
-  String get rateOnGooglePlay => 'דרג ב-Google Play';
-
-  @override
   String get maybeLater => 'אולי מאוחר יותר';
 
   @override
@@ -2121,6 +2108,18 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ עריכת זכרון';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'אני אוהב לאכול גלידה...';

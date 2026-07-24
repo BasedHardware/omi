@@ -1714,22 +1714,6 @@
     "@lovingOmi": {
         "description": "Title for the app review prompt"
     },
-    "leaveReviewIos": "Help us reach more people by leaving a review in the App Store. Your feedback means the world to us!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Help us reach more people by leaving a review in the Google Play Store. Your feedback means the world to us!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "Rate on App Store",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Rate on Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
-    },
     "maybeLater": "Maybe Later",
     "@maybeLater": {
         "description": "Button text to defer action"

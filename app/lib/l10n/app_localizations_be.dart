@@ -1793,20 +1793,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get lovingOmi => 'Нравіцца вам Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Дапамажыце нам дасягнуць больш людзей, пакідаючы водгук ў App Store. Ваш водгук значыць шмат для нас!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Дапамажыце нам дасягнуць больш людзей, пакідаючы водгук ў Google Play Store. Ваш водгук значыць шмат для нас!';
-
-  @override
-  String get rateOnAppStore => 'Агранізавіць ў App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Агранізавіць ў Google Play';
-
-  @override
   String get maybeLater => 'Магчыма пазней';
 
   @override
@@ -2141,6 +2127,18 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Редагаваць спамін';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Мне нравіцца есці мароженае...';
