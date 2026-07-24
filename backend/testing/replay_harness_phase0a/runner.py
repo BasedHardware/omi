@@ -215,28 +215,55 @@ class Harness:
         self.children[name] = child
         return child
 
+    def _append_evidence(self, record: dict[str, Any]) -> None:
+        """Append a runner-emitted evidence record to the shared evidence stream.
+
+        Uses the same fcntl-locked append as the in-process guard sink so runner
+        and SUT writes interleave atomically.
+        """
+        import fcntl
+
+        path = self.evidence_dir / "egress.jsonl"
+        line = json.dumps(record, sort_keys=True, separators=(",", ":"))
+        with path.open("a") as fh:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            fh.write(line + "\n")
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
     def _wait_health(self, name: str) -> RoleHealth:
         role_def = self.topology["roles"][name]
         health = role_def["health"]
         timeout = float(role_def.get("startup_timeout_seconds", 30))
         port = self.ports.get(name)
         pid = self.children[name].pid
+        host = health.get("host", "127.0.0.1")
 
         if health["type"] == "tcp":
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
                 try:
-                    with socket.create_connection(("127.0.0.1", port), timeout=1.0):
+                    with socket.create_connection((host, port), timeout=1.0):
                         rh = RoleHealth(name=name, pid=pid, port=port, ready=True, ready_probe={"type": "tcp"})
                         self.health_records.append(rh)
+                        self._append_evidence(
+                            {
+                                "event": "role_allocated",
+                                "role": name,
+                                "host": host,
+                                "port": port,
+                                "pid": pid,
+                                "health": {"type": "tcp"},
+                                "ready": True,
+                            }
+                        )
                         return rh
                 except OSError:
                     time.sleep(0.2)
-            raise HarnessFailure(f"{name} did not listen on 127.0.0.1:{port}")
+            raise HarnessFailure(f"{name} did not listen on {host}:{port}")
 
         # HTTP health probe.
         expect_role = health.get("expect_role", name)
-        url = f"http://127.0.0.1:{port}{health['path']}"
+        url = f"http://{host}:{port}{health['path']}"
         deadline = time.monotonic() + timeout
 
         def check() -> bool:
@@ -254,6 +281,18 @@ class Harness:
                 probe = {"type": "http", "path": health["path"], "status": 200, "role": expect_role}
                 rh = RoleHealth(name=name, pid=pid, port=port, ready=True, ready_probe=probe)
                 self.health_records.append(rh)
+                self._append_evidence(
+                    {
+                        "event": "role_allocated",
+                        "role": name,
+                        "host": host,
+                        "port": port,
+                        "pid": pid,
+                        "health": {"type": "http", "path": health["path"], "expect_role": expect_role},
+                        "status": 200,
+                        "ready": True,
+                    }
+                )
                 return rh
             time.sleep(0.3)
         raise HarnessFailure(f"{name} health check failed within {timeout:.0f}s")

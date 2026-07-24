@@ -33,14 +33,14 @@ def _topology() -> dict[str, Any]:
         "roles": {
             "redis": {
                 "command": ["redis-server"],
-                "health": {"type": "tcp"},
+                "health": {"type": "tcp", "host": "127.0.0.1"},
                 "port": "dynamic",
                 "runtime": "non-python",
                 "guarded": False,
             },
             "worker": {
                 "command": ["python", "-m", "uvicorn"],
-                "health": {"type": "http", "path": "/__replay/health", "expect_role": "worker"},
+                "health": {"type": "http", "host": "127.0.0.1", "path": "/__replay/health", "expect_role": "worker"},
                 "port": "dynamic",
                 "startup_timeout_seconds": 120,
                 "runtime": "python",
@@ -73,8 +73,29 @@ def _ports() -> dict[str, int]:
 
 def _egress_events() -> list[dict[str, Any]]:
     # Every guarded Python role must carry a guard_installed event.
+    # Every topology role carries a role_allocated launcher/health-observation
+    # record — the raw source the artifact-controlled summary is bound to.
     return [
         {"event": "guard_installed", "role": "worker", "allow_count": 2},
+        {
+            "event": "role_allocated",
+            "role": "redis",
+            "host": "127.0.0.1",
+            "port": 6390,
+            "pid": 1000,
+            "health": {"type": "tcp"},
+            "ready": True,
+        },
+        {
+            "event": "role_allocated",
+            "role": "worker",
+            "host": "127.0.0.1",
+            "port": 8090,
+            "pid": 1000,
+            "health": {"type": "http", "path": "/__replay/health", "expect_role": "worker"},
+            "status": 200,
+            "ready": True,
+        },
         {
             "event": "egress_attempt",
             "role": "worker",
@@ -527,3 +548,133 @@ class TestRolePortProbeBinding:
         del record["ports"]["redis"]
         violations = att.validate_attestation(record, expected_topology=_topology())
         assert any("redis" in v.lower() and "port" in v.lower() for v in violations)
+
+
+# --------------------------------------------------------------------------- #
+# Fourth review — topology health contract must enforce ready-success semantics
+# --------------------------------------------------------------------------- #
+
+
+class TestHealthSuccessSemantics:
+    """The topology health contract must specify/enforce ready-success semantics.
+    The validator previously checked probe type/path/role but never the successful
+    response status, so a readiness probe that returned HTTP 500 passed.
+    """
+
+    def test_http_500_health_observation_rejected(self):
+        """Raw observation and summary both report status=500 coherently; the
+        validator must still reject it because 500 is not a success status."""
+        record = _valid_attestation()
+        for e in record["raw_evidence"]:
+            if e.get("event") == "role_allocated" and e.get("role") == "worker":
+                e["status"] = 500
+        for r in record["roles"]:
+            if r["name"] == "worker":
+                r["ready_probe"]["status"] = 500
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        assert any("status" in v.lower() or "success" in v.lower() for v in violations)
+
+    def test_http_404_health_observation_rejected(self):
+        record = _valid_attestation()
+        for e in record["raw_evidence"]:
+            if e.get("event") == "role_allocated" and e.get("role") == "worker":
+                e["status"] = 404
+        for r in record["roles"]:
+            if r["name"] == "worker":
+                r["ready_probe"]["status"] = 404
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        assert any("status" in v.lower() or "success" in v.lower() for v in violations)
+
+    def test_declared_expected_status_enforced(self):
+        """When the topology declares an explicit expected_status, only that status
+        satisfies success semantics (a 2xx that is not the declared value fails)."""
+        record = _valid_attestation()
+        record["topology_contract"]["roles"]["worker"]["health"]["expected_status"] = 204
+        for e in record["raw_evidence"]:
+            if e.get("event") == "role_allocated" and e.get("role") == "worker":
+                e["status"] = 200
+        for r in record["roles"]:
+            if r["name"] == "worker":
+                r["ready_probe"]["status"] = 200
+        topo = _topology()
+        topo["roles"]["worker"]["health"]["expected_status"] = 204
+        violations = att.validate_attestation(record, expected_topology=topo)
+        assert any("status" in v.lower() or "expected_status" in v.lower() for v in violations)
+
+
+# --------------------------------------------------------------------------- #
+# Fourth review — paired role+port+probe forgery bound to raw allocation record
+# --------------------------------------------------------------------------- #
+
+
+class TestRolePortProbeForge:
+    """Dynamic role/port readiness must not be accepted merely because two
+    artifact-controlled summary fields match. The validator must bind the summary
+    to an explicit launcher allocation/health-observation raw record and validate
+    role identity, endpoint, allocated port, probe contract, successful response,
+    and process identity coherently against the checked-in topology and raw record.
+    """
+
+    def test_paired_role_port_pid_status_forge_rejected(self):
+        """The exact adversarial case from the review: ports[worker] and
+        roles[worker].port changed together to 7777, pid=1, probe status=500.
+        The raw allocation record still reports the real port/pid/status, so the
+        forged summary does not cohere with it."""
+        record = _valid_attestation()
+        record["ports"]["worker"] = 7777
+        for r in record["roles"]:
+            if r["name"] == "worker":
+                r["port"] = 7777
+                r["pid"] = 1
+                r["ready_probe"]["status"] = 500
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        assert violations
+
+    def test_paired_role_port_pid_forge_rejected_with_valid_status(self):
+        """The port/pid forge alone (status still a valid 200) must be rejected on
+        coherence grounds, proving rejection is not solely the status check."""
+        record = _valid_attestation()
+        record["ports"]["worker"] = 7777
+        for r in record["roles"]:
+            if r["name"] == "worker":
+                r["port"] = 7777
+                r["pid"] = 1
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        assert any(
+            "port" in v.lower() or "pid" in v.lower() or "cohere" in v.lower() or "allocation" in v.lower()
+            for v in violations
+        )
+
+    def test_missing_role_allocated_record_rejected(self):
+        """Every topology role must carry a role_allocated raw record; dropping it
+        (so the summary is the only source) must be rejected."""
+        record = _valid_attestation()
+        record["raw_evidence"] = [
+            e for e in record["raw_evidence"] if not (e.get("event") == "role_allocated" and e.get("role") == "worker")
+        ]
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        assert any(
+            "worker" in v.lower()
+            and ("allocation" in v.lower() or "role_allocated" in v.lower() or "health-observation" in v.lower())
+            for v in violations
+        )
+
+    def test_role_allocated_wrong_endpoint_host_rejected(self):
+        """The raw allocation host must match the topology-declared endpoint host;
+        an alias (localhost) where the contract declares 127.0.0.1 is rejected."""
+        record = _valid_attestation()
+        for e in record["raw_evidence"]:
+            if e.get("event") == "role_allocated" and e.get("role") == "worker":
+                e["host"] = "localhost"
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        assert any("host" in v.lower() or "endpoint" in v.lower() for v in violations)
+
+    def test_role_allocated_contract_path_mismatch_rejected(self):
+        """The raw allocation's probe contract must match the topology health
+        contract; a forged http path is rejected."""
+        record = _valid_attestation()
+        for e in record["raw_evidence"]:
+            if e.get("event") == "role_allocated" and e.get("role") == "worker":
+                e["health"]["path"] = "/wrong"
+        violations = att.validate_attestation(record, expected_topology=_topology())
+        assert any("path" in v.lower() or "probe" in v.lower() or "health" in v.lower() for v in violations)
