@@ -231,7 +231,7 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
                 update_data['completed_at'] = datetime.now(timezone.utc)
             else:
                 update_data['completed_at'] = None
-        if item.due_at is not None:
+        if 'due_at' in item.model_fields_set:
             update_data['due_at'] = item.due_at
         if item.exported is not None:
             update_data['exported'] = item.exported
