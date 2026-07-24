@@ -2,15 +2,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi_device/omi_device.dart';
 
 void main() {
-  test('deepgramWsUrl includes encoded token', () {
+  test('deepgramWsUrl omits api key from query string', () {
     expect(
-      deepgramWsUrl('dg-123'),
-      'wss://api.deepgram.com/v1/listen?punctuate=true&model=nova&language=en-US&encoding=linear16&sample_rate=16000&channels=1&token=dg-123',
+      deepgramWsUrl(),
+      'wss://api.deepgram.com/v1/listen?punctuate=true&model=nova&language=en-US&encoding=linear16&sample_rate=16000&channels=1',
     );
-    expect(
-      deepgramWsUrl('key with spaces=', sampleRate: 8000),
-      contains('token=key%20with%20spaces%3D'),
-    );
+    expect(deepgramWsUrl(sampleRate: 8000), contains('sample_rate=8000'));
+    expect(deepgramWsUrl(), isNot(contains('token=')));
   });
 
   test('parakeetWsUrl', () {

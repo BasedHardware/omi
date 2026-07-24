@@ -2,27 +2,21 @@ import type { StreamingTranscriber, TranscriptHandler } from './types';
 
 /**
  * Deepgram live STT.
- * Uses global WebSocket. On React Native, prefer a WS implementation that allows
- * HTTP headers (e.g. react-native-websocket with headers). If standard RN WebSocket
- * is used, pass `createWebSocket` that injects Authorization.
+ * React Native and browser WebSocket implementations cannot attach Authorization
+ * headers after construction, so callers must supply `createWebSocket`.
  */
 export function createDeepgramTranscriber(options: {
   apiKey: string;
   sampleRate?: number;
   onTranscript: TranscriptHandler;
-  createWebSocket?: (url: string, headers: Record<string, string>) => WebSocket;
+  createWebSocket: (url: string, headers: Record<string, string>) => WebSocket;
 }): StreamingTranscriber {
   const sampleRate = options.sampleRate ?? 16000;
   const url =
     `wss://api.deepgram.com/v1/listen?punctuate=true&model=nova&language=en-US` +
     `&encoding=linear16&sample_rate=${sampleRate}&channels=1`;
   const headers = { Authorization: `Token ${options.apiKey}` };
-  const ws = options.createWebSocket
-    ? options.createWebSocket(url, headers)
-    : new WebSocket(url);
-
-  // Best-effort header injection for environments that read this field.
-  (ws as any).headers = headers;
+  const ws = options.createWebSocket(url, headers);
   ws.binaryType = 'arraybuffer';
   ws.onmessage = (event) => {
     try {
