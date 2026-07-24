@@ -1,7 +1,7 @@
 """Advice — proactive coaching items."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictInt
 
 from models.advice import Advice
 from models.shared import StatusResponse
@@ -29,6 +29,13 @@ class CreateAdviceRequest(BaseModel):
 class UpdateAdviceRequest(BaseModel):
     is_read: bool | None = None
     is_dismissed: bool | None = None
+
+
+class AdviceFeedbackRequest(BaseModel):
+    # StrictInt so a bool (True/False) is rejected rather than coerced to 1/0 — a stray `false`
+    # must not silently clear feedback via the rating==0 path.
+    rating: StrictInt = Field(..., ge=-1, le=1)  # 1 = helpful, -1 = not helpful, 0 = clear
+    reason: str | None = Field(None, max_length=500)
 
 
 # ============================================================================
@@ -89,3 +96,15 @@ def delete_advice(
 def mark_all_advice_read(uid: str = Depends(auth.get_current_user_uid)):
     count = advice_db.mark_all_advice_read(uid)
     return {'status': f'marked {count} as read'}
+
+
+@router.post('/v1/advice/{advice_id}/feedback', tags=['advice'])
+def submit_advice_feedback(
+    advice_id: str,
+    request: AdviceFeedbackRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    result = advice_db.set_advice_feedback(uid, advice_id, rating=request.rating, reason=request.reason)
+    if result is None:
+        raise HTTPException(status_code=404, detail='Advice not found')
+    return result

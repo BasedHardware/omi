@@ -67,18 +67,14 @@ def get_advice(
     return items
 
 
-def update_advice(
-    uid: str, advice_id: str, is_read: Optional[bool] = None, is_dismissed: Optional[bool] = None
-) -> Optional[Dict[str, Any]]:
+def _update_advice_and_return(uid: str, advice_id: str, updates: dict) -> Optional[dict]:
+    """Apply `updates` to an advice doc and return the fresh value, or None if it does not exist
+    (or was deleted mid-update). Shared by update_advice and set_advice_feedback so both get the
+    same existence check, NotFound guard, and None-on-re-read handling."""
     ref = _user_col(uid, 'advice').document(advice_id)
     snap = ref.get()
     if not getattr(snap, "exists", False):
         return None
-    updates: Dict[str, Any] = {'updated_at': datetime.now(timezone.utc)}
-    if is_read is not None:
-        updates['is_read'] = is_read
-    if is_dismissed is not None:
-        updates['is_dismissed'] = is_dismissed
     try:
         ref.update(updates)
     except NotFound:
@@ -91,6 +87,28 @@ def update_advice(
     result: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
     result['id'] = advice_id
     return result
+
+
+def update_advice(
+    uid: str, advice_id: str, is_read: Optional[bool] = None, is_dismissed: Optional[bool] = None
+) -> Optional[dict]:
+    updates: Dict[str, Any] = {'updated_at': datetime.now(timezone.utc)}
+    if is_read is not None:
+        updates['is_read'] = is_read
+    if is_dismissed is not None:
+        updates['is_dismissed'] = is_dismissed
+    return _update_advice_and_return(uid, advice_id, updates)
+
+
+def set_advice_feedback(uid: str, advice_id: str, rating: int, reason: Optional[str] = None) -> Optional[dict]:
+    """Record the user's feedback on an advice item.
+
+    rating is 1 (helpful), -1 (not helpful), or 0 (clear any existing feedback). Returns the updated
+    advice dict, or None if the advice does not exist (or was deleted mid-update).
+    """
+    now = datetime.now(timezone.utc)
+    feedback = None if rating == 0 else {'rating': rating, 'reason': reason, 'rated_at': now}
+    return _update_advice_and_return(uid, advice_id, {'feedback': feedback, 'updated_at': now})
 
 
 def delete_advice(uid: str, advice_id: str) -> bool:
