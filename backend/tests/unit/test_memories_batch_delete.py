@@ -375,3 +375,44 @@ def test_delete_after_read_cutover_leaves_legacy_alone(monkeypatch):
     assert mem_mod.delete_memory('mem-1', uid='u1') == {'status': 'ok'}
 
     legacy_delete.assert_not_called()
+
+
+def _canonical_delete_all_stage(monkeypatch, *, read_cutover_done: bool):
+    """Canonical owns writes for DELETE /v3/memories; pick the rollout stage."""
+    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: True)
+    monkeypatch.setattr(mem_mod, 'canonical_read_enabled', lambda *a, **k: read_cutover_done)
+    monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kwargs: SimpleNamespace(delete_all=lambda uid: None))
+    purge = MagicMock()
+    monkeypatch.setattr(mem_mod, '_purge_legacy_memories', purge)
+    return purge
+
+
+def test_delete_all_during_dual_write_also_wipes_the_store_the_user_reads(monkeypatch):
+    """#10446 follow-up: at MEMORY_MODE=write a canonical delete-all is invisible, because
+    GET /v3/memories still reads legacy. "Delete everything" would leave the user's whole
+    list intact on the next refresh, so the wipe must reach the store they read."""
+    purge = _canonical_delete_all_stage(monkeypatch, read_cutover_done=False)
+
+    assert mem_mod.delete_memories(uid='u1') == {'status': 'ok'}
+
+    purge.assert_called_once_with('u1')
+
+
+def test_delete_all_after_read_cutover_leaves_legacy_alone(monkeypatch):
+    """Post-cutover both sides are canonical, so the mirror must not touch legacy."""
+    purge = _canonical_delete_all_stage(monkeypatch, read_cutover_done=True)
+
+    assert mem_mod.delete_memories(uid='u1') == {'status': 'ok'}
+
+    purge.assert_not_called()
+
+
+def test_legacy_cohort_delete_all_still_purges(monkeypatch):
+    """The legacy branch keeps its own behaviour after being factored into the helper."""
+    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: False)
+    purge = MagicMock()
+    monkeypatch.setattr(mem_mod, '_purge_legacy_memories', purge)
+
+    assert mem_mod.delete_memories(uid='u1') == {'status': 'ok'}
+
+    purge.assert_called_once_with('u1')
