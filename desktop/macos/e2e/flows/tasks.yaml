@@ -1,5 +1,6 @@
 version: 2
 name: tasks
+tier: manual
 description: Tasks tab — search, Today/No Deadline sections, keyboard toolbar (v0.12.119+ redesign)
 app: com.omi.computer-macos
 covers:
