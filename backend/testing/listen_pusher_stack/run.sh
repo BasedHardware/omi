@@ -34,7 +34,7 @@ trap 'rm -f "$emulator_config"' EXIT
 node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({emulators: {firestore: {host: "127.0.0.1", port: Number(process.argv[2])}}}))' \
   "$emulator_config" "$emulator_port"
 
-runner_command="PYTHONPATH=backend backend/.venv/bin/python -m testing.listen_pusher_stack.run"
+runner_command="PYTHONPATH=backend backend/.venv/bin/python -m testing.listen_pusher_stack.run && PYTHONPATH=backend backend/.venv/bin/python -m pytest backend/tests/unit/test_stale_processing_emulator_concurrency.py -v"
 for argument in "$@"; do
   printf -v escaped_argument ' %q' "$argument"
   runner_command+="$escaped_argument"
