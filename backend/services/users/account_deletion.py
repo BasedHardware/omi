@@ -148,10 +148,20 @@ def background_wipe_user_data(uid: str) -> bool:
         # genuinely orphaned ``pending`` marker (queued but never started)
         # from a wipe that is actively executing. Without this, a slow wipe
         # could be duplicate-claimed after the short ``pending`` stale window.
+        users_db.mark_user_deletion_wipe_running(uid)
+        # The durable marker and queue claim are the authority for every
+        # irreversible step below. In particular, do not cancel billing or
+        # remove Firebase Auth from the request thread: a queue NotFound must
+        # leave an account usable and recoverable.
+        _cancel_subscription_for_account_deletion(uid)
         try:
-            users_db.mark_user_deletion_wipe_running(uid)
+            auth.delete_account(uid)
         except Exception as e:
-            logger.warning(f'delete_account marker transition to running failed for {uid}: {sanitize(str(e))}')
+            err = str(e).upper()
+            if 'USER_NOT_FOUND' in err or 'NO USER RECORD' in err:
+                logger.info('delete_account worker observed Firebase Auth user already absent')
+            else:
+                raise
         # Twilio caller IDs first, while the phone_numbers subcollection still carries twilio_sid metadata.
         delete_user_caller_ids(uid)
         purge_result = purge_derived_user_data(uid)
@@ -159,8 +169,10 @@ def background_wipe_user_data(uid: str) -> bool:
         if required_failures:
             failed_operations = ', '.join(failure['operation'] for failure in required_failures)
             raise RuntimeError(f'required derived purge failed: {failed_operations}')
-        users_db.delete_user_data(uid)
-        logger.info(f'delete_account background wipe complete for {uid}')
+        wipe_result = users_db.delete_user_data(uid)
+        if wipe_result.get('status') != 'ok':
+            raise RuntimeError('authoritative Firestore user-data wipe did not complete')
+        logger.info('delete_account background wipe complete')
     except Exception as e:
         logger.error(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')
         # Mark the wipe as failed so a reconciliation worker can retry. Do NOT mark
@@ -257,58 +269,50 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
         except Exception as e:
             logger.info(f'delete_account feedback store failed: {sanitize(str(e))}')
 
-    # Phase 1 — persist a NON-ACTIONABLE intent ('deleting_auth') before any
-    # irreversible action. The reconciler only recovers stale 'deleting_auth'
-    # records after verifying the Firebase auth user is gone, so a crash/deploy
-    # between this write and the confirmed auth deletion cannot trigger a
-    # premature data wipe for a user whose Firebase account still exists. Retry
-    # transient Firestore failures; if the intent cannot be written, do NOT
-    # proceed.
-    wipe_job_id = _retry_firestore_write(
+    # Persist the authoritative, actionable intent before dispatch. This state
+    # is enough for reconciliation to recover a failed queue handoff, while the
+    # Cloud Tasks handler claim fences all destructive work. If either write or
+    # dispatch fails, no Firebase Auth or billing mutation has happened.
+    wipe_intent = _retry_firestore_write(
         lambda: users_db.mark_user_deletion_wipe_intent(uid),
         uid=uid,
         fail_msg='Failed to persist deletion-wipe intent',
         on_failure='raise',
     )
+    wipe_job_id = wipe_intent.get('wipe_job_id') if isinstance(wipe_intent, dict) else None
     if not isinstance(wipe_job_id, str) or not wipe_job_id:
         raise RuntimeError('deletion-wipe intent did not persist a wipe_job_id')
+    dispatch_claimed = wipe_intent.get('dispatch_claimed') is True if isinstance(wipe_intent, dict) else False
+    if not dispatch_claimed:
+        logger.info('delete_account joined existing durable deletion intent')
+        return {'status': 'ok', 'message': 'Account deletion started'}
 
-    _cancel_subscription_for_account_deletion(uid)
-
-    try:
-        auth.delete_account(uid)
-    except Exception as e:
-        err = str(e).upper()
-        if 'USER_NOT_FOUND' in err or 'NO USER RECORD' in err:
-            logger.info(f'delete_account firebase user already gone for {uid}')
-        else:
-            # Auth deletion failed — cancel the intent so the record doesn't
-            # linger in 'deleting_auth'. This is cosmetic cleanup, not a safety
-            # requirement: the reconciler verifies the auth user is gone before
-            # recovering any 'deleting_auth' record.
-            _retry_firestore_write(
-                lambda: users_db.cancel_user_deletion_wipe(uid),
-                uid=uid,
-                fail_msg='delete_account marker CANCEL failed — manual intervention may be needed to prevent unwanted data wipe by the reconciliation worker.',
-                on_failure='log',
-            )
-            raise
-
-    # Phase 2 — auth deletion confirmed. Transition the marker to the
-    # actionable 'pending' state before dispatching the durable wipe task.
-    _retry_firestore_write(
-        lambda: users_db.mark_user_deletion_wipe_started(uid),
+    # The pending marker is persisted before enqueue. A failed enqueue is
+    # recorded as failed and is therefore independently recoverable by the
+    # reconciler; queue delivery accelerates the wipe but is not its only
+    # durability boundary.
+    pending_transitioned = _retry_firestore_write(
+        lambda: users_db.mark_user_deletion_wipe_started(uid, wipe_job_id),
         uid=uid,
         fail_msg='delete_account marker transition to pending failed',
         on_failure='raise',
     )
+    if pending_transitioned is not True:
+        # Another execution owns the durable authority. Do not move its marker
+        # backwards or dispatch a duplicate task.
+        logger.info('delete_account queue transition already owned by another request')
+        return {'status': 'ok', 'message': 'Account deletion started'}
 
     try:
         enqueue_deletion_wipe(uid, wipe_job_id)
     except Exception as e:
         _mark_wipe_failed_after_enqueue_error(uid, e)
-        raise
+        logger.warning('delete_account queue acceleration failed; durable reconciliation will retry')
+        # The actionable marker is committed. Queue dispatch is only an
+        # acceleration path; reconciliation owns eventual completion.
+        return {'status': 'ok', 'message': 'Account deletion started'}
 
+    logger.info('delete_account accepted durable deletion intent and queue acceleration')
     return {'status': 'ok', 'message': 'Account deletion started'}
 
 

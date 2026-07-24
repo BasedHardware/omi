@@ -231,12 +231,16 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
     state = {'status': None, 'job_id': None, 'enqueue_attempts': 0, 'wipe_runs': 0}
 
     def persist_intent(_uid):
+        if state['job_id']:
+            return {'wipe_job_id': state['job_id'], 'dispatch_claimed': False}
         state['status'] = 'deleting_auth'
         state['job_id'] = 'job-1'
-        return state['job_id']
+        return {'wipe_job_id': state['job_id'], 'dispatch_claimed': True}
 
-    def mark_started(_uid):
+    def mark_started(_uid, job_id):
+        assert job_id == state['job_id']
         state['status'] = 'pending'
+        return True
 
     def mark_failed(_uid):
         state['status'] = 'failed'
@@ -262,8 +266,7 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
     monkeypatch.setitem(service_globals, 'is_account_deletion_dispatch_enabled', lambda: True)
     monkeypatch.setitem(service_globals, 'enqueue_account_deletion_wipe', enqueue_task)
 
-    with pytest.raises(RuntimeError, match='lost create-task acknowledgement'):
-        users_router.start_account_deletion('uid1')
+    assert users_router.start_account_deletion('uid1')['status'] == 'ok'
 
     assert state == {'status': 'failed', 'job_id': 'job-1', 'enqueue_attempts': 1, 'wipe_runs': 0}
 
