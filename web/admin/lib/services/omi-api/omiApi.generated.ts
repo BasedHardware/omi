@@ -2196,6 +2196,7 @@ export interface MemoryDB {
   headline?: string | null;
   id: string;
   invalid_at?: string | null;
+  is_baseline?: boolean;
   is_locked?: boolean;
   kg_extracted?: boolean;
   layer: string | null;
@@ -8016,6 +8017,17 @@ export interface OmiApiPaths {
     };
     delete: {
       operationId: "delete_memory_v3_memories__memory_id__delete";
+      responses: {
+        "200": MemoryMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v3/memories/{memory_id}/baseline": {
+    patch: {
+      operationId: "update_memory_baseline_v3_memories__memory_id__baseline_patch";
       responses: {
         "200": MemoryMutationResponse;
         "401": void;
@@ -15507,6 +15519,28 @@ export async function delete_memory_v3_memories__memory_id__delete(path: { memor
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function update_memory_baseline_v3_memories__memory_id__baseline_patch(path: { memory_id: string }, query: { value: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<MemoryMutationResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v3/memories/${path.memory_id}/baseline`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function review_memory_v3_memories__memory_id__review_post(path: { memory_id: string }, query: { value: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<MemoryMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v3/memories/${path.memory_id}/review`;
@@ -15654,4 +15688,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 382 client methods generated.
+// Total: 385 client methods generated.
