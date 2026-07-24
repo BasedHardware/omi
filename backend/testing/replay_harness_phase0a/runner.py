@@ -12,7 +12,6 @@ Usage:
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import shutil
@@ -228,7 +227,9 @@ class Harness:
             while time.monotonic() < deadline:
                 try:
                     with socket.create_connection(("127.0.0.1", port), timeout=1.0):
-                        return RoleHealth(name=name, pid=pid, port=port, ready=True, ready_probe={"type": "tcp"})
+                        rh = RoleHealth(name=name, pid=pid, port=port, ready=True, ready_probe={"type": "tcp"})
+                        self.health_records.append(rh)
+                        return rh
                 except OSError:
                     time.sleep(0.2)
             raise HarnessFailure(f"{name} did not listen on 127.0.0.1:{port}")
@@ -312,14 +313,13 @@ class Harness:
     def build_attestation(self, *, outcome: str) -> dict[str, Any]:
         from testing.replay_harness_phase0a.attestation import build_attestation
 
-        topology_hash = hashlib.sha256(self.topology_path.read_bytes()).hexdigest()
+        firestore_host = os.getenv("FIRESTORE_EMULATOR_HOST", "")
         return build_attestation(
             topology=self._resolved_topology or self.topology,
-            topology_hash=topology_hash,
             health_records=self.health_records,
             events=self.read_events(),
-            egress_allow_list=self.topology.get("egress_allow_list", []),
             ports=self.ports,
+            firestore_emulator_host=firestore_host,
             outcome=outcome,
             fault_controls=self.fault_controls,
         )
