@@ -44,6 +44,7 @@ set -euo pipefail
 STATE_DIR="${OMI_FAULT_STATE_DIR:-${TMPDIR:-/tmp}/omi-fault-inject}"
 PID_FILE="$STATE_DIR/pid"
 META_FILE="$STATE_DIR/meta"
+OWNERSHIP_TOKEN="${OMI_FAULT_OWNERSHIP_TOKEN:-}"
 DEFAULT_PORT=47790
 DEFAULT_LATENCY_MS=30000
 
@@ -52,26 +53,58 @@ die() { log "$*"; exit 1; }
 
 read_meta() { [ -f "$META_FILE" ] && cat "$META_FILE" || true; }
 
+meta_value() { sed -n "s/^$1=//p" "$META_FILE" 2>/dev/null | head -n 1; }
+
+valid_owned_process() {
+  local pid pgid token command actual_pgid
+  [ -f "$META_FILE" ] && [ -f "$PID_FILE" ] || return 1
+  pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+  pgid="$(meta_value pgid)"
+  token="$(meta_value token)"
+  [[ "$pid" =~ ^[1-9][0-9]*$ && "$pgid" = "$pid" && "$token" =~ ^[A-Za-z0-9_-]{16,}$ ]] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  actual_pgid="$(ps -p "$pid" -o pgid= 2>/dev/null | tr -d '[:space:]')"
+  [[ "$command" == *"omi-fault-inject:${token}"* && "$actual_pgid" = "$pgid" ]]
+}
+
+wait_for_exit() {
+  local pid="$1" attempts="$2"
+  while (( attempts > 0 )) && kill -0 "$pid" 2>/dev/null; do
+    sleep 0.2
+    attempts=$((attempts - 1))
+  done
+  ! kill -0 "$pid" 2>/dev/null
+}
+
 is_running() {
-  [ -f "$PID_FILE" ] || return 1
-  local pid; pid="$(cat "$PID_FILE" 2>/dev/null || true)"
-  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+  valid_owned_process
 }
 
 cmd_stop() {
-  if is_running; then
-    local pid; pid="$(cat "$PID_FILE")"
-    kill "$pid" 2>/dev/null || true
-    log "stopped fault server (pid $pid)"
-  else
+  if [ ! -f "$PID_FILE" ] && [ ! -f "$META_FILE" ]; then
     log "no fault server running"
+    return 0
+  fi
+  local pid
+  pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+  if [[ "$pid" =~ ^[1-9][0-9]*$ ]] && kill -0 "$pid" 2>/dev/null; then
+    valid_owned_process || die "refusing to signal fault PID without matching ownership token and process group"
+    for signal_and_wait in "INT:40" "TERM:25" "KILL:10"; do
+      local sig="${signal_and_wait%%:*}" attempts="${signal_and_wait##*:}"
+      kill -"$sig" -- "-$pid" 2>/dev/null || true
+      wait_for_exit "$pid" "$attempts" && break
+      valid_owned_process || die "fault process ownership changed during cleanup"
+    done
+    kill -0 "$pid" 2>/dev/null && die "owned fault process did not stop; retaining state for inspection"
   fi
   rm -f "$PID_FILE" "$META_FILE"
+  log "stopped fault server state"
 }
 
 cmd_status() {
   if is_running; then
-    log "running — $(read_meta) (pid $(cat "$PID_FILE"))"
+    log "running — mode=$(meta_value mode) port=$(meta_value port) pid=$(cat "$PID_FILE")"
     return 0
   fi
   if [ -f "$META_FILE" ]; then
@@ -102,7 +135,7 @@ cmd_start() {
   local mode="${1:-}"; shift || true
   [ -n "$mode" ] || die "usage: omi-fault-inject.sh start <mode> [--port N] [--latency-ms N]"
 
-  local port="$DEFAULT_PORT" latency_ms="$DEFAULT_LATENCY_MS"
+  local port="${OMI_FAULT_PORT:-$DEFAULT_PORT}" latency_ms="$DEFAULT_LATENCY_MS"
   while [ $# -gt 0 ]; do
     case "$1" in
       --port) port="${2:?--port needs a value}"; shift 2 ;;
@@ -125,8 +158,15 @@ cmd_start() {
     *) die "unknown mode: $mode (error|status:CODE|latency|reset|refuse)" ;;
   esac
 
-  if is_running; then die "already running — $(read_meta); stop it first"; fi
+  if [ -f "$PID_FILE" ] || [ -f "$META_FILE" ]; then
+    cmd_stop || die "refusing to replace unreclaimed fault state"
+  fi
   mkdir -p "$STATE_DIR"
+  umask 077
+  if [ -z "$OWNERSHIP_TOKEN" ]; then
+    OWNERSHIP_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+  fi
+  [[ "$OWNERSHIP_TOKEN" =~ ^[A-Za-z0-9_-]{16,}$ ]] || die "invalid OMI_FAULT_OWNERSHIP_TOKEN"
 
   local url="http://127.0.0.1:${port}"
 
@@ -147,9 +187,10 @@ cmd_start() {
   command -v python3 >/dev/null 2>&1 || die "python3 not found (needed for $mode mode)"
 
   # Embedded fault server. Reads program from stdin; argv = mode, port, latency_ms.
-  python3 - "$mode" "$port" "$latency_ms" >/dev/null 2>&1 <<'PY' &
-import sys, time, json, socket, struct, http.server, socketserver
-mode, port, latency_ms = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+  python3 - "$mode" "$port" "$latency_ms" "omi-fault-inject:${OWNERSHIP_TOKEN}" >/dev/null 2>&1 <<'PY' &
+import os, sys, time, json, socket, struct, http.server, socketserver
+mode, port, latency_ms, _marker = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
+os.setsid()
 
 if mode == "reset":
     # Abrupt backend drop: RST every connection on accept (SO_LINGER timeout 0 makes
@@ -224,7 +265,7 @@ Server(("127.0.0.1", port), Handler).serve_forever()
 PY
   local pid=$!
   echo "$pid" > "$PID_FILE"
-  printf 'mode=%s port=%s url=%s\n' "$mode" "$port" "$url" > "$META_FILE"
+  printf 'mode=%s\nport=%s\nurl=%s\npid=%s\npgid=%s\ntoken=%s\n' "$mode" "$port" "$url" "$pid" "$pid" "$OWNERSHIP_TOKEN" > "$META_FILE"
 
   # Confirm it actually bound (fail loud instead of leaving a dead pidfile). A TCP accept is
   # the right readiness signal for every mode: an HTTP round-trip would hang on latency,
