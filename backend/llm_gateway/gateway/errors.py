@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from llm_gateway.gateway.schemas import FailureClass
+from llm_gateway.gateway.schemas import FailureClass, ProviderRejection
 
 
 class GatewayErrorCode(str, Enum):
@@ -12,6 +12,7 @@ class GatewayErrorCode(str, Enum):
     CAPABILITY_NOT_SUPPORTED = 'capability_not_supported'
     INVALID_ROUTE_CONFIG = 'invalid_route_config'
     CREDENTIAL_FAILURE = 'credential_failure'
+    PROVIDER_REQUEST_REJECTED = 'provider_request_rejected'
     PROVIDER_FAILURE = 'provider_failure'
 
 
@@ -29,6 +30,21 @@ class GatewayError(Exception):
         self.code = code
         self.failure_class = failure_class
         self.param = param
+        self.provider = 'none'
+        self.model = 'none'
+        self.provider_rejection = ProviderRejection.NONE
+
+    def with_provider_context(
+        self,
+        *,
+        provider: str,
+        model: str,
+        provider_rejection: ProviderRejection = ProviderRejection.NONE,
+    ) -> 'GatewayError':
+        self.provider = provider
+        self.model = model
+        self.provider_rejection = provider_rejection
+        return self
 
     def to_error_dict(self) -> dict[str, str | None]:
         return {
@@ -90,5 +106,15 @@ class GatewayProviderFailureError(GatewayError):
             message,
             code=GatewayErrorCode.PROVIDER_FAILURE,
             failure_class=failure_class,
+            param=param,
+        )
+
+
+class GatewayProviderRequestRejectedError(GatewayError):
+    def __init__(self, message: str, *, param: str | None = 'provider') -> None:
+        super().__init__(
+            message,
+            code=GatewayErrorCode.PROVIDER_REQUEST_REJECTED,
+            failure_class=FailureClass.PROVIDER_INVALID_REQUEST,
             param=param,
         )

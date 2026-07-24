@@ -17,6 +17,7 @@ from llm_gateway.gateway.errors import (
     GatewayError,
     GatewayInvalidRouteConfigError,
     GatewayProviderFailureError,
+    GatewayProviderRequestRejectedError,
 )
 from llm_gateway.gateway.providers import (
     ChatCompletionProvider,
@@ -299,7 +300,7 @@ async def _attempt_provider(
                 )
             return response, None
         except ProviderFailure as exc:
-            error = _map_provider_failure(exc, credential_context)
+            error = _map_provider_failure(exc, credential_context, provider_ref)
             if attempt_trace is not None:
                 attempt_trace.record(
                     provider=provider_ref.provider,
@@ -486,22 +487,36 @@ def _unsupported_provider_error(
     return GatewayInvalidRouteConfigError(f'provider is not supported for this route: {provider_ref.provider}')
 
 
-def _map_provider_failure(exc: ProviderFailure, credential_context: CredentialContext) -> GatewayError:
+def _map_provider_failure(
+    exc: ProviderFailure,
+    credential_context: CredentialContext,
+    provider_ref: ProviderRef,
+) -> GatewayError:
     failure_class = exc.failure_class
     if failure_class == FailureClass.INVALID_CONFIG:
-        return GatewayInvalidRouteConfigError(_safe_failure_message(failure_class, exc.safe_message), param='provider')
-    if failure_class == FailureClass.CAPABILITY_MISMATCH:
-        return GatewayCapabilityMismatchError(_safe_failure_message(failure_class, exc.safe_message), param='provider')
-    if credential_context.mode == CredentialMode.BYOK or is_byok_failure_class(failure_class):
-        return GatewayCredentialFailureError(
+        error: GatewayError = GatewayInvalidRouteConfigError(
+            _safe_failure_message(failure_class, exc.safe_message), param='provider'
+        )
+    elif failure_class == FailureClass.CAPABILITY_MISMATCH:
+        error = GatewayCapabilityMismatchError(_safe_failure_message(failure_class, exc.safe_message), param='provider')
+    elif failure_class == FailureClass.PROVIDER_INVALID_REQUEST:
+        error = GatewayProviderRequestRejectedError(_safe_failure_message(failure_class, exc.safe_message))
+    elif credential_context.mode == CredentialMode.BYOK or is_byok_failure_class(failure_class):
+        error = GatewayCredentialFailureError(
             _safe_failure_message(failure_class, exc.safe_message),
             failure_class=failure_class,
             param='provider',
         )
-    return GatewayProviderFailureError(
-        _safe_failure_message(failure_class, exc.safe_message),
-        failure_class=failure_class,
-        param='provider',
+    else:
+        error = GatewayProviderFailureError(
+            _safe_failure_message(failure_class, exc.safe_message),
+            failure_class=failure_class,
+            param='provider',
+        )
+    return error.with_provider_context(
+        provider=provider_ref.provider,
+        model=provider_ref.model,
+        provider_rejection=exc.provider_rejection,
     )
 
 

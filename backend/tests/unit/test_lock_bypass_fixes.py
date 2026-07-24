@@ -136,6 +136,7 @@ _stubs = [
     'langchain_core',
     'langchain_core.callbacks',
     'langchain_core.language_models',
+    'langchain_core.messages',
     'langchain_core.output_parsers',
     'langchain_core.outputs',
     'langchain_core.prompts',
