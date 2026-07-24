@@ -3,7 +3,8 @@
   "allowed_tests": [
     "ChatDiscoverabilityTests/testAgentControlCapabilitiesMatchCanonicalManifest",
     "ChatDiscoverabilityTests/testDesktopCapabilitiesExistInAgentToolDeclarations",
-    "APIClientRoutingTests/testDeleteConversationRoutesToPython"
+    "APIClientRoutingTests/testDeleteConversationRoutesToPython",
+    "PushToTalkStateMachineTests/testOwnerTransitionTerminatesActiveHubAndDrainsItsPhysicalSession"
   ],
   "skips": [
     {
@@ -20,6 +21,11 @@
       "test": "APIClientRoutingTests/testDeleteConversationRoutesToPython",
       "issue": "https://github.com/BasedHardware/omi/issues/9031",
       "reason": "The client omits ?cascade=true; cascade is backend-gated behind owner sign-off, so flipping it is a data-deletion behavior change."
+    },
+    {
+      "test": "PushToTalkStateMachineTests/testOwnerTransitionTerminatesActiveHubAndDrainsItsPhysicalSession",
+      "issue": "https://github.com/BasedHardware/omi/issues/10492",
+      "reason": "Hangs headless in CI (main regression): the owner-b transition drains the warm hub's physical session and awaits a teardown that never completes without a real transport session. Sibling owner-transition tests pass. Skip until the headless hub-drain hang is fixed."
     }
   ]
 }

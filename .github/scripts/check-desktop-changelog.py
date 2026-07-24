@@ -23,6 +23,10 @@ EXEMPT_DESKTOP_PATHS = {
     # Pre-tag readiness gate script: internal release infrastructure (runs on the
     # trusted M1 before tagging), no user-facing app surface.
     "desktop/macos/scripts/pre-tag-readiness.sh",
+    # Swift test runner and its skip registry: internal test infrastructure with
+    # no user-facing app surface (mirrors the tests/ prefix exemption below).
+    "desktop/macos/scripts/swift-test-suites.sh",
+    "desktop/macos/scripts/swift-test-skips.json",
 }
 # Server-side Rust backend changes are internal reliability work, not user-facing app notes.
 # Test and release-infra changes are likewise never user-facing app notes; the
