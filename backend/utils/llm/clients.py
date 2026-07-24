@@ -566,15 +566,13 @@ def get_llm(
     # which is why binding it directly failed only once deployed. extra_body
     # carries the field in the request body on every version, and the body is
     # where the gateway validator reads it from — the same reason retention
-    # below travels this way.
+    # travels this way where it is set.
+    #
+    # Binding extra_body replaces whatever the client was constructed with, so
+    # nothing else may be set on it. The gateway lane is built without one,
+    # which is what makes replacing it safe here.
     if prompt_cache_options and gateway_feature_mode:
-        extra_body: Dict[str, Any] = {'prompt_cache_options': prompt_cache_options}
-        # Restated rather than inherited: binding extra_body replaces the value
-        # the client was constructed with, so retention has to be carried here
-        # too or it is dropped for models that opt into it.
-        if supports_cache_retention(model):
-            extra_body['prompt_cache_retention'] = "24h"
-        cache_params['extra_body'] = extra_body
+        cache_params['extra_body'] = {'prompt_cache_options': prompt_cache_options}
     if cache_params:
         return result.bind(**cache_params)
     return result
