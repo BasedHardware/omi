@@ -1018,7 +1018,7 @@ extension RealtimeHubController {
             sessionID: voiceSessionID,
             responseID: identity.responseID))
       }
-      source.resumeAfterToolOnlyCycle(identity: identity) { resumed in
+      source.resumeAfterToolOnlyCycle(identity: identity) { [self, source] resumed in
         DispatchQueue.main.async { [weak self, weak source] in
           guard let self, let source else { return }
           self.handlePostToolContinuationStart(

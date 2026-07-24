@@ -44,7 +44,6 @@ struct DesktopHomeView: View {
     DesktopAutomationPresentationCoordinator.shared
   @State private var selectedIndex: Int = {
     if OMIApp.launchMode == .rewind { return SidebarNavItem.rewind.rawValue }
-    let tier = UserDefaults.standard.integer(forKey: "currentTierLevel")
     return SidebarNavItem.dashboard.rawValue
   }()
   @State private var isSidebarCollapsed: Bool = true
