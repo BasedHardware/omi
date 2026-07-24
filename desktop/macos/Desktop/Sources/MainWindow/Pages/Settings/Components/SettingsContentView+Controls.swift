@@ -549,10 +549,12 @@ extension SettingsContentView {
               updaterViewModel.checkForUpdates()
             }
             .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-            .disabled(!updaterViewModel.canCheckForUpdates)
+            .disabled(!updaterViewModel.canManuallyCheckForUpdates)
             .help(
-              updaterViewModel.canCheckForUpdates
-                ? "Check for app updates" : "Already checking for updates…")
+              updaterViewModel.canManuallyCheckForUpdates
+                ? "Check for app updates"
+                : updaterViewModel.updateSessionInProgress
+                  ? "An update is already downloading…" : "Already checking for updates…")
           }
 
           if let lastCheck = updaterViewModel.lastUpdateCheckDate {
