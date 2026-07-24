@@ -693,6 +693,22 @@ def get_plan_type_from_price_id(price_id: str) -> PlanType:
     raise ValueError(f"Price ID {price_id} does not correspond to a known plan.")
 
 
+def is_purchasable_price_id(price_id: str) -> bool:
+    """True only if price_id is a currently-purchasable plan price (the active catalog).
+
+    Unlike get_plan_type_from_price_id, this deliberately excludes LEGACY_PRICE_MAP: legacy
+    prices exist for existing subscribers' renewals and webhook/subscription reconciliation, not
+    as new checkout or upgrade targets. Use this at the checkout/upgrade request boundary so a
+    caller cannot select a hidden or deprecated price by posting its id directly.
+    """
+    if not price_id:
+        return False
+    for definition in get_paid_plan_definitions():
+        if price_id in (definition["monthly_price_id"], definition["annual_price_id"]):
+            return True
+    return False
+
+
 def validate_stripe_price_ids():
     """Validate all configured Stripe price IDs on startup. Logs errors for invalid/unreachable prices."""
     for definition in get_paid_plan_definitions():
