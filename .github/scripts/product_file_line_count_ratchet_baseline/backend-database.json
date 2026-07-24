@@ -1,11 +1,11 @@
 {
   "files": {
     "backend/database/conversations.py": 1601,
-    "backend/database/users.py": 1976
+    "backend/database/users.py": 1992
   },
   "raise_justifications": {
     "backend/database/conversations.py": "Public shared-chat uses the existing conversation storage format for bounded, safe transcript decoding; extraction would duplicate crypto/storage invariants. +21 for the #10033 merge-target eligibility predicate and pure closest-match selector beside the query they filter.",
-    "backend/database/users.py": "Account-deletion marker fencing and recursive missing-root cleanup must remain beside the existing deletion transaction and collection traversal; extracting them would duplicate the durable lifecycle authority. +33 for the queue-before-auth recovery guard."
+    "backend/database/users.py": "Account-deletion marker fencing and recursive missing-root cleanup must remain beside the existing deletion transaction and collection traversal; extracting them would duplicate the durable lifecycle authority. +33 for the queue-before-auth recovery guard and +16 for the job-id-fenced repeat-dispatch transaction."
   },
   "threshold": 1500
 }
