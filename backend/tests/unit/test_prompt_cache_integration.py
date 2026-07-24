@@ -184,9 +184,10 @@ retrieval_mod = _stub_module("utils.retrieval")
 if not hasattr(retrieval_mod, "__path__"):
     retrieval_mod.__path__ = []
 
-safety_mod = _stub_module("utils.retrieval.safety")
-safety_mod.AgentSafetyGuard = MagicMock()
-safety_mod.SafetyGuardError = type("SafetyGuardError", (Exception,), {})
+# utils.retrieval.safety is import-light (typing/os/time/logging only) and its full public surface
+# is shared with test_chat_input_guard.py via the same sys.modules entry, so a partial hand-rolled
+# stub breaks under some collection orders. The REAL module is loaded below, once
+# _load_module_from_file is defined.
 
 boundaries_mod = _stub_module("utils.retrieval.tool_result_boundaries")
 setattr(
@@ -226,6 +227,11 @@ sys.modules["models"].__path__ = [str(BACKEND_DIR / "models")]
 # Load real model modules
 _load_module_from_file("models.app", BACKEND_DIR / "models" / "app.py")
 _load_module_from_file("models.other", BACKEND_DIR / "models" / "other.py")
+
+# Real (import-light) safety module: exports AgentSafetyGuard, SafetyGuardError, fit_within_budget,
+# message_text, MAX_CHAT_INPUT_TOKENS, INPUT_TOO_LONG_MESSAGE. agentic.py imports several of these,
+# and test_chat_input_guard.py shares this same sys.modules entry.
+_load_module_from_file("utils.retrieval.safety", BACKEND_DIR / "utils" / "retrieval" / "safety.py")
 
 # Stub firebase_admin (used by endpoints.py and auth)
 firebase_mod = _stub_module("firebase_admin")
