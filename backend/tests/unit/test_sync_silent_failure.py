@@ -767,8 +767,13 @@ class TestProcessSegmentReal:
     def _import_process_segment(self):
         return self._process_segment
 
-    def test_empty_words_after_vad_are_retryable_failure(self):
-        """Speech-eligible input with no provider words must remain retryable."""
+    def test_empty_words_after_vad_are_silence_not_failure(self):
+        """Speech-eligible input with no provider words is silence, not a failure.
+
+        VAD over-reports on noise, so a provider returning nothing is the
+        authority on whether there was speech. The segment produces nothing and
+        records no error, so its job does not fail and the client stops
+        re-uploading it as a failed recording."""
         process_segment = self._import_process_segment()
 
         response = {'updated_memories': set(), 'new_memories': set()}
@@ -787,12 +792,12 @@ class TestProcessSegmentReal:
             )
 
         assert result is False
-        assert errors == ['stt_empty_unexpected']
+        assert errors == []
         assert len(response['new_memories']) == 0
         assert len(response['updated_memories']) == 0
 
-    def test_empty_postprocessed_after_vad_is_retryable_failure(self):
-        """Provider words filtered to no segments must not be reported as success."""
+    def test_empty_postprocessed_after_vad_is_silence_not_failure(self):
+        """Provider words filtered to no segments is silence, not a failure."""
         process_segment = self._import_process_segment()
 
         response = {'updated_memories': set(), 'new_memories': set()}
@@ -813,7 +818,7 @@ class TestProcessSegmentReal:
             )
 
         assert result is False
-        assert errors == ['stt_empty_unexpected']
+        assert errors == []
         assert len(response['new_memories']) == 0
         assert len(response['updated_memories']) == 0
 
@@ -978,15 +983,19 @@ class TestProcessSegmentReal:
         assert len(errors) == 0
         assert 'conv-existing' in response['updated_memories']
 
-    def test_speech_eligible_empty_segments_are_all_failed(self):
-        """VAD-positive segments with empty STT results must not complete successfully."""
+    def test_speech_eligible_empty_segments_complete_as_silence(self):
+        """VAD-positive segments that all transcribe empty complete, not fail.
+
+        A recording that is entirely noise records no segment errors, so its job
+        finalizes completed rather than failed and is not offered back to the
+        client for a retry that would repeat identically."""
         process_segment = self._import_process_segment()
 
         response = {'updated_memories': set(), 'new_memories': set()}
         errors = []
         lock = threading.Lock()
 
-        # VAD already selected these three segments as speech-eligible.
+        # VAD selected these three as speech-eligible; every one transcribes empty.
         with patch('utils.sync.pipeline.prerecorded', return_value=([], 'en')), patch(
             'utils.sync.pipeline.delete_syncing_temporal_file'
         ), patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
@@ -999,18 +1008,10 @@ class TestProcessSegmentReal:
 
         total_segments = 3
         failed_segments = len(errors)
-        successful_segments = total_segments - failed_segments
 
-        assert errors == ['stt_empty_unexpected'] * 3
-        assert successful_segments == 0
-
-        if total_segments > 0 and successful_segments == 0:
-            status = 500
-        elif failed_segments > 0:
-            status = 207
-        else:
-            status = 200
-        assert status == 500
+        # No errors → _sync_job_finalization_updates yields 'completed'.
+        assert errors == []
+        assert failed_segments == 0
 
     def test_runtime_error_from_dg_becomes_segment_error(self):
         """When deepgram_prerecorded raises RuntimeError (retry exhaustion),
