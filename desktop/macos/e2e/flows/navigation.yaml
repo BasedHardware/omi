@@ -1,5 +1,6 @@
 version: 2
 name: navigation
+tier: manual
 description: Top navigation bar smoke — verify all 4 tabs + Settings gear + Rewind overlay load correctly (v0.12.119+ redesign)
 app: com.omi.computer-macos
 covers:
