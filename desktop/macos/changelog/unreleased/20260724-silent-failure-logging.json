@@ -1,0 +1,3 @@
+{
+  "change": "Desktop and agent paths now log errors that were previously swallowed during setup, auth, and retention cleanup"
+}

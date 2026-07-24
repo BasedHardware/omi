@@ -82,6 +82,7 @@ class GeneratedMemoryDB {
   final String? headline;
   final String id;
   final DateTime? invalidAt;
+  final bool isBaseline;
   final bool isLocked;
   final bool kgExtracted;
   final String? layer;
@@ -122,6 +123,7 @@ class GeneratedMemoryDB {
     this.headline,
     required this.id,
     this.invalidAt,
+    this.isBaseline = false,
     this.isLocked = false,
     this.kgExtracted = false,
     required this.layer,
@@ -164,6 +166,7 @@ class GeneratedMemoryDB {
       headline: _readFieldValue<String>(_readField(json, const ["headline"]), "headline", _readString, requiredField: false, nullable: true),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       invalidAt: _readFieldValue<DateTime>(_readField(json, const ["invalid_at"]), "invalid_at", _readDateTime, requiredField: false, nullable: true),
+      isBaseline: _required(_readFieldValue<bool>(_readField(json, const ["is_baseline"]), "is_baseline", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_baseline"),
       isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
       kgExtracted: _required(_readFieldValue<bool>(_readField(json, const ["kg_extracted"]), "kg_extracted", _readBool, requiredField: false, nullable: false, defaultValue: false), "kg_extracted"),
       layer: _readFieldValue<String>(_readField(json, const ["layer"]), "layer", _readString, requiredField: true, nullable: true),
@@ -207,6 +210,7 @@ class GeneratedMemoryDB {
       'headline': headline,
       'id': id,
       'invalid_at': invalidAt?.toUtc().toIso8601String(),
+      'is_baseline': isBaseline,
       'is_locked': isLocked,
       'kg_extracted': kgExtracted,
       'layer': layer,

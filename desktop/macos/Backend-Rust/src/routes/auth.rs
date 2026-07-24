@@ -490,13 +490,29 @@ async fn auth_token(
     };
 
     if form.use_custom_token {
-        match generate_custom_token(&state, &credentials).await {
-            Ok(token) => response.custom_token = Some(token),
-            Err(e) => tracing::warn!("Failed to generate custom token: {}", e),
-        }
+        response.custom_token = Some(require_custom_token(
+            generate_custom_token(&state, &credentials).await,
+        )?);
     }
 
     Ok(Json(response))
+}
+
+/// `use_custom_token=true` must fail closed: never return a partial token
+/// payload when minting fails or is unimplemented.
+fn require_custom_token(
+    mint_result: Result<String, Box<dyn std::error::Error + Send + Sync>>,
+) -> Result<String, ErrorResponse> {
+    match mint_result {
+        Ok(token) => Ok(token),
+        Err(e) => {
+            tracing::error!("Failed to generate custom token: {}", e);
+            Err(ErrorResponse {
+                error: "custom_token_unavailable".to_string(),
+                message: e.to_string(),
+            })
+        }
+    }
 }
 
 async fn exchange_apple_code(
@@ -774,14 +790,14 @@ async fn generate_custom_token(
 
     tracing::info!("Firebase sign-in successful, UID: {}", firebase_uid);
 
-    // For custom token generation, we need Firebase Admin SDK
-    // In Rust, we'd need to use the service account to create a custom token
-    // For now, return an error indicating this needs server-side implementation
-    // The Python version uses firebase_admin.auth.create_custom_token()
-
-    // TODO: Implement custom token generation using service account
-    // This requires signing a JWT with the service account private key
-    Err("Custom token generation requires Firebase Admin SDK - not yet implemented in Rust".into())
+    // Custom-token minting needs Firebase Admin JWT signing with the service
+    // account private key (Python: firebase_admin.auth.create_custom_token).
+    // Do not fail open with a partial token response — callers that set
+    // use_custom_token=true require the custom token or a hard error.
+    Err(format!(
+        "custom token minting is not implemented for uid {firebase_uid}; use id_token exchange instead"
+    )
+    .into())
 }
 
 /// Escape a value for safe interpolation into a double-quoted JavaScript string
@@ -841,12 +857,14 @@ fn render_auth_callback(
 
 /// Create auth routes
 pub fn auth_routes(config: Arc<Config>) -> Router {
-    let auth_state = AuthState {
+    auth_routes_with_state(AuthState {
         config,
         sessions: AuthSessionStore::new(),
         http_client: Client::new(),
-    };
+    })
+}
 
+fn auth_routes_with_state(auth_state: AuthState) -> Router {
     Router::new()
         .route(
             "/.well-known/apple-developer-domain-association.txt",
@@ -862,6 +880,154 @@ pub fn auth_routes(config: Arc<Config>) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{
+        body::{to_bytes, Body},
+        http::{header, Method, Request, StatusCode},
+    };
+    use tower::ServiceExt;
+
+    fn test_config() -> Arc<Config> {
+        Arc::new(Config {
+            port: 10201,
+            gemini_api_key: None,
+            openai_api_key: None,
+            firebase_project_id: None,
+            firebase_auth_project_id: None,
+            firebase_api_key: None,
+            base_api_url: Some("https://desktop-backend.test".to_string()),
+            apple_client_id: None,
+            apple_team_id: None,
+            apple_key_id: None,
+            apple_private_key: None,
+            google_client_id: None,
+            google_client_secret: None,
+            encryption_secret: None,
+            redis_host: None,
+            redis_port: 6379,
+            redis_password: None,
+            sentry_webhook_secret: None,
+            sentry_auth_token: None,
+            sentry_admin_uid: None,
+            crisp_plugin_identifier: None,
+            crisp_plugin_key: None,
+            crisp_website_id: None,
+            pinecone_api_key: None,
+            pinecone_host: None,
+            gce_project_id: None,
+            gce_source_image: None,
+            agent_gcs_bucket: None,
+            anthropic_api_key: None,
+            desktop_legacy_anthropic_key: None,
+            google_calendar_api_key: None,
+            desktop_release_tag: None,
+            desktop_release_sha: None,
+            desktop_release_channel: None,
+            use_vertex_ai: false,
+            vertex_project_id: None,
+            vertex_location: "us-central1".to_string(),
+        })
+    }
+
+    async fn seed_auth_code(state: &AuthState, code: &str, redirect_uri: &str) {
+        let credentials = OAuthCredentials {
+            provider: "google".to_string(),
+            id_token: "test-id-token".to_string(),
+            access_token: None,
+            provider_id: "google-provider-id".to_string(),
+            redirect_uri: redirect_uri.to_string(),
+        };
+        state
+            .sessions
+            .set_code(
+                code,
+                serde_json::to_string(&credentials).expect("credentials json"),
+                300,
+            )
+            .await;
+    }
+
+    #[tokio::test]
+    async fn auth_token_with_custom_token_fails_closed_when_mint_unavailable() {
+        let redirect_uri = "http://127.0.0.1:8765/callback";
+        let auth_code = "auth-code-custom-token-fail-closed";
+        let state = AuthState {
+            config: test_config(),
+            sessions: AuthSessionStore::new(),
+            http_client: Client::new(),
+        };
+        seed_auth_code(&state, auth_code, redirect_uri).await;
+
+        let body = format!(
+            "grant_type=authorization_code&code={auth_code}&redirect_uri={}&use_custom_token=true",
+            urlencoding::encode(redirect_uri)
+        );
+        let response = auth_routes_with_state(state)
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/v1/auth/token")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(body))
+                    .expect("valid token request"),
+            )
+            .await
+            .expect("token response");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let payload = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body");
+        let error: serde_json::Value =
+            serde_json::from_slice(&payload).expect("error response json");
+        assert_eq!(
+            error.get("error").and_then(|value| value.as_str()),
+            Some("custom_token_unavailable")
+        );
+        assert!(
+            error.get("id_token").is_none(),
+            "fail-closed response must not include a partial token payload"
+        );
+    }
+
+    #[tokio::test]
+    async fn auth_token_without_custom_token_returns_id_token_without_mint() {
+        let redirect_uri = "http://127.0.0.1:8765/callback";
+        let auth_code = "auth-code-without-custom-token";
+        let state = AuthState {
+            config: test_config(),
+            sessions: AuthSessionStore::new(),
+            http_client: Client::new(),
+        };
+        seed_auth_code(&state, auth_code, redirect_uri).await;
+
+        let body = format!(
+            "grant_type=authorization_code&code={auth_code}&redirect_uri={}",
+            urlencoding::encode(redirect_uri)
+        );
+        let response = auth_routes_with_state(state)
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/v1/auth/token")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(body))
+                    .expect("valid token request"),
+            )
+            .await
+            .expect("token response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let payload = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body");
+        let token: serde_json::Value =
+            serde_json::from_slice(&payload).expect("token response json");
+        assert_eq!(
+            token.get("id_token").and_then(|value| value.as_str()),
+            Some("test-id-token")
+        );
+        assert!(token.get("custom_token").is_none());
+    }
 
     #[test]
     fn auth_base_url_rejects_blank_values() {
@@ -983,5 +1149,22 @@ mod tests {
         assert!(!html.contains("</script><script>"));
         assert!(!html.contains("code\"injected"));
         assert!(!html.contains("evil\";document"));
+    }
+
+    #[test]
+    fn require_custom_token_fails_closed_on_mint_error() {
+        let err: Box<dyn std::error::Error + Send + Sync> =
+            "custom token minting is not implemented".into();
+        let result = require_custom_token(Err(err));
+        let error = result.expect_err("mint failure must not fail open");
+        assert_eq!(error.error, "custom_token_unavailable");
+        assert!(error.message.contains("not implemented"));
+    }
+
+    #[test]
+    fn require_custom_token_returns_token_on_success() {
+        let token = require_custom_token(Ok("minted-custom-token".to_string()))
+            .expect("successful mint should surface the token");
+        assert_eq!(token, "minted-custom-token");
     }
 }
