@@ -1026,8 +1026,14 @@ function startServer() {
   }
 
   const httpServer = createServer((req, res) => {
-    // Health check endpoint (no auth)
-    if (req.url === "/health" && req.method === "GET") {
+    // Health check — auth required (same token as upload/sync/ws).
+    // Unauthenticated /health previously leaked databaseReady to the public internet.
+    if ((req.url === "/health" || req.url?.startsWith("/health?")) && req.method === "GET") {
+      if (!verifyAuth(req)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         status: "ok",
