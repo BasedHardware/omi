@@ -3,7 +3,7 @@ Shared service functions for memory retrieval.
 Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 """
 
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Optional, Any, Dict, List, cast
 
 import database.memories as memory_db
@@ -32,6 +32,7 @@ def get_memories_text(
     offset: int = 0,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    now: Optional[datetime] = None,
 ) -> str:
     """Fetch user memories/facts and format as LLM-ready text."""
     logger.info(f"get_memories_text - uid: {uid}, limit: {limit}, offset: {offset}")
@@ -55,7 +56,7 @@ def get_memories_text(
 
     memory_system = pin_memory_system(uid, db_client=firestore_db)
     if memory_system == MemorySystem.CANONICAL:
-        memories = MemoryService(db_client=firestore_db).read(uid, limit=limit, offset=offset)
+        memories = MemoryService(db_client=firestore_db).read(uid, limit=limit, offset=offset, now=now)
         if start_dt or end_dt:
             filtered: List[MemoryDB] = []
             for memory in memories:

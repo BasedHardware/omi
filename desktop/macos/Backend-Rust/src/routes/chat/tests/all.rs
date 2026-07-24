@@ -984,6 +984,37 @@ fn test_translate_request_forces_required_web_search_without_client_tools() {
 }
 
 #[test]
+fn test_injected_web_search_tool_forces_direct_caller() {
+    // Regression: web_search_20260209 defaults allowed_callers to
+    // ["code_execution_20260120"] on programmatic-tool-calling models
+    // (sonnet-4-6 / opus-4-6). Under that default Anthropic returns
+    // code_execution_tool_result blocks our AnthropicContentBlock enum can't
+    // deserialize, so every forced web-search turn 502s. The injected tool must
+    // pin the direct caller so the search returns server_tool_use +
+    // web_search_tool_result blocks the parser already handles.
+    let req = test_request(vec![user_message("search the web for HumanPost")]);
+
+    let result = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
+
+    let tools = result.tools.unwrap();
+    let web_search = serde_json::to_value(&tools[0]).unwrap();
+    assert_eq!(web_search["name"], "web_search");
+    assert_eq!(web_search["type"], "web_search_20260209");
+    assert_eq!(
+        web_search["allowed_callers"],
+        json!(["direct"]),
+        "web_search must pin the direct caller; the default code-execution caller \
+         returns blocks the response parser cannot deserialize (502s the turn)"
+    );
+}
+
+#[test]
 fn test_translate_request_forces_web_search_for_location_qualified_weather() {
     // This is the same gateway request shape used by both the main
     // pi-mono session and default delegated pi-mono child sessions. The
@@ -1131,6 +1162,27 @@ fn test_translate_request_required_web_search_fails_closed_when_disabled() {
     )
     .unwrap_err();
     assert!(error.contains("required public web search is unavailable"));
+}
+
+#[test]
+fn test_translate_request_honors_explicit_web_search_prohibition() {
+    let req = test_request(vec![user_message(
+        "Do you know why the web search tool times out? Don't call it because it will time out again.",
+    )]);
+
+    let result = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
+    assert!(result.tools.is_none());
+    assert!(result.tool_choice.is_none());
+    let prompt = serde_json::to_value(&result.messages[0])
+        .unwrap()
+        .to_string();
+    assert!(!prompt.contains("omi_retrieval_policy"), "{prompt}");
 }
 
 #[test]

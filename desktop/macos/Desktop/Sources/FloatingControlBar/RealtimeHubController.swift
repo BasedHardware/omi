@@ -86,8 +86,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   var lastScreenEvidenceProtocolCompletion: RealtimeScreenEvidenceProtocolCompletion = .notRun
   var authorizedRealtimeScreenshotImages: [String: RealtimeScreenEvidenceAttachment] = [:]
   var screenFailurePresented = false
-  var voiceContextPrefetchTask: Task<Void, Never>?
-  var voiceContextRefreshGeneration: UInt64 = 0
+  let voiceContextSingleFlight = RealtimeVoiceContextSingleFlight()
   var turnPreparationTask: Task<Void, Never>?
   /// (b) Genuinely local: in-flight write Tasks + optional completion receipts.
   /// Receipts shadow kernel acceptance only until consumed; on relaunch they are
@@ -388,7 +387,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       }
     }
     ownerBoundaryGeneration &+= 1
-    voiceContextRefreshGeneration &+= 1
     turnPersistenceLedger.cancelAll()
     turnEpoch &+= 1
     realtimePlaybackEpoch &+= 1
@@ -396,8 +394,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     minting = false
     mintOwnerScope = nil
 
-    voiceContextPrefetchTask?.cancel()
-    voiceContextPrefetchTask = nil
+    voiceContextSingleFlight.cancel()
     turnPreparationTask?.cancel()
     turnPreparationTask = nil
     legacyVoiceJournalImportTask?.cancel()
@@ -607,7 +604,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         prefetchedContextIsEmpty: prefetchedVoiceContext.isEmpty,
         hasPendingOwnerWork: pendingSessionRefreshReason != nil
           || !turnPersistenceLedger.pendingContinuityKeys.isEmpty
-          || voiceContextPrefetchTask != nil
+          || voiceContextSingleFlight.isRunning
           || turnPreparationTask != nil
           || !detachedSessionsAwaitingDrain.isEmpty
           || externalRunAuthorityState != nil
@@ -721,8 +718,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     reason: String,
     mintAttemptId: String? = nil
   ) -> Bool {
-    guard fallbackProvider == nil,
-      let pendingTurn = replacementAudioBuffer,
+    guard fallbackProvider == nil else {
+      recordBargeInReplacementFailoverExhausted(
+        from: provider,
+        reason: reason,
+        mintAttemptId: mintAttemptId)
+      return false
+    }
+    guard let pendingTurn = replacementAudioBuffer,
       let replacementOwnerScope = pendingBargeInOwnerScope,
       isOwnerScopeCurrent(replacementOwnerScope),
       let responseID = voiceResponseID
@@ -759,7 +762,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         ownerScope: replacementOwnerScope)
       return true
     }
-    guard AuthService.shared.isSignedIn else { return false }
+    guard AuthService.shared.isSignedIn else {
+      recordBargeInReplacementFailoverExhausted(
+        from: alternate,
+        reason: reason,
+        mintAttemptId: mintAttemptId)
+      return false
+    }
     pendingBargeInProvider = alternate
     // Marker only: a newer PTT can rotate continuity while the real alternate
     // one-use token is still minting. The start path always remints this case.
@@ -772,6 +781,22 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       rewarmAfterDrain: false)
     remintReplacementSessionForBargeIn(provider: alternate)
     return true
+  }
+
+  func recordBargeInReplacementFailoverExhausted(
+    from provider: RealtimeHubProvider,
+    reason: String,
+    mintAttemptId: String?
+  ) {
+    var exhaustedExtra: [String: Any] = ["user_visible": false]
+    if let mintAttemptId { exhaustedExtra["mint_attempt_id"] = mintAttemptId }
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "realtime_hub",
+      from: provider.rawValue,
+      to: "cascade",
+      reason: reason,
+      outcome: .exhausted,
+      extra: exhaustedExtra)
   }
 
   func shouldFailoverToAlternate(for failureClass: CredentialFailureClass?) -> Bool {

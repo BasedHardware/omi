@@ -166,7 +166,7 @@ extension RealtimeHubController {
       turnPreparationTask = Task { @MainActor [weak self] in
         guard let self else { return }
         guard !Task.isCancelled else { return }
-        guard await self.refreshVoiceContextSnapshot() else {
+        guard await self.awaitVoiceContextReadiness() else {
           self.failContextFreshInputPreparation(
             turnID: turnID,
             message: "Voice context is temporarily unavailable")

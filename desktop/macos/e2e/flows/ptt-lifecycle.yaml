@@ -20,6 +20,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+PushToTalk.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionDelegate.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionLifecycle.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeVoiceContextSingleFlight.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+TransportReplacement.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+VoiceOutput.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+ScreenEvidence.swift

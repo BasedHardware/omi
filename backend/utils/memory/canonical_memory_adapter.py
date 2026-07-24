@@ -205,6 +205,7 @@ def read_canonical_memories(
     db_client: Any = None,
     device_scope_request: Optional[DeviceScopeRequest] = None,
     include_pending_processing: bool = False,
+    now: Optional[datetime] = None,
 ) -> List[MemoryDB]:
     """Read canonical items, optionally exposing explicit pending submissions.
 
@@ -216,9 +217,9 @@ def read_canonical_memories(
     device_scope = device_scope_request.device_scope if device_scope_request else "all"
     client_device_id = device_scope_request.client_device_id if device_scope_request else None
     items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
-    now = datetime.now(timezone.utc)
+    current_time = now or datetime.now(timezone.utc)
     policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
-    visible = filter_canonical_default_visible_items(items, policy=policy, now=now)
+    visible = filter_canonical_default_visible_items(items, policy=policy, now=current_time)
     if include_pending_processing:
         visible_by_id = {item.memory_id: item for item in visible}
         for item in items:
