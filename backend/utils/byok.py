@@ -202,6 +202,13 @@ def _check_byok_validity(uid: str) -> Optional[str]:
         if request_fp != stored_fp:
             return f"BYOK key fingerprint mismatch for provider: {provider}"
 
+    # A header for a provider the user never enrolled has no stored fingerprint, so the
+    # loop above never sees it and it would reach the provider clients unvalidated. Drop
+    # it, mirroring the non-enrolled-user path above: anything we cannot verify must not
+    # be used, and downstream falls back to Omi's own key for that provider.
+    if any(provider not in stored_fingerprints for provider in request_keys):
+        _byok_ctx.set({p: key for p, key in request_keys.items() if p in stored_fingerprints})
+
     return None
 
 

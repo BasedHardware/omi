@@ -898,6 +898,60 @@ class TestBYOKFingerprintValidation:
 
     @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
     @patch('database.users.get_byok_state')
+    def test_valid_request_exposes_exactly_the_enrolled_keys(self, mock_get_state):
+        """A passing BYOK request makes the enrolled provider keys available downstream."""
+        from utils.byok import _byok_ctx, validate_byok_request, get_byok_keys
+
+        mock_get_state.return_value = self._mock_byok_state()
+        token = _byok_ctx.set(dict(self._valid_request_keys))
+        try:
+            validate_byok_request('byok-uid')
+            assert set(get_byok_keys()) == set(self._enrolled_fingerprints)
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_header_for_unenrolled_provider_is_not_used(self, mock_get_state):
+        """A header the enrollment cannot vouch for must never reach the provider clients.
+
+        _check_byok_validity documents that "every header key's SHA-256 must match the
+        enrolled fingerprint", but it iterated the *enrolled* fingerprints. A header for a
+        provider absent from the enrollment was therefore never examined and stayed in the
+        request context, so get_byok_keys() handed it to downstream LLM calls unvalidated.
+        """
+        from utils.byok import _byok_ctx, validate_byok_request, get_byok_keys
+
+        mock_get_state.return_value = self._mock_byok_state()
+        keys = dict(self._valid_request_keys)
+        keys['unenrolled_provider'] = 'sk-never-enrolled-and-never-fingerprinted'
+        token = _byok_ctx.set(keys)
+        try:
+            validate_byok_request('byok-uid')
+            exposed = get_byok_keys()
+            assert 'unenrolled_provider' not in exposed
+            assert set(exposed) == set(self._enrolled_fingerprints)
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_enrolled_keys_survive_alongside_an_unenrolled_header(self, mock_get_state):
+        """Dropping the unenrolled header must not disturb the enrolled ones."""
+        from utils.byok import _byok_ctx, validate_byok_request, get_byok_keys
+
+        mock_get_state.return_value = self._mock_byok_state()
+        keys = dict(self._valid_request_keys)
+        keys['unenrolled_provider'] = 'sk-never-enrolled'
+        token = _byok_ctx.set(keys)
+        try:
+            validate_byok_request('byok-uid')
+            assert get_byok_keys() == self._valid_request_keys
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
     def test_partial_headers_when_byok_active_raises_403(self, mock_get_state):
         """BYOK-active user sending SOME but not all headers → 403 (incomplete BYOK attempt)."""
         from fastapi import HTTPException
