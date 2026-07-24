@@ -741,6 +741,49 @@ def test_action_items_skipped_on_discard():
     extract_mock.assert_not_called()
 
 
+def test_conversation_action_item_auto_sync_uses_postprocess_pool(monkeypatch):
+    action_item = MagicMock()
+    action_item.description = 'Send the forecast'
+    action_item.completed = False
+    action_item.created_at = None
+    action_item.updated_at = None
+    action_item.due_at = None
+    action_item.completed_at = None
+
+    conversation = MagicMock()
+    conversation.id = 'conversation-1'
+    conversation.is_locked = False
+    conversation.structured.action_items = [action_item]
+
+    monkeypatch.setattr(process_conversation.conversation_capture, 'process_before_legacy', lambda *args: False)
+    monkeypatch.setattr(process_conversation.conversation_capture, 'canonical_fields', lambda *args: {})
+    monkeypatch.setattr(process_conversation.conversation_capture, 'legacy_document_ids', lambda *args: None)
+    monkeypatch.setattr(process_conversation.conversation_capture, 'reconcile_after_legacy', lambda *args: None)
+    monkeypatch.setattr(process_conversation.action_items_db, 'get_action_items_by_conversation', lambda *args: [])
+    monkeypatch.setattr(
+        process_conversation.action_items_db, 'delete_action_items_for_conversation', lambda *args: None
+    )
+    monkeypatch.setattr(
+        process_conversation.action_items_db,
+        'create_action_items_batch',
+        lambda *args, **kwargs: ['task-1'],
+    )
+    monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', lambda *args, **kwargs: None)
+    submitted_to = []
+    monkeypatch.setattr(
+        process_conversation,
+        'submit_with_context',
+        lambda executor, function: submitted_to.append(executor),
+    )
+
+    process_conversation._save_action_items('user-1', conversation)
+
+    assert submitted_to == [process_conversation.postprocess_executor], (
+        'conversation task auto-sync must run on postprocess_executor so its Firestore '
+        'children can acquire db_executor workers'
+    )
+
+
 def test_llm_calls_use_omi_qos_tier_system():
     """Verify all LLM functions use get_llm() with correct feature keys and cache_key param."""
     conv_proc_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "conversation_processing.py"
