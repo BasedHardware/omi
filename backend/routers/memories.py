@@ -977,3 +977,25 @@ def update_memory_visibility(
     _validate_mutable_memory(uid, memory_id, db_client=db_client)
     memories_db.change_memory_visibility(uid, memory_id, mutation_value)
     return {'status': 'ok'}
+
+
+@router.patch('/v3/memories/{memory_id}/baseline', tags=['memories'], response_model=MemoryMutationResponse)
+def update_memory_baseline(
+    memory_id: str,
+    value: bool,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
+):
+    """Toggle the baseline flag for a memory.
+
+    Baseline memories are always injected first into the AI context window.
+    Not supported for canonical-path users: MemoryItem has no is_baseline field,
+    so writing to the legacy store would silently have no effect for canonical readers.
+    Canonical users receive 503 explicitly rather than a silent wrong-store write.
+    """
+    db_client = getattr(db_client_module, 'db', None)
+    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
+        raise HTTPException(status_code=503, detail='Service temporarily unavailable')
+    _validate_mutable_memory(uid, memory_id, db_client=db_client)
+    memories_db.update_memory_fields(uid, memory_id, {'is_baseline': value})
+    submit_with_context(postprocess_executor, update_personas_async, uid)
+    return {'status': 'ok'}

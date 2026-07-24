@@ -1,92 +1,78 @@
 version: 2
 name: navigation
-tier: 1
-description: Desktop sidebar navigation — verify core sections load via bridge navigation
-app: non-prod
+tier: manual
+description: Top navigation bar smoke — verify all 4 tabs + Settings gear + Rewind overlay load correctly (v0.12.119+ redesign)
+app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/OmiApp.swift
-  - desktop/macos/Desktop/Sources/MainWindow/CrispManager.swift
   - desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/HomeStatusStore.swift
-  - desktop/macos/Desktop/Sources/Theme/OmiButtonStyle.swift
-  - desktop/macos/Desktop/Sources/Theme/OmiChrome.swift
-  - desktop/macos/Desktop/Sources/Theme/OmiColors.swift
-  - desktop/macos/Desktop/Sources/Theme/OmiFont.swift
-  - desktop/macos/Desktop/Sources/Theme/OmiMotion.swift
-  - desktop/macos/Desktop/Sources/Theme/OmiSpacing.swift
-  - desktop/macos/Desktop/Sources/Theme/OmiTextEditor.swift
-  - desktop/macos/Desktop/Sources/Theme/OmiToggleStyle.swift
-  - desktop/macos/Desktop/Sources/Theme/OmiType.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/FocusPage.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/InsightPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
-  - desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBComponents.swift
-  - desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBWallpaper.swift
-  - desktop/macos/Desktop/Sources/Theme/SecondBrainTokens.swift
 preconditions:
-  - automation_bridge_ready
+  - auth_ready
 
 steps:
   - id: S1
-    name: Navigate to Dashboard
-    bridge.navigate:
-      target: dashboard
-      activateApp: false
-    wait:
-      state.selectedTabIndex: 0
+    name: Verify Home tab loads
+    do: "Verify the app is on the Home tab. Top nav bar should show 4 buttons: Home, Memory, Tasks, Apps. Right side should show Capture status, Listening status, and Settings gear icon. Home content should include chat input area and insight cards."
+    expect:
+      interactive_count: { min: 8 }
+      text_visible:
+        - Home
+        - Memory
+        - Tasks
+        - Apps
 
   - id: S2
-    name: Navigate to Chat
-    bridge.navigate:
-      target: chat
-      activateApp: false
-    wait:
-      state.selectedTabIndex: 2
+    name: Navigate to Memory
+    do: "Click the Memory button in the top nav bar (agent-swift find text 'Memory' click). Verify Memory page loads with 3 sub-tabs: Memories, Conversations, Brain Map."
+    expect:
+      text_visible:
+        - Memories
+        - Conversations
+        - Brain Map
 
   - id: S3
-    name: Navigate to Memories
-    bridge.navigate:
-      target: memories
-      activateApp: false
-    wait:
-      state.selectedTabIndex: 3
+    name: Navigate to Tasks
+    do: "Click the Tasks button in the top nav bar (agent-swift find text 'Tasks' click). Verify Tasks page loads with search bar and task list."
+    expect:
+      text_visible:
+        - Tasks
 
   - id: S4
-    name: Navigate to Tasks
-    bridge.navigate:
-      target: tasks
-      activateApp: false
-    wait:
-      state.selectedTabIndex: 4
+    name: Navigate to Apps
+    do: "Click the Apps button in the top nav bar (agent-swift find text 'Apps' click). Verify Apps page loads with Imports and Exports sections."
+    expect:
+      text_visible:
+        - Apps
+        - Imports
 
   - id: S5
-    name: Navigate to Apps
-    bridge.navigate:
-      target: apps
-      activateApp: false
-    wait:
-      state.selectedTabIndex: 8
+    name: Open Settings via gear icon
+    do: "Click the Settings gear icon (agent-swift find text 'gearshape' click). Verify Settings page opens showing section names: General, Account & Plan, Transcription, Floating Bar, Notifications & Privacy, Rewind, Shortcuts, Advanced, About."
+    expect:
+      interactive_count: { min: 9 }
+      text_visible:
+        - Settings
+        - General
 
   - id: S6
-    name: Navigate to Settings
-    bridge.navigate:
-      target: settings
-      activateApp: false
-    wait:
-      state.selectedTabIndex: 9
+    name: Return to Home from Settings
+    do: "Click the Back button (agent-swift find text 'Back' click) to return from Settings. Verify the Home tab loads with top nav bar visible."
+    expect:
+      text_visible:
+        - Home
 
   - id: S7
-    name: Return to Dashboard
-    bridge.navigate:
-      target: dashboard
-      activateApp: false
-    wait:
-      state.selectedTabIndex: 0
+    name: Open Rewind via View menu
+    do: "Open Rewind via View menu (agent-swift press on View > Rewind menu item, or use keyboard shortcut ⌘⌥R). Verify Rewind overlay appears with search bar, date picker, and either timeline content or 'Screen Recording Permission Required' gate."
+    expect:
+      text_visible:
+        - Rewind
 
   - id: S8
-    name: Logs clean
-    log.expect:
-      absent:
-        - "DesktopAutomationBridge: failed"
-        - "unsupported_route"
+    name: Return to Home
+    do: "Close the Rewind overlay and verify the Home tab is visible with the top nav bar. Click Home in the top nav bar if needed."
+    expect:
+      text_visible:
+        - Home

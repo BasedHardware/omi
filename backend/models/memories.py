@@ -569,6 +569,7 @@ class MemoryDB(Memory):
     data_protection_level: Optional[str] = None
     is_locked: bool = False
     kg_extracted: bool = False
+    is_baseline: bool = False
     evidence: List[Evidence] = Field(default_factory=list)
 
     # Canonical memory tiering. Legacy API/service boundaries set this to None

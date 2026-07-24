@@ -1169,14 +1169,14 @@ def process_conversation(
                 user_folders = folders_db.initialize_system_folders(uid)
 
             if user_folders and conversation.structured:
+                cat = conversation.structured.category.value if conversation.structured.category else 'other'
                 with track_usage(uid, Features.CONVERSATION_FOLDER):
                     folder_id, confidence, reasoning = assign_conversation_to_folder(
                         title=conversation.structured.title or '',
                         overview=conversation.structured.overview or '',
-                        category=(
-                            conversation.structured.category.value if conversation.structured.category else 'other'
-                        ),
+                        category=cat,
                         user_folders=user_folders,
+                        category_folder_id=folders_db.resolve_category_folder_id(cat, user_folders),
                     )
                 if folder_id:
                     conversation.folder_id = folder_id

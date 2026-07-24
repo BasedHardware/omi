@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import VoiceTurnDomain
 import XCTest
 
@@ -381,7 +382,7 @@ import XCTest
   func testSubagentChatRendersMarkdownAndLargeBackHitTarget() throws {
     let source = try floatingControlBarViewSource()
 
-    XCTAssertTrue(source.contains("import MarkdownUI"))
+    XCTAssertFalse(source.contains("import MarkdownUI"))
     XCTAssertFalse(source.contains("Markdown(outputText.isEmpty ? \"Working...\" : outputText)"))
     XCTAssertTrue(source.contains("ForEach(displayedMessages) { message in"))
     XCTAssertTrue(source.contains("agentMessageBubble(message)"))
@@ -390,7 +391,7 @@ import XCTest
     XCTAssertTrue(source.contains("private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup]"))
     XCTAssertTrue(source.contains("ToolCallsGroup(calls: calls, compact: true)"))
     XCTAssertTrue(source.contains("ThinkingBlock(text: text)"))
-    XCTAssertTrue(source.contains("SelectableMarkdown(text: trimmed, sender: .ai)"))
+    XCTAssertTrue(source.contains("OmiMarkdown(text: trimmed, sender: .ai)"))
     XCTAssertTrue(source.contains(".environment(\\.fontScale, 0.88)"))
     XCTAssertTrue(source.contains(".frame(width: 36, height: 36)"))
     XCTAssertTrue(source.contains(".contentShape(Rectangle())"))
@@ -974,8 +975,12 @@ import XCTest
     XCTAssertTrue(source.contains("DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)"))
     XCTAssertFalse(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.18)"))
     XCTAssertFalse(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.45)"))
-    XCTAssertTrue(source.contains("private func handleViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy)"))
-    XCTAssertTrue(source.contains(".background(viewportResizeDetector(proxy: proxy))"))
+    XCTAssertFalse(
+      source.contains("lastScrollViewportSize"),
+      "live resize measurements must not become transcript state and re-enter lazy layout"
+    )
+    XCTAssertFalse(source.contains("viewportResizeDetector"))
+    XCTAssertFalse(source.contains("handleViewportSizeChange"))
     XCTAssertTrue(
       source.contains(
         "    scrollMode = .followingBottom\n    hasActivityBelow = false\n    userIsScrolling = false"))
@@ -1587,8 +1592,8 @@ import XCTest
     XCTAssertTrue(providerSource.contains("return \"Reading file\""))
   }
 
-  func testSelectableMarkdownRoutesGFMTablesThroughMarkdownUI() throws {
-    let selectableSource = try selectableMarkdownSource()
+  func testOmiMarkdownParsesGFMTablesWithoutGeometryFeedback() throws {
+    let rendererSource = try omiMarkdownSource()
     let chatBubbleSource = try chatBubbleSource()
     let table = """
       | Rank | Skill | Loads |
@@ -1601,50 +1606,178 @@ import XCTest
       1 | omi | 39
       """
 
-    XCTAssertTrue(SelectableMarkdown.containsGFMTable(table))
-    XCTAssertTrue(SelectableMarkdown.containsGFMTable(tableWithoutOuterPipes))
-    XCTAssertFalse(SelectableMarkdown.containsGFMTable("Rank | Skill | Loads"))
-    XCTAssertTrue(selectableSource.contains("markdownTableCells"))
-    XCTAssertTrue(selectableSource.contains("Markdown(content)"))
-    XCTAssertTrue(selectableSource.contains(".scaledMarkdownTheme(sender)"))
-    XCTAssertTrue(selectableSource.contains(".inlineOnlyPreservingWhitespace"))
-    XCTAssertTrue(chatBubbleSource.contains(".table { configuration in"))
-    XCTAssertTrue(chatBubbleSource.contains(".markdownTableBorderStyle"))
-    XCTAssertTrue(chatBubbleSource.contains(".markdownTableBackgroundStyle"))
+    XCTAssertTrue(OmiMarkdown.containsGFMTable(table))
+    XCTAssertTrue(OmiMarkdown.containsGFMTable(tableWithoutOuterPipes))
+    XCTAssertFalse(OmiMarkdown.containsGFMTable("Rank | Skill | Loads"))
+
+    let document = OmiMarkdownDocument(markdown: table)
+    guard case .table(let parsedTable) = document.blocks.first?.kind else {
+      return XCTFail("expected an Omi-owned table block")
+    }
+    XCTAssertEqual(parsedTable.header, ["Rank", "Skill", "Loads"])
+    XCTAssertEqual(parsedTable.alignments, [.trailing, .leading, .trailing])
+    XCTAssertEqual(parsedTable.rows, [["1", "omi", "39"]])
+
+    let mixedDocument = OmiMarkdownDocument(
+      markdown: """
+        Before
+
+        | Name | Detail |
+        | --- | --- |
+        | Omi | escaped \\| pipe |
+
+        After
+        """
+    )
+    XCTAssertEqual(mixedDocument.blocks.count, 3)
+    guard case .table(let mixedTable) = mixedDocument.blocks[1].kind else {
+      return XCTFail("expected prose, table, prose blocks")
+    }
+    XCTAssertEqual(mixedTable.rows, [["Omi", "escaped | pipe"]])
+    XCTAssertFalse(
+      OmiMarkdown.containsGFMTable(
+        """
+        | Name | Detail |
+        | --- |
+        """
+      ),
+      "an incomplete streaming separator must remain ordinary text"
+    )
+
+    XCTAssertFalse(rendererSource.contains("MarkdownUI"))
+    XCTAssertFalse(rendererSource.contains("GeometryReader"))
+    XCTAssertFalse(rendererSource.contains("anchorPreference"))
+    XCTAssertTrue(
+      rendererSource.contains(
+        "Grid(alignment: .topLeading, horizontalSpacing: 1, verticalSpacing: 1)"
+      )
+    )
+    XCTAssertTrue(rendererSource.contains("private struct OmiMarkdownTableView"))
+    let tableRendererSource =
+      rendererSource
+      .components(separatedBy: "private struct OmiMarkdownTableView").last?
+      .components(separatedBy: "private struct MarkdownTableCopyButton").first ?? ""
+    XCTAssertTrue(rendererSource.contains("GridRow(alignment: .top)"))
+    XCTAssertTrue(rendererSource.contains("minHeight: row == 0 ? 40 : 44"))
+    XCTAssertTrue(
+      rendererSource.contains(
+        ".frame(maxHeight: .infinity, alignment: columnAlignment.topAlignment)"
+      )
+    )
+    XCTAssertTrue(rendererSource.contains(".background(rowBackground(row))"))
+    XCTAssertFalse(tableRendererSource.contains("ScrollView"))
+    XCTAssertFalse(rendererSource.contains("@State private var document"))
+    XCTAssertFalse(rendererSource.contains("attrCache"))
+    XCTAssertFalse(rendererSource.contains(".textSelection(.enabled)"))
+    XCTAssertTrue(rendererSource.contains(".textSelection(.disabled)"))
+    XCTAssertTrue(rendererSource.contains("MarkdownTableCopyButton"))
+    XCTAssertFalse(chatBubbleSource.contains(".markdownTableBorderStyle"))
+    XCTAssertFalse(chatBubbleSource.contains(".markdownTableBackgroundStyle"))
   }
 
-  func testSelectableMarkdownRenderBoundarySkipsParentOnlyFeedbackUpdates() {
-    let baseline = SelectableMarkdownContent(text: "Final answer", sender: .ai, fontScale: 1)
+  func testOmiMarkdownRenderBoundarySkipsParentOnlyFeedbackUpdates() {
+    let baseline = OmiMarkdownContent(text: "Final answer", style: .assistant, fontScale: 1)
 
     XCTAssertEqual(
       baseline,
-      SelectableMarkdownContent(text: "Final answer", sender: .ai, fontScale: 1),
+      OmiMarkdownContent(text: "Final answer", style: .assistant, fontScale: 1),
       "unchanged message inputs must not rebuild SelectionOverlay when parent copy feedback changes"
     )
     XCTAssertNotEqual(
       baseline,
-      SelectableMarkdownContent(text: "Updated answer", sender: .ai, fontScale: 1)
+      OmiMarkdownContent(text: "Updated answer", style: .assistant, fontScale: 1)
     )
     XCTAssertNotEqual(
       baseline,
-      SelectableMarkdownContent(text: "Final answer", sender: .user, fontScale: 1)
+      OmiMarkdownContent(text: "Final answer", style: .user, fontScale: 1)
     )
     XCTAssertNotEqual(
       baseline,
-      SelectableMarkdownContent(text: "Final answer", sender: .ai, fontScale: 1.1)
+      OmiMarkdownContent(text: "Final answer", style: .assistant, fontScale: 1.1)
     )
   }
 
-  func testSelectableMarkdownProvidesAnIndependentCodeCopyControl() throws {
+  func testOmiMarkdownTableLayoutConvergesWhileSiblingResponseStreams() {
+    let table = """
+      | Rank | Skill | Loads |
+      |---:|---|---:|
+      | 1 | omi | 39 |
+      | 2 | memory | 24 |
+      """
+    var streamed = ""
+    let host = NSHostingView(
+      rootView: OmiMarkdownStreamingLayoutHarness(table: table, streamed: streamed)
+    )
+    host.frame = NSRect(x: 0, y: 0, width: 760, height: 540)
+
+    for token in ["This", " response", " keeps", " streaming", " below", " the", " completed", " table."] {
+      streamed += token
+      host.rootView = OmiMarkdownStreamingLayoutHarness(table: table, streamed: streamed)
+      host.layoutSubtreeIfNeeded()
+      let size = host.fittingSize
+      XCTAssertTrue(size.width.isFinite)
+      XCTAssertTrue(size.height.isFinite)
+      XCTAssertGreaterThan(size.height, 0)
+    }
+  }
+
+  func testOmiMarkdownLongTranscriptCanRepositionAcrossTables() {
+    let table = """
+      | Area | Workstream | Detail |
+      | --- | --- | --- |
+      | Omi | Desktop reliability | Selection-free Markdown rendering with stable scrolling |
+      | Infra | Incident follow-up | Verify production evidence and document the repair |
+      | Agent | Delegation | Coordinate active work without losing completion state |
+      """
+    let messages = (0..<18).map { index in
+      index.isMultiple(of: 3)
+        ? "\(table)\n\nTranscript section \(index)"
+        : "Transcript section \(index)\n\nThis completed response stays immutable while the viewport moves."
+    }
+    var scrollTarget = 17
+    var viewportWidth: CGFloat = 900
+    let host = NSHostingView(
+      rootView: OmiMarkdownScrollLayoutHarness(
+        messages: messages,
+        scrollTarget: scrollTarget,
+        viewportWidth: viewportWidth
+      )
+    )
+    host.frame = NSRect(x: 0, y: 0, width: viewportWidth, height: 620)
+
+    for (target, width) in zip(
+      [0, 12, 3, 17, 1, 15, 0, 17],
+      [900, 680, 1_040, 740, 920, 620, 1_100, 860]
+    ) {
+      scrollTarget = target
+      viewportWidth = CGFloat(width)
+      host.frame = NSRect(x: 0, y: 0, width: viewportWidth, height: 620)
+      host.rootView = OmiMarkdownScrollLayoutHarness(
+        messages: messages,
+        scrollTarget: scrollTarget,
+        viewportWidth: viewportWidth
+      )
+      host.layoutSubtreeIfNeeded()
+      let size = host.fittingSize
+      XCTAssertTrue(size.width.isFinite)
+      XCTAssertTrue(size.height.isFinite)
+      XCTAssertGreaterThan(size.height, 0)
+    }
+  }
+
+  func testOmiMarkdownProvidesIndependentCopyControls() throws {
     // omi-test-quality: source-inspection -- static contract: the reusable SwiftUI code-block
     // renderer owns a leaf-state copy affordance; clipboard writes are exercised manually in the app.
-    let source = try selectableMarkdownSource()
+    let source = try omiMarkdownSource()
 
     XCTAssertTrue(source.contains("private func codeBlockView(_ code: String, language: String?)"))
     XCTAssertTrue(source.contains("private struct CodeBlockCopyButton: View"))
+    XCTAssertTrue(source.contains("private struct MarkdownTableCopyButton: View"))
     XCTAssertTrue(source.contains("@State private var copied = false"))
     XCTAssertTrue(source.contains("NSPasteboard.general.setString(code, forType: .string)"))
+    XCTAssertTrue(source.contains("NSPasteboard.general.setString(markdown, forType: .string)"))
     XCTAssertTrue(source.contains(".help(\"Copy code\")"))
+    XCTAssertTrue(source.contains(".help(\"Copy table\")"))
   }
 
   func testNonProductionBundlesDoNotInstallNativeSentryHandlers() throws {
@@ -1739,11 +1872,11 @@ import XCTest
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
-  private func selectableMarkdownSource() throws -> String {
+  private func omiMarkdownSource() throws -> String {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("Sources/MainWindow/Components/SelectableMarkdown.swift")
+      .appendingPathComponent("Sources/MainWindow/Components/OmiMarkdown.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
@@ -1970,5 +2103,48 @@ import XCTest
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Logger.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+}
+
+private struct OmiMarkdownStreamingLayoutHarness: View {
+  let table: String
+  let streamed: String
+
+  var body: some View {
+    ScrollView {
+      LazyVStack(alignment: .leading) {
+        OmiMarkdown(text: table, style: .assistant)
+        OmiMarkdown(text: streamed, style: .assistant)
+      }
+      .frame(width: 720, alignment: .leading)
+    }
+    .frame(width: 760, height: 540)
+  }
+}
+
+private struct OmiMarkdownScrollLayoutHarness: View {
+  let messages: [String]
+  let scrollTarget: Int
+  let viewportWidth: CGFloat
+
+  var body: some View {
+    ScrollViewReader { proxy in
+      ScrollView {
+        LazyVStack(alignment: .leading, spacing: 16) {
+          ForEach(Array(messages.enumerated()), id: \.offset) { index, message in
+            OmiMarkdown(text: message, style: .assistant)
+              .id(index)
+          }
+        }
+        .frame(width: max(480, viewportWidth - 40), alignment: .leading)
+      }
+      .onAppear {
+        proxy.scrollTo(scrollTarget, anchor: .center)
+      }
+      .onChange(of: scrollTarget) { _, target in
+        proxy.scrollTo(target, anchor: .center)
+      }
+    }
+    .frame(width: viewportWidth, height: 580)
   }
 }

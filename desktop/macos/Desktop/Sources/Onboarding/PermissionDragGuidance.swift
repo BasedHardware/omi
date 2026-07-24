@@ -22,10 +22,23 @@ enum PermissionDragGuidance {
       ?? "Omi"
     let icon = NSApp.applicationIconImage ?? NSWorkspace.shared.icon(forFile: appURL.path)
 
+    // System Settings launches asynchronously (100s of ms). Wait for its window to
+    // exist before presenting, so the card anchors to the real window from its first
+    // paint instead of flashing in the detached bottom-of-screen fallback and
+    // pointing at nothing (the reported "drag card appeared before Settings, arrow
+    // pointing straight up" bug). Mirrors the screen-recording instruction overlay.
+    var anchor: CGRect?
+    for _ in 0..<12 {  // ~2.4s
+      if let frame = CloudConnectorFormAutomation.systemSettingsWindowAppKitFrame() {
+        anchor = frame
+        break
+      }
+      try? await Task.sleep(nanoseconds: 200_000_000)
+    }
+
     // The overlay owns the System Settings lifecycle from here: it re-anchors over
-    // the window once it appears and dismisses the card when the user closes it.
+    // the window as it moves and dismisses the card when the user closes it.
     CloudConnectorGuidanceOverlay.shared.presentDragToGrantCard(
-      appIcon: icon, appName: appName, appURL: appURL,
-      near: CloudConnectorFormAutomation.systemSettingsWindowAppKitFrame())
+      appIcon: icon, appName: appName, appURL: appURL, near: anchor)
   }
 }

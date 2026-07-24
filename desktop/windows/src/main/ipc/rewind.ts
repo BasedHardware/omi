@@ -1,6 +1,4 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { readFile } from 'fs/promises'
-import { resolve, sep } from 'path'
 import { getPrimarySourceId } from '../rewind/sourceId'
 import {
   listRewindFrames,
@@ -24,6 +22,7 @@ import { getCaptureDirective } from '../rewind/captureDirective'
 import { pruneRewindOnce } from '../rewind/retentionRunner'
 import { rebuildRewindIndexFromDisk } from '../rewind/rebuildIndex'
 import { rewindRoot } from '../rewind/paths'
+import { readRewindFrame } from '../rewind/frameFile'
 import type { RewindSettings } from '../../shared/types'
 
 /** How many semantic neighbours to pull before the similarity floor + the
@@ -120,12 +119,7 @@ export function registerRewindHandlers(): void {
     getRewindFrameOcrLines(frameId)
   )
   ipcMain.handle('rewind:frameImage', async (_e, imagePath: string) => {
-    const root = resolve(rewindRoot())
-    const full = resolve(imagePath)
-    if (full !== root && !full.startsWith(root + sep)) {
-      throw new Error('invalid frame path')
-    }
-    const buf = await readFile(full)
+    const buf = await readRewindFrame(rewindRoot(), imagePath)
     return `data:image/jpeg;base64,${buf.toString('base64')}`
   })
   ipcMain.handle('rewind:getSettings', async () => getRewindSettings())

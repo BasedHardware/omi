@@ -11,6 +11,7 @@ struct BrowserGoogleSession: Equatable {
   static let chromiumCookiePythonSupport = """
     import sys, json, os, sqlite3, hashlib, time
     from http.cookiejar import MozillaCookieJar, Cookie
+    from urllib.request import Request
 
     try:
         from Crypto.Cipher import AES
@@ -113,6 +114,24 @@ struct BrowserGoogleSession: Equatable {
             )
             jar.set_cookie(cookie)
         return jar
+
+    def cookie_value_for_request(jar, url, names):
+        # A Chromium profile can keep same-named Google cookies with different
+        # host scopes. Derive the value from the exact Cookie header this jar
+        # would send to `url`; querying the decrypted SQLite rows directly is
+        # unordered and can select a cookie Google will not receive.
+        request = Request(url)
+        jar.add_cookie_header(request)
+        cookie_header = request.get_header('Cookie') or ''
+        values = {}
+        for item in cookie_header.split(';'):
+            name, separator, value = item.strip().partition('=')
+            if separator and name not in values:
+                values[name] = value
+        for name in names:
+            if name in values:
+                return values[name]
+        return None
 
     def write_json_result(prefix, payload):
         import tempfile
