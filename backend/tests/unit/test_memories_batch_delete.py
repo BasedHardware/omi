@@ -51,8 +51,15 @@ def _patch_db(monkeypatch, fetched):
 
 
 def _force_canonical(monkeypatch, *, existing_ids):
-    """Force the canonical cohort and stub its atomic batch adapter."""
+    """Force the canonical cohort and stub its atomic batch adapter.
+
+    Pins the post-read-cutover stage (MEMORY_MODE=read) explicitly instead of
+    inheriting whatever the ambient rollout config yields, so these cases stay about
+    batch-vs-single authorization parity. The pre-cutover dual-write stage, where a
+    delete must also clear the legacy read surface (#10446), has its own cases below.
+    """
     monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: True)
+    monkeypatch.setattr(mem_mod, 'canonical_read_enabled', lambda *a, **k: True)
     existing = set(existing_ids)
 
     def delete_batch(uid, memory_ids, db_client=None):
@@ -331,3 +338,40 @@ class TestBatchDeleteRouteOrdering:
 
 
 # The atomic canonical regression above intentionally exercises read-before-write ordering.
+
+
+def _canonical_delete_stage(monkeypatch, *, read_cutover_done: bool):
+    """Canonical owns writes; `read_cutover_done` picks the rollout stage.
+
+    False models MEMORY_MODE=write (canonical writes, legacy reads); True models
+    MEMORY_MODE=read, where both sides are canonical.
+    """
+    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: True)
+    monkeypatch.setattr(mem_mod, 'canonical_read_enabled', lambda *a, **k: read_cutover_done)
+    monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kwargs: SimpleNamespace(delete=lambda uid, mid: None))
+    legacy_delete = MagicMock()
+    monkeypatch.setattr(mem_mod.memories_db, 'delete_memories_batch', legacy_delete)
+    monkeypatch.setattr(mem_mod, 'delete_memory_vectors_batch', MagicMock())
+    return legacy_delete
+
+
+def test_delete_during_dual_write_also_clears_the_store_the_user_reads(monkeypatch):
+    """#10446: at MEMORY_MODE=write canonical owns writes but GET /v3/memories still reads
+    legacy until MEMORY_MODE=read. A canonical-only delete is invisible in that window —
+    the client drops the row, the next refresh re-reads legacy where it still exists, and
+    the memory reappears seconds later. Deleting must mirror into legacy until cutover."""
+    legacy_delete = _canonical_delete_stage(monkeypatch, read_cutover_done=False)
+
+    assert mem_mod.delete_memory('mem-1', uid='u1') == {'status': 'ok'}
+
+    legacy_delete.assert_called_once_with('u1', ['mem-1'])
+
+
+def test_delete_after_read_cutover_leaves_legacy_alone(monkeypatch):
+    """At MEMORY_MODE=read both sides are canonical, so the mirror must not fire; it exists
+    only to keep the pre-cutover read surface consistent."""
+    legacy_delete = _canonical_delete_stage(monkeypatch, read_cutover_done=True)
+
+    assert mem_mod.delete_memory('mem-1', uid='u1') == {'status': 'ok'}
+
+    legacy_delete.assert_not_called()
