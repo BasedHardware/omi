@@ -22,6 +22,19 @@ fail() {
   exit 1
 }
 
+terminate_process_tree() {
+  local pid="$1"
+  local signal="$2"
+  local children child
+  children="$(pgrep -P "$pid" 2>/dev/null || true)"
+  for child in $children; do
+    terminate_process_tree "$child" "$signal"
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "-$signal" "$pid" 2>/dev/null || true
+  fi
+}
+
 run_suite() {
   local log_dir="$1"
   local suite="$2"
@@ -48,9 +61,9 @@ run_suite() {
     sleep "$SUITE_TIMEOUT_SECONDS"
     if kill -0 "$command_pid" 2>/dev/null; then
       touch "$timeout_path"
-      kill -TERM "$command_pid" 2>/dev/null || true
+      terminate_process_tree "$command_pid" TERM
       sleep 5
-      kill -KILL "$command_pid" 2>/dev/null || true
+      terminate_process_tree "$command_pid" KILL
     fi
   ) &
   local watchdog_pid=$!

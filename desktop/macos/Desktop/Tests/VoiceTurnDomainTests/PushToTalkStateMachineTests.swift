@@ -348,6 +348,7 @@ final class PushToTalkStateMachineTests: XCTestCase {
         allowAutomationOverride: false,
         plannedNextOwner: { _, _ in ownerID },
         retargetLocalStorage: { _, _ in },
+        prepareLocalStorageTransition: { _, _ in },
         ownerDidChange: {}
       ) { defaults in
         defaults.set(ownerID, forKey: .authUserId)
