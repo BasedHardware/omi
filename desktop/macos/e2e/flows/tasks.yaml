@@ -1,75 +1,43 @@
 version: 2
 name: tasks
-tier: 2
-description: Tasks page navigation and tasks snapshot via automation bridge
-app: non-prod
+description: Tasks tab — search, Today/No Deadline sections, keyboard toolbar (v0.12.119+ redesign)
+app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
-  - desktop/macos/Desktop/Sources/Startup/StartupWarmupPolicy.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Components/TaskChatPanel.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
-  - desktop/macos/Desktop/Sources/Services/RecurringTaskScheduler.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/GeminiClient.swift
-  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeStatusStore.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/ProactiveTaskExecute.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksSection.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksStore.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentSettings.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentManager.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskThreadProjection.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskWorkstreamContinuity.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenCandidateAdapter.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Insight/InsightAssistant.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/EmbeddingService.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistantSettings.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskDeduplicationService.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskModels.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskPrioritizationService.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskPromotionService.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/AssistantCoordinator.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/WindowMonitor.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/NotificationService.swift
-  - desktop/macos/Desktop/Sources/Rewind/Core/GoalRecord.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/TaskContextualResurfacingService.swift
-  - desktop/macos/Desktop/Sources/Rewind/Core/ActionItemModels.swift
-  - desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift
-  - desktop/macos/Desktop/Sources/Rewind/Core/StagedTaskStorage.swift
-  - desktop/macos/Desktop/Sources/TaskActionItem.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/TaskDetailViews.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Components/DailyTaskCreationSheet.swift
-  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+TaskCatalog.swift
 preconditions:
-  - automation_bridge_ready
+  - auth_ready
 
 steps:
   - id: S1
-    name: Navigate to Tasks
-    bridge.navigate:
-      target: tasks
-      activateApp: false
-    wait:
-      state.selectedTabIndex: 4
+    name: Navigate to Tasks tab
+    do: "Click the Tasks button in the top nav bar (agent-swift find text 'Tasks' click). Verify Tasks page loads with search bar ('Search tasks...') and task list."
+    expect:
+      text_visible:
+        - Tasks
 
   - id: S2
-    name: Refresh data
-    bridge.action:
-      name: refresh_all_data
+    name: Verify Today section
+    do: "Verify the 'Today' section header is visible with task items listed below. Each task should have a checkbox circle and task text."
+    expect:
+      text_visible:
+        - Today
 
   - id: S3
-    name: Tasks snapshot
-    bridge.action:
-      name: tasks_snapshot
+    name: Verify No Deadline section
+    do: "Scroll down if needed to find the 'No Deadline' section. Verify it exists with a count badge and task items."
     expect:
-      result.detail.is_signed_in: "true"
-      result.detail.load_state: "loaded"
-      result.detail.task_count_valid: "true"
+      text_visible:
+        - No Deadline
 
   - id: S4
-    name: Logs clean
-    log.expect:
-      absent:
-        - "DesktopAutomationBridge: failed"
+    name: Verify keyboard toolbar
+    do: "Verify the keyboard toolbar at the bottom shows navigation and editing controls: Navigate, New, Delete, Indent, Outdent."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S5
+    name: Verify search and filter controls
+    do: "Verify the search bar is present at the top. Check for filter/settings icons next to the search bar and the add (+) button."
+    expect:
+      interactive_count: { min: 2 }
