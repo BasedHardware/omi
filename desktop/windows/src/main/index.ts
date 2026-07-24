@@ -6,7 +6,8 @@ import {
   session,
   nativeImage,
   desktopCapturer,
-  powerMonitor
+  powerMonitor,
+  webContents
 } from 'electron'
 import { join } from 'path'
 import { appendFileSync } from 'fs'
@@ -92,6 +93,7 @@ import { registerByokHandlers } from './ipc/byok'
 import { registerMcpExportsHandlers } from './ipc/mcpExports'
 import { registerAuthStoreHandlers } from './ipc/authStore'
 import { registerPiMonoHandlers } from './ipc/pimono'
+import { scrubPackagedE2EEnvironment } from './e2eEnvironment'
 import { probeAgentStoreRuntimeAtStartup } from './agentKernel/startup'
 import { registerAgentControlIpc } from './ipc/agentControl'
 import { registerAudioMuteHandlers } from './ipc/audioMute'
@@ -351,15 +353,14 @@ app.on('web-contents-created', (_e, wc) => {
   // Stray file drop guard: a file dropped anywhere outside an HTML5 drop zone
   // makes Electron navigate the window to that local file:// URL, blanking the
   // app until reload. Cancel that here for every window (main/bar/capture/glow/
-  // insight-toast) uniformly. Only foreign file:// navigations are cancelled —
-  // in-app HashRouter routing and the initial load never fire will-navigate, and
-  // http(s)/mailto links keep their existing handling. See navigationGuard.ts.
+  // insight-toast) uniformly. Only the renderer's own origin/document is allowed;
+  // external links must use the guarded new-window/system-browser path.
   wc.on('will-navigate', (event, url) => {
     if (shouldBlockNavigation(url, urlOf())) {
       event.preventDefault()
       // Never log the raw URL — a dropped-file path can contain personal data.
       console.warn(
-        `[main] blocked stray in-window navigation to a local file (webContents ${wc.id})`
+        `[main] blocked privileged renderer navigation away from its app origin (webContents ${wc.id})`
       )
     }
   })
@@ -380,6 +381,8 @@ if (import.meta.env.DEV) devBench.applySandboxUserDataOverride()
 // hands off to the first (see the 'second-instance' handler) and exits. Acquired
 // AFTER the sandbox repin above so distinct OMI_SANDBOX profiles (and the E2E
 // harness's --user-data-dir) each get their own lock instead of contending.
+scrubPackagedE2EEnvironment(app.isPackaged)
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) app.quit()
 
@@ -513,7 +516,7 @@ function createWindow(): BrowserWindow {
     icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       // Tell the preload whether Mica is active (renderer sets data-mica).
       additionalArguments: [`--omi-mica=${mica ? '1' : '0'}`],
       // webSecurity stays ON. The Omi API CORS gap is handled by the header
@@ -724,7 +727,14 @@ app.whenReady().then(async () => {
   // NOTE: Electron ships no default getDisplayMedia picker — if this handler
   // isn't registered, getDisplayMedia() rejects with "Not supported". Changes
   // here only take effect after a FULL restart of the main process.
-  session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
+  session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+    const requester = request.frame ? webContents.fromFrame(request.frame) : undefined
+    const captureWc = getCaptureWc()
+    if (!requester || !captureWc || requester.id !== captureWc.id) {
+      console.warn('[main] blocked display-media request outside the capture renderer')
+      callback({})
+      return
+    }
     try {
       const sources = await desktopCapturer.getSources({ types: ['screen'] })
       if (sources.length === 0) throw new Error('no screen sources available')
@@ -853,7 +863,7 @@ app.whenReady().then(async () => {
   registerIntegrationsHandlers()
   registerUsageHandlers()
   registerMemoryCleanupHandlers()
-  registerRewindHandlers()
+  registerRewindHandlers(getCaptureWc)
   registerScreenHandlers()
   registerChatPrivacyHandlers()
   registerAssistantSettingsHandlers()
@@ -1034,7 +1044,7 @@ app.whenReady().then(async () => {
 
   // E2E hook (only when OMI_E2E=1; never in prod): expose the main-process facts
   // the lifecycle harness asserts via electronApp.evaluate.
-  if (process.env.OMI_E2E === '1') {
+  if (!app.isPackaged && process.env.OMI_E2E === '1') {
     ;(globalThis as unknown as { __omiE2E?: Record<string, unknown> }).__omiE2E = {
       trayCreated: () => isTrayCreated(),
       // The harness must target the MAIN window — getAllWindows() also returns

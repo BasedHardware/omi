@@ -3,10 +3,8 @@
 // Firebase's default plaintext localStorage.
 //
 // How it plugs in: firebase.ts passes `[EncryptedAuthPersistence,
-// browserLocalPersistence]` to initializeAuth. Firebase's PersistenceUserManager
-// auto-migrates on init — it finds an existing plaintext user in browserLocal,
-// re-`_set`s it into THIS (encrypted) persistence, and `_remove`s the plaintext
-// copy. Readers (auth.currentUser.getIdToken()) are untouched.
+// inMemoryPersistence]` to initializeAuth. Existing legacy plaintext sessions
+// are scrubbed during startup; new sessions never persist without DPAPI.
 //
 // CRITICAL — this MUST be a CLASS, not a plain object. Firebase's `_getInstance`
 // asserts `cls instanceof Function` ("Expected a class definition") and constructs
@@ -20,10 +18,9 @@
 // availablePersistences.filter(p => p._shouldAllowMigration)); without it the
 // plaintext copy is never moved or deleted and this whole feature is inert.
 //
-// DEGRADATION: on a machine with no OS encryption, `_isAvailable()` returns false,
-// Firebase drops this persistence from the hierarchy, and the session falls
-// through to browserLocalPersistence (plaintext) — the user is never locked out.
-// We emit fallback telemetry once when that happens.
+// DEGRADATION: on a machine with no OS encryption, `_isAvailable()` returns false
+// and Firebase falls through to memory-only persistence. The current session
+// works, but the user signs in again after restart. We emit telemetry once.
 
 import type { Persistence } from 'firebase/auth'
 import { trackEvent } from './analytics'

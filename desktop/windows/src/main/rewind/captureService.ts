@@ -29,11 +29,11 @@ let lastHash: string | null = null
 let lastCapturedAtMs: number | null = null
 let powerListenersBound = false
 // In-memory mirror of the persisted settings. startRewindCapture() loads the
-// saved value (defaulting to capture-on) at startup; updateRewindSettings()
-// keeps this and the on-disk copy in sync. Defaults to capture-on for any
+// saved value (defaulting to capture-off) at startup; updateRewindSettings()
+// keeps this and the on-disk copy in sync. Defaults to capture-off for any
 // pre-startup getRewindSettings() read.
 let settings: RewindSettings = {
-  captureEnabled: true,
+  captureEnabled: false,
   intervalMs: 1000,
   retentionDays: 14,
   excludedApps: []
@@ -200,7 +200,7 @@ export async function ingestRewindFrame(jpeg: Buffer): Promise<IngestResult> {
 }
 
 /**
- * Load the user's persisted settings (capture-on by default for a fresh
+ * Load the user's persisted settings (capture-off by default for a fresh
  * install) + bind power listeners. The renderer drives cadence.
  */
 export function startRewindCapture(): void {

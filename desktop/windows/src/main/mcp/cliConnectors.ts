@@ -5,7 +5,7 @@
 // and if that automation FAILS, the caller falls back to showing the manual
 // copy-command/config card for that tool (Mac's manual path).
 //
-//   • Codex   — `codex mcp add omi-memory -- npx -y mcp-remote <url> --header …`
+//   • Codex   — `codex mcp add omi-memory -- npx -y mcp-remote@0.1.38 <url> --header …`
 //   • OpenClaw— `openclaw mcp set omi-memory '<json>'` + `openclaw mcp reload` + SOUL.md note
 //   • Hermes  — direct ~/.hermes/config.yaml `mcp_servers.omi-memory` edit + SOUL.md note
 //
@@ -26,6 +26,7 @@ import { atomicWriteFileSync } from './atomicWrite'
 const execFileAsync = promisify(execFile)
 const CLI_TIMEOUT_MS = 20_000
 const SOUL_MARKER = 'omi-memory-bank'
+const MCP_REMOTE_PACKAGE = 'mcp-remote@0.1.38'
 
 export type CliConnectorId = 'codex' | 'openclaw' | 'hermes'
 
@@ -127,7 +128,7 @@ export function buildSetupCard(id: CliConnectorId, apiBase: string, key: string)
     case 'codex':
       return {
         copyTitle: 'Copy config',
-        copyText: `[mcp_servers.${MCP_SERVER_KEY}]\ncommand = "npx"\nargs = ["-y", "mcp-remote", "${url}", "--header", "${bearer}"]`,
+        copyText: `[mcp_servers.${MCP_SERVER_KEY}]\ncommand = "npx"\nargs = ["-y", "${MCP_REMOTE_PACKAGE}", "${url}", "--header", "${bearer}"]`,
         steps: ['Add the block below to ~/.codex/config.toml', 'Restart Codex']
       }
     case 'openclaw':
@@ -139,7 +140,7 @@ export function buildSetupCard(id: CliConnectorId, apiBase: string, key: string)
     case 'hermes':
       return {
         copyTitle: 'Copy config',
-        copyText: `${MCP_SERVER_KEY}:\n  command: npx\n  args: ["-y", "mcp-remote", "${url}", "--header", "${bearer}"]`,
+        copyText: `${MCP_SERVER_KEY}:\n  command: npx\n  args: ["-y", "${MCP_REMOTE_PACKAGE}", "${url}", "--header", "${bearer}"]`,
         steps: ['Add the block below under mcp_servers: in ~/.hermes/config.yaml', 'Restart Hermes']
       }
   }
@@ -168,7 +169,18 @@ export async function connectCli(
     case 'codex':
       await run(
         'codex',
-        ['mcp', 'add', MCP_SERVER_KEY, '--', 'npx', '-y', 'mcp-remote', url, '--header', bearer],
+        [
+          'mcp',
+          'add',
+          MCP_SERVER_KEY,
+          '--',
+          'npx',
+          '-y',
+          MCP_REMOTE_PACKAGE,
+          url,
+          '--header',
+          bearer
+        ],
         {
           ...process.env,
           CODEX_HOME: join(home, '.codex')
@@ -222,7 +234,7 @@ export function upsertHermesConfig(path: string, url: string, key: string): void
   const block = [
     `  ${MCP_SERVER_KEY}:`,
     `    command: npx`,
-    `    args: ["-y", "mcp-remote", "${url}", "--header", "Authorization: Bearer ${key}"]`
+    `    args: ["-y", "${MCP_REMOTE_PACKAGE}", "${url}", "--header", "Authorization: Bearer ${key}"]`
   ].join('\n')
 
   const text = existsSync(path) ? readFileSync(path, 'utf8') : ''

@@ -98,14 +98,9 @@ export default {
     // which is gitignored). NSIS installer/uninstaller/shortcut icons inherit this.
     icon: 'resources/icon.ico',
     target: [{ target: 'nsis', arch: ['x64'] }]
-    // --- CODE SIGNING (unsigned today → Windows SmartScreen warns "unknown publisher") ---
-    // Signing requires a certificate that must be procured separately; until one is
-    // wired in, leave this out so unsigned builds still succeed. Recommended: Azure
-    // Trusted Signing (no hardware token, CI-friendly). Once you have an account,
-    // add azureSignOptions (publisherName / endpoint / certificateProfileName /
-    // codeSigningAccountName), storing secrets in CI, never here. Traditional OV/EV
-    // cert alternative: signtoolOptions with certificateSubjectName, or
-    // certificateFile / certificatePassword via CSC_LINK / CSC_KEY_PASSWORD env.
+    // Release signing is injected by desktop_windows_release.yml and verified
+    // before upload. Keep credentials out of this committed config; unsigned
+    // local development builds remain supported.
   },
   nsis: {
     oneClick: false,

@@ -63,6 +63,7 @@ import type {
 } from '../shared/types'
 import type { ByokEnrollResult, ByokProvider } from '../shared/byok'
 import type {
+  McpCloudConnectorId,
   McpConnectorId,
   McpExportsSnapshot,
   McpConnectResult,
@@ -147,10 +148,7 @@ const omi: OmiBridgeApi = {
   },
   allowVirtualMic: process.env.OMI_ALLOW_VIRTUAL_MIC === '1',
   e2e: process.env.OMI_E2E === '1',
-  // Offline fake-auth for the shell E2E (survives production builds). Gated on a
-  // dedicated flag the app never sets itself, so it can never activate in normal
-  // use — and separate from OMI_E2E so the bar/meeting/lifecycle specs (which set
-  // only OMI_E2E) still boot to the signed-out screen. See lib/dev/e2eAuth.
+  // Packaged main scrubs this variable before creating renderer processes.
   e2eFakeAuth: process.env.OMI_E2E_FAKE_AUTH === '1',
   indexFilesScan: () => ipcRenderer.invoke('fileIndex:scan'),
   indexFilesStatus: () => ipcRenderer.invoke('fileIndex:status'),
@@ -451,8 +449,8 @@ const omi: OmiBridgeApi = {
   mcpClearKey: (): Promise<void> => ipcRenderer.invoke('mcp:clearKey'),
   // Cloud (OAuth) connector cards — static field values (no secret, no key).
   mcpCloudInfo: (): Promise<McpCloudConnectorInfo[]> => ipcRenderer.invoke('mcp:cloudInfo'),
-  mcpOpenCloudConnector: (url: string): Promise<void> =>
-    ipcRenderer.invoke('mcp:openCloudConnector', url),
+  mcpOpenCloudConnector: (id: McpCloudConnectorId): Promise<void> =>
+    ipcRenderer.invoke('mcp:openCloudConnector', id),
   // Memory-PACK variant: main formats the pack, copies it to the clipboard, and
   // opens the provider chat. Returns the opened URL.
   mcpMemoryPack: (

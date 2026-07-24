@@ -1,6 +1,6 @@
 // Codex — driven through the official ACP bridge for the OpenAI Codex CLI
 // (@agentclientprotocol/codex-acp, successor to @zed-industries/codex-acp).
-// Suggested command: `npx -y @agentclientprotocol/codex-acp` (the `-y` keeps the
+// Suggested command: `npx -y @agentclientprotocol/codex-acp@1.1.4` (the `-y` keeps the
 // first npx fetch non-interactive so one-click Connect can't hang on a prompt).
 // The bridge auths via the user's ChatGPT login (codex CLI) or an OpenAI API
 // key — which is why the key env vars are forwarded for this adapter only, and

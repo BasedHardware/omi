@@ -411,8 +411,8 @@ export const ENFORCED_TOOL_NAMES: ReadonlySet<string> = new Set([
 ])
 
 /** Classify a whole tool_call event by dispatching on toolName.
- *  When OMI_YOLO_MODE=1, all tool calls are allowed (no denylist).
- *  Yolo mode is gated by the adapter — only forwarded from dev builds. */
+ *  YOLO mode is an intentional full-capability path. It remains environment
+ *  driven for compatibility until the existing action opt-in is main-owned. */
 export function inspectToolCall(event: ToolCallEvent): DenyDecision | null {
   if (process.env.OMI_YOLO_MODE === '1') {
     process.stderr.write(`[omi-provider] YOLO bypass: ${event.toolName}\n`)

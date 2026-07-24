@@ -1,4 +1,4 @@
-// Guard against a stray file drop navigating a window away from the app.
+// Guard against any top-level navigation away from the app renderer.
 //
 // Electron's default behavior for a file dropped ANYWHERE outside a designated
 // HTML5 drop zone is to NAVIGATE the window to that local `file://` URL, which
@@ -8,43 +8,34 @@
 // `#hash` nav) or for programmatic `loadURL`/`loadFile`/`reload`, so cancelling
 // here cannot break in-app routing or the initial window load.
 //
-// We cancel ONLY a navigation to a `file:` URL that is not the app's own
-// document. Every window loads its renderer once (dev `http://localhost:PORT`,
-// prod loopback `http://127.0.0.1:PORT`, or the `file://` index.html fallback)
-// and then only changes its `#hash`, so the sole `file:` URL a window ever shows
-// is its own index.html — a dropped file is always a different path. http/https/
-// mailto and `window.open()`ed links keep their existing behavior (the window's
-// `setWindowOpenHandler` → `shell.openExternal`; the checkout window's own
-// `will-navigate` completion handling — both target http(s), never `file:`).
+// Every privileged renderer carries the preload bridge, so allowing an in-place
+// navigation to an attacker origin would hand that bridge to remote content.
+// Windows load their renderer once (dev `http://localhost:PORT`, prod loopback
+// `http://127.0.0.1:PORT`, or the `file://` index fallback) and then route with
+// same-document hashes. Any other origin/document is therefore rejected.
 //
 // Extracted as a pure predicate so it is unit-testable without an Electron app,
 // mirroring `windowShortcuts.ts` / `externalUrl.ts`.
 
 /**
- * True iff a `will-navigate` to `targetUrl` should be cancelled. Blocks a
- * navigation to a local `file:` URL unless it targets the same document the
- * window already shows (the `loadFile` fallback runs on a `file://` origin).
- * Everything else — http/https/mailto/custom schemes, unparseable URLs — is
- * allowed through unchanged.
+ * True iff a `will-navigate` to `targetUrl` should be cancelled. HTTP renderers
+ * may stay on their exact origin. File renderers may stay on their exact file.
+ * Unparseable URLs and every cross-origin/custom-scheme target fail closed.
  *
  * @param targetUrl  the navigation target (the `url` arg of `will-navigate`)
  * @param currentUrl the URL the window currently shows (`webContents.getURL()`)
  */
 export function shouldBlockNavigation(targetUrl: string, currentUrl: string): boolean {
   let target: URL
+  let current: URL
   try {
     target = new URL(targetUrl)
+    current = new URL(currentUrl)
   } catch {
-    return false // unparseable → not our stray-file case; leave behavior unchanged
+    return true
   }
-  if (target.protocol !== 'file:') return false // only local-file navigations are cancelled here
-  // Allow the app's own document — the loadFile fallback serves the renderer from
-  // a file:// origin, so a navigation back to that exact path is legitimate.
-  try {
-    const current = new URL(currentUrl)
-    if (current.protocol === 'file:' && current.pathname === target.pathname) return false
-  } catch {
-    // No / unparseable current URL → treat the file target as foreign (block).
+  if (current.protocol === 'file:') {
+    return target.protocol !== 'file:' || target.pathname !== current.pathname
   }
-  return true
+  return target.origin !== current.origin
 }

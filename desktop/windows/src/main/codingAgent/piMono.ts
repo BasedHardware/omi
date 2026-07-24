@@ -39,6 +39,7 @@
 //     the port stays self-contained and does not widen the shared contract.
 
 import { ChildProcess, spawn } from 'child_process'
+import { randomBytes } from 'crypto'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { dirname, join } from 'path'
@@ -451,7 +452,7 @@ export class PiMonoAdapter {
   private extensionPath: string
   private readonly contextFilePath = join(
     tmpdir(),
-    `omi-pi-mono-context-${process.pid}-${Math.random().toString(36).slice(2)}.json`
+    `omi-pi-mono-context-${process.pid}-${randomBytes(24).toString('hex')}.json`
   )
   /** Current system prompt baked into the spawned pi process via --system-prompt.
    *  Pi has no set_system_prompt RPC, so changing this requires a subprocess restart. */
@@ -488,11 +489,8 @@ export class PiMonoAdapter {
       'omi-sonnet'
       // Auto-discover extensions and MCP servers from the user's machine
       // to maximize pi-mono's capabilities (e.g. Playwright, filesystem tools).
-      // SECURITY NOTE: auto-discovered extensions run in the pi subprocess and
-      // can read process.env (including OMI_API_KEY). This is acceptable because:
-      // 1. OMI_API_KEY is a short-lived Firebase ID token (~1 hour expiry)
-      // 2. Extensions are user-installed — the trust boundary is the user's machine
-      // 3. ANTHROPIC_API_KEY is always scrubbed (never exposed to extensions)
+      // This remains an accepted risk until the existing "Let Omi take actions"
+      // opt-in is enforced authoritatively in main for every execution path.
     ]
     // Pi has no set_system_prompt RPC — system prompt must be baked at spawn
     // time via the --system-prompt CLI flag. To change it, restart the process.
@@ -507,28 +505,16 @@ export class PiMonoAdapter {
       throw new Error('pi-mono adapter requires config.authToken (Firebase ID token)')
     }
 
-    // Scrub any ANTHROPIC_API_KEY from the child env so the extension cannot
-    // accidentally read it as a credential. pi-mono talks to api.omi.me with
-    // OMI_API_KEY only.
+    // Keep the ambient environment for user-installed integrations. This is an
+    // explicit compatibility exception: a future main-owned action-consent gate
+    // must pair full tool access with narrower, integration-declared env grants.
     const env: Record<string, string> = {
       ...(process.env as Record<string, string>)
     }
     delete env.ANTHROPIC_API_KEY
 
-    // SECURITY: OMI_YOLO_MODE bypasses the extension's entire tool denylist.
-    // Scrub it from the subprocess env, then only re-inject when explicitly
-    // set in the parent. Log when active so usage is auditable.
-    delete env.OMI_YOLO_MODE
-    if (process.env.OMI_YOLO_MODE === '1') {
-      env.OMI_YOLO_MODE = '1'
-      process.stderr.write('[pi-mono] WARNING: OMI_YOLO_MODE=1 — denylist bypass active\n')
-    }
-
-    // BYOK: scrub every inherited OMI_BYOK_* first (parity with macOS
-    // removeInheritedBYOKEnvironment), so a stale/partial set from the parent env
-    // can never leak into the subprocess, then inject only the complete set the
-    // session store built (all-or-nothing — see byokEnvVars). Key material is
-    // never logged.
+    // Scrub inherited BYOK values, then inject only the validated all-or-nothing
+    // set supplied by the main-owned session store.
     for (const key of Object.keys(env)) {
       if (key.toUpperCase().startsWith('OMI_BYOK_')) delete env[key]
     }
