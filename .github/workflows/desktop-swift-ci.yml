@@ -191,7 +191,8 @@ jobs:
       - name: Test desktop Swift app
         working-directory: desktop/macos
         env:
-          OMI_SWIFT_TEST_SUITE_WORKERS: "2"
+          OMI_SWIFT_TEST_SUITE_WORKERS: "1"
+          OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS: "300"
         run: ./scripts/run-swift-ci.sh --test
 
       # This is part of the already-required Desktop Swift Build & Tests check,
