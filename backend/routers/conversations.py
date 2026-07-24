@@ -103,7 +103,8 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
         try:
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
-            process_conversation(uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False)
+            with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
+                process_conversation(uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")

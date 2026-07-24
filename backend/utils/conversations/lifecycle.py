@@ -279,7 +279,7 @@ def _run_processing_lease_heartbeat(
 
 
 @contextmanager
-def processing_admission_guard(uid: str, conversation_id: str):
+def processing_admission_guard(uid: str, conversation_id: str, *, rollback_on_failure: bool = True):
     """Guard an inline (in-request) processing run against stranding its admission.
 
     Wrap the synchronous ``process_conversation`` call with this; if it raises,
@@ -312,17 +312,24 @@ def processing_admission_guard(uid: str, conversation_id: str):
     try:
         yield
     except Exception:
-        try:
-            rolled_back = rollback_processing_admission(uid, conversation_id)
-        except Exception:
-            logger.exception('processing admission rollback failed uid=%s conversation=%s', uid, conversation_id)
-            rolled_back = False
-        logger.exception(
-            'synchronous conversation processing failed uid=%s conversation=%s rolled_back=%s',
-            uid,
-            conversation_id,
-            rolled_back,
-        )
+        if rollback_on_failure:
+            try:
+                rolled_back = rollback_processing_admission(uid, conversation_id)
+            except Exception:
+                logger.exception('processing admission rollback failed uid=%s conversation=%s', uid, conversation_id)
+                rolled_back = False
+            logger.exception(
+                'synchronous conversation processing failed uid=%s conversation=%s rolled_back=%s',
+                uid,
+                conversation_id,
+                rolled_back,
+            )
+        else:
+            logger.exception(
+                'synchronous conversation processing failed uid=%s conversation=%s (no rollback: producer owns recovery)',
+                uid,
+                conversation_id,
+            )
         raise
     finally:
         stop_event.set()
