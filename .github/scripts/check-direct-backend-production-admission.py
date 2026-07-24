@@ -80,6 +80,43 @@ def validate_gateway_release_admission(text: str) -> list[str]:
     return errors
 
 
+def validate_gateway_break_glass_hatch(text: str) -> list[str]:
+    """Pin the gateway eligibility-proof break-glass hatch properties.
+
+    Every gated surface must have a break-glass hatch (AGENTS.md). The hatch
+    may skip the eligibility proof, never the ancestry check, and its use must
+    be recorded as a tracking issue. These are static tripwires, not behavioral
+    coverage.
+    """
+
+    errors: list[str] = []
+    for fragment, message in (
+        (
+            "skip_eligibility_proof:\n        description: 'Break-glass: deploy without a Release Eligibility proof (still requires a merged main SHA)'",
+            "gateway deploy must expose a skip_eligibility_proof break-glass input",
+        ),
+        (
+            '!= "deploy-without-proof"',
+            "gateway break-glass must require an explicit confirm string",
+        ),
+        (
+            "requires a non-empty break_glass_reason",
+            "gateway break-glass must require a non-empty reason",
+        ),
+        (
+            'record_break_glass:',
+            "gateway break-glass use must be recorded by a dedicated job",
+        ),
+        (
+            "release-gate-failure",
+            "gateway break-glass tracking issue must carry the release-gate-failure label",
+        ),
+    ):
+        if fragment not in text:
+            errors.append(message)
+    return errors
+
+
 def validate(root: Path) -> list[str]:
     errors: list[str] = []
     for relative in WORKFLOWS:
@@ -116,6 +153,7 @@ def validate(root: Path) -> list[str]:
             errors.append(f"{relative} must establish its immutable image tag exactly once from checked-out HEAD")
         if relative == GATEWAY_WORKFLOW:
             errors.extend(validate_gateway_release_admission(text))
+            errors.extend(validate_gateway_break_glass_hatch(text))
     return errors
 
 

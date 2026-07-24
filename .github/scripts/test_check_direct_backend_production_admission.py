@@ -117,6 +117,48 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
                 target.write_text(text.replace(old, new, 1), encoding="utf-8")
                 self.assertIn(expected, CHECKER.validate(root))
 
+    def test_gateway_rejects_break_glass_hatch_removals(self) -> None:
+        mutations = (
+            (
+                "        description: 'Break-glass: deploy without a Release Eligibility proof (still requires a merged main SHA)'",
+                "        description: 'removed'",
+                "gateway deploy must expose a skip_eligibility_proof break-glass input",
+            ),
+            (
+                '!= "deploy-without-proof"',
+                '!= "nothing"',
+                "gateway break-glass must require an explicit confirm string",
+            ),
+            (
+                "requires a non-empty break_glass_reason",
+                "requires nothing",
+                "gateway break-glass must require a non-empty reason",
+            ),
+            (
+                "  record_break_glass:",
+                "  removed_break_glass:",
+                "gateway break-glass use must be recorded by a dedicated job",
+            ),
+            (
+                "--label release-gate-failure",
+                "--label removed",
+                "gateway break-glass tracking issue must carry the release-gate-failure label",
+            ),
+        )
+        for old, new, expected in mutations:
+            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                for relative in CHECKER.WORKFLOWS:
+                    source = ROOT / relative
+                    target = root / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, target)
+                target = root / CHECKER.GATEWAY_WORKFLOW
+                text = target.read_text(encoding="utf-8")
+                self.assertIn(old, text)
+                target.write_text(text.replace(old, new, 1), encoding="utf-8")
+                self.assertIn(expected, CHECKER.validate(root))
+
 
 if __name__ == "__main__":
     unittest.main()

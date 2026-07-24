@@ -15,6 +15,28 @@ on:
         description: 'Production only: exact main SHA with a successful first-attempt Release Eligibility proof'
         required: false
         default: ''
+      # Break-glass: the eligibility proof requires a *successful*
+      # first-attempt Release Eligibility push-run on this exact SHA. A flaky
+      # or red check therefore poisons that SHA permanently -- rerunning does
+      # not retroactively make the original run succeed, so the only other
+      # recovery is pushing a new commit to main and waiting for a full green
+      # run. That is unacceptable for a hotfix, so this hatch exists.
+      #
+      # It does NOT relax the property that matters: the SHA must still be an
+      # ancestor of main, so unreviewed code can never reach production.
+      skip_eligibility_proof:
+        description: 'Break-glass: deploy without a Release Eligibility proof (still requires a merged main SHA)'
+        required: false
+        default: false
+        type: boolean
+      break_glass_confirm:
+        description: 'Type deploy-without-proof when skip_eligibility_proof is set'
+        required: false
+        default: ''
+      break_glass_reason:
+        description: 'Why the eligibility proof is unavailable (required with skip_eligibility_proof)'
+        required: false
+        default: ''
 
 # LLM Gateway deployment reapplies shared backend-secrets, so it joins the
 # full backend mutation domain for the selected environment.
@@ -35,6 +57,9 @@ jobs:
       id-token: 'write'
 
     runs-on: ubuntu-latest
+    outputs:
+      break_glass: ${{ steps.admitted_source.outputs.break_glass }}
+      admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
     steps:
       - name: Validate Environment Input
         run: |
@@ -54,9 +79,13 @@ jobs:
           fetch-depth: 0
 
       - name: Admit production source and image identity
+        id: admitted_source
         env:
           DEPLOY_SHA: ${{ github.event.inputs.release_sha }}
           DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          SKIP_PROOF: ${{ github.event.inputs.skip_eligibility_proof }}
+          BREAK_GLASS_CONFIRM: ${{ github.event.inputs.break_glass_confirm }}
+          BREAK_GLASS_REASON: ${{ github.event.inputs.break_glass_reason }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -69,19 +98,36 @@ jobs:
             git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
             main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
             git cat-file -e "${DEPLOY_SHA}^{commit}"
+
+            # Always enforced, break-glass or not: only merged main code deploys.
             if ! git merge-base --is-ancestor "$DEPLOY_SHA" "$main_sha"; then
               echo "ERROR: release_sha is not an ancestor of fresh origin/main; only merged code may deploy." >&2
               exit 1
             fi
-            proof_path="${RUNNER_TEMP}/release-eligibility-${DEPLOY_SHA}.json"
-            gh api -H "Accept: application/vnd.github+json" \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}&per_page=100" \
-              > "$proof_path"
-            python3 .github/scripts/verify_backend_release_admission.py \
-              --sha "$DEPLOY_SHA" \
-              --repository "$GITHUB_REPOSITORY" \
-              --workflow-runs "$proof_path" \
-              --require-first-attempt
+
+            if [[ "${SKIP_PROOF:-false}" == "true" ]]; then
+              if [[ "$BREAK_GLASS_CONFIRM" != "deploy-without-proof" ]]; then
+                echo "ERROR: skip_eligibility_proof requires break_glass_confirm=deploy-without-proof." >&2
+                exit 1
+              fi
+              if [[ -z "${BREAK_GLASS_REASON// }" ]]; then
+                echo "ERROR: skip_eligibility_proof requires a non-empty break_glass_reason." >&2
+                exit 1
+              fi
+              echo "::warning::Release Eligibility proof skipped for ${DEPLOY_SHA}: ${BREAK_GLASS_REASON}"
+              printf 'break_glass=true\n' >> "$GITHUB_OUTPUT"
+            else
+              proof_path="${RUNNER_TEMP}/release-eligibility-${DEPLOY_SHA}.json"
+              gh api -H "Accept: application/vnd.github+json" \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}&per_page=100" \
+                > "$proof_path"
+              python3 .github/scripts/verify_backend_release_admission.py \
+                --sha "$DEPLOY_SHA" \
+                --repository "$GITHUB_REPOSITORY" \
+                --workflow-runs "$proof_path" \
+                --require-first-attempt
+              printf 'break_glass=false\n' >> "$GITHUB_OUTPUT"
+            fi
             git checkout --detach "$DEPLOY_SHA"
           fi
           CHECKED_OUT_SHA=$(git rev-parse HEAD)
@@ -97,6 +143,9 @@ jobs:
           echo "Admitted deployment source: $CHECKED_OUT_SHA"
           echo "CHECKED_OUT_SHA=$CHECKED_OUT_SHA" >> "$GITHUB_ENV"
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+          if [[ "$DEPLOY_ENVIRONMENT" == prod ]]; then
+            printf 'admitted_sha=%s\n' "$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Google Auth
         id: auth
@@ -194,3 +243,34 @@ jobs:
 
       - name: Show Output
         run: echo "LLM Gateway deployed to ${{ github.event.inputs.environment }}"
+
+  record_break_glass:
+    needs: deploy
+    if: ${{ needs.deploy.outputs.break_glass == 'true' }}
+    permissions:
+      contents: 'read'
+      issues: 'write'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record that the eligibility proof was bypassed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEPLOY_SHA: ${{ needs.deploy.outputs.admitted_sha }}
+          DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          BREAK_GLASS_REASON: ${{ github.event.inputs.break_glass_reason }}
+        run: |
+          set -euo pipefail
+          gh issue create --repo "$REPO" \
+            --title "Release Eligibility bypassed for ${DEPLOY_SHA:0:10} (${DEPLOY_ENVIRONMENT})" \
+            --label release-gate-failure \
+            --body "$(printf '%s\n' \
+              "LLM Gateway deploy ran without a Release Eligibility proof." \
+              "" \
+              "- SHA: \`${DEPLOY_SHA}\` (verified ancestor of main)" \
+              "- Environment: ${DEPLOY_ENVIRONMENT}" \
+              "- Operator: @${GITHUB_ACTOR}" \
+              "- Reason: ${BREAK_GLASS_REASON}" \
+              "- Run: ${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID}" \
+              "" \
+              "The gate being unusable is the defect. Fix the gate, then close this.")"
