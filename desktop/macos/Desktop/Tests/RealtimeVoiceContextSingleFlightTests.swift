@@ -11,13 +11,13 @@ final class RealtimeVoiceContextSingleFlightTests: XCTestCase {
     var startedWaiters: [CheckedContinuation<Void, Never>] = []
 
     func run() async -> Bool {
-      startCount += 1
-      for waiter in startedWaiters {
-        waiter.resume()
-      }
-      startedWaiters.removeAll()
       return await withCheckedContinuation { continuation in
         self.continuation = continuation
+        startCount += 1
+        for waiter in startedWaiters {
+          waiter.resume()
+        }
+        startedWaiters.removeAll()
       }
     }
 
