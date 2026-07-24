@@ -24,6 +24,11 @@ checks:
     triggers: ["Makefile", "backend/scripts/sync-python-deps.sh", "scripts/pre-push", "scripts/test-make-setup.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "make setup must provision the minimal, rerunnable backend environment required by selected pre-push checks"
+  - id: pre-push-worktree-fallback
+    command: ["bash", "scripts/test-pre-push-worktree-fallback.sh"]
+    triggers: ["scripts/pre-push", "scripts/pre-push-singleflight", "scripts/pr-preflight", ".github/scripts/preflight_runner.py", ".github/scripts/pr_preflight.py", "scripts/test-pre-push-worktree-fallback.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#10293: the pre-push hook chain must resolve the repo root in linked worktrees where git rev-parse --show-toplevel exits 128, not abort into a --no-verify push"
   - id: check-manifest-contract
     command: ["python3", ".github/scripts/test_run_checks.py"]
     triggers: ["all"]

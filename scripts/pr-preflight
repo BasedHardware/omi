@@ -2,6 +2,11 @@
 
 set -euo pipefail
 
-ROOT="$(git rev-parse --show-toplevel)"
+# Fall back to the working directory when `git rev-parse --show-toplevel` cannot
+# resolve a work tree: in a linked worktree whose git context resolves to a git
+# dir (show-toplevel exits 128, "this operation must be run in a work tree"),
+# this would otherwise abort. The pre-push gate cd's to the repo root before
+# invoking this script, and hooks run at the work-tree top, so pwd is the root.
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT"
 exec python3 .github/scripts/pr_preflight.py "$@"

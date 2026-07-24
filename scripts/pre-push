@@ -2,7 +2,12 @@
 
 set -eo pipefail
 
-cd "$(git rev-parse --show-toplevel)"
+# Git runs hooks with the working directory at the top of the invoking work
+# tree, so fall back to it when `git rev-parse --show-toplevel` cannot resolve a
+# work tree. In a linked worktree whose git context resolves to a git dir rather
+# than a work tree, show-toplevel exits 128 ("this operation must be run in a
+# work tree") and this gate would otherwise abort, forcing a --no-verify push.
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 PUSH_REMOTE="${1:-origin}"
 BASE_REMOTE="${PRE_PUSH_BASE_REMOTE:-origin}"
