@@ -15,7 +15,7 @@ import os
 import sys
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 os.environ.setdefault('OPENAI_API_KEY', '***')
 os.environ.setdefault(
@@ -440,21 +440,62 @@ def test_get_memories_other_deny_reason_still_403():
     assert 'key can be valid and correctly scoped' in detail['message']
 
 
-def test_search_memories_vector_missing_rollout_state_has_actionable_contract():
-    """Vector search uses the same account-readiness error after a valid key grant."""
+def test_search_memories_vector_missing_rollout_state_falls_back_to_legacy():
+    """A legacy-cohort account (no rollout doc) vector-searches legacy, not 403 (#10203).
+
+    The listing endpoint already recovers this case (#9892/#10094) and MCP does too
+    (#10095); vector search used to fail closed with 403 for the same accounts, so they
+    could list memories but not vector-search them. It now serves the legacy `memories`
+    collection, preserving vector-relevance order.
+    """
     client = _build()
 
     developer_module.search_memory_default_developer_memories_vector = MagicMock(
-        return_value=type(
-            'DeniedVectorMemoryResult',
-            (),
-            {
-                'read_decision': developer_module.MemoryReadDecision.DENY_MEMORY,
-                'memories': [],
-                'fallback_reason': 'missing_rollout_state',
-                'should_use_legacy_fallback': False,
-            },
-        )()
+        return_value=_denied_memory_result('missing_rollout_state')
+    )
+
+    # search_memories_by_vector ranks a, then b; hydration returns them in the opposite
+    # order — the response must follow the vector rank, not the hydration order.
+    with patch.object(
+        developer_module, 'search_memories_by_vector', return_value=['legacy-a', 'legacy-b']
+    ), patch.object(
+        developer_module.memories_db,
+        'get_memories_by_ids',
+        return_value=[
+            {'id': 'legacy-b', 'content': 'second', 'category': _VALID_CATEGORY},
+            {'id': 'legacy-a', 'content': 'first', 'category': _VALID_CATEGORY},
+        ],
+    ):
+        resp = client.get('/v1/dev/user/memories/vector/search', params={'query': 'memory'})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert [item['id'] for item in body['items']] == ['legacy-a', 'legacy-b']
+    assert body['returned_count'] == 2
+    assert body['items'][0]['relevance_score'] is None
+
+
+def test_search_memories_vector_use_legacy_safe_falls_back_to_legacy():
+    """The explicit USE_LEGACY_SAFE decision serves legacy too (was 403 before #10203)."""
+    client = _build()  # default vector mock resolves to USE_LEGACY_SAFE
+
+    with patch.object(developer_module, 'search_memories_by_vector', return_value=['m1']), patch.object(
+        developer_module.memories_db,
+        'get_memories_by_ids',
+        return_value=[{'id': 'm1', 'content': 'hi', 'category': _VALID_CATEGORY}],
+    ):
+        resp = client.get('/v1/dev/user/memories/vector/search', params={'query': 'memory'})
+
+    assert resp.status_code == 200
+    assert resp.json()['items'][0]['id'] == 'm1'
+
+
+def test_search_memories_vector_other_deny_reason_still_403():
+    """Deny reasons other than missing_rollout_state keep the vector fail-closed contract."""
+    client = _build()
+
+    developer_module.search_memory_default_developer_memories_vector = MagicMock(
+        return_value=_denied_memory_result('missing_developer_default_memory_grant')
     )
 
     resp = client.get('/v1/dev/user/memories/vector/search', params={'query': 'memory'})
@@ -462,8 +503,7 @@ def test_search_memories_vector_missing_rollout_state_has_actionable_contract():
     assert resp.status_code == 403
     detail = resp.json()['detail']
     assert detail['code'] == 'developer_memory_access_not_ready'
-    assert detail['reason'] == 'missing_rollout_state'
-    assert 'key can be valid and correctly scoped' in detail['message']
+    assert detail['reason'] == 'missing_developer_default_memory_grant'
 
 
 # =============================================================================
