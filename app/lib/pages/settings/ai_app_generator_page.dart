@@ -95,7 +95,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                           color: const Color(0xFF1C1C1E),
                           borderRadius: BorderRadius.circular(18),
                         ),
-                        child: Center(child: FaIcon(FontAwesomeIcons.xmark, color: Colors.white, size: 16)),
+                        child: const Center(child: FaIcon(FontAwesomeIcons.xmark, color: Colors.white, size: 16)),
                       ),
                     ),
                   ],
@@ -342,7 +342,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                           ),
                           child: Center(
                             child: isCompleted
-                                ? FaIcon(FontAwesomeIcons.check, color: Colors.white, size: 12)
+                                ? const FaIcon(FontAwesomeIcons.check, color: Colors.white, size: 12)
                                 : isActive
                                     ? const SizedBox(
                                         width: 14,
@@ -615,7 +615,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                           color: const Color(0xFF6366F1),
                           borderRadius: BorderRadius.circular(22),
                         ),
-                        child: Center(child: FaIcon(FontAwesomeIcons.arrowUp, color: Colors.white, size: 18)),
+                        child: const Center(child: FaIcon(FontAwesomeIcons.arrowUp, color: Colors.white, size: 18)),
                       ),
                     ),
             ],
@@ -645,7 +645,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                         color: const Color(0xFF1C1C1E),
                         borderRadius: BorderRadius.circular(18),
                       ),
-                      child: Center(child: FaIcon(FontAwesomeIcons.arrowLeft, color: Colors.white, size: 16)),
+                      child: const Center(child: FaIcon(FontAwesomeIcons.arrowLeft, color: Colors.white, size: 16)),
                     ),
                   ),
                   const Spacer(),
@@ -673,7 +673,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                         color: const Color(0xFF1C1C1E),
                         borderRadius: BorderRadius.circular(18),
                       ),
-                      child: Center(child: FaIcon(FontAwesomeIcons.xmark, color: Colors.white, size: 16)),
+                      child: const Center(child: FaIcon(FontAwesomeIcons.xmark, color: Colors.white, size: 16)),
                     ),
                   ),
                 ],
@@ -737,7 +737,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                             : null,
                       ),
                       child: provider.generatedIconBytes == null
-                          ? Center(child: FaIcon(FontAwesomeIcons.cube, color: Colors.grey, size: 32))
+                          ? const Center(child: FaIcon(FontAwesomeIcons.cube, color: Colors.grey, size: 32))
                           : null,
                     ),
                     Positioned(
@@ -758,7 +758,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                               ),
                             ],
                           ),
-                          child: FaIcon(FontAwesomeIcons.arrowsRotate, color: Colors.white, size: 14),
+                          child: const FaIcon(FontAwesomeIcons.arrowsRotate, color: Colors.white, size: 14),
                         ),
                       ),
                     ),
@@ -832,7 +832,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  FaIcon(FontAwesomeIcons.dollarSign, color: Color(0xFF22C55E), size: 12),
+                                  const FaIcon(FontAwesomeIcons.dollarSign, color: Color(0xFF22C55E), size: 12),
                                   Text(
                                     '\$${provider.price.toStringAsFixed(0)} / Month',
                                     style: const TextStyle(
@@ -1088,7 +1088,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
               : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    FaIcon(FontAwesomeIcons.circleCheck, color: Colors.white, size: 18),
+                    const FaIcon(FontAwesomeIcons.circleCheck, color: Colors.white, size: 18),
                     const SizedBox(width: 10),
                     Text(
                       context.l10n.createApp,

@@ -16,6 +16,7 @@ from utils.qualified_beta_promotion import (
     REPOSITORY,
     GitHubQualifiedBetaReader,
     QualifiedBetaAdmissionError,
+    _asset_url,
     _current_time,
     _timestamp,
     build_qualified_beta_manifest,
@@ -102,6 +103,109 @@ class FakeQualifiedBetaReader:
         return self.downloaded[url]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("github_status", "expected"),
+    (("ahead", True), ("identical", True), ("behind", False), ("diverged", False)),
+)
+async def test_github_merged_source_uses_head_relative_to_base_direction(monkeypatch, github_status, expected):
+    reader = GitHubQualifiedBetaReader()
+
+    async def fake_api(path):
+        assert path == f"compare/{SHA}...main"
+        return {"status": github_status}
+
+    monkeypatch.setattr(reader, "_api", fake_api)
+    assert await reader.is_merged_source(SHA) is expected
+
+
+@pytest.mark.parametrize(
+    "tag_path",
+    (TAG, TAG.replace("+", "%2B")),
+)
+def test_asset_url_accepts_only_literal_or_github_canonical_plus_encoding(tag_path):
+    url = f"https://github.com/{REPOSITORY}/releases/download/{tag_path}/Omi.zip"
+    assert _asset_url({"browser_download_url": url}, TAG, "Omi.zip") == url
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
+        f"https://github.com/{REPOSITORY}/releases/download/{TAG.replace('+', '%2b')}/Omi.zip",
+        f"https://github.com/attacker/omi/releases/download/{TAG}/Omi.zip",
+        f"https://github.com/{REPOSITORY}/releases/download/{TAG}/other.zip",
+    ),
+)
+def test_asset_url_rejects_noncanonical_or_wrong_identity(url):
+    with pytest.raises(QualifiedBetaAdmissionError, match="asset identity"):
+        _asset_url({"browser_download_url": url}, TAG, "Omi.zip")
+
+
+class FakeHTTPResponse:
+    def __init__(self, status_code, *, headers=None, content=b""):
+        self.status_code = status_code
+        self.headers = headers or {}
+        self.content = content
+
+
+class FakeHTTPClient:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    async def get(self, url, **kwargs):
+        self.calls.append((url, kwargs))
+        return self.responses.pop(0)
+
+
+@pytest.mark.asyncio
+async def test_github_asset_download_follows_one_exact_asset_host_redirect_without_auth(monkeypatch):
+    redirect = "https://release-assets.githubusercontent.com/github-production-release-asset/123/file?sig=abc"
+    client = FakeHTTPClient(
+        [FakeHTTPResponse(302, headers={"location": redirect}), FakeHTTPResponse(200, content=b"artifact")]
+    )
+    monkeypatch.setattr("utils.qualified_beta_promotion.get_web_fetch_client", lambda: client)
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+
+    reader = GitHubQualifiedBetaReader()
+    assert await reader.download("https://github.com/BasedHardware/omi/releases/download/tag/Omi.zip") == b"artifact"
+    assert client.calls[0][1]["headers"]["Authorization"] == "Bearer test-token"
+    assert client.calls[1] == (redirect, {})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "redirect",
+    (
+        "http://release-assets.githubusercontent.com/file",
+        "https://attacker.example/file",
+        "https://user@release-assets.githubusercontent.com/file",
+        "https://release-assets.githubusercontent.com:444/file",
+    ),
+)
+async def test_github_asset_download_rejects_untrusted_redirects(monkeypatch, redirect):
+    client = FakeHTTPClient([FakeHTTPResponse(302, headers={"location": redirect})])
+    monkeypatch.setattr("utils.qualified_beta_promotion.get_web_fetch_client", lambda: client)
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+
+    with pytest.raises(QualifiedBetaAdmissionError, match="asset is unavailable"):
+        await GitHubQualifiedBetaReader().download("https://github.com/BasedHardware/omi/releases/download/tag/Omi.zip")
+    assert len(client.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_github_asset_download_rejects_a_second_redirect(monkeypatch):
+    redirect = "https://release-assets.githubusercontent.com/file"
+    client = FakeHTTPClient(
+        [FakeHTTPResponse(302, headers={"location": redirect}), FakeHTTPResponse(302, headers={"location": redirect})]
+    )
+    monkeypatch.setattr("utils.qualified_beta_promotion.get_web_fetch_client", lambda: client)
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+
+    with pytest.raises(QualifiedBetaAdmissionError, match="asset is unavailable"):
+        await GitHubQualifiedBetaReader().download("https://github.com/BasedHardware/omi/releases/download/tag/Omi.zip")
+
+
 def _digest(value):
     return "sha256:" + hashlib.sha256(value).hexdigest()
 
@@ -150,6 +254,65 @@ def _candidate():
         "updated_at": "2026-07-21T12:01:00Z",
     }
     return release, evidence_bytes, run
+
+
+def _candidate_with_beta():
+    """A candidate that also ships the sanctioned INV-BETA-1 Omi Beta assets."""
+    release, _evidence_bytes, run = _candidate()
+    beta_zip_url = f"https://github.com/BasedHardware/omi/releases/download/{TAG}/Omi.Beta.zip"
+    beta_dmg_url = f"https://github.com/BasedHardware/omi/releases/download/{TAG}/omi-beta.dmg"
+    evidence_name = f"qualification-evidence-{TAG}.json"
+    evidence = {
+        "schema_version": 1,
+        "release_id": TAG,
+        "source_sha": SHA,
+        "qualification_run_id": 123,
+        "source_qualification": {"passed": True, "tier": "T2", "subject": "source-built named-bundle"},
+        "signed_artifact_verification": {"passed": True, "subject": "exact signed ZIP/DMG bytes"},
+        "artifacts": {
+            "Omi.zip": {
+                "url": release["assets"][0]["browser_download_url"],
+                "sha256": hashlib.sha256(b"zip bytes").hexdigest(),
+                "signature": "sparkle",
+            },
+            "omi.dmg": {
+                "url": release["assets"][1]["browser_download_url"],
+                "sha256": hashlib.sha256(b"dmg bytes").hexdigest(),
+            },
+            "Omi.Beta.zip": {
+                "url": beta_zip_url,
+                "sha256": hashlib.sha256(b"beta zip bytes").hexdigest(),
+                "signature": "beta-sparkle",
+            },
+            "omi-beta.dmg": {"url": beta_dmg_url, "sha256": hashlib.sha256(b"beta dmg bytes").hexdigest()},
+        },
+    }
+    evidence_bytes = json.dumps(evidence).encode()
+    # rebuild release body + assets with the beta pair and the refreshed evidence
+    release["body"] = (
+        "<!-- KEY_VALUE_START\nedSignature: sparkle\nbetaEdSignature: beta-sparkle\n"
+        "changelog: Qualified candidate\nKEY_VALUE_END -->"
+    )
+    release["assets"] = [
+        {
+            "name": "Omi.zip",
+            "browser_download_url": release["assets"][0]["browser_download_url"],
+            "digest": _digest(b"zip bytes"),
+        },
+        {
+            "name": "omi.dmg",
+            "browser_download_url": release["assets"][1]["browser_download_url"],
+            "digest": _digest(b"dmg bytes"),
+        },
+        {
+            "name": evidence_name,
+            "browser_download_url": release["assets"][2]["browser_download_url"],
+            "digest": _digest(evidence_bytes),
+        },
+        {"name": "Omi.Beta.zip", "browser_download_url": beta_zip_url, "digest": _digest(b"beta zip bytes")},
+        {"name": "omi-beta.dmg", "browser_download_url": beta_dmg_url, "digest": _digest(b"beta dmg bytes")},
+    ]
+    return release, evidence_bytes, run, {beta_zip_url: b"beta zip bytes", beta_dmg_url: b"beta dmg bytes"}
 
 
 def _artifact_archive(evidence):
@@ -486,6 +649,42 @@ async def test_server_builds_the_canonical_manifest_from_qualified_immutable_ass
     assert manifest["zip_url"].endswith("/Omi.zip")
     assert manifest["dmg_url"].endswith("/omi.dmg")
     assert manifest["qualification_evidence_sha256"] == _digest(evidence)
+
+
+@pytest.mark.asyncio
+async def test_server_admits_a_candidate_that_ships_the_side_by_side_beta_assets():
+    # INV-BETA-1: Omi.Beta.zip/omi-beta.dmg are sanctioned, not retired; the
+    # manifest builds and the beta digests are verified against the evidence.
+    release, evidence, run, beta_downloads = _candidate_with_beta()
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+    reader.downloaded.update(beta_downloads)
+
+    manifest = await build_qualified_beta_manifest(
+        TAG,
+        reader=reader,
+        now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+    )
+
+    assert manifest["release_id"] == TAG
+    assert manifest["zip_url"].endswith("/Omi.zip")
+
+
+@pytest.mark.asyncio
+async def test_server_rejects_a_non_sanctioned_beta_like_identity():
+    release, evidence, run = _candidate()
+    release["assets"].append(
+        {
+            "name": "Omi Beta.zip",
+            "browser_download_url": f"https://github.com/BasedHardware/omi/releases/download/{TAG}/Omi%20Beta.zip",
+            "digest": _digest(b"rogue"),
+        }
+    )
+    with pytest.raises(QualifiedBetaAdmissionError, match="retired desktop identity"):
+        await build_qualified_beta_manifest(
+            TAG,
+            reader=FakeQualifiedBetaReader(release, evidence, run),
+            now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+        )
 
 
 @pytest.mark.asyncio

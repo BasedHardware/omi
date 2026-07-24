@@ -11,11 +11,13 @@ covers:
   - desktop/macos/Desktop/Sources/BundleEnvironment.swift
   - desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift
   - desktop/macos/Desktop/Sources/AuthService.swift
+  - desktop/macos/Desktop/Sources/Auth/OAuthLoopbackCallbackServer.swift
   - desktop/macos/Desktop/Sources/AuthSessionCoordinator.swift
   - desktop/macos/Desktop/Sources/Auth/SessionRecoveryView.swift
   - desktop/macos/Desktop/Sources/Auth/AuthStorageCanary.swift
   - desktop/macos/Desktop/Sources/DesktopKeychainStore.swift
   - desktop/macos/Desktop/Sources/Logger.swift
+  - desktop/macos/Desktop/Sources/Observability/SentryBeforeSendPolicy.swift
   - desktop/macos/Desktop/Sources/ClientDeviceService.swift
   - desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift
   - desktop/macos/Desktop/Sources/AgentSyncService.swift
@@ -34,6 +36,7 @@ covers:
   - desktop/macos/Desktop/Sources/Telemetry/SentryHeartbeatTelemetry.swift
   - desktop/macos/Desktop/Sources/ViewExporter.swift
   - desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift
+  - desktop/macos/Desktop/Sources/Startup/OmiFontRegistration.swift
 preconditions:
   - automation_bridge_ready
 

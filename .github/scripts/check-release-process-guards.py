@@ -411,8 +411,10 @@ def check_codemagic_release_publishers() -> list[str]:
         return [*errors, "canonical and preview workflows must both have scripts"]
     if canonical_scripts is not preview_scripts:
         errors.append("preview scripts must be the exact YAML alias node used by the canonical workflow")
-    if len(canonical_scripts) != 21:
-        errors.append("canonical workflow must retain exactly 21 approved script steps")
+    # 22 = 21 hardening-approved steps + the INV-BETA-1 "Create Omi Beta variant"
+    # step (founder-reviewed re-land, PR #10317).
+    if len(canonical_scripts) != 22:
+        errors.append("canonical workflow must retain exactly 22 approved script steps")
 
     for scalar in _iter_semantic_strings(canonical):
         for forbidden_authority in _FORBIDDEN_NORMAL_RELEASE_GCP_AUTHORITIES:
@@ -533,8 +535,8 @@ def check_desktop_codemagic_release() -> list[str]:
 
     planner = ROOT / ".github/scripts/plan-desktop-release.py"
     planner_text = planner.read_text(encoding="utf-8")
-    if "AUTO_RELEASE_QUIET_SECONDS = 10 * 60" not in planner_text:
-        errors.append("desktop auto-release planner must keep a 10 minute quiet window before auto-tagging")
+    if "AUTO_RELEASE_QUIET_SECONDS = 60" not in planner_text:
+        errors.append("desktop auto-release planner must keep a short (60s) quiet window before auto-tagging")
     if "latest_change_age is None" not in planner_text:
         errors.append("desktop auto-release planner must fail closed when latest change age cannot be determined")
     if "RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60" not in planner_text:
@@ -555,6 +557,7 @@ def check_desktop_codemagic_release() -> list[str]:
     required_files = [
         "desktop/macos/scripts/prepare-agent-runtime.sh",
         "desktop/macos/scripts/prepare-desktop-bundle-native-deps.sh",
+        "desktop/macos/scripts/publish-desktop-debug-symbols.sh",
         "desktop/macos/scripts/audit-desktop-bundle-deps.sh",
         "desktop/macos/scripts/smoke-signed-desktop-artifact.sh",
         "desktop/macos/scripts/test-tool-surfaces.sh",
@@ -578,6 +581,15 @@ def check_desktop_codemagic_release() -> list[str]:
         desktop_workflow_body = ""
     else:
         desktop_workflow_body = desktop_workflow_match.group("body")
+
+    for required_fragment in (
+        "publish-desktop-debug-symbols.sh generate",
+        "publish-desktop-debug-symbols.sh upload",
+        '"$DSYM_ARCHIVE"',
+        "- build/*.dSYM",
+    ):
+        if required_fragment not in desktop_workflow_body:
+            errors.append(f"desktop release is missing fail-closed debug-symbol publication: {required_fragment}")
 
     smoke_index = desktop_workflow_body.find("Smoke signed desktop artifact")
     release_index = desktop_workflow_body.find("Create GitHub release")
@@ -624,6 +636,8 @@ def check_desktop_codemagic_release() -> list[str]:
         errors.append("Codemagic must not write release-body dispatch state outside the trusted workflow serialiser")
     if "candidate remains non-live" not in desktop_workflow_body:
         errors.append("desktop qualification handoff must state that a failed dispatch cannot publish beta")
+    if "ERROR: qualification dispatch was not confirmed after bounded retry" not in dispatch_body or "exit 1" not in dispatch_body:
+        errors.append("desktop qualification handoff must fail closed after bounded dispatch retries")
     if "gh release delete \"$CM_TAG\"" in desktop_workflow_body:
         errors.append("desktop candidate retries must not delete immutable qualification evidence")
     if "docker info" in desktop_workflow_body:
@@ -805,8 +819,6 @@ def check_desktop_qualification_runner() -> list[str]:
         "docker info",
         "check-desktop-auto-beta-candidate.py",
         "--automatic",
-        "--no-promote",
-        "desktop_promote_beta.yml",
         "actions/create-github-app-token@v3",
         "desktop-beta-qualification-${{ inputs.release_tag }}",
         "cancel-in-progress: false",
@@ -814,6 +826,23 @@ def check_desktop_qualification_runner() -> list[str]:
     ):
         if required_fragment not in text:
             errors.append(f"desktop qualification runner is missing required guard fragment: {required_fragment}")
+    if "desktop_promote_beta.yml" in text:
+        errors.append("desktop qualification runner must not promote beta inside its own run")
+
+    promotion = ROOT / ".github/workflows/desktop_promote_beta.yml"
+    promotion_text = promotion.read_text(encoding="utf-8") if promotion.exists() else ""
+    for required_fragment in (
+        'workflows: ["Qualify Desktop Beta Candidate"]',
+        "types: [completed]",
+        "github.event.workflow_run.conclusion == 'success'",
+        "github.event.workflow_run.event == 'workflow_dispatch'",
+        "github.event.workflow_run.head_branch",
+        "github.event.workflow_run.head_sha",
+        "/v2/desktop/beta/promote-qualified",
+        "environment: beta",
+    ):
+        if required_fragment not in promotion_text:
+            errors.append(f"desktop beta promotion workflow is missing post-qualification guard: {required_fragment}")
 
     candidate_gate = ROOT / ".github/scripts/check-desktop-auto-beta-candidate.py"
     candidate_gate_text = candidate_gate.read_text(encoding="utf-8") if candidate_gate.exists() else ""

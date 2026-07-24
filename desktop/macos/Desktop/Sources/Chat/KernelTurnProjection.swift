@@ -193,7 +193,8 @@ final class KernelTurnProjection {
     _ client: AgentClient.Session,
     _ surface: AgentSurfaceReference,
     _ ownerID: String,
-    _ expectedGeneration: Int
+    _ expectedGeneration: Int,
+    _ deleteBackend: Bool
   ) async throws -> Int
 
   typealias KernelReadyOperation = () async -> Bool
@@ -241,9 +242,9 @@ final class KernelTurnProjection {
         await self.refresh(surface: surface)
       }
     }
-    if let surface = host?.mainChatSurfaceReference() {
-      await refresh(surface: surface, lease: lease)
-    }
+    // The visible-chat loader owns the first replay so it can keep the
+    // transcript in its loading state until the complete snapshot is ready.
+    // Event notifications above still refresh an already-mounted surface.
   }
 
   /// Attach the owner-bound client for a non-production journal control action
@@ -288,6 +289,14 @@ final class KernelTurnProjection {
       }
     }
 
+    // A restored conversation is not live streaming. Collect all contiguous
+    // turns fetched by this refresh, then publish one coherent transcript
+    // snapshot after the journal range is settled. Publishing each durable row
+    // independently makes first launch look like the user is watching old
+    // history arrive in real time, and causes the chat viewport to chase it.
+    var pendingProjectionTurns: [KernelJournalTurn] = []
+    var shouldResetProjection = false
+
     repeat {
       guard isCurrent(lease) else { return }
       if refreshRequestedSurfaceEpochs[surfaceKey] == lease.epoch {
@@ -322,7 +331,10 @@ final class KernelTurnProjection {
             highWaterByConversation[checkpointKey] = page.generationBaseTurnSeq
             generationByConversation[checkpointKey] = page.conversationGeneration
             guard isCurrent(lease) else { return }
-            host?.resetJournalProjection(surface: surface)
+            // A newer generation invalidates every accumulated row from the
+            // prior one. Keep the reset and its replacement snapshot atomic.
+            pendingProjectionTurns.removeAll()
+            shouldResetProjection = true
           }
           generationByConversation[checkpointKey] = page.conversationGeneration
           var contiguous = highWaterByConversation[checkpointKey] ?? 0
@@ -332,7 +344,7 @@ final class KernelTurnProjection {
           )
           for turn in contiguousPage {
             guard isCurrent(lease) else { return }
-            host?.projectJournalTurn(turn)
+            pendingProjectionTurns.append(turn)
             contiguous = turn.turnSeq
             highWaterByConversation[checkpointKey] = contiguous
           }
@@ -360,6 +372,12 @@ final class KernelTurnProjection {
         }
       }
     } while isCurrent(lease) && refreshRequestedSurfaceEpochs[surfaceKey] == lease.epoch
+
+    guard isCurrent(lease) else { return }
+    if shouldResetProjection {
+      host?.resetJournalProjection(surface: surface)
+    }
+    host?.projectJournalTurns(pendingProjectionTurns)
   }
 
   func reload(surface: AgentSurfaceReference) async {
@@ -727,7 +745,8 @@ final class KernelTurnProjection {
   func clear(
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
-    requiresModelReadiness: Bool = true
+    requiresModelReadiness: Bool = true,
+    deleteBackend: Bool = true
   ) async -> Bool {
     guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return false }
     let kernelReady =
@@ -782,19 +801,22 @@ final class KernelTurnProjection {
           client,
           surface,
           lease.ownerID,
-          expectedGeneration
+          expectedGeneration,
+          deleteBackend
         )
       } else if requiresModelReadiness {
         _ = try await client.clearJournalTurns(
           surface: surface,
           ownerID: lease.ownerID,
-          expectedGeneration: expectedGeneration
+          expectedGeneration: expectedGeneration,
+          deleteBackend: deleteBackend
         )
       } else {
         _ = try await client.clearJournalTurnsForControl(
           surface: surface,
           ownerID: lease.ownerID,
-          expectedGeneration: expectedGeneration
+          expectedGeneration: expectedGeneration,
+          deleteBackend: deleteBackend
         )
       }
       guard isCurrent(lease) else { return false }

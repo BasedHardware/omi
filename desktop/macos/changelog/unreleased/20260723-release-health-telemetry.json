@@ -1,0 +1,3 @@
+{
+  "change": "Release-health diagnostics are now attributed to the exact app version/build and distinguish normal lifecycle (short taps, quiet discards, expected session rotation) from real issues, so a stability signal reflects an actual regression rather than healthy behavior"
+}

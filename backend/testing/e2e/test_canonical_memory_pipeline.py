@@ -414,7 +414,7 @@ def _invoke_surface_reader(surface_name, *, uid, db, rollout, policy, now):
             now=now,
         ).memories
     if surface_name == "agent_tools":
-        return tool_memories_service.get_memories_text(uid=uid, limit=50)
+        return tool_memories_service.get_memories_text(uid=uid, limit=50, now=now)
     if surface_name == "mcp":
         return MemoryService(db_client=db).search_mcp(uid, "coffee", limit=10)
     if surface_name == "product_search":

@@ -96,11 +96,12 @@ runs:
         SECRET_OVERLAY: ${{ inputs.backfill_secrets }}
         REMOVE_ENV_VARS: HOSTED_PUSHER_API_URL
       run: |
+        DEPLOY_CONTROL_SCRIPT_DIR="${DEPLOY_CONTROL_SCRIPTS:-backend/scripts}"
         gcloud run services describe backend-sync \
           --region=${{ inputs.region }} \
           --project=${{ inputs.project_id }} \
           --format=json > /tmp/backend-sync-live.json
-        python3 backend/scripts/render_cloud_run_clone_env.py \
+        python3 "$DEPLOY_CONTROL_SCRIPT_DIR/render_cloud_run_clone_env.py" \
           --source-json /tmp/backend-sync-live.json >> "$GITHUB_OUTPUT"
 
     - name: Render optional candidate tag
@@ -125,8 +126,8 @@ runs:
         flags: >-
           --revision-suffix=${{ inputs.revision_suffix }}
           ${{ steps.candidate-tag.outputs.flag }}
-          --min-instances=0
-          --max-instances=4
+          --min-instances=1
+          --max-instances=30
           --concurrency=1
           --remove-env-vars=HOSTED_PUSHER_API_URL
           ${{ inputs.cloud_run_flags }}
@@ -158,16 +159,27 @@ runs:
           --member="serviceAccount:${INVOKER_SA}" \
           --role=roles/run.invoker \
           --quiet
+        # Dispatch concurrency must match the worker's --max-instances above.
+        # Offering more than the worker can admit makes Cloud Run reject the
+        # surplus with "no available instance", and Cloud Tasks then retries
+        # each rejection with exponential backoff. At the previous four-worker
+        # sizing that compounded until queued recordings were scheduled almost
+        # a day out. The bounded backoff keeps a transient rejection from
+        # stranding a recording for hours.
         if gcloud tasks queues describe sync-backfill --location=${{ inputs.region }} --project=${{ inputs.project_id }} >/dev/null 2>&1; then
           gcloud tasks queues update sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=4
+            --max-concurrent-dispatches=30 \
+            --min-backoff=5s \
+            --max-backoff=60s
         else
           gcloud tasks queues create sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=4
+            --max-concurrent-dispatches=30 \
+            --min-backoff=5s \
+            --max-backoff=60s
         fi
 
     - name: Provision and verify sync ledger TTL

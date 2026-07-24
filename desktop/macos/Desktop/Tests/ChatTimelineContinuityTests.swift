@@ -39,41 +39,91 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(messages[3].contentBlocks.spawnedAgentIDs, [subagentID])
   }
 
-  func testMainChatKeepsCompletedNonAgentToolLogsAndAgentLinks() {
+  func testCompletedToolLogsAndAgentLinksAreLiveOnlyKeepingAssistantText() {
     let subagentID = UUID()
-    let groups = ContentBlockGroup.visibleChatGroups(
-      [
-        .text(id: "text_1", text: "I started a background agent for that."),
-        .toolCall(
-          id: "tool_1",
-          name: "search_conversations",
-          status: .completed,
-          input: ToolCallInput(summary: "designer", details: "query=designer"),
-          output: "raw search output"
-        ),
-        .toolCall(
-          id: "tool_2",
-          name: "spawn_agent",
-          status: .completed,
-          input: ToolCallInput(summary: "Sleep Agent", details: "sleep five seconds"),
-          output: "Started agent\nID: \(subagentID.uuidString)"
-        ),
-        .thinking(id: "thinking_1", text: "hidden after completion"),
-      ],
-      isStreaming: false
-    )
+    let blocks: [ChatContentBlock] = [
+      .text(id: "text_1", text: "I started a background agent for that."),
+      .toolCall(
+        id: "tool_1",
+        name: "search_conversations",
+        status: .completed,
+        input: ToolCallInput(summary: "designer", details: "query=designer"),
+        output: "raw search output"
+      ),
+      .toolCall(
+        id: "tool_2",
+        name: "spawn_agent",
+        status: .completed,
+        input: ToolCallInput(summary: "Sleep Agent", details: "sleep five seconds"),
+        output: "Started agent\nID: \(subagentID.uuidString)"
+      ),
+      .thinking(id: "thinking_1", text: "hidden after completion"),
+    ]
 
-    XCTAssertEqual(groups.count, 2)
-    guard case .text(_, let text) = groups[0] else {
-      return XCTFail("expected final assistant text to remain visible")
+    // While streaming, the tool logs + spawned-agent link are live progress.
+    let streaming = ContentBlockGroup.visibleChatGroups(blocks, isStreaming: true)
+    guard let toolGroup = streaming.first(where: isToolCalls),
+      case .toolCalls(_, let calls) = toolGroup
+    else {
+      return XCTFail("expected the tool-progress group while streaming")
     }
-    XCTAssertEqual(text, "I started a background agent for that.")
-    guard case .toolCalls(_, let calls) = groups[1] else {
-      return XCTFail("expected a spawned-agent link group")
-    }
-    XCTAssertEqual(calls.count, 2)
     XCTAssertEqual(calls.map(\.id), ["tool_1", "tool_2"])
     XCTAssertEqual(calls.spawnedAgentIDs, [subagentID])
+
+    // Tool chips are live-only: once the reply settles they are dropped and only
+    // the assistant text remains.
+    let settled = ContentBlockGroup.visibleChatGroups(blocks, isStreaming: false)
+    XCTAssertEqual(settled.count, 1)
+    guard case .text(_, let text) = settled[0] else {
+      return XCTFail("expected only the final assistant text to remain")
+    }
+    XCTAssertEqual(text, "I started a background agent for that.")
+    XCTAssertFalse(settled.contains(where: isToolCalls))
+  }
+
+  func testCopyableTextIncludesOnlyFinalAssistantOutput() {
+    let message = ChatMessage(
+      text: "Fallback answer",
+      sender: .ai,
+      contentBlocks: [
+        .thinking(id: "thinking_1", text: "Internal reasoning"),
+        .toolCall(id: "tool_1", name: "search", status: .completed, output: "Raw tool result"),
+        .text(id: "answer_1", text: "Visible final answer"),
+        .agentCompletion(
+          id: "agent_1",
+          pillId: nil,
+          sessionId: nil,
+          runId: nil,
+          title: "Background agent",
+          promptSnippet: "Internal agent prompt",
+          output: "Agent-only result",
+          status: "completed"
+        ),
+      ]
+    )
+
+    XCTAssertEqual(message.copyableText, "Visible final answer")
+  }
+
+  func testFloatingResponseCopiesTheSharedFinalOutputProjection() throws {
+    let root = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    // omi-test-quality: source-inspection -- static contract: floating copy controls use ChatMessage.copyableText.
+    let source = try String(
+      contentsOf: root.appendingPathComponent("Sources/FloatingControlBar/AIResponseView.swift"),
+      encoding: .utf8
+    )
+
+    XCTAssertTrue(source.contains("let finalOutput = message.copyableText"))
+    XCTAssertTrue(source.contains("A: \\(finalOutput)"))
+    XCTAssertTrue(source.contains("Button(action: { [finalOutput] in copyText(finalOutput) })"))
+    XCTAssertFalse(source.contains("setString(message.text, forType: .string)"))
+  }
+
+  private func isToolCalls(_ group: ContentBlockGroup) -> Bool {
+    if case .toolCalls = group { return true }
+    return false
   }
 
   func testLifecycleProjectionHidesDuplicateSpawnProseAndRetainsCanonicalRunIdentity() {
@@ -243,65 +293,68 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertFalse(projected[0].text.localizedCaseInsensitiveContains(lowercasedPillID))
   }
 
-  func testMainChatKeepsCompletedAndInFlightNonAgentToolsAfterAssistantTextSettles() {
-    let groups = ContentBlockGroup.visibleChatGroups(
-      [
-        .toolCall(id: "tool_1", name: "search_conversations", status: .completed, output: "done"),
-        .toolCall(id: "tool_2", name: "execute_sql", status: .running, output: nil),
-      ],
-      // A tool can still be executing after an assistant's explanatory text
-      // has settled. Both chat surfaces must keep the truthful active row.
-      isStreaming: false
-    )
+  func testCompletedAndInFlightToolsAreLiveOnlyAfterAssistantTextSettles() {
+    let blocks: [ChatContentBlock] = [
+      .toolCall(id: "tool_1", name: "search_conversations", status: .completed, output: "done"),
+      .toolCall(id: "tool_2", name: "execute_sql", status: .running, output: nil),
+    ]
 
-    XCTAssertEqual(groups.count, 1)
-    guard case .toolCalls(_, let calls) = groups[0],
+    // While streaming, the full tool-progress trace (completed + in-flight) shows.
+    let streaming = ContentBlockGroup.visibleChatGroups(blocks, isStreaming: true)
+    XCTAssertEqual(streaming.count, 1)
+    guard case .toolCalls(_, let calls) = streaming[0],
       case .toolCall(_, let name, let status, _, _, _) = calls[0]
     else {
-      return XCTFail("expected the complete tool-progress trace")
+      return XCTFail("expected the complete tool-progress trace while streaming")
     }
-    XCTAssertEqual(calls.count, 2)
     XCTAssertEqual(calls.map(\.id), ["tool_1", "tool_2"])
     XCTAssertEqual(name, "search_conversations")
     XCTAssertEqual(status, .completed)
+
+    // Tool chips are live-only: they are dropped once the reply settles.
+    XCTAssertTrue(ContentBlockGroup.visibleChatGroups(blocks, isStreaming: false).isEmpty)
   }
 
-  func testMainChatKeepsActiveToolProgressAlongsideUnmaterializedSpawnLink() {
+  func testActiveToolProgressAndUnmaterializedSpawnAreLiveOnly() {
     let subagentID = UUID()
-    let groups = ContentBlockGroup.visibleChatGroups(
-      [
-        .toolCall(
-          id: "spawn_1",
-          name: "spawn_agent",
-          status: .completed,
-          output: "Started agent\nID: \(subagentID.uuidString)"
-        ),
-        .toolCall(id: "web_1", name: "WebSearch", status: .running, output: nil),
-      ],
-      isStreaming: false
-    )
+    let blocks: [ChatContentBlock] = [
+      .toolCall(
+        id: "spawn_1",
+        name: "spawn_agent",
+        status: .completed,
+        output: "Started agent\nID: \(subagentID.uuidString)"
+      ),
+      .toolCall(id: "web_1", name: "WebSearch", status: .running, output: nil),
+    ]
 
-    XCTAssertEqual(groups.count, 1)
-    guard case .toolCalls(_, let calls) = groups[0] else {
-      return XCTFail("expected one mixed lifecycle tool group")
+    // While streaming, the mixed lifecycle tool group shows both rows.
+    let streaming = ContentBlockGroup.visibleChatGroups(blocks, isStreaming: true)
+    XCTAssertEqual(streaming.count, 1)
+    guard case .toolCalls(_, let calls) = streaming[0] else {
+      return XCTFail("expected one mixed lifecycle tool group while streaming")
     }
     XCTAssertEqual(calls.map(\.id), ["spawn_1", "web_1"])
+
+    // Tool chips are live-only: dropped once the reply settles.
+    XCTAssertTrue(ContentBlockGroup.visibleChatGroups(blocks, isStreaming: false).isEmpty)
   }
 
-  func testMainChatKeepsToolProgressWhenItsLifecycleBecomesTerminal() {
-    let groups = ContentBlockGroup.visibleChatGroups(
-      [
-        .toolCall(id: "tool_1", name: "WebSearch", status: .completed, output: "done"),
-        .toolCall(id: "tool_2", name: "WebFetch", status: .failed, output: nil),
-      ],
-      isStreaming: false
-    )
+  func testTerminalToolProgressIsLiveOnly() {
+    let blocks: [ChatContentBlock] = [
+      .toolCall(id: "tool_1", name: "WebSearch", status: .completed, output: "done"),
+      .toolCall(id: "tool_2", name: "WebFetch", status: .failed, output: nil),
+    ]
 
-    XCTAssertEqual(groups.count, 1)
-    guard case .toolCalls(_, let calls) = groups[0] else {
-      return XCTFail("expected terminal tool progress to remain visible")
+    // Terminal (completed + failed) tool progress shows while streaming…
+    let streaming = ContentBlockGroup.visibleChatGroups(blocks, isStreaming: true)
+    XCTAssertEqual(streaming.count, 1)
+    guard case .toolCalls(_, let calls) = streaming[0] else {
+      return XCTFail("expected terminal tool progress while streaming")
     }
     XCTAssertEqual(calls.map(\.id), ["tool_1", "tool_2"])
+
+    // …and is dropped once the reply settles (live-only).
+    XCTAssertTrue(ContentBlockGroup.visibleChatGroups(blocks, isStreaming: false).isEmpty)
   }
 
   func testBackgroundAgentSummaryParsesLinkedAndLegacyCompletionText() {

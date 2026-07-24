@@ -1,0 +1,3 @@
+{
+  "change": "Second Brain: the top bar's new-item counter now has data on home (memories and tasks are warmed at startup and counted from their stores), and the Brain Map tab drops its leftover close (X) button"
+}

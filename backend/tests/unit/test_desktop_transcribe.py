@@ -9,6 +9,7 @@ import importlib.util
 import os
 import shutil as _shutil
 import sys
+import threading
 import time
 from pathlib import Path
 from types import ModuleType
@@ -1245,8 +1246,18 @@ class TestTranscribeStreamWebSocket:
         try:
             fallback_socket = MagicMock()
             fallback_socket.is_connection_dead = False
-            fallback_socket.send.return_value = True
-            fallback_socket.drain_and_close = AsyncMock()
+            audio_accepted = threading.Event()
+            provider_drained = threading.Event()
+
+            def accept_audio(_audio):
+                audio_accepted.set()
+                return True
+
+            async def drain_provider():
+                provider_drained.set()
+
+            fallback_socket.send.side_effect = accept_audio
+            fallback_socket.drain_and_close = AsyncMock(side_effect=drain_provider)
 
             async def mock_process_audio_parakeet_fail(stream_transcript, **kwargs):
                 return None
@@ -1264,7 +1275,9 @@ class TestTranscribeStreamWebSocket:
                         with patch.object(module, 'process_audio_modulate', side_effect=mock_process_audio_modulate):
                             with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
                                 ws.send_bytes(b'\x00' * 960)
+                                assert audio_accepted.wait(timeout=1), 'fallback provider did not accept audio'
                                 ws.send_text('finalize')
+                                assert provider_drained.wait(timeout=1), 'fallback provider did not drain'
 
             fallback_socket.send.assert_called_once_with(b'\x00' * 960)
             fallback_socket.drain_and_close.assert_awaited_once_with()

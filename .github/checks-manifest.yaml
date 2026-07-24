@@ -4,11 +4,26 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: desktop-codemagic-qualification-lane-tests
+    command: ["python3", ".github/scripts/test_desktop_codemagic_qualification.py"]
+    triggers: [".github/scripts/desktop_codemagic_qualification.py", ".github/scripts/test_desktop_codemagic_qualification.py", ".github/workflows/desktop_qualify_beta.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the Codemagic qualification lane must only qualify a candidate whose result artifact binds to the exact requested tag and SHA (Jul 22 2026 single-runner qualification outage)"
+  - id: dev-harness-unit-tests
+    command: ["bash", "scripts/dev-harness/run-tests.sh"]
+    triggers: ["scripts/dev-harness/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the hermetic dev-harness stack backs release qualification; the Jul 22 2026 beta qualification outage added a docker/native typesense runtime that must stay behaviorally covered"
   - id: pre-push-final-pr-diff
     command: ["bash", "scripts/test-pre-push-diff-base.sh"]
     triggers: ["scripts/pre-push", "scripts/pre-push-diff-base", "scripts/test-pre-push-diff-base.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "pre-push check selection must use the final PR diff rather than a stale remote feature tip"
+  - id: setup-pre-push-prerequisites
+    command: ["bash", "scripts/test-make-setup.sh"]
+    triggers: ["Makefile", "backend/scripts/sync-python-deps.sh", "scripts/pre-push", "scripts/test-make-setup.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "make setup must provision the minimal, rerunnable backend environment required by selected pre-push checks"
   - id: check-manifest-contract
     command: ["python3", ".github/scripts/test_run_checks.py"]
     triggers: ["all"]
@@ -50,6 +65,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "real Firestore transaction serialization must fence stale qualified Beta admissions after reservation, pause, and generation transitions"
+  - id: desktop-beta-admission-supervisor
+    command: ["node", "--test", "backend/testing/desktop_beta_admission/test_supervise.mjs"]
+    triggers: ["backend/testing/desktop_beta_admission/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "SCA-52: the admission emulator must own and drain only its process group, including Firestore JVM grandchildren, on every exit path"
   - id: desktop-changelog-io-tests
     command: ["python3", ".github/scripts/test_desktop_changelog.py"]
     triggers: [".github/scripts/check-desktop-changelog.py", ".github/scripts/desktop-changelog.py", ".github/scripts/test_desktop_changelog.py", ".github/checks-manifest.yaml"]
@@ -57,9 +78,14 @@ checks:
     reason: "#9717: changelog tooling must preserve UTF-8 I/O and exempt only internal desktop release controls"
   - id: agents-md-lean
     command: ["python3", ".github/scripts/check_agents_md_lean.py"]
-    triggers: ["AGENTS.md", ".github/scripts/check_agents_md_lean.py"]
+    triggers: ["AGENTS.md", "**/AGENTS.md", ".github/scripts/check_agents_md_lean.py"]
     lanes: ["local", "ci"]
-    reason: "root AGENTS.md stays a lean index; detail lives in component guides"
+    reason: "every AGENTS.md is loaded into agent context; budgets ratchet down, never up"
+  - id: agent-doc-references
+    command: ["python3", ".github/scripts/check_agent_doc_references.py"]
+    triggers: ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "PRODUCT.md", "docs/agents/**", ".github/scripts/check_agent_doc_references.py"]
+    lanes: ["local", "ci"]
+    reason: "agents cannot tell a stale pointer from a live one; CLAUDE.md and the desktop/app guides had shipped dead paths"
   - id: diff-hygiene
     command: ["python3", ".github/scripts/check_diff_hygiene.py", "--changed-files", "{changed_files}", "--base", "{base}", "--head", "{head}"]
     triggers: ["all"]
@@ -252,7 +278,7 @@ checks:
     command: ["python3", ".github/scripts/test_plan_desktop_release.py"]
     triggers: [".github/scripts/plan-desktop-release.py", ".github/scripts/test_plan_desktop_release.py", ".github/workflows/desktop_auto_release.yml"]
     lanes: ["local", "ci"]
-    reason: "candidate tags require a successful Desktop Swift Build & Tests check for their exact source SHA"
+    reason: "candidate tags require successful Release Eligibility and both Desktop Swift checks for the exact newest queued releasable desktop SHA"
   - id: desktop-manifest-routes
     command: ["python3", ".github/scripts/test_desktop_manifest_routes.py"]
     triggers: [".github/workflows/desktop-swift-ci.yml", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", ".github/scripts/test_desktop_manifest_routes.py"]
@@ -393,9 +419,27 @@ checks:
     reason: "#10163 mutation-sensitive Stable retry and default-channel feed fixtures"
   - id: desktop-release-one-path-contract
     command: ["python3", ".github/scripts/test_desktop_release_flow_contract.py"]
-    triggers: [".github/workflows/desktop_auto_release.yml", ".github/workflows/desktop_qualify_beta.yml", ".github/workflows/desktop_promote_beta.yml", ".github/workflows/desktop_recover_beta.yml", ".github/workflows/desktop_promote_prod.yml", ".github/workflows/gcp_backend.yml", "desktop/macos/scripts/qualify-desktop-beta.sh", ".github/scripts/test_desktop_release_flow_contract.py", ".github/checks-manifest.yaml"]
+    triggers: ["codemagic.yaml", ".github/workflows/desktop_auto_release.yml", ".github/workflows/desktop_qualify_beta.yml", ".github/workflows/desktop_promote_beta.yml", ".github/workflows/desktop_recover_beta.yml", ".github/workflows/desktop_rollback_beta.yml", ".github/workflows/desktop_breakglass_rollout_beta.yml", ".github/workflows/desktop_beta_admission_control.yml", ".github/workflows/desktop_promote_prod.yml", ".github/workflows/gcp_backend.yml", "desktop/macos/scripts/qualify-desktop-beta.sh", ".github/scripts/test_desktop_release_flow_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "SCA-17 prevents duplicate desktop promotion authorities and requires post-traffic production release-vector verification"
+  - id: desktop-qualification-bootstrap-contract
+    command: ["bash", "desktop/macos/tests/test-qualify-desktop-beta-contract.sh"]
+    triggers: ["desktop/macos/scripts/qualify-desktop-beta.sh", "desktop/macos/scripts/prepare-qualification-profile.sh", "desktop/macos/scripts/qualification-swift-cache.sh", "desktop/macos/tests/test-qualify-desktop-beta-contract.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "Trusted qualification requires an exact-SHA persistent source, isolated named-bundle, unchanged gates, and phase-bound bootstrap contracts"
+  - id: desktop-qualification-swift-cache
+    command: ["bash", "desktop/macos/tests/test-qualification-swift-cache.sh"]
+    triggers: ["desktop/macos/scripts/qualification-swift-cache.sh", "desktop/macos/scripts/qualify-desktop-beta.sh", "desktop/macos/tests/test-qualification-swift-cache.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "Exact-source retries must keep stable absolute SwiftPM paths while rejecting stale provenance, symlinks, collisions, and incomplete entries"
+
+  - id: desktop-beta-qualification-retry
+    command: ["python3", ".github/scripts/test_desktop_beta_qualification_retry.py"]
+    triggers: [".github/workflows/desktop_retry_beta_qualification.yml", ".github/scripts/desktop_beta_qualification_retry.py", ".github/scripts/test_desktop_beta_qualification_retry.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-49 bounded automatic retry of transient failed/cancelled Beta qualification must stay tag-bound, exact-SHA, bounded, and never re-dispatch in-progress/successful runs"
 
 exempt:
   - path: ".github/scripts/check-desktop-auto-beta-candidate.py"

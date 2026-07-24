@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a timing issue that could reopen Home chat after explicitly returning to the hub."
+}

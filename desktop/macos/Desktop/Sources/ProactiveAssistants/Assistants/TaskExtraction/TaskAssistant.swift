@@ -669,7 +669,7 @@ actor TaskAssistant: ProactiveAssistant {
 
       guard TaskCaptureModePolicy.usesLegacyStaging(mode) else {
         DesktopDiagnosticsManager.shared.recordFallback(
-          area: "other",
+          area: "task_workflow",
           from: "workflow_control",
           to: "capture_deferred",
           reason: "other",

@@ -149,20 +149,20 @@ void main() {
 
   group('ClockSkewEvent.skewMinutes', () {
     test('converts seconds to minutes (ceiling)', () {
-      expect(ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 900, hint: null).skewMinutes, 15);
-      expect(ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 300, hint: null).skewMinutes, 5);
-      expect(ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 301, hint: null).skewMinutes, 6);
+      expect(const ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 900, hint: null).skewMinutes, 15);
+      expect(const ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 300, hint: null).skewMinutes, 5);
+      expect(const ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 301, hint: null).skewMinutes, 6);
     });
 
     test('minimum 1 minute', () {
-      expect(ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 0, hint: null).skewMinutes, 1);
-      expect(ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 1, hint: null).skewMinutes, 1);
-      expect(ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 59, hint: null).skewMinutes, 1);
+      expect(const ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 0, hint: null).skewMinutes, 1);
+      expect(const ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 1, hint: null).skewMinutes, 1);
+      expect(const ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 59, hint: null).skewMinutes, 1);
     });
 
     test('handles negative skew (abs value)', () {
-      expect(ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: -900, hint: null).skewMinutes, 15);
-      expect(ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: -1, hint: null).skewMinutes, 1);
+      expect(const ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: -900, hint: null).skewMinutes, 15);
+      expect(const ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: -1, hint: null).skewMinutes, 1);
     });
   });
 

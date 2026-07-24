@@ -114,10 +114,22 @@ fi
 VERSION="${RELEASE_TAG#v}"
 VERSION="${VERSION%-macos}"
 BUNDLE="omi-qualification-${VERSION}"
-WORKTREE="$REPO_ROOT/.qualification-worktrees/$RELEASE_TAG"
+WORKTREE=""
 LAUNCH_LOG=""
+LAUNCH_SIGNAL_FILE=""
 DESKTOP_LAUNCH_PID=""
 QUALIFICATION_SUCCESS=0
+# Cold, from-scratch rebuild of the exact tag compiles ~1190 SwiftPM modules
+# (FluidAudio, MarkdownUI, Firebase, ONNX, …) before the named bundle is even
+# packaged/signed/launched. On a self-hosted M1 that first cold build alone runs
+# ~65 min and, with packaging + install, dispatches the desktop launch at ~75 min
+# — past the old 3600s budget, so every fresh tag timed out at [~1139/1190]
+# compiling and left no reusable .build for the warm retry, stalling Beta
+# (v0.12.99–v0.12.113 all failed, self-hosted lane, `not dispatched within 3600s`).
+# 5400s (90 min) covers the observed cold path with headroom while staying within
+# the self-hosted job cap; warm same-SHA retry/prewarm still completes in a
+# fraction of this. Overridable per runner via OMI_QUALIFY_PREPARE_WAIT_SECS.
+DESKTOP_PREPARE_WAIT_SECS="${OMI_QUALIFY_PREPARE_WAIT_SECS:-5400}"
 BRIDGE_WAIT_SECS=900
 
 gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,isPrerelease,publishedAt,assets,body \
@@ -126,19 +138,45 @@ gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,i
 python3 "$KEYVALUE_PY" preflight-release /tmp/desktop-qualification-release.json "$RELEASE_TAG"
 
 SHA=$(git -C "$REPO_ROOT" rev-list -n1 "$RELEASE_TAG")
+WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"
 
-remove_registered_qualification_worktree() {
-  if git -C "$REPO_ROOT" worktree list --porcelain | grep -Fxq "worktree $WORKTREE"; then
-    git -C "$REPO_ROOT" worktree remove --force "$WORKTREE"
-    git -C "$REPO_ROOT" worktree prune
-  elif [[ -e "$WORKTREE" ]]; then
-    echo "qualification failed: unregistered worktree path exists: $WORKTREE" >&2
-    return 1
+# Provision the tag-pinned backend venv so the hermetic stack resolves the
+# locked Python dependencies. The ephemeral Codemagic Mac has no backend venv
+# and no global python3 with backend deps, so this must succeed there — but a
+# freshly installed uv may not carry the exact pinned patch
+# (python-build-standalone lags), so fall back to the pinned minor version and
+# still sync the exact platform lock. Machines without uv keep the legacy
+# global-python3 resolution.
+provision_backend_venv() {
+  local worktree="$1"
+  local backend="$worktree/backend"
+  [[ -f "$backend/.python-version" ]] || { echo "no backend/.python-version; skipping venv provisioning"; return 0; }
+  local pinned minor lock
+  pinned="$(tr -d '[:space:]' < "$backend/.python-version")"
+  minor="${pinned%.*}"
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64 | Darwin-aarch64) lock="pylock.macos.toml" ;;
+    Darwin-x86_64 | Darwin-amd64) lock="pylock.macos-x86_64.toml" ;;
+    *) lock="pylock.toml" ;;
+  esac
+  # Preferred path: exact-patch parity with CI via the shared script.
+  if (cd "$worktree" && make setup-backend); then
+    return 0
   fi
+  echo "make setup-backend failed (likely exact patch $pinned unavailable to this uv); falling back to minor $minor"
+  [[ -f "$backend/$lock" ]] || { echo "no $lock for this platform; cannot provision backend venv" >&2; return 1; }
+  (
+    cd "$backend"
+    uv venv --allow-existing --python "$minor" .venv
+    uv pip sync "$lock" --python .venv/bin/python
+  )
 }
 
-remove_registered_qualification_worktree
-git -C "$REPO_ROOT" worktree add --detach "$WORKTREE" "$RELEASE_TAG"
+if command -v uv >/dev/null 2>&1; then
+  provision_backend_venv "$WORKTREE"
+else
+  echo "uv not found; dev-harness python resolves via global python3"
+fi
 
 LAUNCH_LOG="$WORKTREE/.qualification-desktop-launch.log"
 
@@ -210,6 +248,24 @@ terminate_qualification_desktop() {
   fi
 }
 
+wait_for_desktop_launch() {
+  local signal_file="$1"
+  local deadline=$((SECONDS + DESKTOP_PREPARE_WAIT_SECS))
+  while (( SECONDS < deadline )); do
+    if [[ -f "$signal_file" ]]; then
+      echo "desktop launch dispatched after bounded preparation"
+      return 0
+    fi
+    if [[ -n "$DESKTOP_LAUNCH_PID" ]] && ! kill -0 "$DESKTOP_LAUNCH_PID" 2>/dev/null; then
+      echo "qualification failed: desktop launch process exited during preparation" >&2
+      return 1
+    fi
+    sleep 5
+  done
+  echo "qualification failed: desktop launch not dispatched within ${DESKTOP_PREPARE_WAIT_SECS}s" >&2
+  return 1
+}
+
 wait_for_bridge() {
   local port="$1"
   local deadline=$((SECONDS + BRIDGE_WAIT_SECS))
@@ -255,24 +311,32 @@ cleanup() {
   if [[ "$KEEP_STACK" -eq 0 && -d "$WORKTREE" ]]; then
     (cd "$WORKTREE" && PROVIDER_MODE=offline make dev-down) >/dev/null 2>&1 || true
   fi
-  if [[ "$QUALIFICATION_SUCCESS" -eq 1 ]]; then
-    remove_registered_qualification_worktree || \
-      echo "qualification cleanup: retained unregistered worktree path: $WORKTREE" >&2
-  fi
   exit "$exit_code"
 }
 trap cleanup EXIT
 
 terminate_qualification_desktop "$BUNDLE"
 "$SCRIPT_DIR/prepare-qualification-profile.sh" "$BUNDLE"
+LAUNCH_SIGNAL_FILE="$WORKTREE/.qualification-desktop-launched"
+rm -f "$LAUNCH_SIGNAL_FILE"
 
 (
   cd "$WORKTREE"
   PROVIDER_MODE=offline make dev-up
-  OMI_SKIP_SETTINGS_SEED=1 make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice
+  OMI_DESKTOP_LAUNCH_SIGNAL_FILE="$LAUNCH_SIGNAL_FILE" OMI_SKIP_SETTINGS_SEED=1 \
+    make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice
 ) >"$LAUNCH_LOG" 2>&1 &
 DESKTOP_LAUNCH_PID=$!
-# Build time must not consume the desktop-launch readiness allowance.
+
+if ! wait_for_desktop_launch "$LAUNCH_SIGNAL_FILE"; then
+  echo "--- last 80 lines of $LAUNCH_LOG ---" >&2
+  tail -n 80 "$LAUNCH_LOG" >&2 || true
+  exit 1
+fi
+
+# The bridge gets its complete post-launch readiness allowance; cold Rust,
+# agent-runtime, SwiftPM, packaging, and signing work consumed only the separate
+# bounded preparation phase above.
 SECONDS=0
 
 if ! wait_for_bridge "$AUTOMATION_PORT"; then

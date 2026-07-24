@@ -215,6 +215,51 @@ const EXPLICIT_WEB_REQUESTS = [
   "web search", "internet search",
 ];
 
+const EXPLICIT_WEB_PROHIBITIONS = [
+  "don't call web search", "do not call web search",
+  "don't call the web search", "do not call the web search",
+  "don't call internet search", "do not call internet search",
+  "don't call the internet search", "do not call the internet search",
+  "don't use web search", "do not use web search",
+  "don't use the web search", "do not use the web search",
+  "don't use internet search", "do not use internet search",
+  "don't use the internet search", "do not use the internet search",
+  "don't search the web", "do not search the web",
+  "don't search the internet", "do not search the internet",
+  "without web search",
+];
+
+function explicitlyProhibitsPublicWeb(normalized: string): boolean {
+  if (EXPLICIT_WEB_PROHIBITIONS.some((phrase) => {
+    let searchStart = 0;
+    while (searchStart < normalized.length) {
+      const start = normalized.indexOf(phrase, searchStart);
+      if (start < 0) {
+        return false;
+      }
+      const suffix = normalized.slice(start + phrase.length).trimStart();
+      if (!/^results?\b/.test(suffix)) {
+        return true;
+      }
+      searchStart = start + phrase.length;
+    }
+    return false;
+  })) {
+    return true;
+  }
+  return ["web search tool", "internet search tool"].some((referent) => {
+    const start = normalized.indexOf(referent);
+    if (start < 0) {
+      return false;
+    }
+    const tail = normalized.slice(start + referent.length, start + referent.length + 160);
+    return [
+      "don't call it because", "do not call it because",
+      "don't call it again", "do not call it again",
+    ].some((phrase) => tail.includes(phrase));
+  });
+}
+
 const FRESH_PUBLIC_REQUESTS = [
   "latest news", "latest on", "what's the latest", "what is the latest",
   "current weather", "weather right now", "current price", "price right now",
@@ -240,7 +285,7 @@ const EXPLICIT_PRIVATE_CONTEXT = [
   "my screen history", "my screen activity", "my calendar", "your calendar",
   "my email", "your email", "my files", "your files", "my tasks", "your tasks",
   "my action items", "my notes", "your notes", "what did i say", "what have i said",
-  "when did i", "what was i doing", "what do you remember about me",
+  "what did i do", "when did i", "what was i doing", "what do you remember about me",
 ];
 
 const PUBLIC_WEB_ACCESS_DENIAL = /\b(?:I\s+)?(?:do\s+not|don't|cannot|can't|can not)\s+(?:(?:have\s+)?(?:direct\s+)?(?:access\s+to\s+)?(?:the\s+)?(?:internet|web(?:[ -]?search)?|browser|real[- ]time(?:\s+\w+){0,2}(?:\s+data)?)(?:\s+(?:or|and)\s+(?:the\s+)?(?:internet|web(?:[ -]?search)?|browser|real[- ]time(?:\s+\w+){0,2}(?:\s+data)?))*|(?:have\s+)?(?:direct\s+)?(?:internet|web(?:[ -]?search)?|browser)\s+access|(?:browse|search)\s+(?:the\s+)?(?:web|internet))/i;
@@ -275,14 +320,26 @@ export function routePromptForPublicWeb(message: string): string {
   // The adapter receives the full rendered prompt, including inherited context
   // and prior turns. Inspect only the current user instruction when deciding
   // whether this particular turn requires a public-web lookup.
-  const normalized = currentUserInstruction(message).trim().toLowerCase();
+  const normalized = currentUserInstruction(message)
+    .trim()
+    .toLowerCase()
+    .replace(/[\u2018\u2019]/g, "'");
   if (!normalized || EXPLICIT_PRIVATE_CONTEXT.some((phrase) => normalized.includes(phrase))) {
+    return message;
+  }
+  const hasExplicitWebReference = EXPLICIT_WEB_REQUESTS.some(
+    (phrase) => normalized.includes(phrase)
+  );
+  if (
+    hasExplicitWebReference
+    && explicitlyProhibitsPublicWeb(normalized)
+  ) {
     return message;
   }
   const hasFreshPublicTemporalLookup = FRESH_PUBLIC_TEMPORAL_QUALIFIERS.some(
     (phrase) => normalized.includes(phrase)
   ) && FRESH_PUBLIC_LOOKUP_TERMS.some((term) => normalized.includes(term));
-  const requiresWeb = EXPLICIT_WEB_REQUESTS.some((phrase) => normalized.includes(phrase))
+  const requiresWeb = hasExplicitWebReference
     || FRESH_PUBLIC_REQUESTS.some((phrase) => normalized.includes(phrase))
     || CURRENT_WEATHER_PREFIXES.some((phrase) => normalized.includes(phrase))
     || hasFreshPublicTemporalLookup;

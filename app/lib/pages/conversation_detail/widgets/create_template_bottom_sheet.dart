@@ -52,7 +52,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
 
     // Draw white background
     final bgPaint = Paint()..color = Colors.white;
-    canvas.drawRect(Rect.fromLTWH(0, 0, size, size), bgPaint);
+    canvas.drawRect(const Rect.fromLTWH(0, 0, size, size), bgPaint);
 
     // Draw emoji text
     final textPainter = TextPainter(

@@ -1,12 +1,12 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": 1643,
-    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": 3510,
+    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": 3502,
     "desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift": 1856
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": "Task visibility writes now emit the shared Home-count invalidation after logging, so Dashboard totals refresh without waiting for an activation cooldown.",
-    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": "Nullable screenshot capture provenance preserves the canonical-memory device identity and prevents multi-Mac screen activity from overwriting local row IDs.",
+    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": "currentUserId is gated by an OSAllocatedUnfairLock to fix a cross-executor data race (actor/MainActor/nonisolated shutdown); the Sendable lock + computed accessor replace the prior unsafe static var (SCA-8).",
     "desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift": "Search-result rows load a downsampled ImageIO thumbnail instead of the full-resolution screenshot, so a long results list no longer retains full-size images behind a 120x80 view."
   },
   "threshold": 1500

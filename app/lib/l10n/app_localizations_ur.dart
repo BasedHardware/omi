@@ -9620,153 +9620,154 @@ class AppLocalizationsUr extends AppLocalizations {
       'آپ کا ڈیٹا بطورِ ڈیفالٹ مضبوط خفیہ کاری سے محفوظ ہے، اور یہ کیسے محفوظ اور استعمال کیا جاتا ہے اس پر آپ کا کنٹرول رہتا ہے۔';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => 'درستگی';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => 'بنیادی';
 
   @override
-  String get cloudTranscription => 'Cloud Transcription';
+  String get cloudTranscription => 'کلاؤڈ ٹرانسکرپشن';
 
   @override
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => 'ماڈل حذف کریں';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'کیا آپ واقعی یہ ماڈل حذف کرنا چاہتے ہیں؟';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => 'ڈاؤن لوڈ شدہ';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => 'تیز تر';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => 'خودکار';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => 'زیادہ';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => 'بڑا';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => 'کم';
 
   @override
-  String get whisperModelSizeMedium => 'Medium';
+  String get whisperModelSizeMedium => 'درمیانہ';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => 'ماڈل حذف ہو گیا';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => 'ماڈل ڈاؤن لوڈ ناکام';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc => 'Whisper ماڈل ڈاؤن لوڈ کرنے میں ناکامی۔ براہ کرم دوبارہ کوشش کریں۔';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => 'ماڈل ڈاؤن لوڈ ہو گیا';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper ماڈل کامیابی سے ڈاؤن لوڈ ہو گیا';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => 'ماڈل کا سائز';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => 'کوئی نہیں';
 
   @override
-  String get onDeviceTranscription => 'On-Device Transcription';
+  String get onDeviceTranscription => 'ڈیوائس پر ٹرانسکرپشن';
 
   @override
-  String get onDeviceTranscriptionDesc => 'Transcription is processed locally on your device';
+  String get onDeviceTranscriptionDesc => 'ٹرانسکرپشن آپ کی ڈیوائس پر مقامی طور پر ہوتی ہے';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => 'سست تر';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => 'چھوٹا';
 
   @override
   String get sttProviderSoniox => 'Soniox';
 
   @override
-  String get speechToTextProvider => 'Speech-to-Text Provider';
+  String get speechToTextProvider => 'آواز سے متن کا فراہم کنندہ';
 
   @override
-  String get speechToTextProviderDesc => 'Choose the service used for transcription';
+  String get speechToTextProviderDesc => 'ٹرانسکرپشن کے لیے استعمال ہونے والی سروس منتخب کریں';
 
   @override
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => 'رفتار';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => 'بہت چھوٹا';
 
   @override
-  String get transcriptionLanguage => 'Transcription Language';
+  String get transcriptionLanguage => 'ٹرانسکرپشن کی زبان';
 
   @override
-  String get transcriptionLanguageDesc => 'Choose the language for speech transcription';
+  String get transcriptionLanguageDesc => 'تقریر کی ٹرانسکرپشن کے لیے زبان منتخب کریں';
 
   @override
-  String get whisperModel => 'Whisper Model';
+  String get whisperModel => 'Whisper ماڈل';
 
   @override
-  String get whisperModelDesc => 'Choose the model for on-device transcription';
+  String get whisperModelDesc => 'ڈیوائس پر ٹرانسکرپشن کے لیے ماڈل منتخب کریں';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => 'مفت منصوبے پر ڈاؤن گریڈ کریں؟';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => 'آپ کو یہ حدود درپیش ہوں گی:';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => '7 گنا زیادہ بیٹری کی کھپت';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => '30% کم ٹرانسکرپشن معیار';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => '5-7 سیکنڈ کی تاخیر';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => 'بولنے والوں کی شناخت ممکن نہیں';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => 'پھر بھی ڈاؤن گریڈ کریں';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => 'Google کیلنڈر منسلک نہیں ہے';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt =>
+      'بات چیتوں کو کیلنڈر ایونٹس سے منسلک کرنے کے لیے اپنا Google کیلنڈر منسلک کریں۔';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return '\"$title\" سے منسلک کر دیا گیا';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => 'کیلنڈر ایونٹ منسلک کرنے میں ناکامی';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => 'آپ کی رائے کا شکریہ!';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => 'پیغام کاپی کریں';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => 'ترتیبات تلاش کریں…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => 'آڈیو لوڈ کرنے میں خرابی';
 
   @override
   String get rayBanMetaMicPickerTitle => 'اپنا Ray-Ban Meta مائیکروفون منتخب کریں';

@@ -10,9 +10,25 @@ import time
 from pathlib import Path
 
 CODEMAGIC_CHECK_NAME = "Release OMI Desktop (Swift)"
-DESKTOP_SWIFT_CHECK_NAME = "Desktop Swift Build & Tests"
+RELEASE_ELIGIBILITY_CHECK_NAME = "Release Eligibility"
+REQUIRED_SOURCE_CHECK_NAMES = (
+    RELEASE_ELIGIBILITY_CHECK_NAME,
+    "Desktop Swift Build & Tests",
+    "Desktop Swift Release Compile",
+)
 RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60
-AUTO_RELEASE_QUIET_SECONDS = 10 * 60
+# Short debounce so a merge is tagged within ~a minute instead of waiting ten.
+# The one-active-release fence (Codemagic build status on the latest tag) already
+# collapses rapid bursts to the newest SHA while a build runs, so this window only
+# needs to coalesce near-simultaneous merges, not batch a whole feature.
+AUTO_RELEASE_QUIET_SECONDS = 60
+DESKTOP_RELEASE_PATHS = (
+    "desktop/macos",
+    "codemagic.yaml",
+    ".github/scripts/plan-desktop-release.py",
+    ".github/workflows/desktop_auto_release.yml",
+    ".github/workflows/desktop-swift-ci.yml",
+)
 
 
 def run(args: list[str], *, check: bool = True) -> str:
@@ -38,9 +54,9 @@ def latest_desktop_tag() -> str | None:
 
 def releasable_desktop_changes_since(ref: str | None) -> list[str]:
     if ref is None:
-        output = git(["ls-files", "desktop/macos"])
+        output = git(["ls-files", *DESKTOP_RELEASE_PATHS])
     else:
-        output = git(["diff", "--name-only", "--diff-filter=ACDMR", f"{ref}..HEAD", "--", "desktop/macos"])
+        output = git(["diff", "--name-only", "--diff-filter=ACDMR", f"{ref}..HEAD", "--", *DESKTOP_RELEASE_PATHS])
 
     changes = []
     for path in output.splitlines():
@@ -78,23 +94,20 @@ def latest_change_age_seconds(paths: list[str]) -> int | None:
         return None
 
     try:
-        raw = git(["log", "-1", "--format=%ct", "HEAD", "--", *paths])
+        raw = git(["log", "--first-parent", "-1", "--format=%ct", "HEAD", "--", *paths])
         return int(time.time()) - int(raw)
     except (subprocess.CalledProcessError, ValueError):
         return None
 
 
-def latest_releasable_source_sha(ref: str | None, paths: list[str]) -> str | None:
-    """Return the newest queued desktop-content commit, not an unrelated HEAD commit."""
+def latest_releasable_desktop_sha(paths: list[str]) -> str | None:
     if not paths:
         return None
 
-    revision = f"{ref}..HEAD" if ref else "HEAD"
     try:
-        source_sha = git(["log", "-1", "--format=%H", revision, "--", *paths])
+        return git(["log", "--first-parent", "-1", "--format=%H", "HEAD", "--", *paths]) or None
     except subprocess.CalledProcessError:
         return None
-    return source_sha or None
 
 
 def github_check_status(repository: str, sha: str, check_name: str) -> tuple[str | None, str | None, str | None]:
@@ -128,19 +141,20 @@ def codemagic_check_status(repository: str, sha: str) -> tuple[str | None, str |
     return github_check_status(repository, sha, CODEMAGIC_CHECK_NAME)
 
 
-def required_desktop_swift_check_reason(repository: str, sha: str) -> str | None:
-    status, conclusion, error = github_check_status(repository, sha, DESKTOP_SWIFT_CHECK_NAME)
-    if error:
-        return f"could not read required check for source SHA {sha}: {error}"
-    if status is None:
-        return f"required check {DESKTOP_SWIFT_CHECK_NAME} is missing for source SHA {sha}"
-    if status != "completed":
-        return f"required check {DESKTOP_SWIFT_CHECK_NAME} for source SHA {sha} is {status}"
-    if conclusion != "success":
-        return (
-            f"required check {DESKTOP_SWIFT_CHECK_NAME} for source SHA {sha} "
-            f"completed with {conclusion or 'no conclusion'}"
-        )
+def required_source_checks_reason(repository: str, sha: str) -> str | None:
+    for check_name in REQUIRED_SOURCE_CHECK_NAMES:
+        status, conclusion, error = github_check_status(repository, sha, check_name)
+        if error:
+            return f"could not read required check {check_name} for source SHA {sha}: {error}"
+        if status is None:
+            return f"required check {check_name} is missing for exact source SHA {sha}"
+        if status != "completed":
+            return f"required check {check_name} for exact source SHA {sha} is {status}"
+        if conclusion != "success":
+            return (
+                f"required check {check_name} for exact source SHA {sha} "
+                f"completed with {conclusion or 'no conclusion'}"
+            )
     return None
 
 
@@ -184,13 +198,23 @@ def main() -> int:
 
     latest_tag = latest_desktop_tag()
     changes = releasable_desktop_changes_since(latest_tag)
-    source_sha = latest_releasable_source_sha(latest_tag, changes) or git(["rev-parse", "HEAD"])
     set_output("latest_tag", latest_tag or "")
-    set_output("source_sha", source_sha)
 
     if not changes:
+        set_output("source_sha", "")
         set_output("should_release", "false")
         set_output("reason", "No releasable desktop app changes since the latest desktop tag.")
+        return 0
+
+    # Component CI is produced on the immutable commit that last changed the
+    # queued desktop paths. Later backend/docs-only main commits intentionally
+    # do not become desktop candidates because the producer skips its expensive
+    # release compile on those SHAs.
+    source_sha = latest_releasable_desktop_sha(changes)
+    set_output("source_sha", source_sha or "")
+    if source_sha is None:
+        set_output("should_release", "false")
+        set_output("reason", "Could not resolve the newest releasable desktop source SHA.")
         return 0
 
     if changes:
@@ -213,7 +237,7 @@ def main() -> int:
         )
         return 0
 
-    source_check_reason = required_desktop_swift_check_reason(args.repository, source_sha)
+    source_check_reason = required_source_checks_reason(args.repository, source_sha)
     if source_check_reason:
         set_output("should_release", "false")
         set_output("reason", f"Desktop candidate source gate blocked: {source_check_reason}.")

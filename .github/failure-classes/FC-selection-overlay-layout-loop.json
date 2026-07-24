@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-selection-overlay-layout-loop",
+  "violated_contract": "Transient parent or chrome state must not rebuild unchanged AppKit-backed selectable chat content; doing so can make SelectionOverlay repeatedly set fonts, invalidate intrinsic size, and re-enter AttributeGraph layout until the main thread is pinned.",
+  "canonical_prevention": "Place selectable message content behind an Equatable render boundary whose inputs include every content-affecting value, and keep transient feedback state such as copy confirmation in leaf controls below that boundary.",
+  "evidence_prs": [9267],
+  "scope_hints": ["desktop/macos/Desktop/Sources/**"],
+  "status": "open"
+}

@@ -1229,13 +1229,13 @@ struct ImportsSection: View {
         .scaledFont(size: OmiType.heading, weight: .semibold)
         .foregroundColor(OmiColors.textPrimary)
 
-      VStack(spacing: 0) {
-        ForEach(Array(connectors.enumerated()), id: \.element.id) { index, connector in
-          if index > 0 {
-            Divider()
-              .background(OmiColors.backgroundTertiary)
-          }
-          ImportConnectorRow(
+      LazyVGrid(
+        columns: [GridItem(.adaptive(minimum: 260), spacing: OmiSpacing.md)],
+        alignment: .leading,
+        spacing: OmiSpacing.md
+      ) {
+        ForEach(connectors) { connector in
+          ImportConnectorCard(
             connector: connector,
             snapshot: statusStore.snapshot(for: connector)
           ) {

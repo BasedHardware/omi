@@ -149,7 +149,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   private static var hasSoftRecoveryThisSession = false
 
   // Retain distributed notification observer tokens
-  private var testNotificationObservers: [NSObjectProtocol] = []
+  private var testNotificationObservers: [ProactiveTestNotificationObserver] = []
 
   // MARK: - Initialization
 
@@ -442,7 +442,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         Task {
           do {
-            _ = try await VideoChunkEncoder.shared.flushCurrentChunk()
+            _ = try await RewindStorage.shared.flushCurrentVideoChunk()
           } catch {
             logError("ProactiveAssistantsPlugin: Failed to flush video chunk before power cadence switch", error: error)
           }
@@ -1031,55 +1031,55 @@ public class ProactiveAssistantsPlugin: NSObject {
 
   /// Listen for distributed notifications from CLI to trigger test runs
   private func setupTestNotificationListeners() {
-    // Use selector-based observer (more reliable with DistributedNotificationCenter)
-    DistributedNotificationCenter.default().addObserver(
-      self,
-      selector: #selector(handleInsightTestNotification(_:)),
-      name: NSNotification.Name("com.omi.test.insight"),
-      object: nil
-    )
-    DistributedNotificationCenter.default().addObserver(
-      self,
-      selector: #selector(handleFocusTestNotification(_:)),
-      name: NSNotification.Name("com.omi.test.focus"),
-      object: nil
-    )
-    DistributedNotificationCenter.default().addObserver(
-      self,
-      selector: #selector(handleNotificationTestNotification(_:)),
-      name: NSNotification.Name("com.omi.test.notification"),
-      object: nil
-    )
+    // Distributed notifications may arrive on the posting thread, so entering a selector on this
+    // MainActor-isolated plugin can trap before a Task-based actor hop executes.
+    let observers = [
+      ProactiveTestNotificationObserver(name: NSNotification.Name("com.omi.test.insight")) {
+        [weak self] payload in
+        self?.handleInsightTestNotification(payload)
+      },
+      ProactiveTestNotificationObserver(name: NSNotification.Name("com.omi.test.focus")) {
+        [weak self] payload in
+        self?.handleFocusTestNotification(payload)
+      },
+      ProactiveTestNotificationObserver(name: NSNotification.Name("com.omi.test.notification")) {
+        [weak self] payload in
+        self?.handleNotificationTestNotification(payload)
+      },
+    ]
+    for observer in observers {
+      observer.register(in: DistributedNotificationCenter.default())
+    }
+    testNotificationObservers = observers
     log("InsightTestCLI: Notification observer registered")
     log("FocusTestCLI: Notification observer registered")
     log("NotificationTestCLI: Notification observer registered")
   }
 
-  @objc private func handleInsightTestNotification(_ notification: Notification) {
+  private func handleInsightTestNotification(_ payload: ProactiveTestNotificationPayload) {
     Task { @MainActor in
-      let hours = (notification.userInfo?["hours"] as? String).flatMap { Double($0) } ?? 1.0
-      let count = (notification.userInfo?["count"] as? String).flatMap { Int($0) } ?? 10
+      let hours = payload["hours"].flatMap { Double($0) } ?? 1.0
+      let count = payload["count"].flatMap { Int($0) } ?? 10
       log("InsightTestCLI: Received test trigger (hours=\(hours), count=\(count))")
       await InsightTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
     }
   }
 
-  @objc private func handleFocusTestNotification(_ notification: Notification) {
+  private func handleFocusTestNotification(_ payload: ProactiveTestNotificationPayload) {
     Task { @MainActor in
-      let hours = (notification.userInfo?["hours"] as? String).flatMap { Double($0) } ?? 1.0
-      let count = (notification.userInfo?["count"] as? String).flatMap { Int($0) } ?? 20
+      let hours = payload["hours"].flatMap { Double($0) } ?? 1.0
+      let count = payload["count"].flatMap { Int($0) } ?? 20
       log("FocusTestCLI: Received test trigger (hours=\(hours), count=\(count))")
       await FocusTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
     }
   }
 
-  @objc private func handleNotificationTestNotification(_ notification: Notification) {
+  private func handleNotificationTestNotification(_ payload: ProactiveTestNotificationPayload) {
     Task { @MainActor in
       guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
-      let title = (notification.userInfo?["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-      let message = (notification.userInfo?["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-      let assistantId = (notification.userInfo?["assistantId"] as? String)?.trimmingCharacters(
-        in: .whitespacesAndNewlines)
+      let title = payload["title"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let message = payload["message"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let assistantId = payload["assistantId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
 
       let resolvedTitle = title?.isEmpty == false ? title! : "Insight"
       let resolvedMessage = message?.isEmpty == false ? message! : "Test notification from Omi"
@@ -1088,12 +1088,12 @@ public class ProactiveAssistantsPlugin: NSObject {
       let context = FloatingBarNotificationContext(
         sourceTitle: resolvedTitle,
         assistantId: resolvedAssistantId,
-        sourceApp: notification.userInfo?["sourceApp"] as? String,
-        windowTitle: notification.userInfo?["windowTitle"] as? String,
-        contextSummary: notification.userInfo?["contextSummary"] as? String,
-        currentActivity: notification.userInfo?["currentActivity"] as? String,
-        reasoning: notification.userInfo?["reasoning"] as? String,
-        detail: notification.userInfo?["detail"] as? String
+        sourceApp: payload["sourceApp"],
+        windowTitle: payload["windowTitle"],
+        contextSummary: payload["contextSummary"],
+        currentActivity: payload["currentActivity"],
+        reasoning: payload["reasoning"],
+        detail: payload["detail"]
       )
 
       log("NotificationTestCLI: Received test trigger (title=\(resolvedTitle), assistantId=\(resolvedAssistantId))")

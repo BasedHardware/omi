@@ -333,13 +333,17 @@ final class PushToTalkStateMachineTests: XCTestCase {
       // the transition from a nonisolated static helper so neither `defaults` nor
       // `self` crosses an isolation boundary.
       let boxed = OwnerDefaultsBox(value: defaults)
-      await Self.runOwnerTransition(boxed: boxed, ownerID: ownerID)
+      do {
+        try await Self.runOwnerTransition(boxed: boxed, ownerID: ownerID)
+      } catch {
+        XCTFail("owner transition failed: \(error)")
+      }
     }
 
     private static nonisolated func runOwnerTransition(
       boxed: OwnerDefaultsBox, ownerID: String
-    ) async {
-      await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+    ) async throws {
+      try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
         defaults: boxed.value,
         allowAutomationOverride: false,
         plannedNextOwner: { _, _ in ownerID },

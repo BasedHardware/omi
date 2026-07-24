@@ -984,6 +984,33 @@ fn test_translate_request_forces_required_web_search_without_client_tools() {
 }
 
 #[test]
+fn test_injected_web_search_tool_uses_direct_compatible_version() {
+    // Regression: web_search_20260209 only allowed code-execution callers in
+    // the live provider route, so selecting web_search directly returned 400
+    // before the model could answer. The gateway parser owns the basic direct
+    // server-tool contract, so keep its definition on that compatible version.
+    let req = test_request(vec![user_message("search the web for HumanPost")]);
+
+    let result = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
+
+    let tools = result.tools.unwrap();
+    let web_search = serde_json::to_value(&tools[0]).unwrap();
+    assert_eq!(web_search["name"], "web_search");
+    assert_eq!(web_search["type"], "web_search_20250305");
+    assert_eq!(
+        web_search["allowed_callers"],
+        json!(["direct"]),
+        "web_search must stay on the direct server-tool path the parser handles"
+    );
+}
+
+#[test]
 fn test_translate_request_forces_web_search_for_location_qualified_weather() {
     // This is the same gateway request shape used by both the main
     // pi-mono session and default delegated pi-mono child sessions. The
@@ -1131,6 +1158,27 @@ fn test_translate_request_required_web_search_fails_closed_when_disabled() {
     )
     .unwrap_err();
     assert!(error.contains("required public web search is unavailable"));
+}
+
+#[test]
+fn test_translate_request_honors_explicit_web_search_prohibition() {
+    let req = test_request(vec![user_message(
+        "Do you know why the web search tool times out? Don't call it because it will time out again.",
+    )]);
+
+    let result = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
+    assert!(result.tools.is_none());
+    assert!(result.tool_choice.is_none());
+    let prompt = serde_json::to_value(&result.messages[0])
+        .unwrap()
+        .to_string();
+    assert!(!prompt.contains("omi_retrieval_policy"), "{prompt}");
 }
 
 #[test]

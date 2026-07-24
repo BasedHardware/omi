@@ -1,5 +1,12 @@
 HOOKS_DIR := $(shell git rev-parse --git-path hooks)
-PYTHON ?= $(shell bash -c 'source "$$(git rev-parse --show-toplevel)/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
+# Fall back to the working directory (where make runs, i.e. the repo root) when
+# `git rev-parse --show-toplevel` cannot resolve a work tree. In a linked
+# worktree whose git context resolves to a git dir rather than a work tree,
+# show-toplevel exits 128 and previously expanded to an empty prefix, turning
+# the source into `/scripts/dev-harness/_resolve_python.sh: No such file` and
+# breaking every target. The root stays computed in-shell (never interpolated
+# into recipe text) so a checkout path with quote/`$` characters cannot inject.
+PYTHON ?= $(shell bash -c 'source "$$(git rev-parse --show-toplevel 2>/dev/null || pwd)/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
 # Export so recipes use $$PYTHON (shell variable expansion) instead of $(PYTHON)
 # (Make text interpolation). Shell variable expansion treats the resolved path
 # as data and cannot be broken by quote or command-substitution characters in
@@ -8,16 +15,21 @@ export PYTHON
 DESKTOP_USER ?= alice
 DESKTOP_APP_NAME ?=
 
-.PHONY: setup setup-main setup-hooks preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local run-canonical-promotion
+.PHONY: setup setup-main setup-hooks setup-backend preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local run-canonical-promotion
 
-setup: setup-main setup-hooks
-	@echo "Worktree setup complete."
+# Baseline setup is deliberately limited to prerequisites that the default
+# pre-push gate may require; app and desktop runtime environments stay opt-in.
+setup: setup-main setup-hooks setup-backend
+	@echo "Worktree setup complete: hooks installed and backend pre-push environment ready."
 
 setup-main:
 	@bash scripts/setup-refresh-main.sh
 
 setup-hooks:
 	@bash scripts/install-git-hooks.sh
+
+setup-backend:
+	@bash backend/scripts/sync-python-deps.sh
 
 preflight:
 	python3 .github/scripts/pr_preflight.py --lane local --base origin/main

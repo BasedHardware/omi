@@ -1,0 +1,3 @@
+{
+  "change": "Restored Listening and Capture after reopening the desktop app when permissions are already granted."
+}

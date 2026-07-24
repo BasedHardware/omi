@@ -746,9 +746,9 @@ def test_llm_calls_use_omi_qos_tier_system():
     conv_proc_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "conversation_processing.py"
     conv_proc_source = conv_proc_path.read_text(encoding="utf-8")
 
-    # get_transcript_structure should use get_llm('conv_structure', cache_key=...)
+    # get_transcript_structure should use the conv_structure QoS lane.
     struct_match = re.search(
-        r'def get_transcript_structure.*?chain = prompt \| get_llm\([\'"](\w+)[\'"]\s*,\s*cache_key=',
+        r'def get_transcript_structure.*?get_llm\([\'"](\w+)[\'"]\s*,\s*cache_key=',
         conv_proc_source,
         re.DOTALL,
     )
@@ -757,9 +757,9 @@ def test_llm_calls_use_omi_qos_tier_system():
         struct_match.group(1) == "conv_structure"
     ), f"Expected get_llm('conv_structure') for structure, got {struct_match.group(1)}"
 
-    # get_app_result should use get_llm('conv_app_result', cache_key=...)
+    # get_app_result should use the conv_app_result QoS lane.
     app_match = re.search(
-        r'def get_app_result.*?response = get_llm\([\'"](\w+)[\'"]\s*,\s*cache_key=',
+        r'def get_app_result.*?get_llm\([\'"](\w+)[\'"]\s*,\s*cache_key=',
         conv_proc_source,
         re.DOTALL,
     )
@@ -768,9 +768,9 @@ def test_llm_calls_use_omi_qos_tier_system():
         app_match.group(1) == "conv_app_result"
     ), f"Expected get_llm('conv_app_result') for app result, got {app_match.group(1)}"
 
-    # extract_action_items should use get_llm('conv_action_items', cache_key=...)
+    # extract_action_items should use the conv_action_items QoS lane.
     action_match = re.search(
-        r'def extract_action_items.*?chain = prompt \| get_llm\([\'"](\w+)[\'"]\s*,\s*cache_key=',
+        r'def extract_action_items.*?get_llm\([\'"](\w+)[\'"]\s*,\s*cache_key=',
         conv_proc_source,
         re.DOTALL,
     )
@@ -780,9 +780,9 @@ def test_llm_calls_use_omi_qos_tier_system():
     ), f"Expected get_llm('conv_action_items') for action items, got {action_match.group(1)}"
 
     # Verify cache keys are passed through get_llm's cache_key param (model-safe)
-    assert "cache_key='omi-extract-actions'" in conv_proc_source, "Missing cache_key for action items"
-    assert "cache_key='omi-transcript-structure'" in conv_proc_source, "Missing cache_key for structure"
-    assert "cache_key='omi-app-result'" in conv_proc_source, "Missing cache_key for app result"
+    assert "_cache_bucket_key('omi-extract-actions')" in conv_proc_source, "Missing cache key for action items"
+    assert "_cache_bucket_key('omi-transcript-structure')" in conv_proc_source, "Missing cache key for structure"
+    assert "else 'omi-app-result'" in conv_proc_source, "Missing cache_key for app result"
     assert "cache_key='omi-daily-summary'" in conv_proc_source, "Missing cache_key for daily summary"
 
 

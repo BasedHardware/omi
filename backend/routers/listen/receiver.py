@@ -69,6 +69,10 @@ from utils.listen_audio import ChannelConfig, mix_n_channel_buffers, resample_pc
 
 logger = logging.getLogger(__name__)
 
+# Cadence for the frame-independent provider-death monitor (#10028). Short enough
+# to terminate a zombie "Listening" session promptly, far below ws_receive_timeout.
+STT_DEATH_POLL_INTERVAL_SECONDS = 1.0
+
 
 def _get_opuslib() -> Any:
     if opuslib is None:
@@ -237,6 +241,7 @@ class ListenReceiver:
             self.stt_socket = (
                 GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough) if self.vad_gate else raw
             )
+            self.host.spawn(self._monitor_stt_death(provider), name='stt_death_monitor')
             return True
         except Exception as error:
             await self._drain_stt_sockets()
@@ -248,6 +253,32 @@ class ListenReceiver:
                 platform=self.host.client_device_context.platform,
             )
             return False
+
+    async def _monitor_stt_death(self, provider: str) -> None:
+        """Terminate the client session promptly when the provider STT socket dies.
+
+        The receive loop only observes provider death while flushing a client
+        audio buffer (``_flush_stt_buffer`` → ``live_stt_socket_is_dead``), so a
+        clean upstream close with no further client audio could hold the mobile
+        socket in the "Listening" state until the 300s ``ws_receive_timeout``.
+        This frame-independent poll drives the same idempotent terminal path
+        (``stt_failed`` + WebSocket 1011) as soon as the death latch flips (#10028).
+        """
+        while self.host.state.active and not self.host.state.stt_terminal_failure:
+            socket = self.stt_socket
+            if socket is not None and live_stt_socket_is_dead(socket):
+                await terminate_live_stt_session(
+                    self.host.request.websocket,
+                    self.host.state,
+                    failure=live_stt_upstream_failure(provider),
+                    reason='connection_lost',
+                    platform=self.host.client_device_context.platform,
+                )
+                return
+            # Shutdown-aware sleep: wakes immediately on session shutdown, in
+            # which case normal teardown owns termination and we simply exit.
+            if await self.host.wait(STT_DEATH_POLL_INTERVAL_SECONDS):
+                return
 
     def _cleanup_expired_image_chunks(self) -> None:
         now = time.time()

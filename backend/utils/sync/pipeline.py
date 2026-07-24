@@ -3,7 +3,7 @@
 Extracted from routers/sync.py so the router stays thin and utils never imports routers.
 """
 
-# pyright: reportPrivateUsage=false, reportUnusedFunction=false, reportUnusedVariable=false, reportUnnecessaryComparison=false, reportAssignmentType=false, reportIndexIssue=false, reportArgumentType=false
+# pyright: reportPrivateUsage=false, reportUnusedFunction=false, reportUnusedVariable=false, reportUnusedImport=false, reportUnnecessaryComparison=false, reportAssignmentType=false, reportIndexIssue=false, reportArgumentType=false
 
 from __future__ import annotations
 
@@ -123,6 +123,8 @@ logger = logging.getLogger(__name__)
 
 MAX_VAD_SEGMENT_SECONDS = int(os.getenv('SYNC_MAX_VAD_SEGMENT_SECONDS', '300'))
 _SYNC_STT_MODELS = {'nova-3', 'velma-2', 'parakeet'}
+_PARTIAL_RESULT_FENCED_CONVERSATION_IDS = 'fenced_conversation_ids'
+_RESPONSE_FENCED_CONVERSATION_IDS = '_fenced_conversation_ids'
 _SYNC_FAILURE_REASON_CODES = {
     'backfill_capacity',
     'backfill_paced',
@@ -1277,20 +1279,63 @@ def process_segment(
             turnstile.complete(path)
 
 
-def _reprocess_merged_conversations(uid: str, response: dict):
+def _reprocess_merged_conversations(uid: str, response: dict, on_fenced=None):
     """Regenerate summary/structured data for conversations that gained segments this batch.
 
     The merge path in process_segment only appends transcript segments; without this the
-    conversation keeps the summary generated from its first chunk only.
+    enriched fields (summary, structured, speakers) remain stale.  Fences are isolated
+    per conversation: a replaced/reopened conversation must not block siblings in the
+    same batch.
     """
     merged = response.pop('_merged', {})
     for conversation_id, language in merged.items():
         try:
             _reprocess_conversation_after_update(uid, conversation_id, language)
         except SyncConversationPersistenceFenced:
-            raise
+            response.setdefault(_RESPONSE_FENCED_CONVERSATION_IDS, set()).add(conversation_id)
+            response.get('updated_memories', set()).discard(conversation_id)
+            response.get('new_memories', set()).discard(conversation_id)
+            if on_fenced:
+                on_fenced()
+            logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
         except Exception as e:
             logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
+
+
+async def _checkpoint_fenced_conversations_for_run(
+    uid: str,
+    response: dict,
+    content_id: str | None,
+    job_id: str,
+    active_run_lock_token: str,
+    active_run_lock_epoch: int | None,
+):
+    """Persist a fence tombstone before the losing worker can finalize audio."""
+    partial = {
+        'new_memories': sorted(response['new_memories']),
+        'updated_memories': sorted(response['updated_memories']),
+        _PARTIAL_RESULT_FENCED_CONVERSATION_IDS: sorted(response[_RESPONSE_FENCED_CONVERSATION_IDS]),
+    }
+    if content_id:
+        checkpointed = await run_blocking(
+            db_executor,
+            checkpoint_sync_content_partial_result,
+            uid,
+            content_id,
+            job_id,
+            partial,
+            run_token=active_run_lock_token,
+            run_epoch=active_run_lock_epoch,
+        )
+        if not checkpointed:
+            raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
+    await run_blocking(
+        db_executor,
+        _update_sync_job_for_run,
+        job_id,
+        active_run_lock_token,
+        {'partial_result': partial},
+    )
 
 
 def _wav_bytes_to_pcm16_16k(audio_bytes: Optional[bytes]) -> Optional[bytes]:
@@ -1962,10 +2007,16 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         set(partial_result.get('updated_memories') or [])
                         | set(durable_partial.get('updated_memories') or [])
                     ),
+                    _PARTIAL_RESULT_FENCED_CONVERSATION_IDS: sorted(
+                        set(partial_result.get(_PARTIAL_RESULT_FENCED_CONVERSATION_IDS) or [])
+                        | set(durable_partial.get(_PARTIAL_RESULT_FENCED_CONVERSATION_IDS) or [])
+                    ),
                 }
+            fenced_conversation_ids = set(partial_result.get(_PARTIAL_RESULT_FENCED_CONVERSATION_IDS) or [])
             response = {
-                'updated_memories': set(partial_result.get('updated_memories') or []),
-                'new_memories': set(partial_result.get('new_memories') or []),
+                'updated_memories': set(partial_result.get('updated_memories') or []) - fenced_conversation_ids,
+                'new_memories': set(partial_result.get('new_memories') or []) - fenced_conversation_ids,
+                _RESPONSE_FENCED_CONVERSATION_IDS: fenced_conversation_ids,
             }
             segment_errors = []
             segment_lock = threading.Lock()
@@ -2031,6 +2082,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         partial = {
                             'new_memories': sorted(response['new_memories']),
                             'updated_memories': sorted(response['updated_memories']),
+                            _PARTIAL_RESULT_FENCED_CONVERSATION_IDS: sorted(
+                                response[_RESPONSE_FENCED_CONVERSATION_IDS]
+                            ),
                         }
                         _update_sync_job_for_run(job_id, active_run_lock_token, {'partial_result': partial})
                         if content_id:
@@ -2132,7 +2186,31 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 except Exception:
                     pass
 
-            await run_blocking(sync_executor, _reprocess_merged_conversations, uid, response)
+            coordinator_loop = asyncio.get_running_loop()
+
+            def _checkpoint_fenced_conversations():
+                # This callback runs in sync_executor. Waiting here keeps the fence
+                # durable before audio finalization, while the coordinator loop stays
+                # available to dispatch the writes through db_executor.
+                asyncio.run_coroutine_threadsafe(
+                    _checkpoint_fenced_conversations_for_run(
+                        uid,
+                        response,
+                        content_id,
+                        job_id,
+                        active_run_lock_token,
+                        active_run_lock_epoch,
+                    ),
+                    coordinator_loop,
+                ).result()
+
+            await run_blocking(
+                sync_executor,
+                _reprocess_merged_conversations,
+                uid,
+                response,
+                on_fenced=_checkpoint_fenced_conversations,
+            )
 
             # Persist conversation audio (private-cloud chunks → audio_files) so synced
             # conversations play exactly like realtime ones. Gated on the user's setting.

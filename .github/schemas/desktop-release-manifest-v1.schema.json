@@ -48,11 +48,11 @@
     "ed_signature": { "type": "string", "pattern": ".*\\S.*" },
     "qualification_evidence_asset": {
       "type": "string",
-      "pattern": "^qualification-evidence-[^/]+\\.json$"
+      "pattern": "^(qualification-evidence-[^/]+\\.json|desktop-smoke-result\\.json)$"
     },
     "qualification_evidence_sha256": { "$ref": "#/$defs/sha256" },
-    "qualification_tier": { "const": "T2" },
-    "qualification_passed": { "const": true },
+    "qualification_tier": { "enum": ["T2", "emergency"] },
+    "qualification_passed": { "type": "boolean" },
     "backend_mode": { "enum": ["app_only", "backend_required"] },
     "desktop_backend_source_sha": { "$ref": "#/$defs/sourceSha" },
     "desktop_backend_oci_index_digest": { "$ref": "#/$defs/sha256" },
@@ -128,6 +128,16 @@
     "mandatory": { "type": "boolean" }
   },
   "allOf": [
+    {
+      "if": { "properties": { "qualification_tier": { "const": "T2" } } },
+      "then": { "properties": { "qualification_passed": { "const": true } } },
+      "else": {
+        "properties": {
+          "qualification_passed": { "const": false },
+          "qualification_evidence_asset": { "const": "desktop-smoke-result.json" }
+        }
+      }
+    },
     {
       "if": { "properties": { "backend_mode": { "const": "app_only" } } },
       "then": {

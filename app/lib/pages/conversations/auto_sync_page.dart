@@ -72,17 +72,17 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
             ),
             leading: IconButton(
-              icon: FaIcon(FontAwesomeIcons.chevronLeft, color: Colors.white, size: 18),
+              icon: const FaIcon(FontAwesomeIcons.chevronLeft, color: Colors.white, size: 18),
               onPressed: () => Navigator.of(context).pop(),
             ),
             actions: [
               IconButton(
-                icon: FaIcon(FontAwesomeIcons.circleInfo, color: Color(0xFF8E8E93), size: 18),
+                icon: const FaIcon(FontAwesomeIcons.circleInfo, color: Color(0xFF8E8E93), size: 18),
                 onPressed: () => _showInfoSheet(context),
               ),
               if (syncProvider.clearableWalsCount > 0)
                 IconButton(
-                  icon: FaIcon(FontAwesomeIcons.ellipsis, color: Color(0xFF8E8E93), size: 18),
+                  icon: const FaIcon(FontAwesomeIcons.ellipsis, color: Color(0xFF8E8E93), size: 18),
                   onPressed: () => _showManageStorageSheet(context, syncProvider),
                 ),
             ],
@@ -281,7 +281,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.15), shape: BoxShape.circle),
-              child: Center(child: FaIcon(FontAwesomeIcons.check, color: Colors.green, size: 14)),
+              child: const Center(child: FaIcon(FontAwesomeIcons.check, color: Colors.green, size: 14)),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -311,7 +311,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       ),
       child: Row(
         children: [
-          FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.redAccent, size: 16),
+          const FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.redAccent, size: 16),
           const SizedBox(width: 12),
           Expanded(
             child: Text(

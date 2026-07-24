@@ -7,7 +7,6 @@ struct ChatPage: View {
   @ObservedObject var chatProvider: ChatProvider
   let onHome: () -> Void
   @State private var showAppPicker = false
-  @State private var showHistoryPopover = false
   @State private var selectedCitation: Citation?
   @State private var citedConversation: ServerConversation?
   @State private var isLoadingCitation = false
@@ -355,22 +354,7 @@ struct ChatPage: View {
         .disabled(chatProvider.isLoading || chatProvider.isClearing)
       }
 
-      // History button (only in multi-chat mode)
-      if chatProvider.multiChatEnabled {
-        Button(action: { showHistoryPopover.toggle() }) {
-          Image(systemName: "clock.arrow.circlepath")
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
-        }
-        .buttonStyle(.plain)
-        .help("Chat history")
-        .popover(isPresented: $showHistoryPopover, arrowEdge: .bottom) {
-          ChatHistoryPopover(
-            chatProvider: chatProvider,
-            onSelect: { showHistoryPopover = false }
-          )
-        }
-      }
+      // Omi is one continuous chat — no history button / sessions.
 
       // Advanced AI settings button
       Button(action: {
@@ -393,8 +377,7 @@ struct ChatPage: View {
       isSending: chatProvider.isSending,
       hasMoreMessages: chatProvider.hasMoreMessages,
       isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
-      isLoadingInitial: (chatProvider.isLoading || chatProvider.isLoadingSessions)
-        && !chatProvider.isClearing,
+      isLoadingInitial: chatProvider.isLoading && !chatProvider.isClearing,
       app: selectedApp,
       onLoadMore: { await chatProvider.loadMoreMessages() },
       onRate: { messageId, rating in
@@ -413,12 +396,20 @@ struct ChatPage: View {
       onOpenAgentRef: { ref, completion in
         FloatingControlBarManager.shared.openAgentChatFromTimeline(ref: ref, completion: completion)
       },
-      welcomeContent: { welcomeMessage }
+      welcomeContent: {
+        if let opener = chatProvider.onboardingOpener {
+          OnboardingOpenerView(opener: opener, chatProvider: chatProvider)
+        } else {
+          welcomeMessage
+        }
+      }
     )
     .overlay(alignment: .bottom) {
       ChatComposerFade()
     }
   }
+
+  // MARK: - Welcome
 
   private var welcomeMessage: some View {
     VStack(spacing: OmiSpacing.lg) {
@@ -485,6 +476,7 @@ struct ChatPage: View {
       onSend: { text in
         AnalyticsManager.shared.chatMessageSent(
           messageLength: text.count, hasSelectedAppContext: selectedApp != nil, source: "main_chat")
+        chatProvider.dismissOnboardingOpener()
         Task { await chatProvider.sendMainDraft(text) }
       },
       onStop: {

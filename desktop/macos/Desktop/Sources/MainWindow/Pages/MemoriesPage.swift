@@ -848,7 +848,7 @@ class MemoriesViewModel: ObservableObject {
       // Backend rejected device_scope for a non-canonical user — retry unscoped.
       log("MemoriesViewModel: device_scope unsupported by backend, retrying unscoped")
       DesktopDiagnosticsManager.shared.recordFallback(
-        area: "other",
+        area: "memory_scope",
         from: "device_scoped",
         to: "unscoped",
         reason: "capability_mismatch",
@@ -2233,8 +2233,8 @@ struct MemoriesPage: View {
   private var memoryList: some View {
     ScrollView {
       LazyVStack(alignment: .leading, spacing: OmiSpacing.md) {
-        MemoryGraphInlineCard(viewModel: graphViewModel)
-
+        // Brain Map now lives in its own hub tab (beside Memories/Conversations),
+        // so it's no longer embedded at the top of the memory list.
         LazyVStack(spacing: OmiSpacing.sm) {
           ForEach(viewModel.filteredMemories) { memory in
             MemoryCardView(

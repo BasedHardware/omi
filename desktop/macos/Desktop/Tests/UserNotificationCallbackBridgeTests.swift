@@ -31,4 +31,39 @@ final class UserNotificationCallbackBridgeTests: XCTestCase {
   func testSignedSmokeRequiresExplicitResultPath() {
     XCTAssertFalse(UserNotificationCallbackBridge.runSignedSmokeIfRequested(environment: [:]))
   }
+
+  func testSelectorRegistrationCopiesPayloadAndHopsToMainActor() async {
+    let notificationName = Notification.Name("com.omi.test.insight.\(UUID().uuidString)")
+    let events = AsyncStream<(isMainThread: Bool, hours: String?, unsupported: String?)>.makeStream()
+    let observer = ProactiveTestNotificationObserver(name: notificationName) { payload in
+      events.continuation.yield(
+        (
+          Thread.isMainThread,
+          payload["hours"],
+          payload["unsupported"]
+        ))
+      events.continuation.finish()
+    }
+    let center = NotificationCenter.default
+    observer.register(in: center)
+    defer {
+      observer.unregister(from: center)
+    }
+
+    DispatchQueue.global(qos: .userInitiated).async {
+      NotificationCenter.default.post(
+        name: notificationName,
+        object: nil,
+        userInfo: ["hours": "2.5", "unsupported": "must-not-cross-actor-boundary"]
+      )
+    }
+
+    guard let result = await events.stream.first(where: { _ in true }) else {
+      return XCTFail("expected selector-delivered notification")
+    }
+
+    XCTAssertTrue(result.isMainThread)
+    XCTAssertEqual(result.hours, "2.5")
+    XCTAssertNil(result.unsupported)
+  }
 }

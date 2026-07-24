@@ -25,6 +25,10 @@ struct ChatBubble: View {
   @State private var showRatingFeedback = false
   @State private var showInfoPopover = false
   @State private var lastSubmittedRating: Int?
+  // Shared across every metadata control: true while any of them holds
+  // keyboard focus, so Tab / Full Keyboard Access never lands on an
+  // invisible button.
+  @FocusState private var isMetadataControlFocused: Bool
 
   init(
     message: ChatMessage, app: OmiApp?, onRate: @escaping (Int?) -> Void,
@@ -90,22 +94,27 @@ struct ChatBubble: View {
     )
 
     HStack(alignment: .top, spacing: OmiSpacing.md) {
-      // Default omi replies render avatar-free for a quieter timeline; only
-      // app personas keep their identity mark.
-      if message.sender == .ai, let app = app {
-        AsyncImage(url: URL(string: app.image)) { phase in
-          switch phase {
-          case .success(let image):
-            image
-              .resizable()
-              .aspectRatio(contentMode: .fill)
-          default:
-            Circle()
-              .fill(OmiColors.backgroundTertiary)
+      // Omi texts you: its replies carry the Omi mark on the left, and it spins
+      // while it's thinking of a response. App personas keep their own image.
+      if message.sender == .ai {
+        if let app = app {
+          AsyncImage(url: URL(string: app.image)) { phase in
+            switch phase {
+            case .success(let image):
+              image
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+            default:
+              Circle()
+                .fill(OmiColors.backgroundTertiary)
+            }
           }
+          .frame(width: 32, height: 32)
+          .clipShape(Circle())
+        } else {
+          SBLogo(size: 22, spinning: message.isStreaming)
+            .frame(width: 32, height: 32, alignment: .center)
         }
-        .frame(width: 32, height: 32)
-        .clipShape(Circle())
       }
 
       // Bubbles hug their content up to a readable cap — omi replies sit
@@ -126,12 +135,16 @@ struct ChatBubble: View {
   @ViewBuilder
   private func messageContentView(_ groupedBlocks: [ContentBlockGroup]) -> some View {
     if message.isStreaming && message.text.isEmpty && message.contentBlocks.isEmpty {
-      TypingIndicator()
+      // Omi's own reply shows the spinning Omi-mark avatar while thinking, so no
+      // extra typing dots are needed; only app personas (no spinning mark) do.
+      if app != nil {
+        TypingIndicator()
+      }
     } else if message.sender == .ai && !message.contentBlocks.isEmpty {
       ForEach(groupedBlocks) { group in
         groupView(group)
       }
-      if message.isStreaming {
+      if message.isStreaming, app != nil {
         if case .toolCalls(_, let calls) = groupedBlocks.last,
           calls.contains(where: { block in
             if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
@@ -269,8 +282,11 @@ struct ChatBubble: View {
           onOpenAgentRef: onOpenAgentRef
         )
       )
-    case .thinking(_, let text):
-      return AnyView(ThinkingBlock(text: text))
+    case .thinking:
+      // Omi replies like a person texting — no exposed "Thinking" reasoning
+      // disclosure. The streaming typing indicator (spinning mark) carries the
+      // wait on its own.
+      return AnyView(EmptyView())
     case .discoveryCard(_, let title, let summary, let fullText):
       return AnyView(DiscoveryCard(title: title, summary: summary, fullText: fullText))
     case .agentSpawn(
@@ -329,10 +345,18 @@ struct ChatBubble: View {
       }
     }
     // Quiet timeline: actions and timestamps only surface while the reader
-    // is on the message (or mid-interaction with them).
-    .opacity(isRowHovering || showRatingFeedback || showCopied || showInfoPopover ? 1 : 0)
+    // is on the message — by pointer hover or keyboard focus — or
+    // mid-interaction with them.
+    .opacity(
+      ChatBubbleMetadataReveal.isVisible(
+        hovering: isRowHovering,
+        controlFocused: isMetadataControlFocused,
+        transientFeedback: showRatingFeedback || showCopied || showInfoPopover
+      ) ? 1 : 0
+    )
     .omiAnimation(.easeInOut(duration: 0.12), value: isTimestampHovering)
     .omiAnimation(.easeInOut(duration: 0.15), value: isRowHovering)
+    .omiAnimation(.easeInOut(duration: 0.15), value: isMetadataControlFocused)
   }
 
   @ViewBuilder
@@ -351,6 +375,7 @@ struct ChatBubble: View {
           .foregroundColor(message.rating == 1 ? OmiColors.accent : OmiColors.textTertiary)
       }
       .buttonStyle(.plain)
+      .focused($isMetadataControlFocused)
       .help("Helpful response")
 
       // Thumbs down
@@ -366,6 +391,7 @@ struct ChatBubble: View {
           .foregroundColor(message.rating == -1 ? .red : OmiColors.textTertiary)
       }
       .buttonStyle(.plain)
+      .focused($isMetadataControlFocused)
       .help("Not helpful")
 
       if showRatingFeedback {
@@ -408,6 +434,7 @@ struct ChatBubble: View {
         .foregroundColor(showCopied ? .green : OmiColors.textTertiary)
     }
     .buttonStyle(.plain)
+    .focused($isMetadataControlFocused)
     .help("Copy message")
   }
 
@@ -422,12 +449,23 @@ struct ChatBubble: View {
         .foregroundColor(showInfoPopover ? OmiColors.textPrimary : OmiColors.textTertiary)
     }
     .buttonStyle(.plain)
+    .focused($isMetadataControlFocused)
     .help("View response context")
     .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
       if let metadata = message.metadata {
         MessageMetadataPopover(metadata: metadata)
       }
     }
+  }
+}
+
+/// Visibility rule for the quiet timeline's per-message metadata row
+/// (rating / copy / info / timestamp). Keyboard parity is part of the
+/// contract: focus on any metadata control must reveal the row, otherwise
+/// Tab / Full Keyboard Access ends up on an invisible button.
+enum ChatBubbleMetadataReveal {
+  static func isVisible(hovering: Bool, controlFocused: Bool, transientFeedback: Bool) -> Bool {
+    hovering || controlFocused || transientFeedback
   }
 }
 
@@ -1021,6 +1059,11 @@ enum ContentBlockGroup: Identifiable {
           if case .toolCall = block { return true }
           return false
         }
+        // Tool-call chips are live progress, not history: show them only while
+        // the reply is streaming (tools actively being called) and drop them
+        // once omi has finished replying, so the timeline reads like a clean
+        // text conversation.
+        if !isStreaming { return nil }
         return visibleCalls.isEmpty ? nil : .toolCalls(id: id, calls: visibleCalls)
       }
     }
@@ -1186,7 +1229,7 @@ struct ToolCallsGroup: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .fixedSize(horizontal: false, vertical: true)
-    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.82), radius: compact ? 14 : 16)
+    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.42), radius: compact ? 14 : 16)
   }
 
   private var header: some View {

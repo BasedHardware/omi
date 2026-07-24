@@ -10,7 +10,7 @@ extension ProactiveAssistantsPlugin {
     switch (previous, health) {
     case (.active, .temporarilyUnavailable):
       DesktopDiagnosticsManager.shared.recordFallback(
-        area: "other",
+        area: "screen_capture",
         from: "screen_capture",
         to: "capture_paused",
         reason: "capability_mismatch",
@@ -23,7 +23,7 @@ extension ProactiveAssistantsPlugin {
       )
     case (.active, .recovering), (.temporarilyUnavailable, .recovering):
       DesktopDiagnosticsManager.shared.recordFallback(
-        area: "other",
+        area: "screen_capture",
         from: "screen_capture",
         to: "recovery_poll",
         reason: "other",
@@ -36,7 +36,7 @@ extension ProactiveAssistantsPlugin {
       )
     case (.temporarilyUnavailable, .active), (.recovering, .active):
       DesktopDiagnosticsManager.shared.recordFallback(
-        area: "other",
+        area: "screen_capture",
         from: "capture_paused",
         to: "screen_capture",
         reason: "capability_mismatch",
