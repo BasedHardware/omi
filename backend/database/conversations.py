@@ -1524,6 +1524,21 @@ def store_conversation_photos(
 # ********************************
 
 
+def is_soft_deleted(conversation: Optional[dict]) -> bool:
+    """Whether a conversation is a soft-deleted tombstone.
+
+    A tombstone is invisible to the user, so any content operation that reads it
+    and writes derived state — merging its segments, or reprocessing to
+    regenerate structured data, action items, memories and embeddings —
+    resurrects data the user deleted. Such operations must reject a tombstone.
+
+    Shared predicate behind that contract (sync #10119 via `eligible_merge_target`,
+    merge #10262, reprocess). Deliberately distinct from `discarded`, which stays
+    revivable: the merge and reprocess paths intentionally revive a discarded row.
+    """
+    return bool(conversation) and bool(conversation.get('deleted'))
+
+
 def eligible_merge_target(conversation: Optional[dict]) -> bool:
     """Whether synced audio may merge into this conversation (#10033).
 
@@ -1532,7 +1547,7 @@ def eligible_merge_target(conversation: Optional[dict]) -> bool:
     conversation". Discarded rows stay eligible; the merge path reprocesses
     and revives them.
     """
-    return bool(conversation) and not conversation.get('deleted')
+    return bool(conversation) and not is_soft_deleted(conversation)
 
 
 def select_closest_conversation(conversations, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
