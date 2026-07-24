@@ -687,6 +687,17 @@
           "legendFormat": "oldest nonterminal age",
           "range": true,
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (outcome) (rate(listen_finalization_stale_processing_reconciliations_total[15m]))",
+          "legendFormat": "stale orphan recovery {{outcome}}",
+          "range": true,
+          "refId": "D"
         }
       ],
       "title": "Capture finalization reconciliation and nonterminal work",
