@@ -114,6 +114,29 @@ enum AppsCatalogInitialSection {
   case exports
 }
 
+enum AppsPageCategoryFilter {
+  static let allCategoriesOptionId = ""
+  static let allCategoriesTitle = "All Categories"
+
+  enum Selection: Equatable {
+    case allCategories
+    case category(String)
+  }
+
+  static func categoryDropdownOptions(categories: [OmiAppCategory]) -> [SearchableDropdownOption] {
+    [SearchableDropdownOption(id: allCategoriesOptionId, title: allCategoriesTitle)]
+      + categories.map { SearchableDropdownOption(id: $0.id, title: $0.title) }
+  }
+
+  static func selectedCategoryDropdownId(_ selectedCategory: String?) -> String {
+    selectedCategory ?? allCategoriesOptionId
+  }
+
+  static func categorySelection(forOptionId optionId: String) -> Selection {
+    optionId.isEmpty ? .allCategories : .category(optionId)
+  }
+}
+
 struct AppsPage: View {
   @ObservedObject var appProvider: AppProvider
   var appState: AppState? = nil
@@ -535,58 +558,22 @@ struct AppsPage: View {
   }
 
   private var categoryMenu: some View {
-    Menu {
-      Button(action: {
-        viewAllSection = nil
+    SearchableDropdown(
+      title: "Category",
+      label: "Category",
+      options: AppsPageCategoryFilter.categoryDropdownOptions(categories: appProvider.categories),
+      selectedId: AppsPageCategoryFilter.selectedCategoryDropdownId(appProvider.selectedCategory),
+      minWidth: 180
+    ) { option in
+      viewAllSection = nil
+      switch AppsPageCategoryFilter.categorySelection(forOptionId: option.id) {
+      case .allCategories:
         appProvider.clearCategoryFilter()
-        Task { await appProvider.searchApps() }
-      }) {
-        HStack {
-          Text("All Categories")
-          if appProvider.selectedCategory == nil {
-            Image(systemName: "checkmark")
-          }
-        }
+      case .category(let categoryId):
+        appProvider.selectedCategory = categoryId
       }
-
-      Divider()
-
-      ForEach(appProvider.categories) { category in
-        Button(action: {
-          viewAllSection = nil
-          appProvider.selectedCategory = category.id
-          Task { await appProvider.searchApps() }
-        }) {
-          HStack {
-            Text(category.title)
-            if appProvider.selectedCategory == category.id {
-              Image(systemName: "checkmark")
-            }
-          }
-        }
-      }
-    } label: {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: "line.3.horizontal.decrease.circle")
-          .scaledFont(size: OmiType.caption)
-        Text(selectedCategoryLabel)
-          .scaledFont(size: OmiType.body)
-          .lineLimit(1)
-        Image(systemName: "chevron.down")
-          .scaledFont(size: OmiType.micro, weight: .medium)
-      }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .background(OmiColors.backgroundSecondary)
-      .foregroundColor(OmiColors.textPrimary)
-      .cornerRadius(OmiChrome.elementRadius)
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(appProvider.selectedCategory != nil ? OmiColors.border : Color.clear, lineWidth: 1)
-      )
+      Task { await appProvider.searchApps() }
     }
-    .menuStyle(.borderlessButton)
-    .tint(OmiColors.textPrimary)
     .fixedSize()
   }
 
@@ -611,15 +598,6 @@ struct AppsPage: View {
 
   private var hasActiveFilters: Bool {
     appProvider.hasActiveFilters || viewAllSection != nil
-  }
-
-  private var selectedCategoryLabel: String {
-    if let categoryId = appProvider.selectedCategory,
-      let category = appProvider.categories.first(where: { $0.id == categoryId })
-    {
-      return category.title
-    }
-    return "Category"
   }
 
   /// Apps for the selected filter/search result set or "See more" section.
