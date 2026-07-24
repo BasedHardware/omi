@@ -567,7 +567,7 @@ extension AppState {
 
     // This will prompt the user if not already trusted
     let options =
-      ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+      [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
     let trusted = AXIsProcessTrustedWithOptions(options)
     if trusted {
       hasAccessibilityPermission = true

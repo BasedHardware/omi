@@ -2005,7 +2005,7 @@ class ChatToolExecutor {
         expectedOwnerID,
         authorizationSnapshot: authorizationSnapshot)
     else { return }
-    let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+    let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
     let granted = AXIsProcessTrustedWithOptions(options)
     if !granted {
       _ = openPermissionPrivacySettings(
