@@ -104,6 +104,14 @@ if [ -n "${FAKE_XCRUN_HANG_SUITE:-}" ] && [ "$FAKE_XCRUN_HANG_SUITE" = "$suite" 
   wait "$child_pid"
 fi
 
+if [ -n "${FAKE_XCRUN_LOCKWAIT_SUITE:-}" ] && [ "$FAKE_XCRUN_LOCKWAIT_SUITE" = "$suite" ]; then
+  # Park on the shared SwiftPM build lock (its wait message is the last log line)
+  # for longer than the run budget, then proceed — the runner must not charge
+  # this queue time against the per-suite timeout.
+  echo "Another instance of SwiftPM is already running using '.build', waiting until that process has finished execution..."
+  sleep "${FAKE_XCRUN_LOCKWAIT_SECONDS:-5}"
+fi
+
 echo "$suite passed"
 SH
 chmod +x "$TMPDIR/bin/xcrun"
@@ -165,6 +173,18 @@ fi
 hanging_child_pid="$(cat "$FAKE_XCRUN_HANG_CHILD_PID_PATH")"
 if kill -0 "$hanging_child_pid" 2>/dev/null; then
   fail "runner left the timed-out suite's descendant process alive"
+fi
+
+# A suite parked on the shared SwiftPM build lock must not spend its run budget:
+# with a 2s budget it still passes after a 5s lock wait. (AlphaTests still fails
+# with exit 42, so the runner exits non-zero overall — assert on BetaTests only.)
+unset FAKE_XCRUN_HANG_SUITE
+export OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS=2
+export FAKE_XCRUN_LOCKWAIT_SUITE=BetaTests
+export FAKE_XCRUN_LOCKWAIT_SECONDS=5
+"$RUNNER" >"$TMPDIR/lockwait-runner.out" 2>"$TMPDIR/lockwait-runner.err" || true
+if grep -q -- "--- FAILED: BetaTests ---" "$TMPDIR/lockwait-runner.out"; then
+  fail "runner charged SwiftPM build-lock wait against the per-suite run budget"
 fi
 
 echo "swift-test-suites tests passed"

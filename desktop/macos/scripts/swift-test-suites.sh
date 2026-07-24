@@ -58,13 +58,32 @@ run_suite() {
   "${command[@]}" >"$log_path" 2>&1 &
   local command_pid=$!
   (
-    sleep "$SUITE_TIMEOUT_SECONDS"
-    if kill -0 "$command_pid" 2>/dev/null; then
+    # Parallel workers share one SwiftPM `.build` lock, so `swift test` can block
+    # on "Another instance of SwiftPM is already running ... waiting" before it
+    # executes anything. That queue time must not count against the per-suite run
+    # budget, or a merely-queued suite gets killed as if it hung. Spend the run
+    # budget only while the suite is NOT parked on the build lock (its log's last
+    # line is that wait message); a separate, generous cap still fails a suite
+    # that can never acquire the lock (e.g. a wedged holder).
+    local lock_wait_cap="${OMI_SWIFT_TEST_LOCK_WAIT_CAP_SECONDS:-1200}"
+    local remaining="$SUITE_TIMEOUT_SECONDS"
+    local lock_waited=0
+    while kill -0 "$command_pid" 2>/dev/null; do
+      sleep 1
+      if tail -n 1 "$log_path" 2>/dev/null | grep -q "Another instance of SwiftPM is already running"; then
+        lock_waited=$((lock_waited + 1))
+        [ "$lock_waited" -lt "$lock_wait_cap" ] && continue
+      else
+        lock_waited=0
+        remaining=$((remaining - 1))
+        [ "$remaining" -gt 0 ] && continue
+      fi
       touch "$timeout_path"
       terminate_process_tree "$command_pid" TERM
       sleep 5
       terminate_process_tree "$command_pid" KILL
-    fi
+      exit 0
+    done
   ) &
   local watchdog_pid=$!
   wait "$command_pid"
