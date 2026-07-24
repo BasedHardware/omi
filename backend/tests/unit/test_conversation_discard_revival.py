@@ -1,17 +1,19 @@
-"""A discard is reconsidered by reprocessing and by nothing else.
+"""A discard is the system's verdict about content, not a state to defend.
 
-A conversation discarded while it held nothing, then filled with speech by a
-later sync, is revived by reprocessing it. Fencing that left the recording
-transcribed, untitled, and invisible to its owner with no path back, because the
-in-app reprocess reached the same fence. These pin the reopening to reprocessing
-alone, so an ordinary finalizer still cannot overwrite a discard it never
-inspected.
+``discarded`` is set only by the system deciding a conversation held nothing —
+there is no endpoint through which a user discards one; users delete, which is a
+separate field. Every processor re-derives that verdict from the content in
+front of it, so a write cannot resurrect something still empty.
+
+Fencing writes on it stranded conversations a later sync had filled with speech:
+transcribed, untitled, invisible to their owner, and beyond the reach of the
+in-app reprocess that exists to recover them, because it hit the same fence.
+
+The guards that remain are about generations, not verdicts.
 """
 
 import os
 from unittest.mock import MagicMock
-
-import pytest
 
 os.environ.setdefault(
     'ENCRYPTION_SECRET',
@@ -19,7 +21,6 @@ os.environ.setdefault(
 )
 
 import database.conversations as conversations_db
-import utils.conversations.lifecycle as lifecycle_service
 
 
 class _Snapshot:
@@ -47,9 +48,6 @@ class _Ref:
 
 
 class _Transaction:
-    def __init__(self, ref):
-        self._ref = ref
-
     def set(self, ref, data, merge=False):
         ref.written = data
 
@@ -57,13 +55,12 @@ class _Transaction:
         ref.written = data
 
 
-def _run(monkeypatch, existing, *, revive_discarded):
+def _persist(monkeypatch, existing):
     ref = _Ref(_Snapshot(existing))
-    transaction = _Transaction(ref)
 
     fake_db = MagicMock()
     fake_db.collection.return_value.document.return_value = ref
-    fake_db.transaction.return_value = transaction
+    fake_db.transaction.return_value = _Transaction()
 
     monkeypatch.setattr(conversations_db, 'db', fake_db)
     monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda fn: fn)
@@ -79,63 +76,36 @@ def _run(monkeypatch, existing, *, revive_discarded):
             'data_protection_level': 'standard',
         },
         expected_statuses={'processing', 'merging', 'completed'},
-        revive_discarded=revive_discarded,
     )
     return persisted, ref
 
 
-def test_reprocessing_revives_a_discarded_conversation(monkeypatch):
-    existing = {'discarded': True, 'status': 'processing'}
-
-    persisted, ref = _run(monkeypatch, existing, revive_discarded=True)
+def test_a_discarded_conversation_can_be_rewritten(monkeypatch):
+    persisted, ref = _persist(monkeypatch, {'discarded': True, 'status': 'processing'})
 
     assert persisted is True
-    assert ref.written is not None, 'a revival must reach the document'
-    assert ref.written['discarded'] is False, 'the write is what makes it visible again'
+    assert ref.written is not None, 'a sync that filled it with speech must be able to land'
+    assert ref.written['discarded'] is False, 'the write carries the fresh verdict, which is what unhides it'
 
 
-def test_a_run_that_is_not_reprocessing_stays_fenced(monkeypatch):
-    existing = {'discarded': True, 'status': 'processing'}
-
-    persisted, ref = _run(monkeypatch, existing, revive_discarded=False)
-
-    assert persisted is False
-    assert ref.written is None, 'a discard an ordinary finalizer never inspected must survive'
-
-
-def test_revival_does_not_reopen_a_stale_generation(monkeypatch):
-    # Reconsidering a discard is not licence to overwrite a generation that
-    # already moved on; the status guard is independent of the discard guard.
-    existing = {'discarded': True, 'status': 'failed'}
-
-    persisted, ref = _run(monkeypatch, existing, revive_discarded=True)
+def test_a_stale_generation_is_still_fenced(monkeypatch):
+    # The status guard is what fences a stale processor, and it is untouched:
+    # a generation that already reached a terminal state stays owned by it.
+    persisted, ref = _persist(monkeypatch, {'discarded': False, 'status': 'failed'})
 
     assert persisted is False
     assert ref.written is None
 
 
-def test_revival_does_not_recreate_a_deleted_conversation(monkeypatch):
-    persisted, ref = _run(monkeypatch, None, revive_discarded=True)
+def test_a_stale_generation_is_fenced_even_when_discarded(monkeypatch):
+    persisted, ref = _persist(monkeypatch, {'discarded': True, 'status': 'failed'})
 
     assert persisted is False
     assert ref.written is None
 
 
-@pytest.mark.parametrize('revive_discarded', [True, False])
-def test_lifecycle_forwards_the_reprocess_intent(monkeypatch, revive_discarded):
-    captured = {}
+def test_a_deleted_conversation_is_not_recreated(monkeypatch):
+    persisted, ref = _persist(monkeypatch, None)
 
-    def _capture(uid, conversation_data, *, expected_statuses, revive_discarded=False):
-        captured['revive_discarded'] = revive_discarded
-        return True
-
-    monkeypatch.setattr(conversations_db, 'persist_processing_result_with_lifecycle', _capture)
-    monkeypatch.setattr(lifecycle_service.conversations_db, 'persist_processing_result_with_lifecycle', _capture)
-
-    lifecycle_service.persist_processed_conversation(
-        'uid-1',
-        {'id': 'conv-1', 'status': 'completed'},
-        revive_discarded=revive_discarded,
-    )
-
-    assert captured['revive_discarded'] is revive_discarded
+    assert persisted is False
+    assert ref.written is None
