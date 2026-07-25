@@ -1153,6 +1153,34 @@ struct CanonicalMemoryAtlasPage: View {
   }
 }
 
+/// Memory hub presentation of the atlas.
+///
+/// The hub already owns navigation chrome (the Memory menu selects the
+/// destination), so this variant renders the surface full-bleed instead of
+/// stacking the page's own back/title bar underneath the hub bar. It is the
+/// canonical-cohort counterpart to `MemoryGraphPage`, which fills the same tab
+/// for users still on the legacy graph.
+struct CanonicalMemoryAtlasTabView: View {
+  @ObservedObject var viewModel: MemoryGraphViewModel
+  let onViewEvidence: ([String]) -> Void
+
+  var body: some View {
+    CanonicalMemoryAtlasSurface(
+      graph: viewModel.graphResponse,
+      compact: false,
+      onViewEvidence: onViewEvidence
+    )
+    .background(OmiColors.backgroundPrimary)
+    .accessibilityIdentifier("canonical_memory_atlas_tab")
+    .task { await viewModel.prepareCanonicalAtlas() }
+    .onAppear {
+      memoryAtlasLogger.info(
+        "Atlas tab opened nodes=\(viewModel.graphResponse.nodes.count, privacy: .public) edges=\(viewModel.graphResponse.edges.count, privacy: .public)"
+      )
+    }
+  }
+}
+
 /// The Memories page deliberately uses this bounded Canvas-only preview rather
 /// than embedding a second interactive atlas. It gives the page a fast visual
 /// cue while reserving gesture, search, and hit-testing work for the full page.

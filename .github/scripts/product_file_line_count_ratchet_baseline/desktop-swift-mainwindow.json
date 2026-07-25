@@ -1,21 +1,21 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 1854,
-    "desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift": 1512,
+    "desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift": 1552,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3621,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4467,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3311,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": 2761,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": 2789,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5718,
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1690
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "SB redesign: Omi-mark avatar on replies that spins while thinking (typing-dots suppressed for Omi's own replies) and tool-call chips gated to the streaming turn, merged with main's metadata-row reveal honoring keyboard focus (shared FocusState + testable ChatBubbleMetadataReveal); a component split is tracked follow-up.",
-    "desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift": "Merging the Canonical Memory Atlas (rollout-gated full-page exploration view reachable from Memories, its own top-bar suppression) with main's DesktopTopBar redesign pushed the combined `mainContent` SwiftUI expression past the type checker's budget; split into `sidebarSlot`/`mainContentContainer`/staged notification-chain properties so each stays independently type-checkable.",
+    "desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift": "Merging the Canonical Memory Atlas (rollout-gated full-page exploration view reachable from Memories, its own top-bar suppression) with main's DesktopTopBar redesign pushed the combined `mainContent` SwiftUI expression past the type checker's budget; split into `sidebarSlot`/`mainContentContainer`/staged notification-chain properties so each stays independently type-checkable. Follow-up: routing the Memory hub's Brain Map destination through MemoryGraphPresentationMode so canonical-cohort users get the atlas there instead of the legacy graph, plus the destination-local lifecycle load that establishes the cohort capability when Memories was never opened.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": "SearchableDropdown category filter plus extracted filter helpers for regression coverage.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": "Home ask bar now auto-grows as a multi-line TextField so long messages wrap instead of scrolling off-screen (+14 lines over the prior SB-redesign home/chat layout); a component split is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": "Bridge memory search now awaits the active initial or pagination projection before refreshing, preventing an immediate post-navigation marker search from using stale lifecycle capability state; merged with the rollout-gated Canonical Atlas inline entry point, which replaces the legacy Brain Map card main removed from this list.",
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": "The rollout-gated Atlas keeps its feature-local layout, interaction, rendering, and replay policy together while its render-plan cache remains separately testable.",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": "Adds CanonicalMemoryAtlasTabView, the header-less hub-tab presentation of the atlas; the Memory hub already owns navigation chrome, so the surface renders full-bleed rather than stacking the page's own back/title bar under the hub bar. The private atlas surface and logger keep it in this file.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": "Suggested-task loading feedback is now overlaid outside the list flow so an initial fetch cannot shift the task rows; a component split is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": "SB redesign: adds the hover-expand AppNavRail (icons\u2192labels) and the merged/simplified navigation (Memory, Insights) driving selectedIndex; a component split is tracked follow-up."
   },

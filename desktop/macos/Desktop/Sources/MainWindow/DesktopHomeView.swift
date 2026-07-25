@@ -1319,11 +1319,24 @@ private struct HubSegmentedControl: View {
 private struct MemoryHubPage: View {
   let appState: AppState
   let viewModelContainer: ViewModelContainer
+  /// Observed, not just read through the container: the canonical lifecycle
+  /// capability arrives with the first authoritative memory response, and the
+  /// Brain Map destination must re-resolve its presentation when it flips.
+  @ObservedObject var memoriesViewModel: MemoriesViewModel
   @AppStorage(MemoryHubDestination.storageKey) private var destinationRawValue =
     MemoryHubDestination.memories.rawValue
 
   private var destination: MemoryHubDestination {
     MemoryHubDestination(rawValue: destinationRawValue) ?? .memories
+  }
+
+  /// Canonical-cohort users get the atlas on the Brain Map destination; users
+  /// who have not entered the canonical lifecycle keep the legacy graph.
+  private var brainMapPresentationMode: MemoryGraphPresentationMode {
+    MemoryGraphPresentationMode.resolve(
+      canonicalLifecycleExposed: memoriesViewModel.canonicalLifecycleExposed,
+      forceCanonicalAtlasForLocalQA: MemoryGraphPresentationMode.localQAOverrideEnabled
+    )
   }
 
   var body: some View {
@@ -1345,8 +1358,34 @@ private struct MemoryHubPage: View {
       ConversationsPageHost(appState: appState)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     case .brainMap:
-      MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
+      brainMapDestination
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The lifecycle capability is established by the first authoritative
+        // memory response. Without this, opening straight into a persisted
+        // Brain Map destination would resolve the legacy graph for a canonical
+        // user purely because the Memories destination was never visited.
+        .task { await memoriesViewModel.loadMemoriesIfNeeded() }
+    }
+  }
+
+  @ViewBuilder
+  private var brainMapDestination: some View {
+    switch brainMapPresentationMode {
+    case .canonicalAtlas:
+      CanonicalMemoryAtlasTabView(
+        viewModel: viewModelContainer.memoryGraphViewModel,
+        onViewEvidence: { memoryIds in
+          // Evidence lives on the Memories destination, so route there and
+          // open the referenced memory once the switch has committed.
+          destinationRawValue = MemoryHubDestination.memories.rawValue
+          DispatchQueue.main.async {
+            memoriesViewModel.selectedMemory =
+              memoriesViewModel.memories.first { memoryIds.contains($0.id) }
+          }
+        }
+      )
+    case .legacyBrainMap:
+      MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
     }
   }
 }
@@ -1415,7 +1454,8 @@ private struct PageContentView: View {
       case 1:
         MemoryHubPage(
           appState: appState,
-          viewModelContainer: viewModelContainer
+          viewModelContainer: viewModelContainer,
+          memoriesViewModel: viewModelContainer.memoriesViewModel
         )
       case 2:
         ChatPage(
