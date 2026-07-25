@@ -47,7 +47,8 @@ final class MemoryAssistantTelemetryTests: XCTestCase {
 
   func testAnalysisOutcomeEnumIsClosedAndSourceFaithful() {
     let expected: Set<String> = [
-      "synced", "filtered_low_confidence", "no_new_memory", "sync_failed", "analysis_failed",
+      "synced", "filtered_low_confidence", "no_new_memory", "sync_failed", "local_persistence_failed",
+      "sync_state_persistence_failed", "analysis_failed",
     ]
     let actual = Set(MemoryAssistantTelemetry.AnalysisOutcome.allCases.map(\.rawValue))
     XCTAssertEqual(actual, expected)
@@ -131,8 +132,39 @@ final class MemoryAssistantTelemetryTests: XCTestCase {
     XCTAssertTrue(source.contains("recordAnalysisOutcome(.filteredLowConfidence"))
     XCTAssertTrue(source.contains("recordAnalysisOutcome(.synced"))
     XCTAssertTrue(source.contains("recordAnalysisOutcome(.syncFailed"))
+    XCTAssertTrue(source.contains("recordAnalysisOutcome(.localPersistenceFailed"))
+    XCTAssertTrue(source.contains("recordAnalysisOutcome(.syncStatePersistenceFailed"))
     // Existing success terminal is preserved (not folded into the new event).
     XCTAssertTrue(source.contains("AnalyticsManager.shared.memoryExtracted(memoryCount: 1)"))
+  }
+
+  func testSQLiteInsertFailureDoesNotCallBackendOrEmitHistoricalSuccess() async {
+    var backendSyncCalls = 0
+    let outcome = await MemoryAssistantDurability.persistAndSync(
+      persist: { nil },
+      sync: { (_: Int) in
+        backendSyncCalls += 1
+        return "server-memory"
+      },
+      markSynced: { _, _ in XCTFail("markSynced must not run after an insert failure") }
+    )
+
+    XCTAssertEqual(outcome, .localPersistenceFailed)
+    XCTAssertEqual(backendSyncCalls, 0)
+    XCTAssertFalse(outcome.shouldEmitMemoryExtracted)
+  }
+
+  func testMarkSyncedFailureIsNotClassifiedAsFullySynced() async {
+    enum FixtureError: Error { case markSyncedFailed }
+
+    let outcome = await MemoryAssistantDurability.persistAndSync(
+      persist: { 42 },
+      sync: { (_: Int) in "server-memory" },
+      markSynced: { _, _ in throw FixtureError.markSyncedFailed }
+    )
+
+    XCTAssertEqual(outcome, .syncStatePersistenceFailed)
+    XCTAssertTrue(outcome.shouldEmitMemoryExtracted)
   }
 }
 

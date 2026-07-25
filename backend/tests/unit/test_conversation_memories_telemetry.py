@@ -8,6 +8,7 @@ text, transcript content, prompts, provider payloads, or exception strings can
 reach PostHog.
 """
 
+from contextlib import nullcontext
 from types import SimpleNamespace
 
 import pytest
@@ -23,6 +24,7 @@ from utils.conversations.memory_extraction_telemetry import (
     emit_conversation_memories_extracted,
     source_for_conversation,
 )
+from utils.conversations import process_conversation
 
 
 class FakePosthog:
@@ -226,3 +228,32 @@ def test_redis_failure_fails_open_without_blocking_extraction(monkeypatch):
     # Must not raise, and must still emit (fail-open).
     _emit('uid-1', 'conv-A', count=2)
     assert len(fake.calls) == 1
+
+
+def test_posthog_constructor_failure_is_fail_open_at_public_extraction_boundary(monkeypatch):
+    """A broken configured SDK must not undo a durable extraction or make the
+    finalization worker retry. This exercises the public extraction boundary,
+    rather than calling the telemetry helper in isolation."""
+
+    result = ConversationMemoryExtractionResult(count=1, source=SOURCE_TRANSCRIPTION, path=PATH_CANONICAL)
+    monkeypatch.setattr(process_conversation, "_extract_memories_inner", lambda _uid, _conversation: result)
+    monkeypatch.setattr(process_conversation, "track_usage", lambda *_args: nullcontext())
+    monkeypatch.setattr(met, "try_acquire_conversation_memory_analytics_lock", lambda *_args: True)
+    monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "configured-test-key")
+    monkeypatch.setattr(met, "_posthog_client", None)
+    monkeypatch.setattr(met, "_posthog_disabled", False)
+
+    constructor_calls = []
+
+    class BrokenPosthog:
+        def __init__(self, **_kwargs):
+            constructor_calls.append(True)
+            raise RuntimeError("constructor failure")
+
+    monkeypatch.setattr(met.importlib, "import_module", lambda _name: SimpleNamespace(Posthog=BrokenPosthog))
+
+    # The durable extraction result exists before telemetry; constructor failure
+    # is swallowed and no false event can be captured.
+    process_conversation.extract_memories("uid-1", SimpleNamespace(id="conv-1"))
+    assert constructor_calls == [True]
+    assert met._posthog_client is None
