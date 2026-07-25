@@ -281,6 +281,15 @@ if [ "$LOCAL_PROFILE" = true ]; then
 fi
 AUTOMATION_PORT="${OMI_AUTOMATION_PORT:-${AUTOMATION_PORT:-47777}}"
 AUTOMATION_CAPTURE_ROOT="${OMI_AUTOMATION_CAPTURE_ROOT:-$SCRIPT_DIR/.harness/runs}"
+# An external harness may request an ownership proof for a detached `open`
+# launch. The token is passed as an app argument (and therefore visible in the
+# spawned process command) and copied into the owner-only launch signal. It is
+# intentionally opt-in so ordinary local launches keep their existing behavior.
+DESKTOP_LAUNCH_TOKEN="${OMI_DESKTOP_LAUNCH_TOKEN:-}"
+if [[ -n "$DESKTOP_LAUNCH_TOKEN" && ! "$DESKTOP_LAUNCH_TOKEN" =~ ^[A-Za-z0-9_-]{16,128}$ ]]; then
+    echo "ERROR: OMI_DESKTOP_LAUNCH_TOKEN must be 16-128 URL-safe characters" >&2
+    exit 2
+fi
 AUTOMATION_ARGS=("--automation-port=$AUTOMATION_PORT" "--automation-capture-root=$AUTOMATION_CAPTURE_ROOT")
 if [ "${OMI_ENABLE_LOCAL_AUTOMATION:-0}" = "1" ]; then
     AUTOMATION_ARGS=(--automation-bridge "${AUTOMATION_ARGS[@]}")
@@ -1242,6 +1251,7 @@ fi # full bundle path
 
 signal_desktop_launch() {
     local signal_file="${OMI_DESKTOP_LAUNCH_SIGNAL_FILE:-}"
+    local launch_transport="${1:-unknown}"
     local signal_dir signal_tmp
     [ -n "$signal_file" ] || return 0
     signal_dir="$(dirname "$signal_file")"
@@ -1250,7 +1260,17 @@ signal_desktop_launch() {
         return 1
     fi
     signal_tmp="${signal_file}.tmp.$$"
-    printf 'bundle_id=%s\napp_path=%s\n' "$BUNDLE_ID" "$APP_PATH" > "$signal_tmp"
+    # A harness cleanup proof is valid only when this token has also been
+    # passed to the process launched by `open`. Do not emit half a proof.
+    if [ -n "$DESKTOP_LAUNCH_TOKEN" ]; then
+        umask 077
+        printf 'schema_version=1\nbundle_id=%s\napp_path=%s\nexecutable_path=%s\nlaunch_token=%s\nlaunch_transport=%s\n' \
+            "$BUNDLE_ID" "$APP_PATH" "$APP_PATH/Contents/MacOS/$BINARY_NAME" \
+            "$DESKTOP_LAUNCH_TOKEN" "$launch_transport" > "$signal_tmp"
+        chmod 600 "$signal_tmp"
+    else
+        printf 'bundle_id=%s\napp_path=%s\n' "$BUNDLE_ID" "$APP_PATH" > "$signal_tmp"
+    fi
     mv -f "$signal_tmp" "$signal_file"
 }
 
@@ -1294,16 +1314,27 @@ printf 'launch_mode=%s fast_reason=%s bundle_id=%s profile_root=%q\n' \
     "$LAUNCH_MODE" "$FAST_BUNDLE_REASON" "$BUNDLE_ID" "$PROFILE_ROOT"
 
 auth_debug "BEFORE launch: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
-if [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
+LAUNCH_TRANSPORT="open"
+if [ -n "$DESKTOP_LAUNCH_TOKEN" ]; then
+    # `-n` guarantees this invocation creates a process carrying the capability
+    # token instead of focusing an existing instance of the same app.
+    LAUNCH_ARGS=("${AUTOMATION_ARGS[@]}" "--omi-launch-token=$DESKTOP_LAUNCH_TOKEN")
+    if ! open -n "$APP_PATH" --args "${LAUNCH_ARGS[@]}"; then
+        LAUNCH_TRANSPORT="direct"
+        "$APP_PATH/Contents/MacOS/$BINARY_NAME" "${LAUNCH_ARGS[@]}" &
+    fi
+elif [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
     if ! open "$APP_PATH" --args "${AUTOMATION_ARGS[@]}"; then
+        LAUNCH_TRANSPORT="direct"
         "$APP_PATH/Contents/MacOS/$BINARY_NAME" "${AUTOMATION_ARGS[@]}" &
     fi
 else
     if ! open "$APP_PATH"; then
+        LAUNCH_TRANSPORT="direct"
         "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
     fi
 fi
-signal_desktop_launch
+signal_desktop_launch "$LAUNCH_TRANSPORT"
 
 # Launch finished — free this worktree's lock so other checkouts (and a later
 # rebuild here) are not blocked by the long-running wait below. Kept through

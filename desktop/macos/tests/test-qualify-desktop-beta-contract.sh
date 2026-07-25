@@ -47,9 +47,39 @@ require_text 'defaults write "$BUNDLE_ID" transcriptionEnabled -bool false' "$PR
 require_text '"$SCRIPT_DIR/prepare-qualification-profile.sh" "$BUNDLE"' "$QUALIFIER"
 require_text 'OMI_SKIP_SETTINGS_SEED=1'
 require_text 'make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice'
+# omi-test-quality: source-inspection -- static contract: detached qualification
+# launches must persist token-bound provenance and can never fall back to broad
+# bundle-id/app-name termination; an isolated live macOS launcher is not portable.
+require_text 'OMI_DESKTOP_LAUNCH_TOKEN="$DESKTOP_LAUNCH_TOKEN"'
+require_text 'secrets.token_urlsafe(24)'
+require_text 'record_owned_qualification_desktop'
+require_text 'validated_qualification_desktop_pid'
+require_text 'stop_recorded_qualification_desktop'
+require_text 'stat.S_IMODE(signal.stat().st_mode) != 0o600'
+require_text 'target.chmod(0o600)'
+require_text 'command_sha256'
+require_text 'lsof -nP -iTCP:"$AUTOMATION_PORT" -sTCP:LISTEN'
+require_text 'qualification automation port remains bound after owned app cleanup'
+require_text 'kill -KILL "$pid"'
+require_text 'refusing unproven qualification app cleanup'
+require_text 'cleanup failed; preserving qualification lease and preventing success evidence'
+if grep -Eq 'osascript|pkill|kill_process_tree|quit app id' "$QUALIFIER"; then
+  echo "FAIL: qualification cleanup must not use broad app-name or bundle-id termination" >&2
+  exit 1
+fi
+require_order "$QUALIFIER" \
+  'if ! record_owned_qualification_desktop; then' \
+  './scripts/desktop-core-harness.sh --tier 2' \
+  'if ! run_qualification_cleanup; then' \
+  'if [[ "$GITHUB_ACTIONS_ARTIFACT" -eq 1 ]]'
 require_text 'terminate_qualification_desktop "$BUNDLE"'
 require_text '--json tagName,isDraft,isPrerelease,publishedAt,assets,body'
 require_text 'WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"'
+require_text 'qualification-lease acquire'
+require_text 'qualification-lease release'
+require_text 'OMI_HARNESS_PORT_OFFSET="$QUALIFICATION_PORT_OFFSET"'
+require_text 'OMI_AUTOMATION_PORT="$((47777 + QUALIFICATION_PORT_OFFSET))"'
+require_text 'QUALIFICATION_RETAINED_RUNS="${OMI_QUALIFICATION_RETAINED_RUNS:-3}"'
 if grep -Fq 'worktree add' "$QUALIFIER" || grep -Fq 'rm -rf "$WORKTREE"' "$QUALIFIER"; then
   echo "FAIL: qualification must use the persistent exact-SHA source directly" >&2
   exit 1

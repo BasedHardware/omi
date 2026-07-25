@@ -1,6 +1,7 @@
 @preconcurrency import AVFoundation
 @preconcurrency import AppKit
 import Foundation
+import OmiSupport
 
 /// Coordinates the capture → storage → database → OCR pipeline for Rewind
 actor RewindIndexer {
