@@ -233,3 +233,41 @@ def test_static_agent_proxy_uses_managed_blocking_and_named_lifetime_tasks():
         if not isinstance(call.func, ast.Attribute) or call.func.attr != "create_task":
             continue
         assert any(keyword.arg == "name" for keyword in call.keywords)
+
+
+def test_unresolved_vm_ip_is_never_persisted_as_a_dialable_address(agent_proxy):
+    """The placeholder is truthy, so persisting it passed every `if ip:` reader.
+
+    A stored placeholder satisfied the `status == "ready" and vm_ip` fast path,
+    failed the health probe, and drove `_ensure_vm_running(health_failed=True)`
+    into hard-resetting a healthy VM — which wrote the same placeholder back.
+    No writer repaired the field, so the user never recovered.
+    """
+    assert not agent_proxy._is_usable_vm_ip(agent_proxy.UNRESOLVED_VM_IP)
+    assert not agent_proxy._is_usable_vm_ip("")
+    assert not agent_proxy._is_usable_vm_ip(None)
+    assert agent_proxy._is_usable_vm_ip("34.121.9.4")
+
+    # The placeholder is truthy — this is the property that made it dangerous.
+    assert bool(agent_proxy.UNRESOLVED_VM_IP)
+
+    with pytest.raises(ValueError):
+        agent_proxy._update_firestore_vm("uid-1", agent_proxy.UNRESOLVED_VM_IP, "ready")
+
+
+def test_agent_proxy_never_assigns_the_unresolved_ip_placeholder():
+    """`_start_vm_and_wait` must raise rather than return a sentinel address.
+
+    Both callers already route an exception to `status: "error"`, so raising
+    reuses the existing failure path instead of inventing a second one.
+    """
+    source = (AGENT_PROXY_DIR / "main.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not isinstance(node.value, ast.Constant) or node.value.value != "unknown":
+            continue
+        targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        assert targets == ["UNRESOLVED_VM_IP"], f"'unknown' assigned to {targets} at line {node.lineno}"
