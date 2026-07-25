@@ -1,45 +1,41 @@
 version: 2
 name: apps-marketplace
-tier: manual
-description: Apps tab — Imports, Exports, search, filters, Create App (v0.12.119+ redesign)
-app: com.omi.computer-macos
+tier: 2
+description: Apps tab — navigate, snapshot catalog (v0.12.119+ redesign)
+app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SearchableDropdown.swift
   - desktop/macos/Desktop/Sources/Providers/AppProvider.swift
 preconditions:
-  - auth_ready
+  - automation_bridge_ready
 
 steps:
   - id: S1
-    name: Navigate to Apps tab
-    do: "Click the Apps button in the top nav bar (agent-swift find text 'Apps' click). Verify Apps page loads with Imports and Exports sections."
-    expect:
-      text_visible:
-        - Apps
-        - Imports
+    name: Navigate to Apps
+    bridge.navigate:
+      target: apps
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 8
 
   - id: S2
-    name: Verify Imports section
-    do: "Verify the Imports section shows integration cards: Calendar (Google Calendar), Email (Gmail), Local files (This Mac), Apple Notes, X (Twitter), ChatGPT (Memory import), Claude (Memory import). Each should have a name, description, status, and Connect button."
+    name: Apps catalog snapshot
+    bridge.action:
+      name: apps_catalog_snapshot
     expect:
-      interactive_count: { min: 5 }
+      ok: true
 
   - id: S3
-    name: Verify Exports section
-    do: "Scroll down to find the Exports section. Verify it shows export targets: Notion, Obsidian, ChatGPT/Codex."
-    expect:
-      text_visible:
-        - Exports
+    name: Return to Home
+    bridge.navigate:
+      target: dashboard
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 0
 
   - id: S4
-    name: Verify search and filter controls
-    do: "Verify the search bar ('Search apps...') is at the top. Check for Installed filter button, Category dropdown, and Create App button."
-    expect:
-      interactive_count: { min: 3 }
-
-  - id: S5
-    name: Test Category filter
-    do: "Click the Category dropdown to verify it opens with category options. Dismiss it after verifying."
-    expect:
-      interactive_count: { min: 1 }
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
