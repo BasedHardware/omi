@@ -9085,7 +9085,7 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Resilience",
-    "title": "Live transcription - terminal failure rate elevated",
+  "title": "Live transcription - attempt failure rate elevated",
     "condition": "D",
     "data": [
       {
@@ -9101,7 +9101,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(omi_journey_terminal_total{journey=\"live_transcription\",outcome=~\"success|failure\"}[30m]))",
+        "expr": "sum(increase(omi_live_stt_accepted_total[30m]))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -9121,7 +9121,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(omi_journey_terminal_total{journey=\"live_transcription\",outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"live_transcription\",outcome=~\"success|failure\"}[30m])), 1)",
+        "expr": "sum(increase(omi_live_stt_terminal_total{outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_live_stt_accepted_total[30m])), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -9198,9 +9198,9 @@
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "omi-resilience-fallbacks",
-      "__panelId__": "7",
-      "summary": "Live-transcription terminal failures exceed 10% with at least 20 terminal real requests in 30m",
-      "threshold": "failure share > 0.10; terminal outcomes >= 20",
+      "__panelId__": "10",
+      "summary": "Live-transcription failures exceed 10% with at least 20 accepted real attempts in 30m",
+      "threshold": "failure share > 0.10; accepted attempts >= 20",
       "user_impact": "Users may not receive live transcript text or may experience degraded results.",
       "scope": "The Omi live-transcription production service path.",
       "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",

@@ -34,6 +34,7 @@ class LiveSTTSession(Protocol):
     active: bool
     close_code: int
     stt_terminal_failure: bool
+    live_transcription_attempt: Any
 
 
 class LiveSTTClientSocket(Protocol):
@@ -105,6 +106,9 @@ async def terminate_live_stt_session(
             outcome=failure.outcome,
             phase=_FAILURE_PHASE_BY_REASON[bounded_reason],
         )
+        attempt = getattr(session, 'live_transcription_attempt', None)
+        if attempt is not None:
+            attempt.finish('failure', phase=_FAILURE_PHASE_BY_REASON[bounded_reason])
     except Exception as error:
         logger.warning(
             'Unable to record terminal live STT failure error_type=%s',
