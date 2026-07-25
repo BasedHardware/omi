@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:path_provider/path_provider.dart';
@@ -9,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/sync_state.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -25,14 +27,21 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 ///   0x01 ACK             [0x01][status]
 ///   0x02 INFO            [0x02][read:u64 BE][write:u64 BE][cap:u32 BE][dropped:u64 BE][pkt_size:u16 BE]
 ///   0x03 DATA            [0x03][raw_bytes...]   <-- not aligned to record boundaries
-///   0x04 DONE            [0x04][status][next_seq:u64 BE]
+///   0x04 DONE            [0x04][status][next_seq:u64 BE](optional [crc32:u32 BE])
 ///   0x05 READ_BEGIN      [0x05][transfer_start_seq:u64 BE][packet_count:u32 BE]
 ///
-/// Data-safety invariant: CMD_RING_ADVANCE is sent ONLY after NOTIFY_DONE arrives
-/// AND every chunk we received during the transfer has been handed to LocalWalSync.
-/// On any failure (cancel, BLE drop, NOTIFY_DONE error status) the ring is left
-/// untouched — the next sync session resumes from the same read_seq.
+/// Data-safety invariant: each bounded source-sequence range is registered in
+/// the atomically persisted local WAL manifest only after READ_BEGIN, byte
+/// count, DONE, and optional CRC all agree. CMD_RING_ADVANCE is sent after that
+/// durable registration. On any failure the current range stays on the device;
+/// previously advanced ranges never need to be downloaded again.
+typedef RingConnectionResolver = Future<DeviceConnection?> Function(String deviceId);
+typedef RingDocumentsDirectoryProvider = Future<Directory> Function();
+
 class RingStorageSyncImpl implements RingStorageSync {
+  static const int defaultPacketsPerRead = 1800;
+  static const Duration defaultInactivityTimeout = Duration(seconds: 15);
+
   List<Wal> _wals = [];
   BtDevice? _device;
 
@@ -42,6 +51,11 @@ class RingStorageSyncImpl implements RingStorageSync {
 
   IWalSyncListener listener;
   LocalWalSync? _localSync;
+  final RingConnectionResolver? _connectionResolverOverride;
+  final RingDocumentsDirectoryProvider _documentsDirectoryProvider;
+  final int _packetsPerRead;
+  final Duration _inactivityTimeout;
+  final int Function() _nowSeconds;
 
   bool _isCancelled = false;
   bool _isSyncing = false;
@@ -54,7 +68,28 @@ class RingStorageSyncImpl implements RingStorageSync {
   @override
   double get currentSpeedKBps => _currentSpeedKBps;
 
-  RingStorageSyncImpl(this.listener);
+  RingStorageSyncImpl(
+    this.listener, {
+    RingConnectionResolver? connectionResolver,
+    RingDocumentsDirectoryProvider? documentsDirectoryProvider,
+    int packetsPerRead = defaultPacketsPerRead,
+    Duration inactivityTimeout = defaultInactivityTimeout,
+    int Function()? nowSeconds,
+  })  : _connectionResolverOverride = connectionResolver,
+        _documentsDirectoryProvider = documentsDirectoryProvider ?? getApplicationDocumentsDirectory,
+        _packetsPerRead = packetsPerRead,
+        _inactivityTimeout = inactivityTimeout,
+        _nowSeconds = nowSeconds ?? _systemNowSeconds {
+    if (packetsPerRead <= 0) throw ArgumentError.value(packetsPerRead, 'packetsPerRead', 'must be positive');
+  }
+
+  static int _systemNowSeconds() => DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+  Future<DeviceConnection?> _ensureConnection(String deviceId) {
+    final resolver = _connectionResolverOverride;
+    if (resolver != null) return resolver(deviceId);
+    return ServiceManager.instance().device.ensureConnection(deviceId);
+  }
 
   @override
   void setLocalSync(LocalWalSync localSync) {
@@ -87,7 +122,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     if (deviceId == null || deviceId.isEmpty) return;
 
     try {
-      final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      final connection = await _ensureConnection(deviceId);
       if (connection == null) return;
       // CMD_STOP_SYNC (0x03) — does not persist progress; data stays in the ring.
       await connection.stopStorageSync();
@@ -123,7 +158,7 @@ class RingStorageSyncImpl implements RingStorageSync {
   Future<bool> hasFilesToSync() async {
     if (_device == null) return false;
     try {
-      final connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
+      final connection = await _ensureConnection(_device!.id);
       if (connection == null) return false;
       final status = await connection.getRingStatus();
       final result = status != null && status.unreadPackets > 0;
@@ -154,7 +189,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     }
 
     try {
-      final connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
+      final connection = await _ensureConnection(_device!.id);
       if (connection == null) return;
 
       final status = await connection.getRingStatus();
@@ -255,7 +290,7 @@ class RingStorageSyncImpl implements RingStorageSync {
   Future<void> _clearRingOnDevice() async {
     if (_device == null) return;
     try {
-      final connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
+      final connection = await _ensureConnection(_device!.id);
       if (connection == null) return;
       final ok = await connection.clearRing();
       Logger.debug('RingStorageSync._clearRingOnDevice: ok=$ok');
@@ -335,19 +370,21 @@ class RingStorageSyncImpl implements RingStorageSync {
     return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
   }
 
-  /// Pull the unread ring contents from the device, parse opus frames, register
-  /// chunks with LocalWalSync, then advance the ring iff NOTIFY_DONE arrived.
-  /// Returns true if the transfer ran to completion (DONE received and acted on).
+  /// Drain the ring in bounded, independently durable transactions.
+  ///
+  /// A full CV1 can take well over an hour to transfer. Keeping one cumulative
+  /// ADVANCE behind the entire backlog means any disconnect replays everything.
+  /// Each range is small enough to retry cheaply, and advances only after that
+  /// exact range is durably represented by local WALs.
   Future<bool> _syncRing(Wal wal, {IWalSyncProgressListener? progress}) async {
     if (_device == null) return false;
-    final connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
+    final connection = await _ensureConnection(_device!.id);
     if (connection == null) throw Exception('Device not connected');
 
     _activeSyncDeviceId = _device!.id;
     _downloadStartTime = DateTime.now();
     _totalBytesDownloaded = 0;
 
-    // Snapshot ring state so we know what range we're consuming.
     final ringInfo = await connection.getRingInfo();
     if (ringInfo == null) {
       Logger.debug('RingStorageSync._syncRing: getRingInfo returned null');
@@ -362,46 +399,131 @@ class RingStorageSyncImpl implements RingStorageSync {
         'ringInfo': ringInfo.toString(),
       });
     }
-    final status = await connection.getRingStatus();
-    final rtcValid = status?.isRtcValid ?? false;
+    final targetWriteSeq = ringInfo.writeSeq;
+    final totalRecords = targetWriteSeq - ringInfo.readSeq;
+    final fps = wal.codec.getFramesPerSecond();
+    final fallbackAnchor = await _resolveFallbackAnchor(wal, ringInfo.readSeq, fps);
+    var nextReadSeq = ringInfo.readSeq;
+    var completedRecords = 0;
+    var completedFrames = 0;
 
+    while (!_isCancelled && nextReadSeq < targetWriteSeq) {
+      final remaining = targetWriteSeq - nextReadSeq;
+      final packetCount = remaining > _packetsPerRead ? _packetsPerRead : remaining;
+      final advancedTo = await _syncRange(
+        connection,
+        wal,
+        startSeq: nextReadSeq,
+        packetCount: packetCount,
+        fallbackAnchor: fallbackAnchor,
+        fallbackFramesBefore: completedFrames,
+        completedRecords: completedRecords,
+        totalRecords: totalRecords,
+        progress: progress,
+      );
+      if (advancedTo == null) return false;
+      nextReadSeq = advancedTo.nextSeq;
+      completedRecords += packetCount;
+      completedFrames += advancedTo.frameCount;
+    }
+
+    return !_isCancelled && nextReadSeq == targetWriteSeq;
+  }
+
+  Future<int> _resolveFallbackAnchor(Wal virtualWal, int initialReadSeq, int fps) async {
+    final localSync = _localSync;
+    if (localSync == null) return virtualWal.timerStart;
+
+    final sourcePattern = RegExp(r'^ring_(\d+)_(\d+)$');
+    Wal? predecessor;
+    for (final wal in await localSync.getAllWals()) {
+      if (wal.device != virtualWal.device || wal.sourceId == null) continue;
+      final match = sourcePattern.firstMatch(wal.sourceId!);
+      if (match == null) continue;
+      final startSeq = int.parse(match.group(1)!);
+      final endSeq = int.parse(match.group(2)!);
+      if (startSeq == initialReadSeq) return wal.timerStart;
+      if (endSeq == initialReadSeq &&
+          (predecessor == null || wal.timerStart + wal.seconds > predecessor.timerStart + predecessor.seconds)) {
+        predecessor = wal;
+      }
+    }
+    if (predecessor != null) {
+      return predecessor.timerStart + predecessor.totalFrames ~/ (fps == 0 ? 1 : fps);
+    }
+    return virtualWal.timerStart;
+  }
+
+  Future<_RingRangeResult?> _syncRange(
+    DeviceConnection connection,
+    Wal wal, {
+    required int startSeq,
+    required int packetCount,
+    required int fallbackAnchor,
+    required int fallbackFramesBefore,
+    required int completedRecords,
+    required int totalRecords,
+    IWalSyncProgressListener? progress,
+  }) async {
     final completer = Completer<bool>();
     final reassembler = RingRecordReassembler();
-    final List<List<int>> bytesData = []; // parsed opus frames awaiting flush
+    final pendingRecords = <_RecoveredRingRecord>[];
     int recordsConsumed = 0;
-    int? firstRecordTs;
-    int chunkTimerStart = 0; // updated as chunks flush
+    int segment = 0;
+    int? previousRecordTimestamp;
+    int fallbackFrames = 0;
     final fps = wal.codec.getFramesPerSecond();
     final chunkFrames = sdcardChunkSizeSecs * fps;
     int? doneNextSeq;
     int? transferStartSeq;
     int? announcedPacketCount;
     bool doneOk = false;
+    bool protocolError = false;
+    bool crcVerified = true;
     bool flushError = false;
-    Future<void>? inFlightFlush;
-    Timer? firstDataTimer;
-    bool firstDataReceived = false;
+    Timer? inactivityTimer;
+    final transferCrc = RingTransferCrc32();
 
     DateTime lastProgressUpdate = DateTime.now();
     const progressInterval = Duration(milliseconds: 200);
 
-    // Flush exactly [chunkFrames] frames at a time; on DONE, flush whatever is left.
-    Future<void> flushChunks({required bool finalFlush}) async {
-      while (bytesData.length >= chunkFrames || (finalFlush && bytesData.isNotEmpty)) {
-        final take = bytesData.length >= chunkFrames ? chunkFrames : bytesData.length;
-        final chunk = bytesData.sublist(0, take);
-        bytesData.removeRange(0, take);
+    Future<void> flushValidatedRange() async {
+      while (pendingRecords.isNotEmpty) {
+        final firstSegment = pendingRecords.first.segment;
+        final chunkRecords = <_RecoveredRingRecord>[];
+        var frameCount = 0;
+        while (pendingRecords.isNotEmpty && pendingRecords.first.segment == firstSegment) {
+          if (frameCount >= chunkFrames) break;
+          final record = pendingRecords.removeAt(0);
+          chunkRecords.add(record);
+          frameCount += record.frames.length;
+        }
+        if (chunkRecords.isEmpty) break;
+
+        final frames = chunkRecords.expand((record) => record.frames).toList(growable: false);
+        final timerStart = chunkRecords.first.timestamp;
+        final sourceStartSeq = chunkRecords.first.sequence;
+        final sourceEndSeq = chunkRecords.last.sequence + 1;
+        final sourceId = 'ring_${sourceStartSeq}_$sourceEndSeq';
         try {
-          final file = await _flushToDisk(wal, chunk, chunkTimerStart);
-          await _registerWithLocalSync(wal, file, chunkTimerStart, chunk.length);
+          final file = await _flushToDisk(wal, frames, timerStart, sourceId);
+          await _registerWithLocalSync(wal, file, timerStart, frames.length, sourceId);
         } catch (e) {
           Logger.debug('RingStorageSync._syncRing: flush error: $e');
           flushError = true;
           rethrow;
         }
-        chunkTimerStart += chunk.length ~/ (fps == 0 ? 1 : fps);
-        if (finalFlush && bytesData.isEmpty) break;
       }
+    }
+
+    void armInactivityTimer() {
+      inactivityTimer?.cancel();
+      inactivityTimer = Timer(_inactivityTimeout, () {
+        if (!completer.isCompleted) {
+          Logger.debug('RingStorageSync: range inactive for ${_inactivityTimeout.inSeconds}s');
+          completer.complete(false);
+        }
+      });
     }
 
     await _notifyStream?.cancel();
@@ -414,6 +536,7 @@ class RingStorageSyncImpl implements RingStorageSync {
           return;
         }
         if (value.isEmpty) return;
+        armInactivityTimer();
 
         final opcode = value[0];
         if (opcode == RingProtocol.notifyAck) {
@@ -426,16 +549,20 @@ class RingStorageSyncImpl implements RingStorageSync {
         }
         if (opcode == RingProtocol.notifyReadBegin) {
           final begin = RingProtocol.parseReadBeginNotification(value);
-          if (begin != null) {
+          if (begin == null || begin.transferStartSeq != startSeq || begin.packetCount != packetCount) {
+            protocolError = true;
+            Logger.debug('RingStorageSync: invalid READ_BEGIN for requested range start=$startSeq count=$packetCount');
+            if (!completer.isCompleted) completer.complete(false);
+          } else if (transferStartSeq != null &&
+              (transferStartSeq != begin.transferStartSeq || announcedPacketCount != begin.packetCount)) {
+            protocolError = true;
+            if (!completer.isCompleted) completer.complete(false);
+          } else {
             transferStartSeq = begin.transferStartSeq;
             announcedPacketCount = begin.packetCount;
             Logger.debug(
               'RingStorageSync: NOTIFY_READ_BEGIN start=${begin.transferStartSeq} count=${begin.packetCount}',
             );
-            if (!firstDataReceived) {
-              firstDataReceived = true;
-              firstDataTimer?.cancel();
-            }
           }
           return;
         }
@@ -448,6 +575,14 @@ class RingStorageSyncImpl implements RingStorageSync {
           }
           doneNextSeq = done.nextSeq;
           doneOk = done.isOk;
+          if (done.transferCrc32 != null) {
+            crcVerified = done.transferCrc32 == transferCrc.value;
+            if (!crcVerified) {
+              Logger.debug(
+                'RingStorageSync: transfer CRC mismatch expected=${done.transferCrc32} actual=${transferCrc.value}',
+              );
+            }
+          }
           Logger.debug('RingStorageSync: NOTIFY_DONE status=${done.status} next_seq=$doneNextSeq');
           if (!completer.isCompleted) completer.complete(true);
           return;
@@ -460,31 +595,45 @@ class RingStorageSyncImpl implements RingStorageSync {
         // NOTIFY_DATA: append payload (skip the leading opcode byte) to the
         // reassembler. The firmware does NOT align chunks to record boundaries.
         final payload = value.sublist(1);
-        if (!firstDataReceived) {
-          firstDataReceived = true;
-          firstDataTimer?.cancel();
+        if (transferStartSeq == null) {
+          protocolError = true;
+          Logger.debug('RingStorageSync: DATA arrived before READ_BEGIN');
+          if (!completer.isCompleted) completer.complete(false);
+          return;
         }
+        transferCrc.add(payload);
         reassembler.append(payload);
         _updateSpeed(payload.length);
 
         for (final record in reassembler.drainRecords()) {
           final ts = RingProtocol.readRecordTimestamp(record);
-
-          // Anchor timerStart on the first usable timestamp.
-          if (firstRecordTs == null) {
-            if (rtcValid && ts > 0) {
-              firstRecordTs = ts;
-              chunkTimerStart = ts;
-            } else {
-              // Fallback: now - estimated duration of the unread region.
-              final estSecs = wal.totalFrames ~/ (fps == 0 ? 1 : fps);
-              firstRecordTs = DateTime.now().millisecondsSinceEpoch ~/ 1000 - estSecs;
-              chunkTimerStart = firstRecordTs!;
-            }
+          final frames = RingProtocol.parseAudioPayload(record.sublist(RingProtocol.timestampBytes));
+          if (frames.isEmpty) {
+            protocolError = true;
+            Logger.debug('RingStorageSync: record ${transferStartSeq! + recordsConsumed} has no decodable frames');
           }
+          final now = _nowSeconds();
+          final effectiveTimestamp = RingProtocol.isPlausibleRecordTimestamp(ts, nowSeconds: now)
+              ? ts
+              : fallbackAnchor + (fallbackFramesBefore + fallbackFrames) ~/ (fps == 0 ? 1 : fps);
 
-          final audio = record.sublist(RingProtocol.timestampBytes);
-          bytesData.addAll(RingProtocol.parseAudioPayload(audio));
+          if (previousRecordTimestamp != null &&
+              (effectiveTimestamp < previousRecordTimestamp! || effectiveTimestamp > previousRecordTimestamp! + 2)) {
+            segment += 1;
+          }
+          previousRecordTimestamp = effectiveTimestamp;
+
+          if (frames.isNotEmpty) {
+            pendingRecords.add(
+              _RecoveredRingRecord(
+                sequence: transferStartSeq! + recordsConsumed,
+                timestamp: effectiveTimestamp,
+                segment: segment,
+                frames: frames,
+              ),
+            );
+          }
+          fallbackFrames += frames.length;
           recordsConsumed += 1;
         }
 
@@ -492,9 +641,8 @@ class RingStorageSyncImpl implements RingStorageSync {
         final now = DateTime.now();
         if (now.difference(lastProgressUpdate) >= progressInterval) {
           lastProgressUpdate = now;
-          if (wal.storageTotalBytes > 0) {
-            final consumedBytes = recordsConsumed * RingProtocol.recordSize;
-            final pct = (consumedBytes / wal.storageTotalBytes).clamp(0.0, 1.0);
+          if (totalRecords > 0) {
+            final pct = ((completedRecords + recordsConsumed) / totalRecords).clamp(0.0, 1.0);
             progress?.onWalSyncedProgress(
               pct,
               speedKBps: _currentSpeedKBps,
@@ -503,28 +651,6 @@ class RingStorageSyncImpl implements RingStorageSync {
               totalFiles: 1,
             );
           }
-        }
-
-        // Flush full chunks as we go (data safety: even if BLE drops mid-stream,
-        // already-flushed chunks land in LocalWalSync and reach the cloud).
-        //
-        // Single in-flight flush at a time. flushChunks loops while bytesData
-        // has >= chunkFrames, so additional NOTIFY_DATA arriving during a flush
-        // are absorbed by the in-flight task's next iteration. Without this
-        // guard, two concurrent flush closures would both read chunkTimerStart
-        // before either updated it, producing overlapping timestamps in
-        // LocalWalSync. We hold the Future so the post-DONE final flush can
-        // await any flush still in flight before draining the tail.
-        if (inFlightFlush == null && bytesData.length >= chunkFrames) {
-          inFlightFlush = () async {
-            try {
-              await flushChunks(finalFlush: false);
-            } catch (_) {
-              if (!completer.isCompleted) completer.complete(false);
-            } finally {
-              inFlightFlush = null;
-            }
-          }();
         }
       },
     );
@@ -539,60 +665,32 @@ class RingStorageSyncImpl implements RingStorageSync {
       }
     });
 
-    firstDataTimer = Timer(const Duration(seconds: 5), () {
-      if (!firstDataReceived && !completer.isCompleted) {
-        Logger.debug('RingStorageSync: no data within 5s');
-        completer.completeError(TimeoutException('No data from device'));
-      }
-    });
+    armInactivityTimer();
 
-    // Kick off the read. No packet_count = stream everything from read_seq.
-    final readOk = await connection.readRingFromSeq(ringInfo.readSeq);
+    final readOk = await connection.readRingFromSeq(startSeq, packetCount: packetCount);
     if (!readOk) {
-      firstDataTimer.cancel();
+      inactivityTimer?.cancel();
       await _notifyStream?.cancel();
       _notifyStream = null;
       throw Exception('Failed to send CMD_RING_READ');
     }
 
     Logger.debug(
-      'RingStorageSync: reading from seq=${ringInfo.readSeq} (write=${ringInfo.writeSeq}, unread=${ringInfo.unreadPackets})',
+      'RingStorageSync: reading bounded range start=$startSeq count=$packetCount',
     );
 
     bool reachedDone = false;
     try {
-      reachedDone = await completer.future.timeout(const Duration(minutes: 30));
-    } on TimeoutException {
-      Logger.debug('RingStorageSync: overall transfer timeout (30m)');
+      reachedDone = await completer.future;
     } catch (e) {
       Logger.debug('RingStorageSync: transfer error: $e');
     } finally {
-      firstDataTimer.cancel();
+      inactivityTimer?.cancel();
       if (_isCancelled) {
         await _requestFirmwareStopSync();
       }
       await _notifyStream?.cancel();
       _notifyStream = null;
-    }
-
-    // Wait for any flush still in flight from the streaming phase before
-    // draining the tail — otherwise the final flush could race the in-flight
-    // one on bytesData and chunkTimerStart.
-    final pendingFlush = inFlightFlush;
-    if (pendingFlush != null) {
-      try {
-        await pendingFlush;
-      } catch (e) {
-        Logger.debug('RingStorageSync: in-flight flush error during settle: $e');
-      }
-    }
-
-    // Flush whatever frames are buffered, even on partial failure — those frames
-    // are safe to upload to cloud regardless. ADVANCE is gated separately.
-    try {
-      await flushChunks(finalFlush: true);
-    } catch (e) {
-      Logger.debug('RingStorageSync: final flush error: $e');
     }
 
     final receivedCompleteRange = RingProtocol.receivedCompleteRange(
@@ -602,12 +700,28 @@ class RingStorageSyncImpl implements RingStorageSync {
       receivedPacketCount: recordsConsumed,
       pendingBytes: reassembler.pendingBytes,
     );
+    final transportComplete =
+        reachedDone && doneOk && !protocolError && crcVerified && !_isCancelled && receivedCompleteRange;
+
+    // No bytes are registered before the complete range and optional CRC have
+    // been validated. A corrupt retry therefore cannot poison an immutable
+    // source identity that would block the next clean retry.
+    if (transportComplete) {
+      try {
+        await flushValidatedRange();
+      } catch (e) {
+        Logger.debug('RingStorageSync: final flush error: $e');
+      }
+    }
+
     final advancedOk = RingProtocol.canAdvance(
       reachedDone: reachedDone,
       doneOk: doneOk,
       flushError: flushError,
       isCancelled: _isCancelled,
       receivedCompleteRange: receivedCompleteRange,
+      protocolError: protocolError,
+      crcVerified: crcVerified,
     );
     if (advancedOk) {
       final ok = await connection.advanceRing(doneNextSeq!);
@@ -617,22 +731,27 @@ class RingStorageSyncImpl implements RingStorageSync {
         'next_seq': doneNextSeq,
         'advance_ok': ok,
       });
-      return ok;
+      return ok ? _RingRangeResult(nextSeq: doneNextSeq!, frameCount: fallbackFrames) : null;
     } else {
       Logger.debug(
         'RingStorageSync: skipping advance (reachedDone=$reachedDone doneOk=$doneOk flushError=$flushError '
-        'cancelled=$_isCancelled completeRange=$receivedCompleteRange records=$recordsConsumed '
-        'pendingBytes=${reassembler.pendingBytes})',
+        'cancelled=$_isCancelled completeRange=$receivedCompleteRange protocolError=$protocolError '
+        'crcVerified=$crcVerified records=$recordsConsumed pendingBytes=${reassembler.pendingBytes})',
       );
-      return false;
+      return null;
     }
   }
 
   /// Write opus frames to disk in WAL format: [frame_length_u32_le][frame_data]...
   /// Identical to StorageSyncImpl._flushToDisk for downstream compatibility.
-  Future<File> _flushToDisk(Wal wal, List<List<int>> frames, int timerStart) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final filePath = '${directory.path}/${wal.getFileNameByTimeStarts(timerStart)}';
+  Future<File> _flushToDisk(
+    Wal wal,
+    List<List<int>> frames,
+    int timerStart,
+    String sourceId,
+  ) async {
+    final directory = await _documentsDirectoryProvider();
+    final filePath = '${directory.path}/${wal.getFileNameByTimeStarts(timerStart, sourceId: sourceId)}';
 
     final List<int> data = [];
     for (final frame in frames) {
@@ -645,15 +764,38 @@ class RingStorageSyncImpl implements RingStorageSync {
     }
 
     final file = File(filePath);
-    // The firmware advances its durable read watermark only after this transfer
-    // completes. Flush the file before registering it and sending that ACK so a
-    // process or OS crash cannot turn an acknowledged range into missing audio.
-    await file.writeAsBytes(data, flush: true);
+    if (await file.exists()) {
+      final existing = await file.readAsBytes();
+      if (!listEquals(existing, data)) {
+        throw StateError('Immutable ring WAL collision for $sourceId');
+      }
+      return file;
+    }
+
+    final temporaryFile = File('$filePath.tmp');
+    try {
+      if (await temporaryFile.exists()) await temporaryFile.delete();
+      await temporaryFile.writeAsBytes(data, flush: true);
+      await temporaryFile.rename(filePath);
+    } catch (_) {
+      if (await temporaryFile.exists()) {
+        try {
+          await temporaryFile.delete();
+        } catch (_) {}
+      }
+      rethrow;
+    }
     Logger.debug('RingStorageSync: wrote ${data.length}B (${frames.length} frames) to $filePath');
     return file;
   }
 
-  Future<void> _registerWithLocalSync(Wal wal, File file, int timerStart, int frameCount) async {
+  Future<void> _registerWithLocalSync(
+    Wal wal,
+    File file,
+    int timerStart,
+    int frameCount,
+    String sourceId,
+  ) async {
     if (_localSync == null) {
       throw StateError('LocalWalSync is unavailable; refusing to acknowledge device records');
     }
@@ -674,9 +816,34 @@ class RingStorageSyncImpl implements RingStorageSync {
       totalFrames: frameCount,
       syncedFrameOffset: 0,
       originalStorage: WalStorage.sdcard,
+      sourceId: sourceId,
     );
 
-    await _localSync!.addExternalWal(localWal);
-    Logger.debug('RingStorageSync: registered chunk (ts=$timerStart, ${seconds}s, $frameCount frames)');
+    final registration = await _localSync!.addExternalWal(localWal);
+    Logger.debug(
+      'RingStorageSync: registered chunk (source=$sourceId, ts=$timerStart, ${seconds}s, '
+      '$frameCount frames, result=${registration.name})',
+    );
   }
+}
+
+class _RecoveredRingRecord {
+  final int sequence;
+  final int timestamp;
+  final int segment;
+  final List<List<int>> frames;
+
+  const _RecoveredRingRecord({
+    required this.sequence,
+    required this.timestamp,
+    required this.segment,
+    required this.frames,
+  });
+}
+
+class _RingRangeResult {
+  final int nextSeq;
+  final int frameCount;
+
+  const _RingRangeResult({required this.nextSeq, required this.frameCount});
 }
