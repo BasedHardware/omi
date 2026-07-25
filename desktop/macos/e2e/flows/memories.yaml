@@ -1,53 +1,63 @@
 version: 2
 name: memories
-tier: manual
-description: Memory tab — navigate sub-tabs (Memories, Conversations, Brain Map), search, filter (v0.12.119+ redesign)
-app: com.omi.computer-macos
+tier: 2
+description: Memory tab — navigate, snapshot memories, check conversations list (v0.12.119+ redesign)
+app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
 preconditions:
-  - auth_ready
+  - automation_bridge_ready
 
 steps:
   - id: S1
-    name: Navigate to Memory tab
-    do: "Click the Memory button in the top nav bar (agent-swift find text 'Memory' click). Verify Memory page loads with 3 sub-tabs: Memories, Conversations, Brain Map."
-    expect:
-      text_visible:
-        - Memories
-        - Conversations
-        - Brain Map
+    name: Navigate to Memories
+    bridge.navigate:
+      target: memories
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 3
 
   - id: S2
-    name: Verify Memories sub-tab
-    do: "Verify the Memories sub-tab is active. Check for search bar ('Search memories...'), filter buttons ('This device', 'All'), Add button, and a list of memory items with timestamps."
+    name: Memories snapshot
+    bridge.action:
+      name: memories_snapshot
     expect:
-      interactive_count: { min: 4 }
+      ok: true
+      result.detail.is_signed_in: "true"
 
   - id: S3
-    name: Switch to Conversations sub-tab
-    do: "Click the Conversations sub-tab button. Verify Conversations page loads with Live section (red dot, 'Listening...'), search bar, category filter tabs (All, Starred, Work, Personal, Social), and a list of conversations grouped by date."
-    expect:
-      text_visible:
-        - Conversations
+    name: Navigate to Conversations
+    bridge.navigate:
+      target: conversations
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 1
 
   - id: S4
-    name: Verify conversation list features
-    do: "Check for Select and Quick Note buttons at the top. Verify conversation entries show title, date, duration, and star icon. Check for 'Load older conversations' at the bottom if scrolled down."
+    name: Conversations list snapshot
+    bridge.action:
+      name: conversation_list_snapshot
     expect:
-      interactive_count: { min: 3 }
+      ok: true
 
   - id: S5
-    name: Switch to Brain Map sub-tab
-    do: "Click the Brain Map sub-tab button. Verify Brain Map renders with an interactive node graph visualization showing connected entities."
+    name: Memory graph snapshot
+    bridge.action:
+      name: memory_graph_snapshot
     expect:
-      text_visible:
-        - Brain Map
+      ok: true
 
   - id: S6
-    name: Return to Memories sub-tab
-    do: "Click the Memories sub-tab button to return. Verify the memory list is visible with search and filter controls."
-    expect:
-      text_visible:
-        - Memories
+    name: Return to Memories
+    bridge.navigate:
+      target: memories
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 3
+
+  - id: S7
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
