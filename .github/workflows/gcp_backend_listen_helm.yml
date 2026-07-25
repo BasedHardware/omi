@@ -151,6 +151,26 @@ jobs:
           echo "Deploying image tag ${RESOLVED_TAG} (currently ${RUNNING_TAG:-<none>})"
           echo "BACKEND_LISTEN_IMAGE_TAG=$RESOLVED_TAG" >> "$GITHUB_ENV"
 
+      - name: Carry forward config this workflow does not own
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        run: |
+          set -euo pipefail
+          # deploy-backend-config.sh requires these in prod, but only the full backend
+          # deploy derives them (from live Cloud Run state). This workflow refreshes the
+          # same shared ConfigMap, so read the current values back rather than dropping
+          # them or duplicating that derivation.
+          CM=${{ vars.ENV }}-omi-backend-config
+          NS=${{ vars.ENV }}-omi-backend
+          for key in ACCOUNT_DELETION_HANDLER_URL SYNC_TASKS_HANDLER_URL SYNC_TASKS_INVOKER_SA; do
+            value="$(kubectl -n "$NS" get configmap "$CM" -o jsonpath="{.data.$key}" 2>/dev/null || true)"
+            if [[ -z "$value" ]]; then
+              echo "ERROR: $key is absent from configmap $CM; run the full backend deploy first." >&2
+              exit 1
+            fi
+            echo "$key=$value" >> "$GITHUB_ENV"
+            echo "Carried $key"
+          done
+
       - name: Apply non-secret backend runtime config
         if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
         env:
@@ -168,7 +188,10 @@ jobs:
           MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
           RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
           REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
-          STT_PRERECORDED_MODEL: modulate-velma-2,parakeet
+          ACCOUNT_DELETION_HANDLER_URL: ${{ env.ACCOUNT_DELETION_HANDLER_URL }}
+          SYNC_TASKS_HANDLER_URL: ${{ env.SYNC_TASKS_HANDLER_URL }}
+          SYNC_TASKS_INVOKER_SA: ${{ env.SYNC_TASKS_INVOKER_SA }}
+          STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
           STT_SERVICE_MODELS: modulate-velma-2,parakeet
           TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
           TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
