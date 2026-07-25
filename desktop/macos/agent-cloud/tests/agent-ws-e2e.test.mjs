@@ -313,7 +313,10 @@ describe("agent-cloud WS contract (e2e)", () => {
       proc.kill();
       rmSync(localTemp, { recursive: true, force: true });
     }
-  }, 20000);
+    // 30s like beforeAll: this is the only other case that spawns its own server,
+    // and waitForServer alone may burn 15s on a loaded CI runner. The 20s cases
+    // reuse the already-running shared server, so they need no spawn budget.
+  }, 30000);
 
   it("emits a bounded string category for SDK failures", async () => {
     const ws = await connect();
