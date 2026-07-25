@@ -222,21 +222,6 @@ def test_get_llm_feature_gateway_mode_fails_closed_on_transport_failure(monkeypa
     assert legacy.calls == []
 
 
-def test_gateway_serving_compatibility_wrapper_is_gateway_only():
-    from utils.llm import gateway_serving
-
-    gateway = FakeChatModel(name='gateway', calls=[])
-    legacy = FakeChatModel(name='legacy', calls=[])
-    wrapped = gateway_serving.wrap_gateway_with_legacy_fallback(
-        feature='conv_discard',
-        gateway_model=gateway,
-        legacy_model=legacy,
-    )
-
-    assert wrapped is gateway
-    assert legacy.calls == []
-
-
 def test_gateway_serving_does_not_fallback_on_gateway_configuration_503():
     from utils.llm import gateway_serving
 

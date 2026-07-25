@@ -5,20 +5,6 @@ import httpx
 from utils.llm import gateway_serving
 
 
-def test_compatibility_wrapper_discards_legacy_model():
-    gateway = object()
-    legacy = object()
-
-    wrapped = gateway_serving.wrap_gateway_with_legacy_fallback(
-        feature='chat_responses',
-        gateway_model=gateway,
-        legacy_model=legacy,
-    )
-
-    assert wrapped is gateway
-    assert wrapped is not legacy
-
-
 def test_network_and_timeout_errors_are_transport_failures():
     assert gateway_serving.is_gateway_transport_failure(httpx.ConnectError('connection refused'))
     assert gateway_serving.is_gateway_transport_failure(httpx.ReadTimeout('timed out'))
@@ -37,3 +23,10 @@ def test_only_hard_gateway_statuses_are_transport_failures():
 
 def test_nontransport_application_error_is_not_classified_as_transport():
     assert gateway_serving.is_gateway_transport_failure(ValueError('schema invalid')) is False
+
+
+def test_retired_legacy_fallback_shim_is_not_reintroduced():
+    """The retired compatibility layer must not return (AGENTS.md: no in-repo
+    compatibility layers). A stale caller passing a ``legacy_model`` should be a
+    hard failure at import time, not silently discarded."""
+    assert not hasattr(gateway_serving, 'wrap_gateway_with_legacy_fallback')
