@@ -10,12 +10,16 @@ use serde_json::json;
 
 use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::byok;
+use crate::fallback::{record_fallback, FallbackOutcome};
 use crate::models::chat_completions::*;
 use crate::routes::llm_stub::{llm_stub_enabled, stub_chat_completions_response};
 use crate::routes::rate_limit::{requires_server_metering, RateDecision};
 use crate::AppState;
 
-use super::request_translation::{translate_request_inner, web_search_enabled, ReasoningEffort};
+use super::request_translation::{
+    server_tool_available_from, should_record_web_search_fallback, translate_request_inner,
+    web_search_enabled, ReasoningEffort,
+};
 use super::response_or_500;
 use super::streaming::handle_streaming;
 use super::transport::{handle_non_streaming, new_anthropic_client};
@@ -190,6 +194,10 @@ async fn chat_completions_inner(
 
     // Translate request
     let reasoning_effort = inbound_reasoning_effort(&headers, &req);
+    let record_web_search_fallback = should_record_web_search_fallback(
+        &req,
+        web_search_enabled && !route.upstream_model.starts_with("claude-haiku"),
+    );
     let anthropic_req = translate_request_inner(
         &req,
         route.upstream_model,
@@ -200,6 +208,15 @@ async fn chat_completions_inner(
         tracing::warn!("chat_completions: request translation error: {}", e);
         StatusCode::BAD_REQUEST
     })?;
+    if record_web_search_fallback {
+        record_fallback(
+            "chat_retrieval",
+            "anthropic_web_search",
+            server_tool_available_from(&anthropic_req.tools),
+            "capability_mismatch",
+            FallbackOutcome::Degraded,
+        );
+    }
 
     // Bound connection establishment so a network blip can't hang the request; the
     // total-response timeout is applied per-call (non-streaming only) inside the retry

@@ -4,7 +4,7 @@ use axum::{
     response::Response,
 };
 use futures::{Stream, StreamExt};
-use serde_json::json;
+use serde_json::{json, Value};
 use std::{sync::Arc, time::Duration};
 
 use crate::auth::AuthUser;
@@ -12,10 +12,12 @@ use crate::models::chat_completions::*;
 use crate::services::FirestoreService;
 use crate::AppState;
 
-use super::request_translation::compute_cost;
+use super::request_translation::{compute_cost, response_text_content};
 use super::response_or_500;
 use super::sse::{drain_sse_events, make_chunk, sse_line, stream_termination_chunks};
-use super::transport::send_anthropic_with_retry;
+use super::transport::{
+    append_pause_turn_continuation, complete_anthropic_server_tool_turn, send_anthropic_with_retry,
+};
 
 /// How long a streaming turn may go without a single byte from Anthropic before we end it.
 ///
@@ -31,6 +33,79 @@ pub(super) struct StreamUsageContext {
     pub(super) firestore: Option<Arc<FirestoreService>>,
 }
 
+#[derive(Clone)]
+pub(super) struct StreamContinuationContext {
+    pub(super) client: reqwest::Client,
+    pub(super) api_key: String,
+    pub(super) request: AnthropicRequest,
+}
+
+#[derive(Default)]
+pub(super) struct StreamedContentBlocks {
+    blocks: Vec<Option<Value>>,
+    input_json: std::collections::HashMap<usize, String>,
+}
+
+impl StreamedContentBlocks {
+    pub(super) fn start_block(&mut self, index: usize, block: Value) {
+        if self.blocks.len() <= index {
+            self.blocks.resize(index + 1, None);
+        }
+        self.blocks[index] = Some(block);
+    }
+
+    pub(super) fn append_delta(&mut self, index: usize, delta: &Value) {
+        let Some(block) = self.blocks.get_mut(index).and_then(Option::as_mut) else {
+            return;
+        };
+        match delta.get("type").and_then(Value::as_str) {
+            Some("text_delta") => {
+                if let Some(text) = delta.get("text").and_then(Value::as_str) {
+                    append_string_field(block, "text", text);
+                }
+            }
+            Some("thinking_delta") => {
+                if let Some(thinking) = delta.get("thinking").and_then(Value::as_str) {
+                    append_string_field(block, "thinking", thinking);
+                }
+            }
+            Some("input_json_delta") => {
+                if let Some(partial_json) = delta.get("partial_json").and_then(Value::as_str) {
+                    self.input_json
+                        .entry(index)
+                        .or_default()
+                        .push_str(partial_json);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub(super) fn stop_block(&mut self, index: usize) {
+        let Some(input) = self.input_json.remove(&index) else {
+            return;
+        };
+        let parsed = serde_json::from_str(&input).unwrap_or(Value::String(input));
+        if let Some(block) = self.blocks.get_mut(index).and_then(Option::as_mut) {
+            block["input"] = parsed;
+        }
+    }
+
+    pub(super) fn into_value(self) -> Value {
+        Value::Array(self.blocks.into_iter().flatten().collect())
+    }
+}
+
+fn append_string_field(block: &mut Value, key: &str, suffix: &str) {
+    if let Some(current) = block.get_mut(key).and_then(|value| value.as_str()) {
+        let mut combined = current.to_string();
+        combined.push_str(suffix);
+        block[key] = Value::String(combined);
+    } else {
+        block[key] = Value::String(suffix.to_string());
+    }
+}
+
 /// Convert Anthropic's framed bytes into the OpenAI-compatible SSE sequence.
 ///
 /// This intentionally retains the existing stateful closure as one unit. The
@@ -40,6 +115,7 @@ pub(super) fn translate_anthropic_sse_stream<S, E>(
     byte_stream: S,
     public_model: String,
     usage_context: StreamUsageContext,
+    continuation_context: Option<StreamContinuationContext>,
 ) -> impl Stream<Item = Result<Bytes, std::io::Error>>
 where
     S: Stream<Item = Result<Bytes, E>>,
@@ -56,6 +132,8 @@ where
         let mut initial_usage: Option<AnthropicUsage> = None;
         let mut sent_role = false;
         let mut buffer: Vec<u8> = Vec::new();
+        let mut streamed_content = StreamedContentBlocks::default();
+        let mut pause_turn_continuation: Option<StreamContinuationContext> = None;
 
         // Collect raw bytes and split into SSE events
         let mut byte_stream = std::pin::pin!(byte_stream);
@@ -100,7 +178,22 @@ where
                     None => continue,
                 };
 
-                let event: AnthropicStreamEvent = match serde_json::from_str(data) {
+                let raw_event: Value = match serde_json::from_str(data) {
+                    Ok(value) => value,
+                    Err(_) => continue,
+                };
+                if let Some(block) = raw_event.get("content_block").cloned() {
+                    if let Some(index) = raw_event.get("index").and_then(Value::as_u64) {
+                        streamed_content.start_block(index as usize, block);
+                    }
+                }
+                if let Some(delta) = raw_event.get("delta") {
+                    if let Some(index) = raw_event.get("index").and_then(Value::as_u64) {
+                        streamed_content.append_delta(index as usize, delta);
+                    }
+                }
+
+                let event: AnthropicStreamEvent = match serde_json::from_value(raw_event) {
                     Ok(e) => e,
                     Err(_) => continue,
                 };
@@ -250,8 +343,8 @@ where
                         }
                     }
 
-                    AnthropicStreamEvent::ContentBlockStop { .. } => {
-                        // No action needed
+                    AnthropicStreamEvent::ContentBlockStop { index } => {
+                        streamed_content.stop_block(index);
                     }
 
                     AnthropicStreamEvent::MessageDelta { delta, usage } => {
@@ -260,12 +353,11 @@ where
                         }
 
                         if delta.stop_reason.as_deref() == Some("pause_turn") {
-                            // Public-web turns are normalized before reaching the
-                            // incremental stream. Treat this as a routing bug,
-                            // while retaining a safe OpenAI finish reason below.
-                            tracing::error!(
-                                "chat_completions: unexpected pause_turn reached incremental stream"
+                            pause_turn_continuation = continuation_context.clone();
+                            tracing::info!(
+                                "chat_completions: continuing paused Anthropic server-tool stream"
                             );
+                            break;
                         }
                         let finish = map_stop_reason(delta.stop_reason.as_deref());
                         let chunk_val = make_chunk(
@@ -350,13 +442,111 @@ where
                     }
                 }
             }
+            if pause_turn_continuation.is_some() {
+                break;
+            }
         }
 
-        // The loop above exits on a stall, a transport error, or an upstream EOF. Any of those
-        // can happen after a partial answer and before `message_stop`, so terminate the SSE body
-        // ourselves — otherwise the client never sees finish_reason or [DONE] and keeps waiting.
-        for chunk in stream_termination_chunks(sent_done, sent_finish) {
-            yield Ok(chunk);
+        if let Some(mut continuation) = pause_turn_continuation {
+            append_pause_turn_continuation(&mut continuation.request, streamed_content.into_value());
+            match complete_anthropic_server_tool_turn(
+                &continuation.client,
+                &continuation.api_key,
+                &continuation.request,
+            )
+            .await
+            {
+                Ok(anthropic_resp) => {
+                    if let Some(text) = response_text_content(&anthropic_resp) {
+                        let chunk_val = make_chunk(
+                            &stream_id,
+                            created,
+                            &model,
+                            ChunkDelta {
+                                role: None,
+                                content: Some(text),
+                                reasoning_content: None,
+                                tool_calls: None,
+                            },
+                            None,
+                            None,
+                        );
+                        yield Ok(sse_line(&chunk_val));
+                    }
+                    let finish = map_stop_reason(anthropic_resp.stop_reason.as_deref());
+                    let chunk_val = make_chunk(
+                        &stream_id,
+                        created,
+                        &model,
+                        ChunkDelta::default(),
+                        finish,
+                        None,
+                    );
+                    yield Ok(sse_line(&chunk_val));
+
+                    let merged = merge_stream_usage(initial_usage.as_ref(), &anthropic_resp.usage);
+                    let openai_usage = anthropic_usage_to_openai(&merged);
+                    let usage_chunk = ChatCompletionChunk {
+                        id: stream_id.clone(),
+                        object: "chat.completion.chunk",
+                        created,
+                        model: model.clone(),
+                        choices: vec![],
+                        usage: Some(openai_usage),
+                    };
+                    let val = serde_json::to_value(usage_chunk).unwrap_or(json!({}));
+                    yield Ok(sse_line(&val));
+
+                    if let Some(firestore) = usage_context.firestore.as_ref() {
+                        let cost = compute_cost(&merged, &usage_context.upstream_model);
+                        let uid_clone = usage_context.uid.clone();
+                        let fs = firestore.clone();
+                        tokio::spawn(async move {
+                            if let Err(e) = fs
+                                .record_llm_usage(
+                                    &uid_clone,
+                                    merged.input_tokens,
+                                    merged.output_tokens,
+                                    merged.cache_read_input_tokens,
+                                    merged.cache_creation_input_tokens,
+                                    merged.input_tokens
+                                        + merged.cache_creation_input_tokens
+                                        + merged.cache_read_input_tokens
+                                        + merged.output_tokens,
+                                    cost,
+                                    "omi",
+                                )
+                                .await
+                            {
+                                tracing::error!("chat_completions: usage log failed: {}", e);
+                            }
+                        });
+                    }
+                    yield Ok(Bytes::from_static(b"data: [DONE]\n\n"));
+                }
+                Err(status) => {
+                    tracing::error!(
+                        "chat_completions: paused stream continuation failed with {}",
+                        status
+                    );
+                    let err_chunk = json!({
+                        "error": {
+                            "message": "Upstream provider error",
+                            "type": "server_error",
+                            "code": 502
+                        }
+                    });
+                    yield Ok(sse_line(&err_chunk));
+                    yield Ok(Bytes::from_static(b"data: [DONE]\n\n"));
+                }
+            }
+        } else {
+            // The loop above exits on a stall, a transport error, or an upstream EOF. Any of those
+            // can happen after a partial answer and before `message_stop`, so terminate the SSE body
+            // ourselves — otherwise the client never sees finish_reason or [DONE] and keeps waiting.
+            for chunk in stream_termination_chunks(sent_done, sent_finish) {
+                yield Ok(chunk);
+            }
         }
     };
 
@@ -396,10 +586,28 @@ pub(super) async fn handle_streaming(
         upstream_model: route.upstream_model.to_string(),
         firestore: (!is_byok).then(|| state.firestore.clone()),
     };
+    let continuation_context = anthropic_req
+        .tools
+        .as_ref()
+        .is_some_and(|defs| {
+            defs.iter().any(|def| match def {
+                AnthropicToolDef::Server(value) => value
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .is_some_and(|name| name == "web_search"),
+                AnthropicToolDef::Custom(_) => false,
+            })
+        })
+        .then(|| StreamContinuationContext {
+            client: client.clone(),
+            api_key: api_key.to_string(),
+            request: anthropic_req.clone(),
+        });
     let translated_stream = translate_anthropic_sse_stream(
         upstream_resp.bytes_stream(),
         route.public_model.to_string(),
         usage_context,
+        continuation_context,
     );
     let body = Body::from_stream(translated_stream);
 
