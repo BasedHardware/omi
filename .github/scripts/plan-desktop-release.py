@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 CODEMAGIC_CHECK_NAME = "Release OMI Desktop (Swift)"
@@ -121,6 +122,31 @@ def latest_releasable_desktop_sha(paths: list[str]) -> str | None:
         return None
 
 
+def check_run_sort_key(check_run: dict[str, object]) -> tuple[tuple[datetime, datetime, int] | None, str | None]:
+    """Return a validated, deterministic ordering key for one GitHub check run."""
+    check_run_id = check_run.get("id")
+    if type(check_run_id) is not int or check_run_id <= 0:
+        return None, "gh api returned a check run with an invalid id"
+
+    timestamps: list[datetime] = []
+    for field_name, allow_none in (("started_at", False), ("completed_at", True)):
+        value = check_run.get(field_name)
+        if value is None and allow_none:
+            timestamps.append(datetime.min.replace(tzinfo=timezone.utc))
+            continue
+        if not isinstance(value, str):
+            return None, f"gh api returned a check run with an invalid {field_name}"
+        try:
+            timestamp = datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value)
+        except ValueError:
+            return None, f"gh api returned a check run with an invalid {field_name}"
+        if timestamp.tzinfo is None:
+            return None, f"gh api returned a check run with an invalid {field_name}"
+        timestamps.append(timestamp.astimezone(timezone.utc))
+
+    return (timestamps[0], timestamps[1], check_run_id), None
+
+
 def github_check_status(repository: str, sha: str, check_name: str) -> tuple[str | None, str | None, str | None]:
     result = subprocess.run(
         [
@@ -146,7 +172,7 @@ def github_check_status(repository: str, sha: str, check_name: str) -> tuple[str
     if not isinstance(pages, list):
         return None, None, "gh api returned invalid check-runs pages"
 
-    matching_runs: list[dict[str, object]] = []
+    matching_runs: list[tuple[tuple[datetime, datetime, int], dict[str, object]]] = []
     for page in pages:
         if not isinstance(page, dict):
             return None, None, "gh api returned an invalid check-runs page"
@@ -157,7 +183,11 @@ def github_check_status(repository: str, sha: str, check_name: str) -> tuple[str
             if not isinstance(check_run, dict):
                 return None, None, "gh api returned an invalid check run"
             if check_run.get("name") == check_name:
-                matching_runs.append(check_run)
+                sort_key, sort_key_error = check_run_sort_key(check_run)
+                if sort_key_error:
+                    return None, None, sort_key_error
+                assert sort_key is not None
+                matching_runs.append((sort_key, check_run))
 
     if not matching_runs:
         return None, None, None
@@ -167,14 +197,7 @@ def github_check_status(repository: str, sha: str, check_name: str) -> tuple[str
     # hidden by the API filter. `started_at` is primary so a newer in-progress
     # rerun is never masked by an older completed success; the remaining fields
     # make ordering deterministic when timestamps collide or are unavailable.
-    latest = max(
-        matching_runs,
-        key=lambda check_run: (
-            str(check_run.get("started_at") or ""),
-            str(check_run.get("completed_at") or ""),
-            str(check_run.get("id") or ""),
-        ),
-    )
+    latest = max(matching_runs, key=lambda run: run[0])[1]
     status = latest.get("status")
     conclusion = latest.get("conclusion")
     if status is not None and not isinstance(status, str):
