@@ -12,6 +12,7 @@
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/byteorder.h>
 
+#include "ring_transfer_integrity.h"
 #include "rtc.h"
 #include "sd_card.h"
 #include "transport.h"
@@ -45,6 +46,7 @@ LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
 #define STORAGE_CHUNK_COUNT 36U
 #define STORAGE_BUFFER_SIZE (RAW_AUDIO_PACKET_BYTES * STORAGE_CHUNK_COUNT)
 #define STORAGE_CONTROL_NOTIFY_SIZE 32
+#define STORAGE_CONTROL_RESPONSE_QUEUE_SIZE 16
 #define STORAGE_NOTIFY_VALUE_MAX_LEN ((CONFIG_BT_L2CAP_TX_MTU > 3U) ? (CONFIG_BT_L2CAP_TX_MTU - 3U) : 20U)
 
 #define SYNC_SPEED_LOG_INTERVAL_MS (2 * 1000)
@@ -90,11 +92,23 @@ static struct bt_gatt_attr storage_service_attr[] = {
     BT_GATT_CCC(storage_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 };
 
+struct storage_control_response {
+    uint8_t data[STORAGE_CONTROL_NOTIFY_SIZE];
+    uint16_t len;
+};
+
+K_MSGQ_DEFINE(storage_control_response_queue,
+              sizeof(struct storage_control_response),
+              STORAGE_CONTROL_RESPONSE_QUEUE_SIZE,
+              4);
+
 struct bt_gatt_service storage_service = BT_GATT_SERVICE(storage_service_attr);
 
 static uint8_t storage_buffer[STORAGE_BUFFER_SIZE];
 static uint8_t data_notify_buf[STORAGE_NOTIFY_VALUE_MAX_LEN];
 static uint8_t control_notify_buf[STORAGE_CONTROL_NOTIFY_SIZE];
+static struct storage_control_response active_control_response;
+static bool active_control_response_valid;
 
 bool storage_is_on = false;
 
@@ -103,6 +117,8 @@ static uint8_t clear_requested;
 static uint8_t read_request_pending;
 static uint8_t advance_request_pending;
 static uint8_t stop_requested;
+static uint8_t clear_ack_status;
+static uint8_t advance_ack_status;
 
 /* On connect the SD may still be remounting. Hold a sync request and wait up to
  * this long for the card to become ready, then read -- instead of replying
@@ -122,6 +138,7 @@ static uint64_t transfer_start_seq;
 static uint64_t current_read_seq;
 static uint32_t remaining_packets;
 static uint8_t transfer_end_status;
+static uint32_t transfer_data_crc;
 
 static atomic_t storage_status_used_bytes = ATOMIC_INIT(0);
 static atomic_t storage_status_unread_packets = ATOMIC_INIT(0);
@@ -229,6 +246,46 @@ static int storage_notify(struct bt_conn *conn, const void *data, uint16_t len)
     return bt_gatt_notify(conn, &storage_service.attrs[STORAGE_WRITE_NOTIFY_ATTR_IDX], data, len);
 }
 
+static int queue_control_response(const uint8_t *data, uint16_t len)
+{
+    if (!data || len == 0U || len > STORAGE_CONTROL_NOTIFY_SIZE) {
+        return -EINVAL;
+    }
+
+    struct storage_control_response response = {.len = len};
+    memcpy(response.data, data, len);
+    int ret = k_msgq_put(&storage_control_response_queue, &response, K_NO_WAIT);
+    if (ret != 0) {
+        LOG_ERR("Storage control response queue full: %d", ret);
+        return -ENOMEM;
+    }
+    return 0;
+}
+
+static void pump_control_response(struct bt_conn *conn)
+{
+    if (!conn) {
+        active_control_response_valid = false;
+        k_msgq_purge(&storage_control_response_queue);
+        return;
+    }
+
+    if (!active_control_response_valid) {
+        if (k_msgq_get(&storage_control_response_queue, &active_control_response, K_NO_WAIT) != 0) {
+            return;
+        }
+        active_control_response_valid = true;
+    }
+
+    int ret = storage_notify(conn, active_control_response.data, active_control_response.len);
+    if (ret == 0) {
+        active_control_response_valid = false;
+    } else if (!ring_control_response_should_retain(true, ret)) {
+        LOG_ERR("Storage control response failed permanently: %d", ret);
+        active_control_response_valid = false;
+    }
+}
+
 /* Completion callback: the controller returned a bulk DATA notification's TX
  * buffer. This is flow control only: it does not prove that Android received,
  * reassembled, or durably stored the data. */
@@ -321,17 +378,17 @@ static uint16_t get_ble_data_chunk_size(struct bt_conn *conn)
 
 static int send_ack(struct bt_conn *conn, uint8_t status)
 {
-    control_notify_buf[0] = NOTIFY_ACK;
-    control_notify_buf[1] = status;
-    return storage_notify(conn, control_notify_buf, 2);
+    ARG_UNUSED(conn);
+    uint8_t response[2] = {NOTIFY_ACK, status};
+    return queue_control_response(response, sizeof(response));
 }
 
 static int send_done(struct bt_conn *conn, uint8_t status, uint64_t next_seq)
 {
-    control_notify_buf[0] = NOTIFY_DONE;
-    control_notify_buf[1] = status;
-    sys_put_be64(next_seq, control_notify_buf + 2);
-    return storage_notify(conn, control_notify_buf, 10);
+    size_t length =
+        ring_transfer_encode_done(control_notify_buf, sizeof(control_notify_buf), status, next_seq, transfer_data_crc);
+    __ASSERT_NO_MSG(length == RING_TRANSFER_DONE_BYTES);
+    return storage_notify(conn, control_notify_buf, (uint16_t) length);
 }
 
 static int send_ring_info_response(struct bt_conn *conn)
@@ -344,13 +401,14 @@ static int send_ring_info_response(struct bt_conn *conn)
 
     storage_status_cache_set(&info);
 
-    control_notify_buf[0] = NOTIFY_INFO;
-    sys_put_be64(info.read_seq, control_notify_buf + 1);
-    sys_put_be64(info.write_seq, control_notify_buf + 9);
-    sys_put_be32(info.capacity_packets, control_notify_buf + 17);
-    sys_put_be64(info.dropped_packets, control_notify_buf + 21);
-    sys_put_be16(RAW_AUDIO_PACKET_BYTES, control_notify_buf + 29);
-    return storage_notify(conn, control_notify_buf, 31);
+    uint8_t response[31];
+    response[0] = NOTIFY_INFO;
+    sys_put_be64(info.read_seq, response + 1);
+    sys_put_be64(info.write_seq, response + 9);
+    sys_put_be32(info.capacity_packets, response + 17);
+    sys_put_be64(info.dropped_packets, response + 21);
+    sys_put_be16(RAW_AUDIO_PACKET_BYTES, response + 29);
+    return queue_control_response(response, sizeof(response));
 }
 
 static void reset_transfer_state(void)
@@ -362,6 +420,7 @@ static void reset_transfer_state(void)
     current_read_seq = 0;
     remaining_packets = 0;
     transfer_end_status = 0;
+    transfer_data_crc = 0U;
 }
 
 void storage_stop_transfer(void)
@@ -387,14 +446,15 @@ static bool consume_stop_request(void)
 
 static int start_pending_read(struct bt_conn *conn)
 {
+    ARG_UNUSED(conn);
     sd_ring_info_t info;
     int ret = sd_ring_get_info(&info);
     if (ret < 0) {
-        return send_ack(conn, storage_status_from_error(ret, STORAGE_NOT_READY));
+        return ret;
     }
 
     if (pending_start_seq < info.read_seq || pending_start_seq > info.write_seq) {
-        return send_ack(conn, SEQ_OUT_OF_RANGE);
+        return -ERANGE;
     }
 
     storage_status_cache_set(&info);
@@ -412,6 +472,7 @@ static int start_pending_read(struct bt_conn *conn)
     current_read_seq = pending_start_seq;
     remaining_packets = requested_packets;
     transfer_end_status = 0;
+    transfer_data_crc = 0U;
     sync_speed_reset(SYNC_SPEED_MODE_NONE);
 
     return 0;
@@ -433,13 +494,9 @@ static void write_to_gatt(struct bt_conn *conn)
         sys_put_be32(remaining_packets, control_notify_buf + 9);
 
         int err = storage_notify(conn, control_notify_buf, 13);
-        if (err == -ENOMEM) {
-            k_yield();
+        if (ring_control_response_should_retain(true, err)) {
+            k_msleep(STORAGE_IDLE_POLL_MS_CONNECTED);
             consume_stop_request();
-            return;
-        }
-        if (err == -EAGAIN) {
-            storage_stop_transfer();
             return;
         }
         if (err) {
@@ -516,6 +573,7 @@ static void write_to_gatt(struct bt_conn *conn)
                 return;
             }
 
+            transfer_data_crc = ring_transfer_crc32_update(transfer_data_crc, storage_buffer + bytes_sent, payload);
             bytes_sent += payload;
             sync_speed_add_bytes(payload);
         }
@@ -603,13 +661,17 @@ static ssize_t storage_write_handler(struct bt_conn *conn,
     ARG_UNUSED(flags);
 
     if (len < 1U) {
-        (void) send_ack(conn, INVALID_COMMAND);
+        if (send_ack(conn, INVALID_COMMAND) < 0) {
+            return BT_GATT_ERR(BT_ATT_ERR_INSUFFICIENT_RESOURCES);
+        }
         return len;
     }
 
     uint8_t result = parse_storage_command((void *) buf, len);
     if (result != STORAGE_DEFERRED) {
-        (void) send_ack(conn, result);
+        if (send_ack(conn, result) < 0) {
+            return BT_GATT_ERR(BT_ATT_ERR_INSUFFICIENT_RESOURCES);
+        }
     }
 
     return len;
@@ -619,6 +681,7 @@ static void storage_write(void)
 {
     while (1) {
         struct bt_conn *conn = get_current_connection();
+        pump_control_response(conn);
 
         if (consume_stop_request()) {
             storage_status_cache_maybe_refresh(true);
@@ -628,41 +691,54 @@ static void storage_write(void)
             if (!conn) {
                 info_requested = 0;
                 info_deadline = 0;
-            } else if (sd_is_ready()) {
-                (void) send_ring_info_response(conn);
-                info_requested = 0;
-                info_deadline = 0;
+            } else if (sd_is_ready() && transport_storage_snapshot_ready()) {
+                int ret = send_ring_info_response(conn);
+                if (ret == 0) {
+                    info_requested = 0;
+                    info_deadline = 0;
+                }
             } else {
                 /* SD still remounting after connect: wait for it, up to timeout. */
                 if (info_deadline == 0) {
                     info_deadline = k_uptime_get() + STORAGE_SD_READY_TIMEOUT_MS;
                 } else if (k_uptime_get() >= info_deadline) {
-                    (void) send_ack(conn, STORAGE_NOT_READY);
-                    info_requested = 0;
-                    info_deadline = 0;
+                    if (send_ack(conn, STORAGE_NOT_READY) == 0) {
+                        info_requested = 0;
+                        info_deadline = 0;
+                    }
                 }
             }
         }
 
         if (clear_requested) {
-            clear_requested = 0;
-            if (conn) {
+            if (!conn) {
+                clear_requested = 0;
+            } else if (clear_requested == 1U) {
                 int ret = sd_ring_clear();
                 if (ret >= 0) {
                     storage_status_cache_maybe_refresh(true);
                 }
-                (void) send_ack(conn, ret < 0 ? storage_status_from_error(ret, STORAGE_NOT_READY) : 0);
+                clear_ack_status = ret < 0 ? storage_status_from_error(ret, STORAGE_NOT_READY) : 0;
+                clear_requested = 2U;
+            }
+            if (conn && clear_requested == 2U && send_ack(conn, clear_ack_status) == 0) {
+                clear_requested = 0;
             }
         }
 
         if (advance_request_pending) {
-            advance_request_pending = 0;
-            if (conn) {
+            if (!conn) {
+                advance_request_pending = 0;
+            } else if (advance_request_pending == 1U) {
                 int ret = sd_ring_advance(pending_advance_seq);
                 if (ret >= 0) {
                     storage_status_cache_maybe_refresh(true);
                 }
-                (void) send_ack(conn, ret < 0 ? storage_status_from_error(ret, SEQ_OUT_OF_RANGE) : 0);
+                advance_ack_status = ret < 0 ? storage_status_from_error(ret, SEQ_OUT_OF_RANGE) : 0;
+                advance_request_pending = 2U;
+            }
+            if (conn && advance_request_pending == 2U && send_ack(conn, advance_ack_status) == 0) {
+                advance_request_pending = 0;
             }
         }
 
@@ -670,20 +746,20 @@ static void storage_write(void)
             if (!conn) {
                 read_request_pending = 0;
                 read_deadline = 0;
-            } else if (sd_is_ready()) {
+            } else if (sd_is_ready() && transport_storage_snapshot_ready()) {
                 int ret = start_pending_read(conn);
-                if (ret < 0) {
-                    (void) send_ack(conn, storage_status_from_error(ret, STORAGE_NOT_READY));
+                if (ret == 0 || send_ack(conn, storage_status_from_error(ret, STORAGE_NOT_READY)) == 0) {
+                    read_request_pending = 0;
+                    read_deadline = 0;
                 }
-                read_request_pending = 0;
-                read_deadline = 0;
             } else {
                 if (read_deadline == 0) {
                     read_deadline = k_uptime_get() + STORAGE_SD_READY_TIMEOUT_MS;
                 } else if (k_uptime_get() >= read_deadline) {
-                    (void) send_ack(conn, STORAGE_NOT_READY);
-                    read_request_pending = 0;
-                    read_deadline = 0;
+                    if (send_ack(conn, STORAGE_NOT_READY) == 0) {
+                        read_request_pending = 0;
+                        read_deadline = 0;
+                    }
                 }
             }
         }
@@ -693,8 +769,8 @@ static void storage_write(void)
                 storage_stop_transfer();
             } else if (done_pending) {
                 int err = send_done(conn, transfer_end_status, current_read_seq);
-                if (err == -ENOMEM) {
-                    k_yield();
+                if (ring_control_response_should_retain(true, err)) {
+                    k_msleep(STORAGE_IDLE_POLL_MS_CONNECTED);
                 } else {
                     reset_transfer_state();
                 }
@@ -703,11 +779,16 @@ static void storage_write(void)
             }
         }
 
+        bool connected = conn != NULL;
+        if (conn) {
+            bt_conn_unref(conn);
+        }
+
         if (!transfer_active) {
-            if (conn) {
+            if (connected) {
                 storage_status_cache_maybe_refresh(false);
             }
-            uint32_t idle_sleep_ms = conn ? STORAGE_IDLE_POLL_MS_CONNECTED : STORAGE_IDLE_POLL_MS_OFFLINE;
+            uint32_t idle_sleep_ms = connected ? STORAGE_IDLE_POLL_MS_CONNECTED : STORAGE_IDLE_POLL_MS_OFFLINE;
             k_msleep(idle_sleep_ms);
         } else {
             k_yield();
