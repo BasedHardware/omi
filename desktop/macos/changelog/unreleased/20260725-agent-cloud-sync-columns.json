@@ -1,0 +1,3 @@
+{
+  "change": "Fixed cloud agent sync dropping screen text and search embeddings, which made some screenshots unfindable by the agent"
+}
