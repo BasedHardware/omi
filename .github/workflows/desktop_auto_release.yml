@@ -20,6 +20,7 @@ on:
       - 'codemagic.yaml'
       - '.github/scripts/plan-desktop-release.py'
       - '.github/scripts/desktop-release-source-identity.py'
+      - '.github/scripts/publish-desktop-candidate-tag.py'
       - '.github/workflows/desktop_auto_release.yml'
       - '.github/workflows/desktop-swift-ci.yml'
   schedule:
@@ -166,15 +167,19 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ steps.version.outputs.version }}"
-          BRANCH="changelog/v${VERSION}"
           PLANNED_SOURCE_SHA="${{ steps.recheck.outputs.source_sha }}"
+          # A version-only changelog branch can belong to an earlier planner
+          # source after a retry. Binding the branch to the immutable source
+          # avoids rewriting that stale branch or confusing its PR with this
+          # candidate; published tags are never touched by this recovery path.
+          BRANCH="changelog/v${VERSION}-${PLANNED_SOURCE_SHA:0:12}"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # A rerun after the changelog PR merged must reuse that immutable
-          # branch commit. Rebuilding it would sever the evidence chain to the
-          # normal, regular merge already present on main.
+          # A rerun for the same source must reuse its immutable branch commit.
+          # The source-qualified branch name intentionally ignores stale legacy
+          # `changelog/v<version>` branches from an older planner source.
           if git ls-remote --exit-code origin "refs/heads/$BRANCH" >/dev/null; then
             git fetch --no-tags origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
             CHANGELOG_COMMIT="$(git rev-parse "origin/$BRANCH^{commit}")"
@@ -219,7 +224,8 @@ jobs:
           fi
 
           VERSION="${{ steps.version.outputs.version }}"
-          BRANCH="changelog/v${VERSION}"
+          PLANNED_SOURCE_SHA="${{ steps.recheck.outputs.source_sha }}"
+          BRANCH="changelog/v${VERSION}-${PLANNED_SOURCE_SHA:0:12}"
 
           PR_NUMBER=$(gh pr list \
             --head "$BRANCH" \
@@ -275,23 +281,20 @@ jobs:
           MAIN_SHA="$(git rev-parse 'origin/main^{commit}')"
 
           if [ "$CHANGELOG_CHANGED" = true ]; then
-            CANDIDATE_SHA="${{ steps.changelog-pr.outputs.merged_main_sha }}"
             CHANGELOG_COMMIT="${{ steps.changelog.outputs.commit }}"
             CHANGELOG_PR="${{ steps.changelog-pr.outputs.url }}"
-            test "$CANDIDATE_SHA" = "$MAIN_SHA"
-            test "$(git rev-parse "${CANDIDATE_SHA}^1")" = "$PLANNED_SOURCE_SHA"
-            test "$(git rev-parse "${CANDIDATE_SHA}^2")" = "$CHANGELOG_COMMIT"
+            CHANGELOG_PARENT_SHA="$(git rev-parse "${CHANGELOG_COMMIT}^1")"
+            CANDIDATE_SHA="$MAIN_SHA"
             python3 .github/scripts/desktop-release-source-identity.py \
               --planned-source-sha "$PLANNED_SOURCE_SHA" \
               --candidate-source-sha "$CANDIDATE_SHA" \
               --origin-main-sha "$MAIN_SHA" \
-              --first-parent-sha "$PLANNED_SOURCE_SHA" \
+              --changelog-parent-sha "$CHANGELOG_PARENT_SHA" \
               --changelog-commit "$CHANGELOG_COMMIT" \
               --changelog-pr "$CHANGELOG_PR" \
               --output "$RUNNER_TEMP/desktop-release-source-identity.json"
           else
-            CANDIDATE_SHA="$PLANNED_SOURCE_SHA"
-            test "$CANDIDATE_SHA" = "$MAIN_SHA"
+            CANDIDATE_SHA="$MAIN_SHA"
             python3 .github/scripts/desktop-release-source-identity.py \
               --planned-source-sha "$PLANNED_SOURCE_SHA" \
               --candidate-source-sha "$CANDIDATE_SHA" \
@@ -313,19 +316,28 @@ jobs:
           if-no-files-found: error
           overwrite: false
 
-      - name: Tag exact main source
+      - name: Atomically tag exact live main source
         if: steps.recheck.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
           RELEASE_TAG="${{ steps.version.outputs.release_tag }}"
           CANDIDATE_SHA="${{ steps.identity.outputs.candidate_sha }}"
           EVIDENCE_PATH="${{ steps.identity.outputs.evidence_path }}"
 
-          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null; then
-            echo "Refusing to reuse existing immutable candidate tag $RELEASE_TAG" >&2
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "Omi Bot token not available; cannot atomically publish a candidate tag." >&2
             exit 1
           fi
-          test "$(git rev-parse 'origin/main^{commit}')" = "$CANDIDATE_SHA"
-          git tag -a "$RELEASE_TAG" "$CANDIDATE_SHA" -F "$EVIDENCE_PATH"
+          # `updateRefs` publishes the tag only when GitHub still observes
+          # main at CANDIDATE_SHA; its `beforeOid` check and tag creation are
+          # one server-side atomic transaction, not a cached-ref comparison.
+          python3 .github/scripts/publish-desktop-candidate-tag.py \
+            --repository "${{ github.repository }}" \
+            --release-tag "$RELEASE_TAG" \
+            --candidate-sha "$CANDIDATE_SHA" \
+            --evidence "$EVIDENCE_PATH"
+
+          git fetch --no-tags origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
           test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$CANDIDATE_SHA"
-          git push origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
