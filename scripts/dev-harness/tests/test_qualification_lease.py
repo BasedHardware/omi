@@ -487,8 +487,18 @@ def test_docker_typesense_proxy_listener_is_reclaimed_only_with_exact_container_
     monkeypatch.setattr(safety, "validate_port_owner", lambda *args, **kwargs: None)
     monkeypatch.setattr(safety, "listening_pids", lambda observed_port: (proxy_pid,) if observed_port == port else ())
     monkeypatch.setattr(safety, "is_descendant_of", lambda child, parent: False)
-    monkeypatch.setattr(qualification.os, "getpgid", lambda pid: supervisor_pid if pid == supervisor_pid else proxy_pid)
-    monkeypatch.setattr(qualification.os, "killpg", lambda pid, sig: signalled.append((pid, sig)))
+    monkeypatch.setattr(
+        qualification.os,
+        "getpgid",
+        lambda pid: supervisor_pid if pid == supervisor_pid else proxy_pid,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        qualification.os,
+        "killpg",
+        lambda pid, sig: signalled.append((pid, sig)),
+        raising=False,
+    )
     monkeypatch.setattr(
         qualification.subprocess,
         "run",
@@ -537,8 +547,18 @@ def test_external_typesense_listener_without_exact_docker_binding_is_not_signall
     monkeypatch.setattr(safety, "validate_port_owner", lambda *args, **kwargs: None)
     monkeypatch.setattr(safety, "listening_pids", lambda observed_port: (proxy_pid,) if observed_port == port else ())
     monkeypatch.setattr(safety, "is_descendant_of", lambda child, parent: False)
-    monkeypatch.setattr(qualification.os, "getpgid", lambda pid: supervisor_pid if pid == supervisor_pid else proxy_pid)
-    monkeypatch.setattr(qualification.os, "killpg", lambda pid, sig: signalled.append((pid, sig)))
+    monkeypatch.setattr(
+        qualification.os,
+        "getpgid",
+        lambda pid: supervisor_pid if pid == supervisor_pid else proxy_pid,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        qualification.os,
+        "killpg",
+        lambda pid, sig: signalled.append((pid, sig)),
+        raising=False,
+    )
 
     with pytest.raises(qualification.QualificationLeaseError, match="lease lineage is unproven"):
         qualification._validated_signal(
