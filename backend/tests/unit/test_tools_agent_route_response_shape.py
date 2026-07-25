@@ -331,6 +331,29 @@ class _BlockingTool:
         return 'done'
 
 
+class _FailingTool(_FakeTool):
+    def invoke(self, params, config=None):
+        raise ValueError(f"invalid input_value={params['private_text']}")
+
+
+def test_execute_tool_does_not_echo_user_input_from_exceptions(loaded_route_modules):
+    _tools_router, agent_tools, agentic, _memories_service = loaded_route_modules
+    agentic.CORE_TOOLS[:] = [_FailingTool('failing_tool', None)]
+
+    raw_response = asyncio.run(
+        agent_tools.execute_tool(
+            agent_tools.ExecuteToolRequest(
+                tool_name='failing_tool',
+                params={'private_text': 'private medical note'},
+            ),
+            uid='uid-private',
+        )
+    )
+
+    assert raw_response == {'error': 'Tool execution failed'}
+    assert 'private medical note' not in str(raw_response)
+
+
 def test_execute_tool_runs_sync_tools_off_the_event_loop(loaded_route_modules):
     """`execute_tool` used to call `target.invoke(...)` directly.
 

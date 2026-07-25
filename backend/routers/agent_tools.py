@@ -338,7 +338,7 @@ async def execute_tool(
         result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))
         return {"result": result}
     except Exception as error:
-        # Never echo the exception text: it can embed the caller's tool params,
-        # which carry user content (pydantic renders `input_value=...`).
+        # Exception text can embed caller params (pydantic renders
+        # `input_value=...`), so keep it off both the log and response planes.
         logger.error("❌ Error executing tool %s error_type=%s", body.tool_name, type(error).__name__)
-        return {"error": sanitize(str(error))}
+        return {"error": "Tool execution failed"}
