@@ -8,7 +8,10 @@ publish = false
 [dependencies]
 btleplug = "0.11"
 crepuscularity-gpui = { path = "/Users/undivisible/projects/crepuscularity/crates/crepuscularity-gpui", features = ["macos"] }
+ctrlc = "3"
 gpui = { version = "=0.2.2", default-features = false, features = ["font-kit", "macos-blade"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 
 [dev-dependencies]

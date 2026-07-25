@@ -1,12 +1,10 @@
-mod core;
-
-use core::{
-    discover_bluetooth_targets, set_bluetooth_connection, BluetoothTarget, ButtonEvent,
-    FirmwareImage, FlashSession, Product,
-};
 use crepuscularity_gpui::{
     bounds, gpui_window_options, point, prelude::*, px, size, App, Application, ClickEvent,
     Context, Window,
+};
+use omi_product_emulator::core::{
+    discover_bluetooth_targets, set_bluetooth_connection, BluetoothTarget, ButtonEvent,
+    FirmwareImage, FlashSession, Product,
 };
 use std::env;
 
