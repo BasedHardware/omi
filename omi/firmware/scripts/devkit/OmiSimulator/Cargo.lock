@@ -1147,6 +1147,8 @@ dependencies = [
 [[package]]
 name = "crepuscularity-core"
 version = "0.4.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2cc3f92a3bb167bb980e236fe9f6def87f0053413ae14fe3acd3a7c1b7c213ef"
 dependencies = [
  "notify",
  "serde_json",
@@ -1159,6 +1161,8 @@ dependencies = [
 [[package]]
 name = "crepuscularity-gpui"
 version = "0.5.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9540d1e0aa5a2ec9415a976c20e2c71540884c72aaf6ce4a380fc4ccccd07afc"
 dependencies = [
  "crepuscularity-core",
  "crepuscularity-runtime",
@@ -1170,6 +1174,8 @@ dependencies = [
 [[package]]
 name = "crepuscularity-runtime"
 version = "0.4.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fc97257d9ecf170deaf388e7ced1f7b771f0c2a6ffb4174abd0f722d2f7470b"
 dependencies = [
  "crepuscularity-core",
  "gpui",
@@ -1182,6 +1188,8 @@ dependencies = [
 [[package]]
 name = "crepuscularity_macros"
 version = "0.5.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49d6c652eb167803fd0ceaa2fa2bd61ced14fe691424a3c93138047bda008974"
 dependencies = [
  "crepuscularity-core",
  "proc-macro2",
@@ -3669,6 +3677,7 @@ dependencies = [
  "btleplug",
  "crepuscularity-gpui",
  "ctrlc",
+ "futures",
  "gpui",
  "omi-firmware-core",
  "serde",

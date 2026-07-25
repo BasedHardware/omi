@@ -1,7 +1,8 @@
 use btleplug::{
-    api::{Central, Manager as _, Peripheral as _, ScanFilter},
+    api::{Central, CentralEvent, Manager as _, Peripheral as _, ScanFilter},
     platform::Manager,
 };
+use futures::StreamExt;
 pub use omi_firmware_core::ButtonEvent;
 use serde::Serialize;
 use std::{
@@ -78,24 +79,36 @@ impl Product {
         }
     }
 
-    pub fn detect(name: &str) -> Option<Self> {
+    pub fn detect(name: &str, services: &[String]) -> Option<Self> {
         let name = name.to_ascii_lowercase();
+        let has_service = |uuid: &str| {
+            services
+                .iter()
+                .any(|service| service.eq_ignore_ascii_case(uuid))
+        };
         if name.contains("devkit") || name == "friend" || name == "super" {
             Some(Self::OmiDevKit)
         } else if name.contains("omi glass") {
             Some(Self::OmiGlass)
-        } else if name.contains("omi") {
-            Some(Self::Omi)
         } else if name.contains("plaud") {
             Some(Self::Plaud)
         } else if name.contains("bee") {
             Some(Self::Bee)
-        } else if name.contains("fieldy") {
+        } else if name == "compass"
+            || name == "fieldy"
+            || has_service("4fafc201-1fb5-459e-8fcc-c5c9c331914b")
+        {
             Some(Self::Fieldy)
-        } else if name.contains("friend") {
+        } else if name.starts_with("friend_") || has_service("1a3fd0e7-b1f3-ac9e-2e49-b647b2c4f8da")
+        {
             Some(Self::FriendPendant)
-        } else if name.contains("limitless") {
+        } else if name.contains("limitless")
+            || name.contains("pendant")
+            || has_service("632de001-604c-446b-a80f-7963e950f3fb")
+        {
             Some(Self::Limitless)
+        } else if has_service("19b10000-e8f2-537e-4f6c-d104768a1214") {
+            Some(Self::Omi)
         } else if name.contains("ray-ban") || name.contains("rayban") {
             Some(Self::RayBanMeta)
         } else {
@@ -143,60 +156,95 @@ pub struct BluetoothTarget {
     pub available: bool,
 }
 
-pub fn discover_bluetooth_targets() -> Result<Vec<BluetoothTarget>, String> {
-    let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;
-    let targets = runtime.block_on(async {
-        let manager = Manager::new().await.map_err(|error| error.to_string())?;
-        let adapter = manager
-            .adapters()
-            .await
-            .map_err(|error| error.to_string())?
-            .into_iter()
-            .next()
-            .ok_or("no Bluetooth adapter available")?;
-        adapter
-            .start_scan(ScanFilter::default())
-            .await
-            .map_err(|error| error.to_string())?;
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        let mut targets = Vec::new();
-        for peripheral in adapter
-            .peripherals()
-            .await
-            .map_err(|error| error.to_string())?
-        {
-            let Some(properties) = peripheral
-                .properties()
+pub trait BluetoothScanner {
+    fn scan(&self) -> Result<Vec<BluetoothTarget>, String>;
+}
+
+pub struct SystemBluetoothScanner;
+
+impl BluetoothScanner for SystemBluetoothScanner {
+    fn scan(&self) -> Result<Vec<BluetoothTarget>, String> {
+        let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;
+        runtime.block_on(async {
+            let manager = Manager::new().await.map_err(|error| error.to_string())?;
+            let adapter = manager
+                .adapters()
                 .await
                 .map_err(|error| error.to_string())?
-            else {
-                continue;
-            };
-            let name = properties
-                .local_name
-                .unwrap_or_else(|| "Unnamed peripheral".into());
-            targets.push(BluetoothTarget {
-                product: Product::detect(&name),
-                name,
-                address: peripheral.id().to_string(),
-                rssi: properties.rssi,
-                connected: peripheral
-                    .is_connected()
+                .into_iter()
+                .next()
+                .ok_or("no Bluetooth adapter available")?;
+            let mut events = adapter.events().await.map_err(|error| error.to_string())?;
+            adapter
+                .start_scan(ScanFilter::default())
+                .await
+                .map_err(|error| error.to_string())?;
+            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+            let mut seen = Vec::new();
+            while let Ok(Some(event)) = tokio::time::timeout_at(deadline, events.next()).await {
+                let id = match event {
+                    CentralEvent::DeviceDiscovered(id) | CentralEvent::DeviceUpdated(id) => id,
+                    _ => continue,
+                };
+                if !seen.contains(&id) {
+                    seen.push(id);
+                }
+            }
+            let mut targets = Vec::new();
+            for id in seen {
+                let peripheral = adapter
+                    .peripheral(&id)
                     .await
-                    .map_err(|error| error.to_string())?,
-                available: true,
-            });
-        }
-        adapter
-            .stop_scan()
-            .await
-            .map_err(|error| error.to_string())?;
-        targets.sort_by(|left, right| left.name.cmp(&right.name));
-        Ok::<_, String>(targets)
-    })?;
-    let mut catalog = PeripheralCatalog::default();
-    catalog.update(targets, 0);
-    Ok(catalog.available().cloned().collect())
+                    .map_err(|error| error.to_string())?;
+                let Some(properties) = peripheral
+                    .properties()
+                    .await
+                    .map_err(|error| error.to_string())?
+                else {
+                    continue;
+                };
+                let services = properties
+                    .services
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>();
+                let name = properties
+                    .local_name
+                    .unwrap_or_else(|| "Unnamed peripheral".into());
+                let product = Product::detect(&name, &services);
+                if product.is_none() {
+                    continue;
+                }
+                targets.push(BluetoothTarget {
+                    product,
+                    name,
+                    address: peripheral.id().to_string(),
+                    rssi: properties.rssi,
+                    connected: peripheral
+                        .is_connected()
+                        .await
+                        .map_err(|error| error.to_string())?,
+                    available: true,
+                });
+            }
+            adapter
+                .stop_scan()
+                .await
+                .map_err(|error| error.to_string())?;
+            targets.sort_by(|left, right| left.name.cmp(&right.name));
+            Ok::<_, String>(targets)
+        })
+    }
+}
+
+pub fn discover_bluetooth_targets() -> Result<Vec<BluetoothTarget>, String> {
+    discover_bluetooth_targets_with(&SystemBluetoothScanner)
+}
+
+pub fn discover_bluetooth_targets_with(
+    scanner: &impl BluetoothScanner,
+) -> Result<Vec<BluetoothTarget>, String> {
+    scanner.scan()
 }
 
 pub fn set_bluetooth_connection(id: &str, connect: bool) -> Result<(), String> {
@@ -305,6 +353,17 @@ impl PeripheralCatalog {
             .filter(|(target, _)| target.available)
             .map(|(target, _)| target)
     }
+
+    pub fn find(&self, address: &str) -> Option<&BluetoothTarget> {
+        self.targets
+            .iter()
+            .map(|(target, _)| target)
+            .find(|target| target.address == address)
+    }
+
+    pub fn targets_mut(&mut self) -> impl Iterator<Item = &mut BluetoothTarget> {
+        self.targets.iter_mut().map(|(target, _)| target)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -407,6 +466,36 @@ mod tests {
             ButtonEvent::Double
         );
         assert!(ButtonEvent::decode(&[6, 0, 0, 0]).is_err());
+        assert_eq!(
+            Product::detect("Unknown", &["19b10000-e8f2-537e-4f6c-d104768a1214".into()]),
+            Some(Product::Omi)
+        );
+        assert_eq!(Product::detect("Omi", &[]), None);
+        assert_eq!(
+            Product::detect("Unknown", &["1a3fd0e7-b1f3-ac9e-2e49-b647b2c4f8da".into()]),
+            Some(Product::FriendPendant)
+        );
+    }
+
+    #[test]
+    fn scanner_seam_returns_only_its_current_advertisements() {
+        struct Scanner;
+        impl BluetoothScanner for Scanner {
+            fn scan(&self) -> Result<Vec<BluetoothTarget>, String> {
+                Ok(vec![BluetoothTarget {
+                    name: "Omi".into(),
+                    address: "current".into(),
+                    product: Some(Product::Omi),
+                    rssi: Some(-40),
+                    connected: false,
+                    available: true,
+                }])
+            }
+        }
+
+        let targets = discover_bluetooth_targets_with(&Scanner).unwrap();
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].address, "current");
     }
 
     #[test]
