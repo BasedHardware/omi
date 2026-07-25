@@ -52,6 +52,16 @@
       "requiresPublicWeb": false
     },
     {
+      "name": "fresh_phrase_inside_longer_word",
+      "prompt": "Review my recent newsletter draft",
+      "requiresPublicWeb": false
+    },
+    {
+      "name": "utf8_byte_length_matches_rust_cap",
+      "prompt": "谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁 who's playing today",
+      "requiresPublicWeb": false
+    },
+    {
       "name": "game_inside_gameplan",
       "prompt": "Review my launch gameplan today",
       "requiresPublicWeb": false

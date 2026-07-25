@@ -202,7 +202,7 @@ describe("PiMonoAdapter prompt correlation", () => {
     const fixture = JSON.parse(
       readFileSync(
         fileURLToPath(
-          new URL("../contracts/v1/public-web-routing-contract.fixture.json", import.meta.url)
+          new URL("../../Backend-Rust/fixtures/public-web-routing-contract.fixture.json", import.meta.url)
         ),
         "utf8"
       )

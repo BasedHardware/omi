@@ -331,6 +331,23 @@ function containsWholeTerm(text: string, terms: string[]): boolean {
   });
 }
 
+function normalizedLookupText(text: string): string {
+  return text
+    .trim()
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
+    .toLowerCase()
+    .replace(/[\u2018\u2019]/g, "'");
+}
+
+function utf8ByteLength(text: string): number {
+  let bytes = 0;
+  for (const char of text) {
+    const codePoint = char.codePointAt(0) ?? 0;
+    bytes += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
+  }
+  return bytes;
+}
+
 type PublicWebTurnState = {
   bufferedText: string;
   /**
@@ -349,10 +366,7 @@ export function routePromptForPublicWeb(message: string): string {
   // The adapter receives the full rendered prompt, including inherited context
   // and prior turns. Inspect only the current user instruction when deciding
   // whether this particular turn requires a public-web lookup.
-  const normalized = currentUserInstruction(message)
-    .trim()
-    .toLowerCase()
-    .replace(/[\u2018\u2019]/g, "'");
+  const normalized = normalizedLookupText(currentUserInstruction(message));
   if (!normalized) return message;
   const hasExplicitWebReference = EXPLICIT_WEB_REQUESTS.some(
     (phrase) => normalized.includes(phrase)
@@ -368,7 +382,7 @@ export function routePromptForPublicWeb(message: string): string {
   );
   if (hasExplicitPrivateContext && !hasExplicitWebReference) return message;
 
-  const isShortLookup = normalized.length <= MAX_GENERIC_LOOKUP_CHARS;
+  const isShortLookup = utf8ByteLength(normalized) <= MAX_GENERIC_LOOKUP_CHARS;
   const hasFreshPublicTemporalLookup = isShortLookup
     && containsWholeTerm(normalized, FRESH_PUBLIC_TEMPORAL_QUALIFIERS)
     && containsWholeTerm(normalized, FRESH_PUBLIC_LOOKUP_TERMS);
@@ -376,7 +390,7 @@ export function routePromptForPublicWeb(message: string): string {
     && containsWholeTerm(normalized, PUBLIC_WEB_LOCUS)
     && RESEARCH_INTENT_VERBS.some((verb) => normalized.includes(verb));
   const requiresWeb = hasExplicitWebReference
-    || FRESH_PUBLIC_REQUESTS.some((phrase) => normalized.includes(phrase))
+    || containsWholeTerm(normalized, FRESH_PUBLIC_REQUESTS)
     || CURRENT_WEATHER_PREFIXES.some((phrase) => normalized.includes(phrase))
     || hasFreshPublicTemporalLookup
     || hasResearchIntentLookup;
