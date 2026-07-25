@@ -1,14 +1,16 @@
 use btleplug::{
-    api::{Central, CentralEvent, Manager as _, Peripheral as _, ScanFilter},
-    platform::Manager,
+    api::{Central, CentralEvent, CharPropFlags, Manager as _, Peripheral as _, ScanFilter},
+    platform::{Manager, Peripheral},
 };
 use futures::StreamExt;
 pub use omi_firmware_core::ButtonEvent;
 use serde::Serialize;
 use std::{
     fs,
+    io::Read,
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Child, Command, Output, Stdio},
+    time::Duration,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -321,6 +323,176 @@ pub fn read_button_event(id: &str) -> Result<ButtonEvent, String> {
     })
 }
 
+const BUTTON_UUID: &str = "23ba7925-0000-1000-7450-346eac492e92";
+const BATTERY_UUID: &str = "00002a19-0000-1000-8000-00805f9b34fb";
+const MODEL_UUID: &str = "00002a24-0000-1000-8000-00805f9b34fb";
+const SERIAL_UUID: &str = "00002a25-0000-1000-8000-00805f9b34fb";
+const FIRMWARE_UUID: &str = "00002a26-0000-1000-8000-00805f9b34fb";
+const HARDWARE_UUID: &str = "00002a27-0000-1000-8000-00805f9b34fb";
+const MANUFACTURER_UUID: &str = "00002a29-0000-1000-8000-00805f9b34fb";
+const AUDIO_CODEC_UUID: &str = "19b10002-e8f2-537e-4f6c-d104768a1214";
+const DIM_RATIO_UUID: &str = "19b10011-e8f2-537e-4f6c-d104768a1214";
+const MIC_GAIN_UUID: &str = "19b10012-e8f2-537e-4f6c-d104768a1214";
+const CHARGING_UUID: &str = "19b10013-e8f2-537e-4f6c-d104768a1214";
+const STORAGE_CONTROL_UUID: &str = "30295782-4301-eabd-2904-2849adfeae43";
+const SMP_SERVICE_UUID: &str = "8d53dc1d-1db7-4cd3-868b-8a527460aa84";
+
+async fn selected_peripheral(id: &str) -> Result<Peripheral, String> {
+    let manager = Manager::new().await.map_err(|error| error.to_string())?;
+    let adapter = manager
+        .adapters()
+        .await
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .next()
+        .ok_or("no Bluetooth adapter available")?;
+    let peripheral = adapter
+        .peripherals()
+        .await
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .find(|peripheral| peripheral.id().to_string() == id)
+        .ok_or("selected peripheral is no longer available")?;
+    if !peripheral
+        .is_connected()
+        .await
+        .map_err(|error| error.to_string())?
+    {
+        peripheral
+            .connect()
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+    peripheral
+        .discover_services()
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(peripheral)
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
+pub struct DeviceDiagnostics {
+    pub services: Vec<String>,
+    pub battery_percent: Option<u8>,
+    pub model: Option<String>,
+    pub serial_number: Option<String>,
+    pub firmware_revision: Option<String>,
+    pub hardware_revision: Option<String>,
+    pub manufacturer: Option<String>,
+    pub audio_codec: Option<Vec<u8>>,
+    pub dim_ratio: Option<Vec<u8>>,
+    pub microphone_gain: Option<Vec<u8>>,
+    pub charging_status: Option<Vec<u8>>,
+    pub storage_status: Option<Vec<u8>>,
+    pub button_notifications: bool,
+    pub smp: bool,
+}
+
+pub fn probe_device(id: &str) -> Result<DeviceDiagnostics, String> {
+    let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;
+    runtime.block_on(async {
+        let peripheral = selected_peripheral(id).await?;
+        let characteristics = peripheral.characteristics();
+        let mut diagnostics = DeviceDiagnostics {
+            services: peripheral
+                .services()
+                .iter()
+                .map(|service| service.uuid.to_string())
+                .collect(),
+            ..DeviceDiagnostics::default()
+        };
+        diagnostics.services.sort();
+        diagnostics.smp = diagnostics
+            .services
+            .iter()
+            .any(|uuid| uuid == SMP_SERVICE_UUID);
+        diagnostics.button_notifications = characteristics.iter().any(|characteristic| {
+            characteristic.uuid.to_string() == BUTTON_UUID
+                && characteristic.properties.contains(CharPropFlags::NOTIFY)
+        });
+        for (uuid, destination) in [
+            (AUDIO_CODEC_UUID, &mut diagnostics.audio_codec),
+            (DIM_RATIO_UUID, &mut diagnostics.dim_ratio),
+            (MIC_GAIN_UUID, &mut diagnostics.microphone_gain),
+            (CHARGING_UUID, &mut diagnostics.charging_status),
+            (STORAGE_CONTROL_UUID, &mut diagnostics.storage_status),
+        ] {
+            if let Some(characteristic) = characteristics
+                .iter()
+                .find(|characteristic| characteristic.uuid.to_string() == uuid)
+            {
+                *destination = peripheral.read(characteristic).await.ok();
+            }
+        }
+        for (uuid, destination) in [
+            (MODEL_UUID, &mut diagnostics.model),
+            (SERIAL_UUID, &mut diagnostics.serial_number),
+            (FIRMWARE_UUID, &mut diagnostics.firmware_revision),
+            (HARDWARE_UUID, &mut diagnostics.hardware_revision),
+            (MANUFACTURER_UUID, &mut diagnostics.manufacturer),
+        ] {
+            if let Some(characteristic) = characteristics
+                .iter()
+                .find(|characteristic| characteristic.uuid.to_string() == uuid)
+            {
+                *destination = peripheral
+                    .read(characteristic)
+                    .await
+                    .ok()
+                    .and_then(|value| String::from_utf8(value).ok());
+            }
+        }
+        if let Some(characteristic) = characteristics
+            .iter()
+            .find(|characteristic| characteristic.uuid.to_string() == BATTERY_UUID)
+        {
+            diagnostics.battery_percent = peripheral
+                .read(characteristic)
+                .await
+                .ok()
+                .and_then(|value| value.first().copied());
+        }
+        Ok(diagnostics)
+    })
+}
+
+pub fn monitor_button_events(id: &str, seconds: u64) -> Result<Vec<ButtonEvent>, String> {
+    let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;
+    runtime.block_on(async {
+        let peripheral = selected_peripheral(id).await?;
+        let characteristic = peripheral
+            .characteristics()
+            .into_iter()
+            .find(|characteristic| characteristic.uuid.to_string() == BUTTON_UUID)
+            .ok_or("selected product does not expose the Omi button characteristic")?;
+        if !characteristic.properties.contains(CharPropFlags::NOTIFY) {
+            return Err("Omi button characteristic does not support notifications".into());
+        }
+        peripheral
+            .subscribe(&characteristic)
+            .await
+            .map_err(|error| error.to_string())?;
+        let mut notifications = peripheral
+            .notifications()
+            .await
+            .map_err(|error| error.to_string())?;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(seconds);
+        let mut events = Vec::new();
+        while let Ok(Some(notification)) =
+            tokio::time::timeout_at(deadline, notifications.next()).await
+        {
+            if notification.uuid == characteristic.uuid {
+                events.push(ButtonEvent::decode(&notification.value).map_err(str::to_owned)?);
+            }
+        }
+        peripheral
+            .unsubscribe(&characteristic)
+            .await
+            .map_err(|error| error.to_string())?;
+        Ok(events)
+    })
+}
+
 #[derive(Default)]
 pub struct PeripheralCatalog {
     targets: Vec<(BluetoothTarget, u64)>,
@@ -371,6 +543,9 @@ pub struct FirmwareImage {
     pub path: PathBuf,
     pub version: String,
     pub bytes: u64,
+    pub product: Product,
+    pub hardware: String,
+    pub artifacts: Vec<String>,
 }
 
 impl FirmwareImage {
@@ -380,9 +555,28 @@ impl FirmwareImage {
         if bytes < 4 {
             return Err("firmware image is empty".into());
         }
-        let prefix = fs::read(path).map_err(|error| error.to_string())?;
-        if prefix[..4] != [0x50, 0x4b, 0x03, 0x04] {
-            return Err("firmware image must be a ZIP package".into());
+        let file = fs::File::open(path).map_err(|error| error.to_string())?;
+        let mut archive =
+            zip::ZipArchive::new(file).map_err(|error| format!("invalid firmware ZIP: {error}"))?;
+        let mut artifacts = Vec::new();
+        let mut manifest = None;
+        for index in 0..archive.len() {
+            let mut entry = archive.by_index(index).map_err(|error| error.to_string())?;
+            let name = entry.name().to_owned();
+            if name.to_ascii_lowercase().contains("manifest") && name.ends_with(".json") {
+                let mut contents = String::new();
+                entry
+                    .read_to_string(&mut contents)
+                    .map_err(|error| error.to_string())?;
+                manifest = Some(
+                    serde_json::from_str::<serde_json::Value>(&contents)
+                        .map_err(|error| format!("invalid firmware manifest: {error}"))?,
+                );
+            }
+            artifacts.push(name);
+        }
+        if artifacts.is_empty() {
+            return Err("firmware ZIP contains no artifacts".into());
         }
         let name = path
             .file_stem()
@@ -397,12 +591,161 @@ impl FirmwareImage {
             })
             .unwrap_or("unknown")
             .to_owned();
+        let lower_name = name.to_ascii_lowercase();
+        let (product, hardware) = if lower_name.contains("cv1") {
+            (Product::Omi, "nRF5340")
+        } else if lower_name.contains("devkit") || lower_name.contains("xiao") {
+            (Product::OmiDevKit, "nRF52840")
+        } else {
+            return Err("firmware file name must identify Omi CV1 or Omi DevKit".into());
+        };
+        let manifest = manifest.ok_or("firmware ZIP has no JSON manifest")?;
+        let mut referenced = Vec::new();
+        collect_firmware_references(&manifest, &mut referenced);
+        if referenced.is_empty() {
+            return Err("firmware manifest references no programmable images".into());
+        }
+        for reference in referenced {
+            if !artifacts.iter().any(|artifact| {
+                artifact == &reference
+                    || Path::new(artifact).file_name() == Path::new(&reference).file_name()
+            }) {
+                return Err(format!(
+                    "firmware manifest references missing artifact {reference}"
+                ));
+            }
+        }
         Ok(Self {
             path: path.to_owned(),
             version,
             bytes,
+            product,
+            hardware: hardware.into(),
+            artifacts,
         })
     }
+}
+
+fn collect_firmware_references(value: &serde_json::Value, references: &mut Vec<String>) {
+    match value {
+        serde_json::Value::Array(values) => {
+            for value in values {
+                collect_firmware_references(value, references);
+            }
+        }
+        serde_json::Value::Object(values) => {
+            for value in values.values() {
+                collect_firmware_references(value, references);
+            }
+        }
+        serde_json::Value::String(value)
+            if [".bin", ".hex", ".dat"]
+                .iter()
+                .any(|extension| value.to_ascii_lowercase().ends_with(extension)) =>
+        {
+            references.push(value.clone());
+        }
+        _ => {}
+    }
+}
+
+pub fn nrfutil_devices(controller: Option<&str>) -> Result<serde_json::Value, String> {
+    let mut command = Command::new("nrfutil");
+    command.args(["--json", "device", "list"]);
+    if let Some(controller) = controller {
+        command.args(["--serial-number", controller]);
+    }
+    command_json(command, "nrfutil device list")
+}
+
+pub fn nrfutil_program(
+    firmware: impl AsRef<Path>,
+    controller: &str,
+) -> Result<serde_json::Value, String> {
+    if controller.is_empty() {
+        return Err("a Nordic controller serial number is required".into());
+    }
+    let firmware = firmware.as_ref();
+    if !firmware.is_file() {
+        return Err("Nordic firmware path is not a file".into());
+    }
+    let mut program = Command::new("nrfutil");
+    program
+        .args(["--json", "device", "program", "--firmware"])
+        .arg(firmware)
+        .args([
+            "--options",
+            "verify=VERIFY_READ",
+            "--serial-number",
+            controller,
+        ]);
+    let result = command_json(program, "nrfutil device program")?;
+    let mut reset = Command::new("nrfutil");
+    reset.args(["--json", "device", "reset", "--serial-number", controller]);
+    command_json(reset, "nrfutil device reset")?;
+    Ok(result)
+}
+
+pub fn mcumgr_image(image: impl AsRef<Path>, connection: &str, reset: bool) -> Result<(), String> {
+    if connection.is_empty() {
+        return Err("an mcumgr connection string is required".into());
+    }
+    let image = image.as_ref();
+    if image.extension().and_then(|value| value.to_str()) != Some("bin") {
+        return Err("mcumgr requires a signed MCUboot .bin image, not a DFU ZIP".into());
+    }
+    let status = Command::new("mcumgr")
+        .args([
+            "--conntype",
+            "ble",
+            "--connstring",
+            connection,
+            "image",
+            "upload",
+            "-e",
+        ])
+        .arg(image)
+        .status()
+        .map_err(|error| format!("could not start mcumgr: {error}"))?;
+    if !status.success() {
+        return Err("mcumgr image upload failed".into());
+    }
+    if reset {
+        let status = Command::new("mcumgr")
+            .args(["--conntype", "ble", "--connstring", connection, "reset"])
+            .status()
+            .map_err(|error| format!("could not reset with mcumgr: {error}"))?;
+        if !status.success() {
+            return Err("mcumgr reset failed".into());
+        }
+    }
+    Ok(())
+}
+
+fn command_json(mut command: Command, operation: &str) -> Result<serde_json::Value, String> {
+    let Output {
+        status,
+        stdout,
+        stderr,
+    } = command
+        .output()
+        .map_err(|error| format!("could not start {operation}: {error}"))?;
+    if !status.success() {
+        return Err(format!(
+            "{operation} failed: {}",
+            String::from_utf8_lossy(&stderr).trim()
+        ));
+    }
+    let text = String::from_utf8(stdout).map_err(|error| error.to_string())?;
+    serde_json::from_str(&text).or_else(|_| {
+        let values = text
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(serde_json::from_str)
+            .collect::<Result<Vec<serde_json::Value>, _>>()
+            .map_err(|error| error.to_string())?;
+        Ok(serde_json::Value::Array(values))
+    })
 }
 
 pub struct FlashSession {
@@ -411,6 +754,9 @@ pub struct FlashSession {
 
 impl FlashSession {
     pub fn start_devkit(image: &FirmwareImage, serial_port: &str) -> Result<Self, String> {
+        if image.product != Product::OmiDevKit {
+            return Err("selected firmware is not an Omi DevKit package".into());
+        }
         if serial_port.is_empty() {
             return Err("a serial port is required for DevKit flashing".into());
         }
@@ -528,9 +874,29 @@ mod tests {
         assert!(FirmwareImage::validate(invalid).is_err());
 
         let valid = directory.path().join("Omi_CV1_OTA_v3.0.20.zip");
-        let mut file = fs::File::create(&valid).unwrap();
-        file.write_all(&[0x50, 0x4b, 0x03, 0x04, 1]).unwrap();
+        let file = fs::File::create(&valid).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        zip.start_file("app_update.bin", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(b"firmware").unwrap();
+        zip.start_file("manifest.json", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(br#"{"files":[{"file":"app_update.bin"}]}"#)
+            .unwrap();
+        zip.finish().unwrap();
         let image = FirmwareImage::validate(valid).unwrap();
         assert_eq!(image.version, "3.0.20");
+        assert_eq!(image.product, Product::Omi);
+        assert_eq!(image.hardware, "nRF5340");
+        assert!(FlashSession::start_devkit(&image, "/dev/null").is_err());
+    }
+
+    #[test]
+    fn firmware_validation_rejects_unknown_products_and_empty_archives() {
+        let directory = tempfile::tempdir().unwrap();
+        let unknown = directory.path().join("firmware.zip");
+        let file = fs::File::create(&unknown).unwrap();
+        zip::ZipWriter::new(file).finish().unwrap();
+        assert!(FirmwareImage::validate(unknown).is_err());
     }
 }

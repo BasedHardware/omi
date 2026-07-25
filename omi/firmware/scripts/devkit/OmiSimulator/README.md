@@ -22,6 +22,21 @@ Omi and Omi DevKit expose the firmware button wire values, audio, battery, devic
 
 Select and validate firmware in the test bench. DevKit flashing requires `adafruit-nrfutil` and a serial port supplied as `OMI_EMULATOR_SERIAL`. The test bench shows running, completed, failed, and cancelled states. Host flashing for other products is unavailable because this repository does not provide a compatible host-side protocol.
 
+The JSON CLI exposes the same live hardware paths:
+
+```sh
+cargo run --bin omi-product-cli -- scan
+cargo run --bin omi-product-cli -- connect DEVICE_ID
+cargo run --bin omi-product-cli -- probe DEVICE_ID
+cargo run --bin omi-product-cli -- button monitor DEVICE_ID 30
+cargo run --bin omi-product-cli -- disconnect DEVICE_ID
+cargo run --bin omi-product-cli -- nrfutil list
+cargo run --bin omi-product-cli -- nrfutil program merged.hex CONTROLLER_SERIAL
+cargo run --bin omi-product-cli -- mcumgr zephyr.signed.bin 'peer_name=Omi'
+```
+
+`probe` reads the discovered service set, standard Device Information and Battery characteristics, and the Omi audio codec, settings, storage, button notification, and SMP surfaces. Nordic controller programming uses `nrfutil device` with read-back verification followed by reset. CV1 BLE OTA uses Zephyr's configured SMP service through `mcumgr` and accepts only a signed MCUboot `.bin`. DevKit serial DFU continues to use `adafruit-nrfutil`. Firmware ZIP inspection rejects corrupt archives, unknown product names, missing programmable CV1 images, and DevKit packages without a JSON manifest.
+
 The Swift Xcode target remains only as the existing CoreBluetooth peripheral adapter reference.
 
 ## Limitations

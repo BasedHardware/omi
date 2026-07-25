@@ -3,8 +3,8 @@ use crepuscularity_gpui::{
     Context, Window,
 };
 use omi_product_emulator::core::{
-    discover_bluetooth_targets, set_bluetooth_connection, BluetoothTarget, ButtonEvent,
-    FirmwareImage, FlashSession, PeripheralCatalog, Product,
+    discover_bluetooth_targets, probe_device, set_bluetooth_connection, BluetoothTarget,
+    ButtonEvent, FirmwareImage, FlashSession, PeripheralCatalog, Product,
 };
 use std::env;
 
@@ -155,6 +155,26 @@ impl EmulatorView {
 
     fn disconnect(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.set_connection(false, cx);
+    }
+
+    fn probe(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+        self.status = match self.selected.as_deref().map(probe_device) {
+            Some(Ok(probe)) => format!(
+                "Battery {} · FW {} · HW {} · {} services · button notify {} · SMP {}",
+                probe
+                    .battery_percent
+                    .map(|value| format!("{value}%"))
+                    .unwrap_or_else(|| "N/A".into()),
+                probe.firmware_revision.as_deref().unwrap_or("N/A"),
+                probe.hardware_revision.as_deref().unwrap_or("N/A"),
+                probe.services.len(),
+                probe.button_notifications,
+                probe.smp
+            ),
+            Some(Err(error)) => error,
+            None => "Select an available peripheral first".into(),
+        };
+        cx.notify();
     }
 
     fn send(&mut self, event: ButtonEvent, cx: &mut Context<Self>) {
@@ -338,6 +358,8 @@ impl Render for EmulatorView {
                         "CONNECT"
                     button bg-zinc-800 text-white font-medium px-3 py-2 rounded-md @click=disconnect
                         "DISCONNECT"
+                    button bg-zinc-800 text-white font-medium px-3 py-2 rounded-md @click=probe
+                        "PROBE"
 
                 if {dropdown_open}
                     {target_options}
