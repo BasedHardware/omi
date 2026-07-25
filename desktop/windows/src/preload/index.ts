@@ -484,6 +484,11 @@ const omi: OmiBridgeApi = {
   screenSynthSetState: (patch) => ipcRenderer.invoke('screenSynth:setState', patch),
   screenSynthAdvanceWatermark: (ts) => ipcRenderer.invoke('screenSynth:advanceWatermark', ts),
   screenSynthRecordRun: (run) => ipcRenderer.invoke('screenSynth:recordRun', run),
+  onRewindCaptureNow: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('rewind:capture-now', listener)
+    return () => ipcRenderer.removeListener('rewind:capture-now', listener)
+  },
   onRewindSettings: (cb: (s: RewindSettings) => void) => {
     const listener = (_e: unknown, s: RewindSettings): void => cb(s)
     ipcRenderer.on('rewind:settings', listener)

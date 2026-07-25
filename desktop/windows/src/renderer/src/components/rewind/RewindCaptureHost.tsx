@@ -82,9 +82,12 @@ export function RewindCaptureHost(): React.JSX.Element {
     // round-trip) can't reschedule itself onto a stream that is already gone —
     // otherwise each recovery would leave an extra sampling loop running.
     let generation = 0
+    let captureRunning = false
+    let queuedGeneration: number | null = null
 
     const stop = (): void => {
       generation++
+      queuedGeneration = null
       if (timerRef.current) {
         clearTimeout(timerRef.current)
         timerRef.current = null
@@ -109,42 +112,75 @@ export function RewindCaptureHost(): React.JSX.Element {
       timerRef.current = setTimeout(() => void start(), RESTART_DELAY_MS)
     }
 
-    // Self-pacing: schedule the next grab only after the current one settles, so
-    // a slow save can never stack concurrent captures.
-    const grabAndSchedule = async (gen: number): Promise<void> => {
+    const captureOnce = async (gen: number): Promise<void> => {
       if (cancelled || gen !== generation) return
+      const v = videoRef.current
+      if (!v || !isLive() || !v.videoWidth || !v.videoHeight || savingRef.current) return
+
+      savingRef.current = true
       try {
-        const v = videoRef.current
-        if (v && isLive() && v.videoWidth && v.videoHeight && !savingRef.current) {
-          const scale = Math.min(1, tier.maxEdge / Math.max(v.videoWidth, v.videoHeight))
-          const w = Math.round(v.videoWidth * scale)
-          const h = Math.round(v.videoHeight * scale)
-          const canvas = canvasRef.current ?? (canvasRef.current = document.createElement('canvas'))
-          if (canvas.width !== w) canvas.width = w
-          if (canvas.height !== h) canvas.height = h
-          const ctx = canvas.getContext('2d')
-          if (ctx) {
-            ctx.drawImage(v, 0, 0, w, h)
-            const blob = await new Promise<Blob | null>((r) =>
-              canvas.toBlob(r, 'image/jpeg', tier.jpegQuality)
-            )
-            if (blob && !cancelled && gen === generation) {
-              savingRef.current = true
-              try {
-                await window.omi.rewindSaveFrame(new Uint8Array(await blob.arrayBuffer()))
-              } finally {
-                savingRef.current = false
-              }
-            }
+        const scale = Math.min(1, tier.maxEdge / Math.max(v.videoWidth, v.videoHeight))
+        const w = Math.round(v.videoWidth * scale)
+        const h = Math.round(v.videoHeight * scale)
+        const canvas = canvasRef.current ?? (canvasRef.current = document.createElement('canvas'))
+        if (canvas.width !== w) canvas.width = w
+        if (canvas.height !== h) canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (ctx) {
+          ctx.drawImage(v, 0, 0, w, h)
+          const blob = await new Promise<Blob | null>((r) =>
+            canvas.toBlob(r, 'image/jpeg', tier.jpegQuality)
+          )
+          if (blob && !cancelled && gen === generation) {
+            await window.omi.rewindSaveFrame(new Uint8Array(await blob.arrayBuffer()))
           }
         }
       } catch (e) {
         console.error('[rewind] sample failed:', (e as Error).message)
       } finally {
-        if (!cancelled && gen === generation) {
-          timerRef.current = setTimeout(() => void grabAndSchedule(gen), intervalMs)
-        }
+        savingRef.current = false
       }
+    }
+
+    // Periodic and foreground-triggered requests share one serial drain. Bursts
+    // coalesce to one pending sample, while the next periodic timer is armed only
+    // after all requested work settles.
+    function scheduleNext(gen: number): void {
+      if (cancelled || gen !== generation || !isLive()) return
+      if (timerRef.current) clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null
+        requestCapture(gen)
+      }, intervalMs)
+    }
+
+    function requestCapture(gen: number): void {
+      if (cancelled || gen !== generation || !isLive()) return
+      if (captureRunning) {
+        queuedGeneration = gen
+        return
+      }
+
+      captureRunning = true
+      void (async () => {
+        let nextGeneration: number | null = gen
+        let processedGeneration: number | null = null
+        try {
+          while (nextGeneration !== null && !cancelled) {
+            const requestedGeneration = nextGeneration
+            queuedGeneration = null
+            await captureOnce(requestedGeneration)
+            processedGeneration = requestedGeneration
+            nextGeneration = queuedGeneration
+          }
+        } finally {
+          captureRunning = false
+          queuedGeneration = null
+          if (!cancelled && processedGeneration === generation && isLive()) {
+            scheduleNext(generation)
+          }
+        }
+      })()
     }
 
     const start = async (): Promise<void> => {
@@ -185,17 +221,28 @@ export function RewindCaptureHost(): React.JSX.Element {
           v.srcObject = stream
           await v.play().catch(() => undefined)
         }
-        timerRef.current = setTimeout(() => void grabAndSchedule(gen), intervalMs)
+        scheduleNext(gen)
       } catch (e) {
         console.error('[rewind] failed to start capture:', (e as Error).message)
       }
     }
+
+    const captureNow = (): void => {
+      if (!enabled || cancelled || !isLive()) return
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+      requestCapture(generation)
+    }
+    const offCaptureNow = window.omi.onRewindCaptureNow(captureNow)
 
     if (enabled) void start()
     else stop()
 
     return () => {
       cancelled = true
+      offCaptureNow()
       stop()
     }
     // `quality` is a stream constraint, so changing it re-opens the stream —
