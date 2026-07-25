@@ -13,12 +13,11 @@ use crate::byok;
 use crate::models::chat_completions::*;
 use crate::routes::llm_stub::{llm_stub_enabled, stub_chat_completions_response};
 use crate::routes::rate_limit::{requires_server_metering, RateDecision};
-use crate::routes::retrieval_policy::{caller_disabled_tools, retrieval_policy, RetrievalSource};
 use crate::AppState;
 
 use super::request_translation::{translate_request_inner, web_search_enabled, ReasoningEffort};
 use super::response_or_500;
-use super::streaming::{handle_server_tool_streaming, handle_streaming};
+use super::streaming::handle_streaming;
 use super::transport::{handle_non_streaming, new_anthropic_client};
 
 pub(super) fn chat_metering_response(decision: &RateDecision) -> Option<Response> {
@@ -145,39 +144,10 @@ async fn chat_completions_inner(
         StatusCode::BAD_REQUEST
     })?;
 
+    // Web search availability is not a turn-level gate. The model decides
+    // whether to call the tool when it is supported; otherwise it still owes a
+    // normal answer instead of leaving a client request waiting on a forced path.
     let web_search_enabled = web_search_enabled();
-    let policy = retrieval_policy(&req.messages);
-    // Only an explicit "search the web" is worth failing the turn over. A
-    // heuristic guess degrades to a normal answer in `translate_request_inner`.
-    if policy.requires(RetrievalSource::PublicWeb)
-        && policy.web_requirement_is_explicit()
-        && !caller_disabled_tools(&req)
-        && (!web_search_enabled || route.upstream_model.starts_with("claude-haiku"))
-    {
-        tracing::warn!(
-            event = "retrieval_policy",
-            required_web = true,
-            reason = policy.reason(),
-            web_search_exposed = false,
-            web_search_forced = false,
-            "required public web search is unavailable"
-        );
-        return Ok(response_or_500(
-            Response::builder()
-                .status(StatusCode::SERVICE_UNAVAILABLE)
-                .header("content-type", "application/json"),
-            Body::from(
-                json!({
-                    "error": {
-                        "message": "Public web search is temporarily unavailable. Please try again.",
-                        "type": "web_search_unavailable",
-                        "code": 503
-                    }
-                })
-                .to_string(),
-            ),
-        ));
-    }
 
     // BYOK: check for user-provided Anthropic API key (issue #7357).
     // When present, use the user's key and skip server-key rate limiting.
@@ -236,18 +206,7 @@ async fn chat_completions_inner(
     // helper so it never aborts a long streaming reply.
     let client = new_anthropic_client();
 
-    if req.stream && anthropic_req.requires_public_web {
-        handle_server_tool_streaming(
-            &client,
-            &api_key,
-            &anthropic_req,
-            route,
-            &user,
-            &state,
-            is_byok,
-        )
-        .await
-    } else if req.stream {
+    if req.stream {
         handle_streaming(
             &client,
             &api_key,

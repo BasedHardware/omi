@@ -1,11 +1,6 @@
 use serde_json::json;
 
-use crate::fallback::{record_fallback, FallbackOutcome};
 use crate::models::chat_completions::*;
-use crate::routes::retrieval_policy::{
-    caller_disabled_tools, prepend_latest_user_instruction, retrieval_policy, RetrievalSource,
-    REQUIRED_WEB_SEARCH_INSTRUCTION,
-};
 
 /// Default max_tokens when client doesn't specify one.
 pub(super) const DEFAULT_MAX_TOKENS: u64 = 8192;
@@ -152,7 +147,6 @@ pub(super) fn translate_request_inner(
     enable_web_search: bool,
     reasoning_effort: ReasoningEffort,
 ) -> Result<AnthropicRequest, String> {
-    let policy = retrieval_policy(&req.messages);
     let mut system_prompt: Option<String> = None;
     let mut anthropic_messages: Vec<AnthropicMessage> = Vec::new();
 
@@ -234,37 +228,16 @@ pub(super) fn translate_request_inner(
         }
     }
 
-    // Translate tools. A turn that requires fresh public information gets
-    // Anthropic's server-side web_search tool. Keeping this scoped to the
-    // retrieval policy means normal agentic turns retain their incremental
-    // OpenAI streaming behavior; public-web turns use the gateway's bounded
-    // pause-turn continuation below.
-    // Haiku is excluded: web_search_20260209 is not supported there, and a
-    // tools-bearing haiku request would 400 with it attached.
+    // Web search is a normal tool the model chooses to use, not a keyword-routed
+    // pre-decision. The desktop system prompt already states when public web
+    // search is appropriate, so expose the server-side tool on every supported
+    // agentic turn and let the model select it with its normal tool choice.
+    // This keeps public-web turns on the incremental streaming path instead of
+    // buffering an entire server-tool continuation before the client sees a byte.
+    // Haiku is excluded because it does not support this web-search tool.
     let web_search_supported = enable_web_search && !upstream_model.starts_with("claude-haiku");
-    let wants_web_search =
-        policy.requires(RetrievalSource::PublicWeb) && !caller_disabled_tools(req);
-    if wants_web_search && !web_search_supported && policy.web_requirement_is_explicit() {
-        return Err(
-            "required public web search is unavailable for this model or deployment".to_string(),
-        );
-    }
-    // A heuristic freshness/anaphoric guess is not a user demand. On a route
-    // without web search (haiku, or the kill switch) answer the turn from model
-    // knowledge instead of failing it — the forced-search instruction below also
-    // bans private context, which would be wrong for a turn we merely guessed at.
-    let force_web_search = wants_web_search && web_search_supported;
-    if wants_web_search && !web_search_supported {
-        record_fallback(
-            "chat_retrieval",
-            "forced_web_search",
-            "model_knowledge",
-            "capability_mismatch",
-            FallbackOutcome::Degraded,
-        );
-    }
     let client_tools = req.tools.as_deref().unwrap_or(&[]);
-    let inject_web_search = web_search_supported && force_web_search;
+    let inject_web_search = web_search_supported && !client_tools.is_empty();
     let anthropic_tools = if client_tools.is_empty() && !inject_web_search {
         req.tools.as_ref().map(|_| Vec::new())
     } else {
@@ -286,18 +259,9 @@ pub(super) fn translate_request_inner(
         Some(defs)
     };
 
-    if force_web_search {
-        prepend_latest_user_instruction(&mut anthropic_messages, REQUIRED_WEB_SEARCH_INSTRUCTION);
-    }
-
     tracing::info!(
         event = "retrieval_policy",
-        required_web = policy.requires(RetrievalSource::PublicWeb),
-        required_private = policy.requires(RetrievalSource::OmiPrivate),
-        prohibited_web = policy.prohibits(RetrievalSource::PublicWeb),
-        reason = policy.reason(),
         web_search_exposed = inject_web_search,
-        web_search_forced = force_web_search,
         "chat_retrieval_policy"
     );
 
@@ -341,20 +305,14 @@ pub(super) fn translate_request_inner(
 
     // Translate tool_choice from OpenAI format to Anthropic format.
     // When tool_choice is "none", strip tools entirely — Anthropic has no "none"
-    // and would auto-use tools if they're present in the request. A required
-    // public lookup must stay `auto`: Anthropic's server-side web_search tool
-    // cannot be selected as a direct named tool choice. The instruction above
-    // still requires the lookup, while `auto` lets Anthropic execute it through
-    // its supported server-tool path.
+    // and would auto-use tools if they're present in the request. Otherwise the
+    // client's choice passes through; with no explicit choice Anthropic defaults
+    // to `auto`, allowing the model to choose web_search when appropriate.
     let is_tool_choice_none = matches!(
         &req.tool_choice,
         Some(serde_json::Value::String(s)) if s == "none"
     );
-    let anthropic_tool_choice = if force_web_search {
-        Some(json!({"type": "auto"}))
-    } else {
-        translate_tool_choice(&req.tool_choice)?
-    };
+    let anthropic_tool_choice = translate_tool_choice(&req.tool_choice)?;
 
     // ── Prompt caching ──────────────────────────────────────────────────────
     // Breakpoint 1: emit the system prompt as a content block carrying an
@@ -413,7 +371,6 @@ pub(super) fn translate_request_inner(
             anthropic_tools
         },
         tool_choice: anthropic_tool_choice,
-        requires_public_web: force_web_search,
     })
 }
 
