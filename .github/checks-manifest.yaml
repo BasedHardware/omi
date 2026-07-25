@@ -321,9 +321,14 @@ checks:
     reason: "#9988: Pusher's Kubernetes deadline and workflow wait must cover chart-derived availability at the HPA ceiling"
   - id: pusher-rollout-quality-gate
     command: ["python3", "backend/scripts/verify_pusher_rollout_gate.py"]
-    triggers: ["backend/charts/pusher/**", "backend/utils/metrics.py", "backend/routers/pusher.py", "backend/utils/readiness.py", "backend/scripts/verify_pusher_rollout_gate.py", "backend/tests/unit/test_verify_pusher_rollout_gate.py", ".github/checks-manifest.yaml"]
+    triggers: ["backend/charts/pusher/**", "backend/utils/metrics.py", "backend/routers/pusher.py", "backend/utils/readiness.py", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", "backend/scripts/verify_pusher_rollout_gate.py", "backend/tests/unit/test_verify_pusher_rollout_gate.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "SCA-39: static preflight that fails closed when a pusher rollout cannot be verified safe (capacity, image identity, readiness/health split, telemetry)"
+  - id: pusher-dev-bake-observability
+    command: ["python3", "backend/scripts/verify_pusher_dev_observability.py"]
+    triggers: ["backend/charts/pusher/dev_omi_pusher_values.yaml", "backend/charts/monitoring/kube-prometheus-stack/dev_omi_monitoring_values.yaml", "backend/charts/monitoring/dashboards/gke/pusher.json", "backend/utils/metrics.py", "backend/scripts/verify_pusher_dev_observability.py", "backend/tests/unit/test_verify_pusher_dev_observability.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-115: dev Pusher bake must retain isolated scrape plus connection, drain, and reconnect-circuit visibility"
   - id: shared-config-migration-preflight
     command: ["python3", "backend/scripts/verify_shared_config_migration.py", "preflight"]
     triggers: ["backend/charts/pusher/**", "backend/scripts/verify_shared_config_migration.py", "backend/tests/unit/test_verify_shared_config_migration.py", ".github/checks-manifest.yaml"]
