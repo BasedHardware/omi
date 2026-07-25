@@ -3,7 +3,7 @@
     "desktop/macos/Desktop/Sources/AuthService.swift": 2812,
     "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": 1678,
     "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4256,
-    "desktop/macos/Desktop/Sources/MemoryExportService.swift": 1593,
+    "desktop/macos/Desktop/Sources/MemoryExportService.swift": 1519,
     "desktop/macos/Desktop/Sources/OmiApp.swift": 1599
   },
   "raise_justifications": {
