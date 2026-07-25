@@ -111,106 +111,130 @@ final class MemoryAssistantTelemetryTests: XCTestCase {
     }
   }
 
-  // MARK: - Outcome wiring (static contract supplement)
-  // The MemoryAssistant actor cannot be hermetically instantiated (it wires
-  // GeminiClient / MemoryStorage / APIClient / backend sync), so the reachable
-  // analysis-outcome terminals are asserted as a static-wiring tripwire that
-  // *supplements* — never replaces — the behavioral builder/enum coverage above.
-  func testEveryReachableAnalysisOutcomeIsEmittedFromMemoryAssistant() throws {
-    // omi-test-quality: source-inspection -- static contract: the MemoryAssistant actor's external Gemini/SQLite/APIClient deps prevent hermetic behavioral instantiation; this guarantees every reachable analysis-outcome terminal (.synced/.filteredLowConfidence/.noNewMemory/.syncFailed/.analysisFailed) actually emits, so no funnel branch is silently missing.
-    let source = try String(
-      contentsOf: URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .appendingPathComponent("Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryAssistant.swift"),
-      encoding: .utf8
-    )
-    // recordAnalysisOutcome(...) is the single emit helper; each outcome case
-    // must appear at a terminal call site.
-    XCTAssertTrue(source.contains("recordAnalysisOutcome(.analysisFailed"))
-    XCTAssertTrue(source.contains("recordAnalysisOutcome(.noNewMemory"))
-    XCTAssertTrue(source.contains("recordAnalysisOutcome(.filteredLowConfidence"))
-    XCTAssertTrue(source.contains("recordAnalysisOutcome(.synced"))
-    XCTAssertTrue(source.contains("recordAnalysisOutcome(.syncFailed"))
-    XCTAssertTrue(source.contains("recordAnalysisOutcome(.localPersistenceFailed"))
-    XCTAssertTrue(source.contains("recordAnalysisOutcome(.syncStatePersistenceFailed"))
-    // Existing success terminal is preserved (not folded into the new event).
-    XCTAssertTrue(source.contains("AnalyticsManager.shared.memoryExtracted(memoryCount: 1)"))
+}
+
+/// Deterministic actor used to exercise the exact production durability pipeline
+/// without a Gemini/API/SQLite fixture. The pipeline itself is the object used by
+/// `MemoryAssistant`, and it emits through the production AnalyticsManager.
+private actor MemoryAssistantDurabilityFixtureRunner: MemoryAssistantDurabilityRunning {
+  private let outcome: MemoryAssistantDurability.Outcome
+
+  init(outcome: MemoryAssistantDurability.Outcome) {
+    self.outcome = outcome
   }
 
-  func testSQLiteInsertFailureDoesNotCallBackendOrEmitHistoricalSuccess() async {
-    var backendSyncCalls = 0
-    let outcome = await MemoryAssistantDurability.persistAndSync(
-      persist: { nil },
-      sync: { (_: Int) in
-        backendSyncCalls += 1
-        return "server-memory"
-      },
-      markSynced: { _, _ in XCTFail("markSynced must not run after an insert failure") }
-    )
+  func persistAndSync(_ request: MemoryAssistantDurabilityRequest) async -> MemoryAssistantDurability.Outcome {
+    outcome
+  }
+}
 
-    XCTAssertEqual(outcome, .localPersistenceFailed)
-    XCTAssertEqual(backendSyncCalls, 0)
-    XCTAssertFalse(outcome.shouldEmitMemoryExtracted)
+@MainActor
+final class MemoryAssistantDurabilityPipelineTests: XCTestCase {
+  private typealias CapturedEvent = (name: String, properties: [String: Any])
+  private var captured: [CapturedEvent] = []
+
+  override func setUp() {
+    super.setUp()
+    captured = []
+    AnalyticsManager.shared.setMemoryAssistantTelemetryCaptureForTests { [weak self] name, properties in
+      self?.captured.append((name, properties))
+    }
   }
 
-  func testMarkSyncedFailureIsNotClassifiedAsFullySynced() async {
-    enum FixtureError: Error { case markSyncedFailed }
+  override func tearDown() {
+    AnalyticsManager.shared.setMemoryAssistantTelemetryCaptureForTests(nil)
+    captured = []
+    super.tearDown()
+  }
 
-    let outcome = await MemoryAssistantDurability.persistAndSync(
-      persist: { 42 },
-      sync: { (_: Int) in "server-memory" },
-      markSynced: { _, _ in throw FixtureError.markSyncedFailed }
-    )
+  func testProductionPipelineEmitsTerminalAndHistoricalSuccessForEveryDurabilityOutcome() async {
+    let cases: [(MemoryAssistantDurability.Outcome, String, Bool)] = [
+      (.localPersistenceFailed, "local_persistence_failed", false),
+      (.syncFailed, "sync_failed", true),
+      (.syncStatePersistenceFailed, "sync_state_persistence_failed", true),
+      (.synced, "synced", true),
+    ]
 
-    XCTAssertEqual(outcome, .syncStatePersistenceFailed)
-    XCTAssertTrue(outcome.shouldEmitMemoryExtracted)
+    for (outcome, expectedTerminal, expectsHistoricalSuccess) in cases {
+      captured = []
+      let pipeline = MemoryAssistantDurabilityPipeline(
+        runner: MemoryAssistantDurabilityFixtureRunner(outcome: outcome)
+      )
+      let result = await pipeline.persistSyncAndEmit(
+        MemoryAssistantDurabilityRequest(
+          memory: ExtractedMemory(content: "test memory", category: .system, sourceApp: "Test", confidence: 0.82),
+          screenshotId: nil,
+          contextSummary: "test",
+          windowTitle: nil,
+          ownerID: "test-owner"
+        ),
+        confidence: 0.82
+      )
+
+      XCTAssertEqual(result, outcome)
+      XCTAssertEqual(captured.first?.name, MemoryAssistantTelemetry.analysisRunEventName)
+      XCTAssertEqual(captured.first?.properties["outcome"] as? String, expectedTerminal)
+      XCTAssertEqual(captured.first?.properties["confidence_bucket"] as? String, "80_90")
+
+      let historical = captured.filter { $0.name == "Memory Extracted" }
+      XCTAssertEqual(historical.count, expectsHistoricalSuccess ? 1 : 0)
+      if expectsHistoricalSuccess {
+        XCTAssertEqual(historical.first?.properties as? [String: Int], ["memory_count": 1])
+      }
+      XCTAssertEqual(captured.count, expectsHistoricalSuccess ? 2 : 1)
+    }
   }
 }
 
 /// Behavioral proof that `Memory Assistant Setting Changed` records exactly one
 /// closed, bounded event per real user-initiated persisted change.
 ///
-/// `applyUserSettingChange` is the single user-intent entry point and returns
-/// whether it recorded a change, so the user-intent decision is tested against
-/// the production API directly — no PostHog capture seam is needed (the SDK is
-/// uninitialized in debug builds, and a mutable-global closure sink is unsafe
-/// under Swift 6 concurrency isolation). The raw property setters stay silent
-/// by construction: they never call `applyUserSettingChange`, so remote settings
-/// sync (`SettingsSyncManager.applyRemoteSettings`), migrations/defaults, and
-/// `resetToDefaults` cannot reach the emit — verified structurally in the
-/// adversarial self-review of the diff (the only `memoryAssistantSettingChanged`
-/// call site lives behind `applyUserSettingChange`'s persisted-change guard).
+/// The capture seam lives on `AnalyticsManager`'s main-actor boundary, so these
+/// tests observe the real event and exact payload without a mutable unsafe global.
 @MainActor
 final class MemoryAssistantSettingChangeTelemetryTests: XCTestCase {
   private static let enabledKey = "memoryAssistantEnabled"
   private static let notificationsKey = "memoryNotificationsEnabled"
   private var savedEnabled = false
   private var savedNotifications = false
+  private var captured: [(name: String, properties: [String: Any])] = []
 
   override func setUp() {
     super.setUp()
     savedEnabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
     savedNotifications = UserDefaults.standard.bool(forKey: Self.notificationsKey)
+    captured = []
+    AnalyticsManager.shared.setMemoryAssistantTelemetryCaptureForTests { [weak self] name, properties in
+      self?.captured.append((name, properties))
+    }
   }
 
   override func tearDown() {
     UserDefaults.standard.set(savedEnabled, forKey: Self.enabledKey)
     UserDefaults.standard.set(savedNotifications, forKey: Self.notificationsKey)
+    AnalyticsManager.shared.setMemoryAssistantTelemetryCaptureForTests(nil)
+    captured = []
     super.tearDown()
   }
 
-  func testUserToggleRecordsExactlyOneEventOnlyWhenPersistedValueChanges() {
+  func testUserToggleCapturesExactlyOneClosedEventWithExactPayload() {
     UserDefaults.standard.set(false, forKey: Self.enabledKey)
-    // A real change records exactly one event.
     XCTAssertTrue(MemoryAssistantSettings.shared.applyUserSettingChange(.enabled, value: true))
-    // Re-applying the same value (no persisted change) records nothing.
     XCTAssertFalse(MemoryAssistantSettings.shared.applyUserSettingChange(.enabled, value: true))
-    // Toggling back records a second event for the new value.
-    XCTAssertTrue(MemoryAssistantSettings.shared.applyUserSettingChange(.enabled, value: false))
 
-    UserDefaults.standard.set(true, forKey: Self.notificationsKey)
-    XCTAssertTrue(MemoryAssistantSettings.shared.applyUserSettingChange(.notificationsEnabled, value: false))
-    XCTAssertFalse(MemoryAssistantSettings.shared.applyUserSettingChange(.notificationsEnabled, value: false))
+    XCTAssertEqual(captured.count, 1)
+    XCTAssertEqual(captured[0].name, MemoryAssistantTelemetry.settingChangedEventName)
+    XCTAssertEqual(Set(captured[0].properties.keys), Set(["setting", "value"]))
+    XCTAssertEqual(captured[0].properties["setting"] as? String, "enabled")
+    XCTAssertEqual(captured[0].properties["value"] as? Bool, true)
+  }
+
+  func testRemoteSyncAndResetEmitNoSettingChangeEvent() {
+    SettingsSyncManager.shared.applyRemoteSettings(
+      AssistantSettingsResponse(memory: MemorySettingsResponse(enabled: false, notificationsEnabled: true))
+    )
+    MemoryAssistantSettings.shared.resetToDefaults()
+
+    XCTAssertTrue(captured.isEmpty)
   }
 }

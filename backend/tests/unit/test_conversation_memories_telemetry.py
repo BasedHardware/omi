@@ -35,10 +35,9 @@ class FakePosthog:
         self.calls.append({'distinct_id': distinct_id, 'event': event, 'properties': dict(properties)})
 
 
-class _FakeLock:
-    """Mimics Redis SET NX EX: the first claim for a (uid, conversation_id)
-    returns True; any repeat claim for the same pair returns False. This is the
-    real durable-idempotency semantics without a live Redis."""
+class _FakeDurableClaim:
+    """Mimics Firestore ``create``: a permanent marker exists after the first
+    claim and cannot be re-acquired by later retries."""
 
     def __init__(self):
         self.claimed: set[tuple[str, str]] = set()
@@ -59,12 +58,12 @@ def _reset_posthog_client():
 
 
 @pytest.fixture(autouse=True)
-def _fake_lock(monkeypatch):
-    """Replace the durable Redis claim with the in-memory SET NX equivalent so
-    tests assert the real retry semantics hermetically."""
-    lock = _FakeLock()
-    monkeypatch.setattr(met, "try_acquire_conversation_memory_analytics_lock", lock.acquire)
-    return lock
+def _fake_durable_claim(monkeypatch):
+    """Replace the Firestore marker with an in-memory atomic-create equivalent
+    so tests assert permanent retry semantics hermetically."""
+    claim = _FakeDurableClaim()
+    monkeypatch.setattr(met, "try_claim_conversation_memory_analytics", claim.acquire)
+    return claim
 
 
 def _emit(uid, conversation_id, *, count, source=SOURCE_TRANSCRIPTION, path=PATH_CANONICAL):
@@ -213,21 +212,27 @@ def test_distinct_conversations_emit_independently():
     assert {c['properties']['memory_count_bucket'] for c in fake.calls} == {'2', '3', '1'}
 
 
-def test_redis_failure_fails_open_without_blocking_extraction(monkeypatch):
-    """If the durable store errors, telemetry fails open (emits) rather than
-    silently dropping a legitimate extraction signal — accepting a rare duplicate
-    during a Redis outage over a lost event."""
+def test_durable_claim_outage_skips_telemetry_and_retry_never_duplicates(monkeypatch):
+    """A durable-claim outage must fail closed: extraction continues, but no
+    unverified success is captured. A later retry after an already-claimed
+    conversation is still suppressed, proving cache loss cannot re-open it."""
 
-    def _raising_lock(_uid, _conversation_id):
-        raise RuntimeError('redis down')
+    def _raising_claim(_uid, _conversation_id):
+        raise RuntimeError('firestore down')
 
-    monkeypatch.setattr(met, "try_acquire_conversation_memory_analytics_lock", _raising_lock)
+    monkeypatch.setattr(met, "try_claim_conversation_memory_analytics", _raising_claim)
     fake = FakePosthog()
     met.set_posthog_client_for_tests(fake)
 
-    # Must not raise, and must still emit (fail-open).
+    # Must not raise, and must not emit a potentially duplicate success.
     _emit('uid-1', 'conv-A', count=2)
-    assert len(fake.calls) == 1
+    assert fake.calls == []
+
+    claimed = _FakeDurableClaim()
+    claimed.claimed.add(('uid-1', 'conv-A'))
+    monkeypatch.setattr(met, "try_claim_conversation_memory_analytics", claimed.acquire)
+    _emit('uid-1', 'conv-A', count=2)
+    assert fake.calls == []
 
 
 def test_posthog_constructor_failure_is_fail_open_at_public_extraction_boundary(monkeypatch):
@@ -238,7 +243,7 @@ def test_posthog_constructor_failure_is_fail_open_at_public_extraction_boundary(
     result = ConversationMemoryExtractionResult(count=1, source=SOURCE_TRANSCRIPTION, path=PATH_CANONICAL)
     monkeypatch.setattr(process_conversation, "_extract_memories_inner", lambda _uid, _conversation: result)
     monkeypatch.setattr(process_conversation, "track_usage", lambda *_args: nullcontext())
-    monkeypatch.setattr(met, "try_acquire_conversation_memory_analytics_lock", lambda *_args: True)
+    monkeypatch.setattr(met, "try_claim_conversation_memory_analytics", lambda *_args: True)
     monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "configured-test-key")
     monkeypatch.setattr(met, "_posthog_client", None)
     monkeypatch.setattr(met, "_posthog_disabled", False)
