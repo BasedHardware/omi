@@ -149,6 +149,114 @@ void main() {
     });
   });
 
+  group('RingProtocol.canAdvance', () {
+    test('allows deletion only after a complete durable transfer', () {
+      expect(
+        RingProtocol.canAdvance(
+          reachedDone: true,
+          doneOk: true,
+          flushError: false,
+          isCancelled: false,
+          receivedCompleteRange: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('rejects transport completion without application completion', () {
+      expect(
+        RingProtocol.canAdvance(
+          reachedDone: false,
+          doneOk: false,
+          flushError: false,
+          isCancelled: false,
+          receivedCompleteRange: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects a completed transfer when durable flush failed', () {
+      expect(
+        RingProtocol.canAdvance(
+          reachedDone: true,
+          doneOk: true,
+          flushError: true,
+          isCancelled: false,
+          receivedCompleteRange: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects a cancelled transfer', () {
+      expect(
+        RingProtocol.canAdvance(
+          reachedDone: true,
+          doneOk: true,
+          flushError: false,
+          isCancelled: true,
+          receivedCompleteRange: true,
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('RingProtocol.receivedCompleteRange', () {
+    test('accepts an exact contiguous READ_BEGIN through DONE range', () {
+      expect(
+        RingProtocol.receivedCompleteRange(
+          transferStartSeq: 100,
+          announcedPacketCount: 20,
+          doneNextSeq: 120,
+          receivedPacketCount: 20,
+          pendingBytes: 0,
+        ),
+        isTrue,
+      );
+    });
+
+    test('rejects a missing record even when DONE arrived', () {
+      expect(
+        RingProtocol.receivedCompleteRange(
+          transferStartSeq: 100,
+          announcedPacketCount: 20,
+          doneNextSeq: 120,
+          receivedPacketCount: 19,
+          pendingBytes: 0,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects trailing partial record bytes', () {
+      expect(
+        RingProtocol.receivedCompleteRange(
+          transferStartSeq: 100,
+          announcedPacketCount: 20,
+          doneNextSeq: 120,
+          receivedPacketCount: 20,
+          pendingBytes: 17,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects DONE watermark inconsistent with announced count', () {
+      expect(
+        RingProtocol.receivedCompleteRange(
+          transferStartSeq: 100,
+          announcedPacketCount: 20,
+          doneNextSeq: 121,
+          receivedPacketCount: 20,
+          pendingBytes: 0,
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('RingProtocol.readRecordTimestamp', () {
     test('reads 4-byte big-endian timestamp prefix', () {
       // 0x6824B5C0 = epoch 2026-05-13 21:47:12 UTC

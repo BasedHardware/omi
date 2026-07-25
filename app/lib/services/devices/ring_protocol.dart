@@ -111,6 +111,36 @@ class RingProtocol {
     return (record[0] << 24) | (record[1] << 16) | (record[2] << 8) | record[3];
   }
 
+  /// The pendant may discard records only after the complete transfer reached
+  /// durable phone storage. A BLE TX completion or a partial stream is not an
+  /// acknowledgement.
+  static bool canAdvance({
+    required bool reachedDone,
+    required bool doneOk,
+    required bool flushError,
+    required bool isCancelled,
+    required bool receivedCompleteRange,
+  }) {
+    return reachedDone && doneOk && !flushError && !isCancelled && receivedCompleteRange;
+  }
+
+  /// Validate that READ_BEGIN, DATA, and DONE describe one complete contiguous
+  /// record range. This catches missing notification bytes before a cumulative
+  /// ADVANCE command could discard the corresponding SD records.
+  static bool receivedCompleteRange({
+    required int? transferStartSeq,
+    required int? announcedPacketCount,
+    required int? doneNextSeq,
+    required int receivedPacketCount,
+    required int pendingBytes,
+  }) {
+    if (transferStartSeq == null || announcedPacketCount == null || doneNextSeq == null) return false;
+    return announcedPacketCount >= 0 &&
+        doneNextSeq == transferStartSeq + announcedPacketCount &&
+        receivedPacketCount == announcedPacketCount &&
+        pendingBytes == 0;
+  }
+
   /// Parse the 440-byte audio payload of a ring record into opus frames.
   /// Format: [size:1][frame:size]... with zero padding allowed at any point.
   /// A leading byte of 0 is a no-op padding marker; otherwise it is the
