@@ -1445,7 +1445,10 @@ private struct CanonicalMemoryAtlasSurface: View {
     evidenceProvider: @escaping ([String]) -> [MemoryAtlasEvidence] = { _ in [] },
     onRebuild: (() -> Void)? = nil,
     isRebuilding: Bool = false,
-    previewTimeCursor: Double? = nil
+    previewTimeCursor: Double? = nil,
+    /// Deterministic offscreen renders open the inspector, which is otherwise
+    /// only reachable by tapping the canvas.
+    previewSelectedNodeID: String? = nil
   ) {
     self.graph = graph
     self.compact = compact
@@ -1454,6 +1457,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     self.isRebuilding = isRebuilding
     self.previewTimeCursor = previewTimeCursor
     _timeCursor = State(initialValue: previewTimeCursor ?? 1)
+    _selectedNodeID = State(initialValue: previewSelectedNodeID)
     let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
     let atlasSnapshot = MemoryAtlasLayoutEngine.makeSnapshot(
       graph: graph,
@@ -2979,6 +2983,36 @@ enum MemoryAtlasExportPreview {
       )
     )
   }
+
+  /// Same sparse atlas with an entity selected, so the inspector's real
+  /// layout (connections, evidence, and the map narrowing beside it) is
+  /// captured rather than described.
+  static func inspectorSurface() -> AnyView {
+    AnyView(
+      CanonicalMemoryAtlasSurface(
+        graph: singleTypeGraph(),
+        compact: false,
+        evidenceProvider: { ids in
+          ids.prefix(3).enumerated().map { index, id in
+            MemoryAtlasEvidence(
+              id: id,
+              content: Self.sampleEvidence[index % Self.sampleEvidence.count],
+              createdAt: Date(timeIntervalSince1970: 1_752_000_000 - Double(index) * 86_400)
+            )
+          }
+        },
+        onRebuild: {},
+        previewTimeCursor: 1,
+        previewSelectedNodeID: "concept-2"
+      )
+    )
+  }
+
+  private static let sampleEvidence = [
+    "David runs hermes-m4 as the default agent for Multica work and prefers it over other Codex agents unless told otherwise.",
+    "Debug symbol uploads to Sentry need SENTRY_AUTH_TOKEN present in the release lane, or the upload silently no-ops.",
+    "Long-running agent tasks should run under tmux or screen so closing the terminal session does not kill them.",
+  ]
 
   private static func singleTypeGraph() -> KnowledgeGraphResponse {
     let now = Date(timeIntervalSince1970: 1_752_000_000)
