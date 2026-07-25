@@ -32,6 +32,7 @@ DESKTOP_RELEASE_PATHS = (
     "desktop/macos",
     "codemagic.yaml",
     ".github/scripts/plan-desktop-release.py",
+    ".github/scripts/desktop-release-source-identity.py",
     ".github/workflows/desktop_auto_release.yml",
     ".github/workflows/desktop-swift-ci.yml",
 )
