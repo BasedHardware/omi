@@ -2066,12 +2066,7 @@ async def test_sync_task_final_attempt_publishes_one_bounded_terminal_failure():
 
 @pytest.mark.asyncio
 async def test_sync_task_non_retryable_failure_terminates_on_its_first_delivery():
-    """A permanent failure must not spend the retry budget returning 5xx.
-
-    Cloud Tasks throttles a queue's whole dispatch rate under sustained 5xx, so
-    retrying a job that can never succeed slows every other user's sync. Finalize
-    on the first delivery instead of after ``max_attempts`` 500s.
-    """
+    """A permanent failure must not spend the retry budget returning 5xx."""
 
     module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
     from utils.stt.outcomes import TranscriptionFailure
@@ -2099,7 +2094,6 @@ async def test_sync_task_non_retryable_failure_terminates_on_its_first_delivery(
         assert (
             module._finalize_sync_job_failure.await_args.kwargs['outcome'] == module.TranscriptionOutcome.CONFIG_ERROR
         )
-        # No queued reset and no retained staging: there is nothing to retry.
         module.fenced_mark_job_queued_for_retry.assert_not_called()
         module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
     finally:
