@@ -281,6 +281,25 @@ static void test_power_on_queue_failure_reconciles_until_mount_or_newer_off(void
     assert(!ring_power_on_reconcile_required(true, false, 0));
 }
 
+static void test_bulk_link_policy_avoids_range_boundary_parameter_churn(void)
+{
+    ring_bulk_link_policy_t policy;
+
+    ring_bulk_link_policy_reset(&policy);
+    assert(ring_bulk_link_policy_on_read(&policy) == RING_BULK_LINK_ACTION_REQUEST_BULK);
+    assert(ring_bulk_link_policy_on_read(&policy) == RING_BULK_LINK_ACTION_NONE);
+
+    ring_bulk_link_policy_on_idle(&policy);
+    assert(ring_bulk_link_policy_on_read(&policy) == RING_BULK_LINK_ACTION_NONE);
+    assert(ring_bulk_link_policy_on_restore_timeout(&policy) == RING_BULK_LINK_ACTION_NONE);
+
+    ring_bulk_link_policy_on_idle(&policy);
+    assert(ring_bulk_link_policy_on_restore_timeout(&policy) == RING_BULK_LINK_ACTION_REQUEST_NORMAL);
+    assert(ring_bulk_link_policy_on_read(&policy) == RING_BULK_LINK_ACTION_REQUEST_BULK);
+    assert(ring_bulk_link_policy_on_stop(&policy) == RING_BULK_LINK_ACTION_REQUEST_NORMAL);
+    assert(ring_bulk_link_policy_on_stop(&policy) == RING_BULK_LINK_ACTION_NONE);
+}
+
 int main(void)
 {
     test_overflow_flushes_complete_record_and_zero_pads_tail();
@@ -296,6 +315,7 @@ int main(void)
     test_control_response_retries_transient_notify_backpressure();
     test_snapshot_commit_retries_until_success_or_disconnect();
     test_power_on_queue_failure_reconciles_until_mount_or_newer_off();
+    test_bulk_link_policy_avoids_range_boundary_parameter_churn();
     puts("audio_storage_packer_tests: PASS");
     return 0;
 }

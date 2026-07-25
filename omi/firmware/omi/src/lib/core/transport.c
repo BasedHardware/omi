@@ -131,6 +131,7 @@ static int update_data_length(struct bt_conn *conn);
 static int update_mtu(struct bt_conn *conn);
 static int update_conn_params(struct bt_conn *conn);
 static void link_setup_work_handler(struct k_work *work);
+static void bulk_link_restore_work_handler(struct k_work *work);
 static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_exchange_params *params);
 
 // --- GATT Exchange MTU Params ---
@@ -151,6 +152,11 @@ static link_setup_stage_t link_setup_stage = LINK_SETUP_DONE;
 static uint8_t link_setup_attempts;
 static atomic_t link_setup_generation;
 K_WORK_DELAYABLE_DEFINE(link_setup_work, link_setup_work_handler);
+
+#define BULK_LINK_IDLE_RESTORE_MS 8000U
+static struct k_spinlock bulk_link_policy_lock;
+static ring_bulk_link_policy_t bulk_link_policy;
+K_WORK_DELAYABLE_DEFINE(bulk_link_restore_work, bulk_link_restore_work_handler);
 
 //
 // Service and Characteristic
@@ -676,6 +682,10 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
             supervision_timeout);
     LOG_INF("Initial MTU: %u", mtu);
     is_connected = true;
+    k_work_cancel_delayable(&bulk_link_restore_work);
+    k_spinlock_key_t bulk_policy_key = k_spin_lock(&bulk_link_policy_lock);
+    ring_bulk_link_policy_reset(&bulk_link_policy);
+    k_spin_unlock(&bulk_link_policy_lock, bulk_policy_key);
     atomic_inc(&link_setup_generation);
     link_setup_stage = LINK_SETUP_CONN_PARAMS;
     link_setup_attempts = 0U;
@@ -707,6 +717,10 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 {
     atomic_inc(&link_setup_generation);
     k_work_cancel_delayable(&link_setup_work);
+    k_work_cancel_delayable(&bulk_link_restore_work);
+    k_spinlock_key_t bulk_policy_key = k_spin_lock(&bulk_link_policy_lock);
+    ring_bulk_link_policy_reset(&bulk_link_policy);
+    k_spin_unlock(&bulk_link_policy_lock, bulk_policy_key);
     link_setup_stage = LINK_SETUP_DONE;
     link_setup_attempts = 0U;
 
@@ -818,6 +832,83 @@ static int update_conn_params(struct bt_conn *conn)
         LOG_WRN("bt_conn_le_param_update() failed (err %d)", err);
     }
     return err;
+}
+
+static int update_bulk_conn_params(struct bt_conn *conn)
+{
+    const struct bt_le_conn_param bulk_param = {
+        .interval_min = 12,
+        .interval_max = 12,
+        .latency = 0,
+        .timeout = 600,
+    };
+
+    LOG_INF("Requesting bulk-sync conn params update (15ms, latency 0)...");
+    int err = bt_conn_le_param_update(conn, &bulk_param);
+    if (err) {
+        LOG_WRN("Bulk-sync conn params update was not accepted (err %d); continuing", err);
+    }
+    return err;
+}
+
+static void apply_bulk_link_action(ring_bulk_link_action_t action)
+{
+    if (action == RING_BULK_LINK_ACTION_NONE) {
+        return;
+    }
+
+    struct bt_conn *conn = get_current_connection();
+    if (!conn) {
+        return;
+    }
+
+    if (action == RING_BULK_LINK_ACTION_REQUEST_BULK) {
+        (void) update_bulk_conn_params(conn);
+    } else {
+        (void) update_conn_params(conn);
+    }
+    bt_conn_unref(conn);
+}
+
+void transport_bulk_sync_begin(void)
+{
+    k_work_cancel_delayable(&bulk_link_restore_work);
+
+    k_spinlock_key_t key = k_spin_lock(&bulk_link_policy_lock);
+    ring_bulk_link_action_t action = ring_bulk_link_policy_on_read(&bulk_link_policy);
+    k_spin_unlock(&bulk_link_policy_lock, key);
+
+    apply_bulk_link_action(action);
+}
+
+void transport_bulk_sync_end(bool immediate)
+{
+    ring_bulk_link_action_t action = RING_BULK_LINK_ACTION_NONE;
+
+    if (immediate) {
+        k_work_cancel_delayable(&bulk_link_restore_work);
+        k_spinlock_key_t key = k_spin_lock(&bulk_link_policy_lock);
+        action = ring_bulk_link_policy_on_stop(&bulk_link_policy);
+        k_spin_unlock(&bulk_link_policy_lock, key);
+    } else {
+        k_spinlock_key_t key = k_spin_lock(&bulk_link_policy_lock);
+        ring_bulk_link_policy_on_idle(&bulk_link_policy);
+        k_spin_unlock(&bulk_link_policy_lock, key);
+        k_work_reschedule(&bulk_link_restore_work, K_MSEC(BULK_LINK_IDLE_RESTORE_MS));
+    }
+
+    apply_bulk_link_action(action);
+}
+
+static void bulk_link_restore_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    k_spinlock_key_t key = k_spin_lock(&bulk_link_policy_lock);
+    ring_bulk_link_action_t action = ring_bulk_link_policy_on_restore_timeout(&bulk_link_policy);
+    k_spin_unlock(&bulk_link_policy_lock, key);
+
+    apply_bulk_link_action(action);
 }
 
 static int update_phy(struct bt_conn *conn)
