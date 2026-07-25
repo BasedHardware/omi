@@ -1,3 +1,0 @@
-{
-  "change": "Added privacy-safe analytics for the memory assistant and transcript memory extraction (activation, analysis outcomes, and recording-to-memory success) so their reliability and funnel can be measured; no screen content, memory text, or identifiers are sent"
-}
