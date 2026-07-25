@@ -67,7 +67,15 @@ def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
 @max_part_size(SPEECH_PROFILE_MAX_PART_SIZE)
 def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
     os.makedirs(f'_temp/{uid}', exist_ok=True)
-    file_path = f"_temp/{uid}/{file.filename}"
+    # file.filename comes straight from the client-supplied Content-Disposition header
+    # and is not sanitized by Starlette/FastAPI. Without stripping it to a bare
+    # filename, a name containing "../" segments (or an absolute path) would let an
+    # authenticated caller write bytes outside _temp/{uid}/ to any path this process
+    # can write to.
+    safe_filename = os.path.basename(file.filename or '')
+    if not safe_filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    file_path = f"_temp/{uid}/{safe_filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
 

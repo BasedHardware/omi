@@ -244,6 +244,8 @@ class TestDevWebhookAutoDisable:
     def _stub_webhook_db_lookups(self, monkeypatch):
         monkeypatch.setattr("utils.webhooks.user_webhook_status_db", MagicMock(return_value=True))
         monkeypatch.setattr("utils.webhooks.get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
+        # SSRF guard resolves DNS for real; stub it so these tests stay hermetic.
+        monkeypatch.setattr("utils.webhooks.hostname_is_public", AsyncMock(return_value=True))
 
     def test_append_query_params_preserves_existing_query(self):
         from utils.webhooks import _append_query_params
@@ -1935,6 +1937,8 @@ class TestDevWebhookIntegrationPaths:
     def _stub_webhook_db_lookups(self, monkeypatch):
         monkeypatch.setattr("utils.webhooks.user_webhook_status_db", MagicMock(return_value=True))
         monkeypatch.setattr("utils.webhooks.get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
+        # SSRF guard resolves DNS for real; stub it so these tests stay hermetic.
+        monkeypatch.setattr("utils.webhooks.hostname_is_public", AsyncMock(return_value=True))
 
     @pytest.mark.asyncio
     async def test_conversation_created_records_success(self):

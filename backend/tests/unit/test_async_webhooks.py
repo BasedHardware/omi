@@ -29,6 +29,11 @@ def _stub_webhook_db_helpers(monkeypatch):
     monkeypatch.setattr(webhooks_module, "set_user_webhook_db", MagicMock())
     monkeypatch.setattr(webhooks_module, "record_dev_webhook_success", MagicMock())
     monkeypatch.setattr(webhooks_module, "record_dev_webhook_failure", MagicMock(return_value=False))
+    # _post_dev_webhook's SSRF guard resolves the webhook hostname via real DNS
+    # (utils.ssrf_guard.hostname_is_public). Stub it so these tests stay hermetic and
+    # don't depend on live network/DNS availability in CI; SSRF-guard behavior itself
+    # is covered separately in test_webhook_ssrf_guard.py.
+    monkeypatch.setattr(webhooks_module, "hostname_is_public", AsyncMock(return_value=True))
 
 
 class TestRealtimeTranscriptWebhook:

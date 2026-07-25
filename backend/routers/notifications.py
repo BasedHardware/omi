@@ -1,3 +1,4 @@
+import hmac
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple, cast
@@ -92,7 +93,8 @@ def save_token(
 
 @router.post('/v1/notification')
 def send_notification_to_user(data: Dict[str, Any], secret_key: str = Header(...)) -> Dict[str, str]:
-    if secret_key != os.getenv('ADMIN_KEY'):
+    admin_key = os.getenv('ADMIN_KEY')
+    if not admin_key or not hmac.compare_digest(secret_key, admin_key):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.get('uid'):
         raise HTTPException(status_code=400, detail='uid is required')
