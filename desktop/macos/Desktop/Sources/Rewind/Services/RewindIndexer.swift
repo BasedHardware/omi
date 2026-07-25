@@ -433,7 +433,15 @@ actor RewindIndexer {
       if await discardAbandonedVideoChunkIfNeeded(error) {
         return
       }
-      logError("RewindIndexer: Failed to process CGImage frame", error: error)
+      logError(
+        "RewindIndexer: Failed to process CGImage frame",
+        error: error,
+        context: StorageFailureDiagnostics.context(
+          pathClass: "video-chunk",
+          containingURL: DesktopLocalProfile.applicationSupportURL(),
+          databaseURL: nil,
+          error: error,
+          appIsTerminating: RewindDatabase.isTerminationInProgress))
       await RewindDatabase.shared.reportQueryError(error)
     }
   }

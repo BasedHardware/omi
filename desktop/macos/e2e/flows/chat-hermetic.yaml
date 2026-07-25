@@ -10,6 +10,7 @@ covers:
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+JournalProjection.swift
   - desktop/macos/Desktop/Sources/Chat/AgentBridge.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
 preconditions:
   - automation_bridge_ready
 

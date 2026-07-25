@@ -141,6 +141,37 @@ import XCTest
       XCTAssertTrue(tail.contains("silent capture detected"))
     }
 
+    func testBetaTrailPreservesBoundedFailureDiagnosticsForTransientStorageErrors() throws {
+      let context = StorageFailureDiagnostics.context(
+        pathClass: "rewind-db",
+        containingURL: FileManager.default.temporaryDirectory,
+        databaseURL: nil,
+        error: NSError(domain: NSPOSIXErrorDomain, code: 28),
+        appIsTerminating: false)
+
+      DesktopDiagnosticsManager.shared.recordBetaLogError(
+        message: "Rewind database write failed",
+        error: NSError(domain: NSPOSIXErrorDomain, code: 28),
+        failureDiagnostics: context.values,
+        enabled: true)
+
+      let url = try XCTUnwrap(
+        DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
+          area: "capture",
+          failureClass: "storage_exhausted",
+          phase: "persist",
+          includeBetaDiagnostics: true))
+      defer { try? FileManager.default.removeItem(at: url) }
+
+      let data = try Data(contentsOf: url)
+      let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+      let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+      let trail = try XCTUnwrap(
+        snapshots.first(where: { $0["event"] as? String == "beta_diagnostic_trail" }))
+      XCTAssertEqual(trail["path_class"] as? String, "rewind-db")
+      XCTAssertEqual(trail["error_code"] as? Int, 28)
+    }
+
     func testBetaTrailIncludesTypedErrorContextWithoutRawMessage() throws {
       DesktopDiagnosticsManager.shared.recordBetaLogError(
         message: "Chat bridge returned Alice's private conversation title",
