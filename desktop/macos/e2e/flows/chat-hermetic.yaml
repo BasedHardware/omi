@@ -4,6 +4,7 @@ tier: 2
 description: Hermetic chat in Home tab — send/receive with Rust OMI_LLM_STUB=1 (v0.12.119+ redesign — chat is embedded in Home, not a separate tab)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/AnalyticsManager.swift
   - desktop/macos/Desktop/Sources/APIClient+AuthPolicy.swift
   - desktop/macos/Desktop/Sources/Auth/AuthSessionAttemptFence.swift
   - desktop/macos/Desktop/Sources/Chat/APIClient+KernelJournal.swift
@@ -13,6 +14,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentLifecycleDisplayProjection.swift
   - desktop/macos/Desktop/Sources/Chat/AgentLifecycleTranscriptProjection.swift
   - desktop/macos/Desktop/Sources/Chat/AuthorizedToolExecution.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatQueryTelemetry.swift
   - desktop/macos/Desktop/Sources/Chat/KernelJournalBackendSyncDriver.swift
   - desktop/macos/Desktop/Sources/Chat/KernelJournalEventHub.swift
   - desktop/macos/Desktop/Sources/Chat/KernelTurnJournal.swift
