@@ -1,9 +1,11 @@
 {
   "files": {
-    "backend/scripts/validate-backend-runtime-env.py": 1859
+    "backend/scripts/validate-backend-runtime-env.py": 1859,
+    "backend/testing/listen_pusher_stack/run.py": 1503
   },
   "raise_justifications": {
-    "backend/scripts/validate-backend-runtime-env.py": "Serving STT retirement, shared forbidden-env validation, and SCA-29/SCA-33 runtime-versus-workflow source boundaries remain one authoritative deployment contract."
+    "backend/scripts/validate-backend-runtime-env.py": "Serving STT retirement, shared forbidden-env validation, and SCA-29/SCA-33 runtime-versus-workflow source boundaries remain one authoritative deployment contract.",
+    "backend/testing/listen_pusher_stack/run.py": "The detached real listener/Pusher/Firestore harness keeps its process orchestration and privacy-safe end-to-end assertions in one scenario owner."
   },
   "threshold": 1500
 }
