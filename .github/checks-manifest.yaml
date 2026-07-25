@@ -354,6 +354,11 @@ checks:
     triggers: ["desktop/macos/scripts/swift-format-wrapper.sh", "desktop/macos/tests/test-swift-format-wrapper.sh"]
     lanes: ["local", "ci"]
     reason: "#9843 Ticket 02: pinned swift-format bootstrap wrapper provenance contract"
+  - id: desktop-launch-env-forwarding
+    command: ["bash", "desktop/macos/tests/test-launch-env-forwarding.sh"]
+    triggers: ["desktop/macos/run.sh", "desktop/macos/tests/test-launch-env-forwarding.sh"]
+    lanes: ["local", "ci"]
+    reason: "`open` launches from launchd, so a documented run.sh env override that is not passed with `open --env` silently does nothing; caught OMI_FORCE_CANONICAL_MEMORY_ATLAS being documented but never forwarded"
   - id: desktop-main-actor-xctest-hooks
     command: ["python3", "desktop/macos/scripts/check-main-actor-xctest-hooks.py"]
     triggers: ["desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check-main-actor-xctest-hooks.py"]
