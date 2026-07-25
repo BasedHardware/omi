@@ -42,6 +42,10 @@ logger = logging.getLogger(__name__)
 
 HISTORY_LIMIT = 10
 GCE_PROJECT = "based-hardware"
+# Legacy placeholder that earlier builds persisted as agentVm.ip when the GCE
+# IP poll timed out. Never written any more; still read so already-poisoned
+# records heal on the next connect instead of resetting a healthy VM forever.
+UNRESOLVED_VM_IP = "unknown"
 VM_KEEPALIVE_INTERVAL = 120  # seconds — ping VM every 2 min during active WS
 
 # Encryption — optional; required for users with enhanced data protection.
@@ -210,15 +214,35 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
         if not ip:
             t_fail = time.monotonic() - t0
             logger.error(f"[vm-start] {vm_name} failed to get IP after 6 attempts: {t_fail:.1f}s")
-            ip = "unknown"
+            raise RuntimeError(f"VM {vm_name} started but never reported an external IP")
 
         return ip
 
 
+def _is_usable_vm_ip(ip: Any) -> bool:
+    """True when `ip` is an address the proxy can actually dial.
+
+    `UNRESOLVED_VM_IP` is truthy, so a stored placeholder satisfies every
+    `if ip:` reader on the connect path while resolving to nothing.
+    """
+    return isinstance(ip, str) and bool(ip) and ip != UNRESOLVED_VM_IP
+
+
 def _update_firestore_vm(uid: str, ip: str | None, status: str) -> None:
-    """Update the user's agentVm fields in Firestore."""
+    """Update the user's agentVm fields in Firestore.
+
+    `agentVm.ip` is the address every later connect dials, so this writer is
+    the one place that decides what may become that address. A placeholder
+    must never be persisted: it is truthy, so it passes the `status == "ready"
+    and vm_ip` fast path, fails the health probe, and sends `_ensure_vm_running`
+    down the `health_failed` branch — which finds GCE reporting RUNNING and
+    hard-resets a healthy VM, then writes the same placeholder back. Nothing
+    else repairs the field, so the user is stuck in that loop permanently.
+    """
     update = {"agentVm.status": status}
     if ip:
+        if not _is_usable_vm_ip(ip):
+            raise ValueError(f"refusing to persist unusable agentVm.ip for uid={uid}")
         update["agentVm.ip"] = ip
     _get_firestore_db().collection('users').document(uid).update(update)
 
@@ -254,7 +278,10 @@ async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool =
     zone = cast(str, vm.get("zone", "us-central1-a"))
     fs_status = cast(str, vm.get("status", ""))
 
-    if fs_status == "ready":
+    # A record whose stored IP is the legacy placeholder can never be repaired by
+    # the reset branch below — it writes the same value back. Fall through to a
+    # full restart so `_start_vm_and_wait` resolves a real address.
+    if fs_status == "ready" and _is_usable_vm_ip(vm.get("ip")):
         # Verify it's actually running
         try:
             gce_status = await _check_gce_status(vm_name, zone)
