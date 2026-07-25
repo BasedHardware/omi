@@ -576,10 +576,14 @@ struct DesktopErrorTelemetryDescriptor: Equatable {
 /// Bounded, non-PII fields that may accompany a shared `logError` Sentry event.
 /// Callers must construct these from enums, booleans, and numeric measurements;
 /// paths, exception messages, identifiers, and user content do not belong here.
-struct DesktopErrorDiagnosticContext: @unchecked Sendable {
-  let values: [String: Any]
+/// `Sendable` because these are produced on whichever actor detected the
+/// failure and consumed on another (`AgentRuntimeProcess` -> `@MainActor`
+/// ChatProvider). The element type is `any Sendable` rather than `Any` so the
+/// compiler enforces the scalar-only contract above at every construction site.
+struct DesktopErrorDiagnosticContext: Sendable {
+  let values: [String: any Sendable]
 
-  init(_ values: [String: Any]) {
+  init(_ values: [String: any Sendable]) {
     self.values = values
   }
 }

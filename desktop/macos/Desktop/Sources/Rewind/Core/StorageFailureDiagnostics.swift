@@ -21,7 +21,7 @@ enum StorageFailureDiagnostics {
     let sqlite = error as? DatabaseError
     let underlying = underlyingNSError(from: error)
 
-    var values: [String: Any] = [
+    var values: [String: any Sendable] = [
       "path_class": pathClass,
       "volume_free_bytes": (volume[.systemFreeSize] as? NSNumber)?.int64Value ?? -1,
       "volume_total_bytes": (volume[.systemSize] as? NSNumber)?.int64Value ?? -1,
