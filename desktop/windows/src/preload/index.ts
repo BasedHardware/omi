@@ -674,6 +674,7 @@ const omi: OmiBridgeApi = {
   getBetaUpdatesOptIn: () => ipcRenderer.invoke('update:get-beta-optin'),
   setBetaUpdatesOptIn: (enabled: boolean) => ipcRenderer.invoke('update:set-beta-optin', enabled),
   getPendingUpdate: () => ipcRenderer.invoke('update:get-pending'),
+  installUpdateNow: () => ipcRenderer.invoke('update:install-now'),
   suspendShortcutCapture: () => ipcRenderer.send('shortcuts:suspend-capture'),
   resumeShortcutCapture: () => ipcRenderer.send('shortcuts:resume-capture'),
   // --- Track 6 (UI surfaces) additions ---
