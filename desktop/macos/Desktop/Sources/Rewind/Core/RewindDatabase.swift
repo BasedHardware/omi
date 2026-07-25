@@ -6,11 +6,10 @@ import os
 /// Actor-based database manager for Rewind screenshots
 actor RewindDatabase {
   static let shared = RewindDatabase()
-  private static let terminationLock = NSLock()
-  private static var terminationInProgress = false
+  private static let terminationStateLock = OSAllocatedUnfairLock<Bool>(initialState: false)
 
   nonisolated static var isTerminationInProgress: Bool {
-    terminationLock.withLock { terminationInProgress }
+    terminationStateLock.withLock { $0 }
   }
 
   private var dbQueue: DatabasePool?
@@ -349,7 +348,7 @@ actor RewindDatabase {
   /// Call from applicationWillTerminate to avoid unnecessary integrity checks on next launch.
   /// This is nonisolated so it can be called synchronously from the main thread during termination.
   nonisolated static func markCleanShutdown() {
-    terminationLock.withLock { terminationInProgress = true }
+    terminationStateLock.withLock { $0 = true }
     let userDir = staticUserBaseDirectory()
     let flagPath = userDir.appendingPathComponent(".omi_running").path
     try? FileManager.default.removeItem(atPath: flagPath)

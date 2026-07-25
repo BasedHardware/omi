@@ -1,4 +1,5 @@
 import Foundation
+import OmiSupport
 
 /// Focus monitoring assistant that detects when users are distracted
 actor FocusAssistant: ProactiveAssistant {
