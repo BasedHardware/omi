@@ -66,6 +66,38 @@ void main() {
     });
   });
 
+  group('Wal source identity', () {
+    test('sequence-range sourceId persists and owns retry identity', () {
+      final wal = Wal(
+        timerStart: 1700000000,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        device: 'cv1',
+        sourceId: 'ring_100_200',
+      );
+
+      final restored = Wal.fromJson(wal.toJson());
+
+      expect(restored.sourceId, 'ring_100_200');
+      expect(restored.id, 'cv1_ring_100_200');
+    });
+
+    test('legacy WAL identity remains timestamp-based when sourceId is absent', () {
+      final wal = Wal(timerStart: 1700000000, codec: BleAudioCodec.opus, seconds: 10, device: 'cv1');
+
+      expect(wal.id, 'cv1_1700000000');
+    });
+
+    test('source-aware filename keeps backend timestamp as the final token', () {
+      final wal = Wal(timerStart: 1700000000, codec: BleAudioCodec.opus, seconds: 10, device: 'cv1');
+
+      final filename = wal.getFileNameByTimeStarts(1700000000, sourceId: 'ring_100_200');
+
+      expect(filename, endsWith('_ring_100_200_1700000000.bin'));
+      expect(int.parse(filename.split('_').last.replaceFirst('.bin', '')), 1700000000);
+    });
+  });
+
   group('stampConversationId', () {
     late LocalWalSyncImpl sync;
     late _FakeListener listener;

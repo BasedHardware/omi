@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -11,6 +12,8 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
@@ -497,6 +500,109 @@ void main() {
       await freshSync.addExternalWal(wal);
 
       expect(freshSync.testWals.map((w) => w.id), contains(wal.id));
+    });
+
+    test('external registration waits for manifest, not upload, and coalesces the next wake', () async {
+      SyncRateLimiter.instance.clear();
+      final manifestCommit = Completer<bool>();
+      final uploadStarted = Completer<void>();
+      final secondUploadStarted = Completer<void>();
+      final releaseUpload = Completer<void>();
+      final backgroundManifestSaved = Completer<void>();
+      final uploadBatches = <List<String>>[];
+      var manifestWrites = 0;
+      final fileName = 'external_wal_${DateTime.now().microsecondsSinceEpoch}.bin';
+      final secondFileName = 'external_wal_next_${DateTime.now().microsecondsSinceEpoch}.bin';
+      final file = File('${Directory.systemTemp.path}/$fileName');
+      final secondFile = File('${Directory.systemTemp.path}/$secondFileName');
+      await file.writeAsBytes([1, 2, 3], flush: true);
+      await secondFile.writeAsBytes([4, 5, 6], flush: true);
+      addTearDown(() async {
+        if (await file.exists()) await file.delete();
+        if (await secondFile.exists()) await secondFile.delete();
+      });
+
+      final gate = SyncUploadGate(
+        limiter: SyncRateLimiter.instance,
+        fairUseStatusLoader: () async => {'stage': 'none'},
+        uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+          uploadBatches.add(files.map((file) => file.uri.pathSegments.last).toList());
+          if (uploadBatches.length == 1) uploadStarted.complete();
+          if (uploadBatches.length == 2) secondUploadStarted.complete();
+          await releaseUpload.future;
+          return UploadFilesResult.queued('test-job-${uploadBatches.length}');
+        },
+      );
+      final externalSync = LocalWalSyncImpl(
+        listener,
+        uploadGate: gate,
+        walPersister: (_) {
+          manifestWrites++;
+          if (manifestWrites == 1) return manifestCommit.future;
+          if (manifestWrites >= 5 && !backgroundManifestSaved.isCompleted) {
+            backgroundManifestSaved.complete();
+          }
+          return Future.value(true);
+        },
+      );
+      final wal = Wal(
+        timerStart: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        filePath: fileName,
+        device: 'test-device',
+        sourceId: 'ring_1_2',
+        conversationId: 'conversation-1',
+      );
+
+      var registrationCompleted = false;
+      final registrationFuture = externalSync.addExternalWal(wal).whenComplete(() => registrationCompleted = true);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(manifestWrites, 1);
+      expect(registrationCompleted, isFalse);
+
+      manifestCommit.complete(true);
+      expect(
+        await registrationFuture.timeout(const Duration(seconds: 1)),
+        ExternalWalRegistration.added,
+      );
+      await uploadStarted.future.timeout(const Duration(seconds: 1));
+      expect(releaseUpload.isCompleted, isFalse);
+      expect(uploadBatches, [
+        [fileName],
+      ]);
+
+      final secondWal = Wal(
+        timerStart: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        filePath: secondFileName,
+        device: 'test-device',
+        sourceId: 'ring_2_3',
+        conversationId: 'conversation-1',
+      );
+      expect(
+        await externalSync.addExternalWal(secondWal).timeout(const Duration(seconds: 1)),
+        ExternalWalRegistration.added,
+      );
+      expect(uploadBatches, [
+        [fileName],
+      ]);
+
+      releaseUpload.complete();
+      await secondUploadStarted.future.timeout(const Duration(seconds: 1));
+      await backgroundManifestSaved.future.timeout(const Duration(seconds: 1));
+      expect(uploadBatches, [
+        [fileName],
+        [secondFileName],
+      ]);
     });
   });
 

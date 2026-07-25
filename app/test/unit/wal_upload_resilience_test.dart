@@ -47,6 +47,7 @@ Wal _makeWal({
   WalStatus status = WalStatus.miss,
   WalStorage storage = WalStorage.disk,
   String? filePath = 'audio_1000.bin',
+  String? sourceId,
 }) {
   return Wal(
     timerStart: timerStart,
@@ -56,6 +57,7 @@ Wal _makeWal({
     storage: storage,
     device: 'omi',
     filePath: filePath,
+    sourceId: sourceId,
   );
 }
 
@@ -109,6 +111,62 @@ void main() {
   // -------------------------------------------------------------------------
   // getMissingWals — status filter
   // -------------------------------------------------------------------------
+
+  group('atomic WAL manifest', () {
+    test('failed temporary write preserves the previous complete manifest', () async {
+      final original = _makeWal(timerStart: 1000);
+      expect(await WalFileManager.saveWals([original]), isTrue);
+
+      // A directory at the temporary-file path deterministically fails the
+      // rewrite before rename. The production manifest must remain readable.
+      await Directory('${tempDir.path}/wals.json.tmp').create();
+
+      await expectLater(WalFileManager.saveWals([_makeWal(timerStart: 2000)]), throwsA(isA<FileSystemException>()));
+
+      final restored = await WalFileManager.loadWals();
+      expect(restored.map((wal) => wal.timerStart), [1000]);
+    });
+
+    test('successful rewrite leaves no partial manifest beside the committed file', () async {
+      expect(await WalFileManager.saveWals([_makeWal(timerStart: 3000)]), isTrue);
+
+      expect(File('${tempDir.path}/wals.json').existsSync(), isTrue);
+      expect(File('${tempDir.path}/wals.json.tmp').existsSync(), isFalse);
+      expect(File('${tempDir.path}/wals_backup.json.tmp').existsSync(), isFalse);
+      expect((await WalFileManager.loadWals()).single.timerStart, 3000);
+    });
+
+    test('backup recovery retains the newest durably acknowledged ring range', () async {
+      final first = _makeWal(timerStart: 3000, sourceId: 'ring_100_200');
+      final acknowledged = _makeWal(timerStart: 4000, sourceId: 'ring_200_300');
+
+      expect(await WalFileManager.saveWals([first]), isTrue);
+      expect(await WalFileManager.saveWals([first, acknowledged]), isTrue);
+      await File('${tempDir.path}/wals.json').writeAsString('{corrupted', flush: true);
+
+      final recovered = await WalFileManager.loadWals();
+      expect(recovered.map((wal) => wal.sourceId), ['ring_100_200', 'ring_200_300']);
+    });
+
+    test('backup recovery retains the newest range when the primary manifest is missing', () async {
+      final acknowledged = _makeWal(timerStart: 5000, sourceId: 'ring_300_400');
+
+      expect(await WalFileManager.saveWals([acknowledged]), isTrue);
+      await File('${tempDir.path}/wals.json').delete();
+
+      final recovered = await WalFileManager.loadWals();
+      expect(recovered.single.sourceId, 'ring_300_400');
+    });
+
+    test('concurrent callers commit in invocation order without sharing a temp writer', () async {
+      final olderWrite = WalFileManager.saveWals([_makeWal(timerStart: 4000)]);
+      final newerWrite = WalFileManager.saveWals([_makeWal(timerStart: 5000)]);
+
+      await Future.wait([olderWrite, newerWrite]);
+
+      expect((await WalFileManager.loadWals()).single.timerStart, 5000);
+    });
+  });
 
   group('getMissingWals', () {
     test('returns only miss WALs, excludes synced and corrupted', () async {

@@ -16,7 +16,7 @@ import 'package:omi/services/devices/connectors/device_connection.dart';
 ///     0x01 ACK         [0x01][status]
 ///     0x02 INFO        [0x02][read:u64][write:u64][cap:u32][dropped:u64][pkt_size:u16]
 ///     0x03 DATA        [0x03][raw_bytes...]   <-- not aligned to record boundaries
-///     0x04 DONE        [0x04][status][next_seq:u64]
+///     0x04 DONE        [0x04][status][next_seq:u64](optional [crc32:u32])
 ///     0x05 READ_BEGIN  [0x05][transfer_start_seq:u64][packet_count:u32]
 ///
 ///   Each ring record (packet_size = 444 bytes):
@@ -71,7 +71,11 @@ class RingProtocol {
   static DoneNotification? parseDoneNotification(List<int> value) {
     if (value.isEmpty || value[0] != notifyDone || value.length < 10) return null;
     final bd = ByteData.sublistView(Uint8List.fromList(value));
-    return DoneNotification(status: bd.getUint8(1), nextSeq: bd.getUint64(2, Endian.big));
+    return DoneNotification(
+      status: bd.getUint8(1),
+      nextSeq: bd.getUint64(2, Endian.big),
+      transferCrc32: value.length >= 14 ? bd.getUint32(10, Endian.big) : null,
+    );
   }
 
   /// Parse a NOTIFY_READ_BEGIN (0x05) notification.
@@ -111,6 +115,15 @@ class RingProtocol {
     return (record[0] << 24) | (record[1] << 16) | (record[2] << 8) | record[3];
   }
 
+  /// Record timestamps survive a reboot where the device's current RTC-valid
+  /// flag may be false. Trust plausible embedded capture time rather than
+  /// collapsing old audio onto the retry time.
+  static bool isPlausibleRecordTimestamp(int timestamp, {required int nowSeconds}) {
+    const earliestSupportedTimestamp = 1704067200;
+    const maximumFutureSkewSeconds = 24 * 60 * 60;
+    return timestamp >= earliestSupportedTimestamp && timestamp <= nowSeconds + maximumFutureSkewSeconds;
+  }
+
   /// The pendant may discard records only after the complete transfer reached
   /// durable phone storage. A BLE TX completion or a partial stream is not an
   /// acknowledgement.
@@ -120,8 +133,16 @@ class RingProtocol {
     required bool flushError,
     required bool isCancelled,
     required bool receivedCompleteRange,
+    required bool protocolError,
+    required bool crcVerified,
   }) {
-    return reachedDone && doneOk && !flushError && !isCancelled && receivedCompleteRange;
+    return reachedDone &&
+        doneOk &&
+        !flushError &&
+        !isCancelled &&
+        receivedCompleteRange &&
+        !protocolError &&
+        crcVerified;
   }
 
   /// Validate that READ_BEGIN, DATA, and DONE describe one complete contiguous
@@ -146,10 +167,10 @@ class RingProtocol {
   /// A leading byte of 0 is a no-op padding marker; otherwise it is the
   /// length of the next frame.
   ///
-  /// Boundary uses `>=` to match the firmware's overflow rule in
-  /// transport.c:write_to_storage — at the boundary the firmware writes a
-  /// trailing size byte without its frame (the frame goes to the next 440B
-  /// block); the bytes after it are stale and must not be parsed.
+  /// Boundary uses `>=` for compatibility with legacy 3.0.20 records. That
+  /// firmware can flush a record after writing only a size marker at the exact
+  /// boundary, leaving stale bytes where the frame would be. New firmware
+  /// preserves this no-exact-fit wire invariant.
   static List<List<int>> parseAudioPayload(List<int> audio) {
     final frames = <List<int>>[];
     int offset = 0;
@@ -173,10 +194,30 @@ class RingProtocol {
 class DoneNotification {
   final int status;
   final int nextSeq;
+  final int? transferCrc32;
 
-  const DoneNotification({required this.status, required this.nextSeq});
+  const DoneNotification({required this.status, required this.nextSeq, this.transferCrc32});
 
   bool get isOk => status == 0;
+}
+
+/// Incremental IEEE CRC-32 over raw NOTIFY_DATA payload bytes.
+///
+/// New firmware includes this value in DONE. Legacy 3.0.20 firmware omits it,
+/// so callers verify when present while retaining read compatibility.
+class RingTransferCrc32 {
+  int _crc = 0xFFFFFFFF;
+
+  void add(List<int> bytes) {
+    for (final byte in bytes) {
+      _crc ^= byte & 0xFF;
+      for (var bit = 0; bit < 8; bit++) {
+        _crc = (_crc & 1) != 0 ? (_crc >> 1) ^ 0xEDB88320 : _crc >> 1;
+      }
+    }
+  }
+
+  int get value => (_crc ^ 0xFFFFFFFF) & 0xFFFFFFFF;
 }
 
 /// Decoded NOTIFY_READ_BEGIN payload.

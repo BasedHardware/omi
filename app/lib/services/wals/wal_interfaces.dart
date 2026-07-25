@@ -62,9 +62,11 @@ abstract class IWalService {
 
 enum WalServiceStatus { init, ready, stop }
 
+enum ExternalWalRegistration { added, alreadyRegistered }
+
 // Forward declarations for sync types
 abstract class LocalWalSync implements IWalSync {
-  Future<void> addExternalWal(Wal wal);
+  Future<ExternalWalRegistration> addExternalWal(Wal wal);
   Future<List<Wal>> getAllWals();
   Future<void> deleteAllSyncedWals();
   Future<void> deleteAllPendingWals();

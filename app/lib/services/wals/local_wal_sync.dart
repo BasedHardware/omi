@@ -29,6 +29,9 @@ const _liveCaptureMaxAgeSeconds = 6 * 60 * 60;
 /// backend's 600s stale guard (backend/database/sync_jobs.py).
 const _syncUploadBatchLimit = 5;
 
+typedef WalPersister = Future<bool> Function(List<Wal> wals);
+typedef WalPathResolver = Future<String?> Function(String? pathOrName);
+
 enum SyncJobTerminalPolicy { wait, acknowledge, retry }
 
 /// The shared WAL acknowledgement boundary for async sync jobs.
@@ -99,8 +102,20 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   final SyncUploadGate? _uploadGateOverride;
   SyncUploadGate get _uploadGate => _uploadGateOverride ?? SyncUploadGate.instance;
+  final WalPersister? _walPersisterOverride;
+  final WalPathResolver _walPathResolver;
+  Future<void>? _freshUploadWake;
+  bool _freshUploadWakePending = false;
+  String? _freshUploadWakeWalId;
 
-  LocalWalSyncImpl(this.listener, {SyncUploadGate? uploadGate}) : _uploadGateOverride = uploadGate;
+  LocalWalSyncImpl(
+    this.listener, {
+    SyncUploadGate? uploadGate,
+    WalPersister? walPersister,
+    WalPathResolver? walPathResolver,
+  })  : _uploadGateOverride = uploadGate,
+        _walPersisterOverride = walPersister,
+        _walPathResolver = walPathResolver ?? Wal.getFilePath;
 
   @visibleForTesting
   List<WalFrame> get testFrames => _frames;
@@ -120,16 +135,116 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   @override
-  Future<void> addExternalWal(Wal wal) async {
+  Future<ExternalWalRegistration> addExternalWal(Wal wal) async {
     final existingIndex = _wals.indexWhere((w) => w.id == wal.id);
     if (existingIndex >= 0) {
-      Logger.debug("LocalWalSync: WAL ${wal.id} already exists, skipping");
-      return;
+      final existing = _wals[existingIndex];
+      if (!await _hasIdenticalFile(existing, wal)) {
+        throw StateError('External WAL identity collision for ${wal.id}');
+      }
+      Logger.debug("LocalWalSync: WAL ${wal.id} already durably registered");
+      await _deleteDuplicateExternalFile(existing, wal);
+      return ExternalWalRegistration.alreadyRegistered;
     }
+
+    // Older ring-sync builds keyed recovered WALs only by timestamp. If one of
+    // those files is byte-identical, it is already durable (and may already
+    // be uploaded); do not manufacture a second conversation from the retry.
+    for (final existing in _wals) {
+      if (existing.device == wal.device &&
+          existing.timerStart == wal.timerStart &&
+          existing.codec == wal.codec &&
+          existing.originalStorage == wal.originalStorage &&
+          await _hasIdenticalFile(existing, wal)) {
+        // Old builds could overwrite a timestamp-named file after it had been
+        // marked synced. Without the upload-time hash, its current bytes are
+        // not proof of what reached the server. Re-register that legacy data
+        // conservatively; source-aware WALs below are immutable and idempotent.
+        if (existing.sourceId == null && existing.status == WalStatus.synced) {
+          Logger.debug("LocalWalSync: synced legacy WAL ${existing.id} has no immutable upload proof; retaining retry");
+          continue;
+        }
+        Logger.debug("LocalWalSync: external WAL ${wal.id} matches legacy durable WAL ${existing.id}");
+        await _deleteDuplicateExternalFile(existing, wal);
+        return ExternalWalRegistration.alreadyRegistered;
+      }
+    }
+
     _wals.add(wal);
-    await _saveWalsToFile();
+    try {
+      await _saveWalsToFile();
+    } catch (_) {
+      _wals.removeWhere((candidate) => identical(candidate, wal));
+      rethrow;
+    }
     listener.onWalUpdated();
     Logger.debug("LocalWalSync: Added external WAL ${wal.id} (${wal.seconds}s)");
+    if (_syncLaneForWal(wal, DateTime.now().millisecondsSinceEpoch ~/ 1000) == SyncUploadLane.fresh) {
+      // Registration is the durability boundary used by device-storage sync:
+      // once the manifest is committed, the device may advance its read
+      // pointer. Cloud latency must not hold that acknowledgement hostage.
+      _scheduleFreshUpload(wal);
+    }
+    return ExternalWalRegistration.added;
+  }
+
+  void _scheduleFreshUpload(Wal wal) {
+    _freshUploadWakePending = true;
+    _freshUploadWakeWalId = wal.id;
+    if (_freshUploadWake != null) return;
+    _startFreshUploadWake();
+  }
+
+  void _startFreshUploadWake() {
+    final wake = _drainFreshUploadWakes();
+    _freshUploadWake = wake;
+    unawaited(
+      wake.whenComplete(() {
+        if (!identical(_freshUploadWake, wake)) return;
+        _freshUploadWake = null;
+        // A registration can land after the drain's final pending check but
+        // before this completion callback. Preserve that wake as a new drain.
+        if (_freshUploadWakePending) _startFreshUploadWake();
+      }),
+    );
+  }
+
+  Future<void> _drainFreshUploadWakes() async {
+    do {
+      _freshUploadWakePending = false;
+      final walId = _freshUploadWakeWalId;
+      try {
+        // Device-storage recovery persists one WAL at a time. Coalesce wakes
+        // so a fast BLE drain cannot start duplicate upload loops.
+        await syncFreshOnly();
+      } catch (error) {
+        Logger.debug('LocalWalSync: fresh upload wake failed for $walId: $error');
+      }
+    } while (_freshUploadWakePending);
+  }
+
+  Future<bool> _hasIdenticalFile(Wal existing, Wal candidate) async {
+    if (existing.filePath == null || candidate.filePath == null) return false;
+    final existingPath = await _walPathResolver(existing.filePath);
+    final candidatePath = await _walPathResolver(candidate.filePath);
+    if (existingPath == null || candidatePath == null) return false;
+    final existingFile = File(existingPath);
+    final candidateFile = File(candidatePath);
+    if (!await existingFile.exists() || !await candidateFile.exists()) return false;
+    if (await existingFile.length() != await candidateFile.length()) return false;
+    if (existingPath == candidatePath) return true;
+
+    final existingBytes = await existingFile.readAsBytes();
+    final candidateBytes = await candidateFile.readAsBytes();
+    return listEquals(existingBytes, candidateBytes);
+  }
+
+  Future<void> _deleteDuplicateExternalFile(Wal existing, Wal candidate) async {
+    if (existing.filePath == null || candidate.filePath == null || existing.filePath == candidate.filePath) return;
+    final candidatePath = await _walPathResolver(candidate.filePath);
+    if (candidatePath == null) return;
+    final candidateFile = File(candidatePath);
+    if (await candidateFile.exists()) await candidateFile.delete();
   }
 
   @override
@@ -340,7 +455,10 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   Future<void> _saveWalsToFile() async {
     Logger.debug('Saving WALs to file');
-    await WalFileManager.saveWals(_wals);
+    final saved = await (_walPersisterOverride?.call(_wals) ?? WalFileManager.saveWals(_wals));
+    if (!saved) {
+      throw StateError('WAL manifest persistence failed');
+    }
   }
 
   Future<bool> _deleteWal(Wal wal) async {
