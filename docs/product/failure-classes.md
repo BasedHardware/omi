@@ -45,10 +45,15 @@ Recording an artifact that does not exist fails `scripts/failure-class validate`
 ### Grandfathered classes
 
 `.github/scripts/failure_class_guard_ratchet_allowlist.json` records classes that were
-already over threshold when the ratchet landed. The allowlist only shrinks: once a class
-gains a `canonical_prevention_artifact`, the check fails until its allowlist entry is
+already over threshold when the ratchet landed. Each entry's `declarations_at_baseline`
+freezes the declaration count at ratchet introduction; a new declaration above that
+baseline fails until the class records a guard artifact. The allowlist only shrinks: once a
+class gains a `canonical_prevention_artifact`, the check fails until its allowlist entry is
 removed. Adding an entry is an explicit, reviewable admission that a class is recurring
 without a guard.
+
+An instance-fix PR may add or update `canonical_prevention_artifact` on the declared class
+in the same change; other definition edits still require a registry-only lifecycle PR.
 
 ## Legacy narrative entries
 

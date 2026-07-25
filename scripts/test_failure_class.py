@@ -187,6 +187,18 @@ class FailureClassCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("instance_fix_mutates_registry", [item["code"] for item in payload["errors"]])
 
+    def test_instance_fix_may_record_guard_artifact_for_declared_class(self) -> None:
+        self.write("backend/guards/read_boundary.py", "# guard\n")
+        self.set_definition_field(
+            "FC-malformed-doc-read", "canonical_prevention_artifact", ["backend/guards/read_boundary.py"]
+        )
+        self.add_fix_commit()
+
+        result = self.validate(self.body("Failure-Class: FC-malformed-doc-read\n"))
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(payload["ok"])
+
     def test_registry_only_dormant_transition_is_valid(self) -> None:
         definition_path = self.root / ".github" / "failure-classes" / "FC-malformed-doc-read.json"
         definition = json.loads(definition_path.read_text(encoding="utf-8"))
