@@ -17,6 +17,13 @@ fi
 
 "$build_dir/BleGattOperationSchedulerTests"
 
+"${swift_compiler[@]}" \
+  "$repo_root/app/ios/Runner/Ble/BleNotificationRouter.swift" \
+  "$repo_root/app/ios/test/BleNotificationRouterTests.swift" \
+  -o "$build_dir/BleNotificationRouterTests"
+
+"$build_dir/BleNotificationRouterTests"
+
 ruby "$repo_root/app/ios/test/ble_gatt_project_graph_test.rb"
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
@@ -35,6 +42,7 @@ if [[ "$(uname -s)" == "Darwin" ]] && flutter_bin="$(command -v flutter)"; then
     -target arm64-apple-ios15.0 \
     -F "$flutter_frameworks" \
     "$repo_root/app/ios/Runner/Ble/BleGattOperationScheduler.swift" \
+    "$repo_root/app/ios/Runner/Ble/BleNotificationRouter.swift" \
     "$repo_root/app/ios/Runner/PigeonCommunicator.g.swift" \
     "$repo_root/app/ios/Runner/Ble/OmiBleManager.swift" \
     "$repo_root/app/ios/test/BleManagerDependencyTypecheckStubs.swift"

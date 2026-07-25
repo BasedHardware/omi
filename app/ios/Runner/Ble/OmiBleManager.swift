@@ -92,6 +92,19 @@ final class OmiBleManager: NSObject {
   /// Queued scan request if Bluetooth wasn't ready when startScan was called.
   private var pendingScan: (timeout: Int, serviceUuids: [String])?
 
+  #if DEBUG
+    private struct NotificationWindow {
+      var count = 0
+      var bytes = 0
+      var maxValueLength = 0
+    }
+
+    private var notificationWindowStartedAt = Date()
+    private var notificationWindows: [String: NotificationWindow] = [:]
+    private var pigeonNotificationsInFlight = 0
+    private var peakPigeonNotificationsInFlight = 0
+  #endif
+
   // MARK: - Initialization
 
   private override init() {
@@ -930,6 +943,48 @@ final class OmiBleManager: NSObject {
     }
     operationSchedulers[peripheralUuid]?.endSession()
   }
+
+  #if DEBUG
+    private func recordNotificationMetric(characteristicUuid: String, valueLength: Int) {
+      var window = notificationWindows[characteristicUuid] ?? NotificationWindow()
+      window.count += 1
+      window.bytes += valueLength
+      window.maxValueLength = max(window.maxValueLength, valueLength)
+      notificationWindows[characteristicUuid] = window
+
+      let elapsed = Date().timeIntervalSince(notificationWindowStartedAt)
+      guard elapsed >= 5 else { return }
+
+      for (characteristic, values) in notificationWindows.sorted(by: { $0.key < $1.key }) {
+        NSLog(
+          "[OmiBleMetrics] window=%.3fs characteristic=%@ notifications=%d bytes=%d max_value=%d "
+            + "notifications_per_sec=%.1f bytes_per_sec=%.1f pigeon_in_flight=%d pigeon_peak=%d",
+          elapsed,
+          characteristic,
+          values.count,
+          values.bytes,
+          values.maxValueLength,
+          Double(values.count) / elapsed,
+          Double(values.bytes) / elapsed,
+          pigeonNotificationsInFlight,
+          peakPigeonNotificationsInFlight
+        )
+      }
+      notificationWindows.removeAll(keepingCapacity: true)
+      notificationWindowStartedAt = Date()
+      peakPigeonNotificationsInFlight = pigeonNotificationsInFlight
+    }
+
+    private func recordPigeonNotificationSent() {
+      pigeonNotificationsInFlight += 1
+      peakPigeonNotificationsInFlight = max(
+        peakPigeonNotificationsInFlight, pigeonNotificationsInFlight)
+    }
+
+    private func recordPigeonNotificationCompleted() {
+      pigeonNotificationsInFlight = max(0, pigeonNotificationsInFlight - 1)
+    }
+  #endif
 }
 
 // MARK: - CBCentralManagerDelegate
@@ -1227,40 +1282,55 @@ extension OmiBleManager: CBPeripheralDelegate {
     // Handle notification
     guard let data = characteristic.value, !data.isEmpty else { return }
 
+    #if DEBUG
+      recordNotificationMetric(characteristicUuid: charUuid, valueLength: data.count)
+    #endif
+
     if characteristic.uuid == OmiBleManager.batteryLevelCharUuid, let firstByte = data.first {
       persistBatteryReading(uuid: uuid, level: Int(firstByte))
     }
 
-    // Limitless Transcribe Later: while batch mode targets this pendant's RX
-    // characteristic, the flash-drain engine consumes the packet natively.
-    if LimitlessFlashDrainEngine.shared.handle(
-      peripheralUuid: uuid,
-      serviceUuid: serviceUuid,
-      characteristicUuid: charUuid,
-      value: data
-    ) {
-      return
-    }
-
-    // Batch (offline) mode: store audio natively and skip the Dart forward so the
-    // Flutter engine stays idle. Returns true only for the configured audio
-    // characteristic while batch mode is on; everything else falls through.
-    if OmiBatchAudioWriter.shared.handle(
-      peripheralUuid: uuid,
-      serviceUuid: serviceUuid,
-      characteristicUuid: charUuid,
-      value: data
-    ) {
-      return
+    // Route by fixed protocol identity before consulting native capture policy.
+    // Ring sync can deliver hundreds of notifications per second; asking both
+    // batch handlers to read UserDefaults before rejecting every storage packet
+    // needlessly occupies CoreBluetooth's main-queue callback.
+    switch BleNotificationRouter.route(serviceUuid: serviceUuid, characteristicUuid: charUuid) {
+    case .limitlessFlash:
+      if LimitlessFlashDrainEngine.shared.handle(
+        peripheralUuid: uuid,
+        serviceUuid: serviceUuid,
+        characteristicUuid: charUuid,
+        value: data
+      ) {
+        return
+      }
+    case .batchAudio:
+      if OmiBatchAudioWriter.shared.handle(
+        peripheralUuid: uuid,
+        serviceUuid: serviceUuid,
+        characteristicUuid: charUuid,
+        value: data
+      ) {
+        return
+      }
+    case .dart:
+      break
     }
 
     let typedData = FlutterStandardTypedData(bytes: data)
+    #if DEBUG
+      recordPigeonNotificationSent()
+    #endif
     flutterApi?.onCharacteristicValueUpdated(
       peripheralUuid: uuid,
       serviceUuid: serviceUuid,
       characteristicUuid: charUuid,
       value: typedData
-    ) { _ in }
+    ) { [weak self] _ in
+      #if DEBUG
+        self?.recordPigeonNotificationCompleted()
+      #endif
+    }
   }
 
   func peripheral(
