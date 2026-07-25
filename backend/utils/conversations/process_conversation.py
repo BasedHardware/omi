@@ -75,6 +75,13 @@ from utils.llm.conversation_folder import assign_conversation_to_folder
 from utils.analytics import record_usage
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
+from utils.conversations.memory_extraction_telemetry import (
+    PATH_CANONICAL,
+    PATH_LEGACY,
+    ConversationMemoryExtractionResult,
+    emit_conversation_memories_extracted,
+    source_for_conversation,
+)
 from utils.llm.temporal import date_in_tz
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.goals import extract_and_update_goal_progress
@@ -509,15 +516,24 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     lease. Keep the private helper below for existing in-module async callers.
     """
     with track_usage(uid, Features.MEMORIES):
-        _extract_memories_inner(uid, conversation)
+        result = _extract_memories_inner(uid, conversation)
+    # Product-analytics telemetry (Conversation Memories Extracted): at most one
+    # analytics success per (uid, conversation) across retries — zero-extraction
+    # (count == 0) and persistence exceptions emit nothing; the durable
+    # per-conversation dedup (Redis SET NX EX) is inside emit_*_memories_extracted.
+    if result is not None and result.count > 0:
+        emit_conversation_memories_extracted(uid, conversation.id, result)
 
 
 def _extract_memories(uid: str, conversation: Conversation) -> None:
     extract_memories(uid, conversation)
 
 
-def _extract_memories_canonical(uid: str, conversation: Conversation, *, db_client: Any) -> None:
+def _extract_memories_canonical(
+    uid: str, conversation: Conversation, *, db_client: Any
+) -> ConversationMemoryExtractionResult:
     """Canonical-cohort extraction: extract first, then retract-and-write (Q1/Q7)."""
+    source = source_for_conversation(conversation)
     memory_service = MemoryService(db_client=db_client)
 
     language = users_db.get_user_language_preference(uid)
@@ -564,7 +580,7 @@ def _extract_memories_canonical(uid: str, conversation: Conversation, *, db_clie
 
     if len(parsed_memories) == 0:
         logger.info(f"No canonical memories extracted for conversation {conversation.id}")
-        return
+        return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
 
     memory_service.retract_conversation_memories(uid, conversation.id)
 
@@ -611,20 +627,21 @@ def _extract_memories_canonical(uid: str, conversation: Conversation, *, db_clie
             )
 
     record_usage(uid, memories_created=len(parsed_memories))
+    return ConversationMemoryExtractionResult(count=len(parsed_memories), source=source, path=PATH_CANONICAL)
 
 
-def _extract_memories_inner(uid: str, conversation: Conversation) -> None:
+def _extract_memories_inner(uid: str, conversation: Conversation) -> ConversationMemoryExtractionResult:
     with memory_system_request_scope(uid) as memory_system:
         db_client = getattr(db_client_module, 'db', None)
         if memory_system == MemorySystem.CANONICAL:
             MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
-            _extract_memories_canonical(uid, conversation, db_client=db_client)
-            return
+            return _extract_memories_canonical(uid, conversation, db_client=db_client)
 
-        _extract_memories_legacy(uid, conversation)
+        return _extract_memories_legacy(uid, conversation)
 
 
-def _extract_memories_legacy(uid: str, conversation: Conversation) -> None:
+def _extract_memories_legacy(uid: str, conversation: Conversation) -> ConversationMemoryExtractionResult:
+    source = source_for_conversation(conversation)
     language = users_db.get_user_language_preference(uid)
     new_memories: List[Memory] = []
 
@@ -744,7 +761,7 @@ def _extract_memories_legacy(uid: str, conversation: Conversation) -> None:
 
     if len(parsed_memories) == 0:
         logger.info(f"No memories extracted for conversation {conversation.id}")
-        return
+        return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_LEGACY)
 
     # Replace conversation-scoped memories only after extraction succeeds.
     deletion_result = memories_db.delete_memories_for_conversation(uid, conversation.id)
@@ -790,6 +807,7 @@ def _extract_memories_legacy(uid: str, conversation: Conversation) -> None:
                     logging.exception(f"Error extracting knowledge graph from memory_id: {memory_db_obj.id}")
         except Exception:
             logging.exception("Error extracting knowledge graph from memory.")
+    return ConversationMemoryExtractionResult(count=len(parsed_memories), source=source, path=PATH_LEGACY)
 
 
 def _transcript_artifact_ref(conversation: Conversation) -> Dict[str, Any]:

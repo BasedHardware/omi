@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import os
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -96,14 +98,16 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
             return "completed", "success", None
 
         with patch.object(planner, "github_check_status", side_effect=successful_check):
-            self.assertIsNone(planner.required_source_checks_reason(REPOSITORY, SOURCE_SHA))
+            gate = planner.required_source_checks_gate(REPOSITORY, SOURCE_SHA)
+
+        self.assertEqual(gate.state, "ready")
 
         self.assertEqual(
             checked,
             [(SOURCE_SHA, check_name) for check_name in planner.REQUIRED_SOURCE_CHECK_NAMES],
         )
 
-    def test_each_missing_skipped_or_failed_exact_source_check_blocks_the_gate(self) -> None:
+    def test_missing_or_nonterminal_exact_source_checks_wait_for_re_evaluation(self) -> None:
         for blocked_name in (
             "Release Eligibility",
             "Desktop Swift Build & Tests",
@@ -111,19 +115,65 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         ):
             for blocked_status, blocked_conclusion, expected in (
                 (None, None, "missing"),
-                ("completed", "skipped", "skipped"),
-                ("completed", "failure", "failure"),
+                ("in_progress", None, "in_progress"),
             ):
                 with self.subTest(check=blocked_name, conclusion=blocked_conclusion):
+
                     def check_status(_repository: str, _sha: str, check_name: str):
                         if check_name == blocked_name:
                             return blocked_status, blocked_conclusion, None
                         return "completed", "success", None
 
                     with patch.object(planner, "github_check_status", side_effect=check_status):
-                        reason = planner.required_source_checks_reason(REPOSITORY, SOURCE_SHA) or ""
-                    self.assertIn(blocked_name, reason)
-                    self.assertIn(expected, reason)
+                        gate = planner.required_source_checks_gate(REPOSITORY, SOURCE_SHA)
+                    self.assertEqual(gate.state, "waiting")
+                    self.assertIn(blocked_name, gate.reason or "")
+                    self.assertIn(expected, gate.reason or "")
+
+    def test_failed_exact_source_check_blocks_the_gate(self) -> None:
+        for blocked_conclusion in ("skipped", "failure", "cancelled"):
+            with self.subTest(conclusion=blocked_conclusion):
+
+                def check_status(_repository: str, _sha: str, check_name: str):
+                    if check_name == "Desktop Swift Build & Tests":
+                        return "completed", blocked_conclusion, None
+                    return "completed", "success", None
+
+                with patch.object(planner, "github_check_status", side_effect=check_status):
+                    gate = planner.required_source_checks_gate(REPOSITORY, SOURCE_SHA)
+                self.assertEqual(gate.state, "blocked")
+                self.assertIn("Desktop Swift Build & Tests", gate.reason or "")
+                self.assertIn(blocked_conclusion, gate.reason or "")
+
+    def test_transient_check_state_is_bounded_then_times_out_as_blocked(self) -> None:
+        waiting = planner.SourceCheckGate("waiting", "required check is missing for exact source SHA")
+        with (
+            patch.object(planner, "required_source_checks_gate", return_value=waiting),
+            patch.object(planner.time, "monotonic", side_effect=(100, 100, 121)),
+            patch.object(planner.time, "sleep") as sleep,
+        ):
+            gate = planner.wait_for_required_source_checks(REPOSITORY, SOURCE_SHA, wait_seconds=20, poll_seconds=10)
+
+        self.assertEqual(gate.state, "blocked")
+        self.assertIn("timed out after 20s", gate.reason or "")
+        sleep.assert_called_once_with(10)
+
+    def test_existing_exact_source_tag_preserves_active_or_published_candidate(self) -> None:
+        for lifecycle in ("active", "published"):
+            with self.subTest(lifecycle=lifecycle):
+                with (
+                    patch.object(planner, "candidate_tags_for_source", return_value=[LATEST_TAG]),
+                    patch.object(
+                        planner,
+                        "normal_candidate_lifecycle",
+                        return_value=(lifecycle, f"normal candidate is {lifecycle}"),
+                    ),
+                ):
+                    reason = planner.existing_source_candidate_reason(REPOSITORY, SOURCE_SHA)
+
+                self.assertIn(LATEST_TAG, reason or "")
+                self.assertIn("already owns exact source SHA", reason or "")
+                self.assertIn(lifecycle, reason or "")
 
     def test_backend_or_docs_commit_after_desktop_commit_keeps_exact_releasable_source(self) -> None:
         checked_shas: list[str] = []
@@ -142,7 +192,12 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
                 patch.object(planner, "releasable_desktop_changes_since", return_value=[RELEASABLE_PATH]),
                 patch.object(planner, "latest_change_age_seconds", return_value=601),
                 patch.object(planner, "git", side_effect=fake_git),
-                patch.object(planner, "required_source_checks_reason", side_effect=lambda _, sha: checked_shas.append(sha)),
+                patch.object(planner, "existing_source_candidate_reason", return_value=None),
+                patch.object(
+                    planner,
+                    "wait_for_required_source_checks",
+                    side_effect=lambda _, sha, **__: checked_shas.append(sha) or planner.SourceCheckGate("ready"),
+                ),
                 patch.object(planner, "active_release_reason", return_value=None),
                 patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY]),
                 patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
@@ -154,6 +209,55 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn(f"source_sha={SOURCE_SHA}", outputs)
         self.assertNotIn(f"source_sha={LATER_NON_DESKTOP_SHA}", outputs)
         self.assertIn("should_release=true", outputs)
+
+    def test_duplicate_planner_invocation_does_not_create_another_tag_for_the_same_source(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "github-output"
+            with (
+                patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
+                patch.object(planner, "releasable_desktop_changes_since", return_value=[RELEASABLE_PATH]),
+                patch.object(planner, "latest_releasable_desktop_sha", return_value=SOURCE_SHA),
+                patch.object(
+                    planner,
+                    "candidate_tags_for_source",
+                    return_value=[LATEST_TAG],
+                ),
+                patch.object(planner, "normal_candidate_lifecycle", return_value=("active", "candidate is active")),
+                patch.object(planner, "wait_for_required_source_checks") as wait,
+                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY]),
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
+            ):
+                self.assertEqual(planner.main(), 0)
+            outputs = output_path.read_text(encoding="utf-8")
+
+        wait.assert_not_called()
+        self.assertIn("should_release=false", outputs)
+        self.assertIn("Desktop candidate already exists", outputs)
+        self.assertIn(LATEST_TAG, outputs)
+
+    def test_read_only_status_watcher_reports_only_lifecycle_transitions(self) -> None:
+        observations = [
+            ("waiting", "", "no immutable candidate tag exists"),
+            ("waiting", "", "no immutable candidate tag exists"),
+            ("active", LATEST_TAG, "Release OMI Desktop (Swift) is in_progress"),
+        ]
+        output = io.StringIO()
+        with (
+            patch.object(planner, "source_candidate_status", side_effect=observations),
+            patch.object(planner.time, "sleep") as sleep,
+            redirect_stdout(output),
+        ):
+            self.assertEqual(
+                planner.watch_source_candidate(REPOSITORY, SOURCE_SHA, max_polls=3, poll_seconds=30),
+                0,
+            )
+
+        lines = output.getvalue().splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertIn("lifecycle=waiting", lines[0])
+        self.assertIn("lifecycle=active", lines[1])
+        self.assertIn(LATEST_TAG, lines[1])
+        self.assertEqual(sleep.call_args_list, [((30,), {}), ((30,), {})])
 
     def test_workflow_has_no_input_manual_trigger_and_tags_the_changelog_commit(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
@@ -167,7 +271,12 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertNotIn("break_glass", workflow)
         self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
-        self.assertLess(workflow.index('git commit -m "chore: consolidate changelog for v${VERSION}"'), workflow.index('git tag "$RELEASE_TAG"'))
+        self.assertEqual(workflow.count("--source-check-wait-seconds 720"), 2)
+        self.assertEqual(workflow.count("--source-check-poll-seconds 30"), 2)
+        self.assertLess(
+            workflow.index('git commit -m "chore: consolidate changelog for v${VERSION}"'),
+            workflow.index('git tag "$RELEASE_TAG"'),
+        )
 
     def test_candidate_creation_has_no_selfhosted_pre_tag_gate(self) -> None:
         # Continuous deployment: candidate creation (tag-release) must depend only

@@ -6,6 +6,9 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+SettingsUpdates.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryAssistantSettings.swift
+  - desktop/macos/Desktop/Sources/AnalyticsManager.swift
+  - desktop/macos/Desktop/Sources/PostHogManager.swift
 preconditions:
   - automation_bridge_ready
 

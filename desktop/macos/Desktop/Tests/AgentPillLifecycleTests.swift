@@ -1660,7 +1660,7 @@ import XCTest
     let tableRendererSource =
       rendererSource
       .components(separatedBy: "private struct OmiMarkdownTableView").last?
-      .components(separatedBy: "private struct MarkdownTableCopyButton").first ?? ""
+      .components(separatedBy: "private struct CodeBlockCopyButton").first ?? ""
     XCTAssertTrue(rendererSource.contains("GridRow(alignment: .top)"))
     XCTAssertTrue(rendererSource.contains("minHeight: row == 0 ? 40 : 44"))
     XCTAssertTrue(
@@ -1674,7 +1674,8 @@ import XCTest
     XCTAssertFalse(rendererSource.contains("attrCache"))
     XCTAssertFalse(rendererSource.contains(".textSelection(.enabled)"))
     XCTAssertTrue(rendererSource.contains(".textSelection(.disabled)"))
-    XCTAssertTrue(rendererSource.contains("MarkdownTableCopyButton"))
+    XCTAssertFalse(rendererSource.contains("MarkdownTableCopyButton"))
+    XCTAssertFalse(rendererSource.contains("Copy table"))
     XCTAssertFalse(chatBubbleSource.contains(".markdownTableBorderStyle"))
     XCTAssertFalse(chatBubbleSource.contains(".markdownTableBackgroundStyle"))
   }
@@ -1769,19 +1770,18 @@ import XCTest
     }
   }
 
-  func testOmiMarkdownProvidesIndependentCopyControls() throws {
+  func testOmiMarkdownProvidesCopyOnlyForCodeBlocks() throws {
     // omi-test-quality: source-inspection -- static contract: the reusable SwiftUI code-block
     // renderer owns a leaf-state copy affordance; clipboard writes are exercised manually in the app.
     let source = try omiMarkdownSource()
 
     XCTAssertTrue(source.contains("private func codeBlockView(_ code: String, language: String?)"))
     XCTAssertTrue(source.contains("private struct CodeBlockCopyButton: View"))
-    XCTAssertTrue(source.contains("private struct MarkdownTableCopyButton: View"))
+    XCTAssertFalse(source.contains("private struct MarkdownTableCopyButton: View"))
     XCTAssertTrue(source.contains("@State private var copied = false"))
     XCTAssertTrue(source.contains("NSPasteboard.general.setString(code, forType: .string)"))
-    XCTAssertTrue(source.contains("NSPasteboard.general.setString(markdown, forType: .string)"))
     XCTAssertTrue(source.contains(".help(\"Copy code\")"))
-    XCTAssertTrue(source.contains(".help(\"Copy table\")"))
+    XCTAssertFalse(source.contains("Copy table"))
   }
 
   func testNonProductionBundlesDoNotInstallNativeSentryHandlers() throws {

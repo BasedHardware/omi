@@ -14,8 +14,25 @@ class AnalyticsManager {
   }
 
   private var lastTranscriptionStartedAt: Date?
+  /// Main-actor-isolated test observation at the actual AnalyticsManager
+  /// boundary. It is nil in production and is deliberately not a mutable global
+  /// outside the actor, so tests can observe the real event/payload safely under
+  /// Swift concurrency.
+  private var memoryAssistantTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
 
   private init() {}
+
+  /// Install a scoped test observer for MemoryAssistant telemetry. Tests must
+  /// clear it in teardown; production behavior remains the PostHog call below.
+  func setMemoryAssistantTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    memoryAssistantTelemetryCaptureForTests = capture
+  }
+
+  private func captureMemoryAssistantTelemetryForTests(_ event: String, properties: [String: Any]) {
+    memoryAssistantTelemetryCaptureForTests?(event, properties)
+  }
 
   // MARK: - Initialization
 
@@ -801,7 +818,34 @@ class AnalyticsManager {
   }
 
   func memoryExtracted(memoryCount: Int) {
+    captureMemoryAssistantTelemetryForTests("Memory Extracted", properties: ["memory_count": memoryCount])
     PostHogManager.shared.memoryExtracted(memoryCount: memoryCount)
+  }
+
+  // MARK: - Memory Assistant Telemetry
+
+  /// Proactive MemoryAssistant setting change (the activation denominator). See
+  /// `MemoryAssistantTelemetry.Setting`. Emitted only on a real persisted change.
+  func memoryAssistantSettingChanged(setting: MemoryAssistantTelemetry.Setting, value: Bool) {
+    captureMemoryAssistantTelemetryForTests(
+      MemoryAssistantTelemetry.settingChangedEventName,
+      properties: MemoryAssistantTelemetry.settingChangedPayload(setting: setting, value: value)
+    )
+    PostHogManager.shared.memoryAssistantSettingChanged(setting: setting, value: value)
+  }
+
+  /// Proactive MemoryAssistant analysis-outcome funnel. See
+  /// `MemoryAssistantTelemetry.AnalysisOutcome`. One event per actual analysis
+  /// attempt; supplements (does not alter) the `Memory Extracted` success terminal.
+  func memoryAssistantAnalysisRun(
+    outcome: MemoryAssistantTelemetry.AnalysisOutcome,
+    confidence: Double? = nil
+  ) {
+    captureMemoryAssistantTelemetryForTests(
+      MemoryAssistantTelemetry.analysisRunEventName,
+      properties: MemoryAssistantTelemetry.analysisRunPayload(outcome: outcome, confidence: confidence)
+    )
+    PostHogManager.shared.memoryAssistantAnalysisRun(outcome: outcome, confidence: confidence)
   }
 
   func insightGenerated(category: String?) {
