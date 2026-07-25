@@ -120,6 +120,39 @@ describe('RewindCaptureHost — dead capture track', () => {
     expect(saveFrame).toHaveBeenCalled()
   })
 
+  it('keeps a single sampling loop when the track dies mid-save', async () => {
+    // A save is an IPC round-trip, so over hours the track often dies while one is
+    // in flight. That grab must not reschedule itself after the recovery tore the
+    // stream down, or every recovery leaves an extra loop sampling in parallel.
+    let releaseSave: () => void = () => undefined
+    saveFrame.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseSave = () => resolve()
+        })
+    )
+    render(<RewindCaptureHost />)
+    await settle()
+
+    await tick(INTERVAL_MS)
+    expect(saveFrame).toHaveBeenCalledTimes(1)
+
+    // Track dies with that save still pending, then the save completes.
+    await act(async () => {
+      tracks[0].die()
+    })
+    await act(async () => {
+      releaseSave()
+    })
+
+    await tick(RESTART_DELAY_MS)
+    expect(getUserMedia).toHaveBeenCalledTimes(2)
+
+    saveFrame.mockClear()
+    await tick(INTERVAL_MS)
+    expect(saveFrame).toHaveBeenCalledTimes(1)
+  })
+
   it('does not reopen the stream after unmount', async () => {
     const view = render(<RewindCaptureHost />)
     await settle()

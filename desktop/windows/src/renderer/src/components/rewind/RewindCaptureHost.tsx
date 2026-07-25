@@ -61,8 +61,13 @@ export function RewindCaptureHost(): React.JSX.Element {
     const enabled = !!settings?.captureEnabled && !paused
     const intervalMs = effectiveIntervalMs
     let cancelled = false
+    // Bumped on every teardown so a grab still in flight (a save is an IPC
+    // round-trip) can't reschedule itself onto a stream that is already gone —
+    // otherwise each recovery would leave an extra sampling loop running.
+    let generation = 0
 
     const stop = (): void => {
+      generation++
       if (timerRef.current) {
         clearTimeout(timerRef.current)
         timerRef.current = null
@@ -89,8 +94,8 @@ export function RewindCaptureHost(): React.JSX.Element {
 
     // Self-pacing: schedule the next grab only after the current one settles, so
     // a slow save can never stack concurrent captures.
-    const grabAndSchedule = async (): Promise<void> => {
-      if (cancelled) return
+    const grabAndSchedule = async (gen: number): Promise<void> => {
+      if (cancelled || gen !== generation) return
       try {
         const v = videoRef.current
         if (v && isLive() && v.videoWidth && v.videoHeight && !savingRef.current) {
@@ -107,7 +112,7 @@ export function RewindCaptureHost(): React.JSX.Element {
             const blob = await new Promise<Blob | null>((r) =>
               canvas.toBlob(r, 'image/jpeg', JPEG_QUALITY)
             )
-            if (blob && !cancelled) {
+            if (blob && !cancelled && gen === generation) {
               savingRef.current = true
               try {
                 await window.omi.rewindSaveFrame(new Uint8Array(await blob.arrayBuffer()))
@@ -120,7 +125,9 @@ export function RewindCaptureHost(): React.JSX.Element {
       } catch (e) {
         console.error('[rewind] sample failed:', (e as Error).message)
       } finally {
-        if (!cancelled) timerRef.current = setTimeout(() => void grabAndSchedule(), intervalMs)
+        if (!cancelled && gen === generation) {
+          timerRef.current = setTimeout(() => void grabAndSchedule(gen), intervalMs)
+        }
       }
     }
 
@@ -155,12 +162,13 @@ export function RewindCaptureHost(): React.JSX.Element {
         }
         streamRef.current = stream
         stream.getVideoTracks().forEach((t) => t.addEventListener('ended', onTrackEnded))
+        const gen = generation
         const v = videoRef.current
         if (v) {
           v.srcObject = stream
           await v.play().catch(() => undefined)
         }
-        timerRef.current = setTimeout(() => void grabAndSchedule(), intervalMs)
+        timerRef.current = setTimeout(() => void grabAndSchedule(gen), intervalMs)
       } catch (e) {
         console.error('[rewind] failed to start capture:', (e as Error).message)
       }
