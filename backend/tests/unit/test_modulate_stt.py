@@ -1431,13 +1431,7 @@ class TestPrerecordedProviderFactory(unittest.TestCase):
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('modulate-velma-2', 'dg-nova-3'))
     def test_uncovered_language_reaches_velma_instead_of_failing_closed(self):
-        """Failing closed on an uncovered language stranded real users' audio.
-
-        Hindi is in neither the literal Velma set nor Parakeet's batch model, so this
-        raised — and the raise surfaced as a retryable error that Cloud Tasks retried
-        until sustained 5xx throttled the sync queue. Velma's batch API detects the
-        language itself, so it can serve anything the capability maps omit.
-        """
+        """Hindi is in neither the literal Velma set nor Parakeet's batch model."""
         from utils.stt.pre_recorded import (
             ModulatePrerecordedProvider,
             PrerecordedSTTService,
