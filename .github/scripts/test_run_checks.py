@@ -83,11 +83,45 @@ def interpreter_invoked_test_modules(command: tuple[str, ...]) -> list[str]:
 
 
 def non_self_running_reason(source: str) -> str | None:
-    """Explain why `python3 <module>` would execute no test cases, or None."""
+    """Explain why `python3 <module>` would execute no test cases, or None.
+
+    Two shapes execute nothing and still exit 0:
+      * no `__main__` block at all -- a pytest-only module handed to the
+        interpreter defines its functions and exits.
+      * a `__main__` block calling `unittest.main()` in a module with no
+        `TestCase` subclass -- discovery finds nothing to run.
+
+    A script-style module whose `__main__` calls its own `main()` of assertions
+    is self-running and must not be reported.
+    """
     try:
         tree = ast.parse(source)
     except SyntaxError as exc:  # pragma: no cover - a syntax error fails louder elsewhere
         return f"could not be parsed: {exc}"
+
+    main_blocks = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.If)
+        and any(
+            isinstance(cmp_, ast.Constant) and cmp_.value == "__main__"
+            for cmp_ in getattr(node.test, "comparators", [])
+        )
+    ]
+    invoking_blocks = [
+        node for node in main_blocks if any(isinstance(inner, ast.Call) for inner in ast.walk(node))
+    ]
+    if not invoking_blocks:
+        return "has no __main__ block invoking a test runner, so the interpreter runs no cases"
+
+    delegates_to_unittest = any(
+        isinstance(inner, ast.Attribute) and inner.attr == "main" and getattr(inner.value, "id", "") == "unittest"
+        for block in invoking_blocks
+        for inner in ast.walk(block)
+    )
+    if not delegates_to_unittest:
+        # Script-style: `__main__` calls the module's own assertions directly.
+        return None
 
     has_test_case = any(
         isinstance(node, ast.ClassDef)
@@ -99,19 +133,7 @@ def non_self_running_reason(source: str) -> str | None:
         for node in ast.walk(tree)
     )
     if not has_test_case:
-        return "defines no unittest.TestCase subclass, so unittest.main() would collect nothing"
-
-    has_main_runner = any(
-        isinstance(node, ast.If)
-        and any(
-            isinstance(cmp_, ast.Constant) and cmp_.value == "__main__"
-            for cmp_ in getattr(node.test, "comparators", [])
-        )
-        and any(isinstance(inner, ast.Expr) and isinstance(inner.value, ast.Call) for inner in ast.walk(node))
-        for node in ast.walk(tree)
-    )
-    if not has_main_runner:
-        return "has no __main__ block invoking a test runner"
+        return "calls unittest.main() with no TestCase subclass, so discovery collects nothing"
     return None
 
 
@@ -187,7 +209,7 @@ class ManifestContractTests(unittest.TestCase):
             "def test_something(tmp_path: Path) -> None:\n"
             "    assert True\n"
         )
-        self.assertIn("defines no unittest.TestCase", non_self_running_reason(pytest_only) or "")
+        self.assertIn("has no __main__", non_self_running_reason(pytest_only) or "")
 
         with_runner = (
             "import unittest\n"
@@ -209,6 +231,30 @@ class ManifestContractTests(unittest.TestCase):
             "        self.assertTrue(True)\n"
         )
         self.assertIn("has no __main__", non_self_running_reason(no_main) or "")
+
+        unittest_main_without_test_case = (
+            "import unittest\n"
+            "\n"
+            "def test_something() -> None:\n"
+            "    assert True\n"
+            "\n"
+            'if __name__ == "__main__":\n'
+            "    unittest.main()\n"
+        )
+        self.assertIn(
+            "no TestCase subclass", non_self_running_reason(unittest_main_without_test_case) or ""
+        )
+
+        # Script-style: a module whose __main__ runs its own assertions is fine.
+        script_style = (
+            "def main() -> int:\n"
+            "    assert True\n"
+            "    return 0\n"
+            "\n"
+            'if __name__ == "__main__":\n'
+            "    raise SystemExit(main())\n"
+        )
+        self.assertIsNone(non_self_running_reason(script_style))
 
     def test_unregistered_fake_workflow_check_is_named(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
