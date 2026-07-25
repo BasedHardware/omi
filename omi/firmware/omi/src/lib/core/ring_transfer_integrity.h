@@ -7,6 +7,17 @@
 
 #define RING_TRANSFER_DONE_BYTES 14U
 
+typedef enum {
+    RING_BULK_LINK_ACTION_NONE = 0,
+    RING_BULK_LINK_ACTION_REQUEST_BULK,
+    RING_BULK_LINK_ACTION_REQUEST_NORMAL,
+} ring_bulk_link_action_t;
+
+typedef struct {
+    bool bulk_request_attempted;
+    bool restore_pending;
+} ring_bulk_link_policy_t;
+
 uint32_t ring_transfer_crc32_update(uint32_t crc, const uint8_t *data, size_t length);
 
 /**
@@ -34,6 +45,17 @@ bool ring_snapshot_retry_required(bool connection_active, bool commit_succeeded)
  * mounted or a newer desired-power-off intent supersedes it.
  */
 bool ring_power_on_reconcile_required(bool desired_power_on, bool mounted, int last_result);
+
+/**
+ * Keep the faster connection preference across adjacent ring reads. A finished
+ * range merely arms an idle restore; the next read cancels it without issuing
+ * another parameter request.
+ */
+void ring_bulk_link_policy_reset(ring_bulk_link_policy_t *policy);
+ring_bulk_link_action_t ring_bulk_link_policy_on_read(ring_bulk_link_policy_t *policy);
+void ring_bulk_link_policy_on_idle(ring_bulk_link_policy_t *policy);
+ring_bulk_link_action_t ring_bulk_link_policy_on_restore_timeout(ring_bulk_link_policy_t *policy);
+ring_bulk_link_action_t ring_bulk_link_policy_on_stop(ring_bulk_link_policy_t *policy);
 
 /**
  * Encode [DONE opcode][status][next sequence, BE][DATA CRC32, BE].

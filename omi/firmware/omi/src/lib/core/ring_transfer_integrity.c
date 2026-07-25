@@ -48,6 +48,59 @@ bool ring_power_on_reconcile_required(bool desired_power_on, bool mounted, int l
     return desired_power_on && !mounted && last_result < 0;
 }
 
+void ring_bulk_link_policy_reset(ring_bulk_link_policy_t *policy)
+{
+    if (!policy) {
+        return;
+    }
+
+    policy->bulk_request_attempted = false;
+    policy->restore_pending = false;
+}
+
+ring_bulk_link_action_t ring_bulk_link_policy_on_read(ring_bulk_link_policy_t *policy)
+{
+    if (!policy) {
+        return RING_BULK_LINK_ACTION_NONE;
+    }
+
+    policy->restore_pending = false;
+    if (policy->bulk_request_attempted) {
+        return RING_BULK_LINK_ACTION_NONE;
+    }
+
+    policy->bulk_request_attempted = true;
+    return RING_BULK_LINK_ACTION_REQUEST_BULK;
+}
+
+void ring_bulk_link_policy_on_idle(ring_bulk_link_policy_t *policy)
+{
+    if (policy && policy->bulk_request_attempted) {
+        policy->restore_pending = true;
+    }
+}
+
+ring_bulk_link_action_t ring_bulk_link_policy_on_restore_timeout(ring_bulk_link_policy_t *policy)
+{
+    if (!policy || !policy->restore_pending) {
+        return RING_BULK_LINK_ACTION_NONE;
+    }
+
+    ring_bulk_link_policy_reset(policy);
+    return RING_BULK_LINK_ACTION_REQUEST_NORMAL;
+}
+
+ring_bulk_link_action_t ring_bulk_link_policy_on_stop(ring_bulk_link_policy_t *policy)
+{
+    if (!policy || !policy->bulk_request_attempted) {
+        ring_bulk_link_policy_reset(policy);
+        return RING_BULK_LINK_ACTION_NONE;
+    }
+
+    ring_bulk_link_policy_reset(policy);
+    return RING_BULK_LINK_ACTION_REQUEST_NORMAL;
+}
+
 static void put_be32(uint32_t value, uint8_t *out)
 {
     out[0] = (uint8_t) (value >> 24U);
