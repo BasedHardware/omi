@@ -33,6 +33,15 @@ class FakeResponse(io.BytesIO):
 
 
 class MetadataTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # `resolve_pr_metadata` short-circuits on OMI_PR_BODY_FILE before it ever
+        # reaches the API path these cases assert on. The pre-push hook tells
+        # developers to export that variable, so an inherited value made this
+        # suite fail for a reason unrelated to the behavior under test.
+        patcher = patch.dict(os.environ, {"OMI_PR_BODY_FILE": ""})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_api_loader_uses_current_body_and_records_provenance(self) -> None:
         captured = {}
 
