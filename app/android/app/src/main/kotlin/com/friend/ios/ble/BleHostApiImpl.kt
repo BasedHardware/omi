@@ -133,11 +133,11 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
     // ── Diagnostics ──
 
     override fun startRssiStreaming(uuid: String) {
-        bleManager.isRssiStreamingEnabled = true
+        bleManager.startRssiStreaming(uuid)
     }
 
     override fun stopRssiStreaming(uuid: String) {
-        bleManager.isRssiStreamingEnabled = false
+        bleManager.stopRssiStreaming(uuid)
     }
 
     override fun getBatteryHistory(uuid: String, callback: (Result<List<BleBatteryPoint>>) -> Unit) {
