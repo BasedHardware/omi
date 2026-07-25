@@ -1,7 +1,7 @@
 """Product-analytics telemetry for transcript-conversation memory extraction.
 
-Emits the ``Conversation Memories Extracted`` PostHog event exactly once after a
-durable successful persistence result on the server-side transcript-memory path
+Attempts the ``Conversation Memories Extracted`` PostHog event at most once after
+a durable successful persistence result on the server-side transcript-memory path
 (the path that previously wrote memories to the database but fired no analytics
 event). Bounded dimensions only: a closed memory-count bucket and closed
 ``source``/``path`` enums. It never carries the conversation id, memory text,
@@ -15,7 +15,7 @@ Emission contract (see ``process_conversation.extract_memories``):
   is emitted (no false success).
 * **Persistence failure** — emission runs only after the durable write returned
   successfully; a raised exception propagates and the event is skipped.
-* **Retry / idempotency** — at most one analytics success per
+* **Retry / idempotency** — at most one analytics delivery attempt per
   ``(uid, conversation_id)`` across retries/re-finalization. The emit atomically
   creates a permanent Firestore marker under the authoritative conversation
   document; there is no cache TTL or eviction window. If that durable claim
@@ -38,6 +38,7 @@ from typing import Any, Dict, Optional
 
 from database.conversations import try_claim_conversation_memory_analytics
 from models.conversation import ConversationSource
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -83,10 +84,9 @@ def source_for_conversation(conversation: Any) -> str:
 def emit_conversation_memories_extracted(
     uid: str, conversation_id: str, result: ConversationMemoryExtractionResult
 ) -> None:
-    """Emit the ``Conversation Memories Extracted`` event for one successful
-    extraction, at most once per ``(uid, conversation_id)``. No-op when ``uid`` or
-    ``conversation_id`` is empty, nothing was persisted, or a prior pass already
-    captured the success for this conversation (retry/re-finalization)."""
+    """Attempt the event for one successful extraction, at most once per
+    ``(uid, conversation_id)``. No-op when identity is empty, nothing was
+    persisted, or a prior pass already claimed the delivery attempt."""
     if not uid or not conversation_id or result.count <= 0:
         return
     # Durable idempotency: atomically claim a permanent Firestore marker under
@@ -97,8 +97,15 @@ def emit_conversation_memories_extracted(
     # an internal marker path component and never reaches PostHog properties.
     try:
         acquired = try_claim_conversation_memory_analytics(uid, conversation_id)
-    except Exception as exc:  # noqa: BLE001 - telemetry must never break extraction
-        logger.warning("conversation memory telemetry claim_unavailable error=%s", type(exc).__name__)
+    except Exception:  # noqa: BLE001 - telemetry must never break extraction
+        record_fallback(
+            component='memory_analytics',
+            from_mode='durable_claim',
+            to_mode='telemetry_skipped',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
         return
     if not acquired:
         return
@@ -121,8 +128,15 @@ def emit_conversation_memories_extracted(
             event=CONVERSATION_MEMORIES_EXTRACTED,
             properties=properties,
         )
-    except Exception as exc:  # noqa: BLE001 - telemetry must never break extraction
-        logger.warning("conversation memory telemetry posthog_emit_failed error=%s", type(exc).__name__)
+    except Exception:  # noqa: BLE001 - telemetry must never break extraction
+        record_fallback(
+            component='memory_analytics',
+            from_mode='posthog_capture',
+            to_mode='telemetry_skipped',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
 
 
 def _bucket_memory_count(count: int) -> str:
@@ -159,8 +173,15 @@ def _get_posthog_client() -> Optional[Any]:
         posthog_module = importlib.import_module("posthog")
         posthog_client_cls = getattr(posthog_module, "Posthog")
         _posthog_client = posthog_client_cls(project_api_key=api_key, host=host)
-    except Exception as exc:  # noqa: BLE001 - fail open, never break extraction
-        logger.warning("conversation memory telemetry posthog_client_failed error=%s", type(exc).__name__)
+    except Exception:  # noqa: BLE001 - fail open, never break extraction
+        record_fallback(
+            component='memory_analytics',
+            from_mode='posthog_client',
+            to_mode='telemetry_skipped',
+            reason='config_incomplete',
+            outcome='degraded',
+            log=logger,
+        )
         _posthog_disabled = True
         return None
     return _posthog_client

@@ -113,18 +113,42 @@ final class MemoryAssistantTelemetryTests: XCTestCase {
 
 }
 
-/// Deterministic actor used to exercise the exact production durability pipeline
-/// without a Gemini/API/SQLite fixture. The pipeline itself is the object used by
-/// `MemoryAssistant`, and it emits through the production AnalyticsManager.
-private actor MemoryAssistantDurabilityFixtureRunner: MemoryAssistantDurabilityRunning {
-  private let outcome: MemoryAssistantDurability.Outcome
+/// Deterministic operations injected into the real production sequence. Call
+/// order proves a failed SQLite insert cannot reach backend sync, while the
+/// other fixtures drive backend and sync-state failures independently.
+private actor MemoryAssistantDurabilityFixtureOperations: MemoryAssistantDurabilityOperating {
+  private let insertSucceeds: Bool
+  private let remoteSucceeds: Bool
+  private let markSucceeds: Bool
+  private var calls: [String] = []
 
-  init(outcome: MemoryAssistantDurability.Outcome) {
-    self.outcome = outcome
+  init(insertSucceeds: Bool, remoteSucceeds: Bool, markSucceeds: Bool) {
+    self.insertSucceeds = insertSucceeds
+    self.remoteSucceeds = remoteSucceeds
+    self.markSucceeds = markSucceeds
   }
 
-  func persistAndSync(_ request: MemoryAssistantDurabilityRequest) async -> MemoryAssistantDurability.Outcome {
-    outcome
+  func insertLocalMemory(_ request: MemoryAssistantDurabilityRequest) async -> Int64? {
+    calls.append("insert")
+    return insertSucceeds ? 42 : nil
+  }
+
+  func createRemoteMemory(_ request: MemoryAssistantDurabilityRequest) async -> MemoryAssistantRemoteReceipt? {
+    calls.append("remote")
+    return remoteSucceeds ? .testFixture : nil
+  }
+
+  func markLocalMemorySynced(
+    id: Int64,
+    receipt: MemoryAssistantRemoteReceipt,
+    ownerID: String
+  ) async -> Bool {
+    calls.append("mark")
+    return markSucceeds
+  }
+
+  func recordedCalls() -> [String] {
+    calls
   }
 }
 
@@ -133,32 +157,47 @@ final class MemoryAssistantDurabilityPipelineTests: XCTestCase {
   private typealias CapturedEvent = (name: String, properties: [String: Any])
   private var captured: [CapturedEvent] = []
 
-  override func setUp() {
-    super.setUp()
+  override func setUp() async throws {
     captured = []
     AnalyticsManager.shared.setMemoryAssistantTelemetryCaptureForTests { [weak self] name, properties in
       self?.captured.append((name, properties))
     }
   }
 
-  override func tearDown() {
+  override func tearDown() async throws {
     AnalyticsManager.shared.setMemoryAssistantTelemetryCaptureForTests(nil)
     captured = []
-    super.tearDown()
   }
 
   func testProductionPipelineEmitsTerminalAndHistoricalSuccessForEveryDurabilityOutcome() async {
-    let cases: [(MemoryAssistantDurability.Outcome, String, Bool)] = [
-      (.localPersistenceFailed, "local_persistence_failed", false),
-      (.syncFailed, "sync_failed", true),
-      (.syncStatePersistenceFailed, "sync_state_persistence_failed", true),
-      (.synced, "synced", true),
-    ]
+    let cases:
+      [(
+        insert: Bool,
+        remote: Bool,
+        mark: Bool,
+        outcome: MemoryAssistantDurability.Outcome,
+        terminal: String,
+        historicalSuccess: Bool,
+        calls: [String]
+      )] = [
+        (false, true, true, .localPersistenceFailed, "local_persistence_failed", false, ["insert"]),
+        (true, false, true, .syncFailed, "sync_failed", true, ["insert", "remote"]),
+        (
+          true, true, false, .syncStatePersistenceFailed, "sync_state_persistence_failed", true,
+          ["insert", "remote", "mark"]
+        ),
+        (true, true, true, .synced, "synced", true, ["insert", "remote", "mark"]),
+      ]
 
-    for (outcome, expectedTerminal, expectsHistoricalSuccess) in cases {
+    for testCase in cases {
       captured = []
+      let operations = MemoryAssistantDurabilityFixtureOperations(
+        insertSucceeds: testCase.insert,
+        remoteSucceeds: testCase.remote,
+        markSucceeds: testCase.mark
+      )
       let pipeline = MemoryAssistantDurabilityPipeline(
-        runner: MemoryAssistantDurabilityFixtureRunner(outcome: outcome)
+        runner: MemoryAssistantProductionDurability(operations: operations)
       )
       let result = await pipeline.persistSyncAndEmit(
         MemoryAssistantDurabilityRequest(
@@ -171,18 +210,98 @@ final class MemoryAssistantDurabilityPipelineTests: XCTestCase {
         confidence: 0.82
       )
 
-      XCTAssertEqual(result, outcome)
+      XCTAssertEqual(result, testCase.outcome)
+      let actualCalls = await operations.recordedCalls()
+      XCTAssertEqual(actualCalls, testCase.calls)
       XCTAssertEqual(captured.first?.name, MemoryAssistantTelemetry.analysisRunEventName)
-      XCTAssertEqual(captured.first?.properties["outcome"] as? String, expectedTerminal)
+      XCTAssertEqual(captured.first?.properties["outcome"] as? String, testCase.terminal)
       XCTAssertEqual(captured.first?.properties["confidence_bucket"] as? String, "80_90")
 
       let historical = captured.filter { $0.name == "Memory Extracted" }
-      XCTAssertEqual(historical.count, expectsHistoricalSuccess ? 1 : 0)
-      if expectsHistoricalSuccess {
+      XCTAssertEqual(historical.count, testCase.historicalSuccess ? 1 : 0)
+      if testCase.historicalSuccess {
         XCTAssertEqual(historical.first?.properties as? [String: Int], ["memory_count": 1])
       }
-      XCTAssertEqual(captured.count, expectsHistoricalSuccess ? 2 : 1)
+      XCTAssertEqual(captured.count, testCase.historicalSuccess ? 2 : 1)
     }
+  }
+}
+
+private enum MemoryAssistantAnalysisFixtureError: Error {
+  case providerFailure
+}
+
+/// Drives the throwing production `processFrame` seam. This is behavioral
+/// coverage for Gemini/provider/decoding errors, not a source-text tripwire.
+@MainActor
+final class MemoryAssistantAnalysisFailureTests: XCTestCase {
+  private var savedOwner: String?
+  private var savedAutomationOwner: String?
+  private var savedEnabled = false
+  private var savedNotifications = false
+  private var captured: [(name: String, properties: [String: Any])] = []
+
+  override func setUp() async throws {
+    savedOwner = UserDefaults.standard.string(forKey: .authUserId)
+    savedAutomationOwner = UserDefaults.standard.string(forKey: .automationOwnerOverride)
+    savedEnabled = MemoryAssistantSettings.shared.isEnabled
+    savedNotifications = MemoryAssistantSettings.shared.notificationsEnabled
+
+    UserDefaults.standard.set("analysis-owner", forKey: .authUserId)
+    UserDefaults.standard.set("analysis-owner", forKey: .automationOwnerOverride)
+    MemoryAssistantSettings.shared.isEnabled = true
+    MemoryAssistantSettings.shared.notificationsEnabled = true
+    captured = []
+    AnalyticsManager.shared.setMemoryAssistantTelemetryCaptureForTests { [weak self] name, properties in
+      self?.captured.append((name, properties))
+    }
+  }
+
+  override func tearDown() async throws {
+    if let savedOwner {
+      UserDefaults.standard.set(savedOwner, forKey: .authUserId)
+    } else {
+      UserDefaults.standard.removeObject(forKey: .authUserId)
+    }
+    if let savedAutomationOwner {
+      UserDefaults.standard.set(savedAutomationOwner, forKey: .automationOwnerOverride)
+    } else {
+      UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+    }
+    MemoryAssistantSettings.shared.isEnabled = savedEnabled
+    MemoryAssistantSettings.shared.notificationsEnabled = savedNotifications
+    AnalyticsManager.shared.setMemoryAssistantTelemetryCaptureForTests(nil)
+    captured = []
+  }
+
+  func testThrowingAnalysisEmitsExactlyOneBoundedAnalysisFailedTerminal() async {
+    let operations = MemoryAssistantDurabilityFixtureOperations(
+      insertSucceeds: false,
+      remoteSucceeds: false,
+      markSucceeds: false
+    )
+    let assistant = MemoryAssistant(
+      extractionOverride: { _, _ in
+        throw MemoryAssistantAnalysisFixtureError.providerFailure
+      },
+      durabilityRunner: MemoryAssistantProductionDurability(operations: operations)
+    )
+
+    await assistant.processFrame(
+      CapturedFrame(
+        jpegData: Data([0xFF, 0xD8, 0xFF]),
+        appName: "must-not-leak",
+        frameNumber: 1
+      )
+    )
+
+    XCTAssertEqual(captured.count, 1)
+    XCTAssertEqual(captured[0].name, MemoryAssistantTelemetry.analysisRunEventName)
+    XCTAssertEqual(captured[0].properties as? [String: String], ["outcome": "analysis_failed"])
+    XCTAssertFalse(String(describing: captured[0].properties).contains("providerFailure"))
+    XCTAssertFalse(String(describing: captured[0].properties).contains("must-not-leak"))
+    let durabilityCalls = await operations.recordedCalls()
+    XCTAssertEqual(durabilityCalls, [])
   }
 }
 
@@ -199,8 +318,7 @@ final class MemoryAssistantSettingChangeTelemetryTests: XCTestCase {
   private var savedNotifications = false
   private var captured: [(name: String, properties: [String: Any])] = []
 
-  override func setUp() {
-    super.setUp()
+  override func setUp() async throws {
     savedEnabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
     savedNotifications = UserDefaults.standard.bool(forKey: Self.notificationsKey)
     captured = []
@@ -209,12 +327,11 @@ final class MemoryAssistantSettingChangeTelemetryTests: XCTestCase {
     }
   }
 
-  override func tearDown() {
+  override func tearDown() async throws {
     UserDefaults.standard.set(savedEnabled, forKey: Self.enabledKey)
     UserDefaults.standard.set(savedNotifications, forKey: Self.notificationsKey)
     AnalyticsManager.shared.setMemoryAssistantTelemetryCaptureForTests(nil)
     captured = []
-    super.tearDown()
   }
 
   func testUserToggleCapturesExactlyOneClosedEventWithExactPayload() {

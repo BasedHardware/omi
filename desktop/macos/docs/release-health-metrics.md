@@ -217,16 +217,20 @@ emitted (enforced by `MemoryAssistantTelemetryTests` and
 - **Why it exists:** the "did this recording produce memories?" step ran
   server-side and wrote memories to the DB but emitted **no** analytics event —
   the root cause of the recording→memory observability gap.
-- **Emission rule:** exactly one event **after a durable successful persistence
-  result**, at the `extract_memories` public boundary. Zero extraction → no event
+- **Emission rule:** at most one delivery attempt **after a durable successful
+  persistence result**, at the `extract_memories` public boundary. Zero extraction → no event
   (no false success). Persistence exception → propagates, no event. A permanent,
   atomic Firestore marker under the authoritative per-`(uid, conversation)`
-  document emits at most once across re-finalization/retries, with no cache TTL
-  or eviction window. If that marker cannot be consulted, this optional metric
-  fails closed (no capture) while finalization continues. Conversation ids are
-  marker-path components only and never PostHog properties. PostHog import,
-  client construction, and capture are all fail-open, so telemetry can never undo
-  a durable extraction.
+  document permits at most one PostHog delivery attempt across
+  re-finalization/retries, with no cache TTL or eviction window. The marker is
+  claimed before SDK construction/capture: because PostHog capture is queued
+  rather than delivery-acknowledged, this is explicitly **at-most-once attempt**
+  semantics—optional telemetry can be lost, but retries cannot duplicate the
+  value. If the marker cannot be consulted, this optional metric fails closed
+  (no capture) while finalization continues. Conversation ids are marker-path
+  components only and never PostHog properties. Claim, PostHog construction,
+  and capture degradation record the shared bounded fallback signal; none can
+  undo a durable extraction.
 - **Metric:** transcript memory-extraction success = users emitting
   `Conversation Memories Extracted` ÷ finalized conversations (denominator:
   `Memory Created`, the recording-reconciliation proxy). Join by uid + window.

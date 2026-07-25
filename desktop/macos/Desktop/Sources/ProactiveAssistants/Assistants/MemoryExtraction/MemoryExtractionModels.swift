@@ -35,7 +35,7 @@ struct ExtractedMemory: Codable, Sendable {
 
 // MARK: - Memory Extraction Result
 
-struct MemoryExtractionResult: Codable, AssistantResult {
+struct MemoryExtractionResult: Codable, AssistantResult, Sendable {
   let hasNewMemory: Bool
   let memories: [ExtractedMemory]
   let contextSummary: String
