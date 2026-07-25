@@ -64,7 +64,7 @@ never audio or transcript text.
 
 Scenarios:
 
-1. audio → streaming segment → stale live-session lifecycle → persisted content → completed inline job;
+1. audio → one bounded live-STT accepted attempt → streaming segment → one matching successful terminal (including after teardown replay) → stale live-session lifecycle → persisted content → completed inline job;
 2. completed native UUID reconnect replays the terminal binding without a new job;
 3. a stale empty desktop recording is removed by the next-session lifecycle path and creates no job;
 4. a pusher process loses the first 104 before claim, is restarted, and the

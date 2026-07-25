@@ -503,7 +503,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "**Real-traffic journeys:** chat, pusher, live transcription, and capture-finalization measure accepted work through a server-observable terminal boundary. Product-failure alerts require real traffic; cancelled client/transport endings and fenced stale work remain visible without counting as product failures. An absent source is scrape health, not zero traffic. Semantics: `backend/docs/runbooks/real-traffic-journeys.md`.",
+        "content": "**Real-traffic journeys:** chat, pusher, and capture-finalization use their server-observable terminal boundaries. Live STT separately measures accepted listener attempts and their bounded terminal outcomes. Product-failure alerts require real traffic; cancelled client/transport endings and fenced stale work remain visible without counting as product failures. An absent source is scrape health, not zero traffic. Semantics: `backend/docs/runbooks/real-traffic-journeys.md`.",
         "mode": "markdown"
       },
       "pluginVersion": "12.1.0",
@@ -550,13 +550,13 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(sum by (journey) (increase(omi_journey_terminal_total{outcome=\"success\"}[$__rate_interval])) / sum by (journey) (increase(omi_journey_terminal_total{outcome=~\"success|failure\"}[$__rate_interval]))) and on (journey) (sum by (journey) (increase(omi_journey_terminal_total{outcome=~\"success|failure\"}[$__rate_interval])) > 0)",
-          "legendFormat": "{{journey}}",
+          "expr": "(sum(increase(omi_live_stt_terminal_total{outcome=\"failure\"}[$__rate_interval])) / clamp_min(sum(increase(omi_live_stt_accepted_total[$__rate_interval])), 1)) and (sum(increase(omi_live_stt_accepted_total[$__rate_interval])) > 0)",
+          "legendFormat": "live STT",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Journey terminal success rate (success / success + failure)",
+      "title": "Live STT attempt failure rate (failure / accepted)",
       "type": "timeseries"
     },
     {

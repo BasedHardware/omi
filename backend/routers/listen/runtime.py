@@ -45,7 +45,7 @@ from utils.listen_session_bootstrap import finalize_listen_connect_context, load
 from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
-from utils.observability.journeys import JourneyAttempt, JourneyOutcome
+from utils.observability.transcription import LiveSTTAttempt
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.stt.streaming import get_stt_service_for_language
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
@@ -186,24 +186,27 @@ class ListenSessionRuntime:
     def start_live_transcription(self) -> None:
         """Accept the journey once the listen socket has received real audio."""
         if self.state.live_transcription_attempt is None:
-            self.state.live_transcription_attempt = JourneyAttempt('live_transcription')
+            self.state.live_transcription_attempt = LiveSTTAttempt(
+                provider=getattr(self.stt_service, 'value', self.stt_service),
+                platform=self.client_device_context.platform,
+            )
 
     def complete_live_transcription(self) -> None:
         """Record the first nonempty transcript successfully delivered to the client."""
         if self.state.live_transcription_attempt is not None:
-            self.state.live_transcription_attempt.finish('success')
+            self.state.live_transcription_attempt.finish('success', phase='transcript_delivery')
 
     def _finish_live_transcription(self) -> None:
         """Terminalize an accepted attempt that never delivered a transcript."""
         attempt = self.state.live_transcription_attempt
         if attempt is None:
             return
-        outcome: JourneyOutcome = (
+        outcome = (
             'failure'
             if self.state.live_transcription_failed or self.state.stt_terminal_failure or self.state.close_code == 1011
             else 'cancelled'
         )
-        attempt.finish(outcome)
+        attempt.finish(outcome, phase='teardown')
 
     async def _admit(self) -> bool:
         if not self.request.uid:

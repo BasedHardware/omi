@@ -31,11 +31,11 @@ def _install_journey_metrics(monkeypatch):
 def test_journey_contract_uses_only_closed_privacy_safe_labels(monkeypatch):
     accepted, terminal, latency, reconciliations = _install_journey_metrics(monkeypatch)
 
-    journeys.record_journey_accepted('live_transcription')
+    journeys.record_journey_accepted('pusher_session')
     journeys.record_journey_terminal('pusher_session', 'cancelled', 1.5)
     journeys.record_capture_finalization_reconciliation('requeued')
 
-    accepted.labels.assert_called_once_with(journey='live_transcription')
+    accepted.labels.assert_called_once_with(journey='pusher_session')
     terminal.labels.assert_called_once_with(journey='pusher_session', outcome='cancelled')
     latency.labels.assert_called_once_with(journey='pusher_session', outcome='cancelled')
     reconciliations.labels.assert_called_once_with(outcome='requeued')
@@ -120,7 +120,8 @@ def test_listener_projects_the_closed_durable_finalization_states(monkeypatch):
 def test_idle_metrics_and_monitoring_contract_distinguish_traffic_from_a_missing_scrape_source():
     exported = metrics.generate_latest().decode()
     assert 'omi_journey_accepted_total{journey="chat_response"}' in exported
-    assert 'omi_journey_accepted_total{journey="live_transcription"}' in exported
+    assert 'omi_live_stt_accepted_total' in exported
+    assert 'omi_live_stt_terminal_total' in exported
     assert 'omi_journey_terminal_total{journey="pusher_session",outcome="success"}' in exported
     assert 'omi_capture_finalization_reconciliations_total{outcome="requeued"}' in exported
     assert 'listen_finalization_stale_processing_reconciliations_total{outcome="completed"}' in exported
@@ -146,6 +147,9 @@ def test_idle_metrics_and_monitoring_contract_distinguish_traffic_from_a_missing
     for rule in product_rules:
         if rule['uid'] == 'omi-journey-capture-fail':
             assert 'listen_finalization_durable_jobs' in rule['data'][0]['model']['expr']
+        elif rule['uid'] == 'omi-journey-live-transcription-fail':
+            assert rule['data'][0]['model']['expr'] == 'sum(increase(omi_live_stt_accepted_total[30m]))'
+            assert 'omi_live_stt_terminal_total{outcome="failure"}' in rule['data'][1]['model']['expr']
         else:
             assert 'outcome=~"success|failure"' in rule['data'][0]['model']['expr']
         assert '$A >= 20 && $B > 0.10' in rule['data'][2]['model']['expression']
@@ -168,13 +172,14 @@ def test_idle_metrics_and_monitoring_contract_distinguish_traffic_from_a_missing
         (monitoring / 'dashboards/omi-services/resilience-fallbacks.json').read_text(encoding='utf-8')
     )
     panel_titles = {panel['title'] for panel in dashboard['panels']}
-    assert 'Journey terminal success rate (success / success + failure)' in panel_titles
+    assert 'Live STT attempt failure rate (failure / accepted)' in panel_titles
     assert 'Journey acceptance-to-terminal latency (p95)' in panel_titles
     assert 'Capture finalization durable projection and nonterminal work' in panel_titles
-    success_panel = next(
-        panel for panel in dashboard['panels'] if panel['title'].startswith('Journey terminal success')
+    live_stt_panel = next(
+        panel for panel in dashboard['panels'] if panel['title'].startswith('Live STT attempt failure')
     )
-    assert 'and on (journey)' in success_panel['targets'][0]['expr']
+    assert 'omi_live_stt_terminal_total{outcome="failure"}' in live_stt_panel['targets'][0]['expr']
+    assert 'omi_live_stt_accepted_total' in live_stt_panel['targets'][0]['expr']
     capture_rule = next(rule for rule in split_alerts if rule['uid'] == 'omi-journey-capture-fail')
     assert 'listen_finalization_durable_jobs' in capture_rule['data'][0]['model']['expr']
     assert 'max by (state)' in capture_rule['data'][0]['model']['expr']

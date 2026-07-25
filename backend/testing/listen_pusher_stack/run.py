@@ -42,6 +42,7 @@ PYTHON = BACKEND / '.venv' / 'bin' / 'python'
 ADMIN_KEY = 'omi-listen-pusher-stack-admin-'
 PROJECT = 'demo-omi-listen-stack'
 LOCAL_TASK_TOKEN = 'listen-pusher-stack-loopback-task'
+METRICS_SECRET = 'listen-pusher-stack-metrics'
 REST_FINALIZATION_RACE_ENV = (
     'OMI_STACK_FINALIZATION_RACE_UID',
     'OMI_STACK_FINALIZATION_RACE_CONVERSATION_ID',
@@ -195,6 +196,7 @@ class Stack:
                 'FIRESTORE_DATABASE_ID': '(default)',
                 'ENCRYPTION_SECRET': 'omi_listen_pusher_stack_test_secret_32_bytes',
                 'ADMIN_KEY': ADMIN_KEY,
+                'METRICS_SECRET': METRICS_SECRET,
                 'REDIS_DB_HOST': '127.0.0.1',
                 'REDIS_DB_PORT': str(self.redis_port),
                 'HOSTED_PUSHER_API_URL': f'http://127.0.0.1:{self.pusher_port}',
@@ -582,6 +584,16 @@ class Stack:
             raise StackFailure(f'GET /v1/conversations/{conversation_id} returned non-object JSON')
         return body
 
+    async def listener_metrics(self) -> str:
+        async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
+            response = await client.get(
+                f'http://127.0.0.1:{self.backend_port}/metrics',
+                headers={'Authorization': f'Bearer {METRICS_SECRET}'},
+            )
+        if response.status_code != 200:
+            raise StackFailure(f'listener metrics endpoint returned {response.status_code}')
+        return response.text
+
 
 def _one_job(stack: Stack, uid: str, conversation_id: str) -> dict[str, Any]:
     jobs = stack.jobs_for(uid, conversation_id)
@@ -622,7 +634,10 @@ async def _connect(stack: Stack, uid: str, session_id: str | None) -> tuple[Any,
     params = urlencode(parameters)
     websocket = await websockets.connect(
         f'ws://127.0.0.1:{stack.backend_port}/v4/listen?{params}',
-        extra_headers={'Authorization': f'Bearer {ADMIN_KEY}{uid}'},
+        extra_headers={
+            'Authorization': f'Bearer {ADMIN_KEY}{uid}',
+            'X-App-Platform': 'desktop',
+        },
         max_size=10 * 1024 * 1024,
     )
     session = await _receive_until(
@@ -649,6 +664,28 @@ async def _record_audio(websocket: Any) -> None:
         lambda payload: isinstance(payload, list) and bool(payload) and payload[0].get('id') == 'stack-segment-1',
         label='streamed transcript',
     )
+
+
+async def _assert_live_stt_attempt_metrics(stack: Stack) -> None:
+    """Exercise the real listener/provider seam without exposing audio or transcript text."""
+
+    metrics = await stack.listener_metrics()
+    accepted = [line for line in metrics.splitlines() if line.startswith('omi_live_stt_accepted_total{')]
+    terminals = [line for line in metrics.splitlines() if line.startswith('omi_live_stt_terminal_total{')]
+    expected_labels = ('client_platform="desktop"', 'deployment_environment="offline"', 'provider="parakeet"')
+    if (
+        len(accepted) != 1
+        or not all(label in accepted[0] for label in expected_labels)
+        or not accepted[0].endswith(' 1.0')
+    ):
+        raise StackFailure(f'expected one bounded accepted live-STT attempt, observed {accepted!r}')
+    expected_terminal_labels = (*expected_labels, 'outcome="success"', 'phase="transcript_delivery"')
+    if (
+        len(terminals) != 1
+        or not all(label in terminals[0] for label in expected_terminal_labels)
+        or not terminals[0].endswith(' 1.0')
+    ):
+        raise StackFailure(f'expected one bounded successful live-STT terminal, observed {terminals!r}')
 
 
 async def _request_rest_finalization(
@@ -743,6 +780,7 @@ async def _normal_and_terminal_reconnect(stack: Stack) -> None:
         timeout=25.0,
     )
     await websocket.close(code=1000)
+    await _assert_live_stt_attempt_metrics(stack)
     job = _wait_for_job(stack, uid, session_id, 'completed')
     conversation = stack.conversation(uid, session_id)
     if not conversation or conversation.get('status') != 'completed' or not conversation.get('has_content'):

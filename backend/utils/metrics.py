@@ -53,7 +53,7 @@ OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL = Counter(
 
 # Export zero-valued children from a healthy but idle process. This lets
 # Prometheus/Grafana distinguish no user traffic from an absent scrape target.
-for _journey in ('chat_response', 'pusher_session', 'live_transcription', 'capture_finalization'):
+for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
     OMI_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey)
     for _outcome in ('success', 'failure', 'cancelled', 'stale'):
         OMI_JOURNEY_TERMINAL_TOTAL.labels(journey=_journey, outcome=_outcome)
@@ -235,8 +235,20 @@ OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL = Counter(
 
 OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL = Counter(
     'omi_live_stt_terminal_failures_total',
-    'Terminal live-STT failures by bounded provider, outcome, client platform, revision, and phase',
-    ['provider', 'outcome', 'client_platform', 'deployment_version', 'phase'],
+    'Terminal live-STT failures by bounded provider, outcome, client platform, environment, and phase',
+    ['provider', 'outcome', 'client_platform', 'deployment_environment', 'phase'],
+)
+
+OMI_LIVE_STT_ACCEPTED_TOTAL = Counter(
+    'omi_live_stt_accepted_total',
+    'Accepted live-STT attempts by bounded provider, client platform, and deployment environment',
+    ['provider', 'client_platform', 'deployment_environment'],
+)
+
+OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
+    'omi_live_stt_terminal_total',
+    'Terminal live-STT outcomes for accepted attempts by bounded labels',
+    ['provider', 'outcome', 'client_platform', 'deployment_environment', 'phase'],
 )
 
 TASK_WORKSTREAM_ASSOCIATION_TOTAL = Counter(
