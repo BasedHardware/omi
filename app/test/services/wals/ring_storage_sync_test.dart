@@ -84,6 +84,48 @@ void main() {
     expect(wal.status, WalStatus.synced);
   });
 
+  test('durable ring WAL uses exact little-endian length-prefixed frame bytes', () async {
+    const startSeq = 0x1234;
+    final connection = _FakeRingConnection(readSeq: startSeq, writeSeq: startSeq + 2, framesPerRecord: 2);
+    final local = localSync();
+
+    await ringSync(connection, local).syncWal(wal: virtualWal(2));
+
+    expect(connection.successfulAdvances, [startSeq + 2]);
+    expect(local.testWals, hasLength(1));
+    final bytes = await File('${directory.path}/${local.testWals.single.filePath}').readAsBytes();
+    expect(bytes, [
+      3,
+      0,
+      0,
+      0,
+      0x34,
+      0x12,
+      0,
+      3,
+      0,
+      0,
+      0,
+      0x34,
+      0x12,
+      1,
+      3,
+      0,
+      0,
+      0,
+      0x35,
+      0x12,
+      0,
+      3,
+      0,
+      0,
+      0,
+      0x35,
+      0x12,
+      1,
+    ]);
+  });
+
   test('interrupted range keeps its cursor and retry resumes after the last durable advance', () async {
     final local = localSync();
     final firstConnection = _FakeRingConnection(readSeq: 200, writeSeq: 205, truncateStartSeq: 202);
