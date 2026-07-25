@@ -1759,7 +1759,6 @@ struct MemoriesPage: View {
   }
 
   // MARK: - Header
-
   private var header: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       HStack(alignment: .firstTextBaseline) {
@@ -1782,7 +1781,7 @@ struct MemoriesPage: View {
         )
 
         if viewModel.canonicalLifecycleExposed {
-        // Layer filter dropdown. Default is product default access: Short-term + Long-term.
+          // Layer filter dropdown. Default is product default access: Short-term + Long-term.
           Menu {
             ForEach(MemoryLayerFilter.allCases) { filter in
               Button {

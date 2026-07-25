@@ -747,7 +747,6 @@ struct DashboardPage: View {
   /// suggested questions under the bar while the hub is showing.
   private func homeStage(stageWidth: CGFloat, stageHeight: CGFloat) -> some View {
     let askBarWidth = homeAskBarWidth(for: stageWidth)
-
     return Group {
       if homeMode == .hub {
         homeHubStage(stageWidth: stageWidth, askBarWidth: askBarWidth)
@@ -756,12 +755,7 @@ struct DashboardPage: View {
         homePanelStage(stageWidth: stageWidth, askBarWidth: askBarWidth)
       }
     }
-    .padding(
-      .top,
-      homeMode == .hub
-        ? Self.homeStageTopPadding
-        : (homeMode == .chat ? 0 : OmiSpacing.lg)
-    )
+    .padding(.top, homeMode.topPadding(hub: Self.homeStageTopPadding))
     .padding(.bottom, Self.homeStageBottomPadding)
   }
 
