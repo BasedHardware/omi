@@ -12,10 +12,10 @@ use crate::models::chat_completions::*;
 use crate::services::FirestoreService;
 use crate::AppState;
 
-use super::request_translation::{compute_cost, translate_response};
+use super::request_translation::compute_cost;
 use super::response_or_500;
 use super::sse::{drain_sse_events, make_chunk, sse_line, stream_termination_chunks};
-use super::transport::{complete_anthropic_server_tool_turn, log_usage, send_anthropic_with_retry};
+use super::transport::send_anthropic_with_retry;
 
 /// How long a streaming turn may go without a single byte from Anthropic before we end it.
 ///
@@ -29,120 +29,6 @@ pub(super) struct StreamUsageContext {
     pub(super) uid: String,
     pub(super) upstream_model: String,
     pub(super) firestore: Option<Arc<FirestoreService>>,
-}
-
-pub(super) async fn handle_server_tool_streaming(
-    client: &reqwest::Client,
-    api_key: &str,
-    anthropic_req: &AnthropicRequest,
-    route: &ModelRoute,
-    user: &AuthUser,
-    state: &AppState,
-    is_byok: bool,
-) -> Result<Response, StatusCode> {
-    let anthropic_resp =
-        complete_anthropic_server_tool_turn(client, api_key, anthropic_req).await?;
-
-    if !is_byok {
-        let cost = compute_cost(&anthropic_resp.usage, route.upstream_model);
-        log_usage(state, user, &anthropic_resp.usage, cost).await;
-    }
-
-    let openai_resp = translate_response(&anthropic_resp, route.public_model);
-    let choice = openai_resp
-        .choices
-        .first()
-        .expect("translated Anthropic response always has one choice");
-    let stream_id = openai_resp.id.clone();
-    let created = openai_resp.created;
-    let model = openai_resp.model.clone();
-    let mut chunks = Vec::new();
-
-    chunks.push(sse_line(&make_chunk(
-        &stream_id,
-        created,
-        &model,
-        ChunkDelta {
-            role: Some("assistant".to_string()),
-            content: None,
-            reasoning_content: None,
-            tool_calls: None,
-        },
-        None,
-        None,
-    )));
-
-    let tool_calls = choice.message.tool_calls.as_ref().map(|calls| {
-        calls
-            .iter()
-            .enumerate()
-            .map(|(index, call)| ChunkToolCall {
-                index: index as u32,
-                id: Some(call.id.clone()),
-                call_type: Some(call.call_type.clone()),
-                function: Some(ChunkFunctionCall {
-                    name: Some(call.function.name.clone()),
-                    arguments: Some(call.function.arguments.clone()),
-                }),
-            })
-            .collect::<Vec<_>>()
-    });
-    if choice.message.content.is_some() || tool_calls.is_some() {
-        chunks.push(sse_line(&make_chunk(
-            &stream_id,
-            created,
-            &model,
-            ChunkDelta {
-                role: None,
-                content: choice.message.content.clone(),
-                reasoning_content: None,
-                tool_calls,
-            },
-            None,
-            None,
-        )));
-    }
-
-    chunks.push(sse_line(&make_chunk(
-        &stream_id,
-        created,
-        &model,
-        ChunkDelta {
-            role: None,
-            content: None,
-            reasoning_content: None,
-            tool_calls: None,
-        },
-        choice.finish_reason.clone(),
-        None,
-    )));
-
-    if let Some(usage) = openai_resp.usage {
-        let usage_chunk = ChatCompletionChunk {
-            id: stream_id,
-            object: "chat.completion.chunk",
-            created,
-            model,
-            choices: vec![],
-            usage: Some(usage),
-        };
-        chunks.push(sse_line(
-            &serde_json::to_value(usage_chunk).unwrap_or(json!({})),
-        ));
-    }
-    chunks.push(Bytes::from_static(b"data: [DONE]\n\n"));
-
-    let body = Body::from_stream(futures::stream::iter(
-        chunks.into_iter().map(Ok::<Bytes, std::io::Error>),
-    ));
-    Ok(response_or_500(
-        Response::builder()
-            .status(StatusCode::OK)
-            .header("content-type", "text/event-stream")
-            .header("cache-control", "no-cache")
-            .header("connection", "keep-alive"),
-        body,
-    ))
 }
 
 /// Convert Anthropic's framed bytes into the OpenAI-compatible SSE sequence.
