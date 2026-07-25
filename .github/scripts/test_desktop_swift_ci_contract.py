@@ -3,8 +3,10 @@
 
 Fails if a Swift CI job loses Xcode selection, version assertion, version logging,
 or if the SwiftPM cache key omits Package.swift, Package.resolved, or toolchain
-identity.  This is the Rung-0 guard from #9843: every downstream strictness claim
-depends on knowing which compiler the flags run against.
+identity. It also preserves the runner-saving test selector and the serial CI
+execution required by SwiftPM's shared build-directory lock. This is the Rung-0
+guard from #9843: every downstream strictness claim depends on knowing which
+compiler the flags run against.
 """
 
 from __future__ import annotations
@@ -21,8 +23,8 @@ PRE_PUSH_PATH = REPO_ROOT / "scripts/pre-push"
 EXPECTED_XCODE_VERSION = "16.4"
 EXPECTED_XCODE_BUILD = "16F6"
 EXPECTED_XCODE_APP = f"/Applications/Xcode_{EXPECTED_XCODE_VERSION}.app"
-JOBS = ["changes", "desktop-swift-static", "desktop-swift-tests", "desktop-swift", "desktop-swift-release-compile"]
-MACOS_JOBS = ["desktop-swift-static", "desktop-swift-tests", "desktop-swift-release-compile"]
+JOBS = ["changes", "desktop-swift-verify", "desktop-swift", "desktop-swift-release-compile"]
+MACOS_JOBS = ["desktop-swift-verify", "desktop-swift-release-compile"]
 
 
 def _workflow_text() -> str:
@@ -57,17 +59,17 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
     # --- per-job assertions ------------------------------------------------
 
-    def test_both_jobs_call_the_canonical_pinned_toolchain_runner(self):
+    def test_macos_jobs_call_the_canonical_pinned_toolchain_runner(self):
         for job_id in MACOS_JOBS:
             with self.subTest(job=job_id):
                 self.assertIn("run-swift-ci.sh --select-toolchain", self.jobs[job_id])
 
-        test_job = self.jobs["desktop-swift-tests"]
+        verify_job = self.jobs["desktop-swift-verify"]
         release_job = self.jobs["desktop-swift-release-compile"]
 
-        self.assertIn("run-swift-ci.sh --test", test_job)
+        self.assertIn("run-swift-ci.sh --test", verify_job)
         self.assertIn("run-swift-ci.sh --release-compile", release_job)
-        self.assertIn("run-swift-ci.sh --release-notification-regression", test_job)
+        self.assertIn("run-swift-ci.sh --release-notification-regression", verify_job)
 
     def test_change_detection_happens_before_macos_allocation(self):
         """#9440: non-desktop changes must not claim a costly macOS runner."""
@@ -75,27 +77,26 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
         self.assertIn("runs-on: ubuntu-latest", changes)
         self.assertIn("should_run", changes)
+        self.assertIn("should_run_static", changes)
+        self.assertIn("should_run_tests", changes)
         self.assertIn("should_release_compile", changes)
         self.assertIn("diff_base", changes)
 
-        for job_id, output in (
-            ("desktop-swift-static", "should_run"),
-            ("desktop-swift-tests", "should_run"),
-            ("desktop-swift-release-compile", "should_release_compile"),
-        ):
+        for job_id, output in (("desktop-swift-release-compile", "should_release_compile"),):
             with self.subTest(job=job_id):
                 job = self.jobs[job_id]
                 self.assertIn("needs: changes", job)
                 self.assertIn(f"needs.changes.outputs.{output}", job)
                 self.assertNotIn("Check changed files", job)
 
-        # Static checks need full history for git diff/merge-base. The test and
-        # release-compile jobs can stay shallow because they do not resolve a
-        # diff base themselves.
-        static_job = self.jobs["desktop-swift-static"]
-        self.assertIn("fetch-depth: 0", static_job)
-        test_job = self.jobs["desktop-swift-tests"]
-        self.assertIn("fetch-depth: 1", test_job)
+        # The consolidated job needs full history for static-check diffing and
+        # must preserve both selectors before it reserves one macOS runner.
+        verify_job = self.jobs["desktop-swift-verify"]
+        self.assertIn("needs: changes", verify_job)
+        self.assertIn("needs.changes.outputs.should_run_static", verify_job)
+        self.assertIn("needs.changes.outputs.should_run_tests", verify_job)
+        self.assertNotIn("Check changed files", verify_job)
+        self.assertIn("fetch-depth: 0", verify_job)
         release_job = self.jobs["desktop-swift-release-compile"]
         self.assertIn("fetch-depth: 1", release_job)
 
@@ -130,7 +131,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
     def test_notification_boundary_runs_targeted_release_regression(self):
         changes = self.jobs["changes"]
-        job = self.jobs["desktop-swift-tests"]
+        job = self.jobs["desktop-swift-verify"]
         for path in (
             "AppState[+]Permissions[.]swift",
             "Sources/.*Notification.*[.]swift",
@@ -144,16 +145,67 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("should_notification_release_regression", job)
         self.assertIn("UserNotificationCallbackBridgeTests/", _runner_text())
 
-    def test_stable_release_gate_requires_both_parallel_jobs(self):
-        """The required check name must fail closed on either parallel lane."""
+    def test_stable_release_gate_requires_the_selected_macos_job(self):
+        """The required check name must fail closed on its selected lanes."""
         gate = self.jobs["desktop-swift"]
 
         self.assertIn("name: Desktop Swift Build & Tests", gate)
-        self.assertIn("desktop-swift-static", gate)
-        self.assertIn("desktop-swift-tests", gate)
+        self.assertIn("desktop-swift-verify", gate)
         self.assertIn("always()", gate)
-        self.assertIn('test "$STATIC_RESULT" = success', gate)
-        self.assertIn('test "$TEST_RESULT" = success', gate)
+        self.assertIn("STATIC_REQUIRED", gate)
+        self.assertIn("TESTS_REQUIRED", gate)
+        self.assertIn('test "$VERIFY_RESULT" = success', gate)
+        self.assertIn('test "$VERIFY_RESULT" = skipped', gate)
+
+    def test_full_swift_suite_is_selected_only_for_its_inputs(self):
+        """Asset/config candidates retain static evidence without a second Mac job."""
+        changes = self.jobs["changes"]
+        verify_job = self.jobs["desktop-swift-verify"]
+
+        self.assertIn("SHOULD_RUN_TESTS=false", changes)
+        self.assertIn("SHOULD_RUN_TESTS=true", changes)
+        for path in (
+            "Desktop/(Sources|Tests)/.*[.]swift",
+            "Desktop/Package[.](swift|resolved)",
+            "scripts/(run-swift-ci|swift-test-suites",
+            "desktop/macos/tests/test-.*[.]sh",
+            ".github/workflows/desktop-swift-ci[.]yml",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, changes)
+        self.assertIn("needs.changes.outputs.should_run_tests", verify_job)
+
+    def test_static_macos_lane_is_selected_only_for_macos_contract_inputs(self):
+        """A releasable docs/assets change must not reserve an empty macOS lane."""
+        changes = self.jobs["changes"]
+        verify_job = self.jobs["desktop-swift-verify"]
+
+        self.assertIn("SHOULD_RUN_STATIC=false", changes)
+        self.assertIn("SHOULD_RUN_STATIC=true", changes)
+        for path in (
+            "Desktop/(Sources|Tests)/.*[.]swift",
+            "Desktop/(Package[.]swift|[.]swift-format",
+            "scripts/(swift-format-wrapper|prepare-swiftlint-baseline",
+            ".github/checks-manifest[.]yaml",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, changes)
+        self.assertIn("needs.changes.outputs.should_run_static", verify_job)
+
+    def test_static_and_test_lanes_share_one_hosted_macos_runner(self):
+        """#10507: Swift CI must not reserve two scarce hosted Macs at once."""
+        workflow = _workflow_text()
+
+        self.assertEqual(MACOS_JOBS, ["desktop-swift-verify", "desktop-swift-release-compile"])
+        self.assertIn("rather than claiming two", workflow)
+
+    def test_ci_uses_one_worker_for_the_shared_swiftpm_build_directory(self):
+        """#10507: parallel --skip-build invocations contend on Desktop/.build."""
+        verify_job = self.jobs["desktop-swift-verify"]
+
+        self.assertIn('OMI_SWIFT_TEST_SUITE_WORKERS: "1"', verify_job)
+        self.assertIn("shares Desktop/.build", verify_job)
+        self.assertIn('OMI_SWIFT_TEST_SUITE_WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-4}"', _runner_text())
 
     def test_later_main_push_cannot_cancel_exact_sha_release_evidence(self):
         """A backend/docs push must not strand an earlier selected desktop SHA."""
@@ -176,7 +228,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
     def test_launcher_contract_prerequisites_are_installed(self):
         """Discovered shell tests may use the repository's pinned workflow linter."""
-        job = self.jobs["desktop-swift-tests"]
+        job = self.jobs["desktop-swift-verify"]
         install_index = job.index("brew install")
         launcher_index = job.index("Desktop launcher script tests")
         self.assertLess(install_index, launcher_index)
@@ -214,10 +266,10 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
     def test_cache_key_includes_manifest_and_lockfile_and_toolchain(self):
         """The SwiftPM cache key must include Package.swift, Package.resolved,
         and a toolchain identity component."""
-        job = self.jobs["desktop-swift-tests"]
-        self.assertIn("uses: actions/cache", job, "desktop-swift-tests must have a cache step")
-        key_match = re.search(r"key:\s*([^\n]+)", job)
-        self.assertIsNotNone(key_match, "desktop-swift cache step must declare a key")
+        job = self.jobs["desktop-swift-verify"]
+        self.assertIn("uses: actions/cache", job, "desktop-swift-verify must have a cache step")
+        key_match = re.search(r"key:\s*([^\n]*desktop-swift-build[^\n]*)", job)
+        self.assertIsNotNone(key_match, "desktop-swift build cache step must declare a key")
         key = key_match.group(1)
         # Toolchain identity in the key prefix prevents a tool change from
         # silently reusing a stale cache built with a different compiler.
@@ -238,16 +290,15 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             key,
             "cache key must include Package.resolved hashFiles",
         )
-        static_job = self.jobs["desktop-swift-static"]
-        static_key = re.search(r"key:\s*([^\n]+)", static_job).group(1)
+        static_key = re.search(r"key:\s*([^\n]*desktop-swift-tools[^\n]*)", job).group(1)
         self.assertIn("swift-format-wrapper.sh", static_key)
         self.assertIn("swiftlint-wrapper.sh", static_key)
-        self.assertIn("~/.cache/omi-swift-format", static_job)
-        self.assertIn("~/.cache/omi-swiftlint", static_job)
+        self.assertIn("~/.cache/omi-swift-format", job)
+        self.assertIn("~/.cache/omi-swiftlint", job)
 
     def test_cache_saves_completed_build_state_after_a_test_failure(self):
         """A retry should reuse SwiftPM's validated incremental build state."""
-        job = self.jobs["desktop-swift-tests"]
+        job = self.jobs["desktop-swift-verify"]
         self.assertIn("id: swiftpm-cache", job)
         self.assertIn("uses: actions/cache/restore@v6", job)
         self.assertIn("uses: actions/cache/save@v6", job)
@@ -282,13 +333,21 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
     def test_manifest_checks_use_the_changed_diff_base_on_pushes(self):
         """Pushes must lint the just-pushed diff, not checkout's origin/main HEAD."""
         changes = self.jobs["changes"]
-        job = self.jobs["desktop-swift-static"]
+        job = self.jobs["desktop-swift-verify"]
         self.assertIn('echo "diff_base=$DIFF_BASE" >> "$GITHUB_OUTPUT"', changes)
         self.assertIn(
             '--base "${{ needs.changes.outputs.diff_base }}"',
             job,
             "manifest checks must use the pushed-before SHA on main pushes and the PR base on pull requests",
         )
+
+    def test_pr_changelog_metadata_is_owned_by_the_canonical_preflight(self):
+        """#10501 run 30121300487: the macOS lane has no live PR label metadata."""
+        job = self.jobs["desktop-swift-verify"]
+
+        self.assertIn('if [ "${{ github.event_name }}" = "pull_request" ]; then', job)
+        self.assertIn("MANIFEST_ARGS+=(--skip-changelog)", job)
+        self.assertIn('"${MANIFEST_ARGS[@]}"', job)
 
     def test_xcode_version_probe_does_not_close_its_pipe_early(self):
         """head(1) aborts Xcode 16.4 under pipefail; sed reads the full output."""
@@ -303,7 +362,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         """The workflow must not retain a toolchain setup while bypassing the shared runner."""
         wf_text = WORKFLOW_PATH.read_text(encoding="utf-8")
         tampered = wf_text.replace("run-swift-ci.sh --test", "swift-test-suites.sh", 1)
-        combined = _job_text(tampered, "desktop-swift-tests")
+        combined = _job_text(tampered, "desktop-swift-verify")
         self.assertNotIn("run-swift-ci.sh --test", combined)
 
     def test_adversarial_cache_key_weakening_detected(self):
@@ -313,7 +372,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             "desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}",
             "desktop-swift-${{ hashFiles('desktop/macos/Desktop/Package.swift') }}",
         )
-        job = _job_text(tampered, "desktop-swift-tests")
+        job = _job_text(tampered, "desktop-swift-verify")
         key = re.search(r"key:\s*([^\n]+)", job).group(1)
         self.assertNotIn("Package.resolved", key)
 
