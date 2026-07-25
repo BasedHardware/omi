@@ -5,7 +5,7 @@
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3621,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4467,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3311,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": 2789,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": 2948,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5718,
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1690
   },
@@ -15,7 +15,7 @@
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": "SearchableDropdown category filter plus extracted filter helpers for regression coverage.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": "Home ask bar now auto-grows as a multi-line TextField so long messages wrap instead of scrolling off-screen (+14 lines over the prior SB-redesign home/chat layout); a component split is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": "Bridge memory search now awaits the active initial or pagination projection before refreshing, preventing an immediate post-navigation marker search from using stale lifecycle capability state; merged with the rollout-gated Canonical Atlas inline entry point, which replaces the legacy Brain Map card main removed from this list.",
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": "Adds CanonicalMemoryAtlasTabView, the header-less hub-tab presentation of the atlas; the Memory hub already owns navigation chrome, so the surface renders full-bleed rather than stacking the page's own back/title bar under the hub bar. The private atlas surface and logger keep it in this file.",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": "Adds CanonicalMemoryAtlasTabView (header-less hub-tab presentation), the single-active-type layout and small-atlas label/mark policies that keep a sparse atlas legible, and a deterministic single-type export fixture for that case. The private atlas surface and logger keep all of it in this file; splitting the surface from the layout engine is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": "Suggested-task loading feedback is now overlaid outside the list flow so an initial fetch cannot shift the task rows; a component split is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": "SB redesign: adds the hover-expand AppNavRail (icons\u2192labels) and the merged/simplified navigation (Memory, Insights) driving selectedIndex; a component split is tracked follow-up."
   },
