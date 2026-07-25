@@ -1,12 +1,13 @@
 use omi_product_emulator::core::{
     discover_bluetooth_targets, mcumgr_image, monitor_button_events, nrfutil_devices,
     nrfutil_program, probe_device, read_button_event, set_bluetooth_connection, ButtonEvent,
-    FirmwareImage, FlashSession,
+    FirmwareImage, FlashSession, PeripheralSimulator,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{
     env,
+    io::{self, BufRead},
     process::ExitCode,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -37,6 +38,58 @@ fn button_event(value: &str) -> Result<ButtonEvent, String> {
         "press" => Ok(ButtonEvent::Press),
         "release" => Ok(ButtonEvent::Release),
         _ => Err("button event must be single, double, long, press, or release".into()),
+    }
+}
+
+fn hex_packet(value: &str) -> Result<Vec<u8>, String> {
+    if value.is_empty() || !value.len().is_multiple_of(2) {
+        return Err("audio packet must contain an even number of hexadecimal digits".into());
+    }
+    value
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| {
+            let pair = std::str::from_utf8(pair).map_err(|error| error.to_string())?;
+            u8::from_str_radix(pair, 16)
+                .map_err(|_| "audio packet contains invalid hexadecimal digits".into())
+        })
+        .collect()
+}
+
+fn simulate() -> Result<Value, String> {
+    let mut simulator = PeripheralSimulator::start()?;
+    output(json!({
+        "state": "running",
+        "input": ["button single|double|long|press|release", "battery 0..100", "audio HEX", "status", "stop"]
+    }));
+    for line in io::stdin().lock().lines() {
+        let line = line.map_err(|error| error.to_string())?;
+        let parts = line.split_whitespace().collect::<Vec<_>>();
+        match parts.as_slice() {
+            ["button", event] => simulator.button(button_event(event)?)?,
+            ["battery", level] => simulator.battery(
+                level
+                    .parse::<u8>()
+                    .map_err(|_| "battery level must be between 0 and 100")?,
+            )?,
+            ["audio", packet] => simulator.audio(&hex_packet(packet)?)?,
+            ["status"] => {
+                let (powered, pressed, battery) = simulator.status();
+                output(
+                    json!({"state": "running", "powered": powered, "pressed": pressed, "battery": battery}),
+                );
+            }
+            ["stop"] => break,
+            [] => continue,
+            _ => {
+                return Err("simulate input must be button, battery, audio, status, or stop".into())
+            }
+        }
+    }
+    if simulator.wait()? {
+        Ok(json!({"state": "stopped"}))
+    } else {
+        Err("CoreBluetooth peripheral exited unsuccessfully".into())
     }
 }
 
@@ -129,8 +182,9 @@ fn run(args: &[String]) -> Result<Value, String> {
                 }
             }
         }
+        "simulate" => simulate(),
         _ => Err(
-            "command must be scan, connect, disconnect, status, probe, button, firmware, flash, nrfutil, or mcumgr"
+            "command must be scan, connect, disconnect, status, probe, button, firmware, flash, nrfutil, mcumgr, or simulate"
                 .into(),
         ),
     }
@@ -177,5 +231,13 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(result["packet"], json!([4, 0, 0, 0, 0, 0, 0, 0]));
+    }
+
+    #[test]
+    fn parses_audio_fixture_packets() {
+        assert_eq!(hex_packet("00ff10").unwrap(), [0, 255, 16]);
+        assert!(hex_packet("").is_err());
+        assert!(hex_packet("0").is_err());
+        assert!(hex_packet("zz").is_err());
     }
 }

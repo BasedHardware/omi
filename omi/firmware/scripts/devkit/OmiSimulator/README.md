@@ -4,6 +4,20 @@ Simulator of BasedHardware Omi device.
 
 The primary emulator is a Rust-owned Crepuscularity/GPUI macOS test bench. It discovers the Bluetooth targets known to macOS, exposes every product type supported by the app, and marks capabilities unavailable unless a matching contract exists in this repository.
 
+The CLI can also advertise an app-connectable Omi peripheral through macOS CoreBluetooth. Rust owns the profile, state, and packets; the Swift process only publishes the configured GATT database and notifications.
+
+```bash
+cargo run --bin omi-product-cli -- simulate
+button press
+button release
+battery 42
+audio 01020304
+status
+stop
+```
+
+The process advertises the production Omi audio and button services and exposes readable battery, model, firmware, hardware, and manufacturer characteristics. Audio input is hexadecimal fixture bytes and uses the production audio notification characteristic.
+
 ```sh
 cargo run
 cargo test

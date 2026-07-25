@@ -2,6 +2,19 @@
 
 use serde::Serialize;
 
+pub const OMI_SERVICE_UUID: &str = "19b10000-e8f2-537e-4f6c-d104768a1214";
+pub const AUDIO_DATA_UUID: &str = "19b10001-e8f2-537e-4f6c-d104768a1214";
+pub const AUDIO_CODEC_UUID: &str = "19b10002-e8f2-537e-4f6c-d104768a1214";
+pub const BUTTON_SERVICE_UUID: &str = "23ba7924-0000-1000-7450-346eac492e92";
+pub const BUTTON_TRIGGER_UUID: &str = "23ba7925-0000-1000-7450-346eac492e92";
+pub const BATTERY_SERVICE_UUID: &str = "0000180f-0000-1000-8000-00805f9b34fb";
+pub const BATTERY_LEVEL_UUID: &str = "00002a19-0000-1000-8000-00805f9b34fb";
+pub const DEVICE_INFO_SERVICE_UUID: &str = "0000180a-0000-1000-8000-00805f9b34fb";
+pub const MODEL_NUMBER_UUID: &str = "00002a24-0000-1000-8000-00805f9b34fb";
+pub const FIRMWARE_REVISION_UUID: &str = "00002a26-0000-1000-8000-00805f9b34fb";
+pub const HARDWARE_REVISION_UUID: &str = "00002a27-0000-1000-8000-00805f9b34fb";
+pub const MANUFACTURER_NAME_UUID: &str = "00002a29-0000-1000-8000-00805f9b34fb";
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[repr(i32)]
@@ -41,6 +54,36 @@ impl ButtonEvent {
 pub struct ButtonState {
     pub pressed: bool,
     pub powered: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PeripheralState {
+    pub button: ButtonState,
+    pub battery: u8,
+}
+
+impl Default for PeripheralState {
+    fn default() -> Self {
+        Self {
+            button: ButtonState::default(),
+            battery: 100,
+        }
+    }
+}
+
+impl PeripheralState {
+    pub fn apply_button(&mut self, event: ButtonEvent) -> [u8; 8] {
+        self.button.apply(event);
+        event.packet()
+    }
+
+    pub fn set_battery(&mut self, level: u8) -> Result<[u8; 1], &'static str> {
+        if level > 100 {
+            return Err("battery level must be between 0 and 100");
+        }
+        self.battery = level;
+        Ok([level])
+    }
 }
 
 impl Default for ButtonState {
@@ -90,6 +133,17 @@ mod tests {
                 pressed: false,
                 powered: false
             }
+        );
+
+        let mut peripheral = PeripheralState::default();
+        assert_eq!(
+            peripheral.apply_button(ButtonEvent::Double),
+            [2, 0, 0, 0, 0, 0, 0, 0]
+        );
+        assert_eq!(peripheral.set_battery(42), Ok([42]));
+        assert_eq!(
+            peripheral.set_battery(101),
+            Err("battery level must be between 0 and 100")
         );
     }
 }

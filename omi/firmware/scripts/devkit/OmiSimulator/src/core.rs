@@ -4,12 +4,17 @@ use btleplug::{
 };
 use futures::StreamExt;
 pub use omi_firmware_core::ButtonEvent;
+use omi_firmware_core::{
+    PeripheralState, AUDIO_DATA_UUID, BATTERY_LEVEL_UUID, BATTERY_SERVICE_UUID,
+    BUTTON_SERVICE_UUID, BUTTON_TRIGGER_UUID, DEVICE_INFO_SERVICE_UUID, FIRMWARE_REVISION_UUID,
+    HARDWARE_REVISION_UUID, MANUFACTURER_NAME_UUID, MODEL_NUMBER_UUID, OMI_SERVICE_UUID,
+};
 use serde::Serialize;
 use std::{
     fs,
-    io::Read,
+    io::{Read, Write},
     path::{Path, PathBuf},
-    process::{Child, Command, Output, Stdio},
+    process::{Child, ChildStdin, Command, Output, Stdio},
     time::Duration,
 };
 
@@ -792,6 +797,198 @@ impl Drop for FlashSession {
     }
 }
 
+#[derive(Serialize)]
+struct PeripheralCharacteristic {
+    uuid: &'static str,
+    properties: &'static [&'static str],
+    value: Vec<u8>,
+}
+
+#[derive(Serialize)]
+struct PeripheralService {
+    uuid: &'static str,
+    primary: bool,
+    characteristics: Vec<PeripheralCharacteristic>,
+}
+
+#[derive(Serialize)]
+struct PeripheralConfig {
+    name: &'static str,
+    #[serde(rename = "advertisedServices")]
+    advertised_services: [&'static str; 2],
+    services: Vec<PeripheralService>,
+}
+
+pub struct PeripheralSimulator {
+    child: Child,
+    input: Option<ChildStdin>,
+    state: PeripheralState,
+}
+
+impl PeripheralSimulator {
+    pub fn start() -> Result<Self, String> {
+        if !cfg!(target_os = "macos") {
+            return Err("BLE peripheral simulation requires macOS CoreBluetooth".into());
+        }
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let source = manifest.join("native/macos/OmiPeripheral.swift");
+        let plist = manifest.join("native/macos/Info.plist");
+        let binary = manifest.join("target/omi-peripheral");
+        fs::create_dir_all(binary.parent().ok_or("invalid peripheral binary path")?)
+            .map_err(|error| error.to_string())?;
+        let status = Command::new("swiftc")
+            .arg(&source)
+            .args(["-o"])
+            .arg(&binary)
+            .args(["-framework", "CoreBluetooth", "-framework", "Foundation"])
+            .args(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT"])
+            .args(["-Xlinker", "__info_plist", "-Xlinker"])
+            .arg(&plist)
+            .status()
+            .map_err(|error| format!("could not run swiftc: {error}"))?;
+        if !status.success() {
+            return Err("swiftc could not build the CoreBluetooth peripheral".into());
+        }
+        let mut child = Command::new(binary)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .map_err(|error| format!("could not start CoreBluetooth peripheral: {error}"))?;
+        let mut input = child
+            .stdin
+            .take()
+            .ok_or("peripheral stdin is unavailable")?;
+        writeln!(
+            input,
+            "{}",
+            serde_json::to_string(&peripheral_config()).map_err(|error| error.to_string())?
+        )
+        .map_err(|error| error.to_string())?;
+        Ok(Self {
+            child,
+            input: Some(input),
+            state: PeripheralState::default(),
+        })
+    }
+
+    pub fn button(&mut self, event: ButtonEvent) -> Result<(), String> {
+        let packet = self.state.apply_button(event);
+        self.update(BUTTON_TRIGGER_UUID, &packet)
+    }
+
+    pub fn battery(&mut self, level: u8) -> Result<(), String> {
+        let packet = self.state.set_battery(level).map_err(str::to_owned)?;
+        self.update(BATTERY_LEVEL_UUID, &packet)
+    }
+
+    pub fn audio(&mut self, packet: &[u8]) -> Result<(), String> {
+        if packet.is_empty() {
+            return Err("audio packet cannot be empty".into());
+        }
+        self.update(AUDIO_DATA_UUID, packet)
+    }
+
+    pub fn status(&self) -> (bool, bool, u8) {
+        (
+            self.state.button.powered,
+            self.state.button.pressed,
+            self.state.battery,
+        )
+    }
+
+    pub fn wait(mut self) -> Result<bool, String> {
+        self.input.take();
+        self.child
+            .wait()
+            .map(|status| status.success())
+            .map_err(|error| error.to_string())
+    }
+
+    fn update(&mut self, uuid: &str, value: &[u8]) -> Result<(), String> {
+        writeln!(
+            self.input.as_mut().ok_or("peripheral input is closed")?,
+            "{}",
+            serde_json::json!({"uuid": uuid, "value": value})
+        )
+        .map_err(|error| error.to_string())
+    }
+}
+
+impl Drop for PeripheralSimulator {
+    fn drop(&mut self) {
+        if self.child.try_wait().ok().flatten().is_none() {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+}
+
+fn peripheral_config() -> PeripheralConfig {
+    PeripheralConfig {
+        name: "Omi Emulator",
+        advertised_services: [OMI_SERVICE_UUID, BUTTON_SERVICE_UUID],
+        services: vec![
+            PeripheralService {
+                uuid: OMI_SERVICE_UUID,
+                primary: true,
+                characteristics: vec![
+                    characteristic(AUDIO_DATA_UUID, &["notify"], Vec::new()),
+                    characteristic(AUDIO_CODEC_UUID, &["read"], vec![20]),
+                ],
+            },
+            PeripheralService {
+                uuid: BUTTON_SERVICE_UUID,
+                primary: true,
+                characteristics: vec![characteristic(
+                    BUTTON_TRIGGER_UUID,
+                    &["read", "notify"],
+                    ButtonEvent::Release.packet().to_vec(),
+                )],
+            },
+            PeripheralService {
+                uuid: BATTERY_SERVICE_UUID,
+                primary: true,
+                characteristics: vec![characteristic(
+                    BATTERY_LEVEL_UUID,
+                    &["read", "notify"],
+                    vec![100],
+                )],
+            },
+            PeripheralService {
+                uuid: DEVICE_INFO_SERVICE_UUID,
+                primary: true,
+                characteristics: vec![
+                    characteristic(MODEL_NUMBER_UUID, &["read"], b"Omi Emulator".to_vec()),
+                    characteristic(
+                        FIRMWARE_REVISION_UUID,
+                        &["read"],
+                        b"3.0.0-emulator".to_vec(),
+                    ),
+                    characteristic(HARDWARE_REVISION_UUID, &["read"], b"rust-macos".to_vec()),
+                    characteristic(
+                        MANUFACTURER_NAME_UUID,
+                        &["read"],
+                        b"Based Hardware".to_vec(),
+                    ),
+                ],
+            },
+        ],
+    }
+}
+
+fn characteristic(
+    uuid: &'static str,
+    properties: &'static [&'static str],
+    value: Vec<u8>,
+) -> PeripheralCharacteristic {
+    PeripheralCharacteristic {
+        uuid,
+        properties,
+        value,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -898,5 +1095,24 @@ mod tests {
         let file = fs::File::create(&unknown).unwrap();
         zip::ZipWriter::new(file).finish().unwrap();
         assert!(FirmwareImage::validate(unknown).is_err());
+    }
+
+    #[test]
+    fn peripheral_profile_matches_production_discovery_and_gatt_contracts() {
+        let config = serde_json::to_value(peripheral_config()).unwrap();
+        assert_eq!(config["advertisedServices"][0], OMI_SERVICE_UUID);
+        assert_eq!(config["advertisedServices"][1], BUTTON_SERVICE_UUID);
+        assert!(config["services"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|service| service["characteristics"].as_array().unwrap())
+            .any(|characteristic| characteristic["uuid"] == BATTERY_LEVEL_UUID));
+        assert!(config["services"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|service| service["characteristics"].as_array().unwrap())
+            .any(|characteristic| characteristic["uuid"] == BUTTON_TRIGGER_UUID));
     }
 }
