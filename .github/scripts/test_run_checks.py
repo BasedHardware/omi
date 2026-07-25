@@ -16,6 +16,7 @@ from collections import Counter
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 from run_checks import (
     VALID_PLATFORMS,
@@ -109,9 +110,7 @@ def non_self_running_reason(source: str) -> str | None:
             for cmp_ in getattr(node.test, "comparators", [])
         )
     ]
-    invoking_blocks = [
-        node for node in main_blocks if any(isinstance(inner, ast.Call) for inner in ast.walk(node))
-    ]
+    invoking_blocks = [node for node in main_blocks if any(isinstance(inner, ast.Call) for inner in ast.walk(node))]
     if not invoking_blocks:
         return "has no __main__ block invoking a test runner, so the interpreter runs no cases"
 
@@ -222,10 +221,7 @@ class ManifestContractTests(unittest.TestCase):
     def test_pytest_only_module_is_reported_as_non_self_running(self) -> None:
         """The guard above must fail on the real historical shape it exists to catch."""
         pytest_only = (
-            "from pathlib import Path\n"
-            "\n"
-            "def test_something(tmp_path: Path) -> None:\n"
-            "    assert True\n"
+            "from pathlib import Path\n" "\n" "def test_something(tmp_path: Path) -> None:\n" "    assert True\n"
         )
         self.assertIn("has no __main__", non_self_running_reason(pytest_only) or "")
 
@@ -259,9 +255,7 @@ class ManifestContractTests(unittest.TestCase):
             'if __name__ == "__main__":\n'
             "    unittest.main()\n"
         )
-        self.assertIn(
-            "no TestCase subclass", non_self_running_reason(unittest_main_without_test_case) or ""
-        )
+        self.assertIn("no TestCase subclass", non_self_running_reason(unittest_main_without_test_case) or "")
 
         # Script-style: a module whose __main__ runs its own assertions is fine.
         script_style = (
@@ -567,6 +561,18 @@ class PlatformTests(unittest.TestCase):
 
 
 class DeferredMarkerTests(unittest.TestCase):
+    def test_git_content_reads_are_utf8(self) -> None:
+        module = load_deferred_marker_module()
+        completed = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+        with patch.object(module.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(module.added_lines("origin/main", "fixture.txt"), [])
+            self.assertEqual(module.marker_counts_at_base("origin/main", "fixture.txt"), Counter())
+
+        content_reads = [call for call in run.call_args_list if call.args[0][1] in {"diff", "show"}]
+        self.assertEqual(len(content_reads), 2)
+        for call in content_reads:
+            self.assertEqual(call.kwargs.get("encoding"), "utf-8")
+
     def test_new_marker_requires_tracking_issue(self) -> None:
         module = load_deferred_marker_module()
         marker = "TO" + "DO"
