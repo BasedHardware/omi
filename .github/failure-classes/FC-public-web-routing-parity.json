@@ -4,7 +4,7 @@
   "violated_contract": "Compatibility projections of public-web routing must make the same routing decision as the authoritative gateway policy.",
   "canonical_prevention": "Keep the Rust gateway authoritative and run every compatibility projection against one shared behavioral routing corpus.",
   "canonical_prevention_artifact": [
-    "desktop/macos/agent/contracts/v1/public-web-routing-contract.fixture.json"
+    "desktop/macos/Backend-Rust/fixtures/public-web-routing-contract.fixture.json"
   ],
   "evidence_prs": [10422],
   "scope_hints": [
