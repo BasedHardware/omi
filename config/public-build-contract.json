@@ -32,13 +32,14 @@
           "SHOPIFY_STORE": "WEB_ADMIN_SHOPIFY_STORE:latest",
           "SHOPIFY_ACCESS_TOKEN": "WEB_ADMIN_SHOPIFY_ACCESS_TOKEN:latest",
           "MIXPANEL_SECRET": "WEB_ADMIN_MIXPANEL_SECRET:latest",
-          "OPENAI_API_KEY": "WEB_ADMIN_OPENAI_API_KEY:latest",
+          "OMI_LLM_GATEWAY_SERVICE_TOKEN": "OMI_LLM_GATEWAY_SERVICE_TOKEN:latest",
           "POSTHOG_PERSONAL_API_KEY": "WEB_ADMIN_POSTHOG_PERSONAL_API_KEY:latest",
           "POSTHOG_PROJECT_ID": "WEB_ADMIN_POSTHOG_PROJECT_ID:latest",
           "POSTHOG_HOST": "WEB_ADMIN_POSTHOG_HOST:latest",
           "GOAFFPRO_ACCESS_TOKEN": "GOAFFPRO_ACCESS_TOKEN:latest",
           "CRON_SECRET": "WEB_ADMIN_CRON_SECRET:latest"
-        }
+        },
+        "remove_runtime_secrets": ["ANTHROPIC_API_KEY", "CLAUDE_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"]
       },
       "canary_component": "web/admin/components/public-build-canary.tsx",
       "inputs": [
@@ -131,7 +132,7 @@
           "RAPIDAPI_KEY": "NEXT_PUBLIC_RAPIDAPI_KEY:latest",
           "RAPIDAPI_HOST": "NEXT_PUBLIC_RAPIDAPI_HOST:latest",
           "LINKEDIN_API_KEY": "NEXT_PUBLIC_LINKEDIN_API_KEY:latest",
-          "OPENROUTER_API_KEY": "OPENROUTER_API_KEY:latest"
+          "OMI_LLM_GATEWAY_SERVICE_TOKEN": "OMI_LLM_GATEWAY_SERVICE_TOKEN:latest"
         },
         "preserve_runtime_secrets": [
           "REDIS_HOST",
@@ -151,7 +152,10 @@
           "NEXT_PUBLIC_RAPIDAPI_KEY",
           "NEXT_PUBLIC_RAPIDAPI_HOST",
           "NEXT_PUBLIC_LINKEDIN_API_KEY",
-          "CLAUDE_API_KEY"
+          "ANTHROPIC_API_KEY",
+          "CLAUDE_API_KEY",
+          "OPENAI_API_KEY",
+          "OPENROUTER_API_KEY"
         ]
       },
       "canary_component": "web/personas-open-source/src/components/public-build-canary.tsx",

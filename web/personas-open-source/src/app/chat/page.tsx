@@ -35,6 +35,18 @@ import { PreorderBanner } from '@/components/shared/PreorderBanner';
 import { Mixpanel } from '@/lib/mixpanel';
 
 function ChatContent() {
+  const chatRequestHeaders = async () => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const user = auth.currentUser;
+    if (user && !user.isAnonymous) {
+      headers.Authorization = `Bearer ${await user.getIdToken()}`;
+    }
+    return headers;
+  };
+
+  const streamText = (parsed: any): string =>
+    parsed?.text ?? parsed?.choices?.[0]?.delta?.content ?? '';
+
   useEffect(() => {
     // Identify the user first
     Mixpanel.identify();
@@ -200,7 +212,7 @@ function ChatContent() {
       try {
         const response = await fetch('/api/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await chatRequestHeaders(),
           body: JSON.stringify({
             message:
               'lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.',
@@ -232,8 +244,9 @@ function ChatContent() {
 
               try {
                 const parsed = JSON.parse(data);
-                if (parsed.text) {
-                  accumulatedText += parsed.text;
+                const content = streamText(parsed);
+                if (content) {
+                  accumulatedText += content;
                   setTypingMessage((prev) => ({
                     id: prev?.id || Date.now(),
                     text: accumulatedText,
@@ -323,7 +336,7 @@ function ChatContent() {
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await chatRequestHeaders(),
         body: JSON.stringify({
           message: inputText,
           botId: botId,
@@ -357,8 +370,9 @@ function ChatContent() {
 
             try {
               const parsed = JSON.parse(data);
-              if (parsed.text) {
-                accumulatedText += parsed.text;
+              const content = streamText(parsed);
+              if (content) {
+                accumulatedText += content;
                 setTypingMessage((prev) => ({
                   id: prev?.id || Date.now(),
                   text: accumulatedText,

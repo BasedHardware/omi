@@ -9,12 +9,10 @@ import base64
 import httpx
 from typing import Any, Dict, Optional, cast
 from pydantic import BaseModel
-from openai import OpenAI
-
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.executors import llm_executor, run_blocking
 from utils.llm.clients import get_llm
-from utils.llm.gateway_client import generate_image_via_gateway, should_route_features_through_gateway
+from utils.llm.gateway_client import generate_image_via_gateway
 
 
 def _content_str(response: Any) -> str:
@@ -154,7 +152,7 @@ async def generate_app_from_prompt(user_prompt: str) -> GeneratedAppData:
 
 async def generate_app_icon(app_name: str, app_description: str, category: str) -> bytes:
     """
-    Generate an app icon using OpenAI's DALL-E.
+    Generate an app icon through the internal LLM gateway.
 
     Args:
         app_name: Name of the app
@@ -180,13 +178,6 @@ Design requirements:
     - Vibrant but not overwhelming colors
     - Style: Similar to modern iOS/Android app icons"""
 
-    if not should_route_features_through_gateway():
-        return await run_blocking(
-            llm_executor,
-            _generate_app_icon_via_openai,
-            icon_prompt,
-        )
-
     response = await run_blocking(
         llm_executor,
         generate_image_via_gateway,
@@ -200,15 +191,6 @@ Design requirements:
 
     # Get the base64 image data and decode it
     image_data = cast("list[dict[str, Any]]", response["data"])[0]["b64_json"]
-    return base64.b64decode(cast(str, image_data))
-
-
-def _generate_app_icon_via_openai(icon_prompt: str) -> bytes:
-    client = OpenAI()
-    response = client.images.generate(
-        model="dall-e-3", prompt=icon_prompt, size="1024x1024", quality="standard", n=1, response_format="b64_json"
-    )
-    image_data = cast("list[Any]", response.data)[0].b64_json
     return base64.b64decode(cast(str, image_data))
 
 
