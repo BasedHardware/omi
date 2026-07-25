@@ -126,9 +126,9 @@ def github_check_status(repository: str, sha: str, check_name: str) -> tuple[str
         [
             "gh",
             "api",
-            f"repos/{repository}/commits/{sha}/check-runs?filter=latest",
-            "--jq",
-            f'.check_runs[] | select(.name=="{check_name}") | [.status, (.conclusion // "")] | @tsv',
+            "--paginate",
+            "--slurp",
+            f"repos/{repository}/commits/{sha}/check-runs?filter=all&per_page=100",
         ],
         text=True,
         stdout=subprocess.PIPE,
@@ -138,13 +138,49 @@ def github_check_status(repository: str, sha: str, check_name: str) -> tuple[str
         error = result.stderr.strip() or result.stdout.strip() or "unknown gh api error"
         return None, None, error
 
-    output = result.stdout.strip()
-    first = next((line for line in output.splitlines() if line.strip()), "")
-    if not first:
+    try:
+        pages = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None, None, "gh api returned invalid check-runs JSON"
+
+    if not isinstance(pages, list):
+        return None, None, "gh api returned invalid check-runs pages"
+
+    matching_runs: list[dict[str, object]] = []
+    for page in pages:
+        if not isinstance(page, dict):
+            return None, None, "gh api returned an invalid check-runs page"
+        check_runs = page.get("check_runs")
+        if not isinstance(check_runs, list):
+            return None, None, "gh api returned an invalid check-runs payload"
+        for check_run in check_runs:
+            if not isinstance(check_run, dict):
+                return None, None, "gh api returned an invalid check run"
+            if check_run.get("name") == check_name:
+                matching_runs.append(check_run)
+
+    if not matching_runs:
         return None, None, None
-    parts = first.split("\t", 1)
-    status = parts[0] if parts else None
-    conclusion = parts[1] if len(parts) > 1 else None
+
+    # `filter=latest` can omit an exact-SHA check run. Request every page and
+    # choose the newest matching run ourselves so a later rerun cannot be
+    # hidden by the API filter. `started_at` is primary so a newer in-progress
+    # rerun is never masked by an older completed success; the remaining fields
+    # make ordering deterministic when timestamps collide or are unavailable.
+    latest = max(
+        matching_runs,
+        key=lambda check_run: (
+            str(check_run.get("started_at") or ""),
+            str(check_run.get("completed_at") or ""),
+            str(check_run.get("id") or ""),
+        ),
+    )
+    status = latest.get("status")
+    conclusion = latest.get("conclusion")
+    if status is not None and not isinstance(status, str):
+        return None, None, "gh api returned a check run with an invalid status"
+    if conclusion is not None and not isinstance(conclusion, str):
+        return None, None, "gh api returned a check run with an invalid conclusion"
     return status, conclusion, None
 
 
@@ -382,7 +418,9 @@ def main() -> int:
     latest_change_age = latest_change_age_seconds(changes)
     if latest_change_age is None:
         set_output("should_release", "false")
-        set_output("reason", "Waiting for desktop release quiet window: could not determine latest releasable change age.")
+        set_output(
+            "reason", "Waiting for desktop release quiet window: could not determine latest releasable change age."
+        )
         return 0
     if latest_change_age < AUTO_RELEASE_QUIET_SECONDS:
         wait_seconds = AUTO_RELEASE_QUIET_SECONDS - latest_change_age
