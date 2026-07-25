@@ -338,6 +338,50 @@ def test_mobile_codemagic_trigger_guard_rejects_github_dispatcher(tmp_path, monk
     assert any("must not be dispatched through GitHub Actions" in error for error in errors), errors
 
 
+def _desktop_candidate_trigger_guard_root(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
+    codemagic = tmp_path / "codemagic.yaml"
+    candidate = tmp_path / ".github/workflows/desktop_auto_release.yml"
+    preview = tmp_path / ".github/workflows/desktop_publish_preview.yml"
+    candidate.parent.mkdir(parents=True)
+    shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
+    shutil.copy2(REPO_ROOT / ".github/workflows/desktop_auto_release.yml", candidate)
+    shutil.copy2(REPO_ROOT / ".github/workflows/desktop_publish_preview.yml", preview)
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+    return codemagic, candidate
+
+
+def test_desktop_candidate_trigger_guard_keeps_native_tag_lane_and_preview_exception(tmp_path, monkeypatch):
+    _desktop_candidate_trigger_guard_root(tmp_path, monkeypatch)
+
+    assert GUARDS.check_desktop_candidate_trigger_authority() == []
+
+
+def test_desktop_candidate_trigger_guard_rejects_non_tag_normal_trigger(tmp_path, monkeypatch):
+    codemagic, _ = _desktop_candidate_trigger_guard_root(tmp_path, monkeypatch)
+    _mutate(
+        codemagic,
+        "    triggering:\n      events:\n        - tag\n      tag_patterns:\n        - pattern: \"v*-macos\"\n          include: true\n",
+        "    triggering:\n      events:\n        - push\n      branch_patterns:\n        - pattern: main\n          include: true\n",
+    )
+
+    errors = GUARDS.check_desktop_candidate_trigger_authority()
+
+    assert any("must natively trigger on v*-macos tags" in error for error in errors), errors
+
+
+def test_desktop_candidate_trigger_guard_rejects_direct_build_api_for_normal_lane(tmp_path, monkeypatch):
+    _, candidate = _desktop_candidate_trigger_guard_root(tmp_path, monkeypatch)
+    candidate.write_text(
+        candidate.read_text(encoding="utf-8")
+        + "\n# forbidden normal-candidate dispatcher\n# https://api.codemagic.io/builds\n",
+        encoding="utf-8",
+    )
+
+    errors = GUARDS.check_desktop_candidate_trigger_authority()
+
+    assert any("must not start Codemagic with a direct builds API POST" in error for error in errors), errors
+
+
 @pytest.mark.parametrize(
     ("old", "new"),
     (
