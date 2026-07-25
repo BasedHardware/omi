@@ -46,6 +46,35 @@ def test_closest_live_conversation_wins_by_boundary_distance():
     assert select_closest_conversation([], target, target + 60) is None
 
 
+def test_combined_boundary_distance_beats_lopsided_single_axis_match():
+    """Regression: a candidate close on ONE boundary but wildly off on the other must
+    not block a later candidate that's moderately close on BOTH boundaries.
+
+    The buggy selector tracked `min(diff1, diff2)` as a single running threshold and
+    updated whenever EITHER half improved (`diff1 < min_diff or diff2 < min_diff`). A
+    conversation matching one boundary almost exactly but the other by nearly a million
+    seconds could collapse that threshold down to (near) zero, causing a later, truly
+    closer-on-both-boundaries conversation to lose because neither of its (larger, but
+    individually still small) diffs beat the artificially tiny threshold.
+    """
+    target_start = int(_BASE.timestamp())
+    target_end = target_start + 60
+
+    lopsided = _conversation('lopsided')
+    # started_at ends up ~1,000,000s off target_start, finished_at lands within 1s of target_end.
+    lopsided['started_at'] = _BASE - timedelta(seconds=1_000_000)
+    lopsided['finished_at'] = _BASE + timedelta(seconds=61)
+
+    # Moderate distance on both boundaries (2s and 50s) - the objectively better overall
+    # match, but the buggy version skipped it because 50 > lopsided's collapsed min_diff (1).
+    better_overall = _conversation('better_overall', offset_seconds=2)
+    better_overall['finished_at'] = better_overall['started_at'] + timedelta(seconds=110)
+
+    rows = [lopsided, better_overall]
+    chosen = select_closest_conversation(rows, target_start, target_end)
+    assert chosen is not None and chosen['id'] == 'better_overall'
+
+
 def test_eligible_merge_target_predicate():
     assert eligible_merge_target(_conversation('live')) is True
     assert eligible_merge_target(_conversation('gone', deleted=True)) is False

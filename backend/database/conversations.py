@@ -1551,9 +1551,18 @@ def eligible_merge_target(conversation: Optional[dict]) -> bool:
 
 
 def select_closest_conversation(conversations, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
-    """Pure closest-by-boundary choice among eligible merge targets (#10033)."""
+    """Pure closest-by-boundary choice among eligible merge targets (#10033).
+
+    Ranks candidates by combined boundary displacement (|start diff| + |end diff|), the
+    natural single-number "closeness" for a start/end pair. The previous `diff1 <
+    min_diff or diff2 < min_diff` version updated on EITHER half improving and then
+    collapsed the running threshold to `min(diff1, diff2)` regardless of which half
+    triggered the update — so a candidate with a huge start diff but a tiny end diff
+    could set an artificially small threshold that caused a later, genuinely closer
+    candidate (moderate on both boundaries) to be skipped.
+    """
     closest_conversation = None
-    min_diff = float('inf')
+    min_combined_diff = float('inf')
     for conversation in conversations:
         if not eligible_merge_target(conversation):
             continue
@@ -1561,8 +1570,9 @@ def select_closest_conversation(conversations, start_timestamp: int, end_timesta
         conversation_end_timestamp = conversation['finished_at'].timestamp()
         diff1 = abs(conversation_start_timestamp - start_timestamp)
         diff2 = abs(conversation_end_timestamp - end_timestamp)
-        if diff1 < min_diff or diff2 < min_diff:
-            min_diff = min(diff1, diff2)
+        combined_diff = diff1 + diff2
+        if combined_diff < min_combined_diff:
+            min_combined_diff = combined_diff
             closest_conversation = conversation
     return closest_conversation
 

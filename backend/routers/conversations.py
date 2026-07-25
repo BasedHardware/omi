@@ -789,10 +789,15 @@ def set_action_item_status(
         uid, conversation_id, [action_item.model_dump() for action_item in action_items]
     )
 
-    # Mirror status updates to the standalone action_items collection
+    # Mirror status updates to the standalone action_items collection. Standalone items
+    # aren't linked back to their embedded-list index, only their description text, so
+    # when two action items in the same conversation share identical text this can't
+    # disambiguate which standalone doc corresponds to which embedded item. Consuming
+    # one id per description match (instead of applying to every id sharing that text)
+    # keeps each request touching at most as many standalone items as embedded items it
+    # targeted, instead of fanning a single completion out to every item with that text.
     try:
         existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
-        # Map descriptions to item IDs for quick lookup
         description_to_ids = {}
         for ai in existing_items:
             desc = ai.get('description')
@@ -806,9 +811,11 @@ def set_action_item_status(
             action_item = action_items[action_item_idx]
             new_completed_status = data.values[i]
 
-            ids = description_to_ids.get(action_item.description, [])
-            for action_item_id in ids:
-                action_items_db.mark_action_item_completed(uid, action_item_id, bool(new_completed_status))
+            ids = description_to_ids.get(action_item.description)
+            if not ids:
+                continue
+            action_item_id = ids.pop(0)
+            action_items_db.mark_action_item_completed(uid, action_item_id, bool(new_completed_status))
     except Exception as e:
         # Don't break conversation route if mirrored update fails
         logger.error(f'Failed to mirror action item status update: {e}')
@@ -841,12 +848,16 @@ def update_action_item_description(
         uid, conversation_id, [action_item.model_dump() for action_item in action_items]
     )
 
-    # Mirror description update in the standalone action_items collection
+    # Mirror description update in the standalone action_items collection. Only one
+    # embedded item was renamed above (the loop over action_items breaks on first
+    # match), so only rename one standalone item too - otherwise every other standalone
+    # item that happens to share the old description gets silently renamed alongside it.
     try:
         existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         for ai in existing_items:
             if ai.get('description') == data.old_description:
                 action_items_db.update_action_item(uid, ai['id'], {'description': data.description})
+                break
     except Exception as e:
         logger.error(f'Failed to mirror action item description update: {e}')
     return {"status": "Ok"}
@@ -861,17 +872,26 @@ def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
     action_items = conversation.structured.action_items
-    updated_action_items = [item for item in action_items if not (item.description == data.description)]
+    # The request only identifies the item by description text (no id/index), so a list
+    # comprehension filtering out every item with that text deletes ALL of them when two
+    # action items in this conversation happen to share identical wording. Delete only
+    # the first match instead, matching the "delete one action item" intent.
+    delete_index = next((i for i, item in enumerate(action_items) if item.description == data.description), None)
+    updated_action_items = (
+        action_items if delete_index is None else action_items[:delete_index] + action_items[delete_index + 1 :]
+    )
     conversations_db.update_conversation_action_items(
         uid, conversation_id, [action_item.model_dump() for action_item in updated_action_items]
     )
 
-    # Mirror deletion in the standalone action_items collection
+    # Mirror deletion in the standalone action_items collection - same one-match-only
+    # reasoning as above, so we don't delete other items sharing this description.
     try:
         existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         for ai in existing_items:
             if ai.get('description') == data.description:
                 action_items_db.delete_action_item(uid, ai['id'])
+                break
     except Exception as e:
         logger.error(f'Failed to mirror action item deletion: {e}')
     return {"status": "Ok"}
@@ -959,7 +979,7 @@ def set_assignee_conversation_segment(
     response_model=Conversation,
     tags=['conversations'],
 )
-def set_assignee_conversation_segment(
+def assign_conversation_segments_by_speaker(
     conversation_id: str,
     speaker_id: int,
     assign_type: str,
@@ -986,7 +1006,7 @@ def set_assignee_conversation_segment(
     :return: The updated conversation.
     """
     logger.info(
-        f'set_assignee_conversation_segment {conversation_id} {speaker_id} {assign_type} {value} {use_for_speech_training} {uid}'
+        f'assign_conversation_segments_by_speaker {conversation_id} {speaker_id} {assign_type} {value} {use_for_speech_training} {uid}'
     )
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)

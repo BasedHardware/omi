@@ -122,3 +122,23 @@ def test_mixed_batch_rekeys_only_enhanced(enc):
     written = _written(batch)
     assert enc.decrypt(written[0]["content"], "newuid") == "alpha"
     assert written[1]["content"] == "beta"
+
+
+def test_more_than_500_memories_are_chunked_across_batches(enc):
+    """Regression: a single unchunked batch.commit() raises past Firestore's 500-writes-
+    per-batch limit, silently migrating zero memories for any user with >500 of them,
+    despite having read and prepared all of them. migrate_memories must chunk writes at
+    499 per batch.commit(), the same limit delete_all_memories/delete_memories_batch/
+    unlock_all_memories already respect in this module.
+    """
+    src = [
+        {"id": f"m{i}", "content": "plain text", "data_protection_level": "standard"} for i in range(600)
+    ]
+    db, batch = _make_db(src)
+    count = memories.migrate_memories("prevuid", "newuid", firestore_client=db)
+
+    assert count == 600
+    assert len(_written(batch)) == 600
+    # 600 writes at 499-per-batch must commit twice: once at the 499th write, once for
+    # the trailing 101. A single unchunked commit (commit_count == 1) is the bug.
+    assert batch.commit.call_count == 2
