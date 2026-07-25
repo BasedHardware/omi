@@ -23,6 +23,10 @@ EXEMPT_DESKTOP_PATHS = {
     # Pre-tag readiness gate script: internal release infrastructure (runs on the
     # trusted M1 before tagging), no user-facing app surface.
     "desktop/macos/scripts/pre-tag-readiness.sh",
+    # CI-only flow-validation script and its shared action-source inventory do
+    # not alter the desktop application a user receives.
+    "desktop/macos/scripts/desktop-flow-lint.py",
+    "desktop/macos/scripts/desktop_flow_contract.py",
 }
 # Server-side Rust backend changes are internal reliability work, not user-facing app notes.
 # Test and release-infra changes are likewise never user-facing app notes; the

@@ -1,10 +1,11 @@
 {
   "files": {
     "backend/database/conversations.py": 1616,
-    "backend/database/users.py": 1943
+    "backend/database/users.py": 1992
   },
   "raise_justifications": {
-    "backend/database/conversations.py": "Public shared-chat uses the existing conversation storage format for bounded, safe transcript decoding; extraction would duplicate crypto/storage invariants. +15 for the shared is_soft_deleted tombstone-eligibility predicate that eligible_merge_target and the reprocess guard converge on (#10119/#10262)."
+    "backend/database/conversations.py": "Public shared-chat uses the existing conversation storage format for bounded, safe transcript decoding; extraction would duplicate crypto/storage invariants. +15 for the shared is_soft_deleted tombstone-eligibility predicate that eligible_merge_target and the reprocess guard converge on (#10119/#10262).",
+    "backend/database/users.py": "Account-deletion marker fencing and recursive missing-root cleanup must remain beside the existing deletion transaction and collection traversal; extracting them would duplicate the durable lifecycle authority. +33 for the queue-before-auth recovery guard and +16 for the job-id-fenced repeat-dispatch transaction."
   },
   "threshold": 1500
 }
