@@ -1,45 +1,41 @@
 version: 2
 name: tasks
-tier: manual
-description: Tasks tab — search, Today/No Deadline sections, keyboard toolbar (v0.12.119+ redesign)
-app: com.omi.computer-macos
+tier: 2
+description: Tasks tab — navigate, snapshot tasks list (v0.12.119+ redesign)
+app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksSection.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
 preconditions:
-  - auth_ready
+  - automation_bridge_ready
 
 steps:
   - id: S1
-    name: Navigate to Tasks tab
-    do: "Click the Tasks button in the top nav bar (agent-swift find text 'Tasks' click). Verify Tasks page loads with search bar ('Search tasks...') and task list."
-    expect:
-      text_visible:
-        - Tasks
+    name: Navigate to Tasks
+    bridge.navigate:
+      target: tasks
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 4
 
   - id: S2
-    name: Verify Today section
-    do: "Verify the 'Today' section header is visible with task items listed below. Each task should have a checkbox circle and task text."
+    name: Tasks snapshot
+    bridge.action:
+      name: tasks_snapshot
     expect:
-      text_visible:
-        - Today
+      ok: true
 
   - id: S3
-    name: Verify No Deadline section
-    do: "Scroll down if needed to find the 'No Deadline' section. Verify it exists with a count badge and task items."
-    expect:
-      text_visible:
-        - No Deadline
+    name: Return to Home
+    bridge.navigate:
+      target: dashboard
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 0
 
   - id: S4
-    name: Verify keyboard toolbar
-    do: "Verify the keyboard toolbar at the bottom shows navigation and editing controls: Navigate, New, Delete, Indent, Outdent."
-    expect:
-      interactive_count: { min: 3 }
-
-  - id: S5
-    name: Verify search and filter controls
-    do: "Verify the search bar is present at the top. Check for filter/settings icons next to the search bar and the add (+) button."
-    expect:
-      interactive_count: { min: 2 }
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
