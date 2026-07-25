@@ -29,6 +29,7 @@ class SearchDebouncer: ObservableObject {
 struct ConversationsPage: View {
   @ObservedObject var appState: AppState
   @Binding var selectedConversation: ServerConversation?
+  @ObservedObject private var automation = ConversationDetailAutomationState.shared
 
   /// When true, renders without internal ScrollViews (for embedding in an outer ScrollView)
   var embedded: Bool = false
@@ -137,10 +138,14 @@ struct ConversationsPage: View {
           await appState.loadFolders()
         }
       }
+      consumePendingAutomationOpenConversation()
+    }
+    .onReceive(automation.$pendingOpenRequest.compactMap { $0 }) { _ in
+      consumePendingAutomationOpenConversation()
     }
     .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenConversationRequested)) {
-      notification in
-      handleAutomationOpenConversation(notification)
+      _ in
+      consumePendingAutomationOpenConversation()
     }
     .onReceive(
       NotificationCenter.default.publisher(for: .desktopAutomationSetConversationsSearchRequested)
@@ -186,20 +191,15 @@ struct ConversationsPage: View {
     }
   }
 
-  private func handleAutomationOpenConversation(_ notification: Notification) {
-    guard let conversationId = notification.userInfo?["conversationId"] as? String else { return }
-    let showTranscript = notification.userInfo?["showTranscript"] as? Bool ?? false
+  private func consumePendingAutomationOpenConversation() {
+    guard let request = ConversationDetailAutomationState.shared.takePendingOpenRequest() else { return }
+    handleAutomationOpenConversation(conversationId: request.conversationId)
+  }
+
+  private func handleAutomationOpenConversation(conversationId: String) {
 
     func present(_ conversation: ServerConversation) {
       selectedConversation = conversation
-      guard showTranscript else { return }
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-        NotificationCenter.default.post(
-          name: .desktopAutomationShowConversationTranscriptRequested,
-          object: nil,
-          userInfo: ["conversationId": conversation.id]
-        )
-      }
     }
 
     if let conversation = appState.conversations.first(where: { $0.id == conversationId }) {
