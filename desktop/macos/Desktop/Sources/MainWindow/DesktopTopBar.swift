@@ -1,3 +1,4 @@
+import AppKit
 import OmiTheme
 import SwiftUI
 
@@ -16,6 +17,8 @@ struct DesktopTopBar: View {
   let onRewind: () -> Void
   @AppStorage(MemoryHubDestination.storageKey) private var memoryDestinationRawValue =
     MemoryHubDestination.memories.rawValue
+  @State private var memoryMenuHoverIntent = MemoryMenuHoverIntent()
+  @State private var memoryMenuHoverTask: Task<Void, Never>?
 
   private struct NavItem: Identifiable {
     let index: Int
@@ -81,23 +84,24 @@ struct DesktopTopBar: View {
     HStack(spacing: OmiSpacing.xs) {
       ForEach(navItems) { item in
         if item.index == SidebarNavItem.conversations.rawValue {
-          Menu {
-            ForEach(MemoryHubDestination.allCases) { destination in
-              Button {
-                memoryDestinationRawValue = destination.rawValue
-                OmiMotion.withGated(.easeOut(duration: 0.08)) {
-                  selectedIndex = SidebarNavItem.conversations.rawValue
-                }
-              } label: {
-                Label(destination.title, systemImage: destination.icon)
-              }
-            }
+          Button {
+            memoryMenuHoverTask?.cancel()
+            memoryMenuHoverIntent.openImmediately()
           } label: {
             navLabel(for: item, showsDisclosure: true)
           }
-          .menuStyle(.borderlessButton)
+          .buttonStyle(.plain)
           .fixedSize()
-          .help("Choose a Memory view")
+          .background {
+            NativeMemoryNavigationMenuPresenter(
+              presentationRequest: memoryMenuHoverIntent.presentationRequest,
+              selectedDestination: memoryDestination,
+              onSelect: selectMemoryDestination
+            )
+            .allowsHitTesting(false)
+          }
+          .onHover(perform: memoryMenuHoverChanged)
+          .help("Choose a Memory view — opens on hover")
         } else {
           Button {
             OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = item.index }
@@ -108,6 +112,31 @@ struct DesktopTopBar: View {
           .help(item.title)
         }
       }
+    }
+  }
+
+  private var memoryDestination: MemoryHubDestination {
+    MemoryHubDestination(rawValue: memoryDestinationRawValue) ?? .memories
+  }
+
+  private func selectMemoryDestination(_ destination: MemoryHubDestination) {
+    memoryDestinationRawValue = destination.rawValue
+    OmiMotion.withGated(.easeOut(duration: 0.08)) {
+      selectedIndex = SidebarNavItem.conversations.rawValue
+    }
+  }
+
+  private func memoryMenuHoverChanged(_ isHovering: Bool) {
+    memoryMenuHoverTask?.cancel()
+    guard let generation = memoryMenuHoverIntent.hoverChanged(isHovering) else {
+      memoryMenuHoverTask = nil
+      return
+    }
+
+    memoryMenuHoverTask = Task { @MainActor in
+      try? await Task.sleep(for: .milliseconds(140))
+      guard !Task.isCancelled else { return }
+      memoryMenuHoverIntent.openAfterHoverDelay(generation: generation)
     }
   }
 
@@ -151,6 +180,80 @@ struct DesktopTopBar: View {
     case SidebarNavItem.conversations.rawValue: return newMemories + newConversations
     case SidebarNavItem.tasks.rawValue: return newTasks
     default: return 0
+    }
+  }
+}
+
+/// A deliberately tiny AppKit bridge: SwiftUI owns selection and hover intent;
+/// AppKit owns only native menu construction and tracking.
+private struct NativeMemoryNavigationMenuPresenter: NSViewRepresentable {
+  let presentationRequest: Int
+  let selectedDestination: MemoryHubDestination
+  let onSelect: @MainActor (MemoryHubDestination) -> Void
+
+  func makeCoordinator() -> Coordinator {
+    Coordinator(onSelect: onSelect)
+  }
+
+  func makeNSView(context: Context) -> NSView {
+    let view = NSView()
+    view.setAccessibilityElement(false)
+    return view
+  }
+
+  func updateNSView(_ nsView: NSView, context: Context) {
+    context.coordinator.onSelect = onSelect
+    guard presentationRequest != context.coordinator.lastPresentationRequest else { return }
+    context.coordinator.lastPresentationRequest = presentationRequest
+    context.coordinator.presentMenu(
+      selectedDestination: selectedDestination,
+      relativeTo: nsView
+    )
+  }
+
+  @MainActor
+  final class Coordinator: NSObject {
+    var onSelect: @MainActor (MemoryHubDestination) -> Void
+    var lastPresentationRequest = 0
+
+    init(onSelect: @escaping @MainActor (MemoryHubDestination) -> Void) {
+      self.onSelect = onSelect
+    }
+
+    func presentMenu(
+      selectedDestination: MemoryHubDestination,
+      relativeTo anchorView: NSView
+    ) {
+      let menu = NSMenu(title: "Memory")
+      menu.autoenablesItems = false
+      menu.minimumWidth = 190
+
+      for destination in MemoryHubDestination.allCases {
+        let item = NSMenuItem(
+          title: destination.title,
+          action: #selector(selectDestination(_:)),
+          keyEquivalent: ""
+        )
+        item.target = self
+        item.tag = destination.rawValue
+        item.state = destination == selectedDestination ? .on : .off
+        item.image = NSImage(
+          systemSymbolName: destination.icon,
+          accessibilityDescription: destination.title
+        )
+        menu.addItem(item)
+      }
+
+      menu.popUp(
+        positioning: menu.items.first(where: { $0.state == .on }),
+        at: NSPoint(x: 0, y: -4),
+        in: anchorView
+      )
+    }
+
+    @objc private func selectDestination(_ sender: NSMenuItem) {
+      guard let destination = MemoryHubDestination(rawValue: sender.tag) else { return }
+      onSelect(destination)
     }
   }
 }

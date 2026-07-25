@@ -1261,6 +1261,7 @@ private struct HubSegmentedControl: View {
 private struct MemoryHubPage: View {
   let appState: AppState
   let viewModelContainer: ViewModelContainer
+  @ObservedObject private var conversationDetailState = ConversationDetailAutomationState.shared
   @AppStorage(MemoryHubDestination.storageKey) private var destinationRawValue =
     MemoryHubDestination.memories.rawValue
 
@@ -1271,11 +1272,13 @@ private struct MemoryHubPage: View {
   var body: some View {
     switch destination {
     case .memories:
-      MemoriesPage(
-        viewModel: viewModelContainer.memoriesViewModel,
-        graphViewModel: viewModelContainer.memoryGraphViewModel
+      adaptiveContent(
+        MemoriesPage(
+          viewModel: viewModelContainer.memoriesViewModel,
+          graphViewModel: viewModelContainer.memoryGraphViewModel
+        ),
+        conversationID: viewModelContainer.memoriesViewModel.linkedConversation?.id
       )
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
     case .conversations:
       ConversationsPageHost(appState: appState)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1283,6 +1286,26 @@ private struct MemoryHubPage: View {
       MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+  }
+
+  private func adaptiveContent<Content: View>(
+    _ content: Content,
+    conversationID: String?
+  ) -> some View {
+    let usesAvailableWidth = MemoryHubLayoutPolicy.usesAvailableWidth(
+      conversationID: conversationID,
+      presentedConversationID: conversationDetailState.openConversationId,
+      transcriptDrawerOpen: conversationDetailState.transcriptDrawerOpen
+    )
+
+    return
+      content
+      .frame(
+        maxWidth: usesAvailableWidth ? .infinity : MemoryHubLayoutPolicy.readableContentWidth,
+        maxHeight: .infinity
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .animation(.easeInOut(duration: 0.22), value: usesAvailableWidth)
   }
 }
 
@@ -1319,12 +1342,10 @@ private struct PageContentView: View {
   /// gutters instead of a full-bleed stretch — matching the Focus/Insights
   /// pages, which already self-constrain. Pages paint a clear background, so the
   /// gutters show the shell surface seamlessly.
-  private static let listPageContentWidth: CGFloat = 900
-
   @ViewBuilder
   private func constrainedListPage<V: View>(_ page: V) -> some View {
     page
-      .frame(maxWidth: Self.listPageContentWidth, maxHeight: .infinity)
+      .frame(maxWidth: MemoryHubLayoutPolicy.readableContentWidth, maxHeight: .infinity)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
@@ -1412,9 +1433,24 @@ private struct PageContentView: View {
 private struct ConversationsPageHost: View {
   let appState: AppState
   @State private var selectedConversation: ServerConversation? = nil
+  @ObservedObject private var conversationDetailState = ConversationDetailAutomationState.shared
+
+  private var usesAvailableWidth: Bool {
+    MemoryHubLayoutPolicy.usesAvailableWidth(
+      conversationID: selectedConversation?.id,
+      presentedConversationID: conversationDetailState.openConversationId,
+      transcriptDrawerOpen: conversationDetailState.transcriptDrawerOpen
+    )
+  }
 
   var body: some View {
     ConversationsPage(appState: appState, selectedConversation: $selectedConversation)
+      .frame(
+        maxWidth: usesAvailableWidth ? .infinity : MemoryHubLayoutPolicy.readableContentWidth,
+        maxHeight: .infinity
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .animation(.easeInOut(duration: 0.22), value: usesAvailableWidth)
       // Owner fencing: an open detail view must not keep showing the previous
       // account's conversation after an in-place account switch.
       .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
