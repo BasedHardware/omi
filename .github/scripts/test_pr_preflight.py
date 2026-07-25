@@ -32,6 +32,15 @@ class FakeResponse(io.BytesIO):
         self.close()
 
 
+def http_error(code: int, message: str) -> urllib.error.HTTPError:
+    # An HTTPError raised by urllib always carries the response body, and the loader
+    # closes it. On Python 3.9 — the macOS system interpreter `python3` resolves to,
+    # and the one pre-push runs this suite with — HTTPError inherits the tempfile-based
+    # addinfourl, whose close() raises KeyError('file') when it was built without one.
+    # An fp-less mock therefore fails on a path production never takes.
+    return urllib.error.HTTPError("url", code, message, None, io.BytesIO(b""))  # type: ignore[arg-type]
+
+
 class MetadataTests(unittest.TestCase):
     def setUp(self) -> None:
         # `resolve_pr_metadata` short-circuits on OMI_PR_BODY_FILE before it ever
@@ -72,7 +81,7 @@ class MetadataTests(unittest.TestCase):
     def test_api_loader_retries_transient_failures_then_succeeds(self) -> None:
         payload = json.dumps({"number": 9847, "body": "ok", "updated_at": "u", "labels": []}).encode()
         outcomes: list[object] = [
-            urllib.error.HTTPError("url", 502, "bad gateway", None, None),  # type: ignore[arg-type]
+            http_error(502, "bad gateway"),
             TimeoutError("timed out"),
             FakeResponse(payload),
         ]
@@ -93,7 +102,7 @@ class MetadataTests(unittest.TestCase):
 
         def opener(request: object, timeout: int) -> FakeResponse:
             calls["count"] += 1
-            raise urllib.error.HTTPError("url", 404, "not found", None, None)  # type: ignore[arg-type]
+            raise http_error(404, "not found")
 
         with self.assertRaisesRegex(RuntimeError, "HTTP 404") as raised:
             load_from_api("BasedHardware/omi", 9847, "test-token", opener=opener, sleeper=lambda _: None)
