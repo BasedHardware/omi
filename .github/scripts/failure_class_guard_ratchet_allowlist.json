@@ -4,8 +4,8 @@
   "grandfathered": [
     {
       "id": "FC-split-mutation-authority",
-      "declarations_at_baseline": 30,
-      "reason": "30 first-parent integration changes in the 90 days to 2026-07-24 while evidence_prs still read [9365, 9597]; the canonical prevention is prose with no artifact. This is the recurrence that motivated the ratchet."
+      "declarations_at_baseline": 31,
+      "reason": "31 first-parent integration changes in the 90 days through 2026-07-25 (30 at ratchet authoring on 2026-07-24, plus one on main before merge); evidence_prs still read [9365, 9597] and the canonical prevention is prose with no artifact. This is the recurrence that motivated the ratchet."
     },
     {
       "id": "FC-nonrecoverable-promotion",
