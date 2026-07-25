@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -70,6 +72,60 @@ def _parse_push_filter(workflow_text: str) -> tuple[list[str], set[str]]:
 
 
 class DesktopCandidateSourceCheckTests(unittest.TestCase):
+    def test_github_check_status_reads_all_exact_sha_runs_and_chooses_the_newest_match(self) -> None:
+        response = [
+            {
+                "check_runs": [
+                    {
+                        "id": 101,
+                        "name": "Release Eligibility",
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "started_at": "2026-07-25T21:00:00Z",
+                        "completed_at": "2026-07-25T21:02:00Z",
+                    },
+                    {
+                        "id": 102,
+                        "name": "Unrelated check",
+                        "status": "completed",
+                        "conclusion": "success",
+                        "started_at": "2026-07-25T21:03:00Z",
+                        "completed_at": "2026-07-25T21:04:00Z",
+                    },
+                ]
+            },
+            {
+                "check_runs": [
+                    {
+                        "id": 103,
+                        "name": "Release Eligibility",
+                        "status": "completed",
+                        "conclusion": "success",
+                        "started_at": "2026-07-25T21:28:00Z",
+                        "completed_at": "2026-07-25T21:28:16Z",
+                    }
+                ]
+            },
+        ]
+        completed = subprocess.CompletedProcess([], 0, stdout=json.dumps(response), stderr="")
+
+        with patch.object(planner.subprocess, "run", return_value=completed) as run:
+            status, conclusion, error = planner.github_check_status(REPOSITORY, SOURCE_SHA, "Release Eligibility")
+
+        self.assertEqual((status, conclusion, error), ("completed", "success", None))
+        run.assert_called_once_with(
+            [
+                "gh",
+                "api",
+                "--paginate",
+                "--slurp",
+                f"repos/{REPOSITORY}/commits/{SOURCE_SHA}/check-runs?filter=all&per_page=100",
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
     def test_codemagic_config_is_a_releasable_desktop_input(self) -> None:
         expected_args = [
             "diff",
