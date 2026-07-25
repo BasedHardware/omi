@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-nonrecoverable-promotion",
+  "violated_contract": "A multi-service promotion must preserve its pre-promotion traffic state until its full serving release vector is proven.",
+  "canonical_prevention": "Accept an immutable no-traffic candidate before serving mutations, snapshot the prior traffic state, and automatically restore it when promotion or final vector verification fails.",
+  "evidence_prs": [9952],
+  "scope_hints": [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", "backend/scripts/**"],
+  "status": "open"
+}
