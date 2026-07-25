@@ -175,14 +175,8 @@ class MemoryAssistantSettings {
   var isEnabled: Bool {
     get { UserDefaults.standard.bool(forKey: enabledKey) }
     set {
-      let previous = UserDefaults.standard.bool(forKey: enabledKey)
       UserDefaults.standard.set(newValue, forKey: enabledKey)
       NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
-      // Activation-denominator telemetry: emit only on a real persisted change
-      // (never on default reads / startup / migrations).
-      if MemoryAssistantTelemetry.settingChangeIsPersistedChange(oldValue: previous, newValue: newValue) {
-        AnalyticsManager.shared.memoryAssistantSettingChanged(setting: .enabled, value: newValue)
-      }
     }
   }
 
@@ -232,16 +226,41 @@ class MemoryAssistantSettings {
   var notificationsEnabled: Bool {
     get { UserDefaults.standard.bool(forKey: notificationsEnabledKey) }
     set {
-      let previous = UserDefaults.standard.bool(forKey: notificationsEnabledKey)
       UserDefaults.standard.set(newValue, forKey: notificationsEnabledKey)
       NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
-      // Activation-denominator telemetry: this toggle is the effective analysis
-      // gate (notifications default off), so its change is the highest-signal
-      // activation event. Emit only on a real persisted change.
-      if MemoryAssistantTelemetry.settingChangeIsPersistedChange(oldValue: previous, newValue: newValue) {
-        AnalyticsManager.shared.memoryAssistantSettingChanged(setting: .notificationsEnabled, value: newValue)
-      }
     }
+  }
+
+  // MARK: - User-Intent Setting Changes (telemetry)
+
+  /// Apply an explicit user-initiated change to one of the two telemetry-gated
+  /// settings (`enabled` / `notifications_enabled`), persisting it and recording
+  /// the bounded `Memory Assistant Setting Changed` event only when the persisted
+  /// value actually changes. Returns `true` when the change was real and the
+  /// event was recorded, `false` when it was a no-op (so callers/tests can tell).
+  ///
+  /// This is the **only** path that emits the activation-denominator event. The
+  /// raw property setters (`isEnabled` / `notificationsEnabled`) are deliberately
+  /// silent so that remote settings sync (`SettingsSyncManager.applyRemoteSettings`),
+  /// migrations/defaults, and programmatic resets cannot create denominator
+  /// events. Call this exclusively from explicit user-intent sites (UI toggles,
+  /// intentional user commands).
+  @discardableResult
+  func applyUserSettingChange(_ setting: MemoryAssistantTelemetry.Setting, value: Bool) -> Bool {
+    let previous: Bool
+    switch setting {
+    case .enabled:
+      previous = isEnabled
+      isEnabled = value
+    case .notificationsEnabled:
+      previous = notificationsEnabled
+      notificationsEnabled = value
+    }
+    guard MemoryAssistantTelemetry.settingChangeIsPersistedChange(oldValue: previous, newValue: value) else {
+      return false
+    }
+    AnalyticsManager.shared.memoryAssistantSettingChanged(setting: setting, value: value)
+    return true
   }
 
   /// Apps excluded from memory extraction (user's custom list, on top of the shared built-in list)

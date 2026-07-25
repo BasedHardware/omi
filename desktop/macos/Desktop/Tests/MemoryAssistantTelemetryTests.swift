@@ -135,3 +135,50 @@ final class MemoryAssistantTelemetryTests: XCTestCase {
     XCTAssertTrue(source.contains("AnalyticsManager.shared.memoryExtracted(memoryCount: 1)"))
   }
 }
+
+/// Behavioral proof that `Memory Assistant Setting Changed` records exactly one
+/// closed, bounded event per real user-initiated persisted change.
+///
+/// `applyUserSettingChange` is the single user-intent entry point and returns
+/// whether it recorded a change, so the user-intent decision is tested against
+/// the production API directly — no PostHog capture seam is needed (the SDK is
+/// uninitialized in debug builds, and a mutable-global closure sink is unsafe
+/// under Swift 6 concurrency isolation). The raw property setters stay silent
+/// by construction: they never call `applyUserSettingChange`, so remote settings
+/// sync (`SettingsSyncManager.applyRemoteSettings`), migrations/defaults, and
+/// `resetToDefaults` cannot reach the emit — verified structurally in the
+/// adversarial self-review of the diff (the only `memoryAssistantSettingChanged`
+/// call site lives behind `applyUserSettingChange`'s persisted-change guard).
+@MainActor
+final class MemoryAssistantSettingChangeTelemetryTests: XCTestCase {
+  private static let enabledKey = "memoryAssistantEnabled"
+  private static let notificationsKey = "memoryNotificationsEnabled"
+  private var savedEnabled = false
+  private var savedNotifications = false
+
+  override func setUp() {
+    super.setUp()
+    savedEnabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
+    savedNotifications = UserDefaults.standard.bool(forKey: Self.notificationsKey)
+  }
+
+  override func tearDown() {
+    UserDefaults.standard.set(savedEnabled, forKey: Self.enabledKey)
+    UserDefaults.standard.set(savedNotifications, forKey: Self.notificationsKey)
+    super.tearDown()
+  }
+
+  func testUserToggleRecordsExactlyOneEventOnlyWhenPersistedValueChanges() {
+    UserDefaults.standard.set(false, forKey: Self.enabledKey)
+    // A real change records exactly one event.
+    XCTAssertTrue(MemoryAssistantSettings.shared.applyUserSettingChange(.enabled, value: true))
+    // Re-applying the same value (no persisted change) records nothing.
+    XCTAssertFalse(MemoryAssistantSettings.shared.applyUserSettingChange(.enabled, value: true))
+    // Toggling back records a second event for the new value.
+    XCTAssertTrue(MemoryAssistantSettings.shared.applyUserSettingChange(.enabled, value: false))
+
+    UserDefaults.standard.set(true, forKey: Self.notificationsKey)
+    XCTAssertTrue(MemoryAssistantSettings.shared.applyUserSettingChange(.notificationsEnabled, value: false))
+    XCTAssertFalse(MemoryAssistantSettings.shared.applyUserSettingChange(.notificationsEnabled, value: false))
+  }
+}

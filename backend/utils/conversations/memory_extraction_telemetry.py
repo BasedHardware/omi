@@ -15,11 +15,14 @@ Emission contract (see ``process_conversation.extract_memories``):
   is emitted (no false success).
 * **Persistence failure** — emission runs only after the durable write returned
   successfully; a raised exception propagates and the event is skipped.
-* **Retry / idempotency** — exactly one event per successful
-  ``extract_memories`` invocation. The canonical and legacy paths are both
-  retraction-based (retract/delete then write deterministic memory ids), so a
-  re-finalization re-processes the conversation and re-emits; the count always
-  reflects the memories persisted in *this* pass, never a cached/stale value.
+* **Retry / idempotency** — at most one analytics success per
+  ``(uid, conversation_id)`` across retries/re-finalization. The emit claims a
+  durable, atomic per-conversation lock (``try_acquire_conversation_memory_analytics_lock``,
+  Redis ``SET NX EX``, mirroring ``try_acquire_conversation_goal_lock``); a retry
+  that re-persists the same conversation finds the lock held and emits nothing, so
+  it cannot inflate the metric. Fail-open on Redis error (rare duplicate preferred
+  over a lost extraction signal). ``conversation_id`` is the lock key only — it
+  never appears in PostHog properties.
 
 The event is intentionally distinct from the desktop ``Memory Extracted``
 (proactive screen-context assistant) and from ``Memory Created`` (which is a
@@ -34,6 +37,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
+from database.redis_db import try_acquire_conversation_memory_analytics_lock
 from models.conversation import ConversationSource
 
 logger = logging.getLogger(__name__)
@@ -77,10 +81,25 @@ def source_for_conversation(conversation: Any) -> str:
     return SOURCE_TRANSCRIPTION
 
 
-def emit_conversation_memories_extracted(uid: str, result: ConversationMemoryExtractionResult) -> None:
+def emit_conversation_memories_extracted(
+    uid: str, conversation_id: str, result: ConversationMemoryExtractionResult
+) -> None:
     """Emit the ``Conversation Memories Extracted`` event for one successful
-    extraction pass. No-op when ``uid`` is empty or nothing was persisted."""
-    if not uid or result.count <= 0:
+    extraction, at most once per ``(uid, conversation_id)``. No-op when ``uid`` or
+    ``conversation_id`` is empty, nothing was persisted, or a prior pass already
+    captured the success for this conversation (retry/re-finalization)."""
+    if not uid or not conversation_id or result.count <= 0:
+        return
+    # Durable idempotency: claim the per-conversation analytics slot before
+    # capture. Atomic SET NX EX (see try_acquire_conversation_memory_analytics_lock);
+    # a retry that re-persists the same conversation finds the slot held and emits
+    # nothing, so re-finalization cannot inflate the metric. conversation_id is the
+    # lock key only — it never appears in the PostHog properties below.
+    try:
+        acquired = try_acquire_conversation_memory_analytics_lock(uid, conversation_id)
+    except Exception:  # noqa: BLE001 - telemetry must never break extraction
+        acquired = True  # fail-open: a rare duplicate is preferred over a lost signal
+    if not acquired:
         return
     source = result.source if result.source in _VALID_SOURCES else SOURCE_TRANSCRIPTION
     path = result.path if result.path in _VALID_PATHS else PATH_LEGACY
