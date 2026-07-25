@@ -3,7 +3,7 @@ import hashlib
 import logging
 import uuid
 
-from utils.executors import db_executor
+from utils.executors import postprocess_executor, submit_with_context
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List
@@ -231,7 +231,7 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
                 update_data['completed_at'] = datetime.now(timezone.utc)
             else:
                 update_data['completed_at'] = None
-        if item.due_at is not None:
+        if 'due_at' in item.model_fields_set:
             update_data['due_at'] = item.due_at
         if item.exported is not None:
             update_data['exported'] = item.exported
@@ -318,7 +318,7 @@ def create_action_item(request: ActionItemCreateRequest, uid: str = Depends(auth
     def _run_auto_sync():
         asyncio.run(auto_sync_action_item(uid, {"id": action_item_id, **action_item_data}, skip_apple_reminders=True))
 
-    db_executor.submit(_run_auto_sync)
+    submit_with_context(postprocess_executor, _run_auto_sync)
 
     return ActionItemResponse(**action_item)
 
@@ -360,9 +360,12 @@ def get_action_items(
         end_date=end_date,
         due_start_date=due_start_date,
         due_end_date=due_end_date,
-        limit=limit,
+        limit=limit + 1,
         offset=offset,
     )
+
+    has_more = len(action_items) > limit
+    action_items = action_items[:limit]
 
     for item in action_items:
         if item.get('is_locked', False):
@@ -370,21 +373,6 @@ def get_action_items(
             item['description'] = (description[:70] + '...') if len(description) > 70 else description
 
     response_items = _safe_action_item_responses(action_items, uid=uid)
-
-    has_more = len(action_items) == limit
-    if has_more:
-        next_batch = action_items_db.get_action_items(
-            uid=uid,
-            conversation_id=conversation_id,
-            completed=completed,
-            start_date=start_date,
-            end_date=end_date,
-            due_start_date=due_start_date,
-            due_end_date=due_end_date,
-            limit=1,
-            offset=offset + limit,
-        )
-        has_more = len(next_batch) > 0
 
     return {"action_items": response_items, "has_more": has_more}
 
@@ -589,6 +577,30 @@ def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.
     response_items = _safe_action_item_responses(action_items, uid=uid, context=f'conversation {conversation_id}')
 
     return {"action_items": response_items, "conversation_id": conversation_id}
+
+
+class ConversationActionItemsCountResponse(BaseModel):
+    total: int
+    completed: int
+    incomplete: int
+
+
+@router.get(
+    "/v1/conversations/{conversation_id}/action-items/count",
+    response_model=ConversationActionItemsCountResponse,
+    tags=['action-items'],
+)
+def get_conversation_action_items_count(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Return total / completed / incomplete action-item counts for one conversation.
+
+    A task-progress badge (e.g. 2 of 3 done) for a conversation without paging its items.
+    """
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
+    return action_items_db.get_action_items_count_by_conversation(uid, conversation_id)
 
 
 class ConversationActionItemsDeleteResponse(BaseModel):

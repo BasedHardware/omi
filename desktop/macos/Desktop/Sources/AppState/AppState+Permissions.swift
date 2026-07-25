@@ -19,24 +19,22 @@ extension AppState {
 
   func requestNotificationPermission() {
     // First check current authorization status
-    UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
-      Task { @MainActor in
-        guard let self = self else { return }
+    UserNotificationCallbackBridge.authorizationStatus { [weak self] authorizationStatus in
+      guard let self else { return }
 
-        if settings.authorizationStatus == .notDetermined {
-          // First time - show the system prompt
-          NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
-            reason: "launch_disabled_error",
-            previousStatus: "notDetermined"
-          ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.checkNotificationPermission() }
-          }
-        } else if settings.authorizationStatus == .denied {
-          // Previously denied - open System Settings so user can enable manually
-          self.openNotificationPreferences()
+      if authorizationStatus == .notDetermined {
+        // First time - show the system prompt
+        NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
+          reason: "launch_disabled_error",
+          previousStatus: "notDetermined"
+        ) { [weak self] _ in
+          MainActor.assumeIsolated { self?.checkNotificationPermission() }
         }
-        // If already authorized, checkNotificationPermission() will handle it
+      } else if authorizationStatus == .denied {
+        // Previously denied - open System Settings so user can enable manually
+        self.openNotificationPreferences()
       }
+      // If already authorized, checkNotificationPermission() will handle it
     }
   }
 
@@ -56,14 +54,12 @@ extension AppState {
 
     // After the repair + retry, update our permission state and open System Settings as fallback.
     DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
-      UNUserNotificationCenter.current().getNotificationSettings { settings in
-        DispatchQueue.main.async {
-          let isNowGranted = settings.authorizationStatus == .authorized
-          self?.hasNotificationPermission = isNowGranted
-          if !isNowGranted {
-            log("Notification permission still not granted after repair. Opening System Settings.")
-            self?.openNotificationPreferences()
-          }
+      UserNotificationCallbackBridge.authorizationStatus { [weak self] authorizationStatus in
+        let isNowGranted = authorizationStatus == .authorized
+        self?.hasNotificationPermission = isNowGranted
+        if !isNowGranted {
+          log("Notification permission still not granted after repair. Opening System Settings.")
+          self?.openNotificationPreferences()
         }
       }
     }
@@ -85,19 +81,17 @@ extension AppState {
 
     // Wait for repair + re-authorization, then check if it worked
     DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
-      UNUserNotificationCenter.current().getNotificationSettings { settings in
-        DispatchQueue.main.async {
-          let isNowGranted = settings.authorizationStatus == .authorized
-          self?.hasNotificationPermission = isNowGranted
-          self?.notificationAlertStyle = settings.alertStyle
-          if isNowGranted {
-            log("Notification repair succeeded — auth is now authorized")
-          } else {
-            log(
-              "Notification repair didn't restore auth (status=\(settings.authorizationStatus.rawValue)) — opening System Settings"
-            )
-            self?.openNotificationPreferences()
-          }
+      UserNotificationCallbackBridge.notificationSettings { [weak self] settings in
+        let isNowGranted = settings.authorizationStatus == .authorized
+        self?.hasNotificationPermission = isNowGranted
+        self?.notificationAlertStyle = settings.alertStyle
+        if isNowGranted {
+          log("Notification repair succeeded — auth is now authorized")
+        } else {
+          log(
+            "Notification repair didn't restore auth (status=\(settings.authorizationStatus.rawValue)) — opening System Settings"
+          )
+          self?.openNotificationPreferences()
         }
       }
     }
@@ -220,75 +214,80 @@ extension AppState {
     // SwiftUI view body evaluation, which triggers an assertion in UserNotifications.
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
-      UNUserNotificationCenter.current().getNotificationSettings { settings in
-        DispatchQueue.main.async {
-          let isNowGranted = settings.authorizationStatus == .authorized
-          self.hasNotificationPermission = isNowGranted
-          self.notificationAlertStyle = settings.alertStyle
+      UserNotificationCallbackBridge.notificationSettings { settings in
+        let isNowGranted = settings.authorizationStatus == .authorized
+        self.hasNotificationPermission = isNowGranted
+        self.notificationAlertStyle = settings.alertStyle
 
-          // Log the current notification settings
-          let authStatus =
-            switch settings.authorizationStatus {
-            case .notDetermined: "notDetermined"
-            case .denied: "denied"
-            case .authorized: "authorized"
-            case .provisional: "provisional"
-            case .ephemeral: "ephemeral"
-            @unknown default: "unknown"
-            }
-          let alertStyleName =
-            switch settings.alertStyle {
-            case .none: "NONE (no banners)"
-            case .banner: "BANNER"
-            case .alert: "ALERT"
-            @unknown default: "unknown"
-            }
-          log(
-            "Notification settings: auth=\(authStatus), alertStyle=\(alertStyleName), sound=\(settings.soundSetting.rawValue), badge=\(settings.badgeSetting.rawValue)"
+        // Log the current notification settings
+        let authStatus =
+          switch settings.authorizationStatus {
+          case .notDetermined: "notDetermined"
+          case .denied: "denied"
+          case .authorized: "authorized"
+          case .provisional: "provisional"
+          case .ephemeral: "ephemeral"
+          @unknown default: "unknown"
+          }
+        let alertStyleName =
+          switch settings.alertStyle {
+          case .none: "NONE (no banners)"
+          case .banner: "BANNER"
+          case .alert: "ALERT"
+          @unknown default: "unknown"
+          }
+        log(
+          "Notification settings: auth=\(authStatus), alertStyle=\(alertStyleName), sound=\(settings.soundSetting.rawValue), badge=\(settings.badgeSetting.rawValue)"
+        )
+
+        // Track notification settings in analytics only when they change
+        let soundEnabled = settings.soundSetting == .enabled
+        let badgeEnabled = settings.badgeSetting == .enabled
+        let settingsChanged =
+          authStatus != self.lastNotificationAuthStatus
+          || alertStyleName != self.lastNotificationAlertStyle
+          || soundEnabled != self.lastNotificationSoundEnabled
+          || badgeEnabled != self.lastNotificationBadgeEnabled
+
+        if settingsChanged {
+          AnalyticsManager.shared.notificationSettingsChecked(
+            authStatus: authStatus,
+            alertStyle: alertStyleName,
+            soundEnabled: soundEnabled,
+            badgeEnabled: badgeEnabled,
+            bannersDisabled: settings.alertStyle == .none
           )
 
-          // Track notification settings in analytics only when they change
-          let soundEnabled = settings.soundSetting == .enabled
-          let badgeEnabled = settings.badgeSetting == .enabled
-          let settingsChanged =
-            authStatus != self.lastNotificationAuthStatus
-            || alertStyleName != self.lastNotificationAlertStyle
-            || soundEnabled != self.lastNotificationSoundEnabled
-            || badgeEnabled != self.lastNotificationBadgeEnabled
-
-          if settingsChanged {
-            AnalyticsManager.shared.notificationSettingsChecked(
-              authStatus: authStatus,
-              alertStyle: alertStyleName,
-              soundEnabled: soundEnabled,
-              badgeEnabled: badgeEnabled,
-              bannersDisabled: settings.alertStyle == .none
+          // Detect regression: was authorized, now reverted to notDetermined
+          // This happens on macOS 26+ where the OS silently revokes notification permission
+          if self.lastNotificationAuthStatus == "authorized" && authStatus == "notDetermined" {
+            log(
+              "Notification permission REGRESSED from authorized to notDetermined — triggering auto-repair"
             )
-
-            // Detect regression: was authorized, now reverted to notDetermined
-            // This happens on macOS 26+ where the OS silently revokes notification permission
-            if self.lastNotificationAuthStatus == "authorized" && authStatus == "notDetermined" {
-              log(
-                "Notification permission REGRESSED from authorized to notDetermined — triggering auto-repair"
-              )
-              AnalyticsManager.shared.notificationRepairTriggered(
-                reason: "auth_regression",
-                previousStatus: "authorized",
-                currentStatus: "notDetermined"
-              )
-              self.repairNotificationRegistrationAndRetry()
-            }
-
-            // Update last known state
-            self.lastNotificationAuthStatus = authStatus
-            self.lastNotificationAlertStyle = alertStyleName
-            self.lastNotificationSoundEnabled = soundEnabled
-            self.lastNotificationBadgeEnabled = badgeEnabled
+            AnalyticsManager.shared.notificationRepairTriggered(
+              reason: "auth_regression",
+              previousStatus: "authorized",
+              currentStatus: "notDetermined"
+            )
+            self.repairNotificationRegistrationAndRetry()
           }
 
+          // Update last known state
+          self.lastNotificationAuthStatus = authStatus
+          self.lastNotificationAlertStyle = alertStyleName
+          self.lastNotificationSoundEnabled = soundEnabled
+          self.lastNotificationBadgeEnabled = badgeEnabled
         }
       }
     }  // end DispatchQueue.main.async
+  }
+
+  /// Screen recording was granted while this process was running, so capture
+  /// stays dead until the app relaunches. Drives the "Reopen Omi" offer.
+  var screenRecordingNeedsRelaunch: Bool {
+    ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+      grantedNow: hasScreenRecordingPermission,
+      grantedAtLaunch: screenRecordingGrantedAtLaunch)
   }
 
   /// Check screen recording permission status

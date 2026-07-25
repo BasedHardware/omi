@@ -1,3 +1,0 @@
-{
-  "change": "Added a pinned swift-format bootstrap wrapper and platform-aware manifest checks so macOS-only static checks run on macOS CI"
-}

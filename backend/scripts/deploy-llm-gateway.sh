@@ -54,7 +54,6 @@ if [[ "$SKIP_BACKEND_SECRETS" != "true" ]]; then
     GCP_PROJECT_ID="${GCP_PROJECT_ID:-}" \
     GKE_CLUSTER="${GKE_CLUSTER:-}" \
     REGION="${REGION:-}" \
-    BACKEND_SECRETS_GSA="${BACKEND_SECRETS_GSA:-}" \
     backend/scripts/deploy-backend-secrets.sh
   if [[ "$DRY_RUN" != "true" ]]; then
     sleep 10

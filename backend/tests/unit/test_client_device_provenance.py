@@ -158,13 +158,14 @@ def test_ordered_capture_devices_uses_earliest_evidence_not_alphabetical():
 
 
 def test_listen_conversation_stamps_websocket_device_provenance():
-    source = (Path(__file__).resolve().parents[2] / "routers" / "transcribe.py").read_text(encoding="utf-8")
-    stream_handler = source.split("async def _stream_handler(", 1)[1].split("\n\nasync def _listen(", 1)[0]
-    stub_conversation = stream_handler.split("stub_conversation = Conversation(", 1)[1].split("\n        )", 1)[0]
+    runtime = (Path(__file__).resolve().parents[2] / "routers" / "listen" / "runtime.py").read_text(encoding="utf-8")
+    conversations = (Path(__file__).resolve().parents[2] / "routers" / "listen" / "conversations.py").read_text(
+        encoding="utf-8"
+    )
 
-    assert "resolve_client_device_from_headers(websocket.headers)" in stream_handler
-    assert "client_device_id=client_device_context.client_device_id" in stub_conversation
-    assert "client_platform=client_device_context.platform" in stub_conversation
+    assert "resolve_client_device_from_headers(" in runtime
+    assert "client_device_id=context.client_device_id" in conversations
+    assert "client_platform=context.platform" in conversations
 
 
 def test_web_listen_forwards_first_message_device_provenance():

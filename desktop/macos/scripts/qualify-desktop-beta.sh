@@ -10,28 +10,31 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DESKTOP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$DESKTOP_DIR/../.." && pwd)"
 KEYVALUE_PY="$SCRIPT_DIR/release-keyvalue.py"
+STAGE_HELPER="$SCRIPT_DIR/qualification-stage.sh"
+# shellcheck source=qualification-stage.sh
+source "$STAGE_HELPER"
 
 KEEP_STACK=0
-PROMOTE=1
 AUTOMATIC=0
 SIGNED_SMOKE_RESULT=""
 CANDIDATE_GATE_RESULT=""
+GITHUB_ACTIONS_ARTIFACT=0
 RELEASE_TAG=""
 
 usage() {
   cat <<'USAGE'
-Qualify a macOS desktop candidate (rebuild tag + T2 core E2E + promote beta).
+Qualify a macOS desktop candidate (rebuild tag + T2 core E2E).
 
 Usage:
-  qualify-desktop-beta.sh [--keep-stack] [--no-promote] [--automatic] \
+  qualify-desktop-beta.sh [--keep-stack] [--automatic] [--github-actions-artifact] \
     [--signed-smoke-result PATH --candidate-gate-result PATH] <vX.Y.Z+BUILD-macos>
 
 Options:
-  --keep-stack   Leave dev-harness stack running on exit (default: make dev-down)
-  --no-promote   Write qualification evidence without dispatching beta promotion
+  --keep-stack   Leave the recorded qualification lease for safe later reclamation
   --automatic    Run richer automatic gates and require this to remain the newest candidate
   --signed-smoke-result PATH  Codemagic signed-artifact smoke evidence (required with --automatic)
   --candidate-gate-result PATH  Digest-bound candidate gate evidence (required with --automatic)
+  --github-actions-artifact  Leave trusted evidence publication to the workflow artifact
 USAGE
 }
 
@@ -39,10 +42,6 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --keep-stack)
       KEEP_STACK=1
-      shift
-      ;;
-    --no-promote)
-      PROMOTE=0
       shift
       ;;
     --automatic)
@@ -58,6 +57,10 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 && -n "${2:-}" && "${2:-}" != -* ]] || { echo "--candidate-gate-result requires a path" >&2; exit 2; }
       CANDIDATE_GATE_RESULT="$2"
       shift 2
+      ;;
+    --github-actions-artifact)
+      GITHUB_ACTIONS_ARTIFACT=1
+      shift
       ;;
     --help|-h)
       usage
@@ -114,23 +117,158 @@ fi
 VERSION="${RELEASE_TAG#v}"
 VERSION="${VERSION%-macos}"
 BUNDLE="omi-qualification-${VERSION}"
-WORKTREE="$REPO_ROOT/.qualification-worktrees/$RELEASE_TAG"
+WORKTREE=""
 LAUNCH_LOG=""
+LAUNCH_SIGNAL_FILE=""
 DESKTOP_LAUNCH_PID=""
+DESKTOP_LAUNCH_TOKEN=""
+DESKTOP_LAUNCH_RECORD=""
+DESKTOP_LAUNCH_REQUESTED=0
+QUALIFICATION_CLEANUP_DONE=0
+QUALIFICATION_CLEANUP_STATUS="not-acquired"
 QUALIFICATION_SUCCESS=0
+QUALIFICATION_LEASE_ID=""
+QUALIFICATION_LEASE_TOKEN=""
+QUALIFICATION_LEASE_ROOT="${OMI_QUALIFICATION_LEASE_ROOT:-${TMPDIR:-/tmp}/omi-desktop-qualification}"
+QUALIFICATION_RETAINED_RUNS="${OMI_QUALIFICATION_RETAINED_RUNS:-3}"
+QUALIFICATION_RETENTION_AGE_SECONDS="${OMI_QUALIFICATION_RETENTION_AGE_SECONDS:-1209600}"
+QUALIFICATION_CLEANUP_CONTEXT="${OMI_QUALIFICATION_CLEANUP_CONTEXT:-}"
+QUALIFICATION_LOG_DIR=""
+QUALIFICATION_STAGE=""
+# Cold, from-scratch rebuild of the exact tag compiles ~1190 SwiftPM modules
+# (FluidAudio, MarkdownUI, Firebase, ONNX, …) before the named bundle is even
+# packaged/signed/launched. On a self-hosted M1 that first cold build alone runs
+# ~65 min and, with packaging + install, dispatches the desktop launch at ~75 min
+# — past the old 3600s budget, so every fresh tag timed out at [~1139/1190]
+# compiling and left no reusable .build for the warm retry, stalling Beta
+# (v0.12.99–v0.12.113 all failed, self-hosted lane, `not dispatched within 3600s`).
+# 5400s (90 min) covers the observed cold path with headroom while staying within
+# the self-hosted job cap; warm same-SHA retry/prewarm still completes in a
+# fraction of this. Overridable per runner via OMI_QUALIFY_PREPARE_WAIT_SECS.
+DESKTOP_PREPARE_WAIT_SECS="${OMI_QUALIFY_PREPARE_WAIT_SECS:-5400}"
 BRIDGE_WAIT_SECS=900
 
-gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,isPrerelease,body \
-  > /tmp/desktop-qualification-release.json
+QUALIFICATION_STAGE="$(qualification_stage_create)"
+trap 'qualification_stage_remove "$QUALIFICATION_STAGE"' EXIT
+RELEASE_FILE="$QUALIFICATION_STAGE/release.json"
+gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,isPrerelease,publishedAt,assets,body \
+  > "$RELEASE_FILE"
 
-python3 "$KEYVALUE_PY" preflight-release /tmp/desktop-qualification-release.json "$RELEASE_TAG"
+python3 "$KEYVALUE_PY" preflight-release "$RELEASE_FILE" "$RELEASE_TAG"
 
 SHA=$(git -C "$REPO_ROOT" rev-list -n1 "$RELEASE_TAG")
+WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"
+RUN_SCOPE="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-attempt}-${BASHPID:-$$}"
+RUN_SCOPE="${RUN_SCOPE//[^A-Za-z0-9]/-}"
+QUALIFICATION_LEASE_ID="qualification-${SHA:0:12}-${RUN_SCOPE:0:32}"
+QUALIFICATION_PORT_OFFSET="${OMI_QUALIFICATION_PORT_OFFSET:-}"
+if [[ -z "$QUALIFICATION_PORT_OFFSET" ]]; then
+  QUALIFICATION_PORT_OFFSET="$(python3 - "$SHA" "$QUALIFICATION_LEASE_ID" <<'PY'
+import sys
+import hashlib
+print(1000 + (int(hashlib.sha256(": ".join(sys.argv[1:]).encode()).hexdigest()[:8], 16) % 2000))
+PY
+)"
+fi
+if ! [[ "$QUALIFICATION_PORT_OFFSET" =~ ^[0-9]+$ ]]; then
+  echo "OMI_QUALIFICATION_PORT_OFFSET must be a non-negative integer" >&2
+  exit 2
+fi
+export OMI_QUALIFICATION_LEASE_ROOT="$QUALIFICATION_LEASE_ROOT"
+export OMI_LOCAL_STATE_ROOT="$QUALIFICATION_LEASE_ROOT/state"
+export OMI_LOCAL_INSTANCE="$QUALIFICATION_LEASE_ID"
+export OMI_HARNESS_PORT_OFFSET="$QUALIFICATION_PORT_OFFSET"
+export OMI_AUTOMATION_PORT="$((47777 + QUALIFICATION_PORT_OFFSET))"
+if (( OMI_AUTOMATION_PORT > 65535 )); then
+  echo "OMI_QUALIFICATION_PORT_OFFSET makes OMI_AUTOMATION_PORT invalid: $OMI_AUTOMATION_PORT" >&2
+  exit 2
+fi
 
-rm -rf "$WORKTREE"
-git -C "$REPO_ROOT" worktree add --detach "$WORKTREE" "$RELEASE_TAG"
+# Provision the tag-pinned backend venv so the hermetic stack resolves the
+# locked Python dependencies. The ephemeral Codemagic Mac has no backend venv
+# and no global python3 with backend deps, so this must succeed there — but a
+# freshly installed uv may not carry the exact pinned patch
+# (python-build-standalone lags), so fall back to the pinned minor version and
+# still sync the exact platform lock. Machines without uv keep the legacy
+# global-python3 resolution.
+provision_backend_venv() {
+  local worktree="$1"
+  local backend="$worktree/backend"
+  [[ -f "$backend/.python-version" ]] || { echo "no backend/.python-version; skipping venv provisioning"; return 0; }
+  local pinned minor lock
+  pinned="$(tr -d '[:space:]' < "$backend/.python-version")"
+  minor="${pinned%.*}"
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64 | Darwin-aarch64) lock="pylock.macos.toml" ;;
+    Darwin-x86_64 | Darwin-amd64) lock="pylock.macos-x86_64.toml" ;;
+    *) lock="pylock.toml" ;;
+  esac
+  # Preferred path: exact-patch parity with CI via the shared script.
+  if (cd "$worktree" && make setup-backend); then
+    return 0
+  fi
+  echo "make setup-backend failed (likely exact patch $pinned unavailable to this uv); falling back to minor $minor"
+  [[ -f "$backend/$lock" ]] || { echo "no $lock for this platform; cannot provision backend venv" >&2; return 1; }
+  (
+    cd "$backend"
+    uv venv --allow-existing --python "$minor" .venv
+    uv pip sync "$lock" --python .venv/bin/python
+  )
+}
 
-LAUNCH_LOG="$WORKTREE/.qualification-desktop-launch.log"
+if command -v uv >/dev/null 2>&1; then
+  provision_backend_venv "$WORKTREE"
+else
+  echo "uv not found; dev-harness python resolves via global python3"
+fi
+
+LEASE_JSON="$(
+  cd "$WORKTREE"
+  PYTHONPATH="scripts/dev-harness${PYTHONPATH:+:$PYTHONPATH}" python3 -m dev_harness.cli qualification-lease acquire \
+    --lease-id "$QUALIFICATION_LEASE_ID" \
+    --owner-pid "$$" \
+    --port-offset "$QUALIFICATION_PORT_OFFSET" \
+    --retained-runs "$QUALIFICATION_RETAINED_RUNS"
+)"
+QUALIFICATION_LEASE_TOKEN="$(python3 - "$LEASE_JSON" <<'PY'
+import json
+import sys
+print(json.loads(sys.argv[1])["token"])
+PY
+)"
+QUALIFICATION_LOG_DIR="$(python3 - "$LEASE_JSON" <<'PY'
+import json
+import sys
+from pathlib import Path
+print(Path(json.loads(sys.argv[1])["log_dir"]))
+PY
+)"
+# This capability is distinct from the lease token. It is passed only to the
+# launched named app and binds the detached LaunchServices process to this run.
+DESKTOP_LAUNCH_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+DESKTOP_LAUNCH_RECORD="$QUALIFICATION_LOG_DIR/desktop-app.json"
+LAUNCH_SIGNAL_FILE="$QUALIFICATION_LOG_DIR/desktop-launch.signal"
+if [[ -n "$QUALIFICATION_CLEANUP_CONTEXT" ]]; then
+  umask 077
+  python3 - "$QUALIFICATION_CLEANUP_CONTEXT" "$QUALIFICATION_LEASE_ID" "$QUALIFICATION_LEASE_TOKEN" "$WORKTREE" "$QUALIFICATION_RETAINED_RUNS" "$QUALIFICATION_RETENTION_AGE_SECONDS" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path, lease_id, token, worktree, retained_runs, retention_age = map(str, sys.argv[1:])
+target = Path(path)
+target.parent.mkdir(parents=True, exist_ok=True)
+target.write_text(json.dumps({
+    "lease_id": lease_id,
+    "token": token,
+    "worktree": worktree,
+    "retained_runs": int(retained_runs),
+    "retention_age_seconds": int(retention_age),
+}, sort_keys=True) + "\n", encoding="utf-8")
+target.chmod(0o600)
+PY
+fi
+LAUNCH_LOG="$QUALIFICATION_LOG_DIR/desktop-launch.log"
 
 resolve_automation_port() {
   (
@@ -151,70 +289,225 @@ derive_bundle_id() {
   printf '%s\n' "$BUNDLE_ID"
 }
 
-kill_process_tree() {
-  local pid="$1"
-  local children child
-  [[ -z "$pid" ]] && return 0
-  children="$(pgrep -P "$pid" 2>/dev/null || true)"
-  for child in $children; do
-    kill_process_tree "$child"
+record_owned_qualification_desktop() {
+  local bundle_id app_path executable_path
+  bundle_id="$(derive_bundle_id "$BUNDLE")"
+  app_path="/Applications/${BUNDLE}.app"
+  executable_path="$app_path/Contents/MacOS/Omi Computer"
+  umask 077
+  python3 - "$DESKTOP_LAUNCH_RECORD" "$LAUNCH_SIGNAL_FILE" "$DESKTOP_LAUNCH_TOKEN" "$BUNDLE" "$bundle_id" "$app_path" "$executable_path" "$AUTOMATION_PORT" <<'PY'
+import hashlib
+import json
+import os
+import stat
+import subprocess
+import sys
+from pathlib import Path
+
+record_path, signal_path, token, bundle, bundle_id, app_path, executable_path, port = sys.argv[1:]
+signal = Path(signal_path)
+if not signal.is_file() or signal.stat().st_uid != os.getuid() or stat.S_IMODE(signal.stat().st_mode) != 0o600:
+    raise SystemExit("qualification launch signal is missing or not owner-only")
+fields = {}
+for line in signal.read_text(encoding="utf-8").splitlines():
+    if "=" not in line:
+        raise SystemExit("qualification launch signal is malformed")
+    key, value = line.split("=", 1)
+    if key in fields:
+        raise SystemExit("qualification launch signal has duplicate fields")
+    fields[key] = value
+expected_signal = {
+    "schema_version": "1", "bundle_id": bundle_id, "app_path": app_path,
+    "executable_path": executable_path, "launch_token": token,
+}
+if any(fields.get(key) != value for key, value in expected_signal.items()):
+    raise SystemExit("qualification launch signal does not bind this run")
+if fields.get("launch_transport") not in {"open", "direct"}:
+    raise SystemExit("qualification launch signal has unknown transport")
+proc = subprocess.run(["ps", "-axo", "pid=,lstart=,command="], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
+matches = []
+for line in proc.stdout.splitlines():
+    parts = line.split(None, 6)
+    if len(parts) != 7 or not parts[0].isdigit():
+        continue
+    pid, started, command = int(parts[0]), " ".join(parts[1:6]), parts[6]
+    if executable_path in command and f"--omi-launch-token={token}" in command:
+        matches.append((pid, started, command))
+if len(matches) != 1:
+    raise SystemExit(f"qualification launch ownership is ambiguous (matching processes={len(matches)})")
+pid, started, command = matches[0]
+payload = {
+    "schema_version": 1,
+    "launch_token": token,
+    "bundle": bundle,
+    "bundle_id": bundle_id,
+    "app_path": app_path,
+    "executable_path": executable_path,
+    "automation_port": int(port),
+    "launch_transport": fields["launch_transport"],
+    "launch_pid": pid,
+    "process_start": started,
+    "command_sha256": hashlib.sha256(command.encode()).hexdigest(),
+}
+target = Path(record_path)
+target.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+target.chmod(0o600)
+PY
+}
+
+validated_qualification_desktop_pid() {
+  local bundle_id
+  [[ -n "$DESKTOP_LAUNCH_RECORD" && -f "$DESKTOP_LAUNCH_RECORD" ]] || return 1
+  bundle_id="$(derive_bundle_id "$BUNDLE")"
+  python3 - "$DESKTOP_LAUNCH_RECORD" "$DESKTOP_LAUNCH_TOKEN" "$BUNDLE" "$bundle_id" "$AUTOMATION_PORT" <<'PY'
+import hashlib
+import json
+import os
+import stat
+import subprocess
+import sys
+from pathlib import Path
+
+path, token, bundle, bundle_id, port = sys.argv[1:]
+target = Path(path)
+if target.stat().st_uid != os.getuid() or stat.S_IMODE(target.stat().st_mode) != 0o600:
+    raise SystemExit("qualification app record is not owner-only")
+payload = json.loads(target.read_text(encoding="utf-8"))
+expected = {
+    "schema_version": 1,
+    "launch_token": token,
+    "bundle": bundle,
+    "bundle_id": bundle_id,
+    "app_path": f"/Applications/{bundle}.app",
+    "executable_path": f"/Applications/{bundle}.app/Contents/MacOS/Omi Computer",
+    "automation_port": int(port),
+}
+if any(payload.get(key) != value for key, value in expected.items()):
+    raise SystemExit("qualification app record does not bind this run")
+if payload.get("launch_transport") not in {"open", "direct"}:
+    raise SystemExit("qualification app record has unknown transport")
+if not isinstance(payload.get("launch_pid"), int) or payload["launch_pid"] <= 0 or not isinstance(payload.get("process_start"), str) or not isinstance(payload.get("command_sha256"), str):
+    raise SystemExit("qualification app record has no launch metadata")
+pid = str(payload["launch_pid"])
+proc = subprocess.run(["ps", "-p", pid, "-o", "lstart=,command="], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
+line = proc.stdout.strip()
+if not line:
+    raise SystemExit(3)
+parts = line.split(None, 5)
+if len(parts) != 6:
+    raise SystemExit("qualification process metadata cannot be parsed")
+started, command = " ".join(parts[:5]), parts[5]
+if started != payload["process_start"] or payload["executable_path"] not in command or f"--omi-launch-token={token}" not in command or hashlib.sha256(command.encode()).hexdigest() != payload["command_sha256"]:
+    raise SystemExit("qualification process no longer matches launch provenance")
+print(pid)
+PY
+}
+
+automation_port_is_bound() {
+  lsof -nP -iTCP:"$AUTOMATION_PORT" -sTCP:LISTEN >/dev/null 2>&1
+}
+
+wait_for_automation_port_release() {
+  for _ in $(seq 1 50); do
+    if ! automation_port_is_bound; then
+      return 0
+    fi
+    sleep 0.1
   done
-  if kill -0 "$pid" 2>/dev/null; then
-    kill -TERM "$pid" 2>/dev/null || true
+  echo "qualification automation port remains bound after owned app cleanup: $AUTOMATION_PORT" >&2
+  return 1
+}
+
+stop_recorded_qualification_desktop() {
+  local pid status
+  set +e
+  pid="$(validated_qualification_desktop_pid)"
+  status=$?
+  set -e
+  if [[ "$status" -eq 3 ]]; then
+    return 0
   fi
+  if [[ "$status" -ne 0 || ! "$pid" =~ ^[1-9][0-9]*$ ]]; then
+    echo "qualification failed: refusing unproven qualification app cleanup" >&2
+    return 1
+  fi
+  kill -TERM "$pid" 2>/dev/null || return 1
+  for _ in $(seq 1 50); do
+    set +e
+    validated_qualification_desktop_pid >/dev/null
+    status=$?
+    set -e
+    [[ "$status" -eq 3 ]] && return 0
+    if [[ "$status" -ne 0 ]]; then
+      echo "qualification failed: qualification app ownership changed during TERM cleanup" >&2
+      return 1
+    fi
+    sleep 0.1
+  done
+  # Escalate only after fresh provenance validation of this exact owned process.
+  pid="$(validated_qualification_desktop_pid)" || {
+    echo "qualification failed: qualification app ownership changed before KILL cleanup" >&2
+    return 1
+  }
+  kill -KILL "$pid" 2>/dev/null || return 1
+  for _ in $(seq 1 50); do
+    set +e
+    validated_qualification_desktop_pid >/dev/null
+    status=$?
+    set -e
+    [[ "$status" -eq 3 ]] && return 0
+    if [[ "$status" -ne 0 ]]; then
+      echo "qualification failed: qualification app ownership changed during KILL cleanup" >&2
+      return 1
+    fi
+    sleep 0.1
+  done
+  echo "qualification failed: owned qualification app did not stop; preserving lease evidence" >&2
+  return 1
 }
 
 terminate_qualification_desktop() {
-  local bundle="$1"
-  local bundle_id app_path=""
-  bundle_id="$(derive_bundle_id "$bundle" 2>/dev/null || true)"
-  app_path="/Applications/${bundle}.app"
-
-  if [[ -n "$bundle_id" ]]; then
-    osascript -e "tell application id \"$bundle_id\" to quit" 2>/dev/null \
-      || osascript -e "quit app id \"$bundle_id\"" 2>/dev/null \
-      || true
+  if ! stop_recorded_qualification_desktop; then
+    return 1
   fi
+  wait_for_automation_port_release
+}
 
-  if [[ -d "$app_path" ]]; then
-    pkill -f "$app_path" 2>/dev/null || true
-  fi
-
-  if [[ -n "$DESKTOP_LAUNCH_PID" ]]; then
-    kill_process_tree "$DESKTOP_LAUNCH_PID"
-    wait "$DESKTOP_LAUNCH_PID" 2>/dev/null || true
-  fi
-
-  if [[ -n "$WORKTREE" && -d "$WORKTREE" ]]; then
-    pkill -f "$WORKTREE/desktop/macos/run.sh" 2>/dev/null || true
-  fi
-
-  sleep 0.5
-
-  if pgrep -f "$app_path" >/dev/null 2>&1; then
-    echo "qualification cleanup: ${bundle}.app still running; sending SIGKILL" >&2
-    pkill -9 -f "$app_path" 2>/dev/null || true
-  fi
-  if [[ -n "$bundle_id" ]] && pgrep -f "$bundle_id" >/dev/null 2>&1; then
-    pkill -9 -f "$bundle_id" 2>/dev/null || true
-  fi
+wait_for_desktop_launch() {
+  local signal_file="$1"
+  local deadline=$((SECONDS + DESKTOP_PREPARE_WAIT_SECS))
+  while (( SECONDS < deadline )); do
+    if [[ -f "$signal_file" ]]; then
+      echo "desktop launch dispatched after bounded preparation"
+      return 0
+    fi
+    if [[ -n "$DESKTOP_LAUNCH_PID" ]] && ! kill -0 "$DESKTOP_LAUNCH_PID" 2>/dev/null; then
+      echo "qualification failed: desktop launch process exited during preparation" >&2
+      return 1
+    fi
+    sleep 5
+  done
+  echo "qualification failed: desktop launch not dispatched within ${DESKTOP_PREPARE_WAIT_SECS}s" >&2
+  return 1
 }
 
 wait_for_bridge() {
   local port="$1"
+  local expected_bundle_id
+  expected_bundle_id="$(derive_bundle_id "$BUNDLE")"
   local deadline=$((SECONDS + BRIDGE_WAIT_SECS))
   while (( SECONDS < deadline )); do
-    if python3 - "$port" <<'PY'
+    if python3 - "$port" "$expected_bundle_id" <<'PY'
 import json
 import sys
 import urllib.error
 import urllib.request
 
-port = sys.argv[1]
+port, expected_bundle_id = sys.argv[1:]
 try:
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=3) as response:
         payload = json.loads(response.read().decode("utf-8"))
-    if payload.get("ok"):
+    if payload.get("ok") and payload.get("bundleIdentifier") == expected_bundle_id:
         raise SystemExit(0)
 except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
     pass
@@ -234,59 +527,93 @@ PY
   return 1
 }
 
-prepare_qualification_defaults() {
-  local bundle_id="$1" bundle_name="$2"
-  case "$bundle_name" in
-    omi-qualification-*) ;;
-    *) echo "refusing to reset non-qualification profile: $bundle_name" >&2; return 1 ;;
-  esac
-  # Qualification is a fresh, synthetic profile. Never inherit stale onboarding,
-  # capture, or shortcut state from this bundle's previous run or from Omi Dev.
-  rm -rf "$HOME/Library/Application Support/$bundle_name" "$HOME/Library/Caches/$bundle_name"
-  defaults delete "$bundle_id" >/dev/null 2>&1 || true
-  defaults write "$bundle_id" hasCompletedOnboarding -bool true
-  defaults write "$bundle_id" devLazyPermissionsEnabled -bool true
-  defaults write "$bundle_id" screenAnalysisEnabled -bool false
-  defaults write "$bundle_id" transcriptionEnabled -bool false
-  defaults write "$bundle_id" systemAudioCaptureMode -string never
-  defaults write "$bundle_id" screenAnalysisAutoStartFixed_v2 -bool true
-  defaults write "$bundle_id" shortcut_floatingBarTypedQuestionVoiceAnswersEnabled -bool false
+run_qualification_cleanup() {
+  if [[ "$QUALIFICATION_CLEANUP_DONE" -eq 1 ]]; then
+    [[ "$QUALIFICATION_CLEANUP_STATUS" == released || "$QUALIFICATION_CLEANUP_STATUS" == retained ]]
+    return
+  fi
+  QUALIFICATION_CLEANUP_DONE=1
+  if [[ "$DESKTOP_LAUNCH_REQUESTED" -eq 1 ]]; then
+    if ! terminate_qualification_desktop "$BUNDLE"; then
+      QUALIFICATION_CLEANUP_STATUS="app-cleanup-failed"
+      return 1
+    fi
+  fi
+  if [[ "$KEEP_STACK" -eq 0 && -n "$QUALIFICATION_LEASE_TOKEN" && -d "$WORKTREE" ]]; then
+    if ! (
+      cd "$WORKTREE"
+      export OMI_HARNESS_OWNERSHIP_TOKEN="$QUALIFICATION_LEASE_TOKEN"
+      PYTHONPATH="scripts/dev-harness${PYTHONPATH:+:$PYTHONPATH}" python3 -m dev_harness.cli qualification-lease release \
+        --lease-id "$QUALIFICATION_LEASE_ID" \
+        --token "$QUALIFICATION_LEASE_TOKEN" \
+        --retained-runs "$QUALIFICATION_RETAINED_RUNS" \
+        --retention-age-seconds "$QUALIFICATION_RETENTION_AGE_SECONDS"
+    ) >/dev/null 2>&1; then
+      QUALIFICATION_CLEANUP_STATUS="release-failed"
+      return 1
+    fi
+    QUALIFICATION_CLEANUP_STATUS="released"
+  elif [[ "$KEEP_STACK" -eq 1 && -n "$QUALIFICATION_LEASE_TOKEN" ]]; then
+    echo "qualification stack retained under lease $QUALIFICATION_LEASE_ID for safe later reclamation"
+    QUALIFICATION_CLEANUP_STATUS="retained"
+  fi
 }
 
 cleanup() {
   local exit_code=$?
-  if [[ -n "$BUNDLE" ]]; then
-    terminate_qualification_desktop "$BUNDLE"
-  elif [[ -n "$DESKTOP_LAUNCH_PID" ]]; then
-    kill_process_tree "$DESKTOP_LAUNCH_PID"
-    wait "$DESKTOP_LAUNCH_PID" 2>/dev/null || true
+  if ! run_qualification_cleanup; then
+    echo "qualification cleanup failed; preserving qualification lease and preventing success evidence" >&2
+    [[ "$exit_code" -ne 0 ]] || exit_code=1
   fi
-  if [[ "$KEEP_STACK" -eq 0 && -d "$WORKTREE" ]]; then
-    (cd "$WORKTREE" && PROVIDER_MODE=offline make dev-down) >/dev/null 2>&1 || true
+  if [[ -n "$QUALIFICATION_LOG_DIR" ]]; then
+    python3 - "$QUALIFICATION_LOG_DIR/cleanup.json" "$QUALIFICATION_LEASE_ID" "$QUALIFICATION_CLEANUP_STATUS" "$exit_code" <<'PY'
+import json
+import sys
+from pathlib import Path
+path, lease_id, status, exit_code = sys.argv[1:]
+Path(path).write_text(json.dumps({"lease_id": lease_id, "cleanup_status": status, "exit_code": int(exit_code)}, sort_keys=True) + "\n", encoding="utf-8")
+PY
   fi
-  if [[ "$QUALIFICATION_SUCCESS" -eq 1 ]]; then
-    git -C "$REPO_ROOT" worktree remove --force "$WORKTREE" 2>/dev/null || rm -rf "$WORKTREE"
-  fi
+  qualification_stage_remove "$QUALIFICATION_STAGE" || true
   exit "$exit_code"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
-QUALIFICATION_BUNDLE_ID="$(derive_bundle_id "$BUNDLE")"
-terminate_qualification_desktop "$BUNDLE"
-prepare_qualification_defaults "$QUALIFICATION_BUNDLE_ID" "$BUNDLE"
+"$SCRIPT_DIR/prepare-qualification-profile.sh" "$BUNDLE"
+rm -f "$LAUNCH_SIGNAL_FILE"
 
+DESKTOP_LAUNCH_REQUESTED=1
 (
   cd "$WORKTREE"
-  PROVIDER_MODE=offline make dev-up
-  OMI_SKIP_SETTINGS_SEED=1 make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice
+  OMI_HARNESS_OWNERSHIP_TOKEN="$QUALIFICATION_LEASE_TOKEN" PROVIDER_MODE=offline make dev-up
+  OMI_DESKTOP_LAUNCH_SIGNAL_FILE="$LAUNCH_SIGNAL_FILE" \
+    OMI_DESKTOP_LAUNCH_TOKEN="$DESKTOP_LAUNCH_TOKEN" \
+    OMI_SKIP_SETTINGS_SEED=1 \
+    make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice
 ) >"$LAUNCH_LOG" 2>&1 &
 DESKTOP_LAUNCH_PID=$!
-# Build time must not consume the desktop-launch readiness allowance.
+
+if ! wait_for_desktop_launch "$LAUNCH_SIGNAL_FILE"; then
+  echo "--- last 80 lines of $LAUNCH_LOG ---" >&2
+  tail -n 80 "$LAUNCH_LOG" >&2 || true
+  exit 1
+fi
+
+# The bridge gets its complete post-launch readiness allowance; cold Rust,
+# agent-runtime, SwiftPM, packaging, and signing work consumed only the separate
+# bounded preparation phase above.
 SECONDS=0
 
 if ! wait_for_bridge "$AUTOMATION_PORT"; then
   echo "--- last 80 lines of $LAUNCH_LOG ---" >&2
   tail -n 80 "$LAUNCH_LOG" >&2 || true
+  exit 1
+fi
+if ! record_owned_qualification_desktop; then
+  echo "qualification failed: could not establish owner-only desktop launch provenance" >&2
   exit 1
 fi
 
@@ -313,7 +640,10 @@ FAULT_EVIDENCE=""
 if [[ "$AUTOMATIC" -eq 1 ]]; then
   (
     cd "$WORKTREE/desktop/macos"
-    ./scripts/desktop-core-harness.sh --fault-suite --port "$((AUTOMATION_PORT + 1))"
+    OMI_FAULT_PORT="$((AUTOMATION_PORT + 2))" \
+      OMI_FAULT_STATE_DIR="$QUALIFICATION_LEASE_ROOT/state/$QUALIFICATION_LEASE_ID/fault" \
+      OMI_FAULT_OWNERSHIP_TOKEN="$QUALIFICATION_LEASE_TOKEN" \
+      ./scripts/desktop-core-harness.sh --fault-suite --port "$((AUTOMATION_PORT + 1))"
   )
   FAULT_EVIDENCE=$(ls -td "$WORKTREE/desktop/macos/.harness/desktop-core"/*-fault 2>/dev/null | head -1)
   if [[ -z "$FAULT_EVIDENCE" || ! -f "$FAULT_EVIDENCE/manifest.json" ]]; then
@@ -330,18 +660,32 @@ if manifest.get("passed") is not True or manifest.get("tier") != "fault":
 PY
 fi
 
+# Cleanup is a qualification gate, not best-effort EXIT housekeeping. Do this
+# before any trusted workflow artifact or release evidence can claim success.
+if ! run_qualification_cleanup; then
+  echo "qualification cleanup failed; preserving qualification lease and preventing success evidence" >&2
+  exit 1
+fi
+
+if [[ "$GITHUB_ACTIONS_ARTIFACT" -eq 1 ]]; then
+  QUALIFICATION_SUCCESS=1
+  echo "Qualified $RELEASE_TAG for beta; trusted workflow will publish immutable Actions evidence."
+  exit 0
+fi
+
 STAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-ASSET="qualification-evidence-${VERSION}-$(date -u +%Y%m%dT%H%M%SZ).json"
-cp "$EVIDENCE/manifest.json" "/tmp/$ASSET"
+EVIDENCE_FILE="$QUALIFICATION_STAGE/qualification-evidence.json"
+cp "$EVIDENCE/manifest.json" "$EVIDENCE_FILE"
 
 if [[ "$AUTOMATIC" -eq 1 ]]; then
   git -C "$REPO_ROOT" fetch origin --tags --force
-  LATEST_TAG=$(git -C "$REPO_ROOT" tag -l 'v*-macos' --sort=-v:refname | head -1)
+  LATEST_TAG=$(git -C "$REPO_ROOT" for-each-ref --count=1 --sort=-v:refname \
+    --format='%(refname:strip=2)' 'refs/tags/v*-macos')
   if [[ "$LATEST_TAG" != "$RELEASE_TAG" ]]; then
     echo "automatic qualification stopped: newer candidate exists ($LATEST_TAG)" >&2
     exit 1
   fi
-  python3 - "/tmp/$ASSET" "$SIGNED_SMOKE_RESULT" "$CANDIDATE_GATE_RESULT" "$FAULT_EVIDENCE/manifest.json" <<'PY'
+  python3 - "$EVIDENCE_FILE" "$SIGNED_SMOKE_RESULT" "$CANDIDATE_GATE_RESULT" "$FAULT_EVIDENCE/manifest.json" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -357,24 +701,20 @@ evidence_path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", 
 PY
 fi
 
-BODY_FILE=/tmp/desktop-qualification-release-body.md
+# Qualification evidence is factual, immutable history. Its content digest is
+# part of the asset identity and uploads never clobber an earlier observation.
+EVIDENCE_SHA=$(shasum -a 256 "$EVIDENCE_FILE" | awk '{print $1}')
+ASSET="qualification-evidence-${VERSION}-${EVIDENCE_SHA}.json"
+ASSET_FILE="$QUALIFICATION_STAGE/$ASSET"
+mv "$EVIDENCE_FILE" "$ASSET_FILE"
+
+BODY_FILE="$QUALIFICATION_STAGE/release-body.md"
 gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json body --jq .body > "$BODY_FILE"
 
 python3 "$KEYVALUE_PY" update-qualified-beta "$BODY_FILE" "$STAMP" "$SHA" "$ASSET"
 
-gh release upload "$RELEASE_TAG" "/tmp/$ASSET" --repo BasedHardware/omi --clobber
+gh release upload "$RELEASE_TAG" "$ASSET_FILE" --repo BasedHardware/omi
 gh release edit "$RELEASE_TAG" --repo BasedHardware/omi --notes-file "$BODY_FILE"
-
-if [[ "$PROMOTE" -eq 1 ]]; then
-  PROMOTION_ARGS=(--repo BasedHardware/omi -f release_tag="$RELEASE_TAG")
-  if [[ "$AUTOMATIC" -eq 1 ]]; then
-    PROMOTION_ARGS+=(-f automatic=true)
-  fi
-  gh workflow run desktop_promote_beta.yml "${PROMOTION_ARGS[@]}"
-fi
 
 QUALIFICATION_SUCCESS=1
 echo "Qualified $RELEASE_TAG for beta at $SHA (evidence asset: $ASSET, automation port: $AUTOMATION_PORT)"
-if [[ "$PROMOTE" -eq 1 ]]; then
-  echo "Dispatched qualified beta promotion for $RELEASE_TAG"
-fi

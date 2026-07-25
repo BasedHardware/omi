@@ -86,7 +86,8 @@ You'll need to obtain the following API keys and credentials:
    RAPIDAPI_HOST=your_rapidapi_host
    OPENROUTER_API_KEY=your_openrouter_api_key
    NEXT_PUBLIC_MIXPANEL_TOKEN=your_mixpanel_token
-   LINKEDIN_API_HOST=your_rapidapi_linkedin_host
+   # Non-secret LinkedIn RapidAPI hostname
+   LINKEDIN_RAPIDAPI_HOST=linkedin-api8.p.rapidapi.com
    LINKEDIN_API_KEY=your_rapidapi_linkedin_key
    REDIS_DB_HOST=your_redis_key
    REDIS_DB_PORT=redis_port

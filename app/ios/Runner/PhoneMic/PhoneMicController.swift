@@ -44,6 +44,10 @@ final class PhoneMicController {
     // (they must, to keep the byte stream contiguous across interruptions), released
     // only at stop after the audio queue is drained.
     private var mode: PhoneMicCaptureMode = .stream
+    // Dart-minted identity for the live session (control-queue confined). Every
+    // event the emitter sends carries it; a start() onto a live session adopts the
+    // new caller's id here so future events converge to that caller's Dart session.
+    private var currentSessionId: Int64 = 0
     private var batchEncoder: PhoneMicOpusEncoder?
     private var batchWriter: PhoneMicBatchAudioWriter?
     private var batchMarker = "omibatchphone"
@@ -58,9 +62,9 @@ final class PhoneMicController {
 
     // MARK: - Public API (callable from any thread; completions on main)
 
-    func start(mode: PhoneMicCaptureMode, completion: @escaping (Result<Void, Error>) -> Void) {
+    func start(mode: PhoneMicCaptureMode, sessionId: Int64, completion: @escaping (Result<Void, Error>) -> Void) {
         controlQueue.async { [weak self] in
-            self?.handleStart(mode, completion)
+            self?.handleStart(mode, sessionId, completion)
         }
     }
 
@@ -81,22 +85,36 @@ final class PhoneMicController {
 
     // MARK: - Command handling (controlQueue)
 
-    private func handleStart(_ mode: PhoneMicCaptureMode, _ completion: @escaping (Result<Void, Error>) -> Void) {
+    private func handleStart(_ mode: PhoneMicCaptureMode, _ sessionId: Int64, _ completion: @escaping (Result<Void, Error>) -> Void) {
         switch state {
         case .running:
+            // Piggyback onto a live session (a de-synced Dart restart). Adopt the
+            // caller's id so all future events carry it, and re-emit the current
+            // state now so the caller's fresh Dart session converges to .running.
+            currentSessionId = sessionId
+            emitter.emitState(.running, sessionId: sessionId)
             DispatchQueue.main.async { completion(.success(())) }
         case .starting, .rebuilding, .interrupted:
-            // An active session already exists (cannot happen through the Dart
-            // arbiter); resolve together with the in-flight bring-up/recovery. The
-            // session keeps its original mode — a late start() cannot re-select it.
+            // Bring-up / recovery already in flight; adopt the caller's id so the
+            // eventual transition emission (enterRunning etc.) carries it, and
+            // resolve together with that bring-up/recovery. The session keeps its
+            // original mode — a late start() cannot re-select it.
+            currentSessionId = sessionId
             pendingStartCompletions.append(completion)
+            // Interrupted has no imminent transition to piggyback the emission on,
+            // so re-emit it now: the new Dart session mirrors reality while the
+            // resume ticker keeps probing.
+            if state == .interrupted {
+                emitter.emitState(.interrupted, sessionId: sessionId)
+            }
         case .idle:
             self.mode = mode
+            currentSessionId = sessionId
             state = .starting
             startRetriesUsed = 0
             pendingStartCompletions.append(completion)
             monitor?.startObserving()
-            emitter.emitState(.starting)
+            emitter.emitState(.starting, sessionId: sessionId)
             NSLog("[PhoneMic] starting mode=%@, route %@",
                   mode == .batch ? "batch" : "stream", PhoneMicSessionConfigurator.describeCurrentRoute())
             checkPermissionThenBringUp()
@@ -211,7 +229,7 @@ final class PhoneMicController {
         cancelResumeTicker()
         state = .running
         NSLog("[PhoneMic] running, route %@", PhoneMicSessionConfigurator.describeCurrentRoute())
-        emitter.emitState(.running)
+        emitter.emitState(.running, sessionId: currentSessionId)
         // Batch progress ticker: armed once on first reach of running, kept alive
         // across interruptions/rebuilds (its arrival is the Dart liveness signal),
         // cancelled only on stop/idle.
@@ -241,7 +259,7 @@ final class PhoneMicController {
         cancelResumeTicker()
         state = .idle
         pendingStop = false
-        emitter.emitState(.idle)
+        emitter.emitState(.idle, sessionId: currentSessionId)
         resolvePendingStarts(.failure(PhoneMicPigeonError(code: code, message: message, details: nil)))
         resolvePendingStops()
     }
@@ -266,7 +284,7 @@ final class PhoneMicController {
         audioQueue.sync {}
         state = .idle
         NSLog("[PhoneMic] stopped")
-        emitter.emitState(.idle)
+        emitter.emitState(.idle, sessionId: currentSessionId)
         resolvePendingStops()
         resolvePendingStarts(.failure(PhoneMicPigeonError(code: "start_aborted", message: "stopped", details: nil)))
     }
@@ -289,7 +307,7 @@ final class PhoneMicController {
         releaseBatchResources()
         state = .idle
         NSLog("[PhoneMic] stopped (batch)")
-        emitter.emitState(.idle)
+        emitter.emitState(.idle, sessionId: currentSessionId)
         resolvePendingStops()
         resolvePendingStarts(.failure(PhoneMicPigeonError(code: "start_aborted", message: "stopped", details: nil)))
     }
@@ -333,7 +351,7 @@ final class PhoneMicController {
             switch state {
             case .running, .rebuilding:
                 NSLog("[PhoneMic] media services reset, rebuilding")
-                emitter.emitError(code: "media_services_reset", message: "media services were reset; rebuilding capture")
+                emitter.emitError(code: "media_services_reset", message: "media services were reset; rebuilding capture", sessionId: currentSessionId)
                 state = .running
                 beginRebuild()
             case .interrupted:
@@ -348,7 +366,7 @@ final class PhoneMicController {
         generation.invalidate()
         teardownEngine()
         state = .interrupted
-        emitter.emitState(.interrupted)
+        emitter.emitState(.interrupted, sessionId: currentSessionId)
         armResumeTicker()
     }
 
@@ -365,7 +383,7 @@ final class PhoneMicController {
 
     private func beginRebuild() {
         state = .rebuilding
-        emitter.emitState(.rebuilding)
+        emitter.emitState(.rebuilding, sessionId: currentSessionId)
         if attemptBringUp() == nil {
             enterRunning()
             return
@@ -380,7 +398,7 @@ final class PhoneMicController {
                 self.enterRunning()
             } else {
                 // Fall back to interrupted; the resume ticker keeps trying.
-                self.emitter.emitError(code: "rebuild_failed", message: "capture rebuild failed; retrying in background")
+                self.emitter.emitError(code: "rebuild_failed", message: "capture rebuild failed; retrying in background", sessionId: self.currentSessionId)
                 self.enterInterrupted()
             }
         }
@@ -395,7 +413,7 @@ final class PhoneMicController {
             NSLog("[PhoneMic] converter format drift, rebuilding")
             beginRebuild()
         case .allocationFailed, .converter:
-            emitter.emitError(code: "converter_failed", message: "audio conversion failed; rebuilding capture")
+            emitter.emitError(code: "converter_failed", message: "audio conversion failed; rebuilding capture", sessionId: currentSessionId)
             beginRebuild()
         }
     }
@@ -423,8 +441,11 @@ final class PhoneMicController {
     private func makeConvertedDataSink(epoch: UInt64) -> (Data, UInt64) -> Void {
         switch mode {
         case .stream:
+            // Capture the session id alongside the epoch: a frame belongs to the
+            // session that was current when this sink (its engine epoch) was built.
+            let sid = currentSessionId
             return { [weak self] data, epoch in
-                self?.emitter.emitFrame(data, epoch: epoch)
+                self?.emitter.emitFrame(data, epoch: epoch, sessionId: sid)
             }
         case .batch:
             let encoder = batchEncoder
@@ -511,10 +532,10 @@ final class PhoneMicController {
             (writer.sessionFramesWritten, writer.consumeStorageFullTransitionLocked())
         }
         if storageFullEdge {
-            emitter.emitError(code: "batch_storage_full", message: "storage is low; batch capture paused until space frees up")
+            emitter.emitError(code: "batch_storage_full", message: "storage is low; batch capture paused until space frees up", sessionId: currentSessionId)
         }
         // 320 samples per opus frame at 16kHz == 20ms == 0.02s.
-        emitter.emitBatchProgress(Double(frames) * 0.02)
+        emitter.emitBatchProgress(Double(frames) * 0.02, sessionId: currentSessionId)
     }
 
     private func resolvePendingStarts(_ result: Result<Void, Error>) {

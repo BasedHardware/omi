@@ -26,19 +26,27 @@ AUTHORIZATION_HEADER = 'authorization'
 CALLER_HEADER = 'x-omi-service-caller'
 USER_UID_HEADER = 'x-omi-user-uid'
 TENANT_ID_HEADER = 'x-omi-tenant-id'
+USAGE_FEATURE_HEADER = 'x-omi-llm-feature'
 
 
 class ServiceCaller(StrictBaseModel):
     name: str = Field(min_length=1, max_length=64, pattern=r'^[a-z][a-z0-9_-]*$')
     user_uid: str | None = Field(default=None, min_length=1, max_length=256)
     tenant_id: str | None = Field(default=None, min_length=1, max_length=128)
+    usage_feature: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        pattern=r'^[a-zA-Z0-9_.-]+$',
+        exclude=True,
+    )
 
     @field_validator('name', mode='before')
     @classmethod
     def normalize_name(cls, value: str) -> str:
         return value.strip().lower()
 
-    @field_validator('user_uid', 'tenant_id', mode='before')
+    @field_validator('user_uid', 'tenant_id', 'usage_feature', mode='before')
     @classmethod
     def normalize_optional_header(cls, value: str | None) -> str | None:
         if value is None:
@@ -75,6 +83,7 @@ def require_service_auth(request: Request) -> ServiceCaller:
             name=caller_name,
             user_uid=request.headers.get(USER_UID_HEADER),
             tenant_id=request.headers.get(TENANT_ID_HEADER),
+            usage_feature=request.headers.get(USAGE_FEATURE_HEADER),
         )
     except ValidationError as exc:
         _record_auth_rejection(request, 'invalid_caller')

@@ -99,12 +99,19 @@
     "annotations": {
       "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
       "__panelId__": "5",
-      "summary": "Parakeet receiving zero traffic for 10+ minutes \u2014 possible ILB connectivity or config issue (previous incident: https\u2192http misconfiguration caused 8h outage)",
-      "threshold": "< 0.001 rps (effectively zero)"
+      "summary": "Parakeet receiving zero traffic for 10+ minutes — possible ILB connectivity or config issue (previous incident: https→http misconfiguration caused 8h outage)",
+      "threshold": "< 0.001 rps (effectively zero)",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi speech processing production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
     "labels": {
       "severity": "critical",
-      "instatus_component": "speech-processing"
+      "instatus_component": "speech-processing",
+      "alert_identity": "tz_parakeet_rps_zero",
+      "component": "speech-processing",
+      "impact": "user-experience"
     },
     "isPaused": false,
     "notification_settings": {
@@ -212,12 +219,19 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "17",
-      "summary": "Backend-listen receiving zero LB traffic for 10+ minutes \u2014 transcription pipeline may be down",
-      "threshold": "< 0.001 rps (effectively zero)"
+      "summary": "Backend-listen receiving zero LB traffic for 10+ minutes — transcription pipeline may be down",
+      "threshold": "< 0.001 rps (effectively zero)",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
     "labels": {
       "severity": "critical",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "tz_backend_listen_lb_zero",
+      "component": "live-transcription",
+      "impact": "user-experience"
     },
     "isPaused": false,
     "notification_settings": {
@@ -325,12 +339,19 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "21",
-      "summary": "Backend-listen has zero ready pods \u2014 all replicas are down or failing health checks",
-      "threshold": "< 1 ready pod"
+      "summary": "Backend-listen has zero ready pods — all replicas are down or failing health checks",
+      "threshold": "< 1 ready pod",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
     "labels": {
       "severity": "critical",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "tz_backend_listen_pods_zero",
+      "component": "live-transcription",
+      "impact": "user-experience"
     },
     "isPaused": false,
     "notification_settings": {
@@ -438,12 +459,19 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "86",
-      "summary": "Pusher has zero active WebSocket connections for 10+ minutes \u2014 live transcription pipeline broken",
-      "threshold": "< 1 active connection"
+      "summary": "Pusher has zero active WebSocket connections for 10+ minutes — live transcription pipeline broken",
+      "threshold": "< 1 active connection",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
     "labels": {
       "severity": "critical",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "tz_pusher_connections_zero",
+      "component": "live-transcription",
+      "impact": "user-experience"
     },
     "isPaused": false,
     "notification_settings": {
@@ -552,11 +580,18 @@
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "82",
       "summary": "Backend-listen active WS connections dropped below 10 for 5+ minutes — clients disconnecting, likely backend-listen failure (3-day baseline: min=52, avg=218, max=365)",
-      "threshold": "< 10 active connections"
+      "threshold": "< 10 active connections",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
     "labels": {
       "severity": "critical",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "tz_backend_listen_ws_drop",
+      "component": "live-transcription",
+      "impact": "user-experience"
     },
     "isPaused": false,
     "notification_settings": {
@@ -684,12 +719,19 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "3",
-      "summary": "Backend Cloud Run service receiving zero LB traffic for 15+ minutes \u2014 API may be unreachable",
-      "threshold": "< 0.001 rps (effectively zero)"
+      "summary": "Backend Cloud Run service receiving zero LB traffic for 15+ minutes — API may be unreachable",
+      "threshold": "< 0.001 rps (effectively zero)",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
     "labels": {
       "severity": "critical",
-      "instatus_component": "api"
+      "instatus_component": "api",
+      "alert_identity": "tz_backend_cloudrun_zero",
+      "component": "api",
+      "impact": "user-experience"
     },
     "isPaused": false,
     "notification_settings": {

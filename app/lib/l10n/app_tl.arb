@@ -1483,7 +1483,7 @@
     "exportConfiguration": "I-export ang configuration",
     "bringYourOwn": "Dalhin ang iyong sarili",
     "payYourSttProvider": "Gamitin ang omi nang libre. Direkta lang sa iyong STT provider ang babayaran mo.",
-    "freeMinutesMonth": "600 libreng minuto/buwan kasama. Unlimited sa ",
+    "freeMinutesMonth": "300 libreng minuto/buwan kasama. Unlimited sa ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Ang Host ay kinakailangan",
     "validPortRequired": "Ang Valid port ay kinakailangan",
@@ -1698,22 +1698,6 @@
     "lovingOmi": "Gusto mo ba ang Omi?",
     "@lovingOmi": {
         "description": "Title for the app review prompt"
-    },
-    "leaveReviewIos": "Tumulong sa amin na maabot ang mas maraming tao sa pamamagitan ng pag-iwan ng review sa App Store. Ang iyong feedback ay napakahalagang para sa amin!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Tumulong sa amin na maabot ang mas maraming tao sa pamamagitan ng pag-iwan ng review sa Google Play Store. Ang iyong feedback ay napakahalagang para sa amin!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "Mag-rate sa App Store",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Mag-rate sa Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
     },
     "maybeLater": "Siguro mamaya",
     "@maybeLater": {
@@ -5506,7 +5490,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "600 premium mins + unlimited on-device",
+    "basicPlanDescription": "300 premium mins + unlimited on-device",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7281,7 +7265,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "600 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription.",
+    "premiumMinutesInfo": "300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7392,7 +7376,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "600 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription. ",
+    "premiumMinutesMonth": "300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10521,7 +10505,7 @@
     "upgradePlan": "I-upgrade ang plan",
     "billingMonthly": "Buwanan",
     "billingYearly": "Taunan",
-    "savePercent": "Makatipid ~17%",
+    "savePercent": "Makatipid ~{percent}%",
     "popular": "Sikat",
     "currentPlan": "Kasalukuyan",
     "neoSubtitle": "{count} tanong bawat buwan",
@@ -10727,5 +10711,60 @@
     "deviceStorageUsedOfTotal": "{used} sa {total} ang nagamit",
     "deviceStorageFree": "{free} ang libre",
     "deviceStorageNearlyFull": "Halos puno na ang device — mag-sync para magbakante ng espasyo.",
-    "phoneMicOfflineFallbackMessage": "Walang koneksyon — nagre-record nang lokal. Ita-transcribe ito kapag online ka na ulit."
+    "phoneMicOfflineFallbackMessage": "Walang koneksyon — nagre-record nang lokal. Ita-transcribe ito kapag online ka na ulit.",
+    "dataEncryptedBanner": "Ang iyong data ay protektado bilang default gamit ang malakas na encryption, at ikaw ang kumokontrol kung paano ito iniimbak at ginagamit.",
+    "rayBanMetaMicPickerTitle": "Piliin ang mikropono ng Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "Piliin ang Bluetooth na mikropono ng salamin. Hihinto muna ang musika habang ginagamit ito ng Omi.",
+    "rayBanMetaMicPickerEmpty": "Walang nahanap na Bluetooth na mikropono. Ikonekta ang salamin sa Mga Setting ng iPhone, pagkatapos ay subukan muli.",
+    "rayBanMetaMicPickerLoadError": "Hindi ma-load ang mga Bluetooth na mikropono. Tiyaking naka-on ang Bluetooth, pagkatapos ay subukan muli.",
+    "rayBanMetaMicPickerConnectError": "Hindi makakonekta sa mikroponong iyon. Tiyaking nakakonekta ito sa Mga Setting ng iPhone.",
+    "cloudTranscription": "Transkripsyon sa Cloud",
+    "copyMessage": "Kopyahin ang mensahe",
+    "deleteOnDeviceModel": "Tanggalin ang Modelo",
+    "deleteOnDeviceModelConfirm": "Sigurado ka bang gusto mong tanggalin ang modelong ito?",
+    "downgradeAnyway": "I-downgrade Pa Rin",
+    "downgradeLimitBattery": "7x na paggamit ng baterya",
+    "downgradeLimitDelay": "5-7 segundong pagkaantala",
+    "downgradeLimitQuality": "30% na mas mababang kalidad ng transkripsyon",
+    "downgradeLimitSpeakers": "Hindi makikilala ang mga nagsasalita",
+    "downgradeLimitationsHeading": "Mararanasan mo ang mga limitasyong ito:",
+    "downgradeToFreemiumTitle": "I-downgrade sa libreng plano?",
+    "errorLoadingAudio": "Nagkaproblema sa pag-load ng audio",
+    "failedToLinkCalendarEvent": "Nabigong i-link ang kaganapan sa kalendaryo",
+    "googleCalendarConnectPrompt": "Ikonekta ang iyong Google Calendar upang mai-link ang mga pag-uusap sa mga kaganapan sa kalendaryo.",
+    "googleCalendarNotConnected": "Hindi Nakakonekta ang Google Calendar",
+    "linkedToEvent": "Naka-link sa \"{title}\"",
+    "onDeviceModelDeleted": "Natanggal ang modelo",
+    "onDeviceModelDownloadFailed": "Nabigo ang pag-download ng modelo",
+    "onDeviceModelDownloadFailedDesc": "Nabigong i-download ang modelong Whisper. Pakisubukan muli.",
+    "onDeviceModelDownloadSuccess": "Na-download ang modelo",
+    "onDeviceModelDownloadSuccessDesc": "Matagumpay na na-download ang modelong Whisper",
+    "onDeviceModelDownloaded": "Na-download",
+    "onDeviceModelSize": "Laki ng Modelo",
+    "onDeviceTranscription": "Transkripsyon sa Device",
+    "onDeviceTranscriptionDesc": "Ang transkripsyon ay pinoproseso lokal sa iyong device",
+    "searchSettings": "Maghanap ng setting…",
+    "speechToTextProvider": "Serbisyo ng Boses-sa-Teksto",
+    "speechToTextProviderDesc": "Piliin ang serbisyong gagamitin para sa transkripsyon",
+    "sttFilterAuto": "Awtomatiko",
+    "sttModelAccuracy": "Katumpakan",
+    "sttModelFaster": "Mas mabilis",
+    "sttModelHigher": "Mas mataas",
+    "sttModelLower": "Mas mababa",
+    "sttModelSlower": "Mas mabagal",
+    "sttModelSpeed": "Bilis",
+    "sttNone": "Wala",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "Salamat sa iyong puna!",
+    "transcriptionLanguage": "Wika ng Transkripsyon",
+    "transcriptionLanguageDesc": "Piliin ang wika para sa transkripsyon ng pagsasalita",
+    "whisperModel": "Modelong Whisper",
+    "whisperModelDesc": "Piliin ang modelo para sa transkripsyon sa device",
+    "whisperModelSizeBase": "Batayan",
+    "whisperModelSizeLarge": "Malaki",
+    "whisperModelSizeMedium": "Katamtaman",
+    "whisperModelSizeSmall": "Maliit",
+    "whisperModelSizeTiny": "Napakaliit"
 }

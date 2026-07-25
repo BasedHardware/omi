@@ -120,7 +120,7 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                   final screenWidth = MediaQuery.sizeOf(context).width;
                   final itemSize = MediaQuery.sizeOf(context).width < 400 ? 28.0 : 34.0;
                   final containerPadding = screenWidth * 0.1; // 5% on each side
-                  final cardPadding = 16.0 * 2; // Container padding
+                  const cardPadding = 16.0 * 2; // Container padding
                   final availableWidth =
                       screenWidth - containerPadding - cardPadding - 8.0; // Minus Padding widget padding
                   final totalStarWidth = itemSize * 5;
@@ -145,10 +145,10 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
               duration: const Duration(milliseconds: 300),
               height: showReviewField
                   ? (showButton
-                      ? (MediaQuery.sizeOf(context).height < 680
-                          ? MediaQuery.sizeOf(context).height * 0.28
-                          : MediaQuery.sizeOf(context).height * 0.2)
-                      : MediaQuery.sizeOf(context).height * 0.132)
+                        ? (MediaQuery.sizeOf(context).height < 680
+                              ? MediaQuery.sizeOf(context).height * 0.28
+                              : MediaQuery.sizeOf(context).height * 0.2)
+                        : MediaQuery.sizeOf(context).height * 0.132)
                   : 0,
               child: !showReviewField
                   ? null

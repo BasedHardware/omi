@@ -102,7 +102,8 @@ def manage_daily_summary_tool(
 
     if action == "enable":
         notification_db.set_daily_summary_enabled(uid, True)
-        current_hour = notification_db.get_daily_summary_hour_local(uid) or 22
+        _hour = notification_db.get_daily_summary_hour_local(uid)
+        current_hour = 22 if _hour is None else _hour
         hour_str = _format_hour(current_hour)
         return f"Daily summary notifications enabled. You'll receive them at {hour_str}."
 
@@ -129,7 +130,8 @@ def manage_daily_summary_tool(
 
     elif action == "get_settings":
         enabled = notification_db.get_daily_summary_enabled(uid)
-        current_hour = notification_db.get_daily_summary_hour_local(uid) or 22
+        _hour = notification_db.get_daily_summary_hour_local(uid)
+        current_hour = 22 if _hour is None else _hour
         hour_str = _format_hour(current_hour)
 
         if enabled:

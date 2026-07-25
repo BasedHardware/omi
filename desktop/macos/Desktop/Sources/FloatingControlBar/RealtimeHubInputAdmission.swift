@@ -176,10 +176,57 @@ enum RealtimeInputAdmissionPolicy {
 }
 
 enum RealtimeVoiceContextRefreshPolicy {
+  enum HandoffDecision: Equatable {
+    case keepCurrentSession
+    case debounceIdleHandoff
+    case replacePreservingBufferedTurn
+  }
+
+  /// A streaming text turn can update the voice context several times per
+  /// second. Replacing an otherwise-idle realtime socket for every update
+  /// makes the next PTT press race a chain of redundant reconnects. The
+  /// controller coalesces those idle updates, while a captured press still
+  /// replaces immediately and keeps its audio buffer.
+  static let idleHandoffDebounceNanoseconds: UInt64 = 600_000_000
+
   static func requiresRefresh(
     currentSnapshotIdentity: String,
     sessionSnapshotIdentity: String
   ) -> Bool {
     currentSnapshotIdentity != sessionSnapshotIdentity
+  }
+
+  static func handoffDecision(
+    currentSnapshotIdentity: String,
+    sessionSnapshotIdentity: String,
+    hasBufferedTurn: Bool
+  ) -> HandoffDecision {
+    guard
+      requiresRefresh(
+        currentSnapshotIdentity: currentSnapshotIdentity,
+        sessionSnapshotIdentity: sessionSnapshotIdentity
+      )
+    else {
+      return .keepCurrentSession
+    }
+    return hasBufferedTurn ? .replacePreservingBufferedTurn : .debounceIdleHandoff
+  }
+}
+
+/// A physical realtime socket is useful only after the kernel supplies the
+/// owner-bound context identity it must carry. Starting one earlier creates an
+/// empty session which has to be torn down just as the first PTT capture starts.
+enum RealtimeWarmSessionStartPolicy {
+  static func canStart(requirementIsResolved: Bool) -> Bool {
+    requirementIsResolved
+  }
+}
+
+/// Gemini's completed-turn boundary already schedules a persistence-fenced context refresh.
+/// Starting a second refresh from journal finalization tears down the newly warming session and
+/// makes the next PTT press buffer behind redundant reconnects.
+enum RealtimePersistedVoiceContextRefreshPolicy {
+  static func shouldHandoffImmediately(provider: RealtimeHubProvider?) -> Bool {
+    provider != .gemini
   }
 }

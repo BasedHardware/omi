@@ -483,17 +483,14 @@ class TestParseIsoDate:
         with pytest.raises(ValueError):
             conversations_svc.parse_iso_date("2026-02-01T00:00:00 07:00 ", "test")
 
-    def test_source_has_encodeQueryDate(self):
-        """Verify desktop APIClient.swift uses encodeQueryDate for date params.
-        Regression guard: if encodeQueryDate is removed, this test fails."""
-        swift_path = os.path.join(
-            os.path.dirname(__file__), '..', '..', '..', 'desktop', 'Desktop', 'Sources', 'APIClient.swift'
-        )
-        if not os.path.exists(swift_path):
-            pytest.skip("APIClient.swift not found (backend-only test environment)")
-        with open(swift_path, encoding="utf-8") as f:
-            source = f.read()
-        assert 'func encodeQueryDate' in source, "encodeQueryDate helper must exist in APIClient.swift"
+    def test_source_has_encode_query_date(self):
+        """Verify desktop tool routes preserve plus-sign timezone offsets."""
+        source_root = BACKEND_DIR.parent / "desktop" / "macos" / "Desktop" / "Sources"
+        paths = sorted(source_root.rglob("APIClient*.swift"))
+        if not paths:
+            pytest.skip("APIClient sources not found (backend-only test environment)")
+        source = "\n".join(path.read_text(encoding="utf-8") for path in paths)
+        assert 'func encodeQueryDate' in source, "encodeQueryDate helper must exist in the APIClient extension set"
         # 8 call sites + 1 definition = at least 9 occurrences
         count = source.count('encodeQueryDate(')
         assert count >= 9, f"Expected >= 9 encodeQueryDate( occurrences (1 def + 8 calls), got {count}"

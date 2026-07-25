@@ -1003,13 +1003,17 @@ void sd_worker_thread(void)
             }
             break;
 
-        case REQ_ADVANCE_READ:
+        case REQ_ADVANCE_READ: {
+            /* Perform the advance regardless; a NULL resp is a fire-and-forget
+             * (async) request from the sync checkpoint that must not block. */
+            int adv_res = advance_read_seq_internal(req.u.advance.new_read_seq, false);
             if (req.u.advance.resp) {
-                req.u.advance.resp->res = advance_read_seq_internal(req.u.advance.new_read_seq, false);
+                req.u.advance.resp->res = adv_res;
                 k_sem_give(&req.u.advance.resp->sem);
                 release_resp_busy(req.u.advance.resp->busy_flag);
             }
             break;
+        }
 
         case REQ_CLEAR_RING:
             if (req.u.status.resp) {
@@ -1383,6 +1387,19 @@ int sd_ring_advance(uint64_t new_read_seq)
     }
 
     return resp.res;
+}
+
+int sd_ring_advance_async(uint64_t new_read_seq)
+{
+    /* Fire-and-forget: queue the advance on the priority queue and return
+     * immediately (no worker round-trip). Used by the sync checkpoint so the
+     * BLE send stream is never stalled. Persist happens in the worker; if it
+     * fails the next checkpoint / the final blocking advance re-persists. */
+    sd_req_t req = {0};
+    req.type = REQ_ADVANCE_READ;
+    req.u.advance.new_read_seq = new_read_seq;
+    req.u.advance.resp = NULL;
+    return k_msgq_put(&sd_prio_msgq, &req, K_NO_WAIT);
 }
 
 int sd_ring_clear(void)

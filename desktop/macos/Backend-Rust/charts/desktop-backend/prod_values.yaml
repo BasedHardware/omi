@@ -29,11 +29,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GEMINI_API_KEY
-  - name: DEEPGRAM_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: DEEPGRAM_API_KEY
   - name: REDIS_DB_HOST
     valueFrom:
       secretKeyRef:

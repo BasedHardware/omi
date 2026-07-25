@@ -72,6 +72,12 @@ LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     ['status'],
 )
 
+LISTEN_FINALIZATION_DURABLE_JOBS = Gauge(
+    'listen_finalization_durable_jobs',
+    'Authoritative Firestore finalization jobs by closed durable lifecycle state',
+    ['state'],
+)
+
 LISTEN_FINALIZATION_RETRIES_TOTAL = Counter(
     'listen_finalization_retries_total',
     'Durable listen finalization jobs replayed by the reconciler',
@@ -81,6 +87,17 @@ LISTEN_FINALIZATION_DEAD_LETTER_TOTAL = Counter(
     'listen_finalization_dead_letter_total',
     'Listen finalization jobs terminalized after their final Cloud Tasks attempt',
 )
+
+LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL = Counter(
+    'listen_finalization_stale_processing_reconciliations_total',
+    'Stale bare-processing conversation reconciliation outcomes by the crash-orphan sweep',
+    ['outcome'],
+)
+
+# Zero-initialize the closed outcome set so an idle process exports every
+# series, distinguishing no stranded rows from a missing scrape target.
+for _outcome in ('completed', 'migrated', 'skipped', 'error'):
+    LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome=_outcome)
 
 LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS = Counter(
     'llm_gateway_chat_extraction_requests_total',
@@ -98,6 +115,18 @@ LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = Counter(
     'llm_gateway_chat_extraction_comparisons_total',
     'Privacy-safe comparison buckets between shadow gateway output and legacy extraction output',
     ['feature', 'field', 'outcome'],
+)
+
+LLM_GATEWAY_CIRCUIT_OPEN = Gauge(
+    'llm_gateway_circuit_open',
+    'Whether this backend process is bypassing the LLM gateway after transport failures',
+)
+
+LLM_GATEWAY_CLIENT_FIRST_BYTE_SECONDS = Histogram(
+    'llm_gateway_client_first_byte_seconds',
+    'Client time until the gateway returns a non-streaming response, first stream event, or transport failure',
+    ['feature', 'outcome'],
+    buckets=(0.1, 0.25, 0.5, 1, 2, 3, 5, 10, 15, 30),
 )
 
 OMI_FALLBACK_TOTAL = Counter(
@@ -206,8 +235,28 @@ OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL = Counter(
 
 OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL = Counter(
     'omi_live_stt_terminal_failures_total',
-    'Terminal live-STT failures by bounded provider, outcome, client platform, revision, and phase',
-    ['provider', 'outcome', 'client_platform', 'deployment_version', 'phase'],
+    'Terminal live-STT failures by bounded provider, outcome, client platform, environment, and phase',
+    ['provider', 'outcome', 'client_platform', 'deployment_environment', 'phase'],
+)
+
+OMI_LIVE_STT_ACCEPTED_TOTAL = Counter(
+    'omi_live_stt_accepted_total',
+    'Accepted live-STT attempts by bounded provider, client platform, and deployment environment',
+    ['provider', 'client_platform', 'deployment_environment'],
+)
+
+# Whether misaligned frames actually occur in production is unmeasured; Velma rejects
+# them outright, so this counter is what tells a Velma canary if that was the cause.
+OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL = Counter(
+    'omi_live_stt_misaligned_frames_total',
+    'Live-STT frames that were not a whole number of 16-bit samples, by provider and pipeline stage',
+    ['provider', 'stage'],
+)
+
+OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
+    'omi_live_stt_terminal_total',
+    'Terminal live-STT outcomes for accepted attempts by bounded labels',
+    ['provider', 'outcome', 'client_platform', 'deployment_environment', 'phase'],
 )
 
 TASK_WORKSTREAM_ASSOCIATION_TOTAL = Counter(
@@ -233,6 +282,23 @@ AUTH_FLOW_DURATION_SECONDS = Histogram(
     'Auth flow duration in seconds by provider and terminal state',
     ['provider', 'terminal_state'],
 )
+
+
+# Pusher readiness / drain gauges. Label-free (low cardinality) so they scrape
+# cheaply. Initialized to serving below so an idle healthy pod reads
+# pusher_ready=1 / pusher_drain_in_progress=0 and is distinguishable from a
+# missing scrape target (a labelless Gauge defaults to 0, which would wrongly
+# read as "draining"). utils.readiness.ReadinessGate flips these on drain.
+PUSHER_READY = Gauge(
+    'pusher_ready',
+    '1 = serving new traffic, 0 = draining',
+)
+PUSHER_DRAIN_IN_PROGRESS = Gauge(
+    'pusher_drain_in_progress',
+    '1 = drain initiated, readiness closed',
+)
+PUSHER_READY.set(1)
+PUSHER_DRAIN_IN_PROGRESS.set(0)
 
 
 def metrics_response() -> Response:

@@ -276,6 +276,13 @@ class ShortcutSettings: ObservableObject {
     modifiers: [.command, .shift]
   )
   static let askOmiCommandJShortcut = KeyboardShortcut(keyCode: 38, keyDisplay: "J", modifiers: .command)
+  // ⌘O is the default open hotkey again: it registers reliably via the
+  // dedicated Carbon hotkey (GlobalShortcutManager.registerCommandO), so it no
+  // longer collides with the universal "Open" shortcut the way a plain global
+  // registration did. ⌃⌥O stays defined as a conflict-free alternative users can
+  // bind, but is no longer the default or a preset.
+  static let askOmiControlOptionOShortcut = KeyboardShortcut(
+    keyCode: 31, keyDisplay: "O", modifiers: [.control, .option])
   static let defaultAskOmiShortcut = askOmiCommandOShortcut
 
   static let askOmiPresets: [KeyboardShortcut] = [
@@ -301,15 +308,28 @@ class ShortcutSettings: ObservableObject {
   @Published var askOmiShortcut: KeyboardShortcut {
     didSet {
       persistShortcut(askOmiShortcut, forKey: Self.askOmiShortcutDefaultsKey)
-      NotificationCenter.default.post(name: Self.askOmiShortcutChanged, object: nil)
+      postAskOmiShortcutChangedIfNeeded()
     }
   }
 
   @Published var askOmiEnabled: Bool {
     didSet {
       UserDefaults.standard.set(askOmiEnabled, forKey: "shortcut_askOmiEnabled")
+      postAskOmiShortcutChangedIfNeeded()
+    }
+  }
+
+  /// Keeps the registration owner from observing a half-applied Ask Omi selection.
+  /// The individual published values still update for SwiftUI, but the hotkey owner
+  /// receives one notification only after both persisted values are final.
+  func updateAskOmiRegistration(enabled: Bool, shortcut: KeyboardShortcut) {
+    isUpdatingAskOmiRegistration = true
+    defer {
+      isUpdatingAskOmiRegistration = false
       NotificationCenter.default.post(name: Self.askOmiShortcutChanged, object: nil)
     }
+    askOmiShortcut = shortcut
+    askOmiEnabled = enabled
   }
 
   @Published var pttEnabled: Bool {
@@ -337,6 +357,12 @@ class ShortcutSettings: ObservableObject {
     didSet { UserDefaults.standard.set(pttMuteSystemAudio, forKey: "shortcut_pttMuteSystemAudio") }
   }
 
+  /// Empty means Automatic. A non-empty value is a stable CoreAudio device UID
+  /// selected specifically for push-to-talk, independent of the macOS default input.
+  @Published var pttInputDeviceUID: String {
+    didSet { UserDefaults.standard.set(pttInputDeviceUID, forKey: .shortcutPTTInputDeviceUID) }
+  }
+
   /// Selected AI model for Ask Omi.
   @Published var selectedModel: String {
     didSet { UserDefaults.standard.set(selectedModel, forKey: "shortcut_selectedModel") }
@@ -360,6 +386,19 @@ class ShortcutSettings: ObservableObject {
 
   @Published var pttTranscriptionMode: PTTTranscriptionMode {
     didSet { UserDefaults.standard.set(pttTranscriptionMode.rawValue, forKey: "shortcut_pttTranscriptionMode") }
+  }
+
+  /// Transient, never-persisted override for the onboarding voice demo, which
+  /// forces `.live` only while its step is on screen. Persisting the forced
+  /// mode (as the demo used to, via `pttTranscriptionMode`'s didSet) meant a
+  /// quit/crash mid-step permanently corrupted the user's saved PTT mode.
+  /// Consumers read `effectivePTTTranscriptionMode`, not the stored property.
+  @Published var pttTranscriptionModeDemoOverride: PTTTranscriptionMode?
+
+  /// The PTT transcription mode in effect: the demo override when present,
+  /// otherwise the user's persisted preference.
+  var effectivePTTTranscriptionMode: PTTTranscriptionMode {
+    pttTranscriptionModeDemoOverride ?? pttTranscriptionMode
   }
 
   /// When true, the floating bar can be repositioned by dragging. Off by default.
@@ -522,6 +561,13 @@ class ShortcutSettings: ObservableObject {
     !Self.pttPresets.contains(pttShortcut)
   }
 
+  private var isUpdatingAskOmiRegistration = false
+
+  private func postAskOmiShortcutChangedIfNeeded() {
+    guard !isUpdatingAskOmiRegistration else { return }
+    NotificationCenter.default.post(name: Self.askOmiShortcutChanged, object: nil)
+  }
+
   private static let askOmiShortcutDefaultsKey = "shortcut_askOmiKey"
   private static let pttShortcutDefaultsKey = "shortcut_pttKey"
 
@@ -532,6 +578,9 @@ class ShortcutSettings: ObservableObject {
         legacyMapper: Self.legacyPTTShortcut
       ) ?? Self.pttPresets[0]
 
+    // ⌘O registers reliably now via the dedicated Carbon hotkey
+    // (GlobalShortcutManager.registerCommandO), so a saved ⌘O binding is honored
+    // as-is — no ⌘O → ⌃⌥O migration.
     self.askOmiShortcut =
       Self.loadShortcut(
         forKey: Self.askOmiShortcutDefaultsKey,
@@ -544,6 +593,7 @@ class ShortcutSettings: ObservableObject {
     self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
     self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
     self.pttMuteSystemAudio = UserDefaults.standard.object(forKey: "shortcut_pttMuteSystemAudio") as? Bool ?? true
+    self.pttInputDeviceUID = UserDefaults.standard.string(forKey: .shortcutPTTInputDeviceUID) ?? ""
     self.selectedModel = ModelQoS.Claude.sanitizedSelection(
       UserDefaults.standard.string(forKey: "shortcut_selectedModel")
     )

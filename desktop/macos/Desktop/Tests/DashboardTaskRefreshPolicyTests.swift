@@ -101,24 +101,53 @@ final class DashboardTaskRefreshPolicyTests: XCTestCase {
       ])
     XCTAssertEqual(plan.backendIdsToHardDelete, ["deleted-remotely"])
     XCTAssertEqual(plan.dashboardVisibleServerIds, [stillVisible.id, newDashboardTask.id])
-    XCTAssertTrue(plan.completedServerIds.contains(completed.id))
+    XCTAssertTrue(plan.terminalServerIds.contains(completed.id))
     XCTAssertTrue(plan.movedOutServerIds.contains(movedOut.id))
     XCTAssertFalse(plan.shouldMarkIncompleteTasksLoaded)
     XCTAssertFalse(plan.shouldAssignTasksPageList)
+  }
+
+  func testDashboardDoesNotReintroduceTerminalDetailTask() {
+    let calendar = Calendar(identifier: .gregorian)
+    let now = Date(timeIntervalSince1970: 1_750_000_000)
+    let today = calendar.startOfDay(for: now).addingTimeInterval(10 * 60 * 60)
+
+    for taskStatus in ["cancelled", "superseded"] {
+      let terminalTask = task(
+        id: "\(taskStatus)-remotely",
+        createdAt: now,
+        dueAt: today,
+        taskStatus: taskStatus
+      )
+
+      let plan = DashboardTaskReconciliationPlanner.plan(
+        localDashboardIds: [terminalTask.id],
+        dashboardWindowServerItems: [],
+        exactServerItemsById: [terminalTask.id: terminalTask],
+        missingServerIds: [],
+        now: now,
+        calendar: calendar
+      )
+
+      XCTAssertTrue(plan.terminalServerIds.contains(terminalTask.id))
+      XCTAssertFalse(plan.dashboardVisibleServerIds.contains(terminalTask.id))
+    }
   }
 
   private func task(
     id: String,
     completed: Bool = false,
     createdAt: Date,
-    dueAt: Date?
+    dueAt: Date?,
+    taskStatus: String? = nil
   ) -> TaskActionItem {
     TaskActionItem(
       id: id,
       description: id,
       completed: completed,
       createdAt: createdAt,
-      dueAt: dueAt
+      dueAt: dueAt,
+      taskStatus: taskStatus
     )
   }
 }

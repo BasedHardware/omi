@@ -88,6 +88,26 @@ describe("macOS release CI", () => {
     expect(prepareRuntimeScript).not.toContain('NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.14.0}"');
   });
 
+  it("runs the pi-mono package harness under the maintained Node runtime", () => {
+    const harness = readFileSync(new URL("../../scripts/agent-logic-harness.sh", import.meta.url), "utf8");
+
+    expect(harness).toContain('"$DESKTOP_DIR/Desktop/Sources/Resources/node"');
+    expect(harness).toContain('node_supports_strip_types "$node_bin"');
+    expect(harness).toContain('PATH="$(dirname "$node22"):$PATH" npx --yes tsx --test index.test.ts');
+  });
+
+  it("runs spawn-receipt fixtures under the maintained Node runtime", () => {
+    const fixtureCheck = readFileSync(
+      new URL("../../scripts/check-spawn-receipt-fixtures.sh", import.meta.url),
+      "utf8"
+    );
+
+    expect(fixtureCheck).toContain('"$DESKTOP_DIR/Desktop/Sources/Resources/node"');
+    expect(fixtureCheck).toContain('node_supports_strip_types "$node_bin"');
+    expect(fixtureCheck).toContain('export PATH="$(dirname "$NODE22"):$PATH"');
+    expect(fixtureCheck).toContain('"$NODE22" node_modules/vitest/vitest.mjs run tests/spawn-receipt-fixtures.test.ts');
+  });
+
   it("signs bundled pi-mono-extension native dependencies before app signing", () => {
     const codemagic = readFileSync(new URL("../../../../codemagic.yaml", import.meta.url), "utf8");
 

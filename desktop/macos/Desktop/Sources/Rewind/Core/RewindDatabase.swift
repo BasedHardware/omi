@@ -1,10 +1,17 @@
 import Foundation
 @preconcurrency import GRDB
 import OmiSupport
+import os
 
 /// Actor-based database manager for Rewind screenshots
 actor RewindDatabase {
   static let shared = RewindDatabase()
+  private static let terminationLock = NSLock()
+  nonisolated(unsafe) private static var terminationInProgress = false
+
+  nonisolated static var isTerminationInProgress: Bool {
+    terminationLock.withLock { terminationInProgress }
+  }
 
   private var dbQueue: DatabasePool?
 
@@ -35,8 +42,13 @@ actor RewindDatabase {
   /// on open does not break the in-flight-close detection in `initialize()`.
   private var poolEpoch: Int = 0
 
-  /// Static user ID for nonisolated markCleanShutdown (set by configure(userId:))
-  nonisolated(unsafe) static var currentUserId: String?
+  /// Lock-gated (`OSAllocatedUnfairLock`) so concurrent access from the actor,
+  /// `MainActor` (`AgentVMService`), and nonisolated shutdown is race-free (SCA-8).
+  private static let currentUserIdLock = OSAllocatedUnfairLock<String?>(initialState: nil)
+  static var currentUserId: String? {
+    get { currentUserIdLock.withLock { $0 } }
+    set { currentUserIdLock.withLock { $0 = newValue } }
+  }
 
   /// Runtime error tracking: consecutive SQLITE_IOERR/CORRUPT errors during normal queries.
   /// When this hits the threshold, we close the database so the next initialize() attempt
@@ -137,7 +149,7 @@ actor RewindDatabase {
 
     guard FileManager.default.fileExists(atPath: dbPath) else { return }
     do {
-      try await handleCorruptedDatabase(at: dbPath, in: omiDir)
+      try await handleCorruptedDatabase(at: dbPath, in: omiDir, triggerError: error)
       try await initialize()
       log("RewindDatabase: recovered and reopened database after \(operation)")
     } catch {
@@ -350,6 +362,7 @@ actor RewindDatabase {
   /// Call from applicationWillTerminate to avoid unnecessary integrity checks on next launch.
   /// This is nonisolated so it can be called synchronously from the main thread during termination.
   nonisolated static func markCleanShutdown() {
+    terminationLock.withLock { terminationInProgress = true }
     let userDir = staticUserBaseDirectory()
     let flagPath = userDir.appendingPathComponent(".omi_running").path
     try? FileManager.default.removeItem(atPath: flagPath)
@@ -501,7 +514,7 @@ actor RewindDatabase {
 
         if isCorrupted && FileManager.default.fileExists(atPath: dbPath) {
           log("RewindDatabase: Database is corrupted (error: \(retryError)), attempting recovery...")
-          try await handleCorruptedDatabase(at: dbPath, in: omiDir)
+          try await handleCorruptedDatabase(at: dbPath, in: omiDir, triggerError: retryError)
           // Retry with recovered or fresh database
           queue = try DatabasePool(path: dbPath, configuration: config)
         } else {
@@ -803,7 +816,11 @@ actor RewindDatabase {
   private(set) var recoveredRecordCount: Int = 0
 
   /// Handle corrupted database: attempt recovery, backup, and recreate
-  private func handleCorruptedDatabase(at dbPath: String, in omiDir: URL) async throws {
+  private func handleCorruptedDatabase(
+    at dbPath: String,
+    in omiDir: URL,
+    triggerError: Error? = nil
+  ) async throws {
     let fileManager = FileManager.default
 
     // Create backup directory
@@ -865,7 +882,14 @@ actor RewindDatabase {
       }
     }
 
-    logError("RewindDatabase: Corrupted database backed up and removed. A fresh database will be created.")
+    logError(
+      "RewindDatabase: Corrupted database backed up and removed. A fresh database will be created.",
+      context: StorageFailureDiagnostics.context(
+        pathClass: "rewind-db",
+        containingURL: omiDir,
+        databaseURL: URL(fileURLWithPath: dbPath),
+        error: triggerError,
+        appIsTerminating: Self.isTerminationInProgress))
 
     // Clean up old backups (keep only last 5)
     try await cleanupOldBackups(in: backupDir, keepCount: 5)
@@ -2560,6 +2584,17 @@ actor RewindDatabase {
       }
     }
 
+    // Legacy and rebuilt screenshots cannot safely assert an originating machine.
+    // New captures retain a display name and the canonical memory device identity.
+    migrator.registerMigration("addScreenshotDeviceProvenance") { db in
+      try db.alter(table: "screenshots") { t in
+        t.add(column: "deviceName", .text)
+        t.add(column: "clientDeviceId", .text)
+      }
+    }
+
+    RewindAbandonedVideoChunkQuarantine.registerMigration(on: &migrator)
+
     try migrator.migrate(queue)
   }
 
@@ -2711,24 +2746,6 @@ actor RewindDatabase {
 
   // MARK: - CRUD Operations
 
-  /// Insert a new screenshot record
-  @discardableResult
-  func insertScreenshot(_ screenshot: Screenshot) throws -> Screenshot {
-    guard let dbQueue = dbQueue else {
-      throw RewindError.databaseNotInitialized
-    }
-
-    return try dbQueue.write { db -> Screenshot in
-      var record = screenshot
-      // The `imagePath` column is NOT NULL in the schema, but the model field is
-      // optional (nil for video-based screenshots). Coalesce nil → "" so a video
-      // screenshot never trips a NOT NULL constraint violation on insert.
-      if record.imagePath == nil { record.imagePath = "" }
-      try record.insert(db)
-      return record
-    }
-  }
-
   /// Atomically replace every database row reconstructed from one video chunk.
   ///
   /// Rebuilds can be retried, so inserting reconstructed rows one at a time would
@@ -2761,6 +2778,8 @@ actor RewindDatabase {
     }
 
     return try dbQueue.write { db in
+      try RewindAbandonedVideoChunkQuarantine.requireAvailable(db, videoChunkPath: path)
+
       try db.execute(
         sql: "DELETE FROM screenshots WHERE videoChunkPath = ?",
         arguments: [path]

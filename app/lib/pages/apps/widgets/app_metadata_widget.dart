@@ -107,7 +107,7 @@ class AppMetadataWidget extends StatelessWidget {
                                     child: Container(
                                       padding: const EdgeInsets.all(6.0),
                                       decoration: BoxDecoration(borderRadius: BorderRadius.circular(8.0)),
-                                      child: FaIcon(FontAwesomeIcons.copy, color: Colors.white, size: 16),
+                                      child: const FaIcon(FontAwesomeIcons.copy, color: Colors.white, size: 16),
                                     ),
                                   ),
                                 ],
@@ -136,18 +136,18 @@ class AppMetadataWidget extends StatelessWidget {
                               ),
                               child: imageFile != null || imageUrl != null
                                   ? (imageUrl == null
-                                      ? ClipRRect(
-                                          borderRadius: BorderRadius.circular(14.0),
-                                          child: Image.file(imageFile!, fit: BoxFit.cover),
-                                        )
-                                      : ClipRRect(
-                                          borderRadius: BorderRadius.circular(14.0),
-                                          child: CachedNetworkImage(imageUrl: imageUrl!, fit: BoxFit.cover),
-                                        ))
+                                        ? ClipRRect(
+                                            borderRadius: BorderRadius.circular(14.0),
+                                            child: Image.file(imageFile!, fit: BoxFit.cover),
+                                          )
+                                        : ClipRRect(
+                                            borderRadius: BorderRadius.circular(14.0),
+                                            child: CachedNetworkImage(imageUrl: imageUrl!, fit: BoxFit.cover),
+                                          ))
                                   : Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
-                                        FaIcon(FontAwesomeIcons.camera, color: Colors.grey, size: 24),
+                                        const FaIcon(FontAwesomeIcons.camera, color: Colors.grey, size: 24),
                                         const SizedBox(height: 6),
                                         Text(
                                           '${context.l10n.appIconLabel}*',
@@ -166,7 +166,7 @@ class AppMetadataWidget extends StatelessWidget {
                                 child: Container(
                                   padding: const EdgeInsets.all(6.0),
                                   decoration: const BoxDecoration(color: Color(0xFF35343B), shape: BoxShape.circle),
-                                  child: FaIcon(FontAwesomeIcons.pen, color: Colors.white, size: 12),
+                                  child: const FaIcon(FontAwesomeIcons.pen, color: Colors.white, size: 12),
                                 ),
                               ),
                             ),
@@ -337,7 +337,7 @@ class AppMetadataWidget extends StatelessWidget {
                                   highlightColor: Colors.grey[600]!,
                                   duration: const Duration(seconds: 1),
                                 ),
-                                child: Bone.multiText(),
+                                child: const Bone.multiText(),
                               ),
                             )
                           : TextFormField(
@@ -420,45 +420,46 @@ class AppMetadataWidget extends StatelessWidget {
                                             const SizedBox(height: 18),
                                             ListView(
                                               shrinkWrap: true,
-                                              children: [
-                                                {'label': context.l10n.pricingFree, 'isPaid': false},
-                                                {'label': context.l10n.pricingPaid, 'isPaid': true},
-                                              ].map((option) {
-                                                final isPaid = option['isPaid'] as bool;
-                                                final label = option['label'] as String;
-                                                return InkWell(
-                                                  onTap: () {
-                                                    provider.setIsPaid(isPaid);
-                                                    Navigator.pop(context);
-                                                  },
-                                                  child: Container(
-                                                    padding: const EdgeInsets.symmetric(vertical: 10),
-                                                    child: Row(
-                                                      crossAxisAlignment: CrossAxisAlignment.center,
-                                                      children: [
-                                                        const SizedBox(width: 6),
-                                                        Text(
-                                                          label,
-                                                          style: TextStyle(
-                                                            color: Colors.grey.shade300,
-                                                            fontSize: 16,
-                                                          ),
+                                              children:
+                                                  [
+                                                    {'label': context.l10n.pricingFree, 'isPaid': false},
+                                                    {'label': context.l10n.pricingPaid, 'isPaid': true},
+                                                  ].map((option) {
+                                                    final isPaid = option['isPaid'] as bool;
+                                                    final label = option['label'] as String;
+                                                    return InkWell(
+                                                      onTap: () {
+                                                        provider.setIsPaid(isPaid);
+                                                        Navigator.pop(context);
+                                                      },
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(vertical: 10),
+                                                        child: Row(
+                                                          crossAxisAlignment: CrossAxisAlignment.center,
+                                                          children: [
+                                                            const SizedBox(width: 6),
+                                                            Text(
+                                                              label,
+                                                              style: TextStyle(
+                                                                color: Colors.grey.shade300,
+                                                                fontSize: 16,
+                                                              ),
+                                                            ),
+                                                            const Spacer(),
+                                                            Checkbox(
+                                                              value: provider.isPaid == isPaid,
+                                                              onChanged: (value) {
+                                                                provider.setIsPaid(isPaid);
+                                                                Navigator.pop(context);
+                                                              },
+                                                              side: BorderSide(color: Colors.grey.shade300),
+                                                              shape: const CircleBorder(),
+                                                            ),
+                                                          ],
                                                         ),
-                                                        const Spacer(),
-                                                        Checkbox(
-                                                          value: provider.isPaid == isPaid,
-                                                          onChanged: (value) {
-                                                            provider.setIsPaid(isPaid);
-                                                            Navigator.pop(context);
-                                                          },
-                                                          side: BorderSide(color: Colors.grey.shade300),
-                                                          shape: const CircleBorder(),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                );
-                                              }).toList(),
+                                                      ),
+                                                    );
+                                                  }).toList(),
                                             ),
                                           ],
                                         ),
@@ -473,7 +474,7 @@ class AppMetadataWidget extends StatelessWidget {
                             margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
                             padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 10.0),
                             decoration: BoxDecoration(
-                              color: Color(0xFF35343B),
+                              color: const Color(0xFF35343B),
                               borderRadius: BorderRadius.circular(10.0),
                             ),
                             width: double.infinity,
@@ -495,7 +496,7 @@ class AppMetadataWidget extends StatelessWidget {
                             ),
                           ),
                         )
-                      : SizedBox.shrink(),
+                      : const SizedBox.shrink(),
                 ],
               ),
             ),

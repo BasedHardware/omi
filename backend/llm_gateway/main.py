@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
 from llm_gateway.gateway.request_context import REQUEST_ID_HEADER, request_id_for, resolve_request_id
+from llm_gateway.gateway.accounting_sink import drain_accounting_persistence_tasks
 from llm_gateway.routers import anthropic_messages, health, metrics, openai_compatible
 from llm_gateway.routers.dependencies import close_provider_registry
 
@@ -20,6 +21,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await asyncio.gather(
+            _run_shutdown_cleanup('accounting_persistence', drain_accounting_persistence_tasks),
             _run_shutdown_cleanup('image_generation_client', openai_compatible.close_image_generation_client),
             _run_shutdown_cleanup('anthropic_messages_client', anthropic_messages.close_anthropic_messages_client),
             _run_shutdown_cleanup('provider_registry', close_provider_registry),

@@ -96,14 +96,21 @@ enum ScreenContextAutoIncludePolicy {
   static func reason(
     userText: String,
     systemPromptStyle: ChatSystemPromptStyle,
-    turnOwner: ChatTurnOwner
+    turnOwner: ChatTurnOwner,
+    onboardingActive: Bool = false
   ) -> ScreenContextAutoIncludeReason? {
     if ScreenContextInterestDetector.isScreenContextRequest(userText) {
       return .explicitScreenRequest
     }
 
     switch turnOwner {
-    case .floatingDefault, .floatingVoice, .taskChat, .agentPill:
+    case .floatingDefault, .floatingVoice:
+      // The onboarding demo's whole premise is "Omi reads your screen", but its
+      // suggested query has no screen-cue words. Treat onboarding floating turns
+      // as explicit so a real capture is attempted and capture/permission
+      // failures surface in the answer instead of a silently blind reply.
+      return onboardingActive ? .explicitScreenRequest : .ambientSurfaceContext
+    case .taskChat, .agentPill:
       return .ambientSurfaceContext
     case .mainChat:
       return systemPromptStyle == .floating ? .ambientSurfaceContext : nil
@@ -429,6 +436,27 @@ enum ScreenContextWorkContextBuilder {
   static let staleCaptureThresholdSeconds = 60
   static let voiceTurnStaleCaptureThresholdSeconds = 15
 
+  /// Ambient turns without Screen Recording get this instead of silence, so the
+  /// model can explain a blind answer when the question was screen-dependent —
+  /// without manufacturing a permission request for generic utterances.
+  static func ambientPermissionUnavailablePayload() -> [String: Any] {
+    [
+      "ok": false,
+      "name": "get_work_context",
+      "failure_code": ScreenContextFailureCode.permissionDenied.rawValue,
+      "permission": [
+        "screen_recording": "not_granted"
+      ],
+      "screen_now": [
+        "available": false,
+        "failure_code": ScreenContextFailureCode.permissionDenied.rawValue,
+      ],
+      "timeline": [],
+      "guidance":
+        "No screen context is available because Screen Recording is not enabled for Omi. ONLY if the user's question depends on seeing their screen: start your reply by telling them to enable Screen Recording for Omi in System Settings > Privacy & Security, then answer what you can. For questions that do not need the screen, answer normally and do not mention permissions.",
+    ]
+  }
+
   /// Direct “what is on my screen?” requests are a turn-scoped visual action,
   /// not a request for Rewind history. The caller attaches the same image bytes
   /// to the model request; this envelope makes that provenance explicit.
@@ -453,7 +481,7 @@ enum ScreenContextWorkContextBuilder {
         ],
         "timeline": [],
         "guidance":
-          "A live capture for this request failed. Do not answer from screen history; explain that current screen evidence was unavailable.",
+          "A live capture failed even though Screen Recording shows granted. The usual cause is that the permission was granted after Omi launched and only takes effect after a relaunch. START your reply by telling the user to quit and reopen Omi to activate Screen Recording, then answer what you can without the screen. Do not answer from screen history.",
       ]
     }
     return [

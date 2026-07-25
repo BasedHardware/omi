@@ -60,6 +60,7 @@ class Memory {
   bool deleted;
   MemoryVisibility visibility;
   bool isLocked;
+  bool isBaseline;
   final MemoryLayer? layer;
   final bool layerIsExplicit;
   final String? primaryCaptureDevice;
@@ -80,6 +81,7 @@ class Memory {
     this.deleted = false,
     required this.visibility,
     this.isLocked = false,
+    this.isBaseline = false,
     this.layer,
     this.layerIsExplicit = false,
     this.primaryCaptureDevice,
@@ -123,6 +125,7 @@ class Memory {
           ? (MemoryVisibility.values.asNameMap()[generated.visibility!] ?? MemoryVisibility.public)
           : MemoryVisibility.public,
       isLocked: generated.isLocked,
+      isBaseline: json['is_baseline'] as bool? ?? false,
       layer: resolvedLayer,
       layerIsExplicit: layerIsExplicit,
       primaryCaptureDevice: generated.primaryCaptureDevice,
@@ -147,6 +150,7 @@ class Memory {
       'deleted': deleted,
       'visibility': visibility.name,
       'is_locked': isLocked,
+      'is_baseline': isBaseline,
       if (layerIsExplicit && layer != null) 'layer': layer!.apiValue,
     };
   }

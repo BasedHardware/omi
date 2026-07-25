@@ -119,7 +119,47 @@ function makeErrorTurnEndEvent(errorMessage: string) {
   };
 }
 
+type PublicWebRoutingContractFixture = {
+  version: number;
+  cases: Array<{
+    name: string;
+    prompt: string;
+    requiresPublicWeb: boolean;
+  }>;
+};
+
 describe("PiMonoAdapter prompt correlation", () => {
+  it("forwards tool execution updates as content-free progress activity", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "write the document" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => "",
+    );
+
+    (adapter as any).handleEvent(JSON.stringify({
+      type: "tool_execution_update",
+      toolName: "write",
+      toolCallId: "tool-write-1",
+      partialResult: { content: [{ type: "text", text: "private document content" }] },
+    }));
+
+    expect(events).toEqual([{
+      type: "tool_activity",
+      name: "write",
+      status: "progress",
+      toolUseId: "tool-write-1",
+    }]);
+
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
+    await expect(prompt).resolves.toMatchObject({ text: "done" });
+  });
+
   it("routes current public web requests for both coordinator and leaf sessions", async () => {
     const { adapter } = createAdapter();
     seedSessions(adapter, "main", "leaf");
@@ -152,8 +192,55 @@ describe("PiMonoAdapter prompt correlation", () => {
     for (const message of [
       "search my calendar for weather in NYC",
       "what did I say today about the current weather?",
+      "what did I do today?",
     ]) {
       expect(routePromptForPublicWeb(message)).toBe(message);
+    }
+  });
+
+  it("matches the cross-runtime public-web routing contract", () => {
+    const fixture = JSON.parse(
+      readFileSync(
+        fileURLToPath(
+          new URL("../../Backend-Rust/fixtures/public-web-routing-contract.fixture.json", import.meta.url)
+        ),
+        "utf8"
+      )
+    ) as PublicWebRoutingContractFixture;
+
+    expect(fixture.version).toBe(1);
+    for (const testCase of fixture.cases) {
+      const routed = routePromptForPublicWeb(testCase.prompt);
+      expect(routed.includes("<omi_retrieval_policy>"), testCase.name).toBe(
+        testCase.requiresPublicWeb
+      );
+    }
+  });
+
+  it("does not force web when the current user explicitly prohibits it", () => {
+    for (const message of [
+      "Do you know why the web search tool times out? Don't call it because it will time out again.",
+      "Do you know why the web search tool times out? Don’t call it because it will time out again.",
+      "Do not call the web search tool; answer from what you already know.",
+      "Do not use web search resulting in external network access.",
+      "Explain web search without web search.",
+      "Do not use web search; answer from what you already know.",
+    ]) {
+      expect(routePromptForPublicWeb(message)).toBe(message);
+    }
+  });
+
+  it("does not invert explicit web intent for unrelated negation", () => {
+    for (const message of [
+      "Search the web for naming ideas, but don't call it Omi.",
+      "Search the web for webpack docs; don't use webpack examples.",
+      "Use web search for the answer, but don't call it authoritative.",
+      "Search the web because I got no web search results.",
+      "Search the web, but do not use the web search results as the only source.",
+      "Search the web and explain why no web search results appeared.",
+      "Search the web for the term no web search.",
+    ]) {
+      expect(routePromptForPublicWeb(message)).toContain("<omi_retrieval_policy>");
     }
   });
 
@@ -354,7 +441,7 @@ describe("PiMonoAdapter prompt correlation", () => {
 
     const execution = runtime.executeAttempt(attemptContext, () => {}, new AbortController().signal);
     const relayContext = JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8"));
-    expect(relayContext).toEqual({ capabilityRef: "cap_runtime" });
+    expect(relayContext).toEqual({ capabilityRef: "cap_runtime", requestId: "request-runtime" });
 
     (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
     await expect(execution).resolves.toMatchObject({ terminalStatus: "succeeded" });

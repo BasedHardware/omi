@@ -6,6 +6,8 @@ import SwiftUI
 struct OnboardingFloatingBarShortcutStepView: View {
   @ObservedObject var appState: AppState
   @ObservedObject var chatProvider: ChatProvider
+  var stepIndex: Int
+  var totalSteps: Int
   var onComplete: () -> Void
   var onSkip: () -> Void
   var onForceComplete: (() -> Void)?
@@ -18,6 +20,10 @@ struct OnboardingFloatingBarShortcutStepView: View {
   @State private var captureError: String?
   @State private var localKeyMonitor: Any?
   @State private var globalKeyMonitor: Any?
+  /// Shortcut tokens (e.g. "⌘", "O") currently held down, so their keycaps
+  /// light up while pressed and turn off on release.
+  @State private var pressedTokens: Set<String> = []
+  @State private var mainKeyDown = false
 
   /// Stashed main menu so we can restore it when leaving this step.
   static var savedMenu: NSMenu?
@@ -42,18 +48,22 @@ struct OnboardingFloatingBarShortcutStepView: View {
       Divider()
         .background(OmiColors.backgroundTertiary)
 
+      OnboardingProgressBar(stepIndex: stepIndex, totalSteps: totalSteps)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, OmiSpacing.xl)
+
       Spacer()
 
       VStack(spacing: OmiSpacing.xxl) {
-        Text("Let's set \"Ask a question\" shortcut.\nPress this shortcut. Do the buttons light up?")
+        Text("Let's set the \"Open Omi\" shortcut.\nPress this shortcut. Do the buttons light up?")
           .font(.system(size: 22, weight: .semibold))
           .foregroundColor(OmiColors.textPrimary)
           .multilineTextAlignment(.center)
 
         RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
           .fill(OmiColors.backgroundSecondary)
-          .frame(height: 128)
-          .frame(maxWidth: 420)
+          .frame(height: 152)
+          .frame(maxWidth: 480)
           .overlay {
             shortcutKeyPreview
           }
@@ -75,21 +85,25 @@ struct OnboardingFloatingBarShortcutStepView: View {
           }
         }
 
-        if showContinue {
-          Button(action: onComplete) {
-            Text("Continue")
-              .font(.system(size: 15, weight: .semibold))
-              .foregroundColor(.black)
-              .padding(.horizontal, OmiSpacing.xxl)
-              .padding(.vertical, OmiSpacing.md)
-              .background(
-                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-                  .fill(Color.white)
-              )
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          if showContinue {
+            Button(action: onComplete) {
+              Text("Continue")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.black)
+                .padding(.horizontal, OmiSpacing.xxl)
+                .padding(.vertical, OmiSpacing.md)
+                .background(
+                  RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+                    .fill(Color.white)
+                )
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.defaultAction)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
           }
-          .buttonStyle(.plain)
-          .keyboardShortcut(.defaultAction)
-          .transition(.move(edge: .bottom).combined(with: .opacity))
         }
       }
 
@@ -111,7 +125,10 @@ struct OnboardingFloatingBarShortcutStepView: View {
     VStack(spacing: OmiSpacing.md) {
       HStack(spacing: OmiSpacing.sm) {
         ForEach(Array(shortcutSettings.askOmiShortcut.displayTokens.enumerated()), id: \.offset) { _, symbol in
-          keyCap(symbol)
+          OnboardingKeyCapView(
+            token: symbol,
+            isActive: shortcutDetected || pressedTokens.contains(symbol)
+          )
         }
       }
 
@@ -125,10 +142,10 @@ struct OnboardingFloatingBarShortcutStepView: View {
     let isSelected = shortcutSettings.askOmiUsesCustomShortcut || isRecordingCustomShortcut
     return Button(action: beginCustomShortcutCapture) {
       Text("Custom")
-        .font(.system(size: 13, weight: .medium))
+        .font(.system(size: 14, weight: .medium))
         .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.sm)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.vertical, OmiSpacing.md)
         .background(
           RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
             .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
@@ -260,6 +277,8 @@ struct OnboardingFloatingBarShortcutStepView: View {
   private func resetDetectionState() {
     shortcutDetected = false
     showContinue = false
+    pressedTokens = []
+    mainKeyDown = false
   }
 
   private func confirmShortcutAndContinue() {
@@ -271,11 +290,14 @@ struct OnboardingFloatingBarShortcutStepView: View {
   }
 
   private func installKeyMonitor() {
-    let mask: NSEvent.EventTypeMask = [.keyDown, .flagsChanged]
+    // .keyUp included so held keycaps can turn back off.
+    let mask: NSEvent.EventTypeMask = [.keyDown, .keyUp, .flagsChanged]
     localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { event in
-      handleShortcutEvent(event) ? nil : event
+      updatePressedTokens(from: event)
+      return handleShortcutEvent(event) ? nil : event
     }
     globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { event in
+      updatePressedTokens(from: event)
       _ = handleShortcutEvent(event)
     }
 
@@ -300,6 +322,8 @@ struct OnboardingFloatingBarShortcutStepView: View {
       NSApp.mainMenu = menu
       Self.savedMenu = nil
     }
+    pressedTokens = []
+    mainKeyDown = false
   }
 
   private func handleShortcutEvent(_ event: NSEvent) -> Bool {
@@ -318,7 +342,7 @@ struct OnboardingFloatingBarShortcutStepView: View {
 
   private func captureCustomShortcut(from event: NSEvent) -> Bool {
     if event.type == .flagsChanged {
-      captureError = "Ask omi needs a non-modifier key."
+      captureError = "Open Omi needs a non-modifier key."
       return true
     }
 
@@ -330,5 +354,33 @@ struct OnboardingFloatingBarShortcutStepView: View {
     isRecordingCustomShortcut = false
     captureError = nil
     return true
+  }
+
+  /// Watches modifier + key events so the on-screen keycaps light up while the
+  /// matching key is physically held and turn off on release. Mirrors the
+  /// floating-bar demo step.
+  private func updatePressedTokens(from event: NSEvent) {
+    let shortcut = shortcutSettings.askOmiShortcut
+    // Held modifiers, derived live from the event's flags.
+    let liveFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+    var tokens = Set(ShortcutSettings.KeyboardShortcut.modifierTokens(for: liveFlags))
+
+    // The non-modifier key (e.g. "O", "↩"): track its own down/up.
+    if let keyCode = shortcut.keyCode, let keyDisplay = shortcut.keyDisplay {
+      switch event.type {
+      case .keyDown where event.keyCode == keyCode:
+        mainKeyDown = true
+      case .keyUp where event.keyCode == keyCode:
+        mainKeyDown = false
+      default:
+        break
+      }
+      if mainKeyDown {
+        tokens.insert(keyDisplay)
+      }
+    }
+
+    // Only light caps that belong to this shortcut.
+    pressedTokens = tokens.intersection(Set(shortcut.displayTokens))
   }
 }

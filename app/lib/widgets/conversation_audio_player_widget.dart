@@ -200,19 +200,21 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
 
       // Listen for playback errors
       _errorSubscription?.cancel();
-      _errorSubscription = _audioPlayer.playbackEventStream.handleError((error) {
-        Logger.debug('Playback error: $error');
-        if (mounted && _retryCount < _maxRetries) {
-          _retryCount++;
-          Future.delayed(const Duration(seconds: 1), () {
-            if (mounted) _setupAudioPlayer();
-          });
-        } else if (mounted) {
-          setState(() {
-            _errorMessage = 'Playback error: ${error.toString()}';
-          });
-        }
-      }).listen((_) {});
+      _errorSubscription = _audioPlayer.playbackEventStream
+          .handleError((error) {
+            Logger.debug('Playback error: $error');
+            if (mounted && _retryCount < _maxRetries) {
+              _retryCount++;
+              Future.delayed(const Duration(seconds: 1), () {
+                if (mounted) _setupAudioPlayer();
+              });
+            } else if (mounted) {
+              setState(() {
+                _errorMessage = 'Playback error: ${error.toString()}';
+              });
+            }
+          })
+          .listen((_) {});
 
       if (_disposed) return;
       try {
@@ -344,7 +346,7 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
           children: [
             const Icon(Icons.error_outline, color: Colors.red, size: 32),
             const SizedBox(height: 8),
-            const Text('Error loading audio', style: TextStyle(color: Colors.red)),
+            Text(context.l10n.errorLoadingAudio, style: const TextStyle(color: Colors.red)),
             const SizedBox(height: 4),
             Text(
               _errorMessage!,
@@ -400,9 +402,9 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
                               ),
                               child: Slider(
                                 value: combinedPosition.inMilliseconds.toDouble().clamp(
-                                      0,
-                                      _totalDuration.inMilliseconds.toDouble(),
-                                    ),
+                                  0,
+                                  _totalDuration.inMilliseconds.toDouble(),
+                                ),
                                 max: _totalDuration.inMilliseconds.toDouble().clamp(1.0, double.infinity),
                                 activeColor: Colors.deepPurpleAccent,
                                 inactiveColor: Colors.grey.shade700,

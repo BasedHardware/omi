@@ -107,6 +107,7 @@ def validate_merge_compatibility(
 
     Rejection criteria (hard failures):
     - Less than 2 conversations
+    - Any conversation is a soft-deleted tombstone
     - Any conversation is locked
     - Any conversation is not completed (processing/merging/in_progress)
 
@@ -115,6 +116,17 @@ def validate_merge_compatibility(
     """
     if len(conversations) < 2:
         return False, "At least 2 conversations required to merge", None
+
+    # Check none are soft-deleted. A soft-deleted tombstone is invisible to the
+    # user, so merging it resurrects deleted content into a new visible
+    # conversation — the inverse of the tombstone contract the sync merge path
+    # already enforces (see conversations_db.eligible_merge_target, #10119).
+    # `get_conversation` returns tombstones unfiltered and the /merge endpoint
+    # only 404s on a missing (None) doc, so a deleted id passed by an API client
+    # or a delete-vs-merge race would otherwise flow straight through.
+    for conv in conversations:
+        if conv.get('deleted'):
+            return False, "Cannot merge a deleted conversation.", None
 
     # Check none are locked
     for conv in conversations:
@@ -179,6 +191,15 @@ def perform_merge_async(
 
         if len(conversations) < 2:
             logger.error(f"Merge failed: Not enough conversations found for uid={uid}")
+            _handle_merge_failure(uid, conversation_ids)
+            return
+
+        # A source can be soft-deleted between admission (validate_merge_compatibility
+        # at the endpoint) and this background re-fetch — the delete-vs-merge race. Re-check
+        # here, before reading any content: merging a tombstone would resurrect its deleted
+        # transcript/photos/audio into a new visible conversation. Abort rather than merge.
+        if any(conv.get('deleted') for conv in conversations):
+            logger.error(f"Merge aborted: a source was deleted after admission uid={uid}")
             _handle_merge_failure(uid, conversation_ids)
             return
 
@@ -285,13 +306,14 @@ def perform_merge_async(
         # 8. Process conversation to generate title, summary, action items, memories, etc.
         if reprocess:
             try:
-                processed_conversation = process_conversation(
-                    uid,
-                    new_conversation.language or 'en',
-                    new_conversation,
-                    force_process=True,
-                    is_reprocess=False,  # Not a reprocess - this is a new conversation
-                )
+                with lifecycle_service.processing_admission_guard(uid, new_conversation_id, rollback_on_failure=False):
+                    processed_conversation = process_conversation(
+                        uid,
+                        new_conversation.language or 'en',
+                        new_conversation,
+                        force_process=True,
+                        is_reprocess=False,  # Not a reprocess - this is a new conversation
+                    )
             except Exception as e:
                 logger.error(f"Error processing merged conversation: {e}")
                 # Even if processing fails, continue with cleanup
@@ -446,20 +468,20 @@ def _copy_audio_chunks_for_merge(
     for conv in conversations:
         conv_id = conv['id']
 
-        # List and copy chunks for this conversation
-        try:
-            chunks = list_audio_chunks(uid, conv_id)
-            for chunk in chunks:
-                has_chunks = True
+        # A copy failure here must propagate, not be swallowed. perform_merge_async deletes every
+        # source conversation's original audio chunks (step 9) after this returns, so a swallowed
+        # failure — while has_chunks may already be True from an earlier source — would let that
+        # deletion destroy audio that was never copied anywhere. Raising instead aborts the merge
+        # into _handle_merge_failure, which runs before any source is deleted.
+        chunks = list_audio_chunks(uid, conv_id)
+        for chunk in chunks:
+            has_chunks = True
 
-                # Preserve original filename (handles both single and batch blob naming)
-                original_filename = chunk['path'].split('/')[-1]
-                new_path = f'chunks/{uid}/{new_conversation_id}/{original_filename}'
-                source_blob = bucket.blob(chunk['path'])
-                bucket.copy_blob(source_blob, bucket, new_path)
-
-        except Exception as e:
-            logger.error(f"Error copying chunks for {conv_id}: {e}")
+            # Preserve original filename (handles both single and batch blob naming)
+            original_filename = chunk['path'].split('/')[-1]
+            new_path = f'chunks/{uid}/{new_conversation_id}/{original_filename}'
+            source_blob = bucket.blob(chunk['path'])
+            bucket.copy_blob(source_blob, bucket, new_path)
 
     # Create AudioFile records from copied chunks
     if has_chunks:

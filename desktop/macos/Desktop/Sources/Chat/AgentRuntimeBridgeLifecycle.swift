@@ -29,10 +29,10 @@ struct AgentRuntimeBridgeLifecycle: Equatable, Sendable {
   }
 
   enum StartFailure: String, Equatable, Sendable {
-    case launchFailed
-    case handshakeTimedOut
-    case incompatibleHandshake
-    case exitedDuringStartup
+    case launchFailed = "launch_failed"
+    case handshakeTimedOut = "handshake_timed_out"
+    case incompatibleHandshake = "incompatible_handshake"
+    case exitedDuringStartup = "exited_during_startup"
   }
 
   enum Event: Equatable, Sendable {

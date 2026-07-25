@@ -52,7 +52,8 @@ from database.users import (
     resolve_legacy_deletion_wipe_uid,
     set_user_transcription_preferences,
 )
-from utils.stt.streaming import deepgram_nova3_multi_languages
+from config.stt_provider_policy import supports_live_multilingual_mode
+from utils.user_language import normalize_user_language
 from database.users import *
 from models.conversation import Conversation
 from models.geolocation import Geolocation
@@ -92,6 +93,7 @@ from utils.subscription import (
     has_ever_purchased,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
+    wire_plan_for_client,
     legacy_plan_features,
     clear_trial_paywall_cache,
     get_trial_metadata,
@@ -639,7 +641,8 @@ def update_person_name(
     value: str,  # = Field(min_length=2, max_length=40),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    update_person(uid, person_id, value)
+    if not update_person(uid, person_id, value):
+        raise HTTPException(status_code=404, detail="Person not found")
     return {'status': 'ok'}
 
 
@@ -807,9 +810,7 @@ def set_chat_message_analytics(
 def get_user_language(uid: str = Depends(auth.get_current_user_uid)):
     """Get the user's preferred language."""
     language = get_user_language_preference(uid)
-    if not language:
-        return {'language': None}
-    return {'language': language}
+    return {'language': language or None}
 
 
 class SetUserLanguageRequest(BaseModel):
@@ -819,11 +820,11 @@ class SetUserLanguageRequest(BaseModel):
 @router.patch('/v1/users/language', tags=['v1'], response_model=UserLanguageUpdateResponse)
 def set_user_language(data: SetUserLanguageRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Set the user's preferred language (e.g., 'en', 'vi', etc.)."""
-    language = data.language
+    language = normalize_user_language(data.language)
     if not language:
-        raise HTTPException(status_code=400, detail="Language is required")
+        raise HTTPException(status_code=400, detail="A supported language code is required")
     set_user_language_preference(uid, language)
-    single_language_mode = language not in deepgram_nova3_multi_languages
+    single_language_mode = not supports_live_multilingual_mode(language)
     set_user_transcription_preferences(uid, single_language_mode=single_language_mode)
     return {'status': 'ok', 'single_language_mode': single_language_mode}
 
@@ -1040,7 +1041,7 @@ def get_user_usage_stats_endpoint(
     period: UsagePeriod = UsagePeriod.TODAY,
 ):
     """Gets daily and monthly usage stats for the authenticated user."""
-    stats = user_usage_db.get_current_user_usage(uid, period.value)
+    stats = user_usage_db.get_current_user_usage(uid, period.value, tz_name=notification_db.get_user_time_zone(uid))
     return stats
 
 
@@ -1294,6 +1295,11 @@ def get_user_subscription_endpoint(
         chat_percent = min(100.0, round(100.0 * chat_snapshot['used'] / chat_snapshot['limit'], 2))
     chat_allowed = chat_snapshot['allowed']
 
+    # Grandfather is read from the true plan before the label is remapped for
+    # clients whose enum predates `plus`/`unlimited_v2` (see wire_plan_for_client).
+    desktop_grandfather_until = neo_grandfather_until(subscription)
+    subscription.plan = wire_plan_for_client(subscription.plan, x_app_platform, x_app_version)
+
     return UserSubscriptionResponse(
         subscription=subscription,
         transcription_seconds_used=transcription_seconds_used,
@@ -1310,7 +1316,7 @@ def get_user_subscription_endpoint(
         chat_quota_allowed=chat_allowed,
         chat_quota_reset_at=chat_snapshot['reset_at'],
         phone_call_quota=phone_call_quota,
-        desktop_grandfather_until=neo_grandfather_until(subscription),
+        desktop_grandfather_until=desktop_grandfather_until,
     )
 
 

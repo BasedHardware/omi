@@ -163,6 +163,7 @@ def search_memory_default_developer_memories_vector(
     rollout_decision: Optional[DefaultReadRolloutDecision] = None,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
+    now: Optional[datetime] = None,
 ) -> DeveloperMemorySearchResult:
     """Return explicit read-decision semantics for the developer vector caller.
 
@@ -190,6 +191,7 @@ def search_memory_default_developer_memories_vector(
             consumer=MemoryConsumer.developer_api,
             vector_query=vector_query,
             required_projection_commit_id=required_projection_commit_id,
+            now=now,
             item_formatter=_format_developer_memory,
             score_attacher=_attach_developer_vector_score,
         )

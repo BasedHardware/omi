@@ -1784,18 +1784,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get lovingOmi => 'Elsker du Omi?';
 
   @override
-  String get leaveReviewIos => 'Efterlad en anmeldelse på App Store';
-
-  @override
-  String get leaveReviewAndroid => 'Efterlad en anmeldelse på Google Play';
-
-  @override
-  String get rateOnAppStore => 'Bedøm på App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Bedøm på Google Play';
-
-  @override
   String get maybeLater => 'Måske senere';
 
   @override
@@ -2120,6 +2108,18 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Rediger hukommelse';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Indtast hukommelsesindhold';
@@ -8974,7 +8974,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get billingYearly => 'Årlig';
 
   @override
-  String get savePercent => 'Spar ~17%';
+  String savePercent(int percent) {
+    return 'Spar ~$percent%';
+  }
 
   @override
   String get popular => 'Populært';
@@ -9583,4 +9585,177 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Ingen forbindelse – der optages lokalt. Det bliver transskriberet, når du er online igen.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Dine data er som standard sikret med stærk kryptering, og du bestemmer, hvordan de opbevares og bruges.';
+
+  @override
+  String get sttModelAccuracy => 'Nøjagtighed';
+
+  @override
+  String get whisperModelSizeBase => 'Basis';
+
+  @override
+  String get cloudTranscription => 'Cloud-transskription';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Slet model';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Er du sikker på, at du vil slette denne model?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Downloadet';
+
+  @override
+  String get sttModelFaster => 'Hurtigere';
+
+  @override
+  String get sttFilterAuto => 'Automatisk';
+
+  @override
+  String get sttModelHigher => 'Højere';
+
+  @override
+  String get whisperModelSizeLarge => 'Stor';
+
+  @override
+  String get sttModelLower => 'Lavere';
+
+  @override
+  String get whisperModelSizeMedium => 'Mellem';
+
+  @override
+  String get onDeviceModelDeleted => 'Model slettet';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Download af model mislykkedes';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Whisper-modellen kunne ikke downloades. Prøv igen.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Model downloadet';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper-modellen blev downloadet';
+
+  @override
+  String get onDeviceModelSize => 'Modelstørrelse';
+
+  @override
+  String get sttNone => 'Ingen';
+
+  @override
+  String get onDeviceTranscription => 'Transskription på enheden';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transskription behandles lokalt på din enhed';
+
+  @override
+  String get sttModelSlower => 'Langsommere';
+
+  @override
+  String get whisperModelSizeSmall => 'Lille';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Tale-til-tekst-udbyder';
+
+  @override
+  String get speechToTextProviderDesc => 'Vælg den tjeneste, der bruges til transskription';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Hastighed';
+
+  @override
+  String get whisperModelSizeTiny => 'Meget lille';
+
+  @override
+  String get transcriptionLanguage => 'Transskriptionssprog';
+
+  @override
+  String get transcriptionLanguageDesc => 'Vælg sproget til taletransskription';
+
+  @override
+  String get whisperModel => 'Whisper-model';
+
+  @override
+  String get whisperModelDesc => 'Vælg model til transskription på enheden';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Nedgrader til gratis abonnement?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Du vil opleve disse begrænsninger:';
+
+  @override
+  String get downgradeLimitBattery => '7 gange højere batteriforbrug';
+
+  @override
+  String get downgradeLimitQuality => '30 % dårligere transskriptionskvalitet';
+
+  @override
+  String get downgradeLimitDelay => '5-7 sekunders forsinkelse';
+
+  @override
+  String get downgradeLimitSpeakers => 'Kan ikke identificere talere';
+
+  @override
+  String get downgradeAnyway => 'Nedgrader alligevel';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Kalender ikke forbundet';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'Forbind din Google Kalender for at knytte samtaler til kalenderbegivenheder.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Knyttet til »$title«';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Kunne ikke tilknytte kalenderbegivenhed';
+
+  @override
+  String get thanksForYourFeedback => 'Tak for din feedback!';
+
+  @override
+  String get copyMessage => 'Kopiér besked';
+
+  @override
+  String get searchSettings => 'Søg i indstillinger…';
+
+  @override
+  String get errorLoadingAudio => 'Fejl ved indlæsning af lyd';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Vælg din Ray-Ban Meta-mikrofon';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Vælg Bluetooth-mikrofonen til dine briller. Musik sættes på pause, mens Omi bruger den.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Der blev ikke fundet nogen Bluetooth-mikrofoner. Tilslut dine briller i iPhone-indstillinger, og prøv igen.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth-mikrofonerne kunne ikke indlæses. Kontrollér, at Bluetooth er slået til, og prøv igen.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Der kunne ikke oprettes forbindelse til mikrofonen. Sørg for, at den er tilsluttet i iPhone-indstillinger.';
 }

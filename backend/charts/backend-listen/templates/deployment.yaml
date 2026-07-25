@@ -8,6 +8,10 @@ spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
+  # A 12-60 HPA replica rollout paced by node autoscaler routinely needs >600s
+  # (the k8s default); the deploy CLI already waits 1800s. Keep these aligned so
+  # a healthy-but-slow rollout finishes instead of failing at the k8s deadline.
+  progressDeadlineSeconds: {{ .Values.progressDeadlineSeconds | default 1800 }}
   selector:
     matchLabels:
       {{- include "backend-listen.selectorLabels" . | nindent 6 }}

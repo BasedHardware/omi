@@ -20,6 +20,7 @@
     "Fixed Rewind capture getting stuck after a recoverable local database failure instead of reopening its database automatically",
     "Improved macOS Settings controls with better alignment, larger inputs, and more responsive interactions",
     "Fixed task prioritization syncing large score updates by sending them in backend-safe batches",
-    "Improved macOS development bundle isolation and troubleshooting."
+    "Improved macOS development bundle isolation and troubleshooting.",
+    "Fixed push-to-talk screen questions so Omi clearly asks for Screen Recording permission when macOS denies capture instead of treating the screen as unavailable."
   ]
 }

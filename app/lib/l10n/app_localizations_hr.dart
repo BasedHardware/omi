@@ -1793,20 +1793,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get lovingOmi => 'Sviđa ti se Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Pomozi nam dosegnuti više ljudi ostavljanjem recenzije u App Store. Tvoj povratni podaci su nam veoma važni!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Pomozi nam dosegnuti više ljudi ostavljanjem recenzije u Google Play Storeu. Tvoj povratni podaci su nam veoma važni!';
-
-  @override
-  String get rateOnAppStore => 'Ocijeni na App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Ocijeni na Google Play';
-
-  @override
   String get maybeLater => 'Možda kasnije';
 
   @override
@@ -2141,6 +2127,18 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Uredi Uspomenu';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Volim jesti sladoled...';
@@ -9018,7 +9016,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get billingYearly => 'Godišnje';
 
   @override
-  String get savePercent => 'Uštedite ~17%';
+  String savePercent(int percent) {
+    return 'Uštedite ~$percent%';
+  }
 
   @override
   String get popular => 'Popularno';
@@ -9632,4 +9632,177 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Nema veze — snima se lokalno. Bit će transkribirano kad ponovno budeš na mreži.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Vaši su podaci prema zadanim postavkama zaštićeni snažnom enkripcijom, a vi kontrolirate kako se pohranjuju i koriste.';
+
+  @override
+  String get sttModelAccuracy => 'Točnost';
+
+  @override
+  String get whisperModelSizeBase => 'Osnovni';
+
+  @override
+  String get cloudTranscription => 'Transkripcija u oblaku';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Obriši model';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Jeste li sigurni da želite obrisati ovaj model?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Preuzeto';
+
+  @override
+  String get sttModelFaster => 'Brže';
+
+  @override
+  String get sttFilterAuto => 'Automatski';
+
+  @override
+  String get sttModelHigher => 'Više';
+
+  @override
+  String get whisperModelSizeLarge => 'Veliki';
+
+  @override
+  String get sttModelLower => 'Niže';
+
+  @override
+  String get whisperModelSizeMedium => 'Srednji';
+
+  @override
+  String get onDeviceModelDeleted => 'Model obrisan';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Preuzimanje modela nije uspjelo';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Preuzimanje Whisper modela nije uspjelo. Pokušajte ponovno.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Model preuzet';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper model uspješno je preuzet';
+
+  @override
+  String get onDeviceModelSize => 'Veličina modela';
+
+  @override
+  String get sttNone => 'Nijedan';
+
+  @override
+  String get onDeviceTranscription => 'Transkripcija na uređaju';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkripcija se obrađuje lokalno na vašem uređaju';
+
+  @override
+  String get sttModelSlower => 'Sporije';
+
+  @override
+  String get whisperModelSizeSmall => 'Mali';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Pružatelj usluge govora u tekst';
+
+  @override
+  String get speechToTextProviderDesc => 'Odaberite uslugu koja se koristi za transkripciju';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Brzina';
+
+  @override
+  String get whisperModelSizeTiny => 'Sićušni';
+
+  @override
+  String get transcriptionLanguage => 'Jezik transkripcije';
+
+  @override
+  String get transcriptionLanguageDesc => 'Odaberite jezik za transkripciju govora';
+
+  @override
+  String get whisperModel => 'Whisper model';
+
+  @override
+  String get whisperModelDesc => 'Odaberite model za transkripciju na uređaju';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Prijeći na besplatni plan?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Susrest ćete se sa sljedećim ograničenjima:';
+
+  @override
+  String get downgradeLimitBattery => '7x veća potrošnja baterije';
+
+  @override
+  String get downgradeLimitQuality => '30% slabija kvaliteta transkripcije';
+
+  @override
+  String get downgradeLimitDelay => 'Kašnjenje od 5-7 sekundi';
+
+  @override
+  String get downgradeLimitSpeakers => 'Nije moguće prepoznati govornike';
+
+  @override
+  String get downgradeAnyway => 'Ipak prijeđi na niži plan';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Calendar nije povezan';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'Povežite svoj Google Calendar kako biste razgovore povezali s događajima u kalendaru.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Povezano s „$title”';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Povezivanje s događajem u kalendaru nije uspjelo';
+
+  @override
+  String get thanksForYourFeedback => 'Hvala na povratnoj informaciji!';
+
+  @override
+  String get copyMessage => 'Kopiraj poruku';
+
+  @override
+  String get searchSettings => 'Pretraži postavke…';
+
+  @override
+  String get errorLoadingAudio => 'Greška pri učitavanju zvuka';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Odaberite mikrofon Ray-Ban Meta';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Odaberite Bluetooth mikrofon naočala. Glazba se pauzira dok ga Omi koristi.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Nije pronađen nijedan Bluetooth mikrofon. Povežite naočale u postavkama iPhonea pa pokušajte ponovno.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth mikrofoni nisu se mogli učitati. Provjerite je li Bluetooth uključen pa pokušajte ponovno.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Povezivanje s tim mikrofonom nije uspjelo. Provjerite je li povezan u postavkama iPhonea.';
 }

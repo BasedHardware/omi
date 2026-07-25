@@ -11,6 +11,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 ConfigDict = dict[str, Any]
+_DEPLOY_CLOUD_RUN_ENV_SEPARATORS = frozenset({',', '\n', '\r', '\u2028', '\u2029'})
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -95,8 +96,16 @@ def _render_env_vars(env_entries: ConfigDict) -> str:
         if value is None:
             # Provisional values belong to services not yet deployed in every environment.
             continue
-        lines.append(f'{name}={value}')
+        lines.append(f'{name}={_escape_deploy_cloud_run_env_value(value)}')
     return '\n'.join(lines)
+
+
+def _escape_deploy_cloud_run_env_value(value: str) -> str:
+    """Encode a value for deploy-cloudrun's escaped key/value input grammar."""
+    return ''.join(
+        f'\\{character}' if character == '\\' or character in _DEPLOY_CLOUD_RUN_ENV_SEPARATORS else character
+        for character in value
+    )
 
 
 def _render_secrets(secret_entries: ConfigDict) -> str:

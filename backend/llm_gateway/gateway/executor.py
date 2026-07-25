@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
+from llm_gateway.gateway.accounting import AttemptTrace, ProviderResponseMetadata, UsageStatus
 from llm_gateway.gateway.credentials import CredentialContext, CredentialSource, is_byok_failure_class
 from llm_gateway.gateway.errors import (
     GatewayCapabilityMismatchError,
@@ -16,12 +17,14 @@ from llm_gateway.gateway.errors import (
     GatewayError,
     GatewayInvalidRouteConfigError,
     GatewayProviderFailureError,
+    GatewayProviderRequestRejectedError,
 )
 from llm_gateway.gateway.providers import (
     ChatCompletionProvider,
     EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR,
     GENERIC_PROVIDER_FAILURE_MESSAGE,
     ProviderFailure,
+    ProviderResponse,
 )
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, apply_output_budget
 from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, select_lkg_route_for_failure
@@ -43,6 +46,7 @@ class ExecutorResult:
     fallback_reason: FailureClass | None
     used_lkg: bool
     output_budget: OutputBudgetDecision
+    provider_accounting: ProviderResponseMetadata
 
 
 class ProviderRegistry:
@@ -76,6 +80,8 @@ async def execute_chat_completion(
     resolved_route: ResolvedRoute,
     credential_context: CredentialContext,
     provider_registry: ProviderRegistry,
+    *,
+    attempt_trace: AttemptTrace | None = None,
 ) -> ExecutorResult:
     serving_route = _select_serving_route(resolved_route)
     serving_is_lkg = serving_route is resolved_route.last_known_good_route
@@ -91,6 +97,7 @@ async def execute_chat_completion(
             provider_registry,
             is_lkg=serving_is_lkg,
             fallback_reason=None,
+            attempt_trace=attempt_trace,
         )
     except GatewayError as exc:
         first_failure = exc.failure_class
@@ -110,6 +117,7 @@ async def execute_chat_completion(
                 provider_registry,
                 is_lkg=True,
                 fallback_reason=first_failure,
+                attempt_trace=attempt_trace,
             )
         except GatewayError as exc:
             last_error = exc
@@ -200,6 +208,7 @@ async def _execute_route(
     *,
     is_lkg: bool,
     fallback_reason: FailureClass | None,
+    attempt_trace: AttemptTrace | None,
 ) -> ExecutorResult:
     refs = [route.primary, *route.fallbacks]
     last_error: GatewayError | None = None
@@ -224,6 +233,8 @@ async def _execute_route(
                 provider,
                 provider_ref,
                 credential_context,
+                attempt_trace=attempt_trace,
+                fallback_reason=current_fallback_reason,
             )
             if error is None:
                 if response is None:
@@ -257,7 +268,10 @@ async def _attempt_provider(
     provider: ChatCompletionProvider,
     provider_ref: ProviderRef,
     credential_context: CredentialContext,
-) -> tuple[Mapping[str, Any] | None, GatewayError | None]:
+    *,
+    attempt_trace: AttemptTrace | None,
+    fallback_reason: FailureClass | None,
+) -> tuple[ProviderResponse | None, GatewayError | None]:
     """Try a single provider up to ``route.retry.max_attempts`` times.
 
     Returns ``(response, None)`` on success, or ``(None, error)`` if all
@@ -265,7 +279,7 @@ async def _attempt_provider(
     """
     max_attempts = max(route.retry.max_attempts, 1)
     error: GatewayError | None = None
-    for _attempt in range(max_attempts):
+    for retry_ordinal in range(1, max_attempts + 1):
         try:
             response = await provider.create_chat_completion(
                 _provider_request(resolved_route, provider_ref, route=route),
@@ -273,11 +287,59 @@ async def _attempt_provider(
                 credentials=credential_context,
                 timeout_ms=route.timeouts.request_ms,
             )
+            if attempt_trace is not None:
+                attempt_trace.record(
+                    provider=provider_ref.provider,
+                    configured_model=provider_ref.model,
+                    route_artifact_id=route.route_artifact_id,
+                    fallback_reason=fallback_reason.value if fallback_reason is not None else None,
+                    retry_ordinal=retry_ordinal,
+                    outcome='success',
+                    error_class='none',
+                    metadata=response.accounting,
+                )
             return response, None
         except ProviderFailure as exc:
-            error = _map_provider_failure(exc, credential_context)
+            error = _map_provider_failure(exc, credential_context, provider_ref)
+            if attempt_trace is not None:
+                attempt_trace.record(
+                    provider=provider_ref.provider,
+                    configured_model=provider_ref.model,
+                    route_artifact_id=route.route_artifact_id,
+                    fallback_reason=fallback_reason.value if fallback_reason is not None else None,
+                    retry_ordinal=retry_ordinal,
+                    outcome='error',
+                    error_class=exc.failure_class.value,
+                    usage_status=UsageStatus.INDETERMINATE,
+                )
             if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
                 return None, error
+        except asyncio.CancelledError:
+            if attempt_trace is not None:
+                attempt_trace.record(
+                    provider=provider_ref.provider,
+                    configured_model=provider_ref.model,
+                    route_artifact_id=route.route_artifact_id,
+                    fallback_reason=fallback_reason.value if fallback_reason is not None else None,
+                    retry_ordinal=retry_ordinal,
+                    outcome='cancelled',
+                    error_class='client_cancelled',
+                    usage_status=UsageStatus.INDETERMINATE,
+                )
+            raise
+        except Exception:
+            if attempt_trace is not None:
+                attempt_trace.record(
+                    provider=provider_ref.provider,
+                    configured_model=provider_ref.model,
+                    route_artifact_id=route.route_artifact_id,
+                    fallback_reason=fallback_reason.value if fallback_reason is not None else None,
+                    retry_ordinal=retry_ordinal,
+                    outcome='error',
+                    error_class='unexpected_provider_error',
+                    usage_status=UsageStatus.INDETERMINATE,
+                )
+            raise
     return None, error
 
 
@@ -298,9 +360,37 @@ def _provider_request(
     if resolved_route.validated_request.response_format is not None:
         provider_request['response_format'] = dict(resolved_route.validated_request.response_format)
     provider_request.update(dict(resolved_route.validated_request.forwarded_params))
+    if not provider_ref.model.startswith('gpt-5.6'):
+        _remove_gpt56_cache_fields(provider_request)
     if apply_budget:
         provider_request, _ = apply_output_budget(provider_request, route.output_budget)
     return provider_request
+
+
+def _remove_gpt56_cache_fields(provider_request: dict[str, Any]) -> None:
+    """Keep GPT-5.6 explicit-cache fields off a legacy route or fallback."""
+    provider_request.pop('prompt_cache_options', None)
+    raw_messages = provider_request.get('messages')
+    if not isinstance(raw_messages, list):
+        return
+    sanitized_messages: list[Any] = []
+    for message in raw_messages:
+        if not isinstance(message, Mapping):
+            sanitized_messages.append(message)
+            continue
+        sanitized_message = dict(message)
+        content = sanitized_message.get('content')
+        if isinstance(content, list):
+            sanitized_message['content'] = [
+                (
+                    {key: value for key, value in part.items() if key != 'prompt_cache_breakpoint'}
+                    if isinstance(part, Mapping)
+                    else part
+                )
+                for part in content
+            ]
+        sanitized_messages.append(sanitized_message)
+    provider_request['messages'] = sanitized_messages
 
 
 def _apply_provider_options(provider_request: dict[str, Any], provider_options: Mapping[str, Any]) -> None:
@@ -343,7 +433,7 @@ def _apply_gemini_thinking_budget(provider_request: dict[str, Any], thinking_bud
 
 
 def _executor_result(
-    provider_response: Mapping[str, Any],
+    provider_response: ProviderResponse,
     *,
     resolved_route: ResolvedRoute,
     route: RouteArtifact,
@@ -352,7 +442,7 @@ def _executor_result(
     fallback_reason: FailureClass | None,
     used_lkg: bool,
 ) -> ExecutorResult:
-    response = dict(provider_response)
+    response = dict(provider_response.response)
     response['model'] = resolved_route.validated_request.model
     return ExecutorResult(
         response=response,
@@ -364,6 +454,7 @@ def _executor_result(
         fallback_reason=fallback_reason,
         used_lkg=used_lkg,
         output_budget=output_budget_for(resolved_route, route),
+        provider_accounting=provider_response.accounting,
     )
 
 
@@ -396,22 +487,36 @@ def _unsupported_provider_error(
     return GatewayInvalidRouteConfigError(f'provider is not supported for this route: {provider_ref.provider}')
 
 
-def _map_provider_failure(exc: ProviderFailure, credential_context: CredentialContext) -> GatewayError:
+def _map_provider_failure(
+    exc: ProviderFailure,
+    credential_context: CredentialContext,
+    provider_ref: ProviderRef,
+) -> GatewayError:
     failure_class = exc.failure_class
     if failure_class == FailureClass.INVALID_CONFIG:
-        return GatewayInvalidRouteConfigError(_safe_failure_message(failure_class, exc.safe_message), param='provider')
-    if failure_class == FailureClass.CAPABILITY_MISMATCH:
-        return GatewayCapabilityMismatchError(_safe_failure_message(failure_class, exc.safe_message), param='provider')
-    if credential_context.mode == CredentialMode.BYOK or is_byok_failure_class(failure_class):
-        return GatewayCredentialFailureError(
+        error: GatewayError = GatewayInvalidRouteConfigError(
+            _safe_failure_message(failure_class, exc.safe_message), param='provider'
+        )
+    elif failure_class == FailureClass.CAPABILITY_MISMATCH:
+        error = GatewayCapabilityMismatchError(_safe_failure_message(failure_class, exc.safe_message), param='provider')
+    elif failure_class == FailureClass.PROVIDER_INVALID_REQUEST:
+        error = GatewayProviderRequestRejectedError(_safe_failure_message(failure_class, exc.safe_message))
+    elif credential_context.mode == CredentialMode.BYOK or is_byok_failure_class(failure_class):
+        error = GatewayCredentialFailureError(
             _safe_failure_message(failure_class, exc.safe_message),
             failure_class=failure_class,
             param='provider',
         )
-    return GatewayProviderFailureError(
-        _safe_failure_message(failure_class, exc.safe_message),
-        failure_class=failure_class,
-        param='provider',
+    else:
+        error = GatewayProviderFailureError(
+            _safe_failure_message(failure_class, exc.safe_message),
+            failure_class=failure_class,
+            param='provider',
+        )
+    return error.with_provider_context(
+        provider=provider_ref.provider,
+        model=provider_ref.model,
+        provider_rejection=exc.provider_rejection,
     )
 
 

@@ -3,8 +3,9 @@ import json
 import logging
 import uuid
 import zlib
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Callable
 
 from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
 from google.cloud import firestore
@@ -27,6 +28,10 @@ conversations_collection = 'conversations'
 
 
 _LIFECYCLE_FIELDS = frozenset({'status', 'discarded'})
+_PUBLIC_TRANSCRIPT_MAX_STORED_BYTES = 256 * 1024
+_PUBLIC_TRANSCRIPT_MAX_DECODED_BYTES = 512 * 1024
+_PUBLIC_TRANSCRIPT_MAX_SEGMENTS = 4096
+_PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS = 24_000
 
 
 def get_conversation_ids(uid: str) -> List[str]:
@@ -160,6 +165,89 @@ def _decode_transcript_segments_strict(uid: str, raw_segments: Any, compressed: 
     if isinstance(raw_segments, bytes) and compressed:
         return json.loads(zlib.decompress(raw_segments).decode('utf-8'))
     raise ValueError(f'undecodable transcript_segments: {type(raw_segments).__name__} compressed={compressed}')
+
+
+def _decode_public_transcript_segments_bounded(
+    uid: str,
+    raw_segments: Any,
+    *,
+    compressed: bool,
+    max_stored_bytes: int = _PUBLIC_TRANSCRIPT_MAX_STORED_BYTES,
+    max_decoded_bytes: int = _PUBLIC_TRANSCRIPT_MAX_DECODED_BYTES,
+    max_segments: int = _PUBLIC_TRANSCRIPT_MAX_SEGMENTS,
+    max_segment_text_chars: int = _PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS,
+    decompressor_factory: Callable[[], Any] = zlib.decompressobj,
+) -> List[Dict[str, Any]]:
+    """Decode only the bounded compressed transcript shape used by public chat."""
+
+    def invalid() -> ValueError:
+        return ValueError('invalid bounded public transcript')
+
+    if (
+        compressed is not True
+        or max_stored_bytes <= 0
+        or max_decoded_bytes <= 0
+        or max_segments < 0
+        or max_segment_text_chars < 0
+    ):
+        raise invalid()
+
+    try:
+        if isinstance(raw_segments, str):
+            # Enhanced storage encrypts the hex-encoded compressed bytes. Check
+            # the encoded representation before invoking the decryptor so a
+            # malformed Firestore value cannot allocate without a fixed bound.
+            max_encrypted_chars = (((max_stored_bytes * 2) + 28 + 2) // 3) * 4
+            if not raw_segments.isascii() or len(raw_segments) > max_encrypted_chars:
+                raise invalid()
+            decrypted_hex = encryption.decrypt(raw_segments, uid)
+            if len(decrypted_hex) > max_stored_bytes * 2 or len(decrypted_hex) % 2 != 0:
+                raise invalid()
+            compressed_bytes = bytes.fromhex(decrypted_hex)
+        elif isinstance(raw_segments, (bytes, bytearray, memoryview)):
+            if len(raw_segments) > max_stored_bytes:
+                raise invalid()
+            compressed_bytes = bytes(raw_segments)
+        else:
+            raise invalid()
+
+        if len(compressed_bytes) > max_stored_bytes:
+            raise invalid()
+
+        decompressor = decompressor_factory()
+        decoded = decompressor.decompress(compressed_bytes, max_decoded_bytes + 1)
+        if (
+            len(decoded) > max_decoded_bytes
+            or decompressor.unconsumed_tail
+            or not decompressor.eof
+            or decompressor.unused_data
+        ):
+            raise invalid()
+
+        parsed = json.loads(decoded.decode('utf-8'))
+        if not isinstance(parsed, list) or len(parsed) > max_segments:
+            raise invalid()
+
+        safe_segments: List[Dict[str, Any]] = []
+        for segment in parsed:
+            if not isinstance(segment, Mapping):
+                raise invalid()
+            text = segment.get('text')
+            if not isinstance(text, str) or len(text) > max_segment_text_chars:
+                raise invalid()
+            safe_segment: Dict[str, Any] = {'text': text}
+            is_user = segment.get('is_user')
+            if isinstance(is_user, bool):
+                safe_segment['is_user'] = is_user
+            speaker_id = segment.get('speaker_id')
+            if isinstance(speaker_id, int) and not isinstance(speaker_id, bool):
+                safe_segment['speaker_id'] = speaker_id
+            safe_segments.append(safe_segment)
+        return safe_segments
+    except (json.JSONDecodeError, RecursionError, TypeError, UnicodeDecodeError, ValueError, zlib.error) as exc:
+        if isinstance(exc, ValueError) and str(exc) == 'invalid bounded public transcript':
+            raise
+        raise invalid() from exc
 
 
 def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool:
@@ -319,14 +407,15 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
 def persist_processing_result_with_lifecycle(
     uid: str,
     conversation_data: dict,
-    *,
-    expected_statuses: set[str],
 ) -> bool:
-    """Persist a processor result only while its lifecycle generation remains current.
+    """Merge a processor result into its conversation.
 
-    A processor works from an in-memory snapshot.  This transaction fences that
-    snapshot against a concurrent discard, delete, or terminal transition before
-    merging generated content back into the conversation document.
+    Only deletion is refused.  Lifecycle state is not: a discard is the system's
+    own verdict that a conversation held nothing, and a status is bookkeeping
+    about which generation ran, and every processor re-derives what it writes
+    from the content in front of it.  Fencing on either stranded conversations a
+    later sync had filled with speech — transcribed, untitled, and invisible to
+    their owner — to prevent races that had never been observed.
     """
     conversation_data.pop('updated_at', None)
     if 'audio_base64_url' in conversation_data:
@@ -344,13 +433,12 @@ def persist_processing_result_with_lifecycle(
         existing_snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(existing_snapshot, 'exists', False):
             # A processor is never an authority to recreate a conversation.
-            # Treat deletion as the same terminal fence as a discard so a
-            # finalizer cannot resurrect it and emit derived side effects.
+            # Deleting one is a decision its owner made, and a merge write to a
+            # missing document would create it, so a late processor could bring
+            # back what they removed and emit derived side effects from it.
             return False
 
         existing = existing_snapshot.to_dict() or {}
-        if existing.get('discarded') or existing.get('status') not in expected_statuses:
-            return False
 
         # Generated processing content never owns user-managed fields.
         for field in ('starred', 'folder_id', 'visibility', 'user_title'):
@@ -401,6 +489,51 @@ def get_conversation(uid, conversation_id):
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_data = _document_data_with_revision(conversation_ref.get())
     return conversation_data
+
+
+def get_public_shared_conversation_bounded(
+    uid: str,
+    conversation_id: str,
+    *,
+    firestore_client: Any = None,
+) -> Optional[Dict[str, Any]]:
+    """Read only public-chat fields and decode the transcript within fixed bounds."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    conversation_ref = (
+        client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    )
+    snapshot = conversation_ref.get(
+        field_paths=[
+            'visibility',
+            'is_locked',
+            'transcript_segments_compressed',
+            'transcript_segments',
+        ]
+    )
+    if not snapshot.exists:
+        return None
+    raw = snapshot.to_dict()
+    if not isinstance(raw, dict):
+        return None
+
+    visibility = raw.get('visibility')
+    is_locked = raw.get('is_locked', False)
+    public_conversation: Dict[str, Any] = {
+        'visibility': visibility,
+        'is_locked': is_locked,
+    }
+    if not isinstance(visibility, str) or visibility not in {'shared', 'public'} or is_locked:
+        return public_conversation
+
+    try:
+        public_conversation['transcript_segments'] = _decode_public_transcript_segments_bounded(
+            uid,
+            raw.get('transcript_segments'),
+            compressed=raw.get('transcript_segments_compressed') is True,
+        )
+    except ValueError:
+        return None
+    return public_conversation
 
 
 def get_conversation_audio_stamp(uid: str, conversation_id: str) -> Optional[dict]:
@@ -1391,6 +1524,49 @@ def store_conversation_photos(
 # ********************************
 
 
+def is_soft_deleted(conversation: Optional[dict]) -> bool:
+    """Whether a conversation is a soft-deleted tombstone.
+
+    A tombstone is invisible to the user, so any content operation that reads it
+    and writes derived state — merging its segments, or reprocessing to
+    regenerate structured data, action items, memories and embeddings —
+    resurrects data the user deleted. Such operations must reject a tombstone.
+
+    Shared predicate behind that contract (sync #10119 via `eligible_merge_target`,
+    merge #10262, reprocess). Deliberately distinct from `discarded`, which stays
+    revivable: the merge and reprocess paths intentionally revive a discarded row.
+    """
+    return bool(conversation) and bool(conversation.get('deleted'))
+
+
+def eligible_merge_target(conversation: Optional[dict]) -> bool:
+    """Whether synced audio may merge into this conversation (#10033).
+
+    A soft-deleted tombstone must never absorb new segments: the user cannot
+    see it, so merged audio disappears — recordings that "never create a
+    conversation". Discarded rows stay eligible; the merge path reprocesses
+    and revives them.
+    """
+    return bool(conversation) and not is_soft_deleted(conversation)
+
+
+def select_closest_conversation(conversations, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
+    """Pure closest-by-boundary choice among eligible merge targets (#10033)."""
+    closest_conversation = None
+    min_diff = float('inf')
+    for conversation in conversations:
+        if not eligible_merge_target(conversation):
+            continue
+        conversation_start_timestamp = conversation['started_at'].timestamp()
+        conversation_end_timestamp = conversation['finished_at'].timestamp()
+        diff1 = abs(conversation_start_timestamp - start_timestamp)
+        diff2 = abs(conversation_end_timestamp - end_timestamp)
+        if diff1 < min_diff or diff2 < min_diff:
+            min_diff = min(diff1, diff2)
+            closest_conversation = conversation
+    return closest_conversation
+
+
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
@@ -1415,17 +1591,10 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
     for conversation in conversations:
         logger.info(f"- {conversation['id']} {conversation['started_at']} {conversation['finished_at']}")
 
-    # get the conversation that has the closest start timestamp or end timestamp
-    closest_conversation = None
-    min_diff = float('inf')
-    for conversation in conversations:
-        conversation_start_timestamp = conversation['started_at'].timestamp()
-        conversation_end_timestamp = conversation['finished_at'].timestamp()
-        diff1 = abs(conversation_start_timestamp - start_timestamp)
-        diff2 = abs(conversation_end_timestamp - end_timestamp)
-        if diff1 < min_diff or diff2 < min_diff:
-            min_diff = min(diff1, diff2)
-            closest_conversation = conversation
+    closest_conversation = select_closest_conversation(conversations, start_timestamp, end_timestamp)
+    if closest_conversation is None:
+        logger.info('get_closest_conversation_to_timestamps: no eligible merge target (deleted rows excluded)')
+        return None
 
     logger.info(f"get_closest_conversation_to_timestamps closest_conversation: {closest_conversation['id']}")
     return closest_conversation

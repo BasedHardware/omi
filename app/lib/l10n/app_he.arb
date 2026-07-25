@@ -1483,7 +1483,7 @@
     "exportConfiguration": "ייצא תצורה",
     "bringYourOwn": "הביא שלך",
     "payYourSttProvider": "השתמש בomi בחופשיות. אתה משלם ישירות לספק STT שלך.",
-    "freeMinutesMonth": "600 דקות חינם לחודש כלולות. בלתי מוגבל עם ",
+    "freeMinutesMonth": "300 דקות חינם לחודש כלולות. בלתי מוגבל עם ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "דרוש Host",
     "validPortRequired": "דרוש Port תקף",
@@ -1698,22 +1698,6 @@
     "lovingOmi": "אוהב את Omi?",
     "@lovingOmi": {
         "description": "Title for the app review prompt"
-    },
-    "leaveReviewIos": "עזור לנו להגיע ליותר אנשים על ידי השארת ביקורת ב-App Store. המשוב שלך אומר לנו הרבה!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "עזור לנו להגיע ליותר אנשים על ידי השארת ביקורת ב-Google Play Store. המשוב שלך אומר לנו הרבה!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "דרג ב-App Store",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "דרג ב-Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
     },
     "maybeLater": "אולי מאוחר יותר",
     "@maybeLater": {
@@ -5506,7 +5490,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "600 דקות פרימיום + בלתי מוגבל במכשיר",
+    "basicPlanDescription": "300 דקות פרימיום + בלתי מוגבל במכשיר",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7281,7 +7265,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "600 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה.",
+    "premiumMinutesInfo": "300 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7392,7 +7376,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "600 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה. ",
+    "premiumMinutesMonth": "300 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10521,7 +10505,7 @@
     "upgradePlan": "שדרג תוכנית",
     "billingMonthly": "חודשי",
     "billingYearly": "שנתי",
-    "savePercent": "חסוך ~17%",
+    "savePercent": "חסוך ~{percent}%",
     "popular": "פופולרי",
     "currentPlan": "נוכחי",
     "neoSubtitle": "{count} שאלות בחודש",
@@ -10727,5 +10711,60 @@
     "deviceStorageUsedOfTotal": "{used} מתוך {total} בשימוש",
     "deviceStorageFree": "{free} פנוי",
     "deviceStorageNearlyFull": "המכשיר כמעט מלא — סנכרן כדי לפנות מקום.",
-    "phoneMicOfflineFallbackMessage": "אין חיבור — מקליטים מקומית. התמלול יתבצע כשתחזור לרשת."
+    "phoneMicOfflineFallbackMessage": "אין חיבור — מקליטים מקומית. התמלול יתבצע כשתחזור לרשת.",
+    "dataEncryptedBanner": "הנתונים שלך מאובטחים כברירת מחדל בהצפנה חזקה, ואתה שולט באופן שבו הם נשמרים ומשמשים.",
+    "rayBanMetaMicPickerTitle": "בחירת המיקרופון של Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "בחרו את מיקרופון ה-Bluetooth של המשקפיים. המוזיקה מושהית בזמן ש-Omi משתמש בו.",
+    "rayBanMetaMicPickerEmpty": "לא נמצאו מיקרופוני Bluetooth. חברו את המשקפיים בהגדרות ה-iPhone ונסו שוב.",
+    "rayBanMetaMicPickerLoadError": "לא ניתן היה לטעון את מיקרופוני ה-Bluetooth. ודאו ש-Bluetooth מופעל ונסו שוב.",
+    "rayBanMetaMicPickerConnectError": "לא ניתן היה להתחבר למיקרופון הזה. ודאו שהוא מחובר בהגדרות ה-iPhone.",
+    "cloudTranscription": "תמלול בענן",
+    "copyMessage": "העתקת הודעה",
+    "deleteOnDeviceModel": "מחיקת מודל",
+    "deleteOnDeviceModelConfirm": "האם אתה בטוח שברצונך למחוק מודל זה?",
+    "downgradeAnyway": "שנמך בכל זאת",
+    "downgradeLimitBattery": "צריכת סוללה גבוהה פי 7",
+    "downgradeLimitDelay": "עיכוב של 5-7 שניות",
+    "downgradeLimitQuality": "איכות תמלול נמוכה ב-30%",
+    "downgradeLimitSpeakers": "לא ניתן לזהות דוברים",
+    "downgradeLimitationsHeading": "אלה המגבלות שתיתקל בהן:",
+    "downgradeToFreemiumTitle": "לשנמך לתוכנית החינם?",
+    "errorLoadingAudio": "שגיאה בטעינת האודיו",
+    "failedToLinkCalendarEvent": "קישור אירוע היומן נכשל",
+    "googleCalendarConnectPrompt": "חבר את Google Calendar כדי לקשר שיחות לאירועי יומן.",
+    "googleCalendarNotConnected": "Google Calendar אינו מחובר",
+    "linkedToEvent": "מקושר ל\"{title}\"",
+    "onDeviceModelDeleted": "המודל נמחק",
+    "onDeviceModelDownloadFailed": "הורדת המודל נכשלה",
+    "onDeviceModelDownloadFailedDesc": "הורדת מודל Whisper נכשלה. נסה שנית.",
+    "onDeviceModelDownloadSuccess": "המודל הורד",
+    "onDeviceModelDownloadSuccessDesc": "מודל Whisper הורד בהצלחה",
+    "onDeviceModelDownloaded": "הורד",
+    "onDeviceModelSize": "גודל המודל",
+    "onDeviceTranscription": "תמלול על המכשיר",
+    "onDeviceTranscriptionDesc": "התמלול מעובד מקומית על המכשיר שלך",
+    "searchSettings": "חיפוש בהגדרות…",
+    "speechToTextProvider": "ספק המרת דיבור לטקסט",
+    "speechToTextProviderDesc": "בחר את השירות שישמש לתמלול",
+    "sttFilterAuto": "אוטומטי",
+    "sttModelAccuracy": "דיוק",
+    "sttModelFaster": "מהיר יותר",
+    "sttModelHigher": "גבוה יותר",
+    "sttModelLower": "נמוך יותר",
+    "sttModelSlower": "איטי יותר",
+    "sttModelSpeed": "מהירות",
+    "sttNone": "ללא",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "תודה על המשוב שלך!",
+    "transcriptionLanguage": "שפת התמלול",
+    "transcriptionLanguageDesc": "בחר את השפה לתמלול הדיבור",
+    "whisperModel": "מודל Whisper",
+    "whisperModelDesc": "בחר את המודל לתמלול על המכשיר",
+    "whisperModelSizeBase": "בסיסי",
+    "whisperModelSizeLarge": "גדול",
+    "whisperModelSizeMedium": "בינוני",
+    "whisperModelSizeSmall": "קטן",
+    "whisperModelSizeTiny": "זעיר"
 }

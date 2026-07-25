@@ -1,13 +1,23 @@
 @preconcurrency import AVFoundation
 @preconcurrency import AppKit
 import Foundation
+import OmiSupport
 
 /// Coordinates the capture → storage → database → OCR pipeline for Rewind
 actor RewindIndexer {
   static let shared = RewindIndexer()
 
+  /// Capture provenance is sampled once per session so every new row carries
+  /// a stable canonical-memory identity plus a user-facing computer name.
+  private let currentComputerName = Host.current().localizedName
+  private let currentClientDeviceId = ClientDeviceService.shared.clientDeviceId
+
   private var isInitialized = false
   private var isInitializing = false
+  /// The effective-owner fence sets this before releasing storage for owner A
+  /// and clears it only after the database targets the committed next owner.
+  /// Frames arriving in that window are dropped instead of recreating A paths.
+  private var ownerTransitionSuspended = false
 
   /// OCR frequency: only run OCR every Nth frame to reduce CPU
   private var framesSinceLastOCR = 0
@@ -46,17 +56,39 @@ actor RewindIndexer {
   /// Reset the indexer state so it re-initializes on the next frame.
   /// Called during sign-out to avoid stale `isInitialized = true` after the database is closed.
   func reset() {
+    resetInitializationState()
+    log("RewindIndexer: Reset (will re-initialize on next frame)")
+  }
+
+  func suspendForOwnerTransition() {
+    ownerTransitionSuspended = true
+    resetInitializationState()
+    log("RewindIndexer: Suspended for effective-owner transition")
+  }
+
+  func resumeAfterOwnerTransition() {
+    ownerTransitionSuspended = false
+    log("RewindIndexer: Resumed after effective-owner transition")
+  }
+
+  func isOwnerTransitionSuspendedForTesting() -> Bool {
+    ownerTransitionSuspended
+  }
+
+  private func resetInitializationState() {
     isInitialized = false
     isInitializing = false
     initFailureCount = 0
     nextRetryTime = .distantPast
     lastEncodedFrameSignature = nil
     lastEncodedFrameTimestamp = nil
-    log("RewindIndexer: Reset (will re-initialize on next frame)")
   }
 
   /// Initialize all Rewind services
   func initialize() async throws {
+    guard !ownerTransitionSuspended else {
+      throw RewindError.storageError("Rewind initialization is suspended during an effective-owner transition")
+    }
     let databaseIsInitialized = await RewindDatabase.shared.isInitialized
     guard !(isInitialized && databaseIsInitialized), !isInitializing else { return }
     // RewindDatabase can close itself after repeated I/O/corruption errors.
@@ -93,6 +125,7 @@ actor RewindIndexer {
 
   /// Try to initialize with exponential backoff. Returns true if initialized.
   private func ensureInitialized() async -> Bool {
+    guard !ownerTransitionSuspended else { return false }
     let databaseIsInitialized = await RewindDatabase.shared.isInitialized
     if isInitialized && databaseIsInitialized { return true }
 
@@ -194,6 +227,20 @@ actor RewindIndexer {
     return false
   }
 
+  /// The encoder reports an immutable path when it abandons a writer
+  /// generation. Storage owns the DB tombstone and file deletion; keeping that
+  /// mutation out of the encoder avoids a circular actor dependency and lets
+  /// the persistence boundary reject stale post-OCR inserts for the path.
+  @discardableResult
+  private func discardAbandonedVideoChunkIfNeeded(_ error: Error) async -> Bool {
+    do {
+      return try await RewindStorage.shared.recoverAbandonedVideoChunkIfNeeded(error)
+    } catch {
+      logError("RewindIndexer: Failed to discard abandoned video chunk", error: error)
+      return true
+    }
+  }
+
   // MARK: - Frame Processing
 
   /// Process a captured frame from ProactiveAssistantsPlugin
@@ -231,6 +278,7 @@ actor RewindIndexer {
       // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
       // since there's no video chunk to load later
       guard let encodedFrame = encodedFrame else { return }
+      guard !ownerTransitionSuspended else { return }
 
       // OCR gating: throttle frequency, deduplicate, then check battery
       var ocrText: String?
@@ -271,9 +319,12 @@ actor RewindIndexer {
         frameOffset: encodedFrame.frameOffset,
         ocrText: ocrText,
         ocrDataJson: ocrDataJson,
-        isIndexed: isIndexed
+        isIndexed: isIndexed,
+        deviceName: currentComputerName,
+        clientDeviceId: currentClientDeviceId
       )
 
+      guard !ownerTransitionSuspended else { return }
       let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
       markFrameEncodedForDedupe(dedupeSignature, timestamp: frame.captureTime)
 
@@ -291,6 +342,9 @@ actor RewindIndexer {
       }
 
     } catch {
+      if await discardAbandonedVideoChunkIfNeeded(error) {
+        return
+      }
       logError("RewindIndexer: Failed to process frame", error: error)
       await RewindDatabase.shared.reportQueryError(error)
     }
@@ -315,6 +369,7 @@ actor RewindIndexer {
 
       // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
       guard let encodedFrame = encodedFrame else { return }
+      guard !ownerTransitionSuspended else { return }
 
       // OCR gating: throttle frequency, deduplicate, then check battery
       var ocrText: String?
@@ -354,9 +409,12 @@ actor RewindIndexer {
         frameOffset: encodedFrame.frameOffset,
         ocrText: ocrText,
         ocrDataJson: ocrDataJson,
-        isIndexed: isIndexed
+        isIndexed: isIndexed,
+        deviceName: currentComputerName,
+        clientDeviceId: currentClientDeviceId
       )
 
+      guard !ownerTransitionSuspended else { return }
       let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
       markFrameEncodedForDedupe(dedupeSignature, timestamp: captureTime)
 
@@ -373,7 +431,18 @@ actor RewindIndexer {
       }
 
     } catch {
-      logError("RewindIndexer: Failed to process CGImage frame", error: error)
+      if await discardAbandonedVideoChunkIfNeeded(error) {
+        return
+      }
+      logError(
+        "RewindIndexer: Failed to process CGImage frame",
+        error: error,
+        context: StorageFailureDiagnostics.context(
+          pathClass: "video-chunk",
+          containingURL: DesktopLocalProfile.applicationSupportURL(),
+          databaseURL: nil,
+          error: error,
+          appIsTerminating: RewindDatabase.isTerminationInProgress))
       await RewindDatabase.shared.reportQueryError(error)
     }
   }
@@ -412,6 +481,7 @@ actor RewindIndexer {
 
       // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
       guard let encodedFrame = encodedFrame else { return }
+      guard !ownerTransitionSuspended else { return }
 
       // OCR gating: throttle frequency, deduplicate, then check battery
       var ocrText: String?
@@ -463,9 +533,12 @@ actor RewindIndexer {
         isIndexed: isIndexed,
         focusStatus: focusStatus,
         extractedTasksJson: tasksJson,
-        adviceJson: adviceJson
+        adviceJson: adviceJson,
+        deviceName: currentComputerName,
+        clientDeviceId: currentClientDeviceId
       )
 
+      guard !ownerTransitionSuspended else { return }
       let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
       if !carriesMetadata {
         markFrameEncodedForDedupe(dedupeSignature, timestamp: frame.captureTime)
@@ -485,6 +558,9 @@ actor RewindIndexer {
       }
 
     } catch {
+      if await discardAbandonedVideoChunkIfNeeded(error) {
+        return
+      }
       logError("RewindIndexer: Failed to process frame with metadata", error: error)
       await RewindDatabase.shared.reportQueryError(error)
     }
@@ -554,8 +630,9 @@ actor RewindIndexer {
   func stop() async -> Bool {
     // Flush any pending video frames before stopping
     do {
-      _ = try await VideoChunkEncoder.shared.flushCurrentChunk()
+      _ = try await RewindStorage.shared.flushCurrentVideoChunk()
     } catch {
+      _ = await discardAbandonedVideoChunkIfNeeded(error)
       logError("RewindIndexer: Failed to flush video chunk", error: error)
       return false
     }
@@ -745,7 +822,7 @@ actor RewindIndexer {
   /// presentation time preserves variable/low-cadence capture timing.
   static func reconstructedScreenshots(from chunkInfo: VideoChunkInfo) async throws -> [Screenshot] {
     // Parse the chunk's capture time from its relative path (the day lives in
-    // the parent directory: "<yyyy-MM-dd>/chunk_HHmmss.mp4").
+    // the parent directory: "<yyyy-MM-dd>/chunk_HHmmss_<epochMillis>_<unique>.mp4").
     guard let timestamp = Self.parseChunkTimestamp(relativePath: chunkInfo.relativePath) else {
       throw RewindChunkExtractionError.unparseablePath
     }
@@ -761,7 +838,10 @@ actor RewindIndexer {
         frameOffset: frameOffset,
         ocrText: nil,
         ocrDataJson: nil,
-        isIndexed: false
+        isIndexed: false,
+        // Historical video chunks do not carry authoritative device provenance.
+        deviceName: nil,
+        clientDeviceId: nil
       )
     }
   }
@@ -855,23 +935,29 @@ actor RewindIndexer {
   /// Parse a chunk's capture timestamp from its stored relative path.
   ///
   /// New format (VideoChunkEncoder.generateChunkPath):
-  ///   "<yyyy-MM-dd>/chunk_<HHmmss>.<ext>" — day directory + time-only filename.
+  ///   "<yyyy-MM-dd>/chunk_<HHmmss>_<epochMillis>_<unique>.<ext>" — collision-proof capture-time filename.
   /// Legacy flat format: "chunk_<YYYYMMDD>_<HHMMSS>.hevc".
   ///
-  /// The encoder wrote both parts with local-time DateFormatters, so parse in the
-  /// current time zone to round-trip. Pure + static so rebuild parsing is testable.
+  /// Current paths carry an absolute epoch timestamp. Legacy day/time paths use
+  /// local-time DateFormatters, so parse those in the current time zone. Pure +
+  /// static so rebuild parsing is testable.
   static func parseChunkTimestamp(relativePath: String) -> Date? {
     let parts = relativePath.split(separator: "/").map(String.init)
     let filename = parts.last ?? relativePath
 
-    // New format: day directory + "chunk_HHmmss.<ext>".
-    if parts.count >= 2, let time = timeComponentFromChunkFilename(filename) {
+    // New format: day directory + "chunk_HHmmss[_<epochMillis>_<unique>].<ext>".
+    if parts.count >= 2, let captureTime = captureTimeComponentsFromChunkFilename(filename) {
+      if let epochMilliseconds = captureTime.epochMilliseconds {
+        return Date(timeIntervalSince1970: Double(epochMilliseconds) / 1_000)
+      }
+
       let dayStr = parts[parts.count - 2]
       let formatter = DateFormatter()
       formatter.locale = Locale(identifier: "en_US_POSIX")
       formatter.timeZone = .current
-      formatter.dateFormat = "yyyy-MM-dd'T'HHmmss"
-      if let date = formatter.date(from: "\(dayStr)T\(time)") {
+      formatter.dateFormat = captureTime.milliseconds == nil ? "yyyy-MM-dd'T'HHmmss" : "yyyy-MM-dd'T'HHmmss_SSS"
+      let fractionalPart = captureTime.milliseconds.map { "_\($0)" } ?? ""
+      if let date = formatter.date(from: "\(dayStr)T\(captureTime.clockTime)\(fractionalPart)") {
         return date
       }
     }
@@ -880,14 +966,63 @@ actor RewindIndexer {
     return parseLegacyChunkTimestamp(filename)
   }
 
-  /// Extract the "HHmmss" component from "chunk_HHmmss.<ext>", or nil if the
-  /// filename doesn't match the time-only chunk shape.
-  private static func timeComponentFromChunkFilename(_ filename: String) -> String? {
+  /// Extract capture-time components from current and legacy day-directory
+  /// filenames. Current chunks use `chunk_HHmmss_<epochMillis>_<unique>.<ext>`;
+  /// legacy `chunk_HHmmss.<ext>` files and a short-lived millisecond format
+  /// remain readable.
+  private static func captureTimeComponentsFromChunkFilename(
+    _ filename: String
+  ) -> (clockTime: String, milliseconds: String?, epochMilliseconds: Int64?)? {
     guard filename.hasPrefix("chunk_") else { return nil }
     let afterPrefix = filename.dropFirst("chunk_".count)
     let stem = afterPrefix.split(separator: ".").first.map(String.init) ?? String(afterPrefix)
-    guard stem.count == 6, stem.allSatisfy({ $0.isNumber }) else { return nil }
-    return stem
+    let components = stem.split(separator: "_", maxSplits: 1, omittingEmptySubsequences: false)
+    guard let time = components.first,
+      time.count == 6,
+      time.allSatisfy({ $0.isNumber })
+    else {
+      return nil
+    }
+
+    guard components.count == 2 else {
+      return (String(time), nil, nil)
+    }
+
+    let suffix = components[1].split(separator: "_", maxSplits: 1, omittingEmptySubsequences: false)
+    guard !suffix.isEmpty, !suffix[0].isEmpty else {
+      return nil
+    }
+
+    if suffix.count == 1 {
+      // A previous short-lived path shape used only a UUID suffix.
+      guard UUID(uuidString: String(suffix[0])) != nil else {
+        return nil
+      }
+      return (String(time), nil, nil)
+    }
+
+    guard suffix.count == 2,
+      !suffix[1].isEmpty,
+      UUID(uuidString: String(suffix[1])) != nil
+    else {
+      return nil
+    }
+
+    if suffix[0].count >= 12, suffix[0].allSatisfy({ $0.isNumber }) {
+      guard let epochMilliseconds = Int64(suffix[0])
+      else {
+        return nil
+      }
+      return (String(time), nil, epochMilliseconds)
+    }
+
+    // A short-lived path shape used milliseconds instead of an absolute time.
+    // Keep it readable at local-time precision while current paths use epoch
+    // milliseconds to avoid repeated-hour ambiguity during DST fall-back.
+    guard suffix[0].count == 3, suffix[0].allSatisfy({ $0.isNumber }) else {
+      return (String(time), nil, nil)
+    }
+    return (String(time), String(suffix[0]), nil)
   }
 
   private static func parseLegacyChunkTimestamp(_ filename: String) -> Date? {

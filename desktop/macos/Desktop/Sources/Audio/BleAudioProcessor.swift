@@ -62,7 +62,6 @@ final class BleAudioProcessor {
   private var lastPacketIndex: Int = -1
   private var lastFrameId: Int = -1
   private var pendingFrame: [UInt8] = []
-  private var framesBuffer: [[UInt8]] = []
 
   // Statistics
   private var totalFramesProcessed: Int = 0
@@ -195,7 +194,6 @@ final class BleAudioProcessor {
     lastPacketIndex = -1
     lastFrameId = -1
     pendingFrame = []
-    framesBuffer = []
     decoder?.reset()
     logger.debug("Processor reset")
   }
@@ -297,7 +295,6 @@ final class BleAudioProcessor {
     guard !frameBytes.isEmpty else { return }
 
     totalFramesProcessed += 1
-    framesBuffer.append(frameBytes)
 
     // Decode and deliver
     let frameData = Data(frameBytes)

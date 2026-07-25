@@ -151,6 +151,30 @@ def test_web_listen_custom_stt_suggested_transcript_is_emitted_and_persisted(cli
     assert persisted_conversation["transcript_segments"] == emitted_segments
 
 
+def test_web_listen_custom_stt_multichannel_keeps_receiving_transcripts(client, test_uid):
+    """Custom-STT phone calls do not create provider sockets, but must keep the WS alive.
+
+    This protects the prior ``None.send`` failure: a channel audio frame reaches the
+    multi-channel branch before a client-provided transcript arrives.
+    """
+    seed_listen_user(test_uid)
+
+    with client.websocket_connect(
+        "/v4/web/listen?custom_stt=enabled&channels=2&sample_rate=16000&codec=pcm16&source=phone_call"
+    ) as websocket:
+        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+        assert websocket.receive_json() == {"type": "auth_response", "success": True}
+        receive_until(websocket, is_conversation_session_event)
+        receive_until(websocket, is_ready_event)
+
+        websocket.send_bytes(b"\x01" + b"\x00" * 320)
+        websocket.send_text(json.dumps(fake_suggested_transcript_event()))
+
+        emitted_segments = receive_until(websocket, is_segment_batch)
+
+    assert emitted_segments[0]["id"] == "seg-custom-stt-1"
+
+
 def test_web_listen_reconnect_emits_existing_conversation_session_id(client, test_uid):
     """A fast reconnect should expose the same active conversation id instead of making clients infer it."""
     seed_listen_user(test_uid)
@@ -212,12 +236,12 @@ def test_listen_client_conversation_id_never_resumes_global_conversation(client,
         "status": "in_progress",
     }
 
-    import routers.transcribe as transcribe_router
+    from routers.listen import conversations as listen_conversations
 
     def stale_global_lookup(_uid):
         raise AssertionError(f"identified listen must not resume stale global conversation {stale_conversation['id']}")
 
-    monkeypatch.setattr(transcribe_router, "retrieve_in_progress_conversation", stale_global_lookup)
+    monkeypatch.setattr(listen_conversations, "retrieve_in_progress_conversation", stale_global_lookup)
 
     with client.websocket_connect(
         "/v4/web/listen?"
@@ -338,7 +362,7 @@ def test_web_listen_streaming_stt_send_failure_emits_terminal_status_then_closes
             "status": "stt_failed",
             "status_text": "The transcription provider could not complete the request.",
             "outcome": "upstream_error",
-            "provider": "deepgram",
+            "provider": "parakeet",
             "retryable": True,
             "reason": "send_failed",
         }

@@ -15,13 +15,26 @@ import 'package:omi/utils/logger.dart';
 
 typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
 typedef DailySummariesChecker = Future<bool> Function();
-typedef ConversationSearchFetcher = Future<(List<ServerConversation>, int, int)> Function(
-  String query, {
-  int? page,
-  int? limit,
-  required bool includeDiscarded,
-  String? speakerId,
-});
+typedef ConversationSearchFetcher =
+    Future<(List<ServerConversation>, int, int)> Function(
+      String query, {
+      int? page,
+      int? limit,
+      required bool includeDiscarded,
+      String? speakerId,
+    });
+
+/// Day-bucket key for a conversation timestamp, in the viewer's **local** timezone.
+///
+/// `started_at`/`created_at` arrive as UTC (ISO-8601 `Z`), so bucketing by their raw
+/// UTC `year/month/day` filed an early-morning-local conversation under the previous
+/// day for any UTC+ viewer — it vanished from the "Today" group even though the
+/// local-day date filter still found it (#10198). Truncating the *local* calendar day
+/// keeps grouping consistent with the local-day filter and the Today/Yesterday labels.
+DateTime conversationLocalDayKey(DateTime timestamp) {
+  final local = timestamp.toLocal();
+  return DateTime(local.year, local.month, local.day);
+}
 
 class ConversationProvider extends ChangeNotifier {
   List<ServerConversation> conversations = [];
@@ -91,10 +104,10 @@ class ConversationProvider extends ChangeNotifier {
     DailySummariesChecker? dailySummariesChecker,
     ConversationSearchFetcher? conversationSearchFetcher,
     bool Function()? isSignedIn,
-  })  : _conversationListFetcher = conversationListFetcher,
-        _dailySummariesChecker = dailySummariesChecker,
-        _conversationSearchFetcher = conversationSearchFetcher ?? searchConversationsServer,
-        _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn {
+  }) : _conversationListFetcher = conversationListFetcher,
+       _dailySummariesChecker = dailySummariesChecker,
+       _conversationSearchFetcher = conversationSearchFetcher ?? searchConversationsServer,
+       _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn {
     _setupMergeListener();
     _loadSettings();
   }
@@ -232,7 +245,7 @@ class ConversationProvider extends ChangeNotifier {
 
   int groupedSearchConvoIndex(ServerConversation convo) {
     var convoDate = convo.startedAt ?? convo.createdAt;
-    var date = DateTime(convoDate.year, convoDate.month, convoDate.day);
+    var date = conversationLocalDayKey(convoDate);
     if (groupedConversations.containsKey(date)) {
       return groupedConversations[date]!.indexWhere((element) => element.id == convo.id);
     }
@@ -332,8 +345,9 @@ class ConversationProvider extends ChangeNotifier {
   Future<bool> checkHasDailySummaries() async {
     if (!_isSignedIn()) return false;
     final generation = _sessionGeneration;
-    final hasSummaries = await (_dailySummariesChecker?.call() ??
-        getDailySummaries(limit: 1, offset: 0).then((items) => items.isNotEmpty));
+    final hasSummaries =
+        await (_dailySummariesChecker?.call() ??
+            getDailySummaries(limit: 1, offset: 0).then((items) => items.isNotEmpty));
     if (generation != _sessionGeneration || !_isSignedIn()) return false;
     hasDailySummaries = hasSummaries;
     notifyListeners();
@@ -416,8 +430,10 @@ class ConversationProvider extends ChangeNotifier {
     // can be missed (socket drop, app backgrounded on Android), and unlike
     // fetchConversations this path never rebuilt processingConversations — so a
     // stale card stayed pinned at the top of the list indefinitely.
-    final resolvedIds =
-        newConversations.where((c) => c.status != ConversationStatus.processing).map((c) => c.id).toSet();
+    final resolvedIds = newConversations
+        .where((c) => c.status != ConversationStatus.processing)
+        .map((c) => c.id)
+        .toSet();
     if (resolvedIds.isNotEmpty) {
       processingConversations.removeWhere((c) => resolvedIds.contains(c.id));
     }
@@ -591,7 +607,7 @@ class ConversationProvider extends ChangeNotifier {
       // Apply date filter if selected
       if (selectedDate != null) {
         var effectiveDate = convo.startedAt ?? convo.createdAt;
-        var convoDate = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+        var convoDate = conversationLocalDayKey(effectiveDate);
         var filterDate = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day);
         if (convoDate != filterDate) {
           return false;
@@ -668,7 +684,7 @@ class ConversationProvider extends ChangeNotifier {
     final grouped = <DateTime, List<ServerConversation>>{};
     for (final conversation in source) {
       final effectiveDate = conversation.startedAt ?? conversation.createdAt;
-      final date = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+      final date = conversationLocalDayKey(effectiveDate);
       grouped.putIfAbsent(date, () => []).add(conversation);
     }
 
@@ -776,7 +792,7 @@ class ConversationProvider extends ChangeNotifier {
 
   void updateConversationInSortedList(ServerConversation conversation) {
     var effectiveDate = conversation.startedAt ?? conversation.createdAt;
-    var date = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+    var date = conversationLocalDayKey(effectiveDate);
     if (groupedConversations.containsKey(date)) {
       int idx = groupedConversations[date]!.indexWhere((element) => element.id == conversation.id);
       if (idx != -1) {
@@ -791,7 +807,7 @@ class ConversationProvider extends ChangeNotifier {
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     int idx;
     var effectiveDate = conversation.startedAt ?? conversation.createdAt;
-    var memDate = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+    var memDate = conversationLocalDayKey(effectiveDate);
     if (groupedConversations.containsKey(memDate)) {
       var convoEffectiveDate = conversation.startedAt ?? conversation.createdAt;
       idx = groupedConversations[memDate]!.indexWhere(
@@ -969,8 +985,8 @@ class ConversationProvider extends ChangeNotifier {
     final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
     if (originalConvoIndex != -1) {
       final itemIndex = conversations[originalConvoIndex].structured.actionItems.indexWhere(
-            (item) => item.description == actionItemDescription,
-          );
+        (item) => item.description == actionItemDescription,
+      );
       if (itemIndex != -1) {
         conversations[originalConvoIndex].structured.actionItems[itemIndex].completed = newState;
         conversationFoundAndUpdated = true;
@@ -978,13 +994,13 @@ class ConversationProvider extends ChangeNotifier {
     }
 
     var effectiveDate = conversation.startedAt ?? conversation.createdAt;
-    var dateKey = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+    var dateKey = conversationLocalDayKey(effectiveDate);
     if (groupedConversations.containsKey(dateKey)) {
       final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
       if (groupIndex != -1) {
         final itemIndex = groupedConversations[dateKey]![groupIndex].structured.actionItems.indexWhere(
-              (item) => item.description == actionItemDescription,
-            );
+          (item) => item.description == actionItemDescription,
+        );
         if (itemIndex != -1) {
           groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndex].completed = newState;
         }
@@ -1049,7 +1065,7 @@ class ConversationProvider extends ChangeNotifier {
 
   (DateTime, int)? getConversationDateAndIndex(ServerConversation conversation) {
     final effectiveDate = conversation.startedAt ?? conversation.createdAt;
-    final date = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+    final date = conversationLocalDayKey(effectiveDate);
 
     final list = groupedConversations[date];
     if (list == null) return null;

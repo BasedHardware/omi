@@ -142,6 +142,50 @@ def test_dev_pusher_rollout_preserves_the_existing_replica(contracts: SimpleName
     assert rolling_update["maxSurge"] == 1
 
 
+@pytest.mark.parametrize("environment", ("dev", "prod"))
+def test_pusher_explicit_zero_min_ready_seconds_renders(contracts: SimpleNamespace, environment: str):
+    helm = shutil.which("helm")
+    assert helm is not None, "helm must be installed for the rendered deployment contract"
+    contract = next(contract for contract in contracts.CONTRACTS if contract.service == "pusher")
+
+    documents = contracts.render_chart(contract, environment, helm)
+    deployment = contracts.deployment_for(documents, contracts.release_name(contract, environment))
+
+    assert deployment is not None
+    assert deployment["spec"]["minReadySeconds"] == 0
+
+
+def test_pusher_rejects_a_missing_min_ready_seconds(contracts: SimpleNamespace, tmp_path: Path):
+    helm = shutil.which("helm")
+    assert helm is not None, "helm must be installed for the rendered deployment contract"
+    contract = next(contract for contract in contracts.CONTRACTS if contract.service == "pusher")
+    values = contracts.values_file(contract, "dev")
+    missing_min_ready_values = tmp_path / values.name
+    original = values.read_text(encoding="utf-8")
+    assert original.count("minReadySeconds: 0\n") == 1
+    missing_min_ready_values.write_text(original.replace("minReadySeconds: 0\n", "", 1), encoding="utf-8")
+
+    result = contracts.subprocess.run(
+        [
+            helm,
+            "template",
+            contracts.release_name(contract, "dev"),
+            str(contracts.chart_dir(contract)),
+            "-f",
+            str(missing_min_ready_values),
+            "--set-string",
+            f"image.tag={contracts.CONTRACT_IMAGE_TAG}",
+        ],
+        cwd=contracts.ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "minReadySeconds is required" in result.stderr
+
+
 def test_first_party_charts_reject_missing_image_tag_when_helm_is_available(contracts: SimpleNamespace):
     helm = shutil.which("helm")
     assert helm is not None, "helm must be installed for the rendered deployment contract"

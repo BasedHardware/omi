@@ -544,6 +544,44 @@ final class MemoryBankConnectorTests: XCTestCase {
     XCTAssertEqual(agents, "legacy agents prompt")
   }
 
+  // MARK: - isInstalled (onboarding upfront probe must match the connect path)
+
+  func testIsInstalledCodexRequiresCLINotJustConfigDir() throws {
+    // The exact regression: a stray ~/.codex dir with no `codex` on PATH used to
+    // pass the loose upfront probe, so onboarding showed "Connect" and only flipped
+    // to "not installed" after the click. isInstalled must require the CLI.
+    try FileManager.default.createDirectory(
+      at: tempHome.appendingPathComponent(".codex", isDirectory: true), withIntermediateDirectories: true)
+    XCTAssertFalse(MemoryBankConnector.isInstalled(.codex))  // codexCLIPathOverrideForTesting == "" from setUp
+
+    MemoryBankConnector.codexCLIPathOverrideForTesting = try writeFakeCodexCLI().path
+    XCTAssertTrue(MemoryBankConnector.isInstalled(.codex))
+  }
+
+  func testIsInstalledClaudeCodeDetectsConfig() throws {
+    XCTAssertFalse(MemoryBankConnector.isInstalled(.claudeCode))
+    try "{}".write(
+      to: tempHome.appendingPathComponent(".claude.json"), atomically: true, encoding: .utf8)
+    XCTAssertTrue(MemoryBankConnector.isInstalled(.claudeCode))
+  }
+
+  func testIsInstalledOpenClawRequiresConfigAndWorkspace() throws {
+    // setUp already provides a fake openclaw CLI, so this isolates the config gate.
+    XCTAssertFalse(MemoryBankConnector.isInstalled(.openclaw))  // no config yet
+    let workspace = tempHome.appendingPathComponent(".openclaw/workspace", isDirectory: true)
+    try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+    _ = try writeOpenClawConfig(workspace: workspace)
+    XCTAssertTrue(MemoryBankConnector.isInstalled(.openclaw))
+  }
+
+  func testIsInstalledHermesRequiresInstallEvidence() throws {
+    let hermes = tempHome.appendingPathComponent(".hermes", isDirectory: true)
+    try FileManager.default.createDirectory(at: hermes, withIntermediateDirectories: true)
+    XCTAssertFalse(MemoryBankConnector.isInstalled(.hermes))  // bare dir, no config/install
+    _ = try writeHermesInstall()
+    XCTAssertTrue(MemoryBankConnector.isInstalled(.hermes))
+  }
+
   private func writeOpenClawConfig(workspace: URL, extra: String = "") throws -> URL {
     let configDir = tempHome.appendingPathComponent(".openclaw", isDirectory: true)
     try FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)

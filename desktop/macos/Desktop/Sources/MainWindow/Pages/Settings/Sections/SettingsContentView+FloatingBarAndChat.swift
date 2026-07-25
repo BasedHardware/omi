@@ -321,6 +321,10 @@ extension SettingsContentView {
             Spacer()
           }
 
+          Text("Reference only — CLAUDE.md content is never injected into chat instructions.")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(OmiColors.textTertiary)
+
           // Global CLAUDE.md
           VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             HStack {
@@ -343,11 +347,6 @@ extension SettingsContentView {
                   showFileViewer = true
                 }
                 .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-
-                Toggle("", isOn: $claudeMdEnabled)
-                  .toggleStyle(OmiToggleStyle())
-                  .controlSize(.small)
-                  .labelsHidden()
               }
             }
 
@@ -390,11 +389,6 @@ extension SettingsContentView {
                     showFileViewer = true
                   }
                   .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-
-                  Toggle("", isOn: $projectClaudeMdEnabled)
-                    .toggleStyle(OmiToggleStyle())
-                    .controlSize(.small)
-                    .labelsHidden()
                 }
               }
 

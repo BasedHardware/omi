@@ -15,6 +15,52 @@ import UniformTypeIdentifiers
 /// `onAttachmentRemoved` to enable the paperclip button, the staged-files row,
 /// and drag-drop. When omitted (e.g. task-sidebar chat) the input behaves as
 /// before.
+enum ChatComposerLayout {
+  /// The visible margin around every edge of a composer shell.
+  static let shellInset: CGFloat = OmiSpacing.sm
+  /// Shared page margin for the regular chat composer.
+  static let pageMargin: CGFloat = OmiSpacing.lg
+  /// The height over which transcript content fades into the composer.
+  static let fadeHeight: CGFloat = OmiSpacing.xl
+  static let shellRadius: CGFloat = 18
+}
+
+/// A translucent transition between a scrolling transcript and its composer.
+/// The clear leading edge lets the final message recede naturally instead of
+/// being abruptly clipped by an opaque toolbar.
+struct ChatComposerFade: View {
+  var body: some View {
+    LinearGradient(
+      stops: [
+        .init(color: .clear, location: 0),
+        .init(color: OmiColors.backgroundPrimary.opacity(0.72), location: 0.58),
+        .init(color: OmiColors.backgroundPrimary, location: 1),
+      ],
+      startPoint: .top,
+      endPoint: .bottom
+    )
+    .frame(height: ChatComposerLayout.fadeHeight)
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
+  }
+}
+
+extension View {
+  /// Lightweight composer chrome shared by regular and Notch chat.
+  /// Keeping the inset equal on every edge avoids the heavy bezel effect.
+  func chatComposerShell(fill: Color = OmiColors.backgroundSecondary.opacity(0.82)) -> some View {
+    padding(ChatComposerLayout.shellInset)
+      .background(
+        RoundedRectangle(cornerRadius: ChatComposerLayout.shellRadius, style: .continuous)
+          .fill(fill)
+      )
+      .overlay {
+        RoundedRectangle(cornerRadius: ChatComposerLayout.shellRadius, style: .continuous)
+          .stroke(OmiColors.border.opacity(0.16), lineWidth: 1)
+      }
+  }
+}
+
 struct ChatInputView: View {
   let onSend: (String) -> Void
   var onStop: (() -> Void)? = nil
@@ -146,11 +192,11 @@ struct ChatInputView: View {
         }
       }
     }
-    .padding(OmiSpacing.md)
-    .omiPanel(
-      fill: OmiColors.backgroundSecondary, radius: 22, stroke: dropStrokeColor, shadowOpacity: 0.1, shadowRadius: 12,
-      shadowY: 6
-    )
+    .chatComposerShell(fill: OmiColors.backgroundSecondary.opacity(isDropTargeted ? 0.96 : 0.82))
+    .overlay {
+      RoundedRectangle(cornerRadius: ChatComposerLayout.shellRadius, style: .continuous)
+        .stroke(dropStrokeColor, lineWidth: isDropTargeted ? 1.5 : 0)
+    }
     .fixedSize(horizontal: false, vertical: true)
     .if(attachmentsEnabled) { view in
       view.onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleDrop)

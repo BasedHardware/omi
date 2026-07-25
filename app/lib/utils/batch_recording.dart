@@ -40,8 +40,7 @@ bool canAutoUploadPhoneRecordings({
   required bool useCustomStt,
   required bool autoSyncOfflineRecordings,
   required bool isUploading,
-}) =>
-    !useCustomStt && autoSyncOfflineRecordings && !isUploading;
+}) => !useCustomStt && autoSyncOfflineRecordings && !isUploading;
 
 /// The next offline-fallback recording to auto-upload from [fileNames], or null
 /// when none is eligible. Only auto-marker files qualify (explicit Transcribe
@@ -61,6 +60,26 @@ String? selectNextAutoPhoneUpload(
     return name;
   }
   return null;
+}
+
+/// Which capture mode a phone-mic session starts in. Fixed for the whole
+/// session at streamRecording(); there is no mid-session switching.
+enum PhoneMicSessionMode { live, batchExplicit, batchAuto }
+
+/// Pure decision table for CaptureController.streamRecording. [hasNetwork] is
+/// network connectivity (ConnectivityService.isConnected) — never device
+/// connectivity. Explicit Transcribe Later suppresses the automatic offline
+/// fallback, so an offline start with the toggle on is batchExplicit (the file
+/// keeps the manual marker and is not auto-uploaded on reconnect).
+PhoneMicSessionMode selectPhoneMicSessionMode({
+  required bool supportsBatch,
+  required bool batchModeEnabled,
+  required bool hasNetwork,
+}) {
+  if (!supportsBatch) return PhoneMicSessionMode.live;
+  if (batchModeEnabled) return PhoneMicSessionMode.batchExplicit;
+  if (!hasNetwork) return PhoneMicSessionMode.batchAuto;
+  return PhoneMicSessionMode.live;
 }
 
 /// Metadata parsed from a batch recording filename written by the native layer:
@@ -129,8 +148,8 @@ class BatchRecordingInfo {
     final bytesPerSec = codec == BleAudioCodec.pcm16
         ? 32200
         : codec == BleAudioCodec.pcm8
-            ? 16100
-            : 2400;
+        ? 16100
+        : 2400;
     return (sizeBytes / bytesPerSec).round().clamp(1, 24 * 3600);
   }
 }

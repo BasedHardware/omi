@@ -7,6 +7,7 @@ Neutral ``vector_search_service`` is the source of truth. Canonical vector searc
 
 
 import time
+from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set, cast
 
 try:
@@ -51,6 +52,7 @@ def fetch_default_vector_memory_search(
     clock: Optional[Callable[[], float]] = None,
     required_projection_commit_id: str,
     required_account_generation: int,
+    now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     """Hydrate memory vector candidates through authoritative `memory_items` before returning results.
 
@@ -97,6 +99,7 @@ def fetch_default_vector_memory_search(
         mode=SearchMode.default,
         required_projection_commit_id=required_projection_commit_id,
         required_account_generation=required_account_generation,
+        now=now,
     )
 
     while True:
@@ -135,6 +138,7 @@ def fetch_default_vector_memory_search(
             mode=SearchMode.default,
             required_projection_commit_id=required_projection_commit_id,
             required_account_generation=required_account_generation,
+            now=now,
         )
         if timeout_exhausted or hydration_read_budget_exhausted:
             break

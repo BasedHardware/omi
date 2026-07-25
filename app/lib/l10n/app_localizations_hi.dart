@@ -1460,7 +1460,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get payYourSttProvider => 'Omi का मुफ्त उपयोग करें। आप केवल सीधे STT प्रदाता को भुगतान करते हैं।';
 
   @override
-  String get freeMinutesMonth => '600 मुफ़्त मिनट/माह शामिल हैं।';
+  String get freeMinutesMonth => '300 मुफ़्त मिनट/माह शामिल हैं।';
 
   @override
   String get omiUnlimited => 'Omi असीमित';
@@ -1773,18 +1773,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Omi पसंद आ रहा है?';
-
-  @override
-  String get leaveReviewIos => 'ऐप स्टोर पर समीक्षा छोड़ कर अधिक लोगों तक पहुँचने में हमारी मदद करें।';
-
-  @override
-  String get leaveReviewAndroid => 'Google Play पर समीक्षा छोड़ कर अधिक लोगों तक पहुँचने में हमारी मदद करें।';
-
-  @override
-  String get rateOnAppStore => 'ऐप स्टोर पर रेट करें';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play पर रेट करें';
 
   @override
   String get maybeLater => 'शायद बाद में';
@@ -2112,6 +2100,18 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ स्मृति संपादित करें';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'मुझे आइसक्रीम पसंद है...';
@@ -4683,7 +4683,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'कोई विशिष्ट डेटा एक्सेस कॉन्फ़िगर नहीं किया गया।';
 
   @override
-  String get basicPlanDescription => '600 प्रीमियम मिनट + डिवाइस पर असीमित';
+  String get basicPlanDescription => '300 प्रीमियम मिनट + डिवाइस पर असीमित';
 
   @override
   String get minutes => 'मिनट';
@@ -5975,7 +5975,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get cloudProvider => 'क्लाउड प्रदाता';
 
   @override
-  String get premiumMinutesInfo => '600 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है।';
+  String get premiumMinutesInfo => '300 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है।';
 
   @override
   String get viewUsage => 'उपयोग देखें';
@@ -6056,7 +6056,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get batteryDrainSignificantly => 'बैटरी की खपत काफी बढ़ जाएगी।';
 
   @override
-  String get premiumMinutesMonth => '600 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है। ';
+  String get premiumMinutesMonth => '300 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है। ';
 
   @override
   String get audioProcessedLocally =>
@@ -8966,7 +8966,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get billingYearly => 'वार्षिक';
 
   @override
-  String get savePercent => '~17% बचाएं';
+  String savePercent(int percent) {
+    return '~$percent% बचाएं';
+  }
 
   @override
   String get popular => 'लोकप्रिय';
@@ -9575,4 +9577,177 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'कोई कनेक्शन नहीं — स्थानीय रूप से रिकॉर्ड किया जा रहा है। ऑनलाइन वापस आने पर इसे ट्रांसक्राइब किया जाएगा।';
+
+  @override
+  String get dataEncryptedBanner =>
+      'आपका डेटा डिफ़ॉल्ट रूप से मजबूत एन्क्रिप्शन से सुरक्षित है, और यह कैसे संग्रहीत और उपयोग किया जाता है इस पर आपका नियंत्रण रहता है।';
+
+  @override
+  String get sttModelAccuracy => 'सटीकता';
+
+  @override
+  String get whisperModelSizeBase => 'आधार';
+
+  @override
+  String get cloudTranscription => 'क्लाउड ट्रांसक्रिप्शन';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'मॉडल हटाएं';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'क्या आप वाकई इस मॉडल को हटाना चाहते हैं?';
+
+  @override
+  String get onDeviceModelDownloaded => 'डाउनलोड किया गया';
+
+  @override
+  String get sttModelFaster => 'तेज़';
+
+  @override
+  String get sttFilterAuto => 'स्वतः';
+
+  @override
+  String get sttModelHigher => 'अधिक';
+
+  @override
+  String get whisperModelSizeLarge => 'बड़ा';
+
+  @override
+  String get sttModelLower => 'कम';
+
+  @override
+  String get whisperModelSizeMedium => 'मध्यम';
+
+  @override
+  String get onDeviceModelDeleted => 'मॉडल हटा दिया गया';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'मॉडल डाउनलोड विफल';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Whisper मॉडल डाउनलोड नहीं हो सका। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'मॉडल डाउनलोड हो गया';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper मॉडल सफलतापूर्वक डाउनलोड हो गया';
+
+  @override
+  String get onDeviceModelSize => 'मॉडल आकार';
+
+  @override
+  String get sttNone => 'कोई नहीं';
+
+  @override
+  String get onDeviceTranscription => 'डिवाइस पर ट्रांसक्रिप्शन';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'ट्रांसक्रिप्शन आपके डिवाइस पर स्थानीय रूप से प्रोसेस किया जाता है';
+
+  @override
+  String get sttModelSlower => 'धीमा';
+
+  @override
+  String get whisperModelSizeSmall => 'छोटा';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'स्पीच-टू-टेक्स्ट प्रदाता';
+
+  @override
+  String get speechToTextProviderDesc => 'ट्रांसक्रिप्शन के लिए उपयोग की जाने वाली सेवा चुनें';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'गति';
+
+  @override
+  String get whisperModelSizeTiny => 'अति लघु';
+
+  @override
+  String get transcriptionLanguage => 'ट्रांसक्रिप्शन भाषा';
+
+  @override
+  String get transcriptionLanguageDesc => 'स्पीच ट्रांसक्रिप्शन के लिए भाषा चुनें';
+
+  @override
+  String get whisperModel => 'व्हिस्पर मॉडल';
+
+  @override
+  String get whisperModelDesc => 'डिवाइस पर ट्रांसक्रिप्शन के लिए मॉडल चुनें';
+
+  @override
+  String get downgradeToFreemiumTitle => 'निःशुल्क प्लान पर डाउनग्रेड करें?';
+
+  @override
+  String get downgradeLimitationsHeading => 'आपको ये सीमाएँ अनुभव होंगी:';
+
+  @override
+  String get downgradeLimitBattery => '7 गुना अधिक बैटरी खपत';
+
+  @override
+  String get downgradeLimitQuality => '30% कम ट्रांसक्रिप्शन गुणवत्ता';
+
+  @override
+  String get downgradeLimitDelay => '5-7 सेकंड की देरी';
+
+  @override
+  String get downgradeLimitSpeakers => 'वक्ताओं की पहचान नहीं हो पाएगी';
+
+  @override
+  String get downgradeAnyway => 'फिर भी डाउनग्रेड करें';
+
+  @override
+  String get googleCalendarNotConnected => 'Google कैलेंडर कनेक्ट नहीं है';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'बातचीत को कैलेंडर ईवेंट से लिंक करने के लिए अपना Google कैलेंडर कनेक्ट करें।';
+
+  @override
+  String linkedToEvent(String title) {
+    return '“$title” से लिंक किया गया';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'कैलेंडर ईवेंट लिंक करने में विफल';
+
+  @override
+  String get thanksForYourFeedback => 'आपकी प्रतिक्रिया के लिए धन्यवाद!';
+
+  @override
+  String get copyMessage => 'संदेश कॉपी करें';
+
+  @override
+  String get searchSettings => 'सेटिंग्स खोजें…';
+
+  @override
+  String get errorLoadingAudio => 'ऑडियो लोड करने में त्रुटि';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'अपना Ray-Ban Meta माइक्रोफ़ोन चुनें';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'अपने चश्मे का Bluetooth माइक्रोफ़ोन चुनें। Omi के उपयोग के दौरान संगीत रुक जाता है।';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'कोई Bluetooth माइक्रोफ़ोन नहीं मिला। iPhone सेटिंग्स में चश्मा कनेक्ट करें, फिर दोबारा कोशिश करें।';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth माइक्रोफ़ोन लोड नहीं किए जा सके। जाँचें कि Bluetooth चालू है, फिर दोबारा कोशिश करें।';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'उस माइक्रोफ़ोन से कनेक्ट नहीं हो सके। सुनिश्चित करें कि वह iPhone सेटिंग्स में कनेक्ट है।';
 }

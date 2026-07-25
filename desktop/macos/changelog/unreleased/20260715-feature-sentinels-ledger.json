@@ -1,3 +1,0 @@
-{
-  "change": "Added semantic feature sentinels proving Swift compiler flags are active, plus an advisory strict-concurrency diagnostic ledger for the executable target"
-}

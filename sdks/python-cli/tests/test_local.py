@@ -349,7 +349,11 @@ def test_screenshot_preserves_structured_local_api_error_in_json(config_path: Pa
 
     with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
         router.post("/v1/local/tool").mock(return_value=httpx.Response(422, json=error_payload))
-        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "123", "--output", str(output)])
+        result = cli_runner.invoke(
+            app,
+            ["--json", "local", "screenshot", "123", "--output", str(output)],
+            standalone_mode=False,
+        )
 
     assert result.exit_code != 0
     assert not output.exists()
@@ -435,7 +439,11 @@ def test_screenshot_non_json_local_api_error_has_status_code(config_path: Path, 
 
     with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
         router.post("/v1/local/tool").mock(return_value=httpx.Response(500, text="plain failure"))
-        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "123", "--output", str(output)])
+        result = cli_runner.invoke(
+            app,
+            ["--json", "local", "screenshot", "123", "--output", str(output)],
+            standalone_mode=False,
+        )
 
     assert result.exit_code != 0
     assert not output.exists()

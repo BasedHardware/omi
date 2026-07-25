@@ -108,6 +108,10 @@ AUDITED_PUBLIC_PREFIXES = (
 UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     (
         'POST',
+        '/v1/conversations/shared/chat',
+    ): 'Trusted frontend service OIDC route; it is not a browser or Developer API surface.',
+    (
+        'POST',
         '/v1/conversations',
     ): 'Firebase-authenticated first-party app route; public docs expose Developer API key conversation creation.',
     (
@@ -187,6 +191,14 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         '/v1/conversations/{conversation_id}/transcripts',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
+        'GET',
+        '/v1/conversations/{conversation_id}/analytics',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/finalization',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
         'PATCH',
         '/v1/conversations/{conversation_id}/events',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
@@ -197,6 +209,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     (
         'GET',
         '/v1/conversations/{conversation_id}/action-items',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/action-items/count',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
         'PATCH',
@@ -973,12 +989,26 @@ def write_spec(path: Path, generated: str) -> None:
     path.write_text(generated)
 
 
-def check_spec(path: Path, generated: str) -> None:
+def regenerate_hint(path: Path, surface: str) -> str:
+    """The exact command that regenerates `path`.
+
+    `--surface` has to be explicit: it defaults to `public`, so a hint that omits it
+    sends the reader to overwrite a non-public contract with the public surface, which
+    quietly guts the file instead of refreshing it (#10217).
+    """
+    return f'backend/scripts/export_openapi.py --surface {surface} --write {path}'
+
+
+def check_spec(path: Path, generated: str, *, surface: str = 'public') -> None:
+    # Default matches the --surface default so existing callers (and the public
+    # contract test) stay valid; the production caller passes surface explicitly
+    # so a non-public surface never silently gets the public regenerate hint.
+    hint = regenerate_hint(path, surface)
     if not path.exists():
-        raise OpenAPIContractError(f'{path} does not exist; run export_openapi.py --write {path}')
+        raise OpenAPIContractError(f'{path} does not exist; run {hint}')
     current = path.read_text()
     if current != generated:
-        raise OpenAPIContractError(f'{path} is stale; run backend/scripts/export_openapi.py --write {path}')
+        raise OpenAPIContractError(f'{path} is stale; run {hint}')
 
 
 def parse_args() -> argparse.Namespace:
@@ -1031,7 +1061,7 @@ def main() -> int:
             print(f'wrote {path}')
         elif args.check is not None:
             path = resolve_spec_path(args.surface, args.check)
-            check_spec(path, generated)
+            check_spec(path, generated, surface=args.surface)
             print(f'{path} is up to date')
         return 0
     except OpenAPIContractError as e:

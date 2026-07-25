@@ -1,3 +1,0 @@
-{
-  "change": "Added a down-only SwiftLint baseline ratchet that rejects new violations and enforces reasoned swiftlint:disable suppressions"
-}

@@ -170,7 +170,8 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
   bool _shouldShowSettingsIcon() {
     final selected = context.read<TaskIntegrationProvider>().selectedApp;
-    final hasSettings = (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
+    final hasSettings =
+        (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
         (selected == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) ||
         (selected == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) ||
         (selected == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated);
@@ -508,8 +509,9 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                       )
                     : Container(
                         decoration: BoxDecoration(
-                          color:
-                              isAvailable ? app.iconColor.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.1),
+                          color: isAvailable
+                              ? app.iconColor.withValues(alpha: 0.2)
+                              : Colors.grey.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: FaIcon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),
@@ -554,7 +556,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             else
             // Radio button for connected services
             if (isSelected)
-              FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.green, size: 24)
+              const FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.green, size: 24)
             else
               Container(
                 width: 24,

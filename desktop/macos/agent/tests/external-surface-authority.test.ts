@@ -16,6 +16,7 @@ import { recordJournalTurn, terminalizeJournalTurn, updateJournalTurn } from "..
 import { routeExternalSurfaceTool } from "../src/runtime/external-surface-tool-policy.js";
 import { AgentRuntimeKernel, ExternalSurfaceAuthorityError } from "../src/runtime/kernel.js";
 import type { AuthorizedRunToolInvocation } from "../src/runtime/run-tool-capability.js";
+import { finalizeRelayToolResult } from "../src/runtime/relay-tool-result.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 import { resolveSurfaceSession } from "../src/runtime/surface-session.js";
 import { readToolInvocation } from "../src/runtime/tool-invocation-ledger.js";
@@ -754,6 +755,7 @@ describe("external realtime surface authority", () => {
         schemaVersion: 1,
         surface: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "typed-spawn" },
         continuityKey: `agent_spawn:${invocationId}`,
+        producerRunId: authorized.runId,
         producerTurnId: "typed-spawn-assistant",
         userText: "DEFER_TYPED_PARENT_9515 research the release plan",
         assistantText: "I started a background agent for that.",
@@ -769,16 +771,24 @@ describe("external realtime surface authority", () => {
     expect((prepared.toolInput.metadata as any).producerJournal.forged).toBeUndefined();
 
     kernel.markRunToolInvocationDispatched(authorized);
-    const raw = await handleAgentControlToolCall({
-      kernel,
-      callerSessionId: authorized.sessionId,
-      executionRole: "coordinator",
-      providerBoundary: "local_user:acp",
-      defaultAdapterId: "acp",
-      authorizedProducerJournal: prepared.producerJournal,
-      authorizedCallerRunId: prepared.parentRunId,
-      getOwnerId: () => "owner",
-    }, authorized.canonicalToolName, prepared.toolInput);
+    const previousArtifactRoot = process.env.OMI_AGENT_ARTIFACTS_DIR;
+    process.env.OMI_AGENT_ARTIFACTS_DIR = newRoot();
+    let raw: string;
+    try {
+      raw = await handleAgentControlToolCall({
+        kernel,
+        callerSessionId: authorized.sessionId,
+        executionRole: "coordinator",
+        providerBoundary: "local_user:acp",
+        defaultAdapterId: "acp",
+        authorizedProducerJournal: prepared.producerJournal,
+        authorizedCallerRunId: prepared.parentRunId,
+        getOwnerId: () => "owner",
+      }, authorized.canonicalToolName, prepared.toolInput);
+    } finally {
+      if (previousArtifactRoot === undefined) delete process.env.OMI_AGENT_ARTIFACTS_DIR;
+      else process.env.OMI_AGENT_ARTIFACTS_DIR = previousArtifactRoot;
+    }
     kernel.completeRunToolInvocation({
       ...invocationIdentity(authorized),
       capabilityRef: authorized.capabilityRef,
@@ -1035,18 +1045,27 @@ describe("external realtime surface authority", () => {
       toolInput: { objective: "Research safely", originSurfaceKind: "main_chat" },
     }).toolInput).toMatchObject({ originSurfaceKind: "realtime" });
 
-    const result = JSON.parse(await handleAgentControlToolCall({
-      kernel,
-      callerSessionId: session.agentSessionId,
-      executionRole: "coordinator",
-      providerBoundary: "managed_cloud",
-      defaultAdapterId: "pi-mono",
-      authorizedProducerJournal: parseAgentSpawnProducerJournalDescriptor(
-        ((routed.toolInput.metadata as any) ?? {}).producerJournal,
-      ),
-      authorizedCallerRunId: run.runId,
-      getOwnerId: () => "owner",
-    }, "spawn_agent", routed.toolInput)) as Record<string, unknown>;
+    const previousArtifactRoot = process.env.OMI_AGENT_ARTIFACTS_DIR;
+    process.env.OMI_AGENT_ARTIFACTS_DIR = newRoot();
+    let resultText: string;
+    try {
+      resultText = await handleAgentControlToolCall({
+        kernel,
+        callerSessionId: session.agentSessionId,
+        executionRole: "coordinator",
+        providerBoundary: "managed_cloud",
+        defaultAdapterId: "pi-mono",
+        authorizedProducerJournal: parseAgentSpawnProducerJournalDescriptor(
+          ((routed.toolInput.metadata as any) ?? {}).producerJournal,
+        ),
+        authorizedCallerRunId: run.runId,
+        getOwnerId: () => "owner",
+      }, "spawn_agent", routed.toolInput);
+    } finally {
+      if (previousArtifactRoot === undefined) delete process.env.OMI_AGENT_ARTIFACTS_DIR;
+      else process.env.OMI_AGENT_ARTIFACTS_DIR = previousArtifactRoot;
+    }
+    const result = JSON.parse(resultText) as Record<string, unknown>;
     expect(result).toMatchObject({
       ok: true,
       requestedAgentCount: 1,
@@ -1147,7 +1166,7 @@ describe("external realtime surface authority", () => {
     store.close();
   });
 
-  it("starts an explicitly requested OpenClaw realtime child independently while preserving its producer journal", async () => {
+  it("starts an explicitly requested OpenClaw child independently when its primary producer turn is journaled", async () => {
     const root = newRoot();
     const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
     const registry = new AdapterRegistry();
@@ -1165,6 +1184,49 @@ describe("external realtime surface authority", () => {
       ...beginInput(session.agentSessionId),
       prompt: "Ask OpenClaw to check the release notes in the background",
     });
+    const producerTurnId = "typed-openclaw-producer-turn";
+    recordJournalTurn(store, {
+      ownerId: "owner",
+      conversationId: session.conversationId,
+      turnId: producerTurnId,
+      role: "assistant",
+      surfaceKind: "realtime_voice",
+      origin: "typed_chat",
+      status: "streaming",
+      content: "Starting OpenClaw.",
+      contentBlocks: [],
+      resources: [],
+      producingRunId: run.runId,
+      producingAttemptId: run.attemptId,
+      createdAtMs: 2,
+    });
+    // Production realtime turns can carry the bounded recent-context window
+    // back through the accepted spawn result. Keep this fixture deliberately
+    // large so the regression proves compaction happens *after* child receipt
+    // extraction rather than silently projecting away `agents[0]` first.
+    for (let index = 0; index < 24; index += 1) {
+      recordJournalTurn(store, {
+        ownerId: "owner",
+        conversationId: session.conversationId,
+        turnId: `realtime-context-${index}`,
+        role: index % 2 === 0 ? "user" : "assistant",
+        surfaceKind: "realtime_voice",
+        origin: "realtime_voice",
+        status: "completed",
+        content: `Large retained context ${index}: ${"x".repeat(12_000)}`,
+        contentBlocks: [],
+        resources: [],
+        createdAtMs: 10 + index,
+      });
+    }
+    const parentInput = JSON.parse(String(store.getRow(
+      "SELECT input_json FROM runs WHERE run_id = ?",
+      [run.runId],
+    ).input_json));
+    store.execute(
+      "UPDATE runs SET input_json = ? WHERE run_id = ?",
+      [JSON.stringify({ ...parentInput, producingTurnId: producerTurnId }), run.runId],
+    );
     const routed = kernel.routeExternalSurfaceToolInvocation({
       ownerId: "owner",
       sessionId: session.agentSessionId,
@@ -1183,17 +1245,92 @@ describe("external realtime surface authority", () => {
     const producerJournal = parseAgentSpawnProducerJournalDescriptor(
       ((routed.toolInput.metadata as Record<string, unknown>).producerJournal),
     );
+    expect(producerJournal.producerTurnId).toBe(producerTurnId);
+    expect(producerJournal.producerRunId).toBe(run.runId);
 
-    const started = JSON.parse(await handleAgentControlToolCall({
+    const previousArtifactRoot = process.env.OMI_AGENT_ARTIFACTS_DIR;
+    process.env.OMI_AGENT_ARTIFACTS_DIR = newRoot();
+    let startedText: string;
+    try {
+      startedText = await handleAgentControlToolCall({
+        kernel,
+        callerSessionId: session.agentSessionId,
+        executionRole: "coordinator",
+        providerBoundary: "managed_cloud",
+        defaultAdapterId: "pi-mono",
+        authorizedProducerJournal: producerJournal,
+        authorizedCallerRunId: run.runId,
+        authorizedToolInvocation: {
+          invocationId: "realtime-openclaw-spawn",
+          runId: run.runId,
+          attemptId: run.attemptId,
+          toolName: "spawn_agent",
+        },
+        getOwnerId: () => "owner",
+      }, "spawn_agent", routed.toolInput);
+    } finally {
+      if (previousArtifactRoot === undefined) delete process.env.OMI_AGENT_ARTIFACTS_DIR;
+      else process.env.OMI_AGENT_ARTIFACTS_DIR = previousArtifactRoot;
+    }
+    const started = JSON.parse(startedText) as Record<string, any>;
+
+    expect(Buffer.byteLength(startedText, "utf8")).toBeGreaterThan(8 * 1024);
+    expect(started.toolResultEnvelope).toMatchObject({
+      version: 1,
+      truncated: true,
+      fullOutputRef: expect.stringMatching(/^artifact:/),
+    });
+    const compact = JSON.parse(compactRealtimeSpawnToolResult(startedText, producerJournal)) as Record<string, any>;
+    expect(compact).toMatchObject({
+      ok: true,
+      child: {
+        sessionId: expect.any(String),
+        runId: expect.any(String),
+        attemptId: expect.any(String),
+        pillId: producerJournal.pillId,
+      },
+      providerResult: {
+        ok: true,
+        child: {
+          sessionId: expect.any(String),
+          runId: expect.any(String),
+          attemptId: expect.any(String),
+        },
+      },
+    });
+    expect(compact.toolResultEnvelope.fullOutputRef).toBe(started.toolResultEnvelope.fullOutputRef);
+
+    const finalizedText = finalizeRelayToolResult({
+      identity: {
+        invocationId: "realtime-openclaw-spawn",
+        ownerId: "owner",
+        sessionId: session.agentSessionId,
+        runId: run.runId,
+        attemptId: run.attemptId,
+        toolName: "spawn_agent",
+      },
+      result: JSON.stringify(compact),
+      outcome: "succeeded",
       kernel,
-      callerSessionId: session.agentSessionId,
-      executionRole: "coordinator",
-      providerBoundary: "managed_cloud",
-      defaultAdapterId: "pi-mono",
-      authorizedProducerJournal: producerJournal,
-      authorizedCallerRunId: run.runId,
-      getOwnerId: () => "owner",
-    }, "spawn_agent", routed.toolInput)) as Record<string, any>;
+      artifactRoot: newRoot(),
+    });
+    const finalized = JSON.parse(finalizedText) as Record<string, any>;
+    expect(Buffer.byteLength(finalizedText, "utf8")).toBeLessThanOrEqual(8 * 1024);
+    expect(finalized).toMatchObject({
+      ok: true,
+      child: {
+        sessionId: compact.child.sessionId,
+        runId: compact.child.runId,
+        attemptId: compact.child.attemptId,
+        pillId: producerJournal.pillId,
+      },
+      toolResultEnvelope: {
+        version: 1,
+        status: "succeeded",
+        truncated: true,
+        fullOutputRef: started.toolResultEnvelope.fullOutputRef,
+      },
+    });
 
     expect(started).toMatchObject({
       ok: true,
@@ -1279,6 +1416,12 @@ describe("external realtime surface authority", () => {
       defaultAdapterId: "pi-mono",
       authorizedProducerJournal: producerJournal,
       authorizedCallerRunId: run.runId,
+      authorizedToolInvocation: {
+        invocationId: "realtime-openclaw-unavailable",
+        runId: run.runId,
+        attemptId: run.attemptId,
+        toolName: "spawn_agent",
+      },
       getOwnerId: () => "owner",
     }, "spawn_agent", routed.toolInput));
 

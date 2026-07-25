@@ -40,7 +40,7 @@ CLI_ROUTES = {
 
 
 def load_public_openapi() -> dict:
-    return json.loads(PUBLIC_OPENAPI_PATH.read_text())
+    return json.loads(PUBLIC_OPENAPI_PATH.read_text(encoding="utf-8"))
 
 
 def normalize_route_template(path: str) -> str:
@@ -76,10 +76,9 @@ def test_cli_memory_category_enum_matches_public_openapi():
 def test_cli_goal_type_enum_matches_public_openapi():
     spec = load_public_openapi()
     goal_type_schema = spec['components']['schemas'].get('GoalType')
-    assert goal_type_schema and 'enum' in goal_type_schema, (
-        'GoalType enum missing from public OpenAPI; the CLI mirrors it for '
-        'goal create/update validation.'
-    )
+    assert (
+        goal_type_schema and 'enum' in goal_type_schema
+    ), 'GoalType enum missing from public OpenAPI; the CLI mirrors it for goal create/update validation.'
     expected = set(goal_type_schema['enum'])
     actual = {item.value for item in GoalType}
 
@@ -104,4 +103,3 @@ def test_cli_local_only_enums_are_documented():
         'ConversationTextSource now exists in public OpenAPI — replace the '
         'CLI-local enum with a contract check against the published schema.'
     )
-

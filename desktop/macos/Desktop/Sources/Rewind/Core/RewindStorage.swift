@@ -2,8 +2,18 @@
 @preconcurrency import AppKit
 import CoreImage
 import Foundation
+import ImageIO
 import OmiSupport
 import Sentry
+
+/// A Sendable inspection sample for a decoded video frame. This lets callers
+/// verify video readback without moving AppKit's non-Sendable `NSImage` outside
+/// `RewindStorage`'s actor.
+struct RewindVideoFrameCenterPixel: Equatable, Sendable {
+  let red: Int
+  let green: Int
+  let blue: Int
+}
 
 /// File storage manager for Rewind screenshots
 actor RewindStorage {
@@ -18,6 +28,12 @@ actor RewindStorage {
 
   // Track corrupted video chunks to avoid repeated frame extraction attempts
   private var corruptedChunks = Set<String>()
+  /// A deterministic seam proving sidecar retention across a one-shot cleanup
+  /// failure. Production leaves this at zero.
+  private var abandonedChunkCleanupFailuresForTesting = 0
+  /// Deterministic failure injection for the DB half of abandoned-chunk
+  /// recovery. Production leaves this at zero.
+  private var abandonedChunkDatabaseFailuresForTesting = 0
 
   // MARK: - Initialization
 
@@ -29,11 +45,46 @@ actor RewindStorage {
 
   /// Reset storage state (called on user switch / sign-out)
   func reset() async {
+    do {
+      try await resetForOwnerTransition()
+    } catch {
+      logError("RewindStorage: Could not safely reset old video owner", error: error)
+    }
+  }
+
+  /// The throwing owner-transition boundary. A marker-write failure may leave
+  /// the old writer live, so callers changing the effective owner must stop
+  /// before publishing new defaults when the DB-first fallback also fails.
+  func resetForOwnerTransition() async throws {
+    let cancellation = await VideoChunkEncoder.shared.resetForUserSwitch()
+    switch cancellation {
+    case .markerWriteFailed(let reservation):
+      // Do not clear the old owner configuration while its writer remains
+      // active or its database has not accepted the durable tombstone.
+      try await recoverAfterMarkerWriteFailure(reservation: reservation)
+    case .markerRecorded:
+      do {
+        try await reconcileAbandonedVideoChunks()
+      } catch {
+        // The sidecar is deliberately retained. A later initialization for
+        // this user retries the DB/file cleanup before capture starts again.
+        logError("RewindStorage: Deferred abandoned video chunk recovery", error: error)
+      }
+    case .noActiveChunk:
+      if videosDirectory != nil {
+        do {
+          try await reconcileAbandonedVideoChunks()
+        } catch {
+          logError("RewindStorage: Deferred abandoned video chunk recovery", error: error)
+        }
+      }
+    }
+
+    await VideoChunkEncoder.shared.clearConfigurationAfterUserSwitch()
     screenshotsDirectory = nil
     videosDirectory = nil
     frameCache.removeAllObjects()
     corruptedChunks.removeAll()
-    await VideoChunkEncoder.shared.resetForUserSwitch()
     log("RewindStorage: Reset for user switch")
   }
 
@@ -58,6 +109,10 @@ actor RewindStorage {
 
     try fileManager.createDirectory(at: screenshotsDirectory, withIntermediateDirectories: true)
     try fileManager.createDirectory(at: videosDirectory, withIntermediateDirectories: true)
+
+    // Finish any previous crashed/cancelled writer before this owner can start
+    // another one. A marker remains until both database and file cleanup work.
+    try await reconcileAbandonedVideoChunks()
 
     // Initialize video encoder with videos directory
     try await VideoChunkEncoder.shared.initialize(videosDirectory: videosDirectory)
@@ -145,8 +200,11 @@ actor RewindStorage {
 
   // MARK: - Video Frame Loading
 
-  /// Load a frame from a video chunk.
-  func loadVideoFrame(videoPath: String, frameOffset: Int) async throws -> NSImage {
+  /// Load a frame from a video chunk. AppKit images stay actor-local; callers
+  /// outside this actor use a Sendable representation such as
+  /// `videoFrameCenterPixel(videoPath:frameOffset:)` or the main-actor image
+  /// loading API below.
+  private func loadVideoFrame(videoPath: String, frameOffset: Int) async throws -> NSImage {
     guard let videosDirectory = videosDirectory else {
       throw RewindError.storageError("Videos directory not initialized")
     }
@@ -225,6 +283,29 @@ actor RewindStorage {
         throw error
       }
     }
+  }
+
+  /// Read the decoded frame's center pixel without sending an AppKit image
+  /// across the storage actor boundary. This is useful for deterministic local
+  /// diagnostics and gauntlets that only need to inspect the decoded output.
+  func videoFrameCenterPixel(videoPath: String, frameOffset: Int) async throws -> RewindVideoFrameCenterPixel {
+    let image = try await loadVideoFrame(videoPath: videoPath, frameOffset: frameOffset)
+    guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+      throw RewindError.invalidImage
+    }
+
+    let bitmap = NSBitmapImageRep(cgImage: cgImage)
+    let x = max(0, bitmap.pixelsWide / 2)
+    let y = max(0, bitmap.pixelsHigh / 2)
+    guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+      throw RewindError.invalidImage
+    }
+
+    return RewindVideoFrameCenterPixel(
+      red: Int(color.redComponent * 255),
+      green: Int(color.greenComponent * 255),
+      blue: Int(color.blueComponent * 255)
+    )
   }
 
   /// Extract a frame from finalized AVAssetWriter MP4 chunks using the system decoder.
@@ -451,6 +532,36 @@ actor RewindStorage {
     return image
   }
 
+  /// Thumbnail loader for list rows: decodes only a downsampled image via
+  /// ImageIO instead of the full-resolution screenshot, so a long search list
+  /// doesn't retain full-size NSImages behind a small (e.g. 120×80) view.
+  @MainActor
+  func loadScreenshotThumbnail(for screenshot: Screenshot, maxPixelSize: Int) async throws -> NSImage {
+    let data = try await loadScreenshotData(for: screenshot)
+    guard let thumbnail = Self.downsampledImage(from: data, maxPixelSize: maxPixelSize) else {
+      throw RewindError.invalidImage
+    }
+    return thumbnail
+  }
+
+  /// Downsample encoded image data to a thumbnail no larger than `maxPixelSize`
+  /// on its longest edge, decoding only the reduced image. `nonisolated` + pure
+  /// so it is unit-testable and does not touch actor state.
+  nonisolated static func downsampledImage(from data: Data, maxPixelSize: Int) -> NSImage? {
+    guard maxPixelSize > 0,
+      let source = CGImageSourceCreateWithData(data as CFData, nil)
+    else { return nil }
+    let options: [CFString: Any] = [
+      kCGImageSourceCreateThumbnailFromImageAlways: true,
+      kCGImageSourceCreateThumbnailWithTransform: true,
+      kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+    ]
+    guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+      return nil
+    }
+    return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+  }
+
   /// Get raw image data for a screenshot (for OCR processing)
   func loadScreenshotData(for screenshot: Screenshot) async throws -> Data {
     if screenshot.usesVideoStorage,
@@ -505,6 +616,126 @@ actor RewindStorage {
 
     log("RewindStorage: Cleaned up corrupted chunk \(videoPath), deleted \(deletedCount) DB entries")
     return deletedCount
+  }
+
+  /// Reconcile every durable cancellation marker for the current owner. The
+  /// marker is removed only after the tombstone/row deletion and file deletion
+  /// both succeed; repeating the operation is therefore safe after a restart.
+  func reconcileAbandonedVideoChunks() async throws {
+    guard let videosDirectory else {
+      throw RewindError.storageError("Videos directory not initialized")
+    }
+
+    for marker in try RewindAbandonedVideoChunkJournal.markers(in: videosDirectory) {
+      let deletedCount = try await abandonVideoChunk(relativePath: marker.relativePath)
+      try deleteAbandonedVideoChunkFile(relativePath: marker.relativePath, videosDirectory: videosDirectory)
+      try RewindAbandonedVideoChunkJournal.remove(marker)
+      corruptedChunks.remove(marker.relativePath)
+      log("RewindStorage: Recovered abandoned video chunk, deleted \(deletedCount) DB rows")
+    }
+  }
+
+  /// Marker creation can fail (for example, transient disk exhaustion). The
+  /// owner-transition fallback tombstones the old path first, then cancels only
+  /// that still-current writer and removes the file before retargeting storage.
+  func recoverAfterMarkerWriteFailure(reservation: RewindVideoChunkReservation) async throws {
+    guard let videosDirectory else {
+      throw RewindError.storageError("Videos directory not initialized for marker fallback")
+    }
+
+    _ = try await abandonVideoChunk(relativePath: reservation.relativePath)
+    // The DB tombstone is already durable. Retry the sidecar opportunistically
+    // so a post-cancel filesystem failure still has a startup retry path.
+    let fallbackMarker = try? RewindAbandonedVideoChunkJournal.record(
+      reservation: reservation,
+      in: videosDirectory
+    )
+    await VideoChunkEncoder.shared.forceCancelAfterStorageFallback(for: reservation)
+    do {
+      try deleteAbandonedVideoChunkFile(relativePath: reservation.relativePath, videosDirectory: videosDirectory)
+      if let fallbackMarker {
+        try RewindAbandonedVideoChunkJournal.remove(fallbackMarker)
+      }
+    } catch {
+      // The durable tombstone prevents an orphaned partial file from appearing
+      // in the timeline. Keep a fallback marker when possible and do not block
+      // the nonthrowing effective-owner transition on filesystem cleanup.
+      logError("RewindStorage: Could not delete tombstoned fallback chunk", error: error)
+    }
+    corruptedChunks.remove(reservation.relativePath)
+    log("RewindStorage: Recovered abandoned chunk after marker write failure")
+  }
+
+  /// Shared recovery classifier for every producer path, including indexer
+  /// frame processing, explicit flush, and the encoder's staleness timer.
+  func recoverAbandonedVideoChunkIfNeeded(_ error: Error) async throws -> Bool {
+    if error is RewindAbandonedVideoChunkError {
+      try await reconcileAbandonedVideoChunks()
+      return true
+    }
+    if let markerFailure = error as? RewindAbandonedVideoChunkMarkerWriteError {
+      try await recoverAfterMarkerWriteFailure(reservation: markerFailure.reservation)
+      return true
+    }
+    return false
+  }
+
+  /// Finalize the active encoder generation and reconcile any durable
+  /// abandonment marker before returning an error to non-indexer callers.
+  func flushCurrentVideoChunk() async throws -> VideoChunkEncoder.ChunkFlushResult? {
+    do {
+      return try await VideoChunkEncoder.shared.flushCurrentChunk()
+    } catch {
+      _ = try await recoverAbandonedVideoChunkIfNeeded(error)
+      throw error
+    }
+  }
+
+  func setAbandonedChunkCleanupFailuresForTesting(_ failures: Int) {
+    precondition(failures >= 0)
+    abandonedChunkCleanupFailuresForTesting = failures
+  }
+
+  func setAbandonedChunkDatabaseFailuresForTesting(_ failures: Int) {
+    precondition(failures >= 0)
+    abandonedChunkDatabaseFailuresForTesting = failures
+  }
+
+  func abandonedVideoChunkMarkerCountForTesting() throws -> Int {
+    guard let videosDirectory else {
+      throw RewindError.storageError("Videos directory not initialized")
+    }
+    return try RewindAbandonedVideoChunkJournal.markers(in: videosDirectory).count
+  }
+
+  /// Models a process relaunch after the sidecar was durably written but before
+  /// any in-process DB reconciliation ran. Tests seed the marker and live rows,
+  /// clear only volatile configuration, then exercise normal initialization.
+  func clearVolatileConfigurationForProcessRestartTesting() async {
+    await VideoChunkEncoder.shared.clearConfigurationAfterUserSwitch()
+    screenshotsDirectory = nil
+    videosDirectory = nil
+    frameCache.removeAllObjects()
+    corruptedChunks.removeAll()
+  }
+
+  private func abandonVideoChunk(relativePath: String) async throws -> Int {
+    guard abandonedChunkDatabaseFailuresForTesting == 0 else {
+      abandonedChunkDatabaseFailuresForTesting -= 1
+      throw RewindError.storageError("Injected abandoned-chunk database failure")
+    }
+    return try await RewindDatabase.shared.abandonVideoChunk(relativePath: relativePath)
+  }
+
+  private func deleteAbandonedVideoChunkFile(relativePath: String, videosDirectory: URL) throws {
+    let fullPath = try RewindAbandonedVideoChunkJournal.videoURL(relativePath: relativePath, in: videosDirectory)
+    guard abandonedChunkCleanupFailuresForTesting == 0 else {
+      abandonedChunkCleanupFailuresForTesting -= 1
+      throw RewindError.storageError("Injected abandoned-chunk cleanup failure")
+    }
+    if fileManager.fileExists(atPath: fullPath.path) {
+      try fileManager.removeItem(at: fullPath)
+    }
   }
 
   /// Get all currently known corrupted chunks
@@ -596,8 +827,21 @@ actor RewindStorage {
 
   // MARK: - Cleanup
 
-  /// Delete empty day directories in both Screenshots and Videos folders
-  func cleanupEmptyDirectories() async throws {
+  /// Delete empty day directories in both Screenshots and Videos folders.
+  ///
+  /// The active video path is claimed before `VideoChunkEncoder` creates its
+  /// day directory, then read under that same directory-mutation lock below.
+  /// This keeps cleanup from observing a stale nil and deleting the empty day
+  /// directory during the first-frame writer startup interval.
+  func cleanupEmptyDirectories() throws {
+    try cleanupEmptyDirectories(beforeVideoCleanupLock: nil)
+  }
+
+  /// Performs the cleanup sweep, optionally notifying a synchronous diagnostic
+  /// seam immediately before it acquires the video-directory lock. The seam
+  /// keeps the writer/cleanup interleaving test deterministic without changing
+  /// the production lock scope.
+  func cleanupEmptyDirectories(beforeVideoCleanupLock: (@Sendable () -> Void)?) throws {
     // Clean up Screenshots directory
     if let screenshotsDirectory = screenshotsDirectory {
       try cleanupEmptySubdirectories(in: screenshotsDirectory)
@@ -605,11 +849,39 @@ actor RewindStorage {
 
     // Clean up Videos directory
     if let videosDirectory = videosDirectory {
-      try cleanupEmptySubdirectories(in: videosDirectory)
+      try cleanupEmptyVideoSubdirectories(
+        in: videosDirectory,
+        beforeVideoCleanupLock: beforeVideoCleanupLock
+      )
     }
   }
 
-  private func cleanupEmptySubdirectories(in directory: URL) throws {
+  /// Resolves the one-level day directory containing an active encoder chunk.
+  /// Invalid or nested paths deliberately get no protection: encoder-generated
+  /// paths are exactly `<day>/chunk_<time>_<epochMillis>_<unique>.mp4`, and cleanup only owns immediate
+  /// day directories beneath the Videos root.
+  private static func activeVideoDayDirectory(for relativePath: String?, in videosDirectory: URL) -> URL? {
+    guard let relativePath, !relativePath.isEmpty else { return nil }
+
+    let components = relativePath.split(separator: "/", omittingEmptySubsequences: false)
+    guard
+      components.count == 2,
+      components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." })
+    else {
+      return nil
+    }
+
+    let root = videosDirectory.standardizedFileURL
+    let parent =
+      root
+      .appendingPathComponent(String(components[0]), isDirectory: true)
+      .standardizedFileURL
+
+    guard parent.deletingLastPathComponent().standardizedFileURL == root else { return nil }
+    return parent
+  }
+
+  private func cleanupEmptySubdirectories(in directory: URL, preserving protectedDirectory: URL? = nil) throws {
     // The legacy Screenshots dir may not exist for video-only users — skip it
     // rather than aborting the whole cleanup sweep.
     guard fileManager.fileExists(atPath: directory.path) else { return }
@@ -621,6 +893,10 @@ actor RewindStorage {
     )
 
     for url in contents {
+      if url.standardizedFileURL == protectedDirectory {
+        continue
+      }
+
       let resourceValues = try url.resourceValues(forKeys: [.isDirectoryKey])
       if resourceValues.isDirectory == true {
         let subContents = try fileManager.contentsOfDirectory(atPath: url.path)
@@ -629,6 +905,22 @@ actor RewindStorage {
           log("RewindStorage: Removed empty directory \(url.lastPathComponent)")
         }
       }
+    }
+  }
+
+  /// Serializes directory removal with writer startup and derives the active
+  /// day-directory protection from the reservation inside that same lock.
+  private func cleanupEmptyVideoSubdirectories(
+    in directory: URL,
+    beforeVideoCleanupLock: (@Sendable () -> Void)?
+  ) throws {
+    beforeVideoCleanupLock?()
+    try RewindVideoDirectoryMutation.withActiveChunk { activeVideoChunkReservation in
+      let protectedDirectory = Self.activeVideoDayDirectory(
+        for: activeVideoChunkReservation?.relativePath,
+        in: directory
+      )
+      try cleanupEmptySubdirectories(in: directory, preserving: protectedDirectory)
     }
   }
 

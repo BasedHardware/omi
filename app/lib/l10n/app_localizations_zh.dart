@@ -1444,7 +1444,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get payYourSttProvider => '免费使用 Omi。您只需直接向 STT 提供商付费。';
 
   @override
-  String get freeMinutesMonth => '包含 600 免费分钟/月。';
+  String get freeMinutesMonth => '包含 300 免费分钟/月。';
 
   @override
   String get omiUnlimited => 'Omi 无限版';
@@ -1757,18 +1757,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lovingOmi => '喜欢 Omi 吗？';
-
-  @override
-  String get leaveReviewIos => '在 App Store 留下评论，帮助我们。';
-
-  @override
-  String get leaveReviewAndroid => '在 Google Play 留下评论，帮助我们。';
-
-  @override
-  String get rateOnAppStore => '在 App Store 评价';
-
-  @override
-  String get rateOnGooglePlay => '在 Google Play 评价';
 
   @override
   String get maybeLater => '以后再说';
@@ -2095,6 +2083,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ 编辑记忆';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => '我喜欢冰淇淋...';
@@ -4616,7 +4616,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noSpecificDataAccessConfigured => '未配置特定数据访问。';
 
   @override
-  String get basicPlanDescription => '600 高级分钟 + 设备端无限';
+  String get basicPlanDescription => '300 高级分钟 + 设备端无限';
 
   @override
   String get minutes => '分钟';
@@ -5884,7 +5884,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cloudProvider => '云服务提供商';
 
   @override
-  String get premiumMinutesInfo => '每月 600 分钟高级时长。本地标签页提供无限免费转录。';
+  String get premiumMinutesInfo => '每月 300 分钟高级时长。本地标签页提供无限免费转录。';
 
   @override
   String get viewUsage => '查看使用量';
@@ -5962,7 +5962,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batteryDrainSignificantly => '电池消耗将显著增加。';
 
   @override
-  String get premiumMinutesMonth => '每月600分钟高级配额。设备端选项卡提供无限免费转录。';
+  String get premiumMinutesMonth => '每月300分钟高级配额。设备端选项卡提供无限免费转录。';
 
   @override
   String get audioProcessedLocally => '音频在本地处理。可离线使用，更私密，但消耗更多电量。';
@@ -8831,7 +8831,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get billingYearly => '年付';
 
   @override
-  String get savePercent => '节省约17%';
+  String savePercent(int percent) {
+    return '节省约$percent%';
+  }
 
   @override
   String get popular => '热门';
@@ -9422,4 +9424,171 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get phoneMicOfflineFallbackMessage => '无网络连接 — 正在本地录制。恢复联网后将自动转写。';
+
+  @override
+  String get dataEncryptedBanner => '您的数据默认通过强加密保护，并且由您掌控其存储和使用方式。';
+
+  @override
+  String get sttModelAccuracy => '准确度';
+
+  @override
+  String get whisperModelSizeBase => '基础';
+
+  @override
+  String get cloudTranscription => '云端转录';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => '删除模型';
+
+  @override
+  String get deleteOnDeviceModelConfirm => '确定要删除此模型吗？';
+
+  @override
+  String get onDeviceModelDownloaded => '已下载';
+
+  @override
+  String get sttModelFaster => '更快';
+
+  @override
+  String get sttFilterAuto => '自动';
+
+  @override
+  String get sttModelHigher => '更高';
+
+  @override
+  String get whisperModelSizeLarge => '大型';
+
+  @override
+  String get sttModelLower => '更低';
+
+  @override
+  String get whisperModelSizeMedium => '中型';
+
+  @override
+  String get onDeviceModelDeleted => '模型已删除';
+
+  @override
+  String get onDeviceModelDownloadFailed => '模型下载失败';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Whisper 模型下载失败，请重试。';
+
+  @override
+  String get onDeviceModelDownloadSuccess => '模型已下载';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper 模型下载成功';
+
+  @override
+  String get onDeviceModelSize => '模型大小';
+
+  @override
+  String get sttNone => '无';
+
+  @override
+  String get onDeviceTranscription => '设备端转录';
+
+  @override
+  String get onDeviceTranscriptionDesc => '转录在您的设备上本地处理';
+
+  @override
+  String get sttModelSlower => '更慢';
+
+  @override
+  String get whisperModelSizeSmall => '小型';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => '语音转文字提供商';
+
+  @override
+  String get speechToTextProviderDesc => '选择用于转录的服务';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => '速度';
+
+  @override
+  String get whisperModelSizeTiny => '微型';
+
+  @override
+  String get transcriptionLanguage => '转录语言';
+
+  @override
+  String get transcriptionLanguageDesc => '选择语音转录的语言';
+
+  @override
+  String get whisperModel => 'Whisper模型';
+
+  @override
+  String get whisperModelDesc => '选择设备端转录的模型';
+
+  @override
+  String get downgradeToFreemiumTitle => '降级到免费计划？';
+
+  @override
+  String get downgradeLimitationsHeading => '您将遇到以下限制：';
+
+  @override
+  String get downgradeLimitBattery => '电池消耗增加 7 倍';
+
+  @override
+  String get downgradeLimitQuality => '转录质量降低 30%';
+
+  @override
+  String get downgradeLimitDelay => '5-7 秒延迟';
+
+  @override
+  String get downgradeLimitSpeakers => '无法识别说话人';
+
+  @override
+  String get downgradeAnyway => '仍要降级';
+
+  @override
+  String get googleCalendarNotConnected => '未连接 Google 日历';
+
+  @override
+  String get googleCalendarConnectPrompt => '连接您的 Google 日历，即可将对话关联到日历活动。';
+
+  @override
+  String linkedToEvent(String title) {
+    return '已关联到“$title”';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => '关联日历活动失败';
+
+  @override
+  String get thanksForYourFeedback => '感谢您的反馈！';
+
+  @override
+  String get copyMessage => '复制消息';
+
+  @override
+  String get searchSettings => '搜索设置…';
+
+  @override
+  String get errorLoadingAudio => '音频加载失败';
+
+  @override
+  String get rayBanMetaMicPickerTitle => '选择您的 Ray-Ban Meta 麦克风';
+
+  @override
+  String get rayBanMetaMicPickerDescription => '选择眼镜的 Bluetooth 麦克风。Omi 使用麦克风时，音乐会暂停。';
+
+  @override
+  String get rayBanMetaMicPickerEmpty => '未找到 Bluetooth 麦克风。请在 iPhone 设置中连接眼镜，然后重试。';
+
+  @override
+  String get rayBanMetaMicPickerLoadError => '无法加载 Bluetooth 麦克风。请检查 Bluetooth 是否已开启，然后重试。';
+
+  @override
+  String get rayBanMetaMicPickerConnectError => '无法连接到该麦克风。请确保它已在 iPhone 设置中连接。';
 }

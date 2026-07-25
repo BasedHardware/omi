@@ -101,6 +101,25 @@ final class AppleNotesReaderServiceTests: XCTestCase {
     }
   }
 
+  func testReadProbeRejectsInvalidFolderBeforeEnteringReaderActor() throws {
+    let root = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let invalidPath = root.appendingPathComponent("not-apple-notes", isDirectory: true).path
+
+    XCTAssertThrowsError(
+      try AppleNotesReadProbe.resolveRequestedFolder(
+        path: invalidPath,
+        homeDirectory: root
+      )
+    ) { error in
+      guard case .invalidSelectedFolder(let path) = error as? AppleNotesReaderError else {
+        return XCTFail("Expected invalidSelectedFolder, got \(error)")
+      }
+      XCTAssertEqual(path, invalidPath)
+    }
+  }
+
   func testReadRecentNotesFromSelectedFolderFixture() async throws {
     let root = try makeTemporaryDirectory()
     defer { try? FileManager.default.removeItem(at: root) }

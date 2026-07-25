@@ -100,8 +100,12 @@ class MemoriesViewModel: ObservableObject {
   @Published var memories: [ServerMemory] = [] {
     didSet { recomputeCaches() }
   }
-  @Published var isLoading = false
-  @Published var isLoadingMore = false
+  @Published var isLoading = false {
+    didSet { resumeMemoryLoadLifecycleWaitersIfIdle() }
+  }
+  @Published var isLoadingMore = false {
+    didSet { resumeMemoryLoadLifecycleWaitersIfIdle() }
+  }
   @Published var hasMoreMemories = true
   @Published var errorMessage: String?
   @Published var searchText = "" {
@@ -109,12 +113,15 @@ class MemoriesViewModel: ObservableObject {
       if oldValue != searchText {
         bumpScopeGeneration()
         displayLimit = pageSize
-        Task { await performSearch() }
+        searchCoordinator.submit(searchText) { [weak self] _ in
+          await self?.performSearch()
+        }
       }
     }
   }
   @Published private(set) var isSearching = false
   @Published private(set) var searchResults: [ServerMemory] = []
+  private let searchCoordinator = DebouncedSearchCoordinator()
   @Published var selectedLayerFilter: MemoryLayerFilter = .defaultAccess {
     didSet {
       guard oldValue != selectedLayerFilter else { return }
@@ -197,6 +204,14 @@ class MemoriesViewModel: ObservableObject {
   private var deleteTask: Task<Void, Never>? = nil
   private var cancellables = Set<AnyCancellable>()
   private var hasLoadedInitially = false
+
+  /// A cache-first initial load can clear `isLoading` while its authoritative
+  /// API projection is still syncing. Automation search must wait for that
+  /// lifecycle to finish instead of treating the temporarily hidden spinner as
+  /// an idle projection.
+  private var inFlightInitialMemoryLoads = 0
+  private var memoryLoadLifecycleWaiters: [CheckedContinuation<Void, Never>] = []
+  private(set) var memoryLoadLifecycleWaiterCount = 0
 
   /// Whether the memories page is currently visible.
   /// Auto-refresh only runs when active to avoid unnecessary API calls.
@@ -545,15 +560,23 @@ class MemoriesViewModel: ObservableObject {
     displayLimit = pageSize
   }
 
-  /// Refresh memories if already loaded (for auto-refresh)
-  private func refreshMemoriesIfNeeded() async {
+  /// Refresh memories if already loaded (for auto-refresh).
+  ///
+  /// The automation bridge invokes this immediately before a lifecycle-scoped
+  /// SQLite search. Await an active initial/paginated load first so that search
+  /// cannot observe the stale capability projection which that load is about to
+  /// replace.
+  func refreshMemoriesIfNeeded() async {
     refreshInvocations += 1
     // Skip if user is signed out (tokens are cleared)
     guard AuthState.shared.isSignedIn else { return }
     // Skip if page is not visible
     guard isActive else { return }
 
-    // Skip if currently loading or haven't loaded initially
+    await waitForMemoryLoadLifecycleToSettle()
+
+    // An initial request may fail, in which case there is no authoritative
+    // projection to refresh yet.
     guard !isLoading, !isLoadingMore, hasLoadedInitially else { return }
 
     // Skip if there's a pending delete (avoid interfering with undo)
@@ -588,6 +611,32 @@ class MemoriesViewModel: ObservableObject {
     } catch {
       // Silently ignore errors during auto-refresh
       logError("MemoriesViewModel: Auto-refresh failed", error: error)
+    }
+  }
+
+  private var isMemoryLoadLifecycleActive: Bool {
+    inFlightInitialMemoryLoads > 0 || isLoading || isLoadingMore
+  }
+
+  private func waitForMemoryLoadLifecycleToSettle() async {
+    guard isMemoryLoadLifecycleActive else { return }
+    await withCheckedContinuation { continuation in
+      guard isMemoryLoadLifecycleActive else {
+        continuation.resume()
+        return
+      }
+      memoryLoadLifecycleWaiters.append(continuation)
+      memoryLoadLifecycleWaiterCount = memoryLoadLifecycleWaiters.count
+    }
+  }
+
+  private func resumeMemoryLoadLifecycleWaitersIfIdle() {
+    guard !isMemoryLoadLifecycleActive else { return }
+    let waiters = memoryLoadLifecycleWaiters
+    memoryLoadLifecycleWaiters.removeAll()
+    memoryLoadLifecycleWaiterCount = 0
+    for waiter in waiters {
+      waiter.resume()
     }
   }
 
@@ -802,7 +851,7 @@ class MemoriesViewModel: ObservableObject {
       // Backend rejected device_scope for a non-canonical user — retry unscoped.
       log("MemoriesViewModel: device_scope unsupported by backend, retrying unscoped")
       DesktopDiagnosticsManager.shared.recordFallback(
-        area: "other",
+        area: "memory_scope",
         from: "device_scoped",
         to: "unscoped",
         reason: "capability_mismatch",
@@ -821,6 +870,12 @@ class MemoriesViewModel: ObservableObject {
   /// 4. Sync to local cache in background
   func loadMemories() async {
     guard !isLoading else { return }
+
+    inFlightInitialMemoryLoads += 1
+    defer {
+      inFlightInitialMemoryLoads -= 1
+      resumeMemoryLoadLifecycleWaitersIfIdle()
+    }
 
     isLoading = true
     errorMessage = nil
@@ -1114,7 +1169,10 @@ class MemoriesViewModel: ObservableObject {
     isLoadingMore = true
     // Clear the flag on every exit path, including stale-scope guard returns,
     // so pagination is not permanently blocked by `guard !isLoadingMore`.
-    defer { isLoadingMore = false }
+    defer {
+      isLoadingMore = false
+      resumeMemoryLoadLifecycleWaitersIfIdle()
+    }
     let token = currentScopeToken
     let requestedOffset = currentOffset
     let requestedRawOffset = rawBackendOffset
@@ -1435,13 +1493,13 @@ class MemoriesViewModel: ObservableObject {
     guard !didRegisterAutomationActions else { return }
     didRegisterAutomationActions = true
     let registry = DesktopAutomationActionRegistry.shared
-
     registry.register(
       name: "memories_search",
       summary: "Set memories search query and return filtered result count",
       params: ["query"]
     ) { [weak self] params in
       guard let self else { return ["error": "memories view model deallocated"] }
+      await self.refreshMemoriesIfNeeded()
       let query = params["query"] ?? ""
       self.searchText = query
       let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1702,173 +1760,170 @@ struct MemoriesPage: View {
   }
 
   // MARK: - Header
-
   private var header: some View {
-    HStack(spacing: OmiSpacing.md) {
-      // Search field
-      HStack(spacing: OmiSpacing.sm) {
-        if viewModel.isSearching || viewModel.isLoadingFiltered {
-          ProgressView()
-            .scaleEffect(0.7)
-            .frame(width: 14, height: 14)
-        } else {
-          Image(systemName: "magnifyingglass")
-            .foregroundColor(OmiColors.textTertiary)
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
+      HStack(alignment: .firstTextBaseline) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+          Text("Memories")
+            .scaledFont(size: OmiType.heading, weight: .semibold)
+            .foregroundStyle(OmiColors.textPrimary)
+          Text("What Omi has learned and saved for you")
+            .scaledFont(size: OmiType.caption)
+            .foregroundStyle(OmiColors.textTertiary)
         }
-
-        TextField("Search memories...", text: $viewModel.searchText)
-          .textFieldStyle(.plain)
-          .foregroundColor(OmiColors.textPrimary)
-
-        if !viewModel.searchText.isEmpty {
-          Button {
-            viewModel.searchText = ""
-          } label: {
-            Image(systemName: "xmark.circle.fill")
-              .foregroundColor(OmiColors.textTertiary)
-          }
-          .buttonStyle(.plain)
-        }
+        Spacer()
       }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.md)
-      .frame(minHeight: 46)
-      .omiControlSurface(fill: OmiColors.backgroundTertiary, radius: 18)
 
-      if viewModel.canonicalLifecycleExposed {
-        // Layer filter dropdown. Default is product default access: Short-term + Long-term.
-        Menu {
-          ForEach(MemoryLayerFilter.allCases) { filter in
-            Button {
-              viewModel.selectedLayerFilter = filter
-            } label: {
-              HStack {
-                Text(filter.displayName)
-                if viewModel.selectedLayerFilter == filter {
-                  Image(systemName: "checkmark")
+      HStack(spacing: OmiSpacing.sm) {
+        OmiSearchField(
+          placeholder: "Search memories",
+          text: $viewModel.searchText,
+          isLoading: viewModel.isSearching || viewModel.isLoadingFiltered
+        )
+
+        if viewModel.canonicalLifecycleExposed {
+          // Layer filter dropdown. Default is product default access: Short-term + Long-term.
+          Menu {
+            ForEach(MemoryLayerFilter.allCases) { filter in
+              Button {
+                viewModel.selectedLayerFilter = filter
+              } label: {
+                HStack {
+                  Text(filter.displayName)
+                  if viewModel.selectedLayerFilter == filter {
+                    Image(systemName: "checkmark")
+                  }
                 }
               }
+              .help(filter.description)
             }
-            .help(filter.description)
+          } label: {
+            HStack(spacing: OmiSpacing.xs) {
+              Image(
+                systemName: viewModel.selectedLayerFilter == .archive
+                  ? "archivebox" : "clock.badge.checkmark"
+              )
+              .scaledFont(size: OmiType.caption)
+              Text(viewModel.selectedLayerFilter.displayName)
+                .scaledFont(
+                  size: OmiType.body,
+                  weight: viewModel.selectedLayerFilter == .defaultAccess ? .regular : .medium)
+              Image(systemName: "chevron.down")
+                .scaledFont(size: OmiType.micro)
+            }
+            .foregroundColor(
+              viewModel.selectedLayerFilter == .defaultAccess
+                ? OmiColors.textSecondary : OmiColors.textPrimary
+            )
+            .padding(.horizontal, OmiSpacing.md)
+            .frame(minHeight: 44)
+            .omiControlSurface(
+              fill: viewModel.selectedLayerFilter == .defaultAccess
+                ? OmiColors.backgroundSecondary : OmiColors.backgroundRaised,
+              radius: 16,
+              stroke: OmiColors.border.opacity(
+                viewModel.selectedLayerFilter == .defaultAccess ? 0.18 : 0.6)
+            )
           }
+          .menuStyle(.button)
+          .buttonStyle(.plain)
+          .help("Default shows Short-term + Long-term. Archive is explicit.")
+        }
+
+        Button {
+          viewModel.filterThisDeviceOnly.toggle()
         } label: {
           HStack(spacing: OmiSpacing.xs) {
-            Image(systemName: viewModel.selectedLayerFilter == .archive ? "archivebox" : "clock.badge.checkmark")
+            Image(systemName: "desktopcomputer")
               .scaledFont(size: OmiType.caption)
-            Text(viewModel.selectedLayerFilter.displayName)
+            Text("This device")
               .scaledFont(
-                size: OmiType.body, weight: viewModel.selectedLayerFilter == .defaultAccess ? .regular : .medium)
+                size: OmiType.body, weight: viewModel.filterThisDeviceOnly ? .medium : .regular)
+          }
+          .foregroundColor(
+            viewModel.filterThisDeviceOnly ? OmiColors.textPrimary : OmiColors.textSecondary
+          )
+          .padding(.horizontal, OmiSpacing.md)
+          .frame(minHeight: 44)
+          .omiControlSurface(
+            fill: viewModel.filterThisDeviceOnly
+              ? OmiColors.backgroundRaised : OmiColors.backgroundSecondary,
+            radius: 16,
+            stroke: OmiColors.border.opacity(viewModel.filterThisDeviceOnly ? 0.6 : 0.18)
+          )
+        }
+        .buttonStyle(.plain)
+        .help("Show memories captured on this Mac")
+
+        // Category filter dropdown
+        Button {
+          pendingSelectedTags = viewModel.selectedTags
+          categorySearchText = ""
+          showCategoryFilter = true
+        } label: {
+          HStack(spacing: OmiSpacing.xs) {
+            Image(systemName: "line.3.horizontal.decrease")
+              .scaledFont(size: OmiType.caption)
+            Text(categoryFilterLabel)
+              .scaledFont(
+                size: OmiType.body, weight: viewModel.selectedTags.isEmpty ? .regular : .medium)
             Image(systemName: "chevron.down")
               .scaledFont(size: OmiType.micro)
           }
           .foregroundColor(
-            viewModel.selectedLayerFilter == .defaultAccess ? OmiColors.textSecondary : OmiColors.textPrimary
+            viewModel.selectedTags.isEmpty ? OmiColors.textSecondary : OmiColors.textPrimary
           )
           .padding(.horizontal, OmiSpacing.md)
-          .padding(.vertical, OmiSpacing.md)
-          .frame(minHeight: 46)
+          .frame(minHeight: 44)
           .omiControlSurface(
-            fill: viewModel.selectedLayerFilter == .defaultAccess
-              ? OmiColors.backgroundTertiary : OmiColors.backgroundRaised,
-            radius: 18,
-            stroke: viewModel.selectedLayerFilter == .defaultAccess ? nil : OmiColors.border.opacity(0.6)
+            fill: viewModel.selectedTags.isEmpty
+              ? OmiColors.backgroundSecondary : OmiColors.backgroundRaised,
+            radius: 16,
+            stroke: OmiColors.border.opacity(viewModel.selectedTags.isEmpty ? 0.18 : 0.6)
           )
         }
-        .menuStyle(.button)
         .buttonStyle(.plain)
-        .help("Default shows Short-term + Long-term. Archive is explicit.")
-      }
-
-      Button {
-        viewModel.filterThisDeviceOnly.toggle()
-      } label: {
-        HStack(spacing: OmiSpacing.xs) {
-          Image(systemName: "desktopcomputer")
-            .scaledFont(size: OmiType.caption)
-          Text("This device")
-            .scaledFont(size: OmiType.body, weight: viewModel.filterThisDeviceOnly ? .medium : .regular)
+        .popover(isPresented: $showCategoryFilter, arrowEdge: .bottom) {
+          categoryFilterPopover
         }
-        .foregroundColor(
-          viewModel.filterThisDeviceOnly ? OmiColors.textPrimary : OmiColors.textSecondary
-        )
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.md)
-        .frame(minHeight: 46)
-        .omiControlSurface(
-          fill: viewModel.filterThisDeviceOnly
-            ? OmiColors.backgroundRaised : OmiColors.backgroundTertiary,
-          radius: 18,
-          stroke: viewModel.filterThisDeviceOnly ? OmiColors.border.opacity(0.6) : nil
-        )
-      }
-      .buttonStyle(.plain)
-      .help("Show memories captured on this Mac")
 
-      // Category filter dropdown
-      Button {
-        pendingSelectedTags = viewModel.selectedTags
-        categorySearchText = ""
-        showCategoryFilter = true
-      } label: {
-        HStack(spacing: OmiSpacing.xs) {
-          Image(systemName: "line.3.horizontal.decrease")
-            .scaledFont(size: OmiType.caption)
-          Text(categoryFilterLabel)
-            .scaledFont(size: OmiType.body, weight: viewModel.selectedTags.isEmpty ? .regular : .medium)
-          Image(systemName: "chevron.down")
-            .scaledFont(size: OmiType.micro)
+        // Add Memory button (icon only)
+        Button {
+          viewModel.showingAddMemory = true
+        } label: {
+          Image(systemName: "plus")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(.black)
+            .frame(width: 44, height: 44)
+            .background(OmiColors.textPrimary)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-        .foregroundColor(
-          viewModel.selectedTags.isEmpty ? OmiColors.textSecondary : OmiColors.textPrimary
-        )
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.md)
-        .frame(minHeight: 46)
-        .omiControlSurface(
-          fill: viewModel.selectedTags.isEmpty
-            ? OmiColors.backgroundTertiary : OmiColors.backgroundRaised,
-          radius: 18,
-          stroke: viewModel.selectedTags.isEmpty ? nil : OmiColors.border.opacity(0.6)
-        )
-      }
-      .buttonStyle(.plain)
-      .popover(isPresented: $showCategoryFilter, arrowEdge: .bottom) {
-        categoryFilterPopover
-      }
+        .buttonStyle(.plain)
+        .help("Add Memory")
 
-      // Add Memory button (icon only)
-      Button {
-        viewModel.showingAddMemory = true
-      } label: {
-        Image(systemName: "plus")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(.black)
-          .frame(width: 42, height: 42)
-          .background(OmiColors.textPrimary)
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
-      }
-      .buttonStyle(.plain)
-      .help("Add Memory")
-
-      // Management menu
-      Button {
-        showManagementMenu = true
-      } label: {
-        Image(systemName: "chevron.down")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(.black)
-          .frame(width: 42, height: 42)
-          .background(OmiColors.textPrimary)
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
-      }
-      .buttonStyle(.plain)
-      .popover(isPresented: $showManagementMenu, arrowEdge: .bottom) {
-        managementMenuPopover
+        // Management menu
+        Button {
+          showManagementMenu = true
+        } label: {
+          Image(systemName: "ellipsis")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundColor(OmiColors.textSecondary)
+            .frame(width: 44, height: 44)
+            .omiControlSurface(
+              fill: OmiColors.backgroundSecondary,
+              radius: 14,
+              stroke: OmiColors.border.opacity(0.18)
+            )
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showManagementMenu, arrowEdge: .bottom) {
+          managementMenuPopover
+        }
       }
     }
     .padding(.horizontal, OmiSpacing.xxl)
-    .padding(.top, OmiSpacing.xxl)
-    .padding(.bottom, OmiSpacing.xl)
+    .padding(.top, OmiSpacing.lg)
+    .padding(.bottom, OmiSpacing.md)
     .alert("Delete Default Memories?", isPresented: $viewModel.showingDeleteAllConfirmation) {
       Button("Cancel", role: .cancel) {}
       Button("Delete Default Memories", role: .destructive) {
@@ -2179,17 +2234,18 @@ struct MemoriesPage: View {
   private var memoryList: some View {
     ScrollView {
       LazyVStack(alignment: .leading, spacing: OmiSpacing.md) {
-        switch MemoryGraphPresentationMode.resolve(
+        // Brain Map now lives in its own hub tab (beside Memories/Conversations),
+        // so the legacy graph is no longer embedded at the top of the memory
+        // list. The rollout-gated Canonical Atlas is a distinct successor
+        // surface still worth surfacing here as its own entry point.
+        if MemoryGraphPresentationMode.resolve(
           canonicalLifecycleExposed: viewModel.canonicalLifecycleExposed,
           forceCanonicalAtlasForLocalQA: MemoryGraphPresentationMode.localQAOverrideEnabled
-        ) {
-        case .canonicalAtlas:
+        ) == .canonicalAtlas {
           CanonicalMemoryAtlasInlineCard(
             viewModel: graphViewModel,
             onOpenAtlas: onOpenAtlas
           )
-        case .legacyBrainMap:
-          MemoryGraphInlineCard(viewModel: graphViewModel)
         }
 
         LazyVStack(spacing: OmiSpacing.sm) {

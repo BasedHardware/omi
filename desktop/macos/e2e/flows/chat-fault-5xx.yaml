@@ -45,13 +45,15 @@ steps:
         pollMs: "500"
 
   - id: S5
-    name: Assert surfaced error (not silent no-op)
+    name: Assert injected backend 5xx surfaced (not bridge unavailable)
     bridge.action:
       name: main_chat_snapshot
       params:
         limit: "8"
     expect:
       result.detail.has_error: "true"
+      result.detail.error_message:
+        contains: "HTTP 500"
 
   - id: S6
     name: Logs clean

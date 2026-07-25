@@ -1,0 +1,101 @@
+# LIFECYCLE: permanent
+# Weekly guardrail baseline health pulse (#9454).
+# Records committed JSONL history and opens/updates one tracking issue when any
+# nonzero baseline count has not decreased for 30 days.
+name: Guardrail baseline pulse
+
+on:
+  schedule:
+    # Mondays 15:00 UTC
+    - cron: "0 15 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  pulse:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # Allow the job to push the recorded history line back to main.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run pulse and record snapshot
+        id: pulse
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/guardrail_pulse.py --json --record | tee /tmp/pulse.json
+          set +e
+          python3 .github/scripts/guardrail_pulse.py --check-staleness > /tmp/staleness.txt
+          status=$?
+          set -e
+          echo "staleness_exit=${status}" >> "$GITHUB_OUTPUT"
+          cat /tmp/staleness.txt
+          {
+            echo "## Guardrail baseline pulse"
+            echo
+            echo '```'
+            python3 .github/scripts/guardrail_pulse.py
+            echo '```'
+            echo
+            echo "### Staleness"
+            echo
+            echo '```'
+            cat /tmp/staleness.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit history snapshot
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- .github/guardrail-pulse-history.jsonl; then
+            echo "No history change to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/guardrail-pulse-history.jsonl
+          git commit -m "chore: record weekly guardrail baseline pulse"
+          git push
+
+      - name: Open or update staleness tracking issue
+        if: steps.pulse.outputs.staleness_exit == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TITLE="Guardrail baseline health: stale nonzero baselines"
+          BODY_FILE=$(mktemp)
+          {
+            echo "Automated weekly pulse detected one or more **nonzero** guardrail baselines that have not decreased for 30 days."
+            echo
+            echo "Run: ${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID}"
+            echo
+            echo "## Pulse"
+            echo
+            echo '```'
+            python3 .github/scripts/guardrail_pulse.py
+            echo '```'
+            echo
+            echo "## Staleness"
+            echo
+            echo '```'
+            cat /tmp/staleness.txt
+            echo '```'
+            echo
+            echo "Burn down the listed baselines (shrink the committed grandfather / pay the debt). This issue is updated in place by \`.github/workflows/guardrail-baseline-pulse.yml\`."
+          } > "$BODY_FILE"
+
+          EXISTING=$(gh issue list --repo "$REPO" --state open --search "in:title Guardrail baseline health: stale nonzero baselines" --json number,title --jq '.[0].number // empty')
+          if [[ -n "$EXISTING" ]]; then
+            gh issue edit "$EXISTING" --repo "$REPO" --body-file "$BODY_FILE"
+            gh issue comment "$EXISTING" --repo "$REPO" --body "Weekly pulse refreshed this issue (run ${GITHUB_RUN_ID})."
+            echo "Updated issue #${EXISTING}"
+          else
+            gh issue create --repo "$REPO" --title "$TITLE" --body-file "$BODY_FILE"
+          fi

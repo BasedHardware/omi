@@ -13,6 +13,16 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from llm_gateway.gateway.accounting import (
+    AccountingContext,
+    AttemptTrace,
+    ProviderResponseMetadata,
+    UsageStatus,
+    anthropic_usage_from_response,
+    cache_requested_for_anthropic_request,
+    cache_write_ttl_for_anthropic_request,
+)
+from llm_gateway.gateway.accounting_sink import schedule_attempt_trace
 from llm_gateway.gateway.auth import ServiceAuthDependency
 from llm_gateway.gateway.config_loader import GatewayConfig
 from llm_gateway.gateway.metrics import (
@@ -72,6 +82,15 @@ async def create_anthropic_message(
         credential_source=_anthropic_credential_source(request),
         request_id=request_id,
     )
+    accounting_context = AccountingContext.create(
+        request_id=request_id,
+        caller=caller.name,
+        user_uid=caller.user_uid,
+        feature=_accounting_feature(caller, fallback=route.lane_id),
+        api_surface='anthropic_messages',
+        payer='byok' if _anthropic_credential_source(request) == 'service_forwarded_byok' else 'omi',
+    )
+    attempt_trace = AttemptTrace()
     body['model'] = route.primary.model
     body.update(route.provider_options)
 
@@ -91,7 +110,13 @@ async def create_anthropic_message(
 
     headers = _anthropic_forward_headers(request, api_key=api_key)
     if is_streaming:
-        return await _streaming_anthropic_messages_response(body, headers=headers, metric_context=metric_context)
+        return await _streaming_anthropic_messages_response(
+            body,
+            headers=headers,
+            metric_context=metric_context,
+            accounting_context=accounting_context,
+            attempt_trace=attempt_trace,
+        )
 
     try:
         response = await _get_anthropic_http_client().post(
@@ -100,6 +125,17 @@ async def create_anthropic_message(
             headers=headers,
         )
     except asyncio.CancelledError:
+        attempt_trace.record(
+            provider='anthropic',
+            configured_model=route.primary.model,
+            route_artifact_id=route.route_artifact_id,
+            fallback_reason=None,
+            retry_ordinal=1,
+            outcome='cancelled',
+            error_class='client_cancelled',
+            usage_status=UsageStatus.INDETERMINATE,
+        )
+        schedule_attempt_trace(accounting_context, attempt_trace)
         _observe_message_terminal(
             metric_context,
             outcome='cancelled',
@@ -108,6 +144,17 @@ async def create_anthropic_message(
         )
         raise
     except httpx.TimeoutException as exc:
+        attempt_trace.record(
+            provider='anthropic',
+            configured_model=route.primary.model,
+            route_artifact_id=route.route_artifact_id,
+            fallback_reason=None,
+            retry_ordinal=1,
+            outcome='error',
+            error_class='timeout_before_output',
+            usage_status=UsageStatus.INDETERMINATE,
+        )
+        schedule_attempt_trace(accounting_context, attempt_trace)
         _observe_message_terminal(
             metric_context,
             outcome='error',
@@ -116,6 +163,17 @@ async def create_anthropic_message(
         )
         raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail='anthropic request timed out') from exc
     except httpx.HTTPError as exc:
+        attempt_trace.record(
+            provider='anthropic',
+            configured_model=route.primary.model,
+            route_artifact_id=route.route_artifact_id,
+            fallback_reason=None,
+            retry_ordinal=1,
+            outcome='error',
+            error_class='transport_before_output',
+            usage_status=UsageStatus.INDETERMINATE,
+        )
+        schedule_attempt_trace(accounting_context, attempt_trace)
         _observe_message_terminal(
             metric_context,
             outcome='error',
@@ -125,6 +183,17 @@ async def create_anthropic_message(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail='anthropic transport failure') from exc
 
     if response.status_code >= 400:
+        attempt_trace.record(
+            provider='anthropic',
+            configured_model=route.primary.model,
+            route_artifact_id=route.route_artifact_id,
+            fallback_reason=None,
+            retry_ordinal=1,
+            outcome='error',
+            error_class=_provider_status_error_class(response.status_code),
+            usage_status=UsageStatus.INDETERMINATE,
+        )
+        schedule_attempt_trace(accounting_context, attempt_trace)
         _observe_message_terminal(
             metric_context,
             outcome='error',
@@ -136,6 +205,17 @@ async def create_anthropic_message(
     try:
         response_body = response.json()
     except ValueError:
+        attempt_trace.record(
+            provider='anthropic',
+            configured_model=route.primary.model,
+            route_artifact_id=route.route_artifact_id,
+            fallback_reason=None,
+            retry_ordinal=1,
+            outcome='error',
+            error_class='invalid_provider_response',
+            usage_status=UsageStatus.INDETERMINATE,
+        )
+        schedule_attempt_trace(accounting_context, attempt_trace)
         _observe_message_terminal(
             metric_context,
             outcome='error',
@@ -147,6 +227,26 @@ async def create_anthropic_message(
             content={'error': {'message': 'invalid anthropic response', 'type': 'api_error'}},
         )
 
+    response_metadata = (
+        anthropic_usage_from_response(
+            response_body,
+            cache_requested=cache_requested_for_anthropic_request(body),
+            cache_write_ttl=cache_write_ttl_for_anthropic_request(body),
+        )
+        if isinstance(response_body, Mapping)
+        else ProviderResponseMetadata()
+    )
+    attempt_trace.record(
+        provider='anthropic',
+        configured_model=route.primary.model,
+        route_artifact_id=route.route_artifact_id,
+        fallback_reason=None,
+        retry_ordinal=1,
+        outcome='success',
+        error_class='none',
+        metadata=response_metadata,
+    )
+    schedule_attempt_trace(accounting_context, attempt_trace)
     _observe_message_terminal(metric_context, outcome='success', error_class='none', phase='terminal')
     return JSONResponse(status_code=response.status_code, content=response_body)
 
@@ -230,6 +330,8 @@ async def _streaming_anthropic_messages_response(
     *,
     headers: Mapping[str, str],
     metric_context: _AnthropicMetricContext,
+    accounting_context: AccountingContext | None = None,
+    attempt_trace: AttemptTrace | None = None,
 ) -> JSONResponse | StreamingResponse:
     """Open the upstream stream before committing HTTP status.
 
@@ -246,6 +348,19 @@ async def _streaming_anthropic_messages_response(
         )
         response = await stream_cm.__aenter__()
     except asyncio.CancelledError:
+        if attempt_trace is not None:
+            attempt_trace.record(
+                provider=metric_context.provider,
+                configured_model=metric_context.model,
+                route_artifact_id=metric_context.route_artifact_id,
+                fallback_reason=None,
+                retry_ordinal=1,
+                outcome='cancelled',
+                error_class='client_cancelled',
+                usage_status=UsageStatus.INDETERMINATE,
+            )
+        if accounting_context is not None and attempt_trace is not None:
+            schedule_attempt_trace(accounting_context, attempt_trace)
         _observe_message_terminal(
             metric_context,
             outcome='cancelled',
@@ -255,6 +370,19 @@ async def _streaming_anthropic_messages_response(
         )
         raise
     except httpx.TimeoutException as exc:
+        if attempt_trace is not None:
+            attempt_trace.record(
+                provider=metric_context.provider,
+                configured_model=metric_context.model,
+                route_artifact_id=metric_context.route_artifact_id,
+                fallback_reason=None,
+                retry_ordinal=1,
+                outcome='error',
+                error_class='timeout_before_output',
+                usage_status=UsageStatus.INDETERMINATE,
+            )
+        if accounting_context is not None and attempt_trace is not None:
+            schedule_attempt_trace(accounting_context, attempt_trace)
         _observe_message_terminal(
             metric_context,
             outcome='error',
@@ -264,6 +392,19 @@ async def _streaming_anthropic_messages_response(
         )
         raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail='anthropic request timed out') from exc
     except httpx.HTTPError as exc:
+        if attempt_trace is not None:
+            attempt_trace.record(
+                provider=metric_context.provider,
+                configured_model=metric_context.model,
+                route_artifact_id=metric_context.route_artifact_id,
+                fallback_reason=None,
+                retry_ordinal=1,
+                outcome='error',
+                error_class='transport_before_output',
+                usage_status=UsageStatus.INDETERMINATE,
+            )
+        if accounting_context is not None and attempt_trace is not None:
+            schedule_attempt_trace(accounting_context, attempt_trace)
         _observe_message_terminal(
             metric_context,
             outcome='error',
@@ -278,6 +419,19 @@ async def _streaming_anthropic_messages_response(
             error_bytes = await response.aread()
         finally:
             try:
+                if attempt_trace is not None:
+                    attempt_trace.record(
+                        provider=metric_context.provider,
+                        configured_model=metric_context.model,
+                        route_artifact_id=metric_context.route_artifact_id,
+                        fallback_reason=None,
+                        retry_ordinal=1,
+                        outcome='error',
+                        error_class=_provider_status_error_class(response.status_code),
+                        usage_status=UsageStatus.INDETERMINATE,
+                    )
+                if accounting_context is not None and attempt_trace is not None:
+                    schedule_attempt_trace(accounting_context, attempt_trace)
                 _observe_message_terminal(
                     metric_context,
                     outcome='error',
@@ -290,7 +444,15 @@ async def _streaming_anthropic_messages_response(
         return JSONResponse(status_code=response.status_code, content=_bytes_json_or_error(error_bytes))
 
     return StreamingResponse(
-        _iter_open_anthropic_stream(stream_cm, response, metric_context=metric_context),
+        _iter_open_anthropic_stream(
+            stream_cm,
+            response,
+            metric_context=metric_context,
+            accounting_context=accounting_context,
+            attempt_trace=attempt_trace,
+            cache_requested=cache_requested_for_anthropic_request(body),
+            cache_write_ttl=cache_write_ttl_for_anthropic_request(body),
+        ),
         media_type='text/event-stream',
     )
 
@@ -300,18 +462,53 @@ async def _iter_open_anthropic_stream(
     response: Any,
     *,
     metric_context: _AnthropicMetricContext,
+    accounting_context: AccountingContext | None = None,
+    attempt_trace: AttemptTrace | None = None,
+    cache_requested: bool = False,
+    cache_write_ttl: str | None = None,
 ) -> AsyncIterator[bytes]:
     terminal_observed = False
     terminal_marker_seen = False
     saw_output = False
     ttfb_seconds: float | None = None
     decoder = SSEEventDecoder()
+    provider_usage: dict[str, Any] = {}
+    provider_response_id: str | None = None
+    actual_model_version: str | None = None
 
-    def observe_terminal(*, outcome: str, error_class: str, phase: str) -> None:
+    async def observe_terminal(*, outcome: str, error_class: str, phase: str) -> None:
         nonlocal terminal_observed
         if terminal_observed:
             return
         terminal_observed = True
+        provider_response: dict[str, Any] = {
+            'id': provider_response_id,
+            'model': actual_model_version,
+            'usage': provider_usage,
+        }
+        usage_metadata = anthropic_usage_from_response(
+            provider_response,
+            cache_requested=cache_requested,
+            cache_write_ttl=cache_write_ttl,
+        )
+        if attempt_trace is not None:
+            attempt_trace.record(
+                provider=metric_context.provider,
+                configured_model=metric_context.model,
+                route_artifact_id=metric_context.route_artifact_id,
+                fallback_reason=None,
+                retry_ordinal=1,
+                outcome=outcome,
+                error_class=error_class,
+                metadata=usage_metadata,
+                usage_status=(
+                    UsageStatus.CONFIRMED
+                    if usage_metadata.usage is not None
+                    else UsageStatus.NOT_REPORTED if outcome == 'success' else UsageStatus.INDETERMINATE
+                ),
+            )
+        if accounting_context is not None and attempt_trace is not None:
+            schedule_attempt_trace(accounting_context, attempt_trace)
         _observe_message_terminal(
             metric_context,
             outcome=outcome,
@@ -329,42 +526,55 @@ async def _iter_open_anthropic_stream(
                 saw_output = True
                 ttfb_seconds = time_request() - metric_context.started_at
             for event in decoder.feed(chunk):
+                event_payload = _event_payload(event.data)
+                if event.event == 'message_start' and event_payload is not None:
+                    message = event_payload.get('message')
+                    if isinstance(message, Mapping):
+                        provider_response_id = _optional_string(message.get('id'))
+                        actual_model_version = _optional_string(message.get('model'))
+                        raw_usage = message.get('usage')
+                        if isinstance(raw_usage, Mapping):
+                            provider_usage.update(dict(raw_usage))
+                elif event.event == 'message_delta' and event_payload is not None:
+                    raw_usage = event_payload.get('usage')
+                    if isinstance(raw_usage, Mapping):
+                        provider_usage.update(dict(raw_usage))
                 if event.event == 'message_stop':
                     terminal_marker_seen = True
-                    observe_terminal(outcome='success', error_class='none', phase='terminal_marker')
+                    await observe_terminal(outcome='success', error_class='none', phase='terminal_marker')
                 elif event.event == 'error':
-                    observe_terminal(
+                    await observe_terminal(
                         outcome='error',
                         error_class='provider_error_event',
                         phase='midstream' if saw_output else 'before_output',
                     )
             yield chunk
     except httpx.TimeoutException:
-        observe_terminal(
+        await observe_terminal(
             outcome='error',
             error_class='timeout_midstream' if saw_output else 'timeout_before_output',
             phase='midstream' if saw_output else 'before_output',
         )
         yield b'event: error\ndata: {"type":"error","error":{"type":"timeout_error"}}\n\n'
     except httpx.HTTPError:
-        observe_terminal(
+        await observe_terminal(
             outcome='error',
             error_class='transport_midstream' if saw_output else 'transport_before_output',
             phase='midstream' if saw_output else 'before_output',
         )
         yield b'event: error\ndata: {"type":"error","error":{"type":"api_error"}}\n\n'
     except ValueError:
-        observe_terminal(outcome='error', error_class='invalid_sse_frame', phase='midstream')
+        await observe_terminal(outcome='error', error_class='invalid_sse_frame', phase='midstream')
         raise
     except asyncio.CancelledError:
-        observe_terminal(
+        await observe_terminal(
             outcome='cancelled',
             error_class='client_cancelled',
             phase='midstream' if saw_output else 'before_output',
         )
         raise
     except Exception:
-        observe_terminal(
+        await observe_terminal(
             outcome='error',
             error_class='unexpected_midstream' if saw_output else 'unexpected_before_output',
             phase='midstream' if saw_output else 'before_output',
@@ -372,7 +582,7 @@ async def _iter_open_anthropic_stream(
         raise
     else:
         if not terminal_marker_seen:
-            observe_terminal(
+            await observe_terminal(
                 outcome='error',
                 error_class='eof_before_terminal_marker' if saw_output else 'empty_stream_before_output',
                 phase='midstream' if saw_output else 'before_output',
@@ -382,7 +592,7 @@ async def _iter_open_anthropic_stream(
             await stream_cm.__aexit__(None, None, None)
         finally:
             if not terminal_observed:
-                observe_terminal(
+                await observe_terminal(
                     outcome='cancelled',
                     error_class='consumer_abandoned_stream',
                     phase='midstream' if saw_output else 'before_output',
@@ -456,6 +666,23 @@ def _bytes_json_or_error(body: bytes) -> object:
         return json.loads(body)
     except ValueError:
         return {'error': {'message': 'invalid anthropic response', 'type': 'api_error'}}
+
+
+def _accounting_feature(caller: ServiceAuthDependency, *, fallback: str) -> str:
+    """Feature attribution comes only from an authenticated, bounded header."""
+    return caller.usage_feature or fallback
+
+
+def _event_payload(data: str) -> dict[str, Any] | None:
+    try:
+        value = json.loads(data)
+    except (TypeError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _optional_string(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
 
 
 def _get_anthropic_http_client() -> httpx.AsyncClient:

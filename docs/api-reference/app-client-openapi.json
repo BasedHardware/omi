@@ -4249,6 +4249,24 @@
         "title": "BatchDeleteActionItemsResponse",
         "type": "object"
       },
+      "BatchDeleteMemoriesRequest": {
+        "properties": {
+          "memory_ids": {
+            "description": "Memory IDs to delete in a single batch request",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Memory Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "memory_ids"
+        ],
+        "title": "BatchDeleteMemoriesRequest",
+        "type": "object"
+      },
       "BatchMemoriesRequest": {
         "properties": {
           "memories": {
@@ -6459,6 +6477,29 @@
         "title": "Conversation",
         "type": "object"
       },
+      "ConversationActionItemsCountResponse": {
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "integer"
+          },
+          "incomplete": {
+            "title": "Incomplete",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "completed",
+          "incomplete"
+        ],
+        "title": "ConversationActionItemsCountResponse",
+        "type": "object"
+      },
       "ConversationActionItemsDeleteResponse": {
         "properties": {
           "deleted_count": {
@@ -6496,6 +6537,47 @@
           "conversation_id"
         ],
         "title": "ConversationActionItemsResponse",
+        "type": "object"
+      },
+      "ConversationAnalytics": {
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "speaker_count": {
+            "title": "Speaker Count",
+            "type": "integer"
+          },
+          "speakers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SpeakerAnalytics"
+            },
+            "title": "Speakers",
+            "type": "array"
+          },
+          "total_seconds": {
+            "title": "Total Seconds",
+            "type": "number"
+          },
+          "total_words": {
+            "title": "Total Words",
+            "type": "integer"
+          },
+          "words_per_minute": {
+            "title": "Words Per Minute",
+            "type": "number"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "total_seconds",
+          "total_words",
+          "words_per_minute",
+          "speaker_count"
+        ],
+        "title": "ConversationAnalytics",
         "type": "object"
       },
       "ConversationAudio": {
@@ -6690,6 +6772,45 @@
           "discarded"
         ],
         "title": "ConversationCreateResponse",
+        "type": "object"
+      },
+      "ConversationFinalizationStatusResponse": {
+        "description": "Customer-visible projection of one durable finalization job.",
+        "properties": {
+          "attempt_count": {
+            "title": "Attempt Count",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "task_retry_count": {
+            "title": "Task Retry Count",
+            "type": "integer"
+          },
+          "terminal": {
+            "title": "Terminal",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "job_id",
+          "status",
+          "terminal",
+          "retryable",
+          "attempt_count",
+          "task_retry_count"
+        ],
+        "title": "ConversationFinalizationStatusResponse",
         "type": "object"
       },
       "ConversationMutationResponse": {
@@ -10775,6 +10896,14 @@
       },
       "FullConversation": {
         "properties": {
+          "apps_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AppResult"
+            },
+            "title": "Apps Results",
+            "type": "array"
+          },
           "finished_at": {
             "anyOf": [
               {
@@ -13366,6 +13495,11 @@
             ],
             "title": "Invalid At"
           },
+          "is_baseline": {
+            "default": false,
+            "title": "Is Baseline",
+            "type": "boolean"
+          },
           "is_locked": {
             "default": false,
             "title": "Is Locked",
@@ -15326,7 +15460,9 @@
           "basic",
           "unlimited",
           "architect",
-          "operator"
+          "operator",
+          "plus",
+          "unlimited_v2"
         ],
         "title": "PlanType",
         "type": "string"
@@ -17340,6 +17476,14 @@
       },
       "SimpleConversation": {
         "properties": {
+          "apps_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AppResult"
+            },
+            "title": "Apps Results",
+            "type": "array"
+          },
           "finished_at": {
             "anyOf": [
               {
@@ -17534,6 +17678,55 @@
           "expires_at"
         ],
         "title": "SnapshotReceipt",
+        "type": "object"
+      },
+      "SpeakerAnalytics": {
+        "properties": {
+          "is_user": {
+            "default": false,
+            "title": "Is User",
+            "type": "boolean"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "speaker": {
+            "title": "Speaker",
+            "type": "string"
+          },
+          "talk_seconds": {
+            "title": "Talk Seconds",
+            "type": "number"
+          },
+          "talk_share": {
+            "title": "Talk Share",
+            "type": "number"
+          },
+          "word_count": {
+            "title": "Word Count",
+            "type": "integer"
+          },
+          "words_per_minute": {
+            "title": "Words Per Minute",
+            "type": "number"
+          }
+        },
+        "required": [
+          "speaker",
+          "talk_seconds",
+          "word_count",
+          "words_per_minute",
+          "talk_share"
+        ],
+        "title": "SpeakerAnalytics",
         "type": "object"
       },
       "SpeechProfileMutationResponse": {
@@ -17891,7 +18084,13 @@
           },
           "plan": {
             "$ref": "#/components/schemas/PlanType",
-            "default": "basic"
+            "default": "basic",
+            "enum": [
+              "basic",
+              "unlimited",
+              "architect",
+              "operator"
+            ]
           },
           "status": {
             "$ref": "#/components/schemas/SubscriptionStatus",
@@ -31382,6 +31581,96 @@
         ]
       }
     },
+    "/v1/conversations/{conversation_id}/action-items/count": {
+      "get": {
+        "description": "Return total / completed / incomplete action-item counts for one conversation.\n\nA task-progress badge (e.g. 2 of 3 done) for a conversation without paging its items.",
+        "operationId": "get_conversation_action_items_count_v1_conversations__conversation_id__action_items_count_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationActionItemsCountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Action Items Count",
+        "tags": [
+          "action-items"
+        ]
+      }
+    },
     "/v1/conversations/{conversation_id}/action-items/{action_item_idx}": {
       "patch": {
         "operationId": "update_action_item_description_v1_conversations__conversation_id__action_items__action_item_idx__patch",
@@ -31476,6 +31765,96 @@
           }
         ],
         "summary": "Update Action Item Description",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/analytics": {
+      "get": {
+        "description": "Per-speaker analytics for a conversation (issue #4481).\n\nReturns each speaker's talk time, word count, and words per minute, plus the\nconversation totals. Speakers are the account owner (\"You\"), identified people\n(resolved to their name), and any remaining diarization speakers.",
+        "operationId": "get_conversation_analytics_v1_conversations__conversation_id__analytics_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationAnalytics"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Analytics",
         "tags": [
           "conversations"
         ]
@@ -31981,6 +32360,95 @@
           }
         ],
         "summary": "Set Conversation Events State",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/finalization": {
+      "get": {
+        "operationId": "get_conversation_finalization_status_v1_conversations__conversation_id__finalization_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationFinalizationStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Finalization Status",
         "tags": [
           "conversations"
         ]
@@ -36854,6 +37322,94 @@
           }
         ],
         "summary": "Delete Goal",
+        "tags": [
+          "goals"
+        ]
+      },
+      "get": {
+        "description": "Fetch a single goal by id.\n\nThe list routes cap how many goals are returned, and update/delete/progress/history/advice\nalready address a goal by id, so this exposes the matching read for one goal (404 if it does\nnot exist or belongs to another user).",
+        "operationId": "get_goal_by_id_v1_goals__goal_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Goal By Id",
         "tags": [
           "goals"
         ]
@@ -54424,6 +54980,92 @@
       }
     },
     "/v3/memories/batch": {
+      "delete": {
+        "description": "Delete up to MEMORIES_BATCH_MAX memories in one request.\n\nReplaces the N concurrent DELETE /v3/memories/{id} calls the web UI used to fan out\non bulk selection, which blew through the per-UID rate limiter and 429'd.\n\nAuthorization parity with DELETE /v3/memories/{memory_id}: every requested id is\nvalidated with the SAME business rules as the single-delete path. Validation is\nall-or-nothing — if any id fails, nothing is deleted, so the batch route can never\nbypass the single-delete guardrails (missing/not-owned -> 404, locked paid-plan\nmemory -> 402).",
+        "operationId": "delete_memories_batch_v3_memories_batch_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchDeleteMemoriesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Delete Memories Batch",
+        "tags": [
+          "memories"
+        ]
+      },
       "post": {
         "operationId": "create_memories_batch_v3_memories_batch_post",
         "parameters": [
@@ -55008,6 +55650,105 @@
           }
         ],
         "summary": "Edit Memory",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/v3/memories/{memory_id}/baseline": {
+      "patch": {
+        "description": "Toggle the baseline flag for a memory.\n\nBaseline memories are always injected first into the AI context window.\nNot supported for canonical-path users: MemoryItem has no is_baseline field,\nso writing to the legacy store would silently have no effect for canonical readers.\nCanonical users receive 503 explicitly rather than a silent wrong-store write.",
+        "operationId": "update_memory_baseline_v3_memories__memory_id__baseline_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "value",
+            "required": true,
+            "schema": {
+              "title": "Value",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Update Memory Baseline",
         "tags": [
           "memories"
         ]

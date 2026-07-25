@@ -253,7 +253,7 @@ enum TaskSourceCategory: String, Codable, CaseIterable {
 
   var validSubcategories: [TaskSourceSubcategory] {
     switch self {
-    case .direct_request: return [.message, .meeting, .mention]
+    case .direct_request: return [.message, .meeting, .mention, .commitment]
     case .self_generated: return [.idea, .reminder, .goal_subtask]
     case .calendar_driven: return [.event_prep, .recurring, .deadline]
     case .reactive: return [.error, .notification, .observation]
@@ -269,6 +269,7 @@ enum TaskSourceSubcategory: String, Codable, CaseIterable {
   case message
   case meeting
   case mention
+  case commitment
   // self_generated
   case idea
   case reminder
@@ -520,15 +521,24 @@ struct TaskExtractionResult: Codable, AssistantResult {
 
 /// Context injected into the extraction prompt for deduplication
 struct TaskExtractionContext {
-  let activeTasks: [(id: Int64, description: String, priority: String?, relevanceScore: Int?)]
+  /// Only backend action-item IDs are valid duplicate/refinement targets.
+  let activeTasks: [(id: String, description: String, priority: String?, relevanceScore: Int?)]
   let completedTasks: [(id: Int64, description: String)]
   let deletedTasks: [(id: Int64, description: String)]
+  /// Descriptions of tasks already staged locally (not yet promoted to the
+  /// backend). Presented as "already captured — do not re-extract" evidence
+  /// WITHOUT an updatable id: staged tasks have no backend id, so exposing them
+  /// in the id'd active list (previously all as `id:0`) let the model emit
+  /// `duplicate_of:0` and drive an update against a non-existent task.
+  let stagedTaskDescriptions: [String]
   let goals: [Goal]
 }
 
 /// Result from vector/FTS search during tool-calling extraction
 struct TaskSearchResult: Codable {
-  let id: Int64
+  /// Stable backend action-item ID when this result can be mutated. Local and
+  /// staged rows remain search evidence but deliberately have no task ID.
+  let taskID: String?
   let description: String
   let status: String  // "active", "completed", "deleted"
   let similarity: Double?  // cosine similarity (nil for FTS-only matches)
@@ -536,7 +546,8 @@ struct TaskSearchResult: Codable {
   let relevanceScore: Int?  // relevance ranking score (higher = more important)
 
   enum CodingKeys: String, CodingKey {
-    case id, description, status, similarity
+    case taskID = "task_id"
+    case description, status, similarity
     case matchType = "match_type"
     case relevanceScore = "relevance_score"
   }

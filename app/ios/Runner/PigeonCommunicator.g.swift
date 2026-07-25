@@ -383,6 +383,37 @@ struct RayBanMetaGlasses: Hashable {
   }
 }
 
+/// A Bluetooth Hands-Free Profile input exposed by iOS.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct BluetoothHfpInput: Hashable {
+  var uid: String
+  var name: String
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> BluetoothHfpInput? {
+    let uid = pigeonVar_list[0] as! String
+    let name = pigeonVar_list[1] as! String
+
+    return BluetoothHfpInput(
+      uid: uid,
+      name: name
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      uid,
+      name,
+    ]
+  }
+  static func == (lhs: BluetoothHfpInput, rhs: BluetoothHfpInput) -> Bool {
+    return deepEqualsPigeonCommunicator(lhs.toList(), rhs.toList())  }
+  func hash(into hasher: inout Hasher) {
+    deepHashPigeonCommunicator(value: toList(), hasher: &hasher)
+  }
+}
+
 private class PigeonCommunicatorPigeonCodecReader: FlutterStandardReader {
   override func readValue(ofType type: UInt8) -> Any? {
     switch type {
@@ -398,6 +429,8 @@ private class PigeonCommunicatorPigeonCodecReader: FlutterStandardReader {
       return BleDeviceDiagnostics.fromList(self.readValue() as! [Any?])
     case 134:
       return RayBanMetaGlasses.fromList(self.readValue() as! [Any?])
+    case 135:
+      return BluetoothHfpInput.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
     }
@@ -423,6 +456,9 @@ private class PigeonCommunicatorPigeonCodecWriter: FlutterStandardWriter {
       super.writeValue(value.toList())
     } else if let value = value as? RayBanMetaGlasses {
       super.writeByte(134)
+      super.writeValue(value.toList())
+    } else if let value = value as? BluetoothHfpInput {
+      super.writeByte(135)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -1365,13 +1401,14 @@ protocol RayBanMetaHostAPI {
   func getCameraPermissionStatus(completion: @escaping (Result<String, Error>) -> Void)
   /// Starts capturing the glasses microphone over the Bluetooth HFP route and
   /// streaming PCM16 mono frames to RayBanMetaFlutterAPI.onAudioFrame.
-  func startAudioCapture() throws
+  func startAudioCapture(inputUid: String?) throws
   func stopAudioCapture() throws
   /// True when the active audio input route is the glasses' Bluetooth HFP mic.
   func isGlassesAudioRouteActive() throws -> Bool
-  /// Bluetooth HFP input port names currently available, for the audio-only
-  /// fallback when the DAT SDK is not part of this build.
-  func getBluetoothHfpInputNames() throws -> [String]
+  /// Bluetooth HFP input ports currently available, for the audio-only
+  /// fallback when the DAT SDK is not part of this build. The UID is the
+  /// stable identity; the user-visible name may change.
+  func getBluetoothHfpInputs() throws -> [BluetoothHfpInput]
   /// Starts the DAT camera stream session so photo capture is ready. While
   /// active the glasses' capture LED is on (hardware-enforced by Meta).
   func startCamera() throws
@@ -1548,9 +1585,11 @@ class RayBanMetaHostAPISetup {
     /// streaming PCM16 mono frames to RayBanMetaFlutterAPI.onAudioFrame.
     let startAudioCaptureChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.startAudioCapture\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
-      startAudioCaptureChannel.setMessageHandler { _, reply in
+      startAudioCaptureChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let inputUidArg: String? = nilOrValue(args[0])
         do {
-          try api.startAudioCapture()
+          try api.startAudioCapture(inputUid: inputUidArg)
           reply(wrapResult(nil))
         } catch {
           reply(wrapError(error))
@@ -1586,20 +1625,21 @@ class RayBanMetaHostAPISetup {
     } else {
       isGlassesAudioRouteActiveChannel.setMessageHandler(nil)
     }
-    /// Bluetooth HFP input port names currently available, for the audio-only
-    /// fallback when the DAT SDK is not part of this build.
-    let getBluetoothHfpInputNamesChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getBluetoothHfpInputNames\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    /// Bluetooth HFP input ports currently available, for the audio-only
+    /// fallback when the DAT SDK is not part of this build. The UID is the
+    /// stable identity; the user-visible name may change.
+    let getBluetoothHfpInputsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getBluetoothHfpInputs\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
-      getBluetoothHfpInputNamesChannel.setMessageHandler { _, reply in
+      getBluetoothHfpInputsChannel.setMessageHandler { _, reply in
         do {
-          let result = try api.getBluetoothHfpInputNames()
+          let result = try api.getBluetoothHfpInputs()
           reply(wrapResult(result))
         } catch {
           reply(wrapError(error))
         }
       }
     } else {
-      getBluetoothHfpInputNamesChannel.setMessageHandler(nil)
+      getBluetoothHfpInputsChannel.setMessageHandler(nil)
     }
     /// Starts the DAT camera stream session so photo capture is ready. While
     /// active the glasses' capture LED is on (hardware-enforced by Meta).

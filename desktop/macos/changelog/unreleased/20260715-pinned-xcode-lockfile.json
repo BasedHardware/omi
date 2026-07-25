@@ -1,3 +1,0 @@
-{
-  "change": "Pinned the Xcode toolchain and committed the SwiftPM dependency lockfile so desktop builds are reproducible"
-}

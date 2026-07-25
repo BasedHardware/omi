@@ -25,7 +25,7 @@ import os
 # ---------------------------------------------------------------------------
 
 RATE_LIMIT_BOOST: float = float(os.getenv("RATE_LIMIT_BOOST", "1.0"))
-RATE_LIMIT_SHADOW: bool = os.getenv("RATE_LIMIT_SHADOW_MODE", "false").lower() != "false"
+RATE_LIMIT_SHADOW: bool = os.getenv("RATE_LIMIT_SHADOW_MODE", "false").lower() == "true"
 
 # ---------------------------------------------------------------------------
 # Policies: "name" -> (max_requests, window_seconds)
@@ -82,6 +82,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "memories:delete": (60, 3600),
     # Delete-all is extremely destructive; tight cap with one retry cushion
     "memories:delete_all": (2, 3600),
+    # Batch delete — each request removes up to 100 memories in one Firestore write,
+    # so the per-request cap is tighter than memories:delete (which is one memory each).
+    "memories:delete_batch": (10, 3600),
     # Goals — single LLM call
     "goals:suggest": (30, 3600),
     "goals:advice": (30, 3600),

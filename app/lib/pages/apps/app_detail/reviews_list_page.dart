@@ -106,10 +106,10 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                           await replyToAppReview(widget.app.id, controller.text.trim(), review.uid);
                           if (context.mounted) {
                             context.read<AppProvider>().updateLocalAppReviewResponse(
-                                  widget.app.id,
-                                  controller.text.trim(),
-                                  review.uid,
-                                );
+                              widget.app.id,
+                              controller.text.trim(),
+                              review.uid,
+                            );
                           }
                           review.response = controller.text.trim();
                           review.respondedAt = DateTime.now();
@@ -182,7 +182,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
           child: IconButton(
             padding: EdgeInsets.zero,
             onPressed: () => Navigator.pop(context),
-            icon: FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
+            icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
           ),
         ),
         title: Text(

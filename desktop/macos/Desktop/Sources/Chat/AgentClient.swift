@@ -273,6 +273,20 @@ enum AgentClient {
       )
     }
 
+    func listJournalTurnsForControl(
+      surface: AgentSurfaceReference,
+      ownerID: String? = nil,
+      afterTurnSeq: Int = 0,
+      limit: Int = 100
+    ) async throws -> AgentRuntimeProcess.JournalOperationResult {
+      try await bridge.listJournalTurnsForControl(
+        surface: surface,
+        ownerID: ownerID,
+        afterTurnSeq: afterTurnSeq,
+        limit: limit
+      )
+    }
+
     func importRemoteJournalTurn(
       surface: AgentSurfaceReference,
       ownerID: String? = nil,
@@ -284,12 +298,28 @@ enum AgentClient {
     func clearJournalTurns(
       surface: AgentSurfaceReference,
       ownerID: String? = nil,
-      expectedGeneration: Int? = nil
+      expectedGeneration: Int? = nil,
+      deleteBackend: Bool = true
     ) async throws -> Int {
       try await bridge.clearJournalTurns(
         surface: surface,
         ownerID: ownerID,
-        expectedGeneration: expectedGeneration
+        expectedGeneration: expectedGeneration,
+        deleteBackend: deleteBackend
+      )
+    }
+
+    func clearJournalTurnsForControl(
+      surface: AgentSurfaceReference,
+      ownerID: String? = nil,
+      expectedGeneration: Int? = nil,
+      deleteBackend: Bool = true
+    ) async throws -> Int {
+      try await bridge.clearJournalTurnsForControl(
+        surface: surface,
+        ownerID: ownerID,
+        expectedGeneration: expectedGeneration,
+        deleteBackend: deleteBackend
       )
     }
 
@@ -309,6 +339,7 @@ enum AgentClient {
       attachments: [AgentQueryAttachment] = [],
       producingTurnId: String? = nil,
       expectedContext: AgentContextFreshness? = nil,
+      reasoningEffort: String? = nil,
       onTextDelta: @escaping TextDeltaHandler,
       onToolActivity: @escaping ToolActivityHandler,
       onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
@@ -324,6 +355,7 @@ enum AgentClient {
         attachments: attachments,
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
+        reasoningEffort: reasoningEffort,
         onTextDelta: onTextDelta,
         onToolActivity: onToolActivity,
         onThinkingDelta: onThinkingDelta,
@@ -343,6 +375,7 @@ enum AgentClient {
       attachments: [AgentQueryAttachment] = [],
       producingTurnId: String? = nil,
       expectedContext: AgentContextFreshness? = nil,
+      reasoningEffort: String? = nil,
       onTextDelta: @escaping TextDeltaHandler,
       onToolActivity: @escaping ToolActivityHandler,
       onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
@@ -370,6 +403,7 @@ enum AgentClient {
               attachments: attachments,
               producingTurnId: producingTurnId,
               expectedContext: admittedContext,
+              reasoningEffort: reasoningEffort,
               onTextDelta: onTextDelta,
               onToolActivity: onToolActivity,
               onThinkingDelta: onThinkingDelta,

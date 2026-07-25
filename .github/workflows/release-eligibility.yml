@@ -1,0 +1,27 @@
+name: Release Eligibility
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-eligibility:
+    name: Release Eligibility
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact main SHA
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Verify release eligibility
+        uses: ./.github/actions/release-eligibility
+        with:
+          ref: ${{ github.ref }}
+          sha: ${{ github.sha }}
+          before: ${{ github.event.before }}
+          after: ${{ github.event.after }}

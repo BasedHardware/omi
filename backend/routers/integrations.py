@@ -93,7 +93,6 @@ def render_oauth_response(
 
     if success:
         context: Dict[str, Any] = {
-            'request': request,
             'title': f"{config['name']} Auth",
             'icon': '✓',
             'message': 'Authentication Successful!',
@@ -110,7 +109,6 @@ def render_oauth_response(
         }
 
         context = {
-            'request': request,
             'title': f"{config['name']} Auth Error",
             'icon': '❌',
             'message': f"{'Security' if error_type == 'invalid_state' else 'Configuration' if error_type == 'config_error' else 'Authentication'} Error",
@@ -119,7 +117,7 @@ def render_oauth_response(
             'show_spinner': False,
         }
 
-    return templates.TemplateResponse('oauth_callback.html', context)
+    return templates.TemplateResponse(request, 'oauth_callback.html', context)
 
 
 def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dict[str, str]]:
@@ -134,7 +132,12 @@ def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dic
         return None
 
     state_key = f"oauth_state:{state_token}"
-    state_data_str = redis_db.r.get(state_key)
+    # Atomic get-and-delete: an OAuth state is single-use, so consuming it must be one operation.
+    # A separate GET then DELETE lets two concurrent callbacks carrying the same state both read the
+    # value before either delete runs, which weakens replay protection -- and offloading the consume
+    # to the db_executor thread pool makes that interleaving reachable. GETDEL removes it atomically,
+    # so only one caller ever receives the value.
+    state_data_str = redis_db.r.getdel(state_key)
 
     if not state_data_str:
         return None
@@ -142,13 +145,10 @@ def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dic
     try:
         loaded: object = json.loads(state_data_str.decode() if isinstance(state_data_str, bytes) else state_data_str)
         state_data = cast(Dict[str, str], loaded) if isinstance(loaded, dict) else {}
-        # Delete after successful parse to prevent replay
-        redis_db.r.delete(state_key)
+        # GETDEL above already removed the key atomically; no separate delete needed.
         return state_data
     except Exception as e:
         logger.error(f"Error parsing state data: {e}")
-        # Delete invalid state to prevent repeated parse failures
-        redis_db.r.delete(state_key)
         return None
 
 
@@ -439,7 +439,7 @@ async def handle_oauth_callback(
         return render_oauth_response(request, app_key, success=False, error_type='missing_code')
 
     # Validate state token
-    state_data = validate_and_consume_oauth_state(state)
+    state_data = await run_blocking(db_executor, validate_and_consume_oauth_state, state)
     if not state_data or state_data.get('app_key') != app_key:
         return render_oauth_response(request, app_key, success=False, error_type='invalid_state')
 

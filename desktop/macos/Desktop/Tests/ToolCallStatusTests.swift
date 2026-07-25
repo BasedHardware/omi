@@ -29,6 +29,12 @@ final class ToolCallStatusTests: XCTestCase {
     )
   }
 
+  // MARK: - Tool group presentation
+
+  func testRunningToolGroupsStartCollapsedByDefault() {
+    XCTAssertFalse(ToolCallsGroupExpansionPolicy.initiallyExpanded())
+  }
+
   // MARK: - Stall tracking-id derivation
 
   /// The `StallDetector` registration site and the `applyStallTransitions`

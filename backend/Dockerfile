@@ -62,6 +62,9 @@ RUN ldconfig && \
     rm -rf /tmp/wheels
 
 COPY --from=builder /opt/venv /opt/venv
+COPY .github/scripts/desktop_release_manifest.py /app/desktop_release_manifest_contract.py
+COPY .github/scripts/desktop_qualification_admission.py /app/desktop_qualification_admission_contract.py
+COPY .github/scripts/desktop_qualification_evidence.py /app/desktop_qualification_evidence_contract.py
 COPY backend/ .
 
 EXPOSE 8080

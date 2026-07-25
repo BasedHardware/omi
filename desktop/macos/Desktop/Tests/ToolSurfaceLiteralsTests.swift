@@ -5,7 +5,8 @@ import XCTest
 
 final class ToolSurfaceLiteralsTests: XCTestCase {
   private let dispatchFiles: Set<String> = [
-    "Desktop/Sources/FloatingControlBar/RealtimeHubController.swift"
+    "Desktop/Sources/FloatingControlBar/RealtimeHubController.swift",
+    "Desktop/Sources/FloatingControlBar/RealtimeHubController+Tools.swift",
   ]
 
   func testToolDispatchLiteralsAreConfinedToGeneratedSurfaces() throws {

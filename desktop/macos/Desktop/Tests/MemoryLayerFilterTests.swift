@@ -166,14 +166,14 @@ final class MemoryLayerFilterTests: XCTestCase {
 
   func testLayerFilterControlsRenderOnlyAfterCanonicalLifecycleExposure() throws {
     let source = try memoriesPageSource()
+    let headerStart = try XCTUnwrap(source.range(of: "private var header: some View"))
+    let headerSource = source[headerStart.lowerBound...]
+    let lifecycleGate = try XCTUnwrap(
+      headerSource.range(of: "if viewModel.canonicalLifecycleExposed {")?.lowerBound)
+    let layerOptions = try XCTUnwrap(
+      headerSource.range(of: "ForEach(MemoryLayerFilter.allCases)")?.lowerBound)
 
-    XCTAssertTrue(source.contains("if viewModel.canonicalLifecycleExposed {\n        // Layer filter dropdown"))
-    XCTAssertTrue(source.contains("ForEach(MemoryLayerFilter.allCases)"))
-    XCTAssertLessThan(
-      try XCTUnwrap(
-        source.range(of: "if viewModel.canonicalLifecycleExposed {\n        // Layer filter dropdown")?.lowerBound),
-      try XCTUnwrap(source.range(of: "ForEach(MemoryLayerFilter.allCases)")?.lowerBound)
-    )
+    XCTAssertLessThan(lifecycleGate, layerOptions)
   }
 
   private func memoriesPageSource() throws -> String {

@@ -224,6 +224,7 @@ try:
         MAX_SYNC_FRAME_BYTES,
         decode_files_to_wav,
         decode_opus_file_to_wav,
+        get_wav_duration,
         retrieve_file_paths,
     )
 finally:
@@ -314,8 +315,8 @@ class TestDecodeOpusFileToWav:
 
     # --- Corrupt stream boundaries ---
 
-    def test_one_corrupt_frame_in_middle_rejects_whole_file(self):
-        """A valid prefix plus a corrupt frame must not become partial success."""
+    def test_corrupt_frame_in_middle_keeps_decoded_prefix(self):
+        """Decoding stops at the bad frame; the frames already written survive."""
         klass, _ = _failing_decoder(fail_on={2})
         with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'test.bin')
@@ -324,8 +325,8 @@ class TestDecodeOpusFileToWav:
 
             result = decode_opus_file_to_wav(bin_path, wav_path)
 
-            assert result is False
-            assert not os.path.exists(wav_path)
+            assert result is True
+            assert get_wav_duration(wav_path) > 0
 
     def test_first_frame_corrupt_rejects_file(self):
         """A corrupt first frame has no recoverable decoded result."""
@@ -340,8 +341,8 @@ class TestDecodeOpusFileToWav:
             assert result is False
             assert not os.path.exists(wav_path)
 
-    def test_corrupt_tail_rejects_valid_prefix(self):
-        """A valid prefix followed by a corrupt tail remains retryable input."""
+    def test_corrupt_tail_keeps_valid_prefix(self):
+        """An app kill truncates the tail; the recording before it is not lost."""
         klass, _ = _failing_decoder(fail_on={4})
         with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'test.bin')
@@ -350,12 +351,12 @@ class TestDecodeOpusFileToWav:
 
             result = decode_opus_file_to_wav(bin_path, wav_path)
 
-            assert result is False
-            assert not os.path.exists(wav_path)
+            assert result is True
+            assert get_wav_duration(wav_path) > 0
 
-    def test_multiple_corrupt_frames_reject_whole_file(self):
-        """Any malformed frame invalidates the complete transport stream."""
-        klass, _ = _failing_decoder(fail_on={1, 3})
+    def test_first_corrupt_frame_bounds_the_kept_prefix(self):
+        """Decoding stops at the first bad frame, so later frames never land."""
+        klass, instance = _failing_decoder(fail_on={1, 3})
         with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'test.bin')
             wav_path = os.path.join(d, 'test.wav')
@@ -363,8 +364,10 @@ class TestDecodeOpusFileToWav:
 
             result = decode_opus_file_to_wav(bin_path, wav_path)
 
-            assert result is False
-            assert not os.path.exists(wav_path)
+            assert result is True
+            assert instance.decode.call_count == 2
+            with wave.open(wav_path, 'rb') as wav_file:
+                assert wav_file.getnframes() == len(FAKE_PCM_FRAME) // 2
 
     # --- All-corrupt payload ---
 
@@ -420,8 +423,8 @@ class TestDecodeOpusFileToWav:
 
     # --- Corrupt / malformed length prefix ---
 
-    def test_truncated_frame_data_rejects_valid_prefix(self):
-        """Length prefix says N bytes but file ends early: retain client WAL."""
+    def test_truncated_frame_data_keeps_valid_prefix(self):
+        """Length prefix says N bytes but file ends early: keep what decoded."""
         klass, _ = _good_decoder()
         with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'truncated.bin')
@@ -436,8 +439,8 @@ class TestDecodeOpusFileToWav:
 
             result = decode_opus_file_to_wav(bin_path, wav_path)
 
-            assert result is False
-            assert not os.path.exists(wav_path)
+            assert result is True
+            assert get_wav_duration(wav_path) > 0
 
     def test_truncated_frame_as_first_entry_returns_false(self):
         """Truncated data with no prior valid frames → False."""
@@ -454,8 +457,8 @@ class TestDecodeOpusFileToWav:
             assert result is False
             assert not os.path.exists(wav_path)
 
-    def test_incomplete_length_prefix_at_eof_rejects_valid_prefix(self):
-        """Only 2 bytes remain for a length prefix: do not commit partial audio."""
+    def test_incomplete_length_prefix_at_eof_keeps_valid_prefix(self):
+        """Only 2 bytes remain for a length prefix: commit what already decoded."""
         klass, _ = _good_decoder()
         with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'partial_prefix.bin')
@@ -467,11 +470,11 @@ class TestDecodeOpusFileToWav:
 
             result = decode_opus_file_to_wav(bin_path, wav_path)
 
-            assert result is False
-            assert not os.path.exists(wav_path)
+            assert result is True
+            assert get_wav_duration(wav_path) > 0
 
-    def test_gigantic_length_prefix_rejects_whole_file_before_read(self):
-        """0xFFFFFFFF frame length must not permit a valid prefix to commit."""
+    def test_gigantic_length_prefix_stops_before_read(self):
+        """0xFFFFFFFF frame length is refused without reading the claimed bytes."""
         klass, instance = _good_decoder()
         with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'giant_prefix.bin')
@@ -484,11 +487,11 @@ class TestDecodeOpusFileToWav:
 
             result = decode_opus_file_to_wav(bin_path, wav_path)
 
-            assert result is False
+            assert result is True
             assert instance.decode.call_count == 1
-            assert not os.path.exists(wav_path)
+            assert get_wav_duration(wav_path) > 0
 
-    def test_frame_length_above_cap_rejected_before_read(self):
+    def test_frame_length_above_cap_stops_before_read(self):
         """Malformed Opus frame lengths use the same cap as PCM decoding."""
         klass, instance = _good_decoder()
         with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
@@ -502,9 +505,9 @@ class TestDecodeOpusFileToWav:
 
             result = decode_opus_file_to_wav(bin_path, wav_path)
 
-            assert result is False
+            assert result is True
             assert instance.decode.call_count == 1
-            assert not os.path.exists(wav_path)
+            assert get_wav_duration(wav_path) > 0
 
 
 class TestRetrieveFilePaths:
@@ -645,9 +648,8 @@ class TestDecodeFilesToWavOpus:
 
     # --- Multiple files ---
 
-    def test_mixed_batch_valid_and_corrupt_is_rejected(self):
-        """One corrupt required file prevents a false completed batch."""
-        good_klass, _ = _good_decoder()
+    def test_unreadable_file_does_not_discard_its_batch(self):
+        """A file that decodes nothing is dropped; its siblings still sync."""
         with tempfile.TemporaryDirectory() as d:
             valid_bin = self._opus_filename(d, ts=1710000001)
             corrupt_bin = self._opus_filename(d, ts=1710000002)
@@ -668,12 +670,44 @@ class TestDecodeFilesToWavOpus:
                 self._write_valid_opus_bin(valid_bin)
                 _write_opus_bin(corrupt_bin, [FAKE_OPUS_FRAME] * 5)
 
-                with pytest.raises(HTTPException) as exc_info:
-                    decode_files_to_wav([valid_bin, corrupt_bin])
+                wav_files = decode_files_to_wav([valid_bin, corrupt_bin])
 
-            assert exc_info.value.status_code == 400
+            assert wav_files == [valid_bin.replace('.bin', '.wav')]
+            assert os.path.exists(valid_bin.replace('.bin', '.wav'))
+            assert not os.path.exists(corrupt_bin.replace('.bin', '.wav'))
             assert not os.path.exists(valid_bin)
             assert not os.path.exists(corrupt_bin)
+
+    def test_batch_fails_only_when_nothing_decodes(self):
+        """Every file unreadable → 400, so the job is not marked complete."""
+        klass, _ = _failing_decoder(fail_on=set(range(self.ENOUGH_FRAMES)))
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
+            first = self._opus_filename(d, ts=1710000001)
+            second = self._opus_filename(d, ts=1710000002)
+            self._write_valid_opus_bin(first)
+            self._write_valid_opus_bin(second)
+
+            with pytest.raises(HTTPException) as exc_info:
+                decode_files_to_wav([first, second])
+
+            assert exc_info.value.status_code == 400
+
+    def test_truncated_tail_keeps_the_decodable_prefix(self):
+        """An interrupted writer leaves a partial frame; earlier audio survives."""
+        klass, _ = _good_decoder()
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
+            bin_path = self._opus_filename(d)
+            with open(bin_path, 'wb') as f:
+                for _ in range(self.ENOUGH_FRAMES):
+                    f.write(struct.pack('<I', len(FAKE_OPUS_FRAME)))
+                    f.write(FAKE_OPUS_FRAME)
+                f.write(struct.pack('<I', len(FAKE_OPUS_FRAME)))
+                f.write(FAKE_OPUS_FRAME[:-1])
+
+            wav_files = decode_files_to_wav([bin_path])
+
+            assert wav_files == [bin_path.replace('.bin', '.wav')]
+            assert get_wav_duration(wav_files[0]) > 0
 
 
 class TestMergeAndCapVadSegments:

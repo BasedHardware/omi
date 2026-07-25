@@ -10,6 +10,7 @@ import pytest
 from google.api_core.exceptions import AlreadyExists
 
 import database.conversations as conversations_db
+from database import conversation_finalization_jobs as jobs_db
 from models.conversation_enums import ConversationStatus
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.merge_conversations import validate_merge_compatibility
@@ -115,10 +116,32 @@ def test_lifecycle_service_allows_only_declared_transitions(lifecycle_store):
     )
 
     assert lifecycle_service.admit_processing('uid', 'conversation') is True
-    assert lifecycle_service.complete('uid', 'conversation') is True
-    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.completed
+    # processing -> merging stays undeclared: merge only ever admits completed conversations.
     with pytest.raises(lifecycle_service.LifecycleTransitionError, match='invalid lifecycle transition'):
         lifecycle_service.begin_merge('uid', 'conversation')
+    assert lifecycle_service.complete('uid', 'conversation') is True
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.completed
+
+
+def test_merge_admission_and_lifecycle_agree_on_completed(lifecycle_store):
+    """The two gates in POST /v1/conversations/merge must agree on the admitted status.
+
+    validate_merge_compatibility rejects every status except completed, so completed is the only
+    status that can reach begin_merge. If the transition table omits completed -> merging, every
+    accepted merge raises LifecycleTransitionError, which is an unhandled 500 and makes the merge
+    feature unusable. merge_conversations' failure rollback documents the same edge in reverse.
+    """
+    conversations = [
+        {'id': 'conversation', 'status': ConversationStatus.completed.value},
+        {'id': 'other', 'status': ConversationStatus.completed.value},
+    ]
+    is_valid, error_message, _ = validate_merge_compatibility(conversations)
+    assert (is_valid, error_message) == (True, None)
+
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.completed.value, discarded=False)
+
+    assert lifecycle_service.begin_merge('uid', 'conversation') is True
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.merging
 
 
 def test_generic_lifecycle_field_write_fails_closed(lifecycle_store):
@@ -192,13 +215,17 @@ def test_rollback_processing_admission_respects_discard(lifecycle_store):
     assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.processing.value
 
 
-def test_discard_fences_a_stale_processing_result_and_completion(lifecycle_store):
+def test_a_discard_does_not_fence_a_processing_result_or_completion(lifecycle_store):
+    # A discard records that a conversation held nothing when it was judged, and
+    # a later sync can arrive carrying the speech it was missing. Treating it as
+    # terminal stranded those: transcribed, untitled, and invisible to their
+    # owner, with the reprocess meant to recover them hitting the same fence.
     lifecycle_store.put_conversation(
         'uid',
         'conversation',
         status=ConversationStatus.processing.value,
         discarded=True,
-        title='user-kept terminal state',
+        title='judged empty when it was judged',
     )
 
     persisted = lifecycle_service.persist_processed_conversation(
@@ -207,18 +234,15 @@ def test_discard_fences_a_stale_processing_result_and_completion(lifecycle_store
             'id': 'conversation',
             'status': ConversationStatus.completed,
             'discarded': False,
-            'title': 'stale processor output',
+            'title': 'what the sync filled it with',
             'data_protection_level': 'standard',
         },
     )
 
-    assert persisted is False
-    assert lifecycle_service.complete('uid', 'conversation') is False
-    assert lifecycle_store.conversation('uid', 'conversation') == {
-        'status': ConversationStatus.processing.value,
-        'discarded': True,
-        'title': 'user-kept terminal state',
-    }
+    assert persisted is True
+    stored = lifecycle_store.conversation('uid', 'conversation')
+    assert stored['discarded'] is False
+    assert stored['title'] == 'what the sync filled it with'
 
 
 def test_missing_conversation_fences_processing_result_without_resurrection(lifecycle_store):
@@ -293,3 +317,46 @@ def test_merge_rejects_processing_conversations():
 
     assert (is_valid, warning_message) == (False, None)
     assert error_message == 'Conversation processing is not ready (status: processing). Wait for it to complete.'
+
+
+def test_processing_admission_guard_renews_the_lease_while_the_processor_is_alive(monkeypatch):
+    """A live synchronous processor must keep its admission lease fresh so the
+    crash-orphan sweep can never mistake it for a stranded row (#10461 ownership
+    fence). The guard renews the lease on a heartbeat while the guarded block runs.
+    """
+    renewed = threading.Event()
+    renew_calls: list[tuple[str, str]] = []
+
+    def fake_renew(uid, conversation_id):
+        renew_calls.append((uid, conversation_id))
+        renewed.set()
+        return True
+
+    monkeypatch.setattr(jobs_db, 'renew_processing_lease', fake_renew)
+    monkeypatch.setattr(lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
+
+    with lifecycle_service.processing_admission_guard('uid', 'conversation'):
+        # Block inside the guarded block until the heartbeat has renewed at least once.
+        assert renewed.wait(timeout=5.0)
+
+    assert renew_calls
+
+
+def test_processing_admission_guard_stops_the_heartbeat_when_the_processor_finishes(monkeypatch):
+    """On exit the guard must stop the heartbeat so a finished processor releases its lease."""
+    renew_calls: list[tuple[str, str]] = []
+    stop_seen = threading.Event()
+
+    def fake_renew(uid, conversation_id):
+        renew_calls.append((uid, conversation_id))
+        return True
+
+    monkeypatch.setattr(jobs_db, 'renew_processing_lease', fake_renew)
+    monkeypatch.setattr(lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
+
+    with lifecycle_service.processing_admission_guard('uid', 'conversation'):
+        pass  # the guarded block finishes immediately; the heartbeat should not hot-loop
+    # After exit, allow a brief window for any in-flight renewal to settle, then snapshot.
+    snapshot_after_exit = len(renew_calls)
+    stop_seen.wait(timeout=0.05)
+    assert len(renew_calls) == snapshot_after_exit

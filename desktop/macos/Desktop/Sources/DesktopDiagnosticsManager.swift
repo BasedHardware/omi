@@ -12,17 +12,53 @@ enum DesktopHealthEventName: String {
   case pttAudioCaptureWatchdogTriggered = "ptt_audio_capture_watchdog_triggered"
   case pttAudioCaptureDeviceRouteChanged = "ptt_audio_capture_device_route_changed"
   case pttCommitted = "ptt_committed"
+  case pttAudioCaptureLifecycle = "ptt_audio_capture_lifecycle"
+  case voiceTurnStarted = "voice_turn_started"
+  case voiceTurnTerminal = "voice_turn_terminal"
+  case voiceToolLatency = "voice_tool_latency"
   case realtimeTokenMintFailed = "realtime_token_mint_failed"
   case realtimeProviderExpectedIdleTeardown = "realtime_provider_expected_idle_teardown"
   case realtimeProviderExpectedSessionRotation = "realtime_provider_expected_session_rotation"
   case realtimeProviderPolicyClose = "realtime_provider_policy_close"
   case realtimeProviderSessionError = "realtime_provider_session_error"
+  case realtimeProviderCloseResolution = "realtime_provider_close_resolution"
+  case userVisibleIssue = "user_visible_issue"
+  case betaDiagnosticTrail = "beta_diagnostic_trail"
   case fallbackTriggered = "fallback_triggered"
 }
 
 enum DesktopFallbackOutcome: String {
   case recovered
   case degraded
+  case exhausted
+}
+
+enum DesktopStateAuthoritySeam: String {
+  case chatTranscriptProjection = "chat_transcript_projection"
+  case onboardingSetupState = "onboarding_setup_state"
+  case connectorStatus = "connector_status"
+}
+
+/// The immediate customer-turn/recovery decision made after a realtime transport
+/// closes. This is deliberately separate from the raw close event: the close is
+/// captured before the controller chooses a replacement, failover, or terminal
+/// path, while this closed set records that decision without provider payloads.
+enum RealtimeProviderCloseTurnOutcome: String {
+  case notInterrupted = "not_interrupted"
+  case failed
+  case pendingReplacement = "pending_replacement"
+}
+
+enum RealtimeProviderCloseRecoveryAction: String {
+  case none
+  case sessionRewarm = "session_rewarm"
+  case providerFailover = "provider_failover"
+  case cascade
+}
+
+enum RealtimeProviderCloseRecoveryResult: String {
+  case notNeeded = "not_needed"
+  case started
   case exhausted
 }
 
@@ -58,11 +94,24 @@ final class DesktopDiagnosticsManager {
 
   private let lock = NSLock()
   private var snapshots: [DesktopHealthSnapshot] = []
+  private var betaTrailSnapshots: [DesktopHealthSnapshot] = []
   private let snapshotLimit = 150
+  /// Wall-clock start of each in-flight realtime voice tool call, keyed by the
+  /// hub's transport key. A start/stop timer for `voice_tool_latency`; cleared
+  /// on turn reset so it can't grow unbounded.
+  private var voiceToolStarts: [String: Date] = [:]
+  private var realtimeProviderCloseAttemptID = 0
+  /// State-authority checks can sit on hot UI projection/read paths. Emit each
+  /// bounded seam/direction/subject at most once per process while still keeping
+  /// the check itself cheap enough to run at every authoritative read point.
+  private var reportedStateAuthoritySignals: Set<String> = []
+  private let betaTrailSnapshotLimit = 50
   private var consecutiveNearZeroPTTTurns = 0
   private var lastPTTWatchdogIncidentAt: Date?
+  private var lastUserVisibleSentryIncidentAt: [String: Date] = [:]
   private let pttWatchdogThreshold = 3
   private let pttWatchdogDedupWindow: TimeInterval = 15 * 60
+  private let userVisibleSentryDedupWindow: TimeInterval = 60
   private let pttWatchdogMinimumAudioSeconds: Double = 0.35
 
   private init() {}
@@ -276,6 +325,53 @@ final class DesktopDiagnosticsManager {
       trackRemotely: false)
   }
 
+  /// Per-tool wall time on a realtime voice turn: from the provider's tool
+  /// request to the result being returned — i.e. the "dead air" the user hears
+  /// while a tool runs. Instruments where voice latency actually goes (fast
+  /// local reads vs. slow backend/RAG round-trips) so optimization targets the
+  /// real cost instead of a guess. Bounded dimensions only: `tool_name` and
+  /// `provider` are a fixed low-cardinality set; no arguments or output content.
+  func recordVoiceToolLatency(toolName: String, provider: String, durationMs: Double, resultBytes: Int) {
+    record(
+      .voiceToolLatency,
+      properties: [
+        "tool_name": toolName,
+        "provider": provider,
+        "duration_ms": rounded(durationMs),
+        "result_bytes": resultBytes,
+      ])
+  }
+
+  /// Start a `voice_tool_latency` timer for a realtime tool call (the hub's
+  /// transport key). Kept here rather than on the hub so the 1500-line
+  /// RealtimeHubController does not grow.
+  func markVoiceToolStart(key: String) {
+    lock.lock()
+    voiceToolStarts[key] = Date()
+    lock.unlock()
+  }
+
+  /// Stop the timer for `key` and emit `voice_tool_latency`. No-op if no start
+  /// was recorded (stale/dropped result).
+  func finishVoiceToolLatency(key: String, toolName: String, provider: String, resultBytes: Int) {
+    lock.lock()
+    let start = voiceToolStarts.removeValue(forKey: key)
+    lock.unlock()
+    guard let start else { return }
+    recordVoiceToolLatency(
+      toolName: toolName,
+      provider: provider,
+      durationMs: Date().timeIntervalSince(start) * 1000,
+      resultBytes: resultBytes)
+  }
+
+  /// Drop any in-flight voice tool timers — called on realtime turn reset.
+  func clearVoiceToolStarts() {
+    lock.lock()
+    voiceToolStarts.removeAll()
+    lock.unlock()
+  }
+
   func recordPTTSilentTurn(
     source: String,
     mode: String,
@@ -318,6 +414,14 @@ final class DesktopDiagnosticsManager {
 
     record(.pttAudioCaptureSilentTurn, properties: properties)
 
+    if nearZero && micPermissionGranted && watchdogEligible {
+      recordUserVisibleIssue(
+        area: "ptt",
+        failureClass: "silent_capture",
+        phase: "audio_capture",
+        extra: properties)
+    }
+
     guard nearZero && micPermissionGranted && watchdogEligible && consecutiveNearZeroPTTTurns >= pttWatchdogThreshold
     else { return }
     recordPTTWatchdogTriggered(latestProperties: properties)
@@ -333,22 +437,152 @@ final class DesktopDiagnosticsManager {
       ],
       trackRemotely: false)
   }
+  /// Record one bounded PTT attempt lifecycle snapshot (see
+  /// `PTTAttemptLifecycleRecorder`). Routes through the shared ring buffer + Sentry
+  /// attachment path. Emitted remotely (PostHog) for EVERY terminal disposition —
+  /// including `failureClass == .committed` — so a release-health query has the
+  /// full attempt denominator (success + the causally distinct excluded/failure
+  /// classes), not only classified failures. Short tap / quiet discard / user
+  /// cancel are bounded `failure_class` values distinct from `capture_never_operational`,
+  /// so they cannot inflate a capture-failure rate. This is the authoritative,
+  /// privacy-bounded PTT terminal-outcome funnel (#10425); the ambiguous
+  /// `floating_bar_ptt_ended` `had_transcript` event is retained only for backward
+  /// compatibility and must not be read as a success/failure denominator.
+  func recordPTTAttemptLifecycle(_ snapshot: PTTAttemptLifecycleRecorder.Snapshot) {
+    record(
+      .pttAudioCaptureLifecycle,
+      properties: snapshot.properties,
+      trackRemotely: true)
+  }
+
+  /// Records a typed chat failure as a fleet-health metric. The existing bounded
+  /// `logError` path owns the matching Sentry incident to avoid duplicate capture.
+  func recordChatFailure(errorClass: String) {
+    recordUserVisibleIssue(
+      area: "chat",
+      failureClass: errorClass,
+      phase: "query",
+      captureSentry: false)
+  }
+
+  /// Records a global-hotkey registration failure surfaced by Carbon
+  /// `RegisterEventHotKey`.
+  ///
+  /// This is a hard-terminal failure — the shortcut will not fire on this machine
+  /// (typically another app, or a macOS System Settings > Keyboard > Shortcuts
+  /// entry — even a disabled one — already owns the combination). Because no
+  /// provider, mode, or correctness path switches and there is nothing to fail
+  /// open to, the telemetry contract routes this through the incident path, not
+  /// `recordFallback`. `isConflict` distinguishes `eventHotKeyExistsErr` (-9878),
+  /// which is a property of the user's machine, from other `OSStatus` values.
+  func recordHotkeyRegistrationFailed(osStatus: Int, keycode: Int, modifiers: Int, isConflict: Bool) {
+    recordUserVisibleIssue(
+      area: "startup",
+      failureClass: isConflict ? "hotkey_conflict" : "unknown",
+      phase: "startup",
+      extra: [
+        "osstatus": osStatus,
+        "keycode": keycode,
+        "modifiers": modifiers,
+      ])
+  }
+
+  /// Records a beta-only typed error trail entry. The caller passes free-form local
+  /// log text only for local classification; no message or error description is
+  /// retained in the trail or cloud attachment.
+  func recordBetaLogError(
+    message: String,
+    error: Error?,
+    failureDiagnostics: [String: Any]? = nil,
+    enabled: Bool = BetaEnhancedDiagnosticsConfiguration.isEnabled
+  ) {
+    guard enabled else { return }
+    let nsError = error as NSError?
+    var trailProperties: [String: Any] = [
+      "component": betaComponent(for: message),
+      "operation": "error",
+      "phase": "handling",
+      "outcome": "failed",
+      "failure_class": betaFailureClass(for: nsError),
+      "error_domain": betaErrorDomain(nsError?.domain),
+      "error_code": betaErrorCode(nsError?.code),
+    ]
+    if let failureDiagnostics {
+      trailProperties.merge(sanitizedDiagnosticValues(failureDiagnostics)) { _, new in new }
+    }
+    let snapshot = DesktopHealthSnapshot(
+      timestamp: Date(),
+      event: .betaDiagnosticTrail,
+      properties: commonProperties().merging(
+        sanitized(trailProperties)
+      ) { _, new in new })
+    lock.lock()
+    betaTrailSnapshots.append(snapshot)
+    if betaTrailSnapshots.count > betaTrailSnapshotLimit {
+      betaTrailSnapshots.removeFirst(betaTrailSnapshots.count - betaTrailSnapshotLimit)
+    }
+    lock.unlock()
+  }
+
+  func recordVoiceTurnStarted(turnID: String, intent: String) {
+    record(
+      .voiceTurnStarted,
+      properties: [
+        "attempt_id": turnID,
+        "intent": intent,
+        "telemetry_schema_version": 1,
+      ])
+  }
 
   func recordVoiceTurnTerminal(
+    turnID: String,
     reason: String,
     route: String,
+    intent: String,
+    durationMs: Int?,
+    answerDelivered: Bool,
     staleEventCount: Int,
     invalidTransitionCount: Int
   ) {
-    let breadcrumb = Breadcrumb(level: .info, category: "voice.turn.terminal")
-    breadcrumb.message = "Voice turn reached terminal state"
-    breadcrumb.data = [
+    var properties: [String: Any] = [
+      "attempt_id": turnID,
       "terminal_reason": reason,
+      "outcome": Self.voiceTurnOutcome(for: reason),
+      "response_outcome": Self.voiceResponseOutcome(for: reason, answerDelivered: answerDelivered),
       "route": route,
+      "intent": intent,
       "stale_event_count": staleEventCount,
       "invalid_transition_count": invalidTransitionCount,
+      "telemetry_schema_version": 1,
     ]
+    if let durationMs {
+      properties["duration_ms"] = max(0, durationMs)
+    }
+    record(.voiceTurnTerminal, properties: properties)
+
+    let breadcrumb = Breadcrumb(level: .info, category: "voice.turn.terminal")
+    breadcrumb.message = "Voice turn reached terminal state"
+    breadcrumb.data = properties
     SentrySDK.addBreadcrumb(breadcrumb)
+  }
+
+  static func voiceTurnOutcome(for reason: String) -> String {
+    switch reason {
+    case "success":
+      return "success"
+    case "too_short", "silent_rejected", "cancelled", "owner_changed",
+      "interrupted_by_barge_in", "explicit_interrupt", "cleanup":
+      return "excluded"
+    default:
+      return "failure"
+    }
+  }
+
+  static func voiceResponseOutcome(for reason: String, answerDelivered: Bool) -> String {
+    if answerDelivered || reason == "success" {
+      return "success"
+    }
+    return voiceTurnOutcome(for: reason)
   }
 
   func recordVoiceTurnAnomaly(kind: String, phase: String, route: String) {
@@ -401,6 +635,55 @@ final class DesktopDiagnosticsManager {
     record(.fallbackTriggered, properties: properties, trackRemotely: true)
   }
 
+  /// Detects silent ownership disagreement without changing which state wins.
+  /// `subject` must be a closed product enum (for example a connector kind), not
+  /// a user, message, turn, file, or session identifier.
+  @discardableResult
+  func recordStateAuthoritySignal(
+    seam: DesktopStateAuthoritySeam,
+    from: String,
+    to: String,
+    direction: String,
+    subject: String? = nil
+  ) -> Bool {
+    let safeFrom = safeFallbackLabel(from, default: "none")
+    let safeTo = safeFallbackLabel(to, default: "none")
+    let safeDirection = safeFallbackLabel(direction, default: "other")
+    let safeSubject = subject.map { safeFallbackLabel($0, default: "other") }
+    let dedupeKey = [seam.rawValue, safeFrom, safeTo, safeDirection, safeSubject ?? "none"]
+      .joined(separator: "|")
+
+    lock.lock()
+    let inserted = reportedStateAuthoritySignals.insert(dedupeKey).inserted
+    lock.unlock()
+    guard inserted else { return false }
+
+    var extra: [String: Any] = [
+      "seam": seam.rawValue,
+      "direction": safeDirection,
+      "signal_scope": "process",
+      "failure_class": "FC-split-mutation-authority",
+    ]
+    if let safeSubject {
+      extra["subject"] = safeSubject
+    }
+    recordFallback(
+      area: "state_authority",
+      from: from,
+      to: to,
+      reason: seam == .connectorStatus ? "status_inferred" : "state_divergence",
+      outcome: .degraded,
+      extra: extra)
+    return true
+  }
+
+  /// Realtime token-mint failure. `phase` is bucketed to a closed set (`warm` =
+  /// background pre-warm vs `barge_in_replacement` = replacement during an active
+  /// turn) so a release-health query has a bounded warm-vs-active dimension (#10425).
+  /// `outcome`/`mintAttemptId` are optional: a mint failure is point-in-time, so its
+  /// terminal fate (recovered/degraded/exhausted) is carried by the correlated
+  /// `fallback_triggered`{area=realtime_hub} event; `mint_attempt_id` lets a query
+  /// join the two without provider/time heuristics.
   func recordRealtimeTokenMintFailed(
     provider: String,
     reason: String,
@@ -409,12 +692,14 @@ final class DesktopDiagnosticsManager {
     backendRoute: String? = nil,
     upstreamStatusCode: Int? = nil,
     providerCode: String? = nil,
-    retryable: Bool? = nil
+    retryable: Bool? = nil,
+    outcome: DesktopFallbackOutcome? = nil,
+    mintAttemptId: String? = nil
   ) {
     var properties: [String: Any] = [
       "provider": safeProvider(provider),
       "reason": reason,
-      "phase": phase,
+      "phase": bucketRealtimePhase(phase),
     ]
     if let httpStatusCode {
       properties["http_status_code"] = httpStatusCode
@@ -431,11 +716,18 @@ final class DesktopDiagnosticsManager {
     if let retryable {
       properties["retryable"] = retryable
     }
+    if let outcome {
+      properties["outcome"] = outcome.rawValue
+    }
+    if let mintAttemptId, !mintAttemptId.isEmpty {
+      properties["mint_attempt_id"] = mintAttemptId
+    }
     record(
       .realtimeTokenMintFailed,
       properties: properties)
   }
 
+  @discardableResult
   func recordRealtimeProviderClose(
     provider: String,
     category: String?,
@@ -443,7 +735,11 @@ final class DesktopDiagnosticsManager {
     activeTurn: Bool,
     authMode: CredentialAuthMode?,
     failureClass: CredentialFailureClass?
-  ) {
+  ) -> Int {
+    lock.lock()
+    realtimeProviderCloseAttemptID += 1
+    let closeAttemptID = realtimeProviderCloseAttemptID
+    lock.unlock()
     let normalizedCategory = category ?? failureClass?.logValue ?? "unclassified"
     let event: DesktopHealthEventName
     switch normalizedCategory {
@@ -457,11 +753,21 @@ final class DesktopDiagnosticsManager {
     default:
       event = .realtimeProviderSessionError
     }
+    // Bounded release-health dimension: a single `expected` flag + `lifecycle_class`
+    // so a release-regression rollup can exclude normal idle teardown / planned
+    // session rotation without enumerating the two `realtime_provider_expected_*`
+    // event names (#10425). Expected lifecycle stays inspectable, never an error.
+    let expectedLifecycle =
+      event == .realtimeProviderExpectedIdleTeardown
+      || event == .realtimeProviderExpectedSessionRotation
     var properties: [String: Any] = [
       "provider": safeProvider(provider),
       "category": normalizedCategory,
       "alive_for_seconds": Int(aliveFor),
       "active_turn": activeTurn,
+      "close_attempt_id": closeAttemptID,
+      "expected": expectedLifecycle,
+      "lifecycle_class": expectedLifecycle ? "expected" : "error",
     ]
     if normalizedCategory == RealtimeHubCloseCategory.expectedSessionRotation.rawValue {
       properties["recovery_action"] = "rotate_realtime_session"
@@ -479,6 +785,31 @@ final class DesktopDiagnosticsManager {
     record(
       event,
       properties: properties)
+    return closeAttemptID
+  }
+
+  /// Pair a provider-close event with the controller's immediate lifecycle
+  /// decision. `closeAttemptID` is a process-local monotonic counter, useful
+  /// only to join bounded events from one analytics session; it is not a user,
+  /// device, turn, or provider-session identifier.
+  func recordRealtimeProviderCloseResolution(
+    closeAttemptID: Int,
+    provider: String,
+    activeTurn: Bool,
+    turnOutcome: RealtimeProviderCloseTurnOutcome,
+    recoveryAction: RealtimeProviderCloseRecoveryAction,
+    recoveryResult: RealtimeProviderCloseRecoveryResult
+  ) {
+    record(
+      .realtimeProviderCloseResolution,
+      properties: [
+        "close_attempt_id": closeAttemptID,
+        "provider": safeProvider(provider),
+        "active_turn": activeTurn,
+        "turn_outcome": turnOutcome.rawValue,
+        "recovery_action": recoveryAction.rawValue,
+        "recovery_result": recoveryResult.rawValue,
+      ])
   }
 
   func currentSnapshotsForSentry() -> [[String: Any]] {
@@ -488,24 +819,122 @@ final class DesktopDiagnosticsManager {
     return current
   }
 
+  private func currentCloudSnapshotsForSentry(
+    includeBetaDiagnostics: Bool = BetaEnhancedDiagnosticsConfiguration.isEnabled
+  ) -> [[String: Any]] {
+    lock.lock()
+    var current = snapshots.map { cloudSafeSnapshot($0, includeBetaDiagnostics: includeBetaDiagnostics) }
+    if includeBetaDiagnostics {
+      current.append(
+        contentsOf: betaTrailSnapshots.map {
+          cloudSafeSnapshot($0, includeBetaDiagnostics: true)
+        })
+    }
+    lock.unlock()
+    return current
+  }
+
+  private func currentSnapshotsForLocalExport() -> [[String: Any]] {
+    currentSnapshotsForSentry()
+  }
+
+  private func cloudSafeSnapshot(
+    _ snapshot: DesktopHealthSnapshot,
+    includeBetaDiagnostics: Bool
+  ) -> [String: Any] {
+    var result: [String: Any] = [
+      "timestamp": ISO8601DateFormatter.desktopDiagnostics.string(from: snapshot.timestamp),
+      "event": snapshot.event.rawValue,
+    ]
+
+    let includesTypedIncidentContext =
+      snapshot.event == .userVisibleIssue
+      || snapshot.event == .pttAudioCaptureWatchdogTriggered
+      || snapshot.event == .pttAudioCaptureLifecycle
+      || snapshot.event == .realtimeProviderSessionError
+      || snapshot.event == .realtimeProviderCloseResolution
+      || (includeBetaDiagnostics && snapshot.event == .betaDiagnosticTrail)
+    guard includesTypedIncidentContext else {
+      return result
+    }
+
+    for key in DesktopDiagnosticsManager.cloudIncidentSnapshotKeys {
+      if let value = snapshot.properties[key] {
+        result[key] = value
+      }
+    }
+    return result
+  }
+
+  private static let cloudIncidentSnapshotKeys: Set<String> = [
+    "area", "failure_class", "phase", "build", "build_number", "os_version", "device_model",
+    "source", "mode", "hub_active", "turn_audio_seconds", "voiced_audio_seconds", "peak", "rms",
+    "is_near_zero", "watchdog_eligible", "consecutive_silent_turns", "tcc_microphone_granted",
+    "input_device_class", "close_attempt_id", "turn_outcome", "recovery_action", "recovery_result",
+    "threshold",
+    "component", "operation", "outcome", "error_domain", "error_code",
+    "path_class", "database_file_size_bytes", "volume_free_bytes", "volume_total_bytes",
+    "osstatus", "keycode", "modifiers",
+    // PTT attempt lifecycle correlation (PTTAttemptLifecycleRecorder).
+    "attempt_id", "capture_start_outcome", "capture_start_status_class",
+    "ms_to_first_audio_bucket", "ms_to_first_usable_frame_bucket",
+    "first_chunks_energy_bucket", "turn_disposition",
+    "input_route_class", "input_route_source", "route_changed_during_attempt",
+    "recovery_triggered", "recovery_attempt_id", "recovery_outcome_of_next_turn",
+    "judgeable", "telemetry_schema_version",
+  ]
+  /// Exact-match property keys that must never appear on a health snapshot
+  /// (local ring buffer or remote PostHog). Bounded cousins like
+  /// `transcript_length`, `failure_class`, or `error_code` are intentionally NOT
+  /// listed and survive the filter.
+  private static let contentBearingPropertyKeys: Set<String> = [
+    "transcript", "transcript_text", "audio", "audio_data", "pcm", "prompt", "prompt_text",
+    "response", "response_text", "message", "error_message", "error_description", "error_desc",
+    "localized_description", "description", "detail", "detail_reason", "detail_message",
+    "reason_detail", "content", "title", "notification_title", "window_title", "screen_title",
+  ]
+
   func writeDiagnosticsAttachment() -> URL? {
     let payload: [String: Any] = [
       "generated_at": ISO8601DateFormatter.desktopDiagnostics.string(from: Date()),
       "privacy": "safe_operational_fields_only",
       "snapshots": currentSnapshotsForSentry(),
     ]
-    guard JSONSerialization.isValidJSONObject(payload),
-      let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted])
-    else { return nil }
-    let url = FileManager.default.temporaryDirectory
-      .appendingPathComponent("omi-desktop-diagnostics-\(UUID().uuidString).json")
-    do {
-      try data.write(to: url, options: .atomic)
-      return url
-    } catch {
-      log("DesktopDiagnostics: failed to write diagnostics attachment")
-      return nil
+    return writeDiagnosticsPayload(payload, prefix: "omi-desktop-diagnostics")
+  }
+
+  /// Creates a bounded, redacted local-context attachment for a cloud incident.
+  /// This intentionally replaces raw `omi.log` uploads: the attachment includes
+  /// safe health snapshots and a scrubbed tail only, never the entire log file.
+  func writeIncidentDiagnosticsAttachment(
+    incidentID: String = UUID().uuidString,
+    area: String,
+    failureClass: String,
+    phase: String,
+    logPath: String = omiLogFilePath(),
+    maxLogLines: Int = 200,
+    includeBetaDiagnostics: Bool = BetaEnhancedDiagnosticsConfiguration.isEnabled
+  ) -> URL? {
+    let incident = incidentProperties(
+      id: incidentID,
+      area: area,
+      failureClass: failureClass,
+      phase: phase)
+    var payload: [String: Any] = [
+      "generated_at": ISO8601DateFormatter.desktopDiagnostics.string(from: Date()),
+      "privacy": "redacted_incident_context",
+      "incident": incident,
+      "snapshots": currentCloudSnapshotsForSentry(includeBetaDiagnostics: includeBetaDiagnostics),
+    ]
+    // Beta uploads the independently assembled typed trail only. The free-form
+    // local-log tail remains available exclusively to the existing non-beta path.
+    if !includeBetaDiagnostics {
+      payload["redacted_log_tail"] = redactedLogTail(
+        logPath: logPath,
+        maxLines: maxLogLines,
+        strictCloudRedaction: true)
     }
+    return writeDiagnosticsPayload(payload, prefix: "omi-desktop-incident")
   }
 
   // MARK: - Local (offline) diagnostics export
@@ -551,7 +980,7 @@ final class DesktopDiagnosticsManager {
     }
     sections.append(header.joined(separator: "\n"))
 
-    let snapshots = currentSnapshotsForSentry()
+    let snapshots = currentSnapshotsForLocalExport()
     if JSONSerialization.isValidJSONObject(snapshots),
       let data = try? JSONSerialization.data(withJSONObject: snapshots, options: [.prettyPrinted]),
       let json = String(data: data, encoding: .utf8)
@@ -567,7 +996,11 @@ final class DesktopDiagnosticsManager {
 
   /// Read up to `maxLines` from the end of the log file, redacting anything that
   /// looks like a secret (tokens, JWTs, credential kv pairs) line by line.
-  private func redactedLogTail(logPath: String, maxLines: Int) -> String {
+  private func redactedLogTail(
+    logPath: String,
+    maxLines: Int,
+    strictCloudRedaction: Bool = false
+  ) -> String {
     guard let handle = FileHandle(forReadingAtPath: logPath) else {
       return "(no readable log file at \(logPath))"
     }
@@ -588,7 +1021,9 @@ final class DesktopDiagnosticsManager {
     }
     let lines = content.split(separator: "\n", omittingEmptySubsequences: false)
     let tail = lines.suffix(max(0, maxLines))
-    return tail.map { redactSensitive(String($0)) }.joined(separator: "\n")
+    return tail.map {
+      redactSensitive(String($0), strictCloudRedaction: strictCloudRedaction)
+    }.joined(separator: "\n")
   }
 
   /// Defensive best-effort redaction. The desktop log is not expected to contain
@@ -605,6 +1040,12 @@ final class DesktopDiagnosticsManager {
       ("(?i)(authorization:\\s*basic)\\s+[A-Za-z0-9+/=]{8,}", "$1 [redacted]"),
       // Bare OpenAI-style API keys.
       ("sk-[A-Za-z0-9_-]{20,}", "sk-[redacted]"),
+      // Email addresses and absolute filesystem paths are operationally unnecessary
+      // in a cloud diagnostic attachment.
+      ("(?i)[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", "[redacted-email]"),
+      ("/(?:Users|private|tmp|var|Applications)/[^\\s\\\"']+", "/[redacted-path]"),
+      // URLs can contain query parameters and opaque resource identifiers.
+      ("https?://[^\\s\\\"']+", "https://[redacted-url]"),
       // key=..., token: ..., password="..." in query strings, JSON, or kv logs.
       (
         "(?i)(api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|password|passwd|secret|client[_-]?secret|authorization)([\"']?\\s*[=:]\\s*[\"']?)[A-Za-z0-9._~+/=-]{6,}",
@@ -616,7 +1057,33 @@ final class DesktopDiagnosticsManager {
     }
   }()
 
-  private func redactSensitive(_ line: String) -> String {
+  private static let safeOperationalLogMarkers = [
+    "ptt", "audio_capture", "audiocapture", "silent capture", "voiceturn", "voice turn",
+    "realtime", "sentry", "desktopdiagnostics", "app crash", "crash recovery",
+    "chat telemetry event=",
+  ]
+
+  private static let contentBearingLogMarkers = [
+    "conversation", "transcript", "prompt", "response", "message", "memory", "title",
+    "window", "screen", "ocr", "clipboard",
+  ]
+
+  private func redactSensitive(_ line: String, strictCloudRedaction: Bool = false) -> String {
+    let normalized = line.lowercased()
+    if strictCloudRedaction, normalized.contains("device=[") {
+      return "[redacted-device-bearing-log-line]"
+    }
+    if strictCloudRedaction,
+      DesktopDiagnosticsManager.contentBearingLogMarkers.contains(where: normalized.contains)
+    {
+      return "[redacted-content-bearing-log-line]"
+    }
+    if strictCloudRedaction,
+      !DesktopDiagnosticsManager.safeOperationalLogMarkers.contains(where: normalized.contains)
+    {
+      return "[redacted-unclassified-log-line]"
+    }
+
     var result = line
     for (regex, template) in DesktopDiagnosticsManager.redactionPatterns {
       let range = NSRange(result.startIndex..., in: result)
@@ -629,21 +1096,123 @@ final class DesktopDiagnosticsManager {
     func resetForTests() {
       lock.lock()
       snapshots.removeAll()
+      betaTrailSnapshots.removeAll()
+      reportedStateAuthoritySignals.removeAll()
+      realtimeProviderCloseAttemptID = 0
       consecutiveNearZeroPTTTurns = 0
       lastPTTWatchdogIncidentAt = nil
+      lastUserVisibleSentryIncidentAt.removeAll()
       lock.unlock()
     }
   #endif
+
+  private func shouldCaptureIncident(area: String, failureClass: String) -> Bool {
+    let key = "\(area):\(failureClass)"
+    let now = Date()
+    lock.lock()
+    defer { lock.unlock() }
+    if let last = lastUserVisibleSentryIncidentAt[key],
+      now.timeIntervalSince(last) < userVisibleSentryDedupWindow
+    {
+      return false
+    }
+    lastUserVisibleSentryIncidentAt[key] = now
+    return true
+  }
+
+  private func recordUserVisibleIssue(
+    area: String,
+    failureClass: String,
+    phase: String,
+    extra: [String: Any] = [:],
+    captureSentry: Bool = true
+  ) {
+    let incidentID = UUID().uuidString
+    var properties: [String: Any] = [
+      "area": safeIncidentArea(area),
+      "failure_class": safeIncidentLabel(failureClass),
+      "phase": safeIncidentPhase(phase),
+    ]
+    let allowedExtras = sanitized(extra).filter {
+      DesktopDiagnosticsManager.allowedIncidentExtraKeys.contains($0.key)
+    }
+    for (key, value) in allowedExtras where properties[key] == nil {
+      properties[key] = value
+    }
+    record(.userVisibleIssue, properties: properties)
+
+    let sentryProperties = properties.merging(["incident_id": incidentID]) { _, new in new }
+    guard captureSentry,
+      !AppBuild.isNonProduction,
+      shouldCaptureIncident(
+        area: properties["area"] as? String ?? "other",
+        failureClass: properties["failure_class"] as? String ?? "other"),
+      let attachmentURL = writeIncidentDiagnosticsAttachment(
+        incidentID: incidentID,
+        area: area,
+        failureClass: failureClass,
+        phase: phase)
+    else { return }
+    defer { try? FileManager.default.removeItem(at: attachmentURL) }
+
+    SentrySDK.capture(message: "Desktop user-visible issue") { scope in
+      scope.setLevel(.warning)
+      scope.setTag(value: properties["area"] as? String ?? "other", key: "diagnostic_area")
+      scope.setTag(value: properties["failure_class"] as? String ?? "other", key: "failure_class")
+      scope.setContext(value: sentryProperties, key: "desktop_incident")
+      scope.addAttachment(
+        Attachment(
+          path: attachmentURL.path,
+          filename: "desktop-incident-diagnostics.json",
+          contentType: "application/json"))
+    }
+  }
+
+  private func incidentProperties(
+    id: String,
+    area: String,
+    failureClass: String,
+    phase: String
+  ) -> [String: String] {
+    [
+      "incident_id": id,
+      "area": safeIncidentArea(area),
+      "failure_class": safeIncidentLabel(failureClass),
+      "phase": safeIncidentPhase(phase),
+    ]
+  }
+
+  private func writeDiagnosticsPayload(_ payload: [String: Any], prefix: String) -> URL? {
+    guard JSONSerialization.isValidJSONObject(payload),
+      let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted])
+    else { return nil }
+    let url = FileManager.default.temporaryDirectory
+      .appendingPathComponent("\(prefix)-\(UUID().uuidString).json")
+    do {
+      try data.write(to: url, options: .atomic)
+      return url
+    } catch {
+      log("DesktopDiagnostics: failed to write diagnostics attachment")
+      return nil
+    }
+  }
 
   private func record(
     _ event: DesktopHealthEventName,
     properties: [String: Any],
     trackRemotely: Bool = true
   ) {
+    // Defense-in-depth privacy guard (#10425): no health snapshot — local ring buffer
+    // or remote PostHog `desktop_health_event` — may carry raw transcript/audio/
+    // prompt/response/free-form text. Drop any content-bearing key a caller might
+    // accidentally thread through `extra`. Exact-match only so bounded keys like
+    // `transcript_length` survive; this is the single chokepoint for every emit.
+    let safeProperties = commonProperties().merging(sanitized(properties)) { _, new in new }
+      .filter { !DesktopDiagnosticsManager.contentBearingPropertyKeys.contains($0.key) }
     let snapshot = DesktopHealthSnapshot(
       timestamp: Date(),
       event: event,
-      properties: commonProperties().merging(sanitized(properties)) { _, new in new })
+      properties: safeProperties)
 
     lock.lock()
     snapshots.append(snapshot)
@@ -673,15 +1242,8 @@ final class DesktopDiagnosticsManager {
       "recovery_result": "not_attempted",
     ]) { _, new in new }
     record(.pttAudioCaptureWatchdogTriggered, properties: properties)
-
-    SentrySDK.capture(message: "PTT Silent Capture Watchdog Triggered") { scope in
-      scope.setLevel(.warning)
-      scope.setTag(value: "ptt_silent_capture_watchdog", key: "diagnostic")
-      scope.setContext(value: properties, key: "audio_capture")
-      scope.setContext(
-        value: ["snapshots": self.currentSnapshotsForSentry()],
-        key: "desktop_health_snapshots")
-    }
+    // The initial user-visible silent-capture incident owns the Sentry attachment.
+    // Keep this threshold event in PostHog without duplicating an incident upload.
   }
 
   private func commonProperties() -> [String: Any] {
@@ -704,6 +1266,8 @@ final class DesktopDiagnosticsManager {
         safe[key] = String(string.prefix(96))
       case let int as Int:
         safe[key] = int
+      case let int64 as Int64:
+        safe[key] = Int(clamping: int64)
       case let double as Double:
         safe[key] = rounded(double)
       case let bool as Bool:
@@ -715,8 +1279,54 @@ final class DesktopDiagnosticsManager {
     return safe
   }
 
+  private func sanitizedDiagnosticValues(_ properties: [String: Any]) -> [String: Any] {
+    sanitized(properties)
+  }
+
   private func rounded(_ value: Double) -> Double {
     (value * 100).rounded() / 100
+  }
+
+  private func betaComponent(for message: String) -> String {
+    let value = message.lowercased()
+    if value.contains("chat") || value.contains("bridge") { return "chat" }
+    if value.contains("realtime") || value.contains("omni") { return "realtime" }
+    if value.contains("ptt") || value.contains("audio") || value.contains("transcription") { return "audio" }
+    if value.contains("bluetooth") || value.contains("wifi") || value.contains("device") { return "device" }
+    if value.contains("auth") || value.contains("sign") { return "auth" }
+    if value.contains("sync") || value.contains("wal") { return "sync" }
+    if value.contains("update") || value.contains("sparkle") { return "update" }
+    if value.contains("rewind") || value.contains("screen") { return "capture" }
+    return "app"
+  }
+
+  private func betaFailureClass(for error: NSError?) -> String {
+    guard let error else { return "unknown" }
+    if error.domain == NSURLErrorDomain {
+      switch error.code {
+      case NSURLErrorTimedOut: return "timeout"
+      case NSURLErrorNotConnectedToInternet, NSURLErrorCannotConnectToHost: return "network_unavailable"
+      default: return "network_error"
+      }
+    }
+    if error.domain == NSPOSIXErrorDomain { return "posix_error" }
+    if error.domain == NSCocoaErrorDomain { return "cocoa_error" }
+    return "other"
+  }
+
+  private func betaErrorDomain(_ domain: String?) -> String {
+    switch domain {
+    case NSURLErrorDomain: return "url"
+    case NSPOSIXErrorDomain: return "posix"
+    case NSCocoaErrorDomain: return "cocoa"
+    case nil: return "none"
+    default: return "other"
+    }
+  }
+
+  private func betaErrorCode(_ code: Int?) -> Int {
+    guard let code else { return 0 }
+    return max(-9_999, min(9_999, code))
   }
 
   private func classifyInputDevice(_ description: String?) -> String {
@@ -734,6 +1344,38 @@ final class DesktopDiagnosticsManager {
     default: return "unknown"
     }
   }
+
+  private func safeIncidentArea(_ area: String) -> String {
+    switch area {
+    case "ptt", "chat", "realtime", "crash", "startup": return area
+    default: return "other"
+    }
+  }
+
+  private func safeIncidentPhase(_ phase: String) -> String {
+    switch phase {
+    case "audio_capture", "transcript", "query", "runtime", "session", "startup", "other": return phase
+    default: return "other"
+    }
+  }
+
+  private func safeIncidentLabel(_ label: String) -> String {
+    let allowed: Set<String> = [
+      "silent_capture", "tool_stall", "agent_error", "agent_runtime", "attachment_upload",
+      "authentication", "bridge_unavailable", "bridge_start_failed", "browser_extension_missing",
+      "concurrent_request", "encoding", "quota", "resource_exhausted", "session_setup",
+      "hotkey_conflict", "timeout", "transient_network", "unknown", "user_report",
+    ]
+    return allowed.contains(label) ? label : "other"
+  }
+
+  private static let allowedIncidentExtraKeys: Set<String> = [
+    "source", "mode", "hub_active",
+    "turn_audio_seconds", "voiced_audio_seconds",
+    "peak", "rms", "is_near_zero", "watchdog_eligible", "consecutive_silent_turns",
+    "tcc_microphone_granted", "input_device_class", "recovery_action", "recovery_result",
+    "osstatus", "keycode", "modifiers",
+  ]
 
   private static let allowedFallbackAreas: Set<String> = [
     "sync_dispatch",
@@ -759,6 +1401,18 @@ final class DesktopDiagnosticsManager {
     "automation_bridge",
     "transcription_retry",
     "task_reconcile",
+    // Named owners for paths that previously collapsed into `area=other` (#10425):
+    // screen-capture health flap, memory device-scope, desktop update policy,
+    // out-of-turn TTS, task workflow control, and auth-token storage. Keeping them
+    // out of `other` lets a release-health query separate a benign screen-capture
+    // flap from a genuinely degraded path.
+    "screen_capture",
+    "memory_scope",
+    "desktop_update",
+    "tts_fallback",
+    "task_workflow",
+    "auth_storage",
+    "state_authority",
     "other",
   ]
 
@@ -790,6 +1444,8 @@ final class DesktopDiagnosticsManager {
     "ble_decode_failed",
     "bind_failed",
     "db_backoff",
+    "state_divergence",
+    "status_inferred",
   ]
 
   private func bucketFallbackArea(_ area: String) -> String {
@@ -800,6 +1456,19 @@ final class DesktopDiagnosticsManager {
   private func bucketFallbackReason(_ reason: String) -> String {
     let label = safeFallbackLabel(reason, default: "other")
     return Self.allowedFallbackReasons.contains(label) ? label : "other"
+  }
+  /// Closed set for the realtime token-mint `phase` dimension (#10425): a release
+  /// query can rely on `warm` (background pre-warm) vs `barge_in_replacement`
+  /// (socket replacement during an active turn) instead of an open string.
+  private static let allowedRealtimeMintPhases: Set<String> = [
+    "warm",
+    "barge_in_replacement",
+    "other",
+  ]
+
+  private func bucketRealtimePhase(_ phase: String) -> String {
+    let label = safeFallbackLabel(phase, default: "other")
+    return Self.allowedRealtimeMintPhases.contains(label) ? label : "other"
   }
 
   private func safeFallbackLabel(_ value: String, default defaultValue: String) -> String {

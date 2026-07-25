@@ -108,9 +108,9 @@ def oauth_authorize(
     permissions = unique_permissions
 
     return templates.TemplateResponse(
+        request,
         "oauth_authenticate.html",
         {
-            "request": request,
             "app_id": app_id,
             "app_name": app.name,
             "app_image": app.image,

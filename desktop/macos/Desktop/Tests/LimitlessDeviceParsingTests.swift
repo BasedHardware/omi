@@ -98,6 +98,53 @@ final class LimitlessDeviceParsingTests: XCTestCase {
     XCTAssertEqual(result?.payload.count, 0)
   }
 
+  // MARK: - Flash-page / opus extraction (negative-varint OOB)
+
+  /// A 10-byte varint whose terminator sets bit 63 decodes to a negative `Int`.
+  /// The flash-page parsers computed `pos + length` / `min(pos + length, count)`
+  /// straight from this value, driving the cursor negative and trapping the next
+  /// `flashPageData[pos]` subscript. Every embedded length now routes through
+  /// `boundedFieldLength`, which rejects length <= 0.
+  private let negativeLengthVarint: [UInt8] = Array(repeating: 0xFF, count: 9) + [0x7F]
+
+  func testParseFlashPageInfoSurvivesNegativeChunkLength() {
+    let connection = makeConnection()
+    var page: [UInt8] = [0x1a]  // field 3 (chunk), wire type 2
+    page += negativeLengthVarint
+    page += [0x00, 0x00, 0x00, 0x00]
+
+    // Must not trap; malformed chunk is skipped, defaults returned.
+    let info = connection.parseFlashPageInfo(page)
+    XCTAssertEqual(info["did_start_session"] as? Bool, false)
+    XCTAssertEqual(info["did_stop_recording"] as? Bool, false)
+  }
+
+  func testExtractOpusFramesSurvivesNegativeWrapperLength() {
+    let connection = makeConnection()
+    var page: [UInt8] = [0x1a]  // audio wrapper, wire type 2
+    page += negativeLengthVarint
+    page += [0x00, 0x00, 0x00, 0x00]
+
+    let frames = connection.extractOpusFramesFromFlashPage(page)
+    XCTAssertEqual(frames.count, 0)
+  }
+
+  /// A valid wrapper + valid audio field whose INNER length-delimited field has a
+  /// negative varint length — the recursive extractor used to run `pos += length`
+  /// unconditionally (the `length > 0` guard short-circuits), rewinding `pos`
+  /// below `start` and trapping `data[pos]`.
+  func testExtractOpusFramesSurvivesNegativeRecursiveInnerLength() {
+    let connection = makeConnection()
+    var recursiveTarget: [UInt8] = [0x0a]  // field 1, wire type 2
+    recursiveTarget += negativeLengthVarint  // negative inner length (11 bytes total)
+    let audioField: [UInt8] = [0x12, UInt8(recursiveTarget.count)] + recursiveTarget
+    let wrapper: [UInt8] = [0x1a, UInt8(audioField.count)] + audioField
+    let page = wrapper + [0x00, 0x00]
+
+    let frames = connection.extractOpusFramesFromFlashPage(page)
+    XCTAssertEqual(frames.count, 0)
+  }
+
   // MARK: - Helpers
 
   private func makeConnection() -> LimitlessDeviceConnection {

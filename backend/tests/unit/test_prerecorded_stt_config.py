@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from config.prerecorded_stt import (
+    DEFAULT_STT_PRERECORDED_MODELS,
     PrerecordedSTTConfigurationError,
     PrerecordedSTTService,
     get_prerecorded_models,
@@ -19,30 +20,15 @@ def test_model_preferences_are_read_from_current_environment(monkeypatch):
     assert get_prerecorded_models() == ('modulate-velma-2',)
 
 
-def test_empty_model_preference_retains_deepgram_default():
-    assert get_prerecorded_models({'STT_PRERECORDED_MODEL': ' , '}) == ('dg-nova-3',)
+def test_empty_model_preference_uses_non_deepgram_defaults():
+    assert get_prerecorded_models({'STT_PRERECORDED_MODEL': ' , '}) == DEFAULT_STT_PRERECORDED_MODELS
 
 
 def test_literal_and_opaque_deploy_requirements_share_provider_contract():
-    assert required_env_for_model_config('dg-nova-3') == ('DEEPGRAM_API_KEY',)
-    assert required_env_for_model_config('modulate-velma-2') == (
-        'MODULATE_API_KEY',
-        'DEEPGRAM_API_KEY',
-    )
-    assert required_env_for_model_config('parakeet') == (
-        'HOSTED_PARAKEET_API_URL',
-        'DEEPGRAM_API_KEY',
-    )
-    assert required_env_for_model_config('unknown-model') == ('DEEPGRAM_API_KEY',)
-    assert required_env_for_model_config('parakeet,dg-nova-3') == (
-        'HOSTED_PARAKEET_API_URL',
-        'DEEPGRAM_API_KEY',
-    )
-    assert required_env_for_model_config(None, source_is_opaque=True) == (
-        'DEEPGRAM_API_KEY',
-        'MODULATE_API_KEY',
-        'HOSTED_PARAKEET_API_URL',
-    )
+    expected = {'HOSTED_PARAKEET_API_URL', 'MODULATE_API_KEY'}
+    for model_config in ('dg-nova-3', 'modulate-velma-2', 'parakeet', 'unknown-model', 'parakeet,dg-nova-3'):
+        assert set(required_env_for_model_config(model_config)) == expected
+    assert set(required_env_for_model_config(None, source_is_opaque=True)) == expected
 
 
 def test_runtime_configuration_error_identifies_provider_and_missing_binding():

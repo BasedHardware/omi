@@ -7,6 +7,9 @@ type Props = {
   fallback?: ReactNode
   // Optional label so the logged error says which boundary caught it.
   label?: string
+  // Notified once when the subtree throws (telemetry / mode-change reporting).
+  // Must not throw itself — it runs inside componentDidCatch.
+  onError?: (error: Error) => void
 }
 type State = { failed: boolean }
 
@@ -21,7 +24,12 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error(`[ErrorBoundary${this.props.label ? `:${this.props.label}` : ''}]`, error, info.componentStack)
+    console.error(
+      `[ErrorBoundary${this.props.label ? `:${this.props.label}` : ''}]`,
+      error,
+      info.componentStack
+    )
+    this.props.onError?.(error)
   }
 
   render(): ReactNode {

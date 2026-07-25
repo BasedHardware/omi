@@ -91,6 +91,12 @@ def main() -> int:
         default=None,
         help='Metrics bearer token (default: read from METRICS_SECRET env var)',
     )
+    parser.add_argument(
+        '--lane',
+        action='append',
+        dest='lanes',
+        help='Named auto lane to smoke (repeatable; defaults to omi:auto:session-titles)',
+    )
     args = parser.parse_args()
 
     token = (args.token or os.environ.get('OMI_LLM_GATEWAY_SERVICE_TOKEN') or '').strip()
@@ -104,16 +110,25 @@ def main() -> int:
         'X-Omi-Service-Caller': 'backend',
         'Content-Type': 'application/json',
     }
-    payload = {
-        'model': 'omi:auto:session-titles',
-        'messages': [{'role': 'user', 'content': 'Give this conversation a concise title: project planning.'}],
-    }
+    lanes = args.lanes or ['omi:auto:session-titles']
 
     with httpx.Client(timeout=20.0) as client:
         _get_ready(client, base_url, headers)
-        response = client.post(f'{base_url}/v1/chat/completions', headers=headers, json=payload)
-        _raise_for_status(response, '/v1/chat/completions')
-        body: Dict[str, Any] = cast(Dict[str, Any], response.json())
+        for lane in lanes:
+            payload = {
+                'model': lane,
+                'messages': [{'role': 'user', 'content': 'Reply briefly to confirm this named lane is serving.'}],
+                'max_completion_tokens': 32,
+            }
+            response = client.post(f'{base_url}/v1/chat/completions', headers=headers, json=payload)
+            _raise_for_status(response, f'/v1/chat/completions ({lane})')
+            body: Dict[str, Any] = cast(Dict[str, Any], response.json())
+            choices = cast(list[Dict[str, Any]], body.get('choices') or [{}])
+            message: Dict[str, Any] = cast(Dict[str, Any], choices[0].get('message', {}))
+            content = message.get('content')
+            if not isinstance(content, str) or not content.strip():
+                print(f'ERROR: {lane} response did not contain non-empty choices[0].message.content')
+                return 1
         if args.check_metrics:
             metrics_token = (args.metrics_token or os.environ.get('METRICS_SECRET') or '').strip()
             if not metrics_token:
@@ -121,15 +136,6 @@ def main() -> int:
                 return 2
             _assert_success_metric(client, base_url, metrics_token)
 
-    choices = cast(list[Dict[str, Any]], body.get('choices') or [{}])
-    message: Dict[str, Any] = cast(Dict[str, Any], choices[0].get('message', {}))
-    content = message.get('content')
-    if not isinstance(content, str):
-        print('ERROR: response did not contain choices[0].message.content')
-        return 1
-    if not content.strip():
-        print('ERROR: response content was empty')
-        return 1
     print('LLM gateway smoke passed')
     return 0
 

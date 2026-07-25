@@ -40,7 +40,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
       decoration: BoxDecoration(
         color: const Color(0xFF1F1F25),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Color(0xFF35343B), width: 1),
+        border: Border.all(color: const Color(0xFF35343B), width: 1),
       ),
       child: Row(
         children: [
@@ -87,8 +87,9 @@ class _PaymentsPageState extends State<PaymentsPage> {
                     Consumer<PaymentMethodProvider>(
                       builder: (context, provider, child) {
                         // PayPal is no longer offered; only treat Stripe as a valid active method.
-                        final activeMethod =
-                            provider.activeMethod == PaymentMethodType.stripe ? provider.activeMethod : null;
+                        final activeMethod = provider.activeMethod == PaymentMethodType.stripe
+                            ? provider.activeMethod
+                            : null;
                         final hasActiveMethod = activeMethod != null;
 
                         return Column(

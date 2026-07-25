@@ -7,7 +7,12 @@ class AudioRingBuffer:
     def __init__(self, duration_seconds: float, sample_rate: int):
         self.sample_rate = sample_rate
         self.bytes_per_second = sample_rate * 2  # PCM16 mono
-        self.capacity = int(duration_seconds * self.bytes_per_second)
+        # A non-positive sample_rate or duration yields a zero (or, unclamped, negative) capacity.
+        # sample_rate reaches here straight from the /v4/listen query param, which is only range
+        # checked for opus codecs, so a pcm client can send 0 or a negative value. Clamp so
+        # bytearray() cannot raise "negative count" at construction. Mirrors resample_pcm, which
+        # guards the same non-positive rate.
+        self.capacity = max(0, int(duration_seconds * self.bytes_per_second))
         self.buffer = bytearray(self.capacity)
         self.write_pos = 0
         self.total_bytes_written = 0
@@ -15,6 +20,12 @@ class AudioRingBuffer:
 
     def write(self, data: bytes, timestamp: float):
         """Append audio data with timestamp."""
+        if self.capacity <= 0:
+            # Zero-capacity buffer (non-positive sample_rate/duration): skip rather than IndexError
+            # on buffer[0] or ZeroDivisionError on % capacity when the first audio frame arrives.
+            # last_write_timestamp stays None, so get_time_range()/extract() report nothing buffered
+            # and speaker matching handles that, keeping the live session alive.
+            return
         for byte in data:
             self.buffer[self.write_pos] = byte
             self.write_pos = (self.write_pos + 1) % self.capacity

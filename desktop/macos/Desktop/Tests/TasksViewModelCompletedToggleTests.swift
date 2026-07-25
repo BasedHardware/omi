@@ -58,6 +58,19 @@ final class TasksViewModelCompletedToggleTests: XCTestCase {
     XCTAssertEqual(vm.displayTasks.map(\.id), ["done-1"])
   }
 
+  func testTodoPresentationDoesNotUseDoneRowsAsItsLoadingState() {
+    let store = TasksStore.shared
+    store.resetSessionState()
+    store.completedTasks = [task(id: "done-1", completed: true)]
+    store.isLoadingIncomplete = true
+
+    let vm = TasksViewModel()
+
+    XCTAssertTrue(vm.activeTasks.isEmpty)
+    XCTAssertTrue(vm.isActiveViewLoading)
+    XCTAssertFalse(vm.hasLoadedActiveView)
+  }
+
   private func task(id: String, completed: Bool) -> TaskActionItem {
     TaskActionItem(
       id: id,

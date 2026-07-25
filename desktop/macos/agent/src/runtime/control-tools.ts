@@ -1207,25 +1207,28 @@ export async function handleAgentControlToolCall(
             ? context.kernel.defaultAdapterIdForRun(parentRunId)
             : spawnProfile.adapterId);
         /**
-         * Realtime control always stamps its own run as `parentRunId` so the
-         * producer journal is bound to the exact authorized turn.  That
-         * provenance must not turn an explicit user-selected local provider
-         * into a child of the managed pi-mono session: delegateAgent correctly
-         * pins children to their parent's credential boundary.
+         * A kernel-authorized primary model tool carries its producing run so
+         * the journal can attach the child to the exact assistant turn. That
+         * applies to typed main chat as well as realtime, and a typed turn has
+         * a producerTurnId. The journal link is provenance, not delegation:
+         * an explicitly user-selected local provider must start as an
+         * independent local-provider run rather than inherit pi-mono's
+         * managed credential boundary.
          *
-         * The exception is deliberately narrow.  It requires both the
-         * kernel-issued realtime caller/run and its producer-journal
-         * descriptor, an explicit provider selector, and no producerTurnId
-         * whose validation requires an actual child parent_run_id.  Normal
-         * parent-linked delegation stays on the existing boundary-safe path.
+         * The exception remains narrow: the tool invocation, parent run, and
+         * producer journal must all be kernel-authorized, the caller must be
+         * the primary coordinator, and the provider must be explicit. Leaf
+         * workers never receive this tool and ordinary parent-linked children
+         * still stay inside their parent's provider boundary.
          */
         const isAuthorizedIndependentLocalProviderSpawn = Boolean(
           parentRunId
           && context.authorizedCallerRunId === parentRunId
           && context.authorizedProducerJournal
+          && context.authorizedToolInvocation?.toolName === "spawn_agent"
+          && context.executionRole === "coordinator"
           && parsed.provider
           && parsed.provider === adapterId
-          && !producerJournal?.producerTurnId,
         );
         const inheritsParentExecutionProfile = Boolean(parentRunId) && !isAuthorizedIndependentLocalProviderSpawn;
         const cwd = parsed.cwd ?? (inheritsParentExecutionProfile ? undefined : spawnProfile.workingDirectory);
@@ -2130,6 +2133,26 @@ function stringifyToolResult(
 ): string {
   const scope = controlToolOutputScope.getStore();
   const toolName = scope?.toolName ?? "unscoped_control_tool";
+  // Realtime spawn results have a second, stricter compaction boundary in the
+  // protocol relay (`compactRealtimeSpawnToolResult`).  Do not run the generic
+  // provider projection first: accepted spawn payloads contain the durable
+  // child run/session/attempt lifecycle under `agents[0]`, and that projection
+  // can legitimately be hundreds of KB when the admitted context is large.
+  // The relay compacts the full accepted result into the bounded canonical
+  // child receipt before it reaches Swift or a provider. Typed/main-chat
+  // callers keep the normal projection path below.
+  if (
+    toolName === "spawn_agent"
+      && scope?.context.authorizedToolInvocation?.toolName === "spawn_agent"
+      && scope?.context.authorizedProducerJournal
+      && ["realtime", "realtime_voice"].includes(scope.context.authorizedProducerJournal.surface.surfaceKind)
+      && Array.isArray(payload.agents)
+      && payload.agents.length > 0
+      && !Object.hasOwn(payload, "error")
+      && payload.toolResultEnvelope === undefined
+  ) {
+    return stringifyRealtimeSpawnPrecompactResult(payload, requestedStatus, scope.context);
+  }
   const existingEnvelope = payload.toolResultEnvelope;
   if (existingEnvelope) {
     // Dedicated detail tools have already persisted the complete source before
@@ -2199,6 +2222,46 @@ function stringifyToolResult(
   }
 
   return stringifyProviderBudgetFailure(toolName, undefined, null, scope?.context);
+}
+
+/**
+ * Preserve the complete accepted spawn shape until the realtime relay can
+ * derive its compact semantic child receipt. This is intentionally scoped to
+ * a kernel-authorized realtime producer; every other control-tool caller still
+ * uses `stringifyToolResult`'s bounded projection/artifact behavior.
+ */
+function stringifyRealtimeSpawnPrecompactResult(
+  payload: Record<string, unknown>,
+  requestedStatus: "succeeded" | "failed" | "cancelled" | undefined,
+  context: AgentControlToolContext,
+): string {
+  const fullJson = JSON.stringify(payload) ?? "{}";
+  const bytes = Buffer.byteLength(fullJson, "utf8");
+  const status = requestedStatus ?? (Object.hasOwn(payload, "error") ? "failed" : "succeeded");
+  const ownerId = safeControlToolOwnerId(context);
+  const fullOutputRef = ownerId && context.callerSessionId
+    ? persistToolOutputArtifact(context, ownerId, context.callerSessionId, "spawn_agent", fullJson)
+    : null;
+  // The second compaction boundary removes the large run/context fields. Keep
+  // the source envelope explicitly artifact-backed so the relay's finalizer
+  // can preserve the complete control result while replacing its projection.
+  // A missing artifact is not silently relabeled as an untruncated success.
+  if (!fullOutputRef) {
+    return stringifyProviderBudgetFailure("spawn_agent", bytes, null, context);
+  }
+  const envelope = makeToolResultEnvelope({
+    status,
+    truncated: true,
+    originalBytes: bytes,
+    projectedBytes: Math.min(Math.max(0, bytes - 1), MAX_REALTIME_TOOL_RESULT_BYTES),
+    fullOutputRef,
+    provenance: controlToolResultProvenance(context, "spawn_agent"),
+  });
+  return JSON.stringify({
+    ok: status === "succeeded",
+    ...payload,
+    toolResultEnvelope: envelope,
+  });
 }
 
 function stringifyProviderBudgetFailure(

@@ -16,7 +16,7 @@ from pydantic import ValidationError
 
 import database.chat as chat_db
 from models.chat import ChatSession, FileChat
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, llm_executor, run_blocking
 from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
 import logging
 
@@ -198,16 +198,21 @@ class FileChatTool:
             answer = await self._ask_vision_stream(question, files, callback)
             return answer
 
-        # _ensure_thread_and_assistant can fail before ask_stream runs.
-        # ask_stream has its own try/finally on callback, so only guard
-        # the setup phase here.
+        # The Assistants setup and stream iterator both use the synchronous
+        # OpenAI client. Keep the complete non-vision sequence off the event
+        # loop so graph.py can enforce its first-event and total-stream bounds.
+        return await run_blocking(llm_executor, self._ensure_and_ask_stream, question, file_ids, callback)
+
+    def _ensure_and_ask_stream(self, question: str, file_ids: List[str], callback: _StreamingCallbackProtocol) -> str:
+        """Run the synchronous Assistants setup and stream in the LLM executor."""
         try:
             self._ensure_thread_and_assistant()
         except Exception:
+            # ask_stream owns its callback finalizer; setup fails before that
+            # function is entered, so terminate the callback here instead.
             callback.end_nowait()
             raise
-        answer = self.ask_stream(self.uid, question, file_ids, self.thread_id, self.assistant_id, callback)
-        return answer
+        return self.ask_stream(self.uid, question, file_ids, self.thread_id, self.assistant_id, callback)
 
     async def _ask_vision_stream(
         self,
@@ -264,8 +269,8 @@ class FileChatTool:
             try:
                 thread = openai.beta.threads.retrieve(self.thread_id, timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use
                 logger.info(f"Retrieved existing thread: {thread.id}")
-            except Exception as e:
-                logger.error(f"Failed to retrieve thread {self.thread_id}, creating new one. Error: {e}")
+            except Exception as error:
+                logger.error('file chat thread retrieval failed error_type=%s', type(error).__name__)
                 self.thread_id = None
 
         if not self.thread_id:
@@ -274,8 +279,8 @@ class FileChatTool:
                 self.thread_id = thread.id
                 created_new = True
                 logger.info(f"Created new thread: {self.thread_id}")
-            except Exception as e:
-                raise Exception(f"Failed to create OpenAI thread: {e}")
+            except Exception as error:
+                raise RuntimeError('failed to create OpenAI thread') from error
 
         # Handle assistant
         if self.assistant_id:
@@ -283,8 +288,8 @@ class FileChatTool:
             try:
                 assistant = openai.beta.assistants.retrieve(self.assistant_id, timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use
                 logger.info(f"Retrieved existing assistant: {assistant.id}")
-            except Exception as e:
-                logger.error(f"Failed to retrieve assistant {self.assistant_id}, creating new one. Error: {e}")
+            except Exception as error:
+                logger.error('file chat assistant retrieval failed error_type=%s', type(error).__name__)
                 self.assistant_id = None
 
         if not self.assistant_id:
@@ -299,8 +304,8 @@ class FileChatTool:
                 self.assistant_id = assistant.id
                 created_new = True
                 logger.info(f"Created new assistant: {self.assistant_id}")
-            except Exception as e:
-                raise Exception(f"Failed to create OpenAI assistant: {e}")
+            except Exception as error:
+                raise RuntimeError('failed to create OpenAI assistant') from error
 
         # Save to database if we created new ones
         if created_new:
@@ -308,8 +313,8 @@ class FileChatTool:
                 chat_db.update_chat_session_openai_ids(
                     self.uid, self.chat_session_id, self.thread_id, self.assistant_id
                 )
-            except Exception as e:
-                logger.error(f"Failed to save thread/assistant IDs to database: {e}")
+            except Exception as error:
+                logger.error('file chat identifier save failed error_type=%s', type(error).__name__)
                 # Continue anyway - IDs will be recreated next time
 
     def _fill_question(self, uid: str, question: str, file_ids: List[str], thread_id: str) -> None:
@@ -421,17 +426,17 @@ class FileChatTool:
             for openai_file_id in _openai_file_ids(files):
                 try:
                     openai.files.delete(openai_file_id, timeout=30.0)
-                except Exception as e:
-                    logger.error(f"Failed to delete file {openai_file_id}: {e}")
+                except Exception as error:
+                    logger.error('file chat file deletion failed error_type=%s', type(error).__name__)
             chat_db.delete_multi_files(self.uid, files)
 
         if self.thread_id:
             try:
                 openai.beta.threads.delete(self.thread_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use
-            except Exception as e:
-                logger.error(f"Failed to delete thread {self.thread_id}: {e}")
+            except Exception as error:
+                logger.error('file chat thread deletion failed error_type=%s', type(error).__name__)
         if self.assistant_id:
             try:
                 openai.beta.assistants.delete(self.assistant_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use
-            except Exception as e:
-                logger.error(f"Failed to delete assistant {self.assistant_id}: {e}")
+            except Exception as error:
+                logger.error('file chat assistant deletion failed error_type=%s', type(error).__name__)

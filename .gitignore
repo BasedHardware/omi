@@ -28,6 +28,7 @@ yarn.lock
 # General
 .idea/
 .next/
+.worktrees/
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies

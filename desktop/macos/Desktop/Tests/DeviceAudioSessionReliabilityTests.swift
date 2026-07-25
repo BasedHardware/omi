@@ -208,7 +208,7 @@ final class DeviceAudioSetupCancellationTests: XCTestCase {
     await waitForBluetoothReliabilityCondition { transport.writeCallCount == 1 }
     connection.handleControlResponse([0x06, 0xC0, 0x01])
 
-    XCTAssertNil(connection.processAudioPacket([0, 0, 0xFF, 0xF1, 0x50]))
+    XCTAssertEqual(connection.processAudioPacket([0, 0, 0xFF, 0xF1, 0x50]), [])
     initialConsumer.cancel()
     _ = try? await initialConsumer.value
     await waitForBluetoothReliabilityCondition { transport.writeCallCount == 2 }
@@ -222,7 +222,7 @@ final class DeviceAudioSetupCancellationTests: XCTestCase {
     let cleanFrame: [UInt8] = [0xFF, 0xF1, 0x50, 0x80, 0, 0xE0, 0xFC]
     XCTAssertEqual(
       connection.processAudioPacket([0, 0] + cleanFrame),
-      cleanFrame
+      [cleanFrame]
     )
     connection.handleControlResponse([0x06, 0xC0, 0x01])
 
@@ -231,6 +231,29 @@ final class DeviceAudioSetupCancellationTests: XCTestCase {
     await waitForBluetoothReliabilityCondition { transport.writeCallCount == 4 }
     connection.handleControlResponse([0x06, 0xC0, 0x00])
     await connection.teardownDevice()
+  }
+
+  /// Regression: a single BLE notification carrying two complete ADTS frames
+  /// must emit BOTH (in order) from that one notification. The old code popped
+  /// only the first per notification, so frame 2 surfaced one notification late
+  /// (~64ms/frame shift, cumulative) and any surplus was discarded on stop.
+  func testSinglePacketWithTwoCompleteFramesDrainsBothInOrder() {
+    let transport = ReliabilityTestTransport(sessionGeneration: 22)
+    transport.state = .connected
+    let connection = BeeDeviceConnection(
+      device: bluetoothReliabilityTestDevice,
+      transport: transport
+    )
+    // Two complete 9-byte ADTS frames (frameLength field = 9) in ONE payload,
+    // prefixed with the 2-byte packet header processAudioPacket strips.
+    let frame1: [UInt8] = [0xFF, 0xF1, 0x00, 0x00, 0x01, 0x20, 0x00, 0xAA, 0xBB]
+    let frame2: [UInt8] = [0xFF, 0xF1, 0x00, 0x00, 0x01, 0x20, 0x00, 0xCC, 0xDD]
+
+    let frames = connection.processAudioPacket([0x00, 0x00] + frame1 + frame2)
+
+    XCTAssertEqual(
+      frames, [frame1, frame2],
+      "both complete frames from one notification must drain in order (was [frame1] before the fix)")
   }
 
   private func firstValue(

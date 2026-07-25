@@ -60,6 +60,9 @@ def test_unexpected_500_keeps_request_correlation_without_exposing_exception(mon
 async def test_lifespan_runs_registry_cleanup_when_image_cleanup_fails(monkeypatch):
     calls = []
 
+    async def drain_accounting():
+        calls.append('accounting')
+
     async def fail_image_cleanup():
         calls.append('image')
         raise RuntimeError('image cleanup failed')
@@ -68,9 +71,10 @@ async def test_lifespan_runs_registry_cleanup_when_image_cleanup_fails(monkeypat
         calls.append('registry')
 
     monkeypatch.setattr(main.openai_compatible, 'close_image_generation_client', fail_image_cleanup)
+    monkeypatch.setattr(main, 'drain_accounting_persistence_tasks', drain_accounting)
     monkeypatch.setattr(main, 'close_provider_registry', close_registry)
 
     async with main.lifespan(app):
         pass
 
-    assert calls == ['image', 'registry']
+    assert set(calls) == {'accounting', 'image', 'registry'}

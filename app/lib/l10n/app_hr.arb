@@ -1699,22 +1699,6 @@
     "@lovingOmi": {
         "description": "Title for the app review prompt"
     },
-    "leaveReviewIos": "Pomozi nam dosegnuti više ljudi ostavljanjem recenzije u App Store. Tvoj povratni podaci su nam veoma važni!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Pomozi nam dosegnuti više ljudi ostavljanjem recenzije u Google Play Storeu. Tvoj povratni podaci su nam veoma važni!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "Ocijeni na App Store",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Ocijeni na Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
-    },
     "maybeLater": "Možda kasnije",
     "@maybeLater": {
         "description": "Button text to defer action"
@@ -10521,7 +10505,7 @@
     "upgradePlan": "Nadogradi plan",
     "billingMonthly": "Mjesečno",
     "billingYearly": "Godišnje",
-    "savePercent": "Uštedite ~17%",
+    "savePercent": "Uštedite ~{percent}%",
     "popular": "Popularno",
     "currentPlan": "Trenutni",
     "neoSubtitle": "{count} pitanja mjesečno",
@@ -10727,5 +10711,60 @@
     "deviceStorageUsedOfTotal": "{used} od {total} iskorišteno",
     "deviceStorageFree": "{free} slobodno",
     "deviceStorageNearlyFull": "Uređaj je gotovo pun — sinkronizirajte kako biste oslobodili prostor.",
-    "phoneMicOfflineFallbackMessage": "Nema veze — snima se lokalno. Bit će transkribirano kad ponovno budeš na mreži."
+    "phoneMicOfflineFallbackMessage": "Nema veze — snima se lokalno. Bit će transkribirano kad ponovno budeš na mreži.",
+    "dataEncryptedBanner": "Vaši su podaci prema zadanim postavkama zaštićeni snažnom enkripcijom, a vi kontrolirate kako se pohranjuju i koriste.",
+    "rayBanMetaMicPickerTitle": "Odaberite mikrofon Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "Odaberite Bluetooth mikrofon naočala. Glazba se pauzira dok ga Omi koristi.",
+    "rayBanMetaMicPickerEmpty": "Nije pronađen nijedan Bluetooth mikrofon. Povežite naočale u postavkama iPhonea pa pokušajte ponovno.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth mikrofoni nisu se mogli učitati. Provjerite je li Bluetooth uključen pa pokušajte ponovno.",
+    "rayBanMetaMicPickerConnectError": "Povezivanje s tim mikrofonom nije uspjelo. Provjerite je li povezan u postavkama iPhonea.",
+    "cloudTranscription": "Transkripcija u oblaku",
+    "copyMessage": "Kopiraj poruku",
+    "deleteOnDeviceModel": "Obriši model",
+    "deleteOnDeviceModelConfirm": "Jeste li sigurni da želite obrisati ovaj model?",
+    "downgradeAnyway": "Ipak prijeđi na niži plan",
+    "downgradeLimitBattery": "7x veća potrošnja baterije",
+    "downgradeLimitDelay": "Kašnjenje od 5-7 sekundi",
+    "downgradeLimitQuality": "30% slabija kvaliteta transkripcije",
+    "downgradeLimitSpeakers": "Nije moguće prepoznati govornike",
+    "downgradeLimitationsHeading": "Susrest ćete se sa sljedećim ograničenjima:",
+    "downgradeToFreemiumTitle": "Prijeći na besplatni plan?",
+    "errorLoadingAudio": "Greška pri učitavanju zvuka",
+    "failedToLinkCalendarEvent": "Povezivanje s događajem u kalendaru nije uspjelo",
+    "googleCalendarConnectPrompt": "Povežite svoj Google Calendar kako biste razgovore povezali s događajima u kalendaru.",
+    "googleCalendarNotConnected": "Google Calendar nije povezan",
+    "linkedToEvent": "Povezano s „{title}”",
+    "onDeviceModelDeleted": "Model obrisan",
+    "onDeviceModelDownloadFailed": "Preuzimanje modela nije uspjelo",
+    "onDeviceModelDownloadFailedDesc": "Preuzimanje Whisper modela nije uspjelo. Pokušajte ponovno.",
+    "onDeviceModelDownloadSuccess": "Model preuzet",
+    "onDeviceModelDownloadSuccessDesc": "Whisper model uspješno je preuzet",
+    "onDeviceModelDownloaded": "Preuzeto",
+    "onDeviceModelSize": "Veličina modela",
+    "onDeviceTranscription": "Transkripcija na uređaju",
+    "onDeviceTranscriptionDesc": "Transkripcija se obrađuje lokalno na vašem uređaju",
+    "searchSettings": "Pretraži postavke…",
+    "speechToTextProvider": "Pružatelj usluge govora u tekst",
+    "speechToTextProviderDesc": "Odaberite uslugu koja se koristi za transkripciju",
+    "sttFilterAuto": "Automatski",
+    "sttModelAccuracy": "Točnost",
+    "sttModelFaster": "Brže",
+    "sttModelHigher": "Više",
+    "sttModelLower": "Niže",
+    "sttModelSlower": "Sporije",
+    "sttModelSpeed": "Brzina",
+    "sttNone": "Nijedan",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "Hvala na povratnoj informaciji!",
+    "transcriptionLanguage": "Jezik transkripcije",
+    "transcriptionLanguageDesc": "Odaberite jezik za transkripciju govora",
+    "whisperModel": "Whisper model",
+    "whisperModelDesc": "Odaberite model za transkripciju na uređaju",
+    "whisperModelSizeBase": "Osnovni",
+    "whisperModelSizeLarge": "Veliki",
+    "whisperModelSizeMedium": "Srednji",
+    "whisperModelSizeSmall": "Mali",
+    "whisperModelSizeTiny": "Sićušni"
 }

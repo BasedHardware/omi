@@ -35,6 +35,37 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(local.stored.map(\.updatedAt), [server.updatedAt])
   }
 
+  func testCacheReloadDuringPendingMutationKeepsOptimisticStar() async throws {
+    let unstarred = makeConversation(starred: false, revision: 1)
+    let suspendedStars = SuspendedConversationResults()
+    let remote = FakeConversationRemote(listResult: .success([unstarred]), countResult: .success(1))
+    remote.starHandler = { starred in try await suspendedStars.result(for: String(starred)) }
+    // The local cache still holds the pre-mutation (un-starred) row.
+    let local = FakeConversationLocal(listResult: [unstarred], count: 1)
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+
+    // Stage the optimistic star; the remote is suspended, so the mutation stays
+    // pending (pendingMutations retains it) while we reload.
+    let starTask = Task { try await repository.setStarred(id: unstarred.id, starred: true) }
+    await suspendedStars.waitUntilRequested("true")
+    XCTAssertTrue(repository.conversations[0].starred, "precondition: optimistic star is visible")
+
+    // The user toggles a filter mid-mutation → load() re-runs the cache-first
+    // path. Capture only the cache emit.
+    var cacheSnapshots: [ConversationRepositorySnapshot] = []
+    repository.onSnapshot = { if $0.source == .cache { cacheSnapshots.append($0) } }
+    await repository.load(query: .all)
+
+    XCTAssertEqual(
+      cacheSnapshots.last?.conversations.first?.starred, true,
+      "A cache reload mid-mutation must reapply the pending optimistic star, not revert it")
+
+    // Let the mutation settle so the task doesn't leak.
+    await suspendedStars.resume("true", with: .success(makeConversation(starred: true, revision: 2)))
+    try await starTask.value
+  }
+
   func testServerFailureKeepsUsefulCacheVisibleWithoutBlankingTheList() async {
     let cached = makeConversation(title: "Available offline", revision: 1)
     let remote = FakeConversationRemote(listResult: .failure(TestFailure.offline))
@@ -50,6 +81,44 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(snapshots.last?.conversations.map(\.structured.title), ["Available offline"])
     XCTAssertNil(snapshots.last?.error)
     XCTAssertFalse(snapshots.last?.isLoading ?? true)
+  }
+
+  func testLoadMoreAppendsTheNextServerPageWithoutReplacingTheVisibleList() async {
+    let firstPage = (0..<50).map { index in
+      makeConversation(id: "conversation-\(index)", title: "Conversation \(index)", revision: 100 - Double(index))
+    }
+    let second = makeConversation(id: "second", title: "Older", revision: 1)
+    let remote = FakeConversationRemote(listResult: .success(firstPage), countResult: .success(51))
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+
+    await repository.load(query: .all, includeCache: false)
+    remote.listResult = .success([second])
+    await repository.loadMore()
+
+    XCTAssertEqual(repository.conversations.map(\.id), firstPage.map(\.id) + ["second"])
+    XCTAssertEqual(remote.listRequests.map(\.offset), [0, 50])
+    XCTAssertEqual(remote.listRequests.map(\.limit), [50, 50])
+  }
+
+  func testLoadMoreRemainsAvailableWhenServerCountFailsOverCachedCount() async {
+    let firstPage = (0..<50).map { index in
+      makeConversation(id: "conversation-\(index)", title: "Conversation \(index)", revision: 100 - Double(index))
+    }
+    let second = makeConversation(id: "second", title: "Older", revision: 1)
+    let remote = FakeConversationRemote(listResult: .success(firstPage), countResult: .failure(TestFailure.offline))
+    let repository = ConversationRepository(
+      remote: remote,
+      local: FakeConversationLocal(listResult: firstPage, count: 50)
+    )
+
+    await repository.load(query: .all)
+    XCTAssertTrue(repository.hasMore)
+
+    remote.listResult = .success([second])
+    await repository.loadMore()
+
+    XCTAssertEqual(repository.conversations.map(\.id), firstPage.map(\.id) + ["second"])
+    XCTAssertEqual(remote.listRequests.map(\.offset), [0, 50])
   }
 
   func testDetailPaintsCachedTranscriptThenRevalidatesServerOwnedFields() async throws {
@@ -827,6 +896,7 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
   var titleHandler: ((String) async throws -> ServerConversation)?
   var deleteHandler: ((String) async throws -> Void)?
   var deletedIds: [String] = []
+  var listRequests: [(offset: Int, limit: Int)] = []
 
   init(
     listResult: Result<[ServerConversation], Error> = .success([]),
@@ -848,7 +918,8 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
     self.deleteResult = deleteResult
   }
 
-  func list(query: ConversationListQuery) async throws -> [ServerConversation] {
+  func list(query: ConversationListQuery, offset: Int, limit: Int) async throws -> [ServerConversation] {
+    listRequests.append((offset: offset, limit: limit))
     if let listHandler { return try await listHandler(query) }
     return try listResult.get()
   }

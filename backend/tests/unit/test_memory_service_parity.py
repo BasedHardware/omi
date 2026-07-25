@@ -459,6 +459,22 @@ class TestMemoryServiceParity:
         assert len(result) == 1
         assert result[0].id == "mem-1"
 
+    @pytest.mark.parametrize("canonical_enabled", [False, True])
+    def test_memory_service_forwards_read_clock_to_selected_backend(self, monkeypatch, canonical_enabled):
+        service_mod = _load_memory_service(monkeypatch)
+        monkeypatch.setattr(service_mod, "canonical_read_enabled", lambda *args, **kwargs: canonical_enabled)
+        service = service_mod.MemoryService(db_client=_FirestoreFake())
+        service._legacy.read = MagicMock(return_value=[])
+        service._canonical.read = MagicMock(return_value=[])
+        read_time = datetime(2040, 1, 15, 12, 0, tzinfo=timezone.utc)
+
+        assert service.read("uid-test", now=read_time) == []
+
+        selected = service._canonical.read if canonical_enabled else service._legacy.read
+        unselected = service._legacy.read if canonical_enabled else service._canonical.read
+        assert selected.call_args.kwargs["now"] == read_time
+        unselected.assert_not_called()
+
     def test_legacy_backend_strips_canonical_lifecycle_fields_on_read(self, monkeypatch):
         service_mod = _load_memory_service(monkeypatch)
         memories = [_sample_tiered_memory_dict()]

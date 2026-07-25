@@ -43,14 +43,17 @@ class SettingsSyncManager {
 
   // MARK: - Apply Remote → Local
 
-  private func applyRemoteSettings(_ remote: AssistantSettingsResponse) {
+  /// Applies a server-authoritative snapshot, then notifies runtime owners to
+  /// reconcile services whose persisted intent may have changed after launch.
+  func applyRemoteSettings(_ remote: AssistantSettingsResponse) {
     // Shared settings
     if let shared = remote.shared {
       if let v = shared.cooldownInterval { AssistantSettings.shared.cooldownInterval = v }
       if let v = shared.glowOverlayEnabled { AssistantSettings.shared.glowOverlayEnabled = v }
       if let v = shared.analysisDelay { AssistantSettings.shared.analysisDelay = v }
-      // Lazy-dev bundles keep the local seed (false) and ignore the remote value
-      // so the named bundle cannot start screen analysis until the user opts in.
+      // Lazy-dev bundles keep their per-bundle capture preference instead of
+      // importing another bundle's remote value. Capture defaults to enabled;
+      // the runtime checks TCC without prompting when permission is absent.
       if let v = shared.screenAnalysisEnabled, !shouldKeepLocalScreenAnalysisDefault {
         AssistantSettings.shared.screenAnalysisEnabled = v
       }
@@ -107,6 +110,8 @@ class SettingsSyncManager {
         UpdaterViewModel.shared.updateChannel = parsed
       }
     }
+
+    NotificationCenter.default.post(name: .assistantSettingsDidSyncFromServer, object: nil)
   }
 
   // MARK: - Build Local → Response

@@ -1,5 +1,72 @@
 import Foundation
 
+enum ScreenCaptureHealth: String, Equatable {
+  case active
+  case temporarilyUnavailable
+  case recovering
+  case stopped
+
+  var statusText: String {
+    switch self {
+    case .active:
+      return "Capturing screen content"
+    case .temporarilyUnavailable:
+      return "Capture paused: current window can’t be captured"
+    case .recovering:
+      return "Capture paused: recovering screen capture"
+    case .stopped:
+      return "Screen capture is paused"
+    }
+  }
+
+  var rewindBadgeText: String? {
+    switch self {
+    case .active, .stopped:
+      return nil
+    case .temporarilyUnavailable:
+      return "Capture paused"
+    case .recovering:
+      return "Recovering"
+    }
+  }
+
+  var rewindToggleHelp: String {
+    switch self {
+    case .active:
+      return "Rewind is capturing - click to stop"
+    case .temporarilyUnavailable:
+      return "Rewind is on, but the current window cannot be captured"
+    case .recovering:
+      return "Rewind is recovering screen capture"
+    case .stopped:
+      return "Rewind is off - click to start capturing"
+    }
+  }
+}
+
+struct ScreenCaptureFailureTracker {
+  private(set) var consecutiveEngineFailures = 0
+
+  mutating func recordCaptureSuccess() -> Int {
+    let previousFailures = consecutiveEngineFailures
+    consecutiveEngineFailures = 0
+    return previousFailures
+  }
+
+  mutating func recordTargetUnavailable() {
+    consecutiveEngineFailures = 0
+  }
+
+  mutating func recordEngineFailure() -> Int {
+    consecutiveEngineFailures += 1
+    return consecutiveEngineFailures
+  }
+
+  mutating func reset() {
+    consecutiveEngineFailures = 0
+  }
+}
+
 enum ProactiveAssistantOrchestrationPolicy {
   enum ScreenshotAppDecision: Equatable {
     case pause(backoffUntil: Date)

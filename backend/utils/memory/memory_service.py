@@ -2,6 +2,7 @@
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Dict, List, Optional, cast
 
 from fastapi import HTTPException
@@ -290,6 +291,7 @@ class LegacyMemoryBackend:
         offset: int = 0,
         device_scope_request: Optional[DeviceScopeRequest] = None,
         include_pending_processing: bool = False,
+        now: Optional[datetime] = None,
     ) -> List[MemoryDB]:
         _reject_legacy_device_scope(device_scope_request)
         return _legacy_read_memories(uid, limit=limit, offset=offset)
@@ -359,6 +361,7 @@ class CanonicalMemoryBackend:
         offset: int = 0,
         device_scope_request: Optional[DeviceScopeRequest] = None,
         include_pending_processing: bool = False,
+        now: Optional[datetime] = None,
     ) -> List[MemoryDB]:
         return read_canonical_memories(
             uid,
@@ -367,6 +370,7 @@ class CanonicalMemoryBackend:
             db_client=self._db_client,
             device_scope_request=device_scope_request,
             include_pending_processing=include_pending_processing,
+            now=now,
         )
 
     def search(
@@ -466,6 +470,7 @@ class MemoryService:
         offset: int = 0,
         device_scope_request: Optional[DeviceScopeRequest] = None,
         include_pending_processing: bool = False,
+        now: Optional[datetime] = None,
     ) -> List[MemoryDB]:
         backend = self._canonical if canonical_read_enabled(uid, db_client=self._db_client) else self._legacy
         return backend.read(
@@ -474,6 +479,7 @@ class MemoryService:
             offset=offset,
             device_scope_request=device_scope_request,
             include_pending_processing=include_pending_processing,
+            now=now,
         )
 
     def search(

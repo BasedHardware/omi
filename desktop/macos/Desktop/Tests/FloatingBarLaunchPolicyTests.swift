@@ -3,6 +3,33 @@ import XCTest
 @testable import Omi_Computer
 
 final class FloatingBarLaunchPolicyTests: XCTestCase {
+  func testExplicitUserActionRevealsSnoozedFloatingBar() {
+    XCTAssertTrue(
+      FloatingBarPresentationPolicy.shouldPresent(
+        request: .explicitUserAction,
+        isSnoozed: true
+      )
+    )
+  }
+
+  func testBackgroundPresentationRemainsSuppressedWhileSnoozed() {
+    XCTAssertFalse(
+      FloatingBarPresentationPolicy.shouldPresent(
+        request: .background,
+        isSnoozed: true
+      )
+    )
+  }
+
+  func testBackgroundPresentationIsAllowedWhenNotSnoozed() {
+    XCTAssertTrue(
+      FloatingBarPresentationPolicy.shouldPresent(
+        request: .background,
+        isSnoozed: false
+      )
+    )
+  }
+
   func testNormalSignedInLaunchShowsEnabledFloatingBarEvenOnNotchedDisplays() {
     XCTAssertEqual(
       FloatingBarLaunchPolicy.presentation(

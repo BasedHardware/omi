@@ -766,9 +766,6 @@
             "title": "Text Source Spec"
           }
         },
-        "required": [
-          "text"
-        ],
         "title": "ExternalIntegrationCreateMemory",
         "type": "object"
       },
@@ -1088,6 +1085,11 @@
               }
             ],
             "title": "Invalid At"
+          },
+          "is_baseline": {
+            "default": false,
+            "title": "Is Baseline",
+            "type": "boolean"
           },
           "is_locked": {
             "default": false,

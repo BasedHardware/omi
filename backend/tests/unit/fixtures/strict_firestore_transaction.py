@@ -1,8 +1,8 @@
 """Narrow Firestore transaction fixture for ordering-sensitive unit tests.
 
 This fixture models document-reference ``get(transaction=...)`` plus transaction
-``set`` and ``update``. It enforces Firestore's rule that every transactional
-read must occur before the first transactional write.
+``create``, ``set``, and ``update``. It enforces Firestore's rule that every
+transactional read must occur before the first transactional write.
 
 It deliberately does not model queries, deletes, commit/rollback visibility,
 or retry and contention semantics. Extend it only when an incident proves that
@@ -32,7 +32,7 @@ class UnsupportedFirestoreOperationError(NotImplementedError):
     """Raised for a Firestore operation this narrow fixture does not model."""
 
 
-_SUPPORTED_OPERATIONS = 'transaction-bound document get, transaction set, and transaction update'
+_SUPPORTED_OPERATIONS = 'document get/create, transaction-bound document get, transaction create/set/update'
 
 
 class StrictFirestoreSnapshot:
@@ -58,6 +58,11 @@ class StrictFirestoreDocument:
             transaction._assert_read_allowed()
         return StrictFirestoreSnapshot(self._database.rows.get(self.path))
 
+    def create(self, data: dict[str, Any]) -> None:
+        if self.path in self._database.rows:
+            raise RuntimeError('document already exists')
+        self._database.rows[self.path] = deepcopy(data)
+
     def delete(self, *args: Any, **kwargs: Any) -> None:
         raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
 
@@ -82,9 +87,28 @@ class StrictFirestoreTransaction:
         self._database = database
         self._allow_reads_after_writes = allow_reads_after_writes
         self.lock = database.lock
+        self.creates: list[tuple[tuple[str, ...], dict[str, Any]]] = []
         self.sets: list[tuple[tuple[str, ...], dict[str, Any]]] = []
         self.updates: list[tuple[tuple[str, ...], dict[str, Any]]] = []
         self.has_written = False
+        self._read_only = False
+        self._max_attempts = 1
+        self._id: bytes | None = None
+
+    # The Firestore ``@transactional`` decorator drives these lifecycle hooks.
+    # They deliberately keep this fixture single-attempt: it guards production
+    # read-before-write ordering without pretending to model contention retries.
+    def _clean_up(self) -> None:
+        self._id = None
+
+    def _begin(self, retry_id: bytes | None = None) -> None:
+        self._id = retry_id or b'strict-firestore-transaction'
+
+    def _commit(self) -> None:
+        return None
+
+    def _rollback(self) -> None:
+        return None
 
     def _assert_read_allowed(self) -> None:
         if self.has_written and not self._allow_reads_after_writes:
@@ -101,6 +125,15 @@ class StrictFirestoreTransaction:
         self.sets.append((ref.path, payload))
         self._database.rows[ref.path] = payload
 
+    def create(self, ref: StrictFirestoreDocument, data: dict[str, Any]) -> None:
+        self._assert_reference_belongs(ref)
+        self.has_written = True
+        if ref.path in self._database.rows:
+            raise RuntimeError('document already exists')
+        payload = deepcopy(data)
+        self.creates.append((ref.path, payload))
+        self._database.rows[ref.path] = payload
+
     def update(self, ref: StrictFirestoreDocument, patch: dict[str, Any]) -> None:
         self._assert_reference_belongs(ref)
         self.has_written = True
@@ -111,9 +144,6 @@ class StrictFirestoreTransaction:
         self._database.rows[ref.path].update(payload)
 
     def delete(self, *args: Any, **kwargs: Any) -> None:
-        raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
-
-    def create(self, *args: Any, **kwargs: Any) -> None:
         raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
 
     def get(self, *args: Any, **kwargs: Any) -> None:
@@ -140,9 +170,12 @@ class StrictFirestore:
         self.rows = deepcopy(rows or {})
         self.lock = RLock()
         self._allow_reads_after_writes = allow_reads_after_writes
+        self.transactions: list[StrictFirestoreTransaction] = []
 
     def collection(self, name: str) -> StrictFirestoreCollection:
         return StrictFirestoreCollection(self, (name,))
 
     def transaction(self) -> StrictFirestoreTransaction:
-        return StrictFirestoreTransaction(self, allow_reads_after_writes=self._allow_reads_after_writes)
+        transaction = StrictFirestoreTransaction(self, allow_reads_after_writes=self._allow_reads_after_writes)
+        self.transactions.append(transaction)
+        return transaction

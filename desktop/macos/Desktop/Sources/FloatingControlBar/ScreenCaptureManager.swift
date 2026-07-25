@@ -168,6 +168,10 @@ class ScreenCaptureManager {
   static func captureScreenWithDetailTiles() -> ChatScreenshotCapture? {
     guard let image = captureScreenImage() else { return nil }
     guard let directory = screenshotsDirectory() else { return nil }
+    // The capture_screen chat tool writes the full frame plus native-resolution
+    // detail tiles (multiple MB per call) and never deletes them. Sweep stale
+    // captures each time so ~/Documents/Omi/Screenshots cannot grow forever.
+    pruneOldScreenshots()
 
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
@@ -200,6 +204,38 @@ class ScreenCaptureManager {
     return ChatScreenshotCapture(fullImageURL: fullURL, tiles: tiles)
   }
 
+  /// Chat-tool screenshots older than this are swept on the next capture.
+  /// Tool captures are read by the model within the turn; a day of retention is
+  /// generous for any later reference.
+  static let screenshotRetention: TimeInterval = 24 * 60 * 60
+
+  /// Pure retention decision: which files (by last-modified date) are stale
+  /// relative to `now`. Extracted so the sweep policy is testable without disk.
+  static func staleScreenshotURLs(
+    _ files: [(url: URL, modified: Date)], now: Date, retention: TimeInterval
+  ) -> [URL] {
+    files.filter { now.timeIntervalSince($0.modified) > retention }.map(\.url)
+  }
+
+  private static func pruneOldScreenshots(now: Date = Date()) {
+    guard let directory = screenshotsDirectory() else { return }
+    let fileManager = FileManager.default
+    guard
+      let entries = try? fileManager.contentsOfDirectory(
+        at: directory, includingPropertiesForKeys: [.contentModificationDateKey])
+    else { return }
+    let dated: [(url: URL, modified: Date)] = entries.compactMap { url in
+      guard
+        let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey])
+          .contentModificationDate
+      else { return nil }
+      return (url, modified)
+    }
+    for url in staleScreenshotURLs(dated, now: now, retention: screenshotRetention) {
+      try? fileManager.removeItem(at: url)
+    }
+  }
+
   private static func screenshotsDirectory() -> URL? {
     let fileManager = FileManager.default
     guard let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
@@ -229,6 +265,7 @@ class ScreenCaptureManager {
   static func captureScreen() -> URL? {
     guard let data = captureScreenData() else { return nil }
     guard let directory = screenshotsDirectory() else { return nil }
+    pruneOldScreenshots()
 
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"

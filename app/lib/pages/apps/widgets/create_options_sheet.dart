@@ -24,9 +24,9 @@ class CreateOptionsSheet extends StatelessWidget {
           Text(
             context.l10n.whatWouldYouLikeToCreate,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w400,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
+              fontWeight: FontWeight.w400,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
           ),
           const SizedBox(height: 24),
           Card(
@@ -40,10 +40,6 @@ class CreateOptionsSheet extends StatelessWidget {
               title: Text(
                 context.l10n.createAnApp,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
-              ),
-              subtitle: Text(
-                context.l10n.createAndShareYourApp,
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
               ),
               onTap: () {
                 Navigator.pop(context);
@@ -64,10 +60,6 @@ class CreateOptionsSheet extends StatelessWidget {
               title: Text(
                 context.l10n.addMcpServer,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
-              ),
-              subtitle: Text(
-                context.l10n.connectExternalAiTools,
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
               ),
               onTap: () {
                 Navigator.pop(context);

@@ -92,6 +92,12 @@ verify that every required fact is published.
   clears the screen protocol while preserving the provider-continuation fence,
   so native realtime audio answers the user's original question from the image.
   Only deterministic screen-verification failure is a local terminal result.
+  A missing Screen Recording permission is instead a recoverable screenshot-tool
+  result: it never supplies visual evidence, but it clears the screen protocol
+  and preserves the provider continuation so the selected native voice can
+  explain the permission request naturally. All other missing, stale,
+  contradictory, or cross-turn evidence failures remain deterministic local
+  results.
   Model-supplied
   evidence IDs and app labels have no authority; native code supplies app identity
   and rejects stale, missing, contradictory, or cross-turn reports without using

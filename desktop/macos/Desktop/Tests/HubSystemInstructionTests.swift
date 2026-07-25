@@ -46,6 +46,23 @@ final class HubSystemInstructionTests: XCTestCase {
     XCTAssertNil(payload?["frontmost_app"], "legacy ambient app fields must remain unavailable")
   }
 
+  func testLiveScreenshotPermissionFailureNamesScreenRecordingAndThePermissionTool() {
+    let result = RealtimeHubTools.screenshotToolResult(
+      capturedBytes: nil,
+      captureFailure: .screenRecordingPermissionRequired)
+    let payload = try? JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any]
+    let error = payload?["error"] as? [String: Any]
+
+    XCTAssertEqual(payload?["ok"] as? Bool, false)
+    XCTAssertEqual(error?["code"] as? String, "permission_required")
+    XCTAssertEqual(error?["permission"] as? String, "screen_recording")
+    XCTAssertEqual(error?["next_tool"] as? String, "request_permission")
+    XCTAssertEqual(
+      (error?["next_tool_arguments"] as? [String: String])?["type"],
+      "screen_recording")
+    XCTAssertTrue((error?["message"] as? String ?? "").contains("cannot see their current screen"))
+  }
+
   func testValidatedScreenObservationContinuesToTheOriginalUserAnswer() {
     let instruction = RealtimeHubTools.systemInstruction()
     let accepted = RealtimeHubTools.screenObservationResult(accepted: true)

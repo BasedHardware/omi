@@ -306,15 +306,12 @@ actor CalendarReaderService {
       }
 
       RULES:
-      - Extract 10-15 memories (facts about their role, recurring meetings, relationships, routines, interests, work schedule, hobbies, social life)
-      - Extract 3-5 tasks (upcoming preparation, follow-ups, deadlines from future events)
-      - Focus on PATTERNS (weekly standups, regular gym, recurring 1-on-1s) not one-off events
-      - Each memory should be a single clear factual statement in third person ("The user...")
-      - Tasks should only reference FUTURE events with ISO date in due_at
+      - Extract 10-15 memories (facts about their role, recurring meetings, relationships, routines, interests, work schedule, hobbies, social life). Memories generalize PATTERNS (weekly standups, regular gym, recurring 1-on-1s), not one-off events, in third person ("The user...").
+      - Extract 0-3 tasks. A task is a SPECIFIC preparation the user still owes for a real upcoming event: name the event and what's owed ("Prep the demo for Thursday's call with Daniel"), with an ISO date in due_at. Never a vague "follow up" or a task for a past event.
+      - Prefer 0 tasks over a weak or generic one. An empty tasks array is correct when nothing genuine is owed.
       - Task priorities: "high", "medium", or "low"
       - Profile should summarize professional identity and schedule patterns
-      - Do NOT include raw event details — synthesize and generalize
-      - Do NOT include sensitive medical or financial details
+      - Do NOT include sensitive medical, financial, or religious details in tasks
       """
 
     // Retry the synthesis on transient failure instead of silently dropping the import.
@@ -556,27 +553,11 @@ actor CalendarReaderService {
           except Exception:
               return None
 
-      def fetch_calendar_events(jar, cookies_list, days_back, days_forward, max_results):
+      def fetch_calendar_events(jar, days_back, days_forward, max_results):
           # Returns (events, error, http_status). http_status lets the caller
           # distinguish an expired session (401/403) from a transient network
           # failure so the user gets the right recovery step (philosophy §3).
-          # Find SAPISID cookie
-          sapisid = None
-          for c in cookies_list:
-              if c['name'] == 'SAPISID':
-                  sapisid = c['value']
-                  break
-          if not sapisid:
-              # Try __Secure-3PAPISID
-              for c in cookies_list:
-                  if c['name'] == '__Secure-3PAPISID':
-                      sapisid = c['value']
-                      break
-          if not sapisid:
-              return None, "No SAPISID cookie found", None
-
           origin = "https://calendar.google.com"
-          auth_header = get_sapisidhash(sapisid, origin)
 
           now = datetime.now(timezone.utc)
           time_min = (now - timedelta(days=days_back)).strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -598,6 +579,16 @@ actor CalendarReaderService {
                   url += f"&pageToken={urllib.parse.quote(page_token)}"
 
               req = urllib.request.Request(url)
+              # The SAPISIDHASH must use the same host-scoped cookie Chrome
+              # would send to clients6.google.com. Selecting the first
+              # same-named cookie from SQLite can hash a cookie from a
+              # different Google host and make a live browser session look
+              # expired.
+              sapisid = cookie_value_for_request(
+                  jar, url, ('SAPISID', '__Secure-3PAPISID'))
+              if not sapisid:
+                  return None, "No SAPISID cookie applicable to Calendar found", None
+              auth_header = get_sapisidhash(sapisid, origin)
               req.add_header('Authorization', auth_header)
               req.add_header('Origin', origin)
               req.add_header('Referer', 'https://calendar.google.com/')
@@ -678,7 +669,7 @@ actor CalendarReaderService {
               continue
 
           jar = make_cookie_jar(cookies)
-          events, fetch_err, http_status = fetch_calendar_events(jar, cookies, days_back, days_forward, max_results)
+          events, fetch_err, http_status = fetch_calendar_events(jar, days_back, days_forward, max_results)
           if fetch_err or events is None:
               attempts.append({'browser': browser['name'], 'stage': 'fetch',
                                'reason': (fetch_err or 'unknown fetch error'),

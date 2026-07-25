@@ -37,7 +37,6 @@ class LockContract:
 # new deploy writer cannot silently bypass the audited lock graph.
 LOCK_CONTRACTS = {
     "desktop_backend_auto_dev.yml": LockContract("desktop-backend-auto-dev"),
-    "desktop_promote_prod.yml": LockContract("desktop-backend-promote-prod"),
     "gcp_admin.yml": LockContract(
         "deploy-cloud-run-omi-admin-dashboard-${{ github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
@@ -61,7 +60,6 @@ LOCK_CONTRACTS = {
         "deploy-cloud-run-frontend-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
     "gcp_llm_gateway.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
-    "gcp_llm_gateway_auto_dev.yml": LockContract("deploy-backend-stack-development"),
     "gcp_memory_maintenance_job.yml": LockContract(
         "deploy-cloud-run-memory-maintenance-job-${{ github.event.inputs.environment }}"
     ),
@@ -85,6 +83,8 @@ LOCK_CONTRACTS = {
 RUN_SCOPED_EXEMPTIONS = {
     "parakeet_gpu_tests.yml": "JOB_NAME: parakeet-gpu-test-${{ github.run_id }}",
 }
+
+READ_ONLY_WORKFLOW_EXEMPTIONS: dict[str, str] = {}
 
 # Firestore index creation is a schema migration, not ordinary deploy work.
 # Keep a single auditable writer so backend readiness can stay read-only.
@@ -115,6 +115,13 @@ PUSHER_CONFIGMAP_PREFLIGHT = (
     "kubectl -n ${{ vars.ENV }}-omi-backend get configmap " "${{ vars.ENV }}-omi-backend-config >/dev/null"
 )
 PUSHER_REFERENCE_PREFLIGHT = "backend/scripts/verify_pusher_config_references.py"
+
+# The automatic backend deploy is triggered by a completed Release Eligibility
+# workflow, not by the source push itself. The source-admission job publishes
+# the SHA only after proving it is still current, same-repository main; retain
+# that output expression so release-vector gates cannot bypass admission with
+# workflow_run or workflow execution context SHAs.
+AUTO_DEPLOY_ADMITTED_SHA = "${{ needs.firestore_readiness.outputs.admitted_sha }}"
 
 
 class PolicyError(ValueError):
@@ -175,19 +182,20 @@ def validate_lock(name: str, text: str, contract: LockContract) -> list[str]:
 
 
 def validate_auto_deploy_acceptance(text: str) -> list[str]:
-    """Keep exact candidate acceptance in the locked deploy job before promotion."""
+    """Keep exact admitted-source acceptance in the locked deploy job before promotion."""
 
     block = job_block(text, "deploy")
     if block is None:
         return ["gcp_backend_auto_dev.yml: missing deploy job"]
     required_markers = (
         "Capture exact no-traffic candidate URLs",
-        "backend/scripts/verify_dev_backend_deployment.py",
+        "backend/scripts/verify_backend_release_vector.py",
         "backend/scripts/run_dev_candidate_acceptance.py",
         "--candidate",
-        '--commit-sha "${{ github.sha }}"',
+        f'--commit-sha "{AUTO_DEPLOY_ADMITTED_SHA}"',
         '--deploy-run-id "${{ github.run_id }}"',
         '--deploy-run-attempt "${{ github.run_attempt }}"',
+        "--environment dev",
         "Shift Cloud Run traffic to validated revisions",
     )
     errors = [
@@ -201,6 +209,141 @@ def validate_auto_deploy_acceptance(text: str) -> list[str]:
         errors.append("gcp_backend_auto_dev.yml: candidate acceptance must run before traffic promotion")
     if job_block(text, "verify") is not None:
         errors.append("gcp_backend_auto_dev.yml: candidate acceptance must not run in a post-promotion verify job")
+    return errors
+
+
+def validate_serving_release_vector(name: str, text: str) -> list[str]:
+    """Require a post-promotion, all-tier vector check in each full backend deploy."""
+
+    block = job_block(text, "deploy")
+    if block is None:
+        return [f"{name}: missing deploy job"]
+    promotion_index = next((index for index, line in enumerate(block) if "Shift Cloud Run traffic" in line), -1)
+    verifier_index = next(
+        (index for index, line in enumerate(block) if "Verify serving backend release vector" in line), -1
+    )
+    errors: list[str] = []
+    if promotion_index < 0:
+        errors.append(f"{name}: missing Cloud Run traffic promotion")
+    if verifier_index < 0:
+        errors.append(f"{name}: missing post-promotion release-vector verification")
+    elif verifier_index <= promotion_index:
+        errors.append(f"{name}: release-vector verification must run after traffic promotion")
+
+    verifier_step = next(
+        (step for step in deploy_job_steps(block) if "Verify serving backend release vector" in "\n".join(step)),
+        [],
+    )
+    verifier_text = "\n".join(verifier_step)
+    if not any(
+        marker in verifier_text
+        for marker in ("backend/scripts/verify_backend_release_vector.py", "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py")
+    ):
+        errors.append(f"{name}: release-vector verification must use the canonical verifier")
+    if "--environment" not in verifier_text:
+        errors.append(f"{name}: release-vector verification must bind an environment")
+    if name == "gcp_backend.yml":
+        if "github.event.inputs.deploy_targets" not in verifier_text or "--cloud-run-only" not in verifier_text:
+            errors.append(f"{name}: cloud-run-only promotion must use the Cloud Run-only release-vector contract")
+    return errors
+
+
+def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
+    """Keep the Cloud Run candidate boundary ahead of GKE and traffic mutations."""
+
+    block = job_block(text, "deploy")
+    if block is None:
+        return [f"{name}: missing deploy job"]
+    steps = deploy_job_steps(block)
+
+    def step_index(marker: str) -> int:
+        return next((index for index, step in enumerate(steps) if marker in "\n".join(step)), -1)
+
+    errors: list[str] = []
+    candidate_index = step_index("Accept no-traffic Cloud Run candidate")
+    snapshot_index = step_index("Capture Cloud Run pre-promotion traffic snapshot")
+    promotion_index = step_index("Shift Cloud Run traffic to validated revisions")
+    serving_vector_index = step_index("Verify serving backend release vector")
+    production_smoke_index = step_index("Smoke promoted production serving API")
+    restore_index = step_index("Restore Cloud Run traffic snapshot after failed promotion")
+    required_steps = {
+        "candidate acceptance": candidate_index,
+        "pre-promotion traffic snapshot": snapshot_index,
+        "traffic promotion": promotion_index,
+        "serving release-vector verification": serving_vector_index,
+        "traffic snapshot restoration": restore_index,
+    }
+    errors.extend(f"{name}: missing {description}" for description, index in required_steps.items() if index < 0)
+
+    candidate_step = steps[candidate_index] if candidate_index >= 0 else []
+    candidate_text = "\n".join(candidate_step)
+    for marker in ("--candidate", "--cloud-run-only"):
+        if marker not in candidate_text:
+            errors.append(f"{name}: candidate acceptance must include {marker!r}")
+    if not any(
+        marker in candidate_text
+        for marker in ("backend/scripts/verify_backend_release_vector.py", "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py")
+    ):
+        errors.append(f"{name}: candidate acceptance must include the canonical release-vector verifier")
+
+    for marker in (
+        "Apply non-secret backend runtime config",
+        "Deploy backend-secrets",
+        "Deploy ${{ env.SERVICE }}-listen to GKE",
+    ):
+        mutation_index = step_index(marker)
+        if mutation_index < 0:
+            errors.append(f"{name}: missing deferred GKE mutation {marker!r}")
+        elif candidate_index >= mutation_index:
+            errors.append(f"{name}: candidate acceptance must precede {marker!r}")
+
+    if snapshot_index >= promotion_index:
+        errors.append(f"{name}: pre-promotion traffic snapshot must precede traffic promotion")
+    if serving_vector_index <= promotion_index:
+        errors.append(f"{name}: serving release-vector verification must follow traffic promotion")
+    if restore_index <= serving_vector_index:
+        errors.append(f"{name}: traffic snapshot restoration must follow serving release-vector verification")
+    if name == "gcp_backend.yml":
+        if production_smoke_index <= serving_vector_index:
+            errors.append(f"{name}: production serving smoke must follow serving release-vector verification")
+        if restore_index <= production_smoke_index:
+            errors.append(f"{name}: traffic snapshot restoration must follow production serving smoke")
+
+    snapshot_step = "\n".join(steps[snapshot_index]) if snapshot_index >= 0 else ""
+    if not any(
+        marker in snapshot_step
+        for marker in ("backend/scripts/cloud_run_traffic_snapshot.py capture", 'cloud_run_traffic_snapshot.py" capture')
+    ):
+        errors.append(f"{name}: pre-promotion snapshot must use the canonical Cloud Run snapshot helper")
+    for service in ("backend", "backend-sync", "backend-sync-backfill", "backend-integration"):
+        if f"--service {service}" not in snapshot_step:
+            errors.append(f"{name}: pre-promotion snapshot must include {service}")
+
+    restore_step = "\n".join(steps[restore_index]) if restore_index >= 0 else ""
+    restore_condition = (
+        "if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' "
+        "&& (steps.shift-cloud-run-traffic.outcome == 'failure' "
+        "|| steps.verify-serving-release-vector.outcome == 'failure') }}"
+    )
+    if name == "gcp_backend.yml":
+        restore_condition = (
+            "if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' "
+            "&& (steps.shift-cloud-run-traffic.outcome == 'failure' "
+            "|| steps.verify-serving-release-vector.outcome == 'failure' "
+            "|| steps.smoke-promoted-production-serving-api.outcome == 'failure') }}"
+        )
+    if restore_condition not in restore_step:
+        errors.append(f"{name}: traffic restoration must run after a failed promotion when its snapshot exists")
+    if name == "gcp_backend.yml" and "steps.smoke-promoted-production-serving-api.outcome == 'failure'" not in restore_step:
+        errors.append(f"{name}: traffic restoration must include failed production serving smoke")
+    if not any(
+        marker in restore_step
+        for marker in ("backend/scripts/cloud_run_traffic_snapshot.py restore", 'cloud_run_traffic_snapshot.py" restore')
+    ):
+        errors.append(f"{name}: traffic restoration must use the canonical Cloud Run snapshot helper")
+    for artifact in ("cloud-run-pre-promotion-traffic-snapshot.json", "cloud-run-traffic-restore.json"):
+        if artifact not in text:
+            errors.append(f"{name}: must retain {artifact!r} as deployment evidence")
     return errors
 
 
@@ -304,6 +447,10 @@ def pusher_preflight_step_is_valid(name: str, step: list[str]) -> bool:
 def validate_pusher_config_preflight(name: str, text: str) -> list[str]:
     """Require an active ConfigMap check in the pusher deploy job before Helm."""
 
+    if name in READ_ONLY_WORKFLOW_EXEMPTIONS:
+        return []
+    if not is_persistent_writer(text):
+        return []
     if PUSHER_CHART_MARKER not in text:
         return []
     block = job_block(text, "deploy")
@@ -345,6 +492,32 @@ def development_group(name: str, group: str) -> str:
     return DEVELOPMENT_GROUP_OVERRIDES.get(name, resolve_environment(group, "development"))
 
 
+def validate_automatic_backend_stack_lifecycle(workflow_text: dict[str, str]) -> list[str]:
+    """Keep the shared dev backend lock owned by one automatic lifecycle.
+
+    GitHub Actions retains only one pending run per concurrency group. A second
+    automatic writer can therefore evict the exact Release Eligibility SHA
+    admitted by gcp_backend_auto_dev.yml before either workflow has a job.
+    """
+
+    automatic_writers: list[str] = []
+    for name, text in workflow_text.items():
+        trigger = text.split("\njobs:", 1)[0]
+        if "group: deploy-backend-stack-development" not in trigger:
+            continue
+        if "workflow_run:" in trigger or "\n  push:" in trigger:
+            automatic_writers.append(name)
+    expected = ["gcp_backend_auto_dev.yml"]
+    return (
+        []
+        if sorted(automatic_writers) == expected
+        else [
+            "automatic development backend-stack deployment must be owned only by "
+            f"gcp_backend_auto_dev.yml, found {sorted(automatic_writers)!r}"
+        ]
+    )
+
+
 def validate_shared_families(groups: dict[str, str]) -> list[str]:
     errors: list[str] = []
 
@@ -352,7 +525,6 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         ("gcp_backend.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_firestore_indexes.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_backend_listen_helm.yml", "gcp_backend_auto_dev.yml"),
-        ("gcp_llm_gateway.yml", "gcp_llm_gateway_auto_dev.yml"),
         ("gcp_llm_gateway.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_memory_maintenance_job.yml", "gcp_memory_maintenance_job_auto_dev.yml"),
         ("gcp_backend_agent_proxy.yml", "gcp_backend_agent_proxy_auto_deploy.yml"),
@@ -394,9 +566,10 @@ def check_repository() -> list[str]:
         for path in WORKFLOWS.glob(pattern)
     }
     errors.extend(validate_firestore_schema_writers(workflow_text))
+    errors.extend(validate_automatic_backend_stack_lifecycle(workflow_text))
 
     detected = {name for name, text in workflow_text.items() if is_persistent_writer(text)}
-    expected = set(LOCK_CONTRACTS) | set(RUN_SCOPED_EXEMPTIONS)
+    expected = set(LOCK_CONTRACTS) | set(RUN_SCOPED_EXEMPTIONS) | set(READ_ONLY_WORKFLOW_EXEMPTIONS)
     for name in sorted(detected - expected):
         errors.append(f"{name}: persistent deployment writer is missing from the lock policy")
     for name in sorted(expected - detected):
@@ -421,6 +594,14 @@ def check_repository() -> list[str]:
         if marker not in text:
             errors.append(f"{name}: run-scoped deploy-lock exemption lost required marker {marker!r}")
 
+    for name, marker in READ_ONLY_WORKFLOW_EXEMPTIONS.items():
+        text = workflow_text.get(name, "")
+        if marker not in text:
+            errors.append(f"{name}: read-only workflow exemption lost required marker {marker!r}")
+        for mutation in ("kubectl apply", "helm upgrade", "gcloud run deploy", "gcloud run services update"):
+            if mutation in text:
+                errors.append(f"{name}: read-only workflow exemption contains mutating command {mutation!r}")
+
     identity_markers = (
         'SHORT_SHA="$(git rev-parse --short=7 HEAD)"',
         "revision_suffix=${SHORT_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}",
@@ -433,15 +614,25 @@ def check_repository() -> list[str]:
 
     auto_deploy = workflow_text.get("gcp_backend_auto_dev.yml", "")
     errors.extend(validate_auto_deploy_acceptance(auto_deploy))
+    for name in ("gcp_backend.yml", "gcp_backend_auto_dev.yml"):
+        errors.extend(validate_serving_release_vector(name, workflow_text.get(name, "")))
+        errors.extend(validate_phase_aware_backend_promotion(name, workflow_text.get(name, "")))
     for name, text in workflow_text.items():
         errors.extend(validate_pusher_config_preflight(name, text))
-    separate_acceptance_workflows = sorted(
+    release_vector_workflows = sorted(
         name
         for name, text in workflow_text.items()
-        if name != "gcp_backend_auto_dev.yml" and "backend/scripts/verify_dev_backend_deployment.py" in text
+        if any(
+            marker in text
+            for marker in ("backend/scripts/verify_backend_release_vector.py", "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py")
+        )
     )
-    for name in separate_acceptance_workflows:
-        errors.append(f"{name}: acceptance must remain inside the source deploy workflow")
+    # Release-ring deploys are admitted from an immutable record and bind the
+    # verifier to that record's source SHA and this deployment run identity.
+    allowed_release_vector_workflows = {"gcp_backend.yml", "gcp_backend_auto_dev.yml"}
+    for name in release_vector_workflows:
+        if name not in allowed_release_vector_workflows:
+            errors.append(f"{name}: release-vector verification may run only in a source backend deploy workflow")
 
     return errors
 
@@ -587,11 +778,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: >-
-          python3 backend/scripts/verify_dev_backend_deployment.py
+          python3 backend/scripts/verify_backend_release_vector.py
           --candidate
-          --commit-sha "${{ github.sha }}"
+          --commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}"
           --deploy-run-id "${{ github.run_id }}"
           --deploy-run-attempt "${{ github.run_attempt }}"
+          --environment dev
       - name: Capture exact no-traffic candidate URLs
       - run: python3 backend/scripts/run_dev_candidate_acceptance.py
       - name: Shift Cloud Run traffic to validated revisions
@@ -599,10 +791,65 @@ jobs:
     if validate_auto_deploy_acceptance(in_deploy_acceptance):
         raise PolicyError("valid in-deploy candidate acceptance was rejected")
 
+    for wrong_sha in ("${{ github.sha }}", "${{ github.event.workflow_run.head_sha }}"):
+        wrong_source = in_deploy_acceptance.replace(AUTO_DEPLOY_ADMITTED_SHA, wrong_sha)
+        if not any("commit-sha" in error for error in validate_auto_deploy_acceptance(wrong_source)):
+            raise PolicyError(f"unadmitted {wrong_sha} satisfied the candidate acceptance contract")
+
+    serving_vector = """name: fixture
+jobs:
+  deploy:
+    steps:
+      - name: Shift Cloud Run traffic to validated revisions
+      - name: Verify serving backend release vector
+        run: python3 backend/scripts/verify_backend_release_vector.py --environment dev
+"""
+    if validate_serving_release_vector("gcp_backend_auto_dev.yml", serving_vector):
+        raise PolicyError("valid post-promotion release-vector verification was rejected")
+
+    phase_aware_promotion = """name: fixture
+jobs:
+  deploy:
+    steps:
+      - name: Accept no-traffic Cloud Run candidate
+        run: python3 backend/scripts/verify_backend_release_vector.py --candidate --cloud-run-only
+      - name: Apply non-secret backend runtime config
+      - name: Deploy backend-secrets to GKE
+      - name: Deploy ${{ env.SERVICE }}-listen to GKE
+      - name: Capture Cloud Run pre-promotion traffic snapshot
+        run: |-
+          python3 backend/scripts/cloud_run_traffic_snapshot.py capture \\
+            --service backend \\
+            --service backend-sync \\
+            --service backend-sync-backfill \\
+            --service backend-integration \\
+            --output cloud-run-pre-promotion-traffic-snapshot.json
+      - name: Shift Cloud Run traffic to validated revisions
+        id: shift-cloud-run-traffic
+      - name: Verify serving backend release vector
+        id: verify-serving-release-vector
+      - name: Restore Cloud Run traffic snapshot after failed promotion
+        if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'failure') }}
+        run: |-
+          python3 backend/scripts/cloud_run_traffic_snapshot.py restore \\
+            --evidence-path cloud-run-traffic-restore.json
+"""
+    if validate_phase_aware_backend_promotion("fixture.yml", phase_aware_promotion):
+        raise PolicyError("valid phase-aware backend promotion was rejected")
+    without_restore = phase_aware_promotion.replace(
+        "Restore Cloud Run traffic snapshot after failed promotion", "Report"
+    )
+    if not any(
+        "traffic snapshot restoration" in error
+        for error in validate_phase_aware_backend_promotion("fixture.yml", without_restore)
+    ):
+        raise PolicyError("missing traffic restoration satisfied the phase-aware deploy contract")
+
     pusher_deploy = """name: fixture
 jobs:
   deploy:
     steps:
+      - uses: google-github-actions/get-gke-credentials@v3
       - run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
       - run: helm upgrade ./backend/charts/pusher
 """
@@ -612,6 +859,7 @@ jobs:
 jobs:
   deploy:
     steps:
+      - uses: google-github-actions/get-gke-credentials@v3
       - name: Preflight pusher ConfigMap and Secret references
         run: |
           python3 -m pip install -q pyyaml
@@ -632,6 +880,7 @@ jobs:
 jobs:
   deploy:
     steps:
+      - uses: google-github-actions/get-gke-credentials@v3
       - run: helm upgrade backend/charts/pusher
 """
     if not validate_pusher_config_preflight("fixture.yml", equivalent_chart_path):
@@ -641,6 +890,7 @@ jobs:
 jobs:
   deploy:
     steps:
+      - uses: google-github-actions/get-gke-credentials@v3
       - run: helm upgrade ./backend/charts/pusher
       - run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
 """
@@ -654,6 +904,7 @@ jobs:
       - run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
   deploy:
     steps:
+      - uses: google-github-actions/get-gke-credentials@v3
       - run: helm upgrade ./backend/charts/pusher
 """
     if not validate_pusher_config_preflight("fixture.yml", cross_job_preflight):
@@ -663,6 +914,7 @@ jobs:
 jobs:
   deploy:
     steps:
+      - uses: google-github-actions/get-gke-credentials@v3
       - name: Disabled preflight
         if: false
         run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
@@ -675,6 +927,7 @@ jobs:
 jobs:
   deploy:
     steps:
+      - uses: google-github-actions/get-gke-credentials@v3
       - name: Nonfatal preflight
         continue-on-error: true
         run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
@@ -687,6 +940,7 @@ jobs:
 jobs:
   deploy:
     steps:
+      - uses: google-github-actions/get-gke-credentials@v3
       - run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null || true
       - run: helm upgrade ./backend/charts/pusher
 """

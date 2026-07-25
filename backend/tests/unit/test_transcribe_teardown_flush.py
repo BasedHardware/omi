@@ -1,134 +1,93 @@
-"""Regression tests for listen teardown tail-audio flush ordering (#9237)."""
+"""Regression tests for listen teardown tail-audio flushing (#9237)."""
 
 import struct
-import time
-from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from utils.transcribe_decisions import should_flush_final_multi_channel_mix
+from routers.listen.receiver import ListenReceiver
+from utils.stt.streaming import STTService
+from utils.listen_audio import build_channel_config
 
 from tests.unit.utils.test_listen_pusher_session import FakePusherWebSocket, frame_type, make_session
 
 
-def mix_n_channel_buffers(buffers):
-    """Local copy of routers.transcribe.mix_n_channel_buffers for hermetic tests."""
-    min_len = min((len(b) for b in buffers), default=0)
-    if min_len < 2:
-        return b''
-    min_len = min_len - (min_len % 2)
-    num_samples = min_len // 2
-    channel_samples = [struct.unpack(f'<{num_samples}h', b[:min_len]) for b in buffers]
-    mixed = []
-    for i in range(num_samples):
-        s = sum(ch[i] for ch in channel_samples)
-        mixed.append(max(-32768, min(32767, s)))
-    return struct.pack(f'<{num_samples}h', *mixed)
-
-
-async def _flush_tail_then_close(*, session, channel_mix_buffers, is_multi_channel: bool):
-    """Mirrors the corrected _stream_handler finally ordering."""
-    audio_bytes_send = session.audio_bytes_send
-    if should_flush_final_multi_channel_mix(
-        is_multi_channel=is_multi_channel,
-        audio_bytes_enabled=True,
-        buffers=channel_mix_buffers,
-    ):
-        mixed = mix_n_channel_buffers(channel_mix_buffers)
-        if mixed:
-            audio_bytes_send(mixed, time.time())
-        for buf in channel_mix_buffers:
-            buf.clear()
-    await session.close()
-
-
-async def _close_then_flush_tail(*, session, channel_mix_buffers, is_multi_channel: bool):
-    """Buggy ordering: pusher close before tail enqueue loses audio on the wire."""
-    await session.close()
-    audio_bytes_send = session.audio_bytes_send
-    if should_flush_final_multi_channel_mix(
-        is_multi_channel=is_multi_channel,
-        audio_bytes_enabled=True,
-        buffers=channel_mix_buffers,
-    ):
-        mixed = mix_n_channel_buffers(channel_mix_buffers)
-        if mixed:
-            audio_bytes_send(mixed, time.time())
-        for buf in channel_mix_buffers:
-            buf.clear()
-
-
 @pytest.fixture
 def anyio_backend():
-    return "asyncio"
+    return 'asyncio'
+
+
+def _receiver_with_tail_sender(audio_bytes_send):
+    channels = build_channel_config('phone_call')
+    host = SimpleNamespace(
+        is_multi_channel=True,
+        audio_bytes_send=audio_bytes_send,
+        request=SimpleNamespace(sample_rate=16000),
+        state=SimpleNamespace(last_audio_received_time=None),
+    )
+    return ListenReceiver(host, channels, {channel.channel_id: index for index, channel in enumerate(channels)})
 
 
 @pytest.mark.anyio
-async def test_teardown_tail_audio_flushed_when_enqueued_before_close():
+async def test_teardown_tail_audio_flushes_through_real_receiver_before_pusher_close():
     ws = FakePusherWebSocket()
-    session = make_session(
-        ws=ws,
-        config_overrides={"is_multi_channel": True, "sample_rate": 16000},
-    )
+    session = make_session(ws=ws, config_overrides={'is_multi_channel': True, 'sample_rate': 16000})
     await session.connect()
-
-    channel_mix_buffers = [
+    receiver = _receiver_with_tail_sender(session.audio_bytes_send)
+    receiver.channel_mix_buffers = [
         bytearray(struct.pack('<2h', 1000, 2000)),
         bytearray(struct.pack('<2h', 3000, 4000)),
     ]
 
-    flush_started_with_audio = {}
+    await receiver.flush_multi_channel_tail()
+    await session.close()
 
-    original_flush = session._flush
-
-    async def tracking_flush():
-        flush_started_with_audio["size"] = session.audio_total_size
-        await original_flush()
-
-    session._flush = tracking_flush
-
-    await _flush_tail_then_close(
-        session=session,
-        channel_mix_buffers=channel_mix_buffers,
-        is_multi_channel=True,
-    )
-
-    assert flush_started_with_audio["size"] > 0
+    assert all(not buffer for buffer in receiver.channel_mix_buffers)
     assert any(frame_type(frame) == 101 for frame in ws.sent)
 
 
 @pytest.mark.anyio
-async def test_teardown_close_before_tail_enqueue_drops_audio():
-    ws = FakePusherWebSocket()
-    session = make_session(
-        ws=ws,
-        config_overrides={"is_multi_channel": True, "sample_rate": 16000},
-    )
-    await session.connect()
+async def test_tail_flush_is_a_noop_when_audio_bytes_delivery_is_disabled():
+    receiver = _receiver_with_tail_sender(None)
+    receiver.channel_mix_buffers = [bytearray(b'\x01\x00'), bytearray(b'\x02\x00')]
 
-    channel_mix_buffers = [
-        bytearray(struct.pack('<2h', 1000, 2000)),
-        bytearray(struct.pack('<2h', 3000, 4000)),
-    ]
+    await receiver.flush_multi_channel_tail()
 
-    await _close_then_flush_tail(
-        session=session,
-        channel_mix_buffers=channel_mix_buffers,
+    assert receiver.channel_mix_buffers == [bytearray(b'\x01\x00'), bytearray(b'\x02\x00')]
+
+
+@pytest.mark.anyio
+async def test_partial_multichannel_stt_construction_drains_every_open_socket():
+    first_socket = SimpleNamespace(drain_and_close=AsyncMock())
+    host = SimpleNamespace(
         is_multi_channel=True,
+        use_custom_stt=False,
+        stt_service=STTService.parakeet,
+        request=SimpleNamespace(websocket=MagicMock()),
+        state=SimpleNamespace(),
+        client_device_context=SimpleNamespace(platform='desktop'),
     )
+    receiver = ListenReceiver(host, [SimpleNamespace(), SimpleNamespace()], {})
+    receiver._create_stt_socket = AsyncMock(side_effect=[first_socket, RuntimeError('connect failed')])
 
-    assert not any(frame_type(frame) == 101 for frame in ws.sent)
-    assert session.audio_total_size > 0
+    with patch('routers.listen.receiver.terminate_live_stt_session', new=AsyncMock()):
+        assert await receiver.initialize_stt() is False
+
+    first_socket.drain_and_close.assert_awaited_once_with()
+    assert receiver.stt_sockets_multi == [None, None]
 
 
-def test_stream_handler_teardown_flushes_tail_before_pusher_close():
-    transcribe_path = Path(__file__).resolve().parents[2] / "routers" / "transcribe.py"
-    source = transcribe_path.read_text()
-    handler_end = source.find('logger.info(f"_stream_handler ended')
-    finally_start = source.rfind("    finally:", 0, handler_end)
-    teardown = source[finally_start:handler_end]
-    flush_pos = teardown.find("# Flush any remaining mixed audio to pusher")
-    pusher_pos = teardown.find("# Pusher sockets")
-    assert flush_pos != -1
-    assert pusher_pos != -1
-    assert flush_pos < pusher_pos
+@pytest.mark.anyio
+async def test_multichannel_teardown_continues_after_one_drain_failure():
+    failing = SimpleNamespace(drain_and_close=AsyncMock(side_effect=RuntimeError('drain failed')), finish=MagicMock())
+    healthy = SimpleNamespace(drain_and_close=AsyncMock(), finish=MagicMock())
+    host = SimpleNamespace(is_multi_channel=True)
+    receiver = ListenReceiver(host, [SimpleNamespace(), SimpleNamespace()], {})
+    receiver.stt_sockets_multi = [failing, healthy]
+
+    await receiver._drain_stt_sockets()
+
+    failing.finish.assert_called_once_with()
+    healthy.drain_and_close.assert_awaited_once_with()
+    assert receiver.stt_sockets_multi == [None, None]

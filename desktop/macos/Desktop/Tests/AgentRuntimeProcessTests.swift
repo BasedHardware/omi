@@ -99,7 +99,130 @@ private actor GatedRuntimeStartupHarness {
   func launches() -> Int { launchCount }
 }
 
+private enum CredentialRefreshShouldNotRun: Error {
+  case invoked
+}
+
+private actor CredentialFreeControlStartProbe {
+  private var startupCredentialFetches = 0
+  private var runtimeCredentialRefreshes = 0
+  private var ownerSynchronizations = 0
+
+  func attemptStartupCredentialFetch() throws -> String? {
+    startupCredentialFetches += 1
+    throw CredentialRefreshShouldNotRun.invoked
+  }
+
+  func attemptRuntimeCredentialRefresh() throws -> Bool {
+    runtimeCredentialRefreshes += 1
+    throw CredentialRefreshShouldNotRun.invoked
+  }
+
+  func synchronizeOwner() {
+    ownerSynchronizations += 1
+  }
+
+  func snapshot() -> (startupCredentialFetches: Int, runtimeCredentialRefreshes: Int, ownerSynchronizations: Int) {
+    (startupCredentialFetches, runtimeCredentialRefreshes, ownerSynchronizations)
+  }
+}
+
 final class AgentRuntimeProcessTests: XCTestCase {
+  func testHermeticFaultModelTokenIsNonProductionOnlyAndAvoidsFirebaseRefresh() {
+    let environment = [
+      AgentRuntimeCredentialPolicy.hermeticFaultModelTokenEnvironmentKey: "fault-suite-model-token"
+    ]
+
+    let token = AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
+      isNonProduction: true,
+      bundleIdentifier: AgentRuntimeCredentialPolicy.hermeticFaultBundleIdentifier,
+      environment: environment)
+    XCTAssertEqual(token, "fault-suite-model-token")
+    XCTAssertFalse(
+      AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: true,
+        isNonProduction: true,
+        hermeticFaultModelToken: token),
+      "the isolated fault backend must exercise its injected response without Firebase")
+    XCTAssertNil(
+      AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
+        isNonProduction: false,
+        bundleIdentifier: AgentRuntimeCredentialPolicy.hermeticFaultBundleIdentifier,
+        environment: environment),
+      "production must never accept a harness-supplied model token")
+    XCTAssertNil(
+      AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
+        isNonProduction: true,
+        bundleIdentifier: "com.omi.some-other-dev-bundle",
+        environment: environment),
+      "only the named fault bundle may opt into the inert model token")
+    XCTAssertNil(
+      AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
+        isNonProduction: true,
+        bundleIdentifier: AgentRuntimeCredentialPolicy.hermeticFaultBundleIdentifier,
+        environment: [
+          AgentRuntimeCredentialPolicy.hermeticFaultModelTokenEnvironmentKey: "   "
+        ]))
+  }
+
+  func testNonProductionJournalControlStartDoesNotRefreshCredentials() async throws {
+    let probe = CredentialFreeControlStartProbe()
+
+    XCTAssertFalse(
+      AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: false,
+        isNonProduction: true))
+    XCTAssertTrue(
+      AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: false,
+        isNonProduction: false),
+      "production must never permit a credential-free runtime start")
+    XCTAssertTrue(
+      AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: true,
+        isNonProduction: true),
+      "normal model starts must remain credential-required")
+
+    let authHeader = try await AgentRuntimeProcess.startupAuthHeader(
+      requiresCredentials: false,
+      fetchAuthHeader: {
+        try await probe.attemptStartupCredentialFetch()
+      })
+    XCTAssertNil(authHeader)
+
+    await AgentBridge.synchronizeAuthorityForStart(
+      requiresCredentials: false,
+      refreshCredentials: {
+        try await probe.attemptRuntimeCredentialRefresh()
+      },
+      refreshOwner: {
+        await probe.synchronizeOwner()
+      })
+
+    let snapshot = await probe.snapshot()
+    XCTAssertEqual(snapshot.startupCredentialFetches, 0)
+    XCTAssertEqual(snapshot.runtimeCredentialRefreshes, 0)
+    XCTAssertEqual(snapshot.ownerSynchronizations, 1)
+  }
+
+  func testNamedBundleStartupUsesValidSeededCredentialWithoutForcedRefresh() {
+    XCTAssertFalse(
+      AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(
+        isNonProduction: true,
+        isDesktopLocalProfile: false),
+      "a named bundle has no Firebase SDK session to satisfy a forced refresh")
+    XCTAssertFalse(
+      AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(
+        isNonProduction: true,
+        isDesktopLocalProfile: true),
+      "the local harness owns its credential lifecycle")
+    XCTAssertTrue(
+      AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(
+        isNonProduction: false,
+        isDesktopLocalProfile: false),
+      "production and Beta starts must continue forcing a fresh credential")
+  }
+
   func testKernelJournalMutationClosesTheRuntimeReplayBoundary() async throws {
     let runtime = AgentRuntimeProcess()
     let turn = try XCTUnwrap(
@@ -364,13 +487,13 @@ final class AgentRuntimeProcessTests: XCTestCase {
     let startBody = String(bridgeSource[startRange.lowerBound..<restartRange.lowerBound])
     let handshakeRange = try XCTUnwrap(
       startBody.range(
-        of: "await synchronizeRuntimeAuthority(authorizationSnapshot: authorizationSnapshot)"))
+        of: "await synchronizeRuntimeAuthority(\n          authorizationSnapshot: authorizationSnapshot,"))
     let migrationRange = try XCTUnwrap(
       startBody.range(
         of: "await migrateLegacyMainChatSessionsIfNeeded("))
     XCTAssertLessThan(handshakeRange.lowerBound, migrationRange.lowerBound)
-    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else"))
-    XCTAssertTrue(bridgeSource.contains("await runtime.refreshRuntimeOwner("))
+    XCTAssertTrue(bridgeSource.contains("synchronizeAuthorityForStart("))
+    XCTAssertTrue(bridgeSource.contains("runtime.refreshRuntimeOwner("))
   }
 
   func testRuntimeStartupSingleFlightLaunchesExactlyOnceForConcurrentSameKey() async throws {
@@ -637,11 +760,13 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(
       bridgeSource.contains(
         "AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue"))
-    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else"))
+    XCTAssertTrue(
+      bridgeSource.contains(
+        "isPiMonoHarness\n      && AgentRuntimeCredentialPolicy.requiresManagedCredentials"))
     XCTAssertTrue(bridgeSource.contains("if adapterId == AgentAdapterId.piMono.rawValue"))
     XCTAssertTrue(
       bridgeSource.contains(
-        "ensureTokenRefreshTask(authorizationSnapshot: authorizationSnapshot)"))
+        "if requiresCredentials {\n      ensureTokenRefreshTask(authorizationSnapshot: authorizationSnapshot)"))
     XCTAssertFalse(bridgeSource.contains("guard isPiMonoHarness else { return false }"))
     XCTAssertFalse(bridgeSource.contains(#"harnessMode == "piMono""#))
   }
@@ -901,11 +1026,16 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
+    let whitespaceNormalizedSource = source.split(whereSeparator: \.isWhitespace).joined(separator: " ")
 
     XCTAssertTrue(source.contains("Self.removeInheritedBYOKEnvironment(from: &env)"))
     XCTAssertTrue(source.contains("let byok = await Self.usableBYOKEnvironment()"))
     XCTAssertTrue(
-      source.contains("let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled"))
+      whitespaceNormalizedSource.contains(
+        "let forceRefreshToken = preferredAdapterId == .piMono "
+          + "&& AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup("
+      ))
+    XCTAssertTrue(source.contains("isDesktopLocalProfile: DesktopLocalProfile.isEnabled"))
     XCTAssertTrue(source.contains("getAuthHeader("))
     XCTAssertTrue(source.contains("forceRefresh: forceRefreshToken"))
     XCTAssertTrue(source.contains("expectedUserId: authorizationSnapshot.ownerID"))

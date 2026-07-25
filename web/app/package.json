@@ -60,6 +60,11 @@
     "typescript": "^5.7"
   },
   "overrides": {
-    "postcss": "$postcss"
+    "postcss": "$postcss",
+    "@grpc/grpc-js": ">=1.9.16",
+    "protobufjs": ">=7.6.3",
+    "@babel/core": ">=7.26.0",
+    "js-yaml": ">=4.1.1",
+    "websocket-driver": ">=0.5.8"
   }
 }

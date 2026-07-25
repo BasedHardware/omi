@@ -48,9 +48,9 @@ jobs:
     name: Build & verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -87,7 +87,7 @@ jobs:
         run: python -m twine check dist/*
 
       - name: Upload dist artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: omi-cli-dist
           path: sdks/python-cli/dist/
@@ -106,7 +106,7 @@ jobs:
       id-token: write  # the ONLY elevated permission, scoped to this job
     steps:
       - name: Download dist artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: omi-cli-dist
           path: dist/

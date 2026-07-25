@@ -79,6 +79,13 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     return true
   }
 
+  /// Server list/detail responses project soft retirement through canonical
+  /// lifecycle status and may omit the legacy `deleted` field. Keep that
+  /// projection here so every local cache and surface applies the same rule.
+  var isRetired: Bool {
+    deleted == true || taskStatus == "cancelled" || taskStatus == "superseded"
+  }
+
   /// Custom Equatable: compares only display-relevant fields.
   /// Skips `metadata` (JSON key ordering is non-deterministic after SQLite round-trip),
   /// `updatedAt` (set to Date() when nil on sync), and fields lost through SQLite.

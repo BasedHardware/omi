@@ -19,6 +19,15 @@ function file(): string {
   return join(app.getPath('userData'), 'rewind-settings.json')
 }
 
+// On a Wayland session, continuous capture would re-trigger the desktop portal's
+// "Share screen?" prompt on every frame (Electron exposes no persisted-consent
+// path), so a fresh install defaults capture OFF there. On-demand "what's on my
+// screen" is unaffected, and the user can still enable continuous capture
+// explicitly (one prompt per session). X11 sessions keep the default-on behavior.
+export function defaultCaptureEnabled(): boolean {
+  return process.env.XDG_SESSION_TYPE !== 'wayland'
+}
+
 // Coerce a partial/untrusted settings object into a fully-valid one.
 function sanitize(raw: Partial<RewindSettings>): RewindSettings {
   const intervalMs =
@@ -52,7 +61,7 @@ export function getPersistedRewindSettings(): RewindSettings {
   try {
     return sanitize(JSON.parse(readFileSync(file(), 'utf-8')) as Partial<RewindSettings>)
   } catch {
-    return { ...DEFAULTS }
+    return { ...DEFAULTS, captureEnabled: DEFAULTS.captureEnabled && defaultCaptureEnabled() }
   }
 }
 

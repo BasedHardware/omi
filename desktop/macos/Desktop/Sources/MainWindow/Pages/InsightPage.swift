@@ -80,14 +80,22 @@ struct InsightPage: View {
   @ObservedObject private var storage = InsightStorage.shared
   @State private var selectedInsight: StoredInsight? = nil
   @State private var showClearConfirmation = false
+  @Environment(\.sbTheme) private var sb
+
+  private let contentMaxWidth: CGFloat = 820
 
   var body: some View {
     VStack(spacing: 0) {
-      // Header
-      header
-
-      // Filter bar
-      filterBar
+      // Fixed top: header + search + filter chips
+      VStack(spacing: 18) {
+        header
+        filterBar
+      }
+      .frame(maxWidth: contentMaxWidth, alignment: .leading)
+      .frame(maxWidth: .infinity)
+      .padding(.horizontal, 28)
+      .padding(.top, 24)
+      .padding(.bottom, 16)
 
       // Content
       if storage.insightHistory.isEmpty {
@@ -124,45 +132,38 @@ struct InsightPage: View {
   // MARK: - Header
 
   private var header: some View {
-    HStack {
-      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+    HStack(alignment: .firstTextBaseline) {
+      VStack(alignment: .leading, spacing: 6) {
         Text("Insights")
-          .scaledFont(size: 24, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .geist(size: 28, weight: .semibold, tracking: 28 * -0.02)
+          .foregroundStyle(sb.ink)
 
-        HStack(spacing: OmiSpacing.sm) {
-          Text("\(viewModel.totalCount) insights")
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+        HStack(spacing: 8) {
+          Text("\(viewModel.totalCount.formatted()) insights")
+            .geistMono(size: 12.5, tracking: 0)
+            .foregroundStyle(sb.ink(.w35))
 
           if viewModel.unreadCount > 0 {
             Text("\(viewModel.unreadCount) new")
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
-              .padding(.horizontal, OmiSpacing.sm)
-              .padding(.vertical, OmiSpacing.hairline)
-              .background(OmiColors.textPrimary.opacity(0.15))
-              .cornerRadius(OmiChrome.stripRadius)
+              .geistMono(size: 11.5, weight: .medium, tracking: 0)
+              .foregroundStyle(sb.ink)
+              .padding(.horizontal, 8)
+              .padding(.vertical, 2)
+              .background(
+                Capsule().fill(sb.ink(.w12))
+              )
           }
         }
       }
 
-      Spacer()
+      Spacer(minLength: 12)
 
       // Actions
-      HStack(spacing: OmiSpacing.md) {
+      HStack(spacing: 12) {
         if viewModel.unreadCount > 0 {
-          Button {
+          SBOutlineButton(title: "Mark all read", size: 13) {
             viewModel.markAllAsRead()
-          } label: {
-            HStack(spacing: OmiSpacing.xs) {
-              Image(systemName: "checkmark.circle")
-              Text("Mark All Read")
-            }
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textSecondary)
           }
-          .buttonStyle(.plain)
         }
 
         Menu {
@@ -177,94 +178,104 @@ struct InsightPage: View {
           }
           .disabled(storage.insightHistory.isEmpty)
         } label: {
-          Image(systemName: "ellipsis.circle")
-            .scaledFont(size: OmiType.heading)
-            .foregroundColor(OmiColors.textSecondary)
+          Image(systemName: "ellipsis")
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(sb.ink(.w55))
+            .frame(width: 34, height: 34)
+            .background(
+              RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(sb.ink(.w12), lineWidth: 1)
+            )
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
       }
     }
-    .padding(.horizontal, OmiSpacing.xxl)
-    .padding(.top, OmiSpacing.xl)
-    .padding(.bottom, OmiSpacing.lg)
   }
 
   // MARK: - Filter Bar
 
   private var filterBar: some View {
-    VStack(spacing: OmiSpacing.md) {
+    VStack(spacing: 14) {
       // Search field
-      HStack(spacing: OmiSpacing.sm) {
+      HStack(spacing: 10) {
         Image(systemName: "magnifyingglass")
-          .foregroundColor(OmiColors.textTertiary)
+          .font(.system(size: 13, weight: .medium))
+          .foregroundStyle(sb.ink(.w35))
 
-        TextField("Search insights...", text: $viewModel.searchText)
-          .textFieldStyle(.plain)
-          .foregroundColor(OmiColors.textPrimary)
+        ZStack(alignment: .leading) {
+          if viewModel.searchText.isEmpty {
+            Text("Search insights…")
+              .geist(size: 14)
+              .foregroundStyle(sb.ink(.w35))
+          }
+          TextField("", text: $viewModel.searchText)
+            .textFieldStyle(.plain)
+            .geist(size: 14)
+            .foregroundStyle(sb.ink)
+        }
 
         if !viewModel.searchText.isEmpty {
           Button {
             viewModel.searchText = ""
           } label: {
             Image(systemName: "xmark.circle.fill")
-              .foregroundColor(OmiColors.textTertiary)
+              .font(.system(size: 13))
+              .foregroundStyle(sb.ink(.w35))
           }
           .buttonStyle(.plain)
         }
       }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .background(OmiColors.backgroundTertiary)
-      .cornerRadius(OmiChrome.elementRadius)
+      .padding(.horizontal, 12)
+      .padding(.vertical, 10)
+      .background(
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+          .fill(sb.ink(.w06))
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+          .stroke(sb.ink(.w12), lineWidth: 1)
+      )
 
-      // Category tabs
+      // Category chips
       ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: OmiSpacing.sm) {
-          categoryTab(nil, "All")
+        HStack(spacing: 8) {
+          categoryChip(nil, "All")
 
           ForEach(InsightCategory.allCases, id: \.self) { category in
-            categoryTab(category, category.displayName)
+            categoryChip(category, category.displayName)
           }
         }
+        .padding(.vertical, 1)
       }
     }
-    .padding(.horizontal, OmiSpacing.xxl)
-    .padding(.bottom, OmiSpacing.lg)
   }
 
-  private func categoryTab(_ category: InsightCategory?, _ title: String) -> some View {
+  private func categoryChip(_ category: InsightCategory?, _ title: String) -> some View {
     let isSelected = viewModel.selectedCategory == category
     let count = viewModel.countForCategory(category)
 
     return Button {
       viewModel.selectedCategory = category
     } label: {
-      HStack(spacing: OmiSpacing.xs) {
-        if let cat = category {
-          Image(systemName: cat.icon)
-            .scaledFont(size: OmiType.caption)
-        }
-
+      HStack(spacing: 7) {
         Text(title)
-          .scaledFont(size: OmiType.body, weight: isSelected ? .semibold : .regular)
+          .geist(size: 13, weight: isSelected ? .medium : .regular)
+          .foregroundStyle(isSelected ? sb.ink : sb.ink(.w55))
 
         if count > 0 {
           Text("\(count)")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
-            .padding(.horizontal, OmiSpacing.xs)
-            .padding(.vertical, OmiSpacing.hairline)
-            .background(
-              Capsule()
-                .fill(isSelected ? OmiColors.textPrimary.opacity(0.15) : OmiColors.textTertiary.opacity(0.1))
-            )
+            .geistMono(size: 11, tracking: 0)
+            .foregroundStyle(isSelected ? sb.ink(.w7) : sb.ink(.w35))
         }
       }
-      .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.xs)
-      .background(isSelected ? OmiColors.textPrimary.opacity(0.15) : Color.clear)
-      .cornerRadius(OmiChrome.badgeRadius)
+      .padding(.horizontal, 12)
+      .padding(.vertical, 7)
+      .background(
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+          .fill(isSelected ? sb.ink(.w12) : sb.ink(.w06))
+      )
     }
     .buttonStyle(.plain)
   }
@@ -273,10 +284,13 @@ struct InsightPage: View {
 
   private var insightList: some View {
     ScrollView {
-      LazyVStack(spacing: OmiSpacing.md) {
-        ForEach(viewModel.filteredInsights) { item in
-          InsightCard(
+      LazyVStack(spacing: 0) {
+        let items = viewModel.filteredInsights
+        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+          InsightTimelineRow(
             insight: item,
+            isFirst: index == 0,
+            isLast: index == items.count - 1,
             onTap: {
               viewModel.markAsRead(item.id)
               selectedInsight = item
@@ -290,66 +304,67 @@ struct InsightPage: View {
           )
         }
       }
-      .padding(.horizontal, OmiSpacing.xxl)
-      .padding(.bottom, OmiSpacing.xxl)
+      .frame(maxWidth: contentMaxWidth)
+      .frame(maxWidth: .infinity)
+      .padding(.horizontal, 28)
+      .padding(.top, 8)
+      .padding(.bottom, 32)
     }
   }
 
   // MARK: - Empty States
 
   private var emptyState: some View {
-    VStack(spacing: OmiSpacing.lg) {
-      Image(systemName: "lightbulb.fill")
-        .scaledFont(size: 48)
-        .foregroundColor(OmiColors.textTertiary)
+    VStack(spacing: 16) {
+      Image(systemName: "lightbulb")
+        .font(.system(size: 40, weight: .light))
+        .foregroundStyle(sb.ink(.w25))
 
-      Text("No Insights Yet")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+      Text("No insights yet")
+        .geist(size: 17, weight: .semibold)
+        .foregroundStyle(sb.ink(.w85))
 
       Text(
-        "Proactive insights from your AI assistant will appear here.\nMake sure the Insight Assistant is enabled in Settings."
+        "Proactive insights from Omi will appear here as you work.\nEnable the Insight Assistant to start seeing them."
       )
-      .scaledFont(size: OmiType.body)
-      .foregroundColor(OmiColors.textTertiary)
+      .geist(size: 13.5)
+      .foregroundStyle(sb.ink(.w45))
       .multilineTextAlignment(.center)
-      .padding(.horizontal, OmiSpacing.section)
+      .lineSpacing(2)
 
-      // Info about where to enable
-      HStack(spacing: OmiSpacing.sm) {
-        Image(systemName: "info.circle")
-          .scaledFont(size: OmiType.body)
-        Text("Go to Settings > Proactive Assistants to configure")
-          .scaledFont(size: OmiType.body)
+      HStack(spacing: 7) {
+        Image(systemName: "gearshape")
+          .font(.system(size: 12))
+        Text("Settings → Proactive Assistants")
+          .geist(size: 12.5)
       }
-      .foregroundColor(OmiColors.textTertiary)
-      .padding(.top, OmiSpacing.sm)
+      .foregroundStyle(sb.ink(.w35))
+      .padding(.top, 4)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .padding(.horizontal, 40)
   }
 
   private var noResultsView: some View {
-    VStack(spacing: OmiSpacing.md) {
+    VStack(spacing: 14) {
       Image(systemName: "magnifyingglass")
-        .scaledFont(size: 36)
-        .foregroundColor(OmiColors.textTertiary)
+        .font(.system(size: 32, weight: .light))
+        .foregroundStyle(sb.ink(.w25))
 
-      Text("No Results")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+      Text("No results")
+        .geist(size: 16, weight: .semibold)
+        .foregroundStyle(sb.ink(.w85))
 
-      Text("Try a different search or filter")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
+      Text("Try a different search or filter.")
+        .geist(size: 13.5)
+        .foregroundStyle(sb.ink(.w45))
 
       if viewModel.selectedCategory != nil || !viewModel.searchText.isEmpty {
-        Button("Clear Filters") {
+        SBOutlineButton(title: "Clear filters", size: 13) {
           viewModel.selectedCategory = nil
           viewModel.searchText = ""
         }
-        .buttonStyle(.bordered)
-        .tint(OmiColors.textSecondary)
-        .padding(.top, OmiSpacing.sm)
+        .padding(.top, 4)
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -358,20 +373,22 @@ struct InsightPage: View {
   // MARK: - Detail Sheet
 
   private func insightDetailSheet(_ insight: StoredInsight) -> some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.xl) {
+    VStack(alignment: .leading, spacing: 20) {
       // Header
       HStack {
-        HStack(spacing: OmiSpacing.sm) {
+        HStack(spacing: 8) {
           Image(systemName: insight.insight.category.icon)
-            .scaledFont(size: OmiType.body)
+            .font(.system(size: 12, weight: .medium))
           Text(insight.insight.category.displayName)
-            .scaledFont(size: OmiType.body, weight: .medium)
+            .geist(size: 12.5, weight: .medium)
         }
-        .foregroundColor(categoryColor(insight.insight.category))
-        .padding(.horizontal, OmiSpacing.sm)
-        .padding(.vertical, OmiSpacing.xs)
-        .background(categoryColor(insight.insight.category).opacity(0.15))
-        .cornerRadius(OmiChrome.badgeRadius)
+        .foregroundStyle(sb.ink(.w7))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+          RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(sb.ink(.w06))
+        )
 
         Spacer()
 
@@ -379,116 +396,89 @@ struct InsightPage: View {
           selectedInsight = nil
         } label: {
           Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: OmiType.heading)
-            .foregroundColor(OmiColors.textTertiary)
+            .font(.system(size: 18))
+            .foregroundStyle(sb.ink(.w35))
         }
         .buttonStyle(.plain)
       }
 
       // Main advice
       Text(insight.insight.insight)
-        .scaledFont(size: OmiType.heading, weight: .medium)
-        .foregroundColor(OmiColors.textPrimary)
+        .geist(size: 16, weight: .medium)
+        .foregroundStyle(sb.ink(.w9))
+        .lineSpacing(3)
         .textSelection(.enabled)
         .fixedSize(horizontal: false, vertical: true)
 
       // Reasoning
       if let reasoning = insight.insight.reasoning {
-        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-          Text("Why this insight?")
-            .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
-            .textCase(.uppercase)
+        VStack(alignment: .leading, spacing: 8) {
+          SBSectionLabel(text: "Why this insight")
 
           Text(reasoning)
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textSecondary)
+            .geist(size: 13.5)
+            .foregroundStyle(sb.ink(.w7))
+            .lineSpacing(2)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(OmiSpacing.md)
-        .background(OmiColors.backgroundTertiary)
-        .cornerRadius(OmiChrome.elementRadius)
+        .padding(14)
+        .sbCard(radius: 12)
       }
 
       // Context
-      VStack(alignment: .leading, spacing: OmiSpacing.md) {
-        Text("Context")
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-          .foregroundColor(OmiColors.textTertiary)
-          .textCase(.uppercase)
+      VStack(alignment: .leading, spacing: 12) {
+        SBSectionLabel(text: "Context")
 
-        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-          HStack(alignment: .top, spacing: OmiSpacing.sm) {
-            Image(systemName: "app.fill")
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
-              .frame(width: 16)
-
-            Text(insight.insight.sourceApp)
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
-              .textSelection(.enabled)
-          }
-
-          HStack(alignment: .top, spacing: OmiSpacing.sm) {
-            Image(systemName: "figure.walk")
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
-              .frame(width: 16)
-
-            Text(insight.currentActivity)
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
-              .textSelection(.enabled)
-          }
-
-          HStack(alignment: .top, spacing: OmiSpacing.sm) {
-            Image(systemName: "doc.text")
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
-              .frame(width: 16)
-
-            Text(insight.contextSummary)
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
-              .textSelection(.enabled)
-          }
+        VStack(alignment: .leading, spacing: 10) {
+          contextRow("app", insight.insight.sourceApp)
+          contextRow("figure.walk", insight.currentActivity)
+          contextRow("doc.text", insight.contextSummary)
         }
       }
-      .padding(OmiSpacing.md)
-      .background(OmiColors.backgroundTertiary)
-      .cornerRadius(OmiChrome.elementRadius)
+      .padding(14)
+      .sbCard(radius: 12)
+
+      Spacer(minLength: 0)
 
       // Footer
       HStack {
-        // Confidence
-        HStack(spacing: OmiSpacing.xxs) {
-          Image(systemName: "chart.bar.fill")
-            .scaledFont(size: OmiType.caption)
+        HStack(spacing: 5) {
+          Image(systemName: "chart.bar")
+            .font(.system(size: 11))
           Text("\(Int(insight.insight.confidence * 100))% confidence")
-            .scaledFont(size: OmiType.caption)
+            .geistMono(size: 11.5, tracking: 0)
         }
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundStyle(sb.ink(.w35))
 
         Spacer()
 
-        // Date
         Text(formatDate(insight.createdAt))
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .geistMono(size: 11.5, tracking: 0)
+          .foregroundStyle(sb.ink(.w35))
       }
     }
-    .padding(OmiSpacing.xxl)
+    .padding(24)
     .frame(width: 450)
-    .background(OmiColors.backgroundSecondary)
+    .background(sb.background)
+  }
+
+  private func contextRow(_ icon: String, _ text: String) -> some View {
+    HStack(alignment: .top, spacing: 10) {
+      Image(systemName: icon)
+        .font(.system(size: 12))
+        .foregroundStyle(sb.ink(.w35))
+        .frame(width: 16)
+
+      Text(text)
+        .geist(size: 13.5)
+        .foregroundStyle(sb.ink(.w7))
+        .textSelection(.enabled)
+        .fixedSize(horizontal: false, vertical: true)
+    }
   }
 
   // MARK: - Helpers
-
-  private func categoryColor(_ category: InsightCategory) -> Color {
-    return OmiColors.textSecondary
-  }
 
   private func formatDate(_ date: Date) -> String {
     let formatter = RelativeDateTimeFormatter()
@@ -499,6 +489,141 @@ struct InsightPage: View {
 
 // MARK: - Insight Card
 
+/// One realization on the Insights stream: a connector dot on a vertical rail,
+/// a category tag + timestamp, and the insight itself as a pull-quote — so the
+/// page reads like a running log of what Omi has learned about you.
+struct InsightTimelineRow: View {
+  let insight: StoredInsight
+  let isFirst: Bool
+  let isLast: Bool
+  let onTap: () -> Void
+  let onDismiss: () -> Void
+  let onDelete: () -> Void
+
+  @State private var isHovering = false
+  @State private var showDeleteConfirmation = false
+  @Environment(\.sbTheme) private var sb
+
+  var body: some View {
+    Button(action: onTap) {
+      HStack(alignment: .top, spacing: 14) {
+        rail
+
+        VStack(alignment: .leading, spacing: 7) {
+          // Category tag · relative time, with hover actions on the right.
+          HStack(spacing: 8) {
+            HStack(spacing: 5) {
+              Image(systemName: insight.insight.category.icon)
+                .font(.system(size: 10, weight: .semibold))
+              Text(insight.insight.category.displayName.uppercased())
+                .geistMono(size: 11, tracking: 0.6)
+            }
+            .foregroundStyle(sb.ink(.w45))
+
+            Text("·").geistMono(size: 11).foregroundStyle(sb.ink(.w18))
+
+            Text(formatDate(insight.createdAt))
+              .geistMono(size: 11, tracking: 0)
+              .foregroundStyle(sb.ink(.w35))
+
+            Spacer(minLength: 8)
+
+            if isHovering {
+              HStack(spacing: 6) {
+                hoverAction("eye.slash", help: "Dismiss") { onDismiss() }
+                hoverAction("trash", help: "Delete") { showDeleteConfirmation = true }
+              }
+              .transition(.opacity)
+            }
+          }
+
+          // The realization itself, quoted.
+          Text(insight.insight.insight)
+            .geist(size: 16, weight: insight.isRead ? .regular : .medium)
+            .foregroundStyle(insight.isRead ? sb.ink(.w8) : sb.ink)
+            .lineSpacing(3)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+
+          // Quiet confidence + source footnote.
+          HStack(spacing: 6) {
+            Text("\(Int(insight.insight.confidence * 100))% sure")
+              .geistMono(size: 11)
+              .foregroundStyle(sb.ink(.w3))
+            if !insight.insight.sourceApp.isEmpty {
+              Text("·").geistMono(size: 11).foregroundStyle(sb.ink(.w18))
+              Text(insight.insight.sourceApp)
+                .geistMono(size: 11)
+                .foregroundStyle(sb.ink(.w3))
+            }
+          }
+        }
+        .padding(.bottom, 22)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
+      .opacity(insight.isDismissed ? 0.5 : 1.0)
+    }
+    .buttonStyle(.plain)
+    .animation(SBMotion.standard, value: isHovering)
+    .onHover { hovering in
+      isHovering = hovering
+      if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+    }
+    .confirmationDialog(
+      "Delete Insight",
+      isPresented: $showDeleteConfirmation,
+      titleVisibility: .visible
+    ) {
+      Button("Delete", role: .destructive) { onDelete() }
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text("Are you sure you want to delete this insight?")
+    }
+  }
+
+  /// The vertical connector: a short segment above the dot (hidden on the first
+  /// row), the dot, then a segment that fills to the next row's dot.
+  private var rail: some View {
+    VStack(spacing: 0) {
+      Rectangle()
+        .fill(isFirst ? Color.clear : sb.ink(.w12))
+        .frame(width: 1.5, height: 9)
+      Circle()
+        .fill(insight.isRead ? sb.ink(.w25) : sb.ink)
+        .frame(width: 9, height: 9)
+        .overlay(
+          Circle()
+            .stroke(sb.ink(.w25), lineWidth: insight.isRead ? 0 : 4)
+            .opacity(insight.isRead ? 0 : 0.35)
+        )
+      Rectangle()
+        .fill(isLast ? Color.clear : sb.ink(.w12))
+        .frame(width: 1.5)
+        .frame(maxHeight: .infinity)
+    }
+    .frame(width: 10)
+  }
+
+  private func hoverAction(_ icon: String, help: String, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      Image(systemName: icon)
+        .font(.system(size: 12))
+        .foregroundStyle(sb.ink(.w45))
+        .frame(width: 24, height: 24)
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(sb.ink(.w06)))
+    }
+    .buttonStyle(.plain)
+    .help(help)
+  }
+
+  private func formatDate(_ date: Date) -> String {
+    let formatter = RelativeDateTimeFormatter()
+    formatter.unitsStyle = .abbreviated
+    return formatter.localizedString(for: date, relativeTo: Date())
+  }
+}
+
 struct InsightCard: View {
   let insight: StoredInsight
   let onTap: () -> Void
@@ -507,113 +632,75 @@ struct InsightCard: View {
 
   @State private var isHovering = false
   @State private var showDeleteConfirmation = false
-
-  private var categoryColor: Color {
-    return OmiColors.textSecondary
-  }
+  @Environment(\.sbTheme) private var sb
 
   var body: some View {
     Button(action: onTap) {
-      HStack(alignment: .top, spacing: OmiSpacing.md) {
-        // Category icon
+      HStack(alignment: .top, spacing: 14) {
+        // Category icon tile
         ZStack {
-          Circle()
-            .fill(categoryColor.opacity(0.15))
+          RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(sb.ink(.w06))
             .frame(width: 36, height: 36)
 
           Image(systemName: insight.insight.category.icon)
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(categoryColor)
+            .font(.system(size: 15, weight: .medium))
+            .foregroundStyle(sb.ink(.w45))
         }
 
         // Content
-        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
-          HStack {
-            // Unread indicator
+        VStack(alignment: .leading, spacing: 6) {
+          HStack(alignment: .top, spacing: 8) {
             if !insight.isRead {
               Circle()
-                .fill(OmiColors.textPrimary)
-                .frame(width: 8, height: 8)
+                .fill(sb.ink)
+                .frame(width: 7, height: 7)
+                .padding(.top, 6)
             }
 
             Text(insight.insight.insight)
-              .scaledFont(size: OmiType.body, weight: insight.isRead ? .regular : .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .geist(size: 15, weight: insight.isRead ? .regular : .medium)
+              .foregroundStyle(sb.ink(.w9))
+              .lineSpacing(2)
               .lineLimit(2)
               .multilineTextAlignment(.leading)
 
-            Spacer()
+            Spacer(minLength: 0)
           }
 
-          HStack(spacing: OmiSpacing.md) {
-            // Source app
-            HStack(spacing: OmiSpacing.xxs) {
-              Image(systemName: "app.fill")
-                .scaledFont(size: OmiType.micro)
-              Text(insight.insight.sourceApp)
-                .scaledFont(size: OmiType.caption)
-            }
-            .foregroundColor(OmiColors.textTertiary)
+          HStack(spacing: 10) {
+            metaLabel("app", insight.insight.sourceApp)
 
-            // Confidence
-            HStack(spacing: OmiSpacing.xxs) {
-              Image(systemName: "chart.bar.fill")
-                .scaledFont(size: OmiType.micro)
-              Text("\(Int(insight.insight.confidence * 100))%")
-                .scaledFont(size: OmiType.caption)
-            }
-            .foregroundColor(OmiColors.textTertiary)
+            Text("·")
+              .geistMono(size: 12, tracking: 0)
+              .foregroundStyle(sb.ink(.w25))
 
-            Spacer()
+            metaLabel("chart.bar", "\(Int(insight.insight.confidence * 100))%")
 
-            // Date
+            Spacer(minLength: 8)
+
             Text(formatDate(insight.createdAt))
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .geistMono(size: 12, tracking: 0)
+              .foregroundStyle(sb.ink(.w35))
           }
         }
 
-        // Actions (on hover)
+        // Hover actions
         if isHovering {
-          HStack(spacing: OmiSpacing.sm) {
-            Button {
-              onDismiss()
-            } label: {
-              Image(systemName: "eye.slash")
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
-            }
-            .buttonStyle(.plain)
-            .help("Dismiss")
-
-            Button {
-              showDeleteConfirmation = true
-            } label: {
-              Image(systemName: "trash")
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
-            }
-            .buttonStyle(.plain)
-            .help("Delete")
+          HStack(spacing: 6) {
+            hoverAction("eye.slash", help: "Dismiss") { onDismiss() }
+            hoverAction("trash", help: "Delete") { showDeleteConfirmation = true }
           }
           .transition(.opacity)
         }
       }
-      .padding(OmiSpacing.md)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .fill(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundTertiary.opacity(0.6))
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .stroke(
-            insight.isDismissed ? OmiColors.textTertiary.opacity(0.3) : Color.clear,
-            lineWidth: 1
-          )
-      )
-      .opacity(insight.isDismissed ? 0.6 : 1.0)
+      .padding(16)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .sbCard(radius: 14, stroke: isHovering ? .w14 : .w09)
+      .opacity(insight.isDismissed ? 0.55 : 1.0)
     }
     .buttonStyle(.plain)
+    .animation(SBMotion.standard, value: isHovering)
     .onHover { hovering in
       isHovering = hovering
       if hovering {
@@ -634,6 +721,31 @@ struct InsightCard: View {
     } message: {
       Text("Are you sure you want to delete this insight?")
     }
+  }
+
+  private func metaLabel(_ icon: String, _ text: String) -> some View {
+    HStack(spacing: 4) {
+      Image(systemName: icon)
+        .font(.system(size: 10))
+      Text(text)
+        .geistMono(size: 12, tracking: 0)
+    }
+    .foregroundStyle(sb.ink(.w35))
+  }
+
+  private func hoverAction(_ icon: String, help: String, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      Image(systemName: icon)
+        .font(.system(size: 13))
+        .foregroundStyle(sb.ink(.w45))
+        .frame(width: 26, height: 26)
+        .background(
+          RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .fill(sb.ink(.w06))
+        )
+    }
+    .buttonStyle(.plain)
+    .help(help)
   }
 
   private func formatDate(_ date: Date) -> String {

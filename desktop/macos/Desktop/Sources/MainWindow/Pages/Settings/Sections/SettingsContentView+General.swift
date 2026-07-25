@@ -21,10 +21,14 @@ extension SettingsContentView {
 
             Text(
               permissionError
-                ?? (isMonitoring ? "Capturing screen content" : "Screen capture is paused")
+                ?? screenCaptureHealth.statusText
             )
             .scaledFont(size: OmiType.body)
-            .foregroundColor(permissionError != nil ? OmiColors.warning : OmiColors.textTertiary)
+            .foregroundColor(
+              permissionError != nil || screenCaptureHealth == .temporarilyUnavailable
+                || screenCaptureHealth == .recovering
+                ? OmiColors.warning : OmiColors.textTertiary
+            )
           }
 
           Spacer()
@@ -32,6 +36,7 @@ extension SettingsContentView {
           if isToggling {
             ProgressView()
               .scaleEffect(0.8)
+              .frame(width: 36, height: 20)
           } else {
             Toggle(
               "",
@@ -45,6 +50,7 @@ extension SettingsContentView {
             )
             .toggleStyle(OmiToggleStyle())
             .labelsHidden()
+            .frame(width: 36, height: 20)
           }
         }
       }
@@ -77,6 +83,7 @@ extension SettingsContentView {
           if isTogglingTranscription {
             ProgressView()
               .scaleEffect(0.8)
+              .frame(width: 36, height: 20)
           } else {
             Toggle(
               "",
@@ -90,6 +97,7 @@ extension SettingsContentView {
             )
             .toggleStyle(OmiToggleStyle())
             .labelsHidden()
+            .frame(width: 36, height: 20)
           }
         }
       }

@@ -287,6 +287,7 @@ enum GeneratedToolCapabilities {
       "Creates a canonical kernel session/run; visible runs project into floating-bar pills.",
       "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
       "Use visible=false for parent-linked background work that should not appear as a pill.",
+      "The primary coordinator decides in its model loop whether to call spawn_agent. When the current user explicitly asks OpenClaw or Hermes to do work, call spawn_agent in that same turn with that provider; do not delegate that instruction to another agent, use a text-pattern handoff, or narrate that only another chat surface can do it.",
       "Pass provider='openclaw' or provider='hermes' only when the current user explicitly names that provider; otherwise omit provider so Omi starts its regular managed agent.",
       "Inspect progress with list_agent_sessions or get_agent_run."
     ]
@@ -354,6 +355,19 @@ enum GeneratedToolCapabilities {
       summary: "Load the full instructions for a named skill listed in available_skills.",
       bullets: [
       "Use the exact skill name from available_skills."
+    ]
+    ),
+    Capability(
+      toolName: "search_skills",
+      title: "Search Skills",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "Search installed skill names and compact descriptions before loading a specialized workflow.",
+      bullets: [
+      "Use only when the user's request may benefit from a specialized workflow.",
+      "Load a returned skill only when it is relevant to the user's request.",
+      "Use only when the current user request plausibly needs a specialized workflow.",
+      "Do not browse skills merely to explore options or because a related term appears in conversation context."
     ]
     ),
     Capability(

@@ -6,7 +6,6 @@ final class MemoryGraphRevisitTests: XCTestCase {
   func testHomeMemoriesUsePersistentGraphViewModel() throws {
     let graph = try source(at: "Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift")
     let home = try source(at: "Sources/MainWindow/DesktopHomeView.swift")
-    let memories = try source(at: "Sources/MainWindow/Pages/MemoriesPage.swift")
     let container = try source(at: "Sources/ViewModelContainer.swift")
 
     XCTAssertFalse(graph.contains("@StateObject private var viewModel = MemoryGraphViewModel()"))
@@ -14,7 +13,39 @@ final class MemoryGraphRevisitTests: XCTestCase {
     XCTAssertTrue(container.contains("let memoryGraphViewModel = MemoryGraphViewModel()"))
     XCTAssertTrue(container.contains("memoryGraphViewModel.resetSessionState()"))
     XCTAssertTrue(home.contains("graphViewModel: viewModelContainer.memoryGraphViewModel"))
-    XCTAssertTrue(memories.contains("MemoryGraphInlineCard(viewModel: graphViewModel)"))
+    // The Brain Map moved from an inline Memories card to its own hub tab, still
+    // driven by the persistent, container-owned view model.
+    XCTAssertTrue(home.contains("MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)"))
+    // Static wiring tripwire: the Memory menu routes each destination into the
+    // same full-width surface while the graph keeps the shared background.
+    XCTAssertFalse(home.contains("constrainedListPage(MemoryHubPage"))
+    XCTAssertFalse(home.contains("listContentWidth"))
+    XCTAssertTrue(home.contains("switch destination"))
+    XCTAssertTrue(home.contains("MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)"))
+    XCTAssertTrue(graph.contains("scnView.backgroundColor = NSColor(OmiColors.backgroundPrimary)"))
+  }
+
+  func testMemoryHubDestinationMenuHasStableRoutes() {
+    XCTAssertEqual(
+      MemoryHubDestination.allCases,
+      [.memories, .conversations, .brainMap]
+    )
+    XCTAssertEqual(MemoryHubDestination.memories.title, "Memories")
+    XCTAssertEqual(MemoryHubDestination.conversations.title, "Conversations")
+    XCTAssertEqual(MemoryHubDestination.brainMap.title, "Brain Map")
+    XCTAssertEqual(MemoryHubDestination(rawValue: 1), .conversations)
+    XCTAssertEqual(
+      MemoryHubDestination.destination(for: .conversations),
+      .conversations
+    )
+    XCTAssertEqual(
+      MemoryHubDestination.destination(
+        for: .conversations,
+        requestedRawValue: MemoryHubDestination.brainMap.rawValue
+      ),
+      .brainMap
+    )
+    XCTAssertNil(MemoryHubDestination.destination(for: .tasks))
   }
 
   @MainActor

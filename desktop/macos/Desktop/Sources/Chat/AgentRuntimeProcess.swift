@@ -284,6 +284,14 @@ actor AgentRuntimeProcess {
     useExtension && !token.isEmpty && targetHasExtension
   }
 
+  nonisolated static func startupAuthHeader(
+    requiresCredentials: Bool,
+    fetchAuthHeader: () async throws -> String?
+  ) async throws -> String? {
+    guard requiresCredentials else { return nil }
+    return try await fetchAuthHeader()
+  }
+
   nonisolated static func validateRuntimeHandshake(
     _ message: RuntimeMessage
   ) throws -> RuntimeHandshake {
@@ -534,6 +542,13 @@ actor AgentRuntimeProcess {
   /// an actor blocked writing to the frozen process. See DebugSuspendControl.
   private nonisolated let debugSuspend = DebugSuspendControl()
   private var lastExitWasOOM = false
+  private var startupBeganAt: Date?
+  private var startupBinaryPresent = false
+  private var startupBinaryPresentChecked = false
+  private var startupPermissionGrantedChecked = false
+  private var pendingStartFailureDiagnostics: DesktopErrorDiagnosticContext?
+  private var startupPermissionGranted = false
+  private var startupExitCode: Int32?
   private var clients: [String: ClientRegistration] = [:]
   private var activeRequests: [RuntimeMessage.RequestKey: ActiveRequest] = [:]
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
@@ -628,7 +643,8 @@ actor AgentRuntimeProcess {
   func registerClient(
     clientId: String,
     harnessMode: String,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    requiresCredentials: Bool = true
   ) async throws {
     guard !isRestarting else {
       throw BridgeError.restarting
@@ -671,7 +687,8 @@ actor AgentRuntimeProcess {
       try await startProcess(
         preferredHarnessMode: harnessMode,
         authorizationSnapshot: authorizationSnapshot,
-        admissionAuthorityEpoch: admissionAuthorityEpoch)
+        admissionAuthorityEpoch: admissionAuthorityEpoch,
+        requiresCredentials: requiresCredentials)
       try assertAuthorization(authorizationSnapshot)
       try assertClientRegistration(clientId: clientId, registrationID: registrationID)
     } catch {
@@ -763,7 +780,8 @@ actor AgentRuntimeProcess {
       try await startProcess(
         preferredHarnessMode: harnessMode,
         authorizationSnapshot: authorizationSnapshot,
-        admissionAuthorityEpoch: runtimeOwnerAuthorityEpoch)
+        admissionAuthorityEpoch: runtimeOwnerAuthorityEpoch,
+        requiresCredentials: true)
       try assertAuthorization(authorizationSnapshot)
       try assertClientRegistration(clientId: clientId, registrationID: registrationID)
     } catch {
@@ -815,7 +833,9 @@ actor AgentRuntimeProcess {
   private func finishStopFlight(id: UUID) {
     guard let flight = stopFlight, flight.id == id else { return }
     stopFlight = nil
-    flight.waiters.forEach { $0.resume() }
+    for waiter in flight.waiters {
+      waiter.resume()
+    }
   }
 
   private func assertClientRegistration(
@@ -1581,7 +1601,8 @@ actor AgentRuntimeProcess {
     imageData: Data?,
     attachments: [AgentQueryAttachment],
     producingTurnId: String?,
-    expectedContext: AgentContextFreshness?
+    expectedContext: AgentContextFreshness?,
+    reasoningEffort: String? = nil
   ) -> [String: Any] {
     var message = protocolEnvelope(
       type: "query",
@@ -1595,6 +1616,7 @@ actor AgentRuntimeProcess {
     if let imageData { message["imageBase64"] = imageData.base64EncodedString() }
     if !attachments.isEmpty { message["attachments"] = attachments.map(\.dictionary) }
     if let producingTurnId, !producingTurnId.isEmpty { message["producingTurnId"] = producingTurnId }
+    if let reasoningEffort, !reasoningEffort.isEmpty { message["reasoningEffort"] = reasoningEffort }
     if let expectedContext {
       message["expectedContextSnapshotVersion"] = expectedContext.version
       message["expectedContextSnapshotGeneration"] = expectedContext.generation
@@ -1903,10 +1925,14 @@ actor AgentRuntimeProcess {
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
     expectedGeneration: Int? = nil,
+    deleteBackend: Bool = true,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> Int {
     var payload: [String: Any] = [:]
     if let expectedGeneration { payload["expectedGeneration"] = expectedGeneration }
+    // Only send the flag when it diverges from the daemon default (true) so a
+    // local-only reset never deletes the user's server-side chat history.
+    if !deleteBackend { payload["deleteBackend"] = false }
     return try await journalOperation(
       type: "journal_clear_turns",
       operation: "clear",
@@ -2350,6 +2376,7 @@ actor AgentRuntimeProcess {
     attachments: [AgentQueryAttachment],
     producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
+    reasoningEffort: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     onTextDelta: @escaping AgentBridge.TextDeltaHandler,
     onToolActivity: @escaping AgentBridge.ToolActivityHandler,
@@ -2392,7 +2419,8 @@ actor AgentRuntimeProcess {
         imageData: imageData,
         attachments: attachments,
         producingTurnId: producingTurnId,
-        expectedContext: expectedContext
+        expectedContext: expectedContext,
+        reasoningEffort: reasoningEffort
       )
       sendJson(queryDict)
     }
@@ -2401,7 +2429,8 @@ actor AgentRuntimeProcess {
   private func startProcess(
     preferredHarnessMode: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
-    admissionAuthorityEpoch: UInt64
+    admissionAuthorityEpoch: UInt64,
+    requiresCredentials: Bool
   ) async throws {
     let startupIsInFlight: Bool
     if bridgeLifecycle.state == .starting {
@@ -2428,7 +2457,8 @@ actor AgentRuntimeProcess {
         return try await self.performStartProcess(
           preferredHarnessMode: preferredHarnessMode,
           authorizationSnapshot: authorizationSnapshot,
-          admissionAuthorityEpoch: admissionAuthorityEpoch)
+          admissionAuthorityEpoch: admissionAuthorityEpoch,
+          requiresCredentials: requiresCredentials)
       }
     } catch {
       if [.starting, .failedStart].contains(bridgeLifecycle.state) {
@@ -2458,8 +2488,15 @@ actor AgentRuntimeProcess {
   private func performStartProcess(
     preferredHarnessMode: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
-    admissionAuthorityEpoch: UInt64
+    admissionAuthorityEpoch: UInt64,
+    requiresCredentials: Bool
   ) async throws -> StartupReceipt {
+    startupBeganAt = Date()
+    startupBinaryPresent = false
+    startupBinaryPresentChecked = false
+    startupPermissionGrantedChecked = false
+    startupPermissionGranted = false
+    startupExitCode = nil
     // `startProcess` owns the launch through `startupSingleFlight`. Do not use
     // the reducer's `.starting` state as a join signal here: the launch owner
     // intentionally sets it *before* this operation is scheduled.
@@ -2507,6 +2544,8 @@ actor AgentRuntimeProcess {
 
     let nodeExists = FileManager.default.isExecutableFile(atPath: nodePath)
     let bridgeExists = FileManager.default.fileExists(atPath: bridgePath)
+    startupBinaryPresentChecked = true
+    startupBinaryPresent = nodeExists && bridgeExists
     let bridgeDir = (bridgePath as NSString).deletingLastPathComponent
     let pkgJsonPath = ((bridgeDir as NSString).deletingLastPathComponent as NSString)
       .appendingPathComponent("package.json")
@@ -2520,6 +2559,11 @@ actor AgentRuntimeProcess {
     proc.arguments = ["--max-old-space-size=256", "--max-semi-space-size=16", bridgePath]
 
     var env = ProcessInfo.processInfo.environment
+    let hermeticFaultModelToken = AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
+      isNonProduction: AppBuild.isNonProduction,
+      bundleIdentifier: AppBuild.bundleIdentifier,
+      environment: env)
+    env.removeValue(forKey: AgentRuntimeCredentialPolicy.hermeticFaultModelTokenEnvironmentKey)
     env["NODE_NO_WARNINGS"] = "1"
     env["HARNESS_MODE"] = preferredHarnessMode
     env["OMI_AGENT_STATE_DIR"] = Self.defaultStateDirectory()
@@ -2563,19 +2607,39 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: pi-mono BYOK active, forwarding \(byok.values.count) usable user keys")
     }
 
+    let requiresPiMonoCredentials =
+      preferredAdapterId == .piMono
+      && AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: requiresCredentials,
+        isNonProduction: AppBuild.isNonProduction,
+        hermeticFaultModelToken: hermeticFaultModelToken)
     let authService = await MainActor.run { AuthService.shared }
-    let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled
-    let authHeader = try? await authService.getAuthHeader(
-      forceRefresh: forceRefreshToken,
-      expectedUserId: authorizationSnapshot.ownerID)
+    let forceRefreshToken =
+      preferredAdapterId == .piMono
+      && AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(
+        isNonProduction: AppBuild.isNonProduction,
+        isDesktopLocalProfile: DesktopLocalProfile.isEnabled)
+    let authHeader = try? await Self.startupAuthHeader(
+      requiresCredentials: requiresPiMonoCredentials,
+      fetchAuthHeader: {
+        try await authService.getAuthHeader(
+          forceRefresh: forceRefreshToken,
+          expectedUserId: authorizationSnapshot.ownerID)
+      })
     try assertStartupAuthority(
       authorizationSnapshot,
       expectedAuthorityEpoch: admissionAuthorityEpoch)
-    if let authHeader,
+    if let hermeticFaultModelToken {
+      env["OMI_AUTH_TOKEN"] = hermeticFaultModelToken
+      log("AgentRuntimeProcess: starting non-production fault-model runtime without Firebase auth")
+    } else if let authHeader,
       let token = Self.bearerToken(from: authHeader)
     {
+      startupPermissionGrantedChecked = requiresPiMonoCredentials
+      startupPermissionGranted = requiresPiMonoCredentials
       env["OMI_AUTH_TOKEN"] = token
-    } else if preferredAdapterId == .piMono && env["OMI_AGENT_ALLOW_CONTROL_ONLY"] != "1" {
+    } else if requiresPiMonoCredentials {
+      startupPermissionGrantedChecked = true
       log("AgentRuntimeProcess: pi-mono start refused, Firebase ID token is missing")
       throw BridgeError.authMissing
     } else if preferredAdapterId == .piMono {
@@ -2878,6 +2942,50 @@ actor AgentRuntimeProcess {
         "recovery_action": "retry_start",
         "recovery_result": "exhausted",
       ])
+    pendingStartFailureDiagnostics = bridgeStartFailureContext(failure)
+  }
+
+  func consumePendingStartFailureDiagnostics() -> DesktopErrorDiagnosticContext? {
+    defer { pendingStartFailureDiagnostics = nil }
+    return pendingStartFailureDiagnostics
+  }
+
+  private func bridgeStartFailureContext(
+    _ failure: AgentRuntimeBridgeLifecycle.StartFailure
+  ) -> DesktopErrorDiagnosticContext {
+    let elapsedMs = startupBeganAt.map { Int(Date().timeIntervalSince($0) * 1_000) } ?? -1
+    return Self.startFailureDiagnostics(
+      failure: failure,
+      elapsedMs: elapsedMs,
+      exitCode: startupExitCode,
+      binaryPresent: startupBinaryPresent,
+      binaryPresentChecked: startupBinaryPresentChecked,
+      permissionGrantedChecked: startupPermissionGrantedChecked,
+      permissionGranted: startupPermissionGranted)
+  }
+
+  nonisolated static func startFailureDiagnostics(
+    failure: AgentRuntimeBridgeLifecycle.StartFailure,
+    elapsedMs: Int,
+    exitCode: Int32?,
+    binaryPresent: Bool,
+    binaryPresentChecked: Bool,
+    permissionGrantedChecked: Bool,
+    permissionGranted: Bool
+  ) -> DesktopErrorDiagnosticContext {
+    DesktopErrorDiagnosticContext([
+      "startup_stage": failure.rawValue,
+      "exit_code": exitCode.map(Int.init) ?? -1,
+      "elapsed_ms": elapsedMs,
+      "configured_timeout_ms": 30_000,
+      "binary_present_checked": binaryPresentChecked,
+      "binary_present": binaryPresent,
+      // The JSONL bridge has no TCP listener; report that the port precondition was not checked.
+      "port_bound_checked": false,
+      "port_bound": false,
+      "permission_granted_checked": permissionGrantedChecked,
+      "permission_granted": permissionGranted,
+    ])
   }
 
   private func cleanupFailedStart(process failedProcess: Process, error: Error) async {
@@ -2993,7 +3101,15 @@ actor AgentRuntimeProcess {
     handle.readabilityHandler = { [weak self] handle in
       let chunk = chunkReader.read(from: handle)
       guard !chunk.data.isEmpty else {
-        handle.readabilityHandler = nil
+        // Empty availableData usually means EOF. Only detach once the child
+        // has exited — clearing the handler while the agent is still alive
+        // stops Swift from draining stdout and can deadlock Node's writes.
+        Task { [weak self] in
+          let stillRunning = await self?.isAgentProcessRunning(generation: expectedGeneration) ?? false
+          if !stillRunning {
+            handle.readabilityHandler = nil
+          }
+        }
         return
       }
       Task { [weak self] in
@@ -3004,6 +3120,10 @@ actor AgentRuntimeProcess {
         )
       }
     }
+  }
+
+  private func isAgentProcessRunning(generation: UInt64) -> Bool {
+    generation == processGeneration && process?.isRunning == true
   }
 
   private func processStdoutData(_ data: Data, sequence: UInt64, generation: UInt64) {
@@ -3318,7 +3438,7 @@ actor AgentRuntimeProcess {
         case .succeeded = executionResult
       {
         DesktopDiagnosticsManager.shared.recordFallback(
-          area: "other",
+          area: "agent_runtime",
           from: "spawn_agent",
           to: command.canonicalToolName,
           reason: "other",
@@ -3332,7 +3452,9 @@ actor AgentRuntimeProcess {
   }
 
   private func cancelAuthorizedToolExecutionTasks() {
-    activeAuthorizedToolExecutionTasks.values.forEach { $0.cancel() }
+    for task in activeAuthorizedToolExecutionTasks.values {
+      task.cancel()
+    }
   }
 
   private func cancelAndDrainAuthorizedToolExecutionTasks() async {
@@ -3346,7 +3468,9 @@ actor AgentRuntimeProcess {
   nonisolated static func cancelAndAwaitPhysicalExecutionTasks(
     _ tasks: [Task<Void, Never>]
   ) async {
-    tasks.forEach { $0.cancel() }
+    for task in tasks {
+      task.cancel()
+    }
     for task in tasks { await task.value }
   }
 
@@ -3944,6 +4068,9 @@ actor AgentRuntimeProcess {
     }
 
     let likelyOOM = lastExitWasOOM || oomDiagnosticLatch.isConfirmed(generation: processGeneration)
+    if bridgeLifecycle.state == .starting {
+      startupExitCode = exitCode
+    }
     let error: BridgeError = likelyOOM ? .outOfMemory : .processExited
     lastExitWasOOM = false
     oomDiagnosticLatch.reset(generation: processGeneration)

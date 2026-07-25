@@ -27,6 +27,11 @@ ENV_IDENTITY_DEFAULTS = {
     },
 }
 
+SAFE_STREAMING_ROUTE = 'modulate-velma-2,parakeet'
+# Batch queues, so the bounded self-hosted GPU is preferred there; the streaming
+# surface must stay Velma-first because a Parakeet admission cap fails users live.
+SAFE_PRERECORDED_ROUTE = 'parakeet,modulate-velma-2'
+
 
 def _load_values(path: Path) -> dict:
     loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -98,3 +103,38 @@ def test_backend_listen_helm_template_requires_image_tag():
 
     assert result.returncode != 0
     assert "image.tag is required" in result.stderr
+
+
+def test_prod_values_make_modulate_the_explicit_live_stt_primary():
+    values = _load_values(ENV_IDENTITY_DEFAULTS['prod']['values_file'])
+
+    assert _env_value(values, 'STT_SERVICE_MODELS') == SAFE_STREAMING_ROUTE
+    assert _env_value(values, 'STT_PRERECORDED_MODEL') == SAFE_PRERECORDED_ROUTE
+
+
+def test_rendered_prod_deployment_cannot_restore_parakeet_first_streaming():
+    helm = shutil.which('helm')
+    if helm is None:
+        pytest.skip('helm is not installed')
+
+    rendered = subprocess.run(
+        [
+            helm,
+            'template',
+            'backend-listen',
+            str(CHART_DIR),
+            '-f',
+            str(ENV_IDENTITY_DEFAULTS['prod']['values_file']),
+            '--set-string',
+            'image.tag=abc1234',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+
+    assert f'name: STT_SERVICE_MODELS\n              value: "{SAFE_STREAMING_ROUTE}"' in rendered
+    # Scoped to the streaming key: the same literal is the intended batch route, so a
+    # blanket check would forbid the pre-recorded default as collateral.
+    assert f'name: STT_SERVICE_MODELS\n              value: "{SAFE_PRERECORDED_ROUTE}"' not in rendered
+    assert f'name: STT_PRERECORDED_MODEL\n              value: "{SAFE_PRERECORDED_ROUTE}"' in rendered

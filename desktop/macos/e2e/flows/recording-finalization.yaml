@@ -1,0 +1,64 @@
+version: 2
+name: recording-finalization
+tier: manual
+description: Desktop recording finalization flow - verify a granted microphone recording stops into one durable backend conversation and opens in detail view
+app: com.omi.computer-macos
+covers:
+  - desktop/Desktop/Sources/AppState.swift
+  - desktop/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
+  - desktop/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
+  - desktop/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+preconditions:
+  - auth_ready
+  - microphone_permission_granted
+  - backend_reachable
+
+steps:
+  - id: S1
+    name: Capture conversation baseline
+    do: "Click the Dashboard sidebar icon (identifier: sidebar_dashboard) to navigate to Dashboard. Record the newest visible conversation row, including title, timestamp, source, and whether it is still processing, so the post-stop list can be compared against a stable baseline."
+    expect:
+      interactive_count: { min: 5 }
+      text_visible:
+        - Dashboard
+    note: "This flow assumes microphone permission is already granted. The permission request branch remains covered by audio-recording.yaml."
+
+  - id: S2
+    name: Start a desktop recording
+    do: "Click the Start Recording button. Verify the app enters an active recording state with a Stop Recording action, timer, waveform, or recording indicator. Keep the recording active for at least 10 seconds and speak a short unique phrase such as 'Omi finalization test recording'."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S3
+    name: Stop and wait for finalization
+    do: "Click Stop Recording. Wait for the recording indicator to clear and for the conversation list to refresh after backend finalization. The UI should not immediately start a new active recording unless the user explicitly clicked Start Recording again."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S4
+    name: Verify exactly one new conversation
+    do: "Compare the newest conversation rows against the S1 baseline. Verify exactly one new desktop recording conversation appears for the recording window. There should not be a duplicate row with the same recording time, source, or spoken test phrase."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S5
+    name: Open finalized conversation
+    do: "Open the new conversation row. Verify the detail view loads the finalized conversation instead of an empty placeholder, stale cached row, or unrelated older conversation."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S6
+    name: Verify transcript loads
+    do: "In the conversation detail view, wait for the transcript or conversation content to load. Verify the spoken test phrase or a non-empty transcript segment is shown, and that the detail page remains bound to the same new conversation after refresh. The page should not remain stuck on only an empty or processing state after finalization settles."
+    expect:
+      interactive_count: { min: 2 }
+      text_visible:
+        - Omi finalization test recording
+
+  - id: S7
+    name: Return without duplicate recovery
+    do: "Click the Dashboard sidebar icon (identifier: sidebar_dashboard) and confirm the same single finalized conversation remains visible. The local cache should stay bound to the backend conversation and should not create a second recovered conversation row after reopening the list."
+    expect:
+      interactive_count: { min: 5 }
+      text_visible:
+        - Dashboard

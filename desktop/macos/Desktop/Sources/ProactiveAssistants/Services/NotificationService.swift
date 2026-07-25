@@ -423,42 +423,39 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // `deliverSystemBanner: true` (see the parameter doc above).
     guard deliverSystemBanner else { return }
 
-    UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
-      Task { @MainActor in
-        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
-          log("NotificationService: dropping stale-owner system notification")
-          return
-        }
-        guard settings.authorizationStatus == .authorized else {
-          log("Notification skipped (auth=\(settings.authorizationStatus.rawValue)): \(title)")
-
-          // If auth reverted to notDetermined (not explicitly denied), trigger repair.
-          // Debounce: at most once per 10 minutes to avoid hammering lsregister.
-          if settings.authorizationStatus == .notDetermined {
-            let now = Date()
-            if self?.lastRepairAttempt == nil || now.timeIntervalSince(self?.lastRepairAttempt ?? .distantPast) > 600 {
-              self?.lastRepairAttempt = now
-              log("Notification auth is notDetermined at send time — triggering repair")
-              AnalyticsManager.shared.notificationRepairTriggered(
-                reason: "send_time_not_determined",
-                previousStatus: "unknown",
-                currentStatus: "notDetermined"
-              )
-              ProactiveAssistantsPlugin.repairNotificationRegistration()
-            }
-          }
-
-          return
-        }
-
-        self?.deliverNotification(
-          title: title,
-          message: message,
-          assistantId: assistantId,
-          sound: sound,
-          authorizationSnapshot: authorizationSnapshot
-        )
+    UserNotificationCallbackBridge.authorizationStatus { [weak self] authorizationStatus in
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        log("NotificationService: dropping stale-owner system notification")
+        return
       }
+      guard authorizationStatus == .authorized else {
+        log("Notification skipped (auth=\(authorizationStatus.rawValue)): \(title)")
+
+        // If auth reverted to notDetermined (not explicitly denied), trigger repair.
+        // Debounce: at most once per 10 minutes to avoid hammering lsregister.
+        if authorizationStatus == .notDetermined {
+          let now = Date()
+          if self?.lastRepairAttempt == nil || now.timeIntervalSince(self?.lastRepairAttempt ?? .distantPast) > 600 {
+            self?.lastRepairAttempt = now
+            log("Notification auth is notDetermined at send time — triggering repair")
+            AnalyticsManager.shared.notificationRepairTriggered(
+              reason: "send_time_not_determined",
+              previousStatus: "unknown",
+              currentStatus: "notDetermined"
+            )
+            ProactiveAssistantsPlugin.repairNotificationRegistration()
+          }
+        }
+        return
+      }
+
+      self?.deliverNotification(
+        title: title,
+        message: message,
+        assistantId: assistantId,
+        sound: sound,
+        authorizationSnapshot: authorizationSnapshot
+      )
     }
   }
 
@@ -600,27 +597,23 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     sound.playCustomSound()
 
     print("[\(assistantId)] Sending notification: \(title) - \(message)")
-    UNUserNotificationCenter.current().add(request) { [weak self] error in
-      if let error = error {
-        print("Notification error: \(error)")
-        logError("Notification error", error: error)
+    UserNotificationCallbackBridge.add(request) { [weak self] result in
+      if let errorDescription = result.errorDescription {
+        print("Notification error: \(errorDescription)")
+        log("Notification error: \(errorDescription)")
         // Clean up metadata on error
-        Task { @MainActor in
-          self?.notificationMetadata.removeValue(forKey: notificationId)
-          self?.notificationMetadataOrder.removeAll { $0 == notificationId }
-        }
+        self?.notificationMetadata.removeValue(forKey: notificationId)
+        self?.notificationMetadataOrder.removeAll { $0 == notificationId }
       } else {
         print("Notification sent successfully")
         // Track notification sent
-        Task { @MainActor in
-          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
-          AnalyticsManager.shared.notificationSent(
-            notificationId: notificationId,
-            title: title,
-            assistantId: assistantId,
-            surface: "system_notification"
-          )
-        }
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+        AnalyticsManager.shared.notificationSent(
+          notificationId: notificationId,
+          title: title,
+          assistantId: assistantId,
+          surface: "system_notification"
+        )
       }
     }
   }

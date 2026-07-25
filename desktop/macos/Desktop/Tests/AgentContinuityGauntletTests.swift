@@ -48,12 +48,7 @@ final class AgentContinuityGauntletTests: XCTestCase {
         "missing automation action \(name)"
       )
     }
-    let hubSource = try String(
-      contentsOf:
-        desktopDir
-        .appendingPathComponent("Desktop/Sources/FloatingControlBar/RealtimeHubController.swift"),
-      encoding: .utf8
-    )
+    let hubSource = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let providerSource = try String(
       contentsOf:
         desktopDir

@@ -4,6 +4,14 @@ import { SENSITIVE_WINDOW_MARKERS } from '../../shared/rewindExclusions'
 /** Max bit difference for two frames to count as "the same screen" → skip. */
 export const DUP_HAMMING_THRESHOLD = 4
 
+/**
+ * A duplicate frame is skipped only while it's within this window of the last
+ * STORED frame; past it, a still-identical screen is force-captured as a periodic
+ * "keyframe" anchor so a long-running static screen still appears in the timeline.
+ * Mirrors macOS `frameDedupeMaxInterval = 30.0` (RewindIndexer.swift:26).
+ */
+export const KEYFRAME_ANCHOR_MS = 30_000
+
 export type CaptureState = {
   locked: boolean
   idleSeconds: number
@@ -17,6 +25,10 @@ export type CaptureState = {
   excludedApps: string[]
   hash: string
   lastHash: string | null
+  /** Wall-clock time of this decision (ms). */
+  nowMs: number
+  /** Wall-clock time the last frame was actually STORED (ms), or null if none yet. */
+  lastCapturedAtMs: number | null
 }
 
 export type CaptureDecision =
@@ -53,7 +65,12 @@ export function shouldCaptureFrame(s: CaptureState): CaptureDecision {
     return { capture: false, reason: 'sensitive' }
   }
   if (s.lastHash && hammingDistance(s.hash, s.lastHash) <= DUP_HAMMING_THRESHOLD) {
-    return { capture: false, reason: 'duplicate' }
+    // Skip as a duplicate only within the keyframe window of the last stored
+    // frame. Past that window (or if nothing has been stored yet) force-capture
+    // so a static screen still lands a periodic anchor in the timeline.
+    const withinAnchorWindow =
+      s.lastCapturedAtMs != null && s.nowMs - s.lastCapturedAtMs <= KEYFRAME_ANCHOR_MS
+    if (withinAnchorWindow) return { capture: false, reason: 'duplicate' }
   }
   return { capture: true }
 }

@@ -1476,7 +1476,7 @@ class AppLocalizationsTa extends AppLocalizations {
       'Omi ஐ சுதந்திரமாகப் பயன்படுத்தவும். நீங்கள் உங்கள் STT வழங்குநரிடம் நேரடியாக பணம் செலுத்துங்கள்.';
 
   @override
-  String get freeMinutesMonth => 'மாதத்திற்கு 600 இலவச நிமிடங்கள் அடங்கியுள்ளது. ';
+  String get freeMinutesMonth => 'மாதத்திற்கு 300 இலவச நிமிடங்கள் அடங்கியுள்ளது. ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1798,20 +1798,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Omi ஐ விரும்புகிறீர்களா?';
-
-  @override
-  String get leaveReviewIos =>
-      'App Store இல் ஒரு மதிப்பாய்வு விட்டு மேலும் நபர்களை அடைய எங்களுக்கு உதவவும். உங்கள் பதிப்பு எங்களுக்கு உலகத்தைக் குறிக்கிறது!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Google Play Store இல் ஒரு மதிப்பாய்வு விட்டு மேலும் நபர்களை அடைய எங்களுக்கு உதவவும். உங்கள் பதிப்பு எங்களுக்கு உலகத்தைக் குறிக்கிறது!';
-
-  @override
-  String get rateOnAppStore => 'App Store இல் மதிப்பிடவும்';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play இல் மதிப்பிடவும்';
 
   @override
   String get maybeLater => 'ஒருவேளை பிறகு';
@@ -2151,6 +2137,18 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ பதிவை திருத்தவும்';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'நான் ஐஸ் கிரீம் சாப்பிட விரும்புவேன்...';
@@ -4741,7 +4739,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'குறிப்பிட்ட தரவு அணுக கட்டமைக்கப்படவில்லை.';
 
   @override
-  String get basicPlanDescription => '600 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை';
+  String get basicPlanDescription => '300 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை';
 
   @override
   String get minutes => 'நிமிషங்கள்';
@@ -6041,7 +6039,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
+      'மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
 
   @override
   String get viewUsage => 'பயன்பாட்டைக் கவனிக்கவும்';
@@ -6123,7 +6121,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
+      'மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
 
   @override
   String get audioProcessedLocally =>
@@ -9054,7 +9052,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get billingYearly => 'ஆண்டு';
 
   @override
-  String get savePercent => '~17% சேமிக்கவும்';
+  String savePercent(int percent) {
+    return '~$percent% சேமிக்கவும்';
+  }
 
   @override
   String get popular => 'பிரபலம்';
@@ -9668,4 +9668,177 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'இணைப்பு இல்லை — உள்ளூரில் பதிவு செய்யப்படுகிறது. நீங்கள் மீண்டும் ஆன்லைனுக்கு வரும்போது படியெடுக்கப்படும்.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'உங்கள் தரவு இயல்பாகவே வலுவான குறியாக்கத்துடன் பாதுகாக்கப்படுகிறது, மேலும் அது எவ்வாறு சேமிக்கப்படுகிறது மற்றும் பயன்படுத்தப்படுகிறது என்பதை நீங்கள் கட்டுப்படுத்துகிறீர்கள்.';
+
+  @override
+  String get sttModelAccuracy => 'துல்லியம்';
+
+  @override
+  String get whisperModelSizeBase => 'அடிப்படை';
+
+  @override
+  String get cloudTranscription => 'கிளவுட் உரையாக்கம்';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'மாதிரியை நீக்கு';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'இந்த மாதிரியை நீக்க விரும்புகிறீர்களா?';
+
+  @override
+  String get onDeviceModelDownloaded => 'பதிவிறக்கப்பட்டது';
+
+  @override
+  String get sttModelFaster => 'வேகமானது';
+
+  @override
+  String get sttFilterAuto => 'தானியங்கு';
+
+  @override
+  String get sttModelHigher => 'அதிகம்';
+
+  @override
+  String get whisperModelSizeLarge => 'பெரியது';
+
+  @override
+  String get sttModelLower => 'குறைவு';
+
+  @override
+  String get whisperModelSizeMedium => 'நடுத்தரம்';
+
+  @override
+  String get onDeviceModelDeleted => 'மாதிரி நீக்கப்பட்டது';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'மாதிரி பதிவிறக்கம் தோல்வியடைந்தது';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Whisper மாதிரியைப் பதிவிறக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'மாதிரி பதிவிறக்கப்பட்டது';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper மாதிரி வெற்றிகரமாகப் பதிவிறக்கப்பட்டது';
+
+  @override
+  String get onDeviceModelSize => 'மாதிரி அளவு';
+
+  @override
+  String get sttNone => 'எதுவும் இல்லை';
+
+  @override
+  String get onDeviceTranscription => 'சாதனத்தில் உரையாக்கம்';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'உரையாக்கம் உங்கள் சாதனத்திலேயே செயலாக்கப்படுகிறது';
+
+  @override
+  String get sttModelSlower => 'மெதுவானது';
+
+  @override
+  String get whisperModelSizeSmall => 'சிறியது';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'பேச்சு-உரை வழங்குநர்';
+
+  @override
+  String get speechToTextProviderDesc => 'உரையாக்கத்திற்குப் பயன்படுத்தப்படும் சேவையைத் தேர்ந்தெடுக்கவும்';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'வேகம்';
+
+  @override
+  String get whisperModelSizeTiny => 'மிகச் சிறியது';
+
+  @override
+  String get transcriptionLanguage => 'உரையாக்க மொழி';
+
+  @override
+  String get transcriptionLanguageDesc => 'பேச்சு உரையாக்கத்திற்கான மொழியைத் தேர்ந்தெடுக்கவும்';
+
+  @override
+  String get whisperModel => 'Whisper மாதிரி';
+
+  @override
+  String get whisperModelDesc => 'சாதனத்தில் உரையாக்கத்திற்கான மாதிரியைத் தேர்ந்தெடுக்கவும்';
+
+  @override
+  String get downgradeToFreemiumTitle => 'இலவசத் திட்டத்திற்கு மாறவா?';
+
+  @override
+  String get downgradeLimitationsHeading => 'இந்த வரம்புகளை நீங்கள் சந்திப்பீர்கள்:';
+
+  @override
+  String get downgradeLimitBattery => '7 மடங்கு அதிக பேட்டரி பயன்பாடு';
+
+  @override
+  String get downgradeLimitQuality => '30% குறைவான உரையாக்கத் தரம்';
+
+  @override
+  String get downgradeLimitDelay => '5-7 வினாடிகள் தாமதம்';
+
+  @override
+  String get downgradeLimitSpeakers => 'பேசுபவர்களை அடையாளம் காண முடியாது';
+
+  @override
+  String get downgradeAnyway => 'எப்படியும் தரமிறக்கு';
+
+  @override
+  String get googleCalendarNotConnected => 'Google நாட்காட்டி இணைக்கப்படவில்லை';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'உரையாடல்களை நாட்காட்டி நிகழ்வுகளுடன் இணைக்க உங்கள் Google நாட்காட்டியை இணைக்கவும்.';
+
+  @override
+  String linkedToEvent(String title) {
+    return '“$title” உடன் இணைக்கப்பட்டது';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'நாட்காட்டி நிகழ்வை இணைக்க முடியவில்லை';
+
+  @override
+  String get thanksForYourFeedback => 'உங்கள் கருத்துக்கு நன்றி!';
+
+  @override
+  String get copyMessage => 'செய்தியை நகலெடு';
+
+  @override
+  String get searchSettings => 'அமைப்புகளில் தேடு…';
+
+  @override
+  String get errorLoadingAudio => 'ஆடியோவை ஏற்றுவதில் பிழை';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'உங்கள் Ray-Ban Meta மைக்ரோஃபோனைத் தேர்வுசெய்யவும்';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'உங்கள் கண்ணாடியின் Bluetooth மைக்ரோஃபோனைத் தேர்வுசெய்யவும். Omi அதைப் பயன்படுத்தும்போது இசை இடைநிறுத்தப்படும்.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Bluetooth மைக்ரோஃபோன்கள் எதுவும் கிடைக்கவில்லை. iPhone அமைப்புகளில் கண்ணாடியை இணைத்து மீண்டும் முயலவும்.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth மைக்ரோஃபோன்களை ஏற்ற முடியவில்லை. Bluetooth இயக்கத்தில் உள்ளதா எனச் சரிபார்த்து மீண்டும் முயலவும்.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'அந்த மைக்ரோஃபோனுடன் இணைக்க முடியவில்லை. அது iPhone அமைப்புகளில் இணைக்கப்பட்டுள்ளதா என உறுதிசெய்யவும்.';
 }

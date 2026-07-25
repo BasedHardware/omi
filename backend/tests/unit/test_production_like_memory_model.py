@@ -10,6 +10,7 @@ from utils.memory_ingestion.models import (
     CandidateEvidenceSpan,
     CandidateEntityMention,
     MemoryPipelineInput,
+    MemoryPipelineOutput,
     RawContextEvent,
     SourceDescriptor,
     SourceRef,
@@ -516,7 +517,6 @@ def test_liberal_memory_candidate_schema_is_natural_language_and_source_grounded
 
 
 def test_pipeline_output_can_include_liberal_candidates_without_final_frame_decision():
-    output = _run(_input(_event("No memory should be emitted from this ordinary sentence.")))
     liberal = LiberalMemoryCandidate(
         candidate_id="raw_chat_x:msg:0:cand:0",
         candidate_text="The user may prefer terse benchmark reports.",
@@ -535,8 +535,8 @@ def test_pipeline_output_can_include_liberal_candidates_without_final_frame_deci
         raw_quotes=["prefer terse benchmark reports"],
         speaker_or_actor_attribution="user_stated",
     )
-    copied = output.model_copy(update={"liberal_candidates": [liberal]})
-    dumped = copied.model_dump(mode="json")
+    output = MemoryPipelineOutput.model_construct(liberal_candidates=[liberal])
+    dumped = output.model_dump(mode="json")
 
     assert dumped["liberal_candidates"][0]["candidate_text"] == liberal.candidate_text
     assert dumped["liberal_candidates"][0]["source_unit_ids"] == ["raw_chat_x:msg:0"]

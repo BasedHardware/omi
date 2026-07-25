@@ -2,6 +2,7 @@ import Foundation
 
 enum DesktopBackendEnvironment {
   static let productionPythonAPIURL = "https://api.omi.me/"
+  static let productionRustBackendURL = "https://desktop-backend-hhibjajaja-uc.a.run.app/"
   static let developmentPythonAPIURL = "https://api.omiapi.com/"
   static let developmentRustBackendURL = "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/"
 
@@ -9,7 +10,6 @@ enum DesktopBackendEnvironment {
     shouldUseDevelopmentBackends(
       bundleIdentifier: AppBuild.bundleIdentifier,
       updateChannel: AppBuild.currentUpdateChannel,
-      forceOverride: currentEnvironmentValue("OMI_FORCE_DEV_BACKENDS"),
       externalPreviewBackend: AppBuild.externalPreviewBackend
     )
   }
@@ -17,7 +17,6 @@ enum DesktopBackendEnvironment {
   static func shouldUseDevelopmentBackends(
     bundleIdentifier: String,
     updateChannel: String,
-    forceOverride: String? = nil,
     externalPreviewBackend: AppBuild.ExternalPreviewBackend? = nil
   ) -> Bool {
     // External previews opt into their backend through signed bundle metadata. They must
@@ -29,29 +28,13 @@ enum DesktopBackendEnvironment {
 
     // Named/dev bundles route to the dev backend by default. Explicit launch
     // URLs still win below so local harnesses and intentionally-targeted tests
-    // remain possible.
-    if bundleIdentifier != AppBuild.productionBundleIdentifier {
+    // remain possible. The Omi Beta app is a production-family artifact, not a
+    // dev bundle: it falls through to channel-based routing like stable.
+    if !AppBuild.productionFamilyBundleIdentifiers.contains(bundleIdentifier) {
       return true
     }
 
-    // Beta channel of the production bundle routes to the dev backend
-    // (api.omiapi.com + dev Cloud Run desktop-backend). The dev backend is
-    // configured to use prod Firebase (project_id=based-hardware, prod service
-    // account, prod FIREBASE_API_KEY), so custom tokens it mints resolve to the
-    // same UID a user has on prod — and reads/writes hit prod Firestore. Same
-    // pattern as mobile TestFlight → staging.
-    //
-    // PR #7014 (April 2026) was reverted because at that time the dev backend
-    // was wired to the based-hardware-dev Firebase project, so beta users
-    // ended up signed in as fresh empty UIDs. The infra has since been moved
-    // onto prod Firebase. Verify before any future revert: dev backend
-    // /v1/auth/token must mint custom tokens whose UID matches prod.
-    if isAffirmative(forceOverride) {
-      return true
-    }
-
-    return bundleIdentifier == AppBuild.productionBundleIdentifier
-      && normalizedChannel(updateChannel) == "beta"
+    return false
   }
 
   static func pythonBaseURL(
@@ -63,21 +46,30 @@ enum DesktopBackendEnvironment {
     )
   }
 
-  static func pythonBaseURL(useDevelopmentBackends: Bool, environmentValue: String?) -> String {
+  static func pythonBaseURL(
+    useDevelopmentBackends: Bool,
+    environmentValue: String?
+  ) -> String {
+    // A production-family app must not allow a launch environment or bundled
+    // config to switch its customer data plane. Development identities retain
+    // their explicit override seam for local and signed-preview testing.
+    if !useDevelopmentBackends {
+      return productionPythonAPIURL
+    }
     if let url = normalizedURL(environmentValue) {
       return url
     }
 
-    if useDevelopmentBackends {
-      return developmentPythonAPIURL
-    }
-
-    return productionPythonAPIURL
+    return developmentPythonAPIURL
   }
 
   static func authBaseURL(
+    useDevelopmentBackends: Bool = shouldUseDevelopmentBackends,
     environmentValue: String? = currentEnvironmentValue("OMI_AUTH_API_URL")
   ) -> String {
+    if !useDevelopmentBackends {
+      return productionPythonAPIURL
+    }
     if let url = normalizedURL(environmentValue) {
       return url
     }
@@ -104,6 +96,9 @@ enum DesktopBackendEnvironment {
     environmentValue: String?,
     launchEnvironmentValue: String?
   ) -> String {
+    if !useDevelopmentBackends {
+      return productionRustBackendURL
+    }
     if let url = normalizedURL(environmentValue) {
       return url
     }
@@ -112,28 +107,19 @@ enum DesktopBackendEnvironment {
       return url
     }
 
-    if useDevelopmentBackends {
-      return developmentRustBackendURL
-    }
-
-    return ""
+    return developmentRustBackendURL
   }
 
   static func applyReleaseChannelDefaults() {
-    guard shouldUseDevelopmentBackends else { return }
-
-    if normalizedURL(currentEnvironmentValue("OMI_PYTHON_API_URL")) == nil {
-      setenv("OMI_PYTHON_API_URL", developmentPythonAPIURL, 1)
+    if shouldUseDevelopmentBackends {
+      if normalizedURL(currentEnvironmentValue("OMI_PYTHON_API_URL")) == nil {
+        setenv("OMI_PYTHON_API_URL", developmentPythonAPIURL, 1)
+      }
+      if normalizedURL(currentEnvironmentValue("OMI_DESKTOP_API_URL")) == nil {
+        setenv("OMI_DESKTOP_API_URL", developmentRustBackendURL, 1)
+      }
     }
-    if normalizedURL(currentEnvironmentValue("OMI_DESKTOP_API_URL")) == nil {
-      setenv("OMI_DESKTOP_API_URL", developmentRustBackendURL, 1)
-    }
-    log("BackendEnvironment: development defaults applied only for missing backend URLs")
-  }
-
-  private static func normalizedChannel(_ channel: String) -> String {
-    let normalized = channel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    return normalized == "staging" ? "beta" : normalized
+    log("BackendEnvironment: release-channel defaults applied only for missing backend URLs")
   }
 
   private static func normalizedURL(_ raw: String?) -> String? {
@@ -148,11 +134,5 @@ enum DesktopBackendEnvironment {
       return nil
     }
     return string
-  }
-
-  private static func isAffirmative(_ value: String?) -> Bool {
-    guard let value else { return false }
-    let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    return normalized == "1" || normalized == "true" || normalized == "yes"
   }
 }

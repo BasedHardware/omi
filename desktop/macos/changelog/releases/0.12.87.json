@@ -1,0 +1,17 @@
+{
+  "version": "0.12.87",
+  "date": "2026-07-20",
+  "changes": [
+    "Fixed a failed app update being able to delete your existing installed copy of Omi",
+    "Fixed audio from Bee devices gradually drifting out of sync during longer recordings",
+    "Fixed starring or renaming a conversation briefly reverting when you switch filters on a slow connection",
+    "Fixed the movable floating bar drifting out of position after repeated Ask Omi queries",
+    "Personalized home suggestions now retry after a network outage instead of staying empty for the rest of the day",
+    "Fixed personalized home suggestions so switching accounts mid-refresh can never show or store another account's questions",
+    "Fixed a startup crash that could occur while checking notification permissions",
+    "Home suggestions now open with \"What should I do today?\" followed by two questions personalized from your memories, tasks, and goals",
+    "Fixed already-synced device recordings never being cleaned up, which grew disk usage over time",
+    "Fixed device recordings occasionally getting stuck and never finishing sync after an authentication hiccup",
+    "Improved reliability of macOS beta qualification retries by starting each run with a clean synthetic profile"
+  ]
+}

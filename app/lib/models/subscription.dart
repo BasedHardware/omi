@@ -1,11 +1,40 @@
 import 'package:omi/backend/schema/gen/subscription_usage_wire.g.dart' as wire;
 
-enum PlanType { basic, unlimited, architect, operator }
+enum PlanType { basic, unlimited, architect, operator, plus, unlimitedV2 }
 
 enum SubscriptionStatus { active, inactive }
 
+const Map<PlanType, String> _planTypeWireNames = {
+  PlanType.basic: 'basic',
+  PlanType.unlimited: 'unlimited',
+  PlanType.architect: 'architect',
+  PlanType.operator: 'operator',
+  PlanType.plus: 'plus',
+  PlanType.unlimitedV2: 'unlimited_v2',
+};
+
+extension PlanTypeX on PlanType {
+  String get wireName => _planTypeWireNames[this]!;
+
+  bool get isPaid => this != PlanType.basic;
+
+  /// Plans with no monthly transcription cap. Plus is paid but metered
+  /// (1500 min/month), so it is deliberately excluded.
+  bool get hasUnlimitedTranscription =>
+      this == PlanType.unlimited ||
+      this == PlanType.operator ||
+      this == PlanType.architect ||
+      this == PlanType.unlimitedV2;
+
+  /// Mirrors backend DESKTOP_ENTITLED_PLAN_TYPES.
+  bool get grantsDesktop => this == PlanType.operator || this == PlanType.architect;
+}
+
 PlanType _planTypeFromWire(String? value) {
-  return PlanType.values.asNameMap()[value] ?? PlanType.basic;
+  for (final entry in _planTypeWireNames.entries) {
+    if (entry.value == value) return entry.key;
+  }
+  return PlanType.basic;
 }
 
 SubscriptionStatus _subscriptionStatusFromWire(String? value) {
@@ -100,7 +129,7 @@ class Subscription {
 
   wire.GeneratedSubscription toGenerated() {
     return wire.GeneratedSubscription(
-      plan: plan.name,
+      plan: plan.wireName,
       status: status.name,
       currentPeriodEnd: currentPeriodEnd,
       stripeSubscriptionId: stripeSubscriptionId,

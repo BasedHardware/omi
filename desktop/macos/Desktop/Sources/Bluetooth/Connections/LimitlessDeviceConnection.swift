@@ -29,7 +29,6 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
   private var buttonStreamSubject = PassthroughSubject<[UInt8], Never>()
 
   private var rxSubscription: Task<Void, Never>?
-  private var rawDataBuffer = [UInt8]()
 
   /// Fragment reassembly: index -> {seq -> payload}
   private var fragmentBuffer: [Int: [Int: [UInt8]]] = [:]
@@ -146,7 +145,6 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
       if isBatchMode {
         logger.debug("Batch mode - packet parse failed, data=\(data.count)b")
       }
-      rawDataBuffer.append(contentsOf: data)
       return
     }
 
@@ -296,7 +294,7 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
 
   // MARK: - Flash Page Parsing
 
-  private func parseFlashPageInfo(_ flashPageData: [UInt8]) -> [String: Any] {
+  func parseFlashPageInfo(_ flashPageData: [UInt8]) -> [String: Any] {
     var result: [String: Any] = [
       "timestamp_ms": Int64(0),
       "did_start_session": false,
@@ -320,12 +318,14 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
         pos += 1
         let (chunkLength, chunkPos) = decodeVarint(flashPageData, pos)
         pos = chunkPos
-        // Clamp every embedded length to the buffer end. A reassembled
-        // flash page can arrive truncated (a stale/lost BLE fragment, or an
-        // outer field already clamped upstream) while its inner length
-        // fields still over-claim, which would drive `pos` to `count` and
-        // trap on the subscripts below. Mirrors extractOpusFramesFromFlashPage.
-        let chunkEnd = min(pos + chunkLength, flashPageData.count)
+        // Clamp every embedded length through `boundedFieldLength`. A malformed
+        // varint can decode NEGATIVE (a 10-byte varint sets bit 63) or near
+        // `Int.max`; a bare `min(pos + length, count)` returns the negative
+        // value (or overflow-traps on the `+`), driving `pos` below zero and
+        // trapping the subscripts below. `boundedFieldLength` rejects length<=0
+        // and clamps to the remaining bytes, so `chunkEnd` is always in
+        // `pos...count`.
+        let chunkEnd = pos + Self.boundedFieldLength(chunkLength, at: pos, count: flashPageData.count)
 
         while pos < chunkEnd - 1 {
           let marker = flashPageData[pos]
@@ -335,7 +335,7 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
             pos += 1
             let (statusLength, statusPos) = decodeVarint(flashPageData, pos)
             pos = statusPos
-            let statusEnd = min(pos + statusLength, flashPageData.count)
+            let statusEnd = pos + Self.boundedFieldLength(statusLength, at: pos, count: flashPageData.count)
 
             while pos < statusEnd {
               let statusMarker = flashPageData[pos]
@@ -357,7 +357,7 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
             pos += 1
             let (audioLength, audioPos) = decodeVarint(flashPageData, pos)
             pos = audioPos
-            let audioEnd = min(pos + audioLength, flashPageData.count)
+            let audioEnd = pos + Self.boundedFieldLength(audioLength, at: pos, count: flashPageData.count)
 
             while pos < audioEnd - 1 {
               let audioMarker = flashPageData[pos]
@@ -388,7 +388,7 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
 
   // MARK: - Opus Extraction
 
-  private func extractOpusFramesFromFlashPage(_ flashPageData: [UInt8]) -> [[UInt8]] {
+  func extractOpusFramesFromFlashPage(_ flashPageData: [UInt8]) -> [[UInt8]] {
     var frames = [[UInt8]]()
     var pos = 0
 
@@ -412,7 +412,10 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
         pos += 1
         let (wrapperLength, wrapperPos) = decodeVarint(flashPageData, pos)
         pos = wrapperPos
-        let wrapperEnd = pos + wrapperLength
+        // `boundedFieldLength` rejects a negative/oversized decoded length so
+        // `wrapperEnd` is always in `pos...count` — a bare `pos + wrapperLength`
+        // could go negative (later trapping `flashPageData[pos]`) or overflow.
+        let wrapperEnd = pos + Self.boundedFieldLength(wrapperLength, at: pos, count: flashPageData.count)
 
         if wrapperEnd > flashPageData.count { break }
 
@@ -432,7 +435,7 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
             pos += 1
             let (audioLength, audioPos) = decodeVarint(flashPageData, pos)
             pos = audioPos
-            let audioEnd = pos + audioLength
+            let audioEnd = pos + Self.boundedFieldLength(audioLength, at: pos, count: flashPageData.count)
 
             if audioEnd > flashPageData.count {
               pos = wrapperEnd
@@ -452,7 +455,7 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
             pos = newPos
           } else if wireType == 2 {
             let (length, newPos) = decodeVarint(flashPageData, pos)
-            pos = newPos + length
+            pos = newPos + Self.boundedFieldLength(length, at: newPos, count: flashPageData.count)
           }
         }
         pos = wrapperEnd
@@ -473,8 +476,13 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
       pos += 1
 
       if wireType == 2 {
-        let (length, newPos) = decodeVarint(data, pos)
+        let (rawLength, newPos) = decodeVarint(data, pos)
         pos = newPos
+        // Clamp before any `pos + length` arithmetic. A negative decoded length
+        // would skip the guarded branch (short-circuit) yet still run
+        // `pos += length` below, rewinding `pos` below `start` and trapping
+        // `data[pos]`; a near-`Int.max` length would overflow the `+`.
+        let length = Self.boundedFieldLength(rawLength, at: pos, count: end)
 
         if length > 0 && pos + length <= end {
           let fieldData = Array(data[pos..<(pos + length)])
@@ -941,7 +949,6 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
     guard isInitialized else { return }
 
     do {
-      rawDataBuffer.removeAll()
       fragmentBuffer.removeAll()
       completedFlashPages.removeAll()
       isBatchMode = true
@@ -964,7 +971,6 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
     guard isInitialized else { return }
 
     do {
-      rawDataBuffer.removeAll()
       fragmentBuffer.removeAll()
       completedFlashPages.removeAll()
       firstFlashPageTimestampMs = nil

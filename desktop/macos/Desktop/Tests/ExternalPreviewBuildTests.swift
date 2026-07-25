@@ -37,19 +37,17 @@ final class ExternalPreviewBuildTests: XCTestCase {
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(
         bundleIdentifier: previewBundleIdentifier,
         updateChannel: "stable",
-        forceOverride: "1",
         externalPreviewBackend: nil
       ),
       "a malformed preview must not inherit local-development routing"
     )
   }
 
-  func testPreviewBackendSelectionIsExplicitAndCannotBeOverridden() {
+  func testPreviewBackendSelectionIsExplicit() {
     XCTAssertTrue(
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(
         bundleIdentifier: previewBundleIdentifier,
         updateChannel: "stable",
-        forceOverride: nil,
         externalPreviewBackend: .development
       )
     )
@@ -57,14 +55,13 @@ final class ExternalPreviewBuildTests: XCTestCase {
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(
         bundleIdentifier: previewBundleIdentifier,
         updateChannel: "stable",
-        forceOverride: "1",
         externalPreviewBackend: .production
       ),
-      "a preview's signed backend selection must win over a process override"
+      "a preview's signed backend selection must select its only permitted plane"
     )
   }
 
-  func testNamedDevelopmentBundlesKeepTheirExistingAutomationAndUpdateBehavior() {
+  func testNamedDevelopmentBundlesKeepAutomationButDisableSharedSparkle() {
     let configuration = AppBuild.configuration(
       bundleIdentifier: "com.omi.omi-local-preview",
       infoDictionary: [
@@ -76,7 +73,8 @@ final class ExternalPreviewBuildTests: XCTestCase {
     XCTAssertTrue(configuration.isNonProduction)
     XCTAssertFalse(configuration.isExternalPreview)
     XCTAssertTrue(configuration.allowsLocalAutomation)
-    XCTAssertTrue(configuration.allowsSparkleUpdates)
+    XCTAssertTrue(configuration.isNamedDevelopmentBundle)
+    XCTAssertFalse(configuration.allowsSparkleUpdates)
   }
 
   func testAutomationBridgeCannotBeForcedOnForAnExternalPreview() {

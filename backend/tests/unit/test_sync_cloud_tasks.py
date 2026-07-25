@@ -385,6 +385,32 @@ class TestFencedJobMutations:
             assert redis_client.ttl(job_key) == terminal_ttl
         assert redis_client.smembers(f'{sync_jobs.PROCESSED_SEGMENTS_KEY_PREFIX}{job_id}') == set()
 
+    def test_durable_ledger_finalizer_converges_a_current_queued_retry(self):
+        """A durable-ledger recovery may finish the queued retry that owns its new lease."""
+        redis_client = fakeredis.FakeRedis()
+        sync_jobs, _ = _load_sync_jobs(redis_client)
+        job_id = 'job-queued-recovery'
+        _seed_fenced_job(
+            redis_client,
+            sync_jobs,
+            job_id,
+            {'job_id': job_id, 'status': 'queued', 'lane': 'fresh', 'result': None},
+            owner='2:recovery-owner',
+        )
+        result = {'total_segments': 1, 'failed_segments': 0, 'provider': 'deepgram', 'model': 'nova-3'}
+
+        ordinary = sync_jobs.fenced_finalize_sync_job(job_id, '2:recovery-owner', result, now=101.0)
+        assert ordinary.outcome is sync_jobs.FencedSyncJobMutationOutcome.INVALID_STATE
+
+        converged = sync_jobs.fenced_finalize_sync_job_from_durable_ledger(
+            job_id,
+            '2:recovery-owner',
+            result,
+            now=102.0,
+        )
+        assert converged.applied is True
+        assert converged.job['status'] == 'completed'
+
     def test_fenced_failed_and_queued_retry_primitives_publish_while_owner_matches(self):
         redis_client = fakeredis.FakeRedis()
         sync_jobs, _ = _load_sync_jobs(redis_client)
@@ -668,7 +694,12 @@ class TestVerifyCloudTasksOidc:
             with pytest.raises(RuntimeError):
                 cloud_tasks.enqueue_sync_job({'job_id': 'j'})
 
-    def test_backfill_uses_dedicated_queue_handler_and_audience(self):
+    def test_backfill_lane_still_uses_the_main_queue(self):
+        # An offline recording can never carry server capture proof, so every
+        # offline upload classifies as backfill. Routing that lane to the
+        # bounded historical-recovery worker sent the whole offline workload
+        # through a few dispatch slots, and Cloud Tasks backed the surplus off
+        # for hours. The lane label stays on the payload for metering.
         cloud_tasks = _load_cloud_tasks()
         env = {
             'SYNC_TASKS_QUEUE': 'sync-jobs',
@@ -681,11 +712,10 @@ class TestVerifyCloudTasksOidc:
             cloud_tasks.enqueue_sync_job({'job_id': 'job-1', 'lane': 'backfill'})
 
         enqueue.assert_called_once_with(
-            'sync-backfill',
-            'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+            'sync-jobs',
+            'https://backend-sync.example.com/v2/sync-jobs/run',
             'job-1',
             {'job_id': 'job-1', 'lane': 'backfill'},
-            audience='https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         )
 
     def test_enqueue_account_deletion_task_is_named_by_job_id(self):
@@ -980,6 +1010,7 @@ def _load_sync_router_for_fast_path():
 
     sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
     sys.modules['utils.fair_use'].get_hard_restriction_status = MagicMock(return_value=(False, None))
+    sys.modules['utils.fair_use'].is_daily_audio_ceiling_exceeded = MagicMock(return_value=False)
     sys.modules['utils.fair_use'].is_dg_budget_exhausted = MagicMock(return_value=False)
     sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
     sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
@@ -1208,6 +1239,49 @@ def test_polling_stale_job_releases_retry_claim_through_owned_finalizer():
             run_lock_token='1:poll-lock',
         )
         module.release_job_run_lock.assert_called_once_with('job-1', '1:poll-lock')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = original
+
+
+def test_polling_never_dispatched_queued_job_finalizes_as_dispatch_lost():
+    """#10033: a queued cloud_tasks job whose task was lost finalizes with the
+    dispatch-lost code so it is separable from died-worker staleness."""
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    stale_job = {
+        'job_id': 'job-q',
+        'uid': 'test-uid',
+        'status': 'queued',
+        'content_id': 'content-q',
+        'stt_provider': 'deepgram',
+        'stt_model': 'nova-3',
+        'lane': 'fresh',
+        'dispatch_mode': 'cloud_tasks',
+        'ledger_fence_mode': 'active',
+        'started_at': None,
+    }
+    failed_job = {**stale_job, 'status': 'failed', 'reason_code': 'sync_dispatch_lost'}
+    try:
+        module.get_sync_ledger_fence_mode = MagicMock(return_value=module.SyncLedgerFenceMode.ACTIVE)
+        _enable_active_ledger_fence(module)
+        module.get_sync_job = MagicMock(side_effect=[stale_job, stale_job])
+        module.is_sync_job_stale = MagicMock(return_value=True)
+        module.try_acquire_sync_job_run_lock = MagicMock(return_value='1:poll-lock')
+        module.release_job_run_lock = MagicMock()
+        module.bind_or_converge_sync_ledger_completion = MagicMock(return_value=None)
+        module.delete_sync_job_run_lock_epoch = MagicMock()
+        module.finalize_sync_job_failure_now = MagicMock(return_value=failed_job)
+
+        response = module.get_sync_job_status('job-q', uid='test-uid')
+
+        assert response['status'] == 'failed'
+        assert response['reason_code'] == 'sync_dispatch_lost'
+        assert module.finalize_sync_job_failure_now.call_args.kwargs['error_code'] == 'sync_dispatch_lost'
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
@@ -1635,7 +1709,7 @@ async def test_post_terminal_retired_claim_cleanup_retries_through_terminal_bran
         )
         module._run_full_pipeline_background_async = _terminalize_then_fail_retired_cleanup
 
-        first = await module.run_sync_job(request, task_retry_count=0)
+        first = await module.run_sync_job(request, task_retry_count=2)
 
         assert first.status_code == 500
         assert json.loads(first.body) == {'status': 'terminal_cleanup_retry', 'job_status': 'partial_failure'}
@@ -1643,6 +1717,12 @@ async def test_post_terminal_retired_claim_cleanup_retries_through_terminal_bran
         module._finalize_sync_job_failure.assert_not_awaited()
         module.delete_sync_job_run_lock_epoch.assert_not_called()
         module._delete_staged_blobs_async.assert_not_awaited()
+        module.bind_or_converge_sync_ledger_completion.assert_called_once_with(
+            job_id='job-1',
+            uid='test-uid',
+            content_id='content-1',
+            run_lock_token='1:lock-token',
+        )
 
         module.release_sync_content_claim_after_job_retired.reset_mock()
         module.release_sync_content_claim_after_job_retired.side_effect = None
@@ -1740,6 +1820,52 @@ async def test_sync_task_lease_rejection_preserves_claim_and_staged_audio():
 
 
 @pytest.mark.asyncio
+async def test_sync_task_persistence_fence_terminalizes_backfill_and_releases_its_slot():
+    """A lifecycle-fenced processor result is terminal, not a Cloud Tasks retry."""
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=module.SyncConversationPersistenceFenced('conversation lifecycle replaced this worker'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+    request.json.return_value['lane'] = 'backfill'
+    setattr(module, 'finalize_sync_job_superseded', AsyncMock())
+
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'superseded'}
+        module.finalize_sync_job_superseded.assert_awaited_once_with(
+            job_id='job-1',
+            run_lock_token='1:lock-token',
+            lane='backfill',
+            provider='deepgram',
+            model='nova-3',
+        )
+        module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
+        module.release_backfill_slot.assert_called_once_with('test-uid', 'job-1')
+        module.release_sync_content_claim_after_job_retired.assert_called_once_with('test-uid', 'content-1', 'job-1')
+        module.release_sync_content_claim.assert_not_called()
+        module._finalize_sync_job_failure.assert_not_awaited()
+        module.fenced_mark_job_queued_for_retry.assert_not_called()
+        module.release_job_run_lock.assert_called_once_with('job-1', '1:lock-token')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
 async def test_expired_task_releases_only_its_matching_claim_for_404_reupload_recovery():
     module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
     request = _configure_task_handler(
@@ -1807,6 +1933,93 @@ async def test_duplicate_terminal_task_releases_only_retryable_matching_claim(st
 
 
 @pytest.mark.asyncio
+async def test_sync_task_final_attempt_converges_a_ledger_completed_by_the_failing_pipeline():
+    """A final Cloud Tasks delivery cannot overwrite its own durable completion."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('failure after durable ledger completion'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    try:
+        module.bind_or_converge_sync_ledger_completion = MagicMock(
+            side_effect=[None, {'total_segments': 1, 'outcome': 'success'}]
+        )
+
+        response = await module.run_sync_job(request, task_retry_count=2)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'done', 'reconciled': True}
+        expected_bind = unittest.mock.call(
+            job_id='job-1',
+            uid='test-uid',
+            content_id='content-1',
+            run_lock_token='1:lock-token',
+        )
+        assert module.bind_or_converge_sync_ledger_completion.call_args_list == [expected_bind, expected_bind]
+        module._run_full_pipeline_background_async.assert_awaited_once()
+        module._finalize_sync_job_failure.assert_not_awaited()
+        module.fenced_mark_job_queued_for_retry.assert_not_called()
+        module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
+        module.release_job_run_lock.assert_called_once_with('job-1', '1:lock-token')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_task_final_attempt_ledger_bind_loss_preserves_retry_material():
+    """A final recovery bind that loses ownership must not consume or clean the task."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('failure after a competing ledger update'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    try:
+        module.bind_or_converge_sync_ledger_completion = MagicMock(
+            side_effect=[None, module.SyncJobRunLeaseLost('newer ledger owner')]
+        )
+
+        response = await module.run_sync_job(request, task_retry_count=2)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module._run_full_pipeline_background_async.assert_awaited_once()
+        module._finalize_sync_job_failure.assert_not_awaited()
+        module.fenced_mark_job_queued_for_retry.assert_not_called()
+        module._delete_staged_blobs_async.assert_not_awaited()
+        module.release_job_run_lock.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
 async def test_sync_task_final_attempt_publishes_one_bounded_terminal_failure():
     """Retry exhaustion must publish a recoverable failure before consuming the task."""
 
@@ -1841,6 +2054,80 @@ async def test_sync_task_final_attempt_publishes_one_bounded_terminal_failure():
         module.fenced_mark_job_queued_for_retry.assert_not_called()
         module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
         module.release_job_run_lock.assert_called_once_with('job-1', '1:lock-token')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_task_non_retryable_failure_terminates_on_its_first_delivery():
+    """A permanent failure must not spend the retry budget returning 5xx."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    from utils.stt.outcomes import TranscriptionFailure
+
+    request = _configure_task_handler(
+        module,
+        pipeline_error=TranscriptionFailure(
+            module.TranscriptionOutcome.CONFIG_ERROR,
+            retryable=False,
+        ),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'unknown',
+            'stt_model': 'unknown',
+        },
+    )
+
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'failed_final'}
+        module._finalize_sync_job_failure.assert_awaited_once()
+        assert (
+            module._finalize_sync_job_failure.await_args.kwargs['outcome'] == module.TranscriptionOutcome.CONFIG_ERROR
+        )
+        module.fenced_mark_job_queued_for_retry.assert_not_called()
+        module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_task_retryable_failure_still_retries_before_exhaustion():
+    """The non-retryable short circuit must not collapse genuine transient retries."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=TimeoutError('transient upstream detail'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'parakeet',
+            'stt_model': 'parakeet',
+        },
+    )
+
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 500
+        assert json.loads(response.body) == {'status': 'retry'}
+        module._finalize_sync_job_failure.assert_not_awaited()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
@@ -1889,6 +2176,89 @@ async def test_sync_post_enqueue_cleanup_does_not_unstage(monkeypatch):
         module.create_sync_job.assert_called_once()
         module.enqueue_sync_job.assert_called_once()
         assert module.create_sync_job.call_args.kwargs['dispatch_mode'] == 'cloud_tasks'
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_fresh_admission_daily_ceiling_prevents_staging_or_dispatch():
+    """A fresh V2 upload over the hard ceiling must leave its WAL audio untouched."""
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, mock_sync_jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.is_daily_audio_ceiling_exceeded = MagicMock(return_value=True)
+    module._fair_use_restriction_response = AsyncMock(
+        return_value=module.JSONResponse(status_code=429, content={'code': 'fair_use_restricted'})
+    )
+    module.start_background_task = MagicMock()
+    module.classify_sync_lane = MagicMock(
+        return_value=types.SimpleNamespace(
+            lane=module.SyncLane.FRESH,
+            trust=types.SimpleNamespace(value='device_bound'),
+            reason='recent_capture',
+            maximum_age_seconds=60,
+            automatic_recovery_allowed=True,
+        )
+    )
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert response.status_code == 429
+        assert json.loads(response.body) == {'code': 'fair_use_restricted'}
+        module.is_daily_audio_ceiling_exceeded.assert_called_once_with('test-uid')
+        module._fair_use_restriction_response.assert_awaited_once()
+        restriction_kwargs = module._fair_use_restriction_response.await_args.kwargs
+        assert restriction_kwargs['uid'] == 'test-uid'
+        assert restriction_kwargs['retry_after'] > 0
+        module._retrieve_file_paths_v2.assert_not_called()
+        mock_sync_jobs.create_sync_job.assert_not_called()
+        module.claim_sync_content.assert_not_called()
+        module.enqueue_sync_job.assert_not_called()
+        module.start_background_task.assert_not_called()
+        module.has_transcription_credits.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_backfill_admission_does_not_consume_fresh_daily_ceiling():
+    """Historical recovery keeps its independent pacing policy, even above the live ceiling."""
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, mock_sync_jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.is_daily_audio_ceiling_exceeded = MagicMock(return_value=True)
+    module.start_background_task = MagicMock()
+    module.classify_sync_lane = MagicMock(
+        return_value=types.SimpleNamespace(
+            lane=module.SyncLane.BACKFILL,
+            trust=types.SimpleNamespace(value='legacy'),
+            reason='historical_recovery',
+            maximum_age_seconds=24 * 60 * 60,
+            automatic_recovery_allowed=True,
+        )
+    )
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert response.status_code == 202
+        module.is_daily_audio_ceiling_exceeded.assert_not_called()
+        mock_sync_jobs.create_sync_job.assert_called_once()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)

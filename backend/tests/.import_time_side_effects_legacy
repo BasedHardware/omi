@@ -8,7 +8,7 @@
 #
 # Terminal state: this file is deleted (PLAN.md §4, condition #2).
 #
-# Total: 30 entries.
+# Total: 29 entries.
 #
 # The 4 entries marked "surfaced by P2" below were discovered by the alias-
 # resolution hardening of scan_import_time_side_effects.py: the old checker
@@ -41,7 +41,6 @@ backend/scripts/users/retrieval.py
 backend/scripts/vad_multilang_dg_test.py
 backend/scripts/vad_offline_replay.py
 backend/utils/conversations/search.py
-backend/utils/llm/clients.py
 backend/utils/other/storage.py
 
 # surfaced by P2 (from-import alias blind spot)

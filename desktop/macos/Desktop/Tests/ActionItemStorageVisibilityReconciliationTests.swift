@@ -98,11 +98,62 @@ final class ActionItemStorageVisibilityReconciliationTests: XCTestCase {
     XCTAssertEqual(refreshed.description, "local description must survive")
   }
 
+  func testCancelledDetailStatusRemainsRetiredWhenTheWireOmitsDeleted() async throws {
+    let createdAt = Date(timeIntervalSince1970: 1_749_900_000)
+    let activeUpdatedAt = Date(timeIntervalSince1970: 1_749_950_000)
+    let retiredUpdatedAt = Date(timeIntervalSince1970: 1_750_000_000)
+
+    try await ActionItemStorage.shared.syncTaskActionItems(
+      [
+        task(
+          id: "soft-retired-task",
+          description: "remove me from To Do",
+          completed: false,
+          deleted: false,
+          createdAt: createdAt,
+          updatedAt: activeUpdatedAt,
+          dueAt: nil
+        )
+      ],
+      authorization: .unrestricted
+    )
+
+    // Detail/list reads omit the legacy deleted field and represent this
+    // transition through canonical lifecycle status instead.
+    try await ActionItemStorage.shared.syncTaskActionItems(
+      [
+        task(
+          id: "soft-retired-task",
+          description: "remove me from To Do",
+          completed: false,
+          deleted: nil,
+          taskStatus: "cancelled",
+          createdAt: createdAt,
+          updatedAt: retiredUpdatedAt,
+          dueAt: nil
+        )
+      ],
+      authorization: .unrestricted
+    )
+
+    let localTask = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: "soft-retired-task")
+    let cached = try XCTUnwrap(localTask)
+    XCTAssertEqual(cached.deleted, true)
+
+    let todoItems = try await ActionItemStorage.shared.getLocalActionItems(
+      limit: 10,
+      offset: 0,
+      completed: false
+    )
+    XCTAssertTrue(todoItems.isEmpty, "cancelled status must remove the task from To Do")
+  }
+
   private func task(
     id: String,
     description: String,
     completed: Bool,
-    deleted: Bool,
+    deleted: Bool?,
+    taskStatus: String? = nil,
     createdAt: Date,
     updatedAt: Date,
     dueAt: Date?
@@ -114,7 +165,8 @@ final class ActionItemStorageVisibilityReconciliationTests: XCTestCase {
       createdAt: createdAt,
       updatedAt: updatedAt,
       dueAt: dueAt,
-      deleted: deleted
+      deleted: deleted,
+      taskStatus: taskStatus
     )
   }
 }

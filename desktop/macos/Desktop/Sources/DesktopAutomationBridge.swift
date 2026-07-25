@@ -617,6 +617,16 @@ private func ensureConversationsTabVisibleForAutomation() async throws {
   try await Task.sleep(nanoseconds: 150_000_000)
 }
 
+private func requestAutomationConversationOpen(conversationId: String, showTranscript: Bool) async {
+  await MainActor.run {
+    ConversationDetailAutomationState.shared.requestOpen(
+      conversationId: conversationId,
+      showTranscript: showTranscript
+    )
+    NotificationCenter.default.post(name: .desktopAutomationOpenConversationRequested, object: nil)
+  }
+}
+
 @MainActor
 final class DesktopAutomationActionRegistry {
   static let shared = DesktopAutomationActionRegistry()
@@ -705,13 +715,72 @@ final class DesktopAutomationActionRegistry {
   func registerBuiltins() {
     guard !didRegisterBuiltins else { return }
     didRegisterBuiltins = true
-
+    registerOpenOmiShortcutActionsForQA()
     register(
       name: "refresh_all_data",
       summary: "Refresh conversations, chat, tasks, and memories (same as Cmd+R)"
     ) { _ in
       NotificationCenter.default.post(name: .refreshAllData, object: nil)
       return nil
+    }
+
+    // Posts a real keyDown+keyUp pair through the app's own event queue, so local
+    // NSEvent monitors and SwiftUI key equivalents see it exactly like a physical
+    // keypress — lets a headless harness drive keyboard navigation without
+    // Accessibility permission or a frontmost window. Non-prod only.
+    register(
+      name: "post_key",
+      summary:
+        "Post a keyDown+keyUp NSEvent through the app event queue (e.g. key_code=124 for right arrow). Non-prod only.",
+      params: ["key_code", "modifiers"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "post_key is disabled on production bundles"]
+      }
+      guard let codeText = params["key_code"], let keyCode = UInt16(codeText) else {
+        throw DesktopAutomationActionError.invalidParams("key_code must be a numeric macOS key code")
+      }
+      var modifiers: NSEvent.ModifierFlags = []
+      for token in (params["modifiers"] ?? "").split(separator: ",") {
+        switch token.trimmingCharacters(in: .whitespaces).lowercased() {
+        case "command", "cmd": modifiers.insert(.command)
+        case "shift": modifiers.insert(.shift)
+        case "option", "alt": modifiers.insert(.option)
+        case "control", "ctrl": modifiers.insert(.control)
+        case "function", "fn": modifiers.insert(.function)
+        case "": break
+        default:
+          throw DesktopAutomationActionError.invalidParams("unknown modifier '\(token)'")
+        }
+      }
+      // Arrow keys carry their function-key character and the flags a physical
+      // press would have, so consumers that look at characters/flags match too.
+      let arrowCharacters: [UInt16: String] = [
+        123: "\u{F702}", 124: "\u{F703}", 125: "\u{F701}", 126: "\u{F700}",
+      ]
+      let characters = arrowCharacters[keyCode] ?? ""
+      if arrowCharacters[keyCode] != nil {
+        modifiers.formUnion([.function, .numericPad])
+      }
+      let window = NSApp.keyWindow ?? NSApp.mainWindow
+      var posted = 0
+      for phase in [NSEvent.EventType.keyDown, .keyUp] {
+        if let event = NSEvent.keyEvent(
+          with: phase, location: .zero, modifierFlags: modifiers,
+          timestamp: ProcessInfo.processInfo.systemUptime,
+          windowNumber: window?.windowNumber ?? 0, context: nil,
+          characters: characters, charactersIgnoringModifiers: characters,
+          isARepeat: false, keyCode: keyCode)
+        {
+          NSApp.postEvent(event, atStart: false)
+          posted += 1
+        }
+      }
+      return [
+        "posted_events": "\(posted)",
+        "key_code": "\(keyCode)",
+        "window": window.map { $0.title.isEmpty ? "untitled" : $0.title } ?? "none",
+      ]
     }
 
     // CHAT-05: read the free-tier monthly chat usage-limiter state so a harness can
@@ -1179,11 +1248,7 @@ final class DesktopAutomationActionRegistry {
       }
       let persisted = try? await TranscriptionStorage.shared.getCachedConversation(id: detail.id)
 
-      NotificationCenter.default.post(
-        name: .desktopAutomationOpenConversationRequested,
-        object: nil,
-        userInfo: ["conversationId": detail.id, "showTranscript": true]
-      )
+      await requestAutomationConversationOpen(conversationId: detail.id, showTranscript: true)
 
       return [
         "list_loaded": appState.conversations.isEmpty ? "false" : "true",
@@ -1480,7 +1545,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "home_close_panel",
-      summary: "Collapse Home back to the hub (same as Esc / the close buttons)"
+      summary: "Collapse Home back to its resting surface (same as Esc / the close buttons)"
     ) { _ in
       NotificationCenter.default.post(name: .homeStageClose, object: nil)
       return nil
@@ -1558,6 +1623,20 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "debug_reach_error",
+      summary: "Show the actionable 'Couldn't reach Omi' card on the bar (Retry/Skip) for visual verification",
+      params: []
+    ) { _ in
+      let mgr = FloatingControlBarManager.shared
+      guard mgr.barState != nil else { return ["error": "no bar state"] }
+      if !mgr.isVisible { mgr.show() }
+      mgr.showReachError(message: "Error 502") {
+        log("debug_reach_error: Retry tapped")
+      }
+      return ["shown": "true"]
+    }
+
+    register(
       name: "reset_main_chat",
       summary: "Clear main-window chat messages and start a fresh session (harness flow isolation)",
       params: []
@@ -1568,14 +1647,28 @@ final class DesktopAutomationActionRegistry {
       guard let provider = ChatProvider.mainInstance else {
         return ["error": "main ChatProvider not yet initialized"]
       }
-      let clear = await provider.automationClearOwnerSurfaceState(chatId: "default")
-      if let error = clear["error"] {
-        return ["error": error]
-      }
-      if let error = await provider.automationResetChatForHarness() {
+      if let error = await provider.automationResetMainChatForHarness() {
         return ["error": error]
       }
       return ["reset": "true"]
+    }
+
+    register(
+      name: "present_onboarding_opener",
+      summary: "Compose and show the post-onboarding opener in the empty-chat slot (QA rendering seam)",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "present_onboarding_opener is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      provider.presentOnboardingOpener()
+      return [
+        "presented": "true",
+        "starter_count": "\(provider.onboardingOpener?.starters.count ?? 0)",
+      ]
     }
 
     // Send a message through the real main-window chat pipeline (ChatPage),
@@ -1961,14 +2054,13 @@ final class DesktopAutomationActionRegistry {
       params: ["folderPath", "maxResults", "remember"]
     ) { params in
       let maxResults = min(max(intParam(params["maxResults"], default: 20), 1), 250)
-      let folderPath = params["folderPath"]?.trimmingCharacters(in: .whitespacesAndNewlines)
       let remember = boolParam(params["remember"], default: false)
 
       do {
         let selectedFolderPath: String?
-        if let folderPath, !folderPath.isEmpty {
+        if let requestedFolder = try AppleNotesReadProbe.resolveRequestedFolder(path: params["folderPath"]) {
           let resolved = try await AppleNotesReaderService.shared.validateSelectedFolder(
-            path: folderPath,
+            path: requestedFolder.path,
             remember: remember
           )
           selectedFolderPath = resolved.path
@@ -2502,11 +2594,7 @@ final class DesktopAutomationActionRegistry {
       }
       let showTranscript = boolParam(params["showTranscript"], default: false)
       try await ensureConversationsTabVisibleForAutomation()
-      NotificationCenter.default.post(
-        name: .desktopAutomationOpenConversationRequested,
-        object: nil,
-        userInfo: ["conversationId": conversationId, "showTranscript": showTranscript]
-      )
+      await requestAutomationConversationOpen(conversationId: conversationId, showTranscript: showTranscript)
       let timeoutMs = max(500, intParam(params["timeoutMs"], default: 5_000))
       let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000)
       while ConversationDetailAutomationState.shared.openConversationId != conversationId,
@@ -2551,11 +2639,7 @@ final class DesktopAutomationActionRegistry {
       }
       let showTranscript = boolParam(params["showTranscript"], default: false)
       try await ensureConversationsTabVisibleForAutomation()
-      NotificationCenter.default.post(
-        name: .desktopAutomationOpenConversationRequested,
-        object: nil,
-        userInfo: ["conversationId": conversationId, "showTranscript": showTranscript]
-      )
+      await requestAutomationConversationOpen(conversationId: conversationId, showTranscript: showTranscript)
       let timeoutMs = max(500, intParam(params["timeoutMs"], default: 5_000))
       let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000)
       while ConversationDetailAutomationState.shared.openConversationId != conversationId,
@@ -3151,7 +3235,7 @@ final class DesktopAutomationActionRegistry {
         "storage_bytes": "\(stats?.storageSize ?? 0)",
       ]
     }
-
+    registerRewindArtifactRecoveryGauntlet()
     register(
       name: "navigate_via_shortcut",
       summary: "Post the same sidebar navigation notification as Cmd+1..6 / Cmd+, shortcuts",
@@ -3319,18 +3403,14 @@ final class DesktopAutomationActionRegistry {
     }
 
     // SET-02: assemble the exact payload FeedbackView.submitFeedback() would
-    // attach — the report title + the desktop_diagnostics.json attachment + the
-    // log-attachment metadata — WITHOUT calling SentrySDK, so a harness can grep
-    // the diagnostics JSON for secrets without firing a real Sentry event. The
-    // title and diagnostics JSON come from the same builders the real submit
-    // uses (feedbackReportTitle / writeDiagnosticsAttachment), so the dry-run
-    // can't diverge from what ships. The raw log is attached unredacted to Sentry
-    // by design (trusted sink, explicit user report); we surface only its
-    // metadata here — never its contents — so the bridge response can't leak it.
+    // attach — the report title plus a redacted incident diagnostics attachment —
+    // WITHOUT calling SentrySDK. The dry-run uses the same builders as the real
+    // submit path, so a harness can secret-scan the attachment without a cloud
+    // side effect and cannot drift toward a raw-log upload.
     register(
       name: "dump_feedback_payload_dryrun",
       summary:
-        "Assemble the feedback report payload (title + desktop_diagnostics.json + log-attachment metadata) without submitting to Sentry; returns the diagnostics JSON for secret-scanning. Non-prod only.",
+        "Assemble the feedback report payload (title + redacted desktop_diagnostics.json) without submitting to Sentry; returns the diagnostics JSON for secret-scanning. Non-prod only.",
       params: ["message"]
     ) { params in
       guard AppBuild.isNonProduction else {
@@ -3344,7 +3424,11 @@ final class DesktopAutomationActionRegistry {
         "would_submit_to_sentry": "false",
       ]
 
-      if let url = DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment() {
+      if let url = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
+        area: "other",
+        failureClass: "user_report",
+        phase: "other"
+      ) {
         defer { try? FileManager.default.removeItem(at: url) }
         if let data = try? Data(contentsOf: url), let json = String(data: data, encoding: .utf8) {
           detail["diagnostics_json"] = json
@@ -3354,18 +3438,6 @@ final class DesktopAutomationActionRegistry {
         }
       } else {
         detail["diagnostics_error"] = "attachment_write_failed"
-      }
-
-      let logPath = omiLogFilePath()
-      let logExists = FileManager.default.fileExists(atPath: logPath)
-      detail["log_attachment_filename"] = (logPath as NSString).lastPathComponent
-      detail["log_attachment_exists"] = logExists ? "true" : "false"
-      if logExists,
-        let attributes = try? FileManager.default.attributesOfItem(atPath: logPath),
-        let size = attributes[.size] as? NSNumber
-      {
-        // int64Value, not intValue (Int32): the log can exceed 2 GB in a long dev session.
-        detail["log_attachment_bytes"] = "\(size.int64Value)"
       }
       return detail
     }
@@ -3742,8 +3814,7 @@ final class DesktopAutomationBridge: @unchecked Sendable {
           logLaunchID: omiLogLaunchID(),
           bridgePort: DesktopAutomationLaunchOptions.port,
           requiresAuth: true,
-          backendEnvironment: DesktopBackendEnvironment.shouldUseDevelopmentBackends
-            ? "development" : "production",
+          backendEnvironment: DesktopBackendEnvironment.shouldUseDevelopmentBackends ? "development" : "production",
           pythonBackendURL: DesktopBackendEnvironment.pythonBaseURL(),
           rustBackendURL: DesktopBackendEnvironment.rustBackendURL(),
           agentRuntimeRunning: runtime.running,
@@ -4025,16 +4096,10 @@ final class DesktopAutomationBridge: @unchecked Sendable {
   private func dispatchOpenConversation(_ payload: DesktopAutomationOpenConversationRequest) async throws {
     await activateMainWindowIfNeeded(payload.activateApp ?? true)
     try await ensureConversationsTabVisibleForAutomation()
-    await MainActor.run {
-      NotificationCenter.default.post(
-        name: .desktopAutomationOpenConversationRequested,
-        object: nil,
-        userInfo: [
-          "conversationId": payload.conversationId,
-          "showTranscript": payload.showTranscript ?? false,
-        ]
-      )
-    }
+    await requestAutomationConversationOpen(
+      conversationId: payload.conversationId,
+      showTranscript: payload.showTranscript ?? false
+    )
   }
 
   private func activateMainWindowIfNeeded(_ activateApp: Bool) async {

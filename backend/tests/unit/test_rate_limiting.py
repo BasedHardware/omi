@@ -188,6 +188,35 @@ class TestShadowMode(unittest.TestCase):
             self.assertFalse(rlc.RATE_LIMIT_SHADOW)
         importlib.reload(rlc)
 
+    def test_shadow_mode_non_true_values_stay_off(self):
+        """Shadow is opt-in via 'true'; any other value must NOT silently enable it.
+
+        The flag defaults OFF (enforcement active). Only an explicit truthy
+        'true' should turn shadow/log-only mode on. Values like '0', 'off',
+        'no', or an empty string mean "not true", so enforcement must stay on —
+        otherwise setting the env var to disable shadow would fail open and
+        silently drop all rate-limit enforcement.
+        """
+        import utils.rate_limit_config as rlc
+
+        for value in ("0", "off", "no", "", "1", "disabled", "False ", "yes"):
+            with patch.dict(os.environ, {"RATE_LIMIT_SHADOW_MODE": value}):
+                importlib.reload(rlc)
+                self.assertFalse(
+                    rlc.RATE_LIMIT_SHADOW,
+                    f"RATE_LIMIT_SHADOW_MODE={value!r} must not enable shadow mode",
+                )
+        importlib.reload(rlc)
+
+    def test_shadow_mode_true_is_case_insensitive(self):
+        import utils.rate_limit_config as rlc
+
+        for value in ("true", "TRUE", "True"):
+            with patch.dict(os.environ, {"RATE_LIMIT_SHADOW_MODE": value}):
+                importlib.reload(rlc)
+                self.assertTrue(rlc.RATE_LIMIT_SHADOW, f"{value!r} should enable shadow mode")
+        importlib.reload(rlc)
+
 
 class TestGetEffectiveLimit(unittest.TestCase):
     """Test get_effective_limit edge cases."""
@@ -634,8 +663,8 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_memories_router_has_rate_limits(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:")
-        # create, batch, 3 review (list/get/resolve), delete, delete_all, 3 modify endpoints = 10
-        self.assertEqual(len(matches), 10, f"memories.py expected 10 rate limits, got {len(matches)}")
+        # create, batch, 3 review (list/get/resolve), delete, delete_all, delete_batch, 4 modify endpoints = 12
+        self.assertEqual(len(matches), 12, f"memories.py expected 12 rate limits, got {len(matches)}")
 
     def test_memories_create_endpoint_rate_limited(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:create")
@@ -644,6 +673,10 @@ class TestRouterWiring(unittest.TestCase):
     def test_memories_delete_all_endpoint_rate_limited(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:delete_all")
         self.assertEqual(len(matches), 1, "DELETE /v3/memories must have memories:delete_all rate limit")
+
+    def test_memories_delete_batch_endpoint_rate_limited(self):
+        matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:delete_batch")
+        self.assertEqual(len(matches), 1, "DELETE /v3/memories/batch must have memories:delete_batch rate limit")
 
 
 class TestRealCheckRateLimit(unittest.TestCase):

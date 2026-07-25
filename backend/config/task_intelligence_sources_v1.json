@@ -38,7 +38,9 @@
         "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift",
         "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift",
         "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift",
-        "desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift"
+        "desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift",
+        "desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift",
+        "desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift"
       ],
       "test_adapter": "direct_command_contract",
       "writer_anchors": []

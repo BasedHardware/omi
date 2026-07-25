@@ -2,6 +2,12 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
+import {
+  backendTombstoneCode,
+  backendTurnPayload,
+  backendTurnPayloadHash,
+} from "./backend-turn-projection.js";
+import { conversationTurnFromRow } from "./conversation-turns.js";
 import type {
   AdapterBinding,
   AgentArtifact,
@@ -69,6 +75,7 @@ const CLEARED_BACKEND_TURN_CLAIMS_MIGRATION_VERSION = 24;
 const CONTEXT_SOURCE_SURFACE_SCOPE_MIGRATION_VERSION = 25;
 const BACKEND_RECONCILE_CURSOR_MIGRATION_VERSION = 26;
 const JOURNAL_PRODUCING_ATTEMPT_MIGRATION_VERSION = 27;
+const LOCAL_ONLY_JOURNAL_DELIVERY_MIGRATION_VERSION = 28;
 
 const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
@@ -373,8 +380,14 @@ export function probeNodeSqliteRuntime(options: NodeSqliteProbeOptions = {}): vo
     runToolInvocationLedgerMigration(db, Date.now());
     runKernelContextAuthorityMigration(db, Date.now());
     runJournalGenerationBaseMigration(db, Date.now());
+    runOwnerContextSnapshotMigration(db, Date.now());
+    runBackendConversationDeleteOutboxMigration(db, Date.now());
+    runBackendReconcileStateMigration(db, Date.now());
+    runClearedBackendTurnClaimsMigration(db, Date.now());
     runContextSourceSurfaceScopeMigration(db, Date.now());
+    runBackendReconcileCursorMigration(db, Date.now());
     runJournalProducingAttemptMigration(db, Date.now());
+    runLocalOnlyJournalDeliveryMigration(db, Date.now());
     runTransaction(db, () => {
       db?.prepare("INSERT INTO sessions (session_id, owner_id, status, surface_kind, default_adapter_id, created_at_ms, updated_at_ms, last_activity_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
         "ses_probe",
@@ -506,6 +519,9 @@ export class SqliteAgentStore implements AgentStore {
     }
     if (!this.hasMigration(JOURNAL_PRODUCING_ATTEMPT_MIGRATION_VERSION)) {
       runJournalProducingAttemptMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(LOCAL_ONLY_JOURNAL_DELIVERY_MIGRATION_VERSION)) {
+      runLocalOnlyJournalDeliveryMigration(this.db, this.nowMs());
     }
   }
 
@@ -645,7 +661,8 @@ export class SqliteAgentStore implements AgentStore {
       }
 
       const reconciledJournalTurns = reconcileNonterminalJournalRows(this.db, now);
-      for (const repair of reconciledJournalTurns) {
+      const repairedBackendTurnOutboxes = reconcileBackendTurnOutboxRows(this.db, now);
+      for (const repair of [...reconciledJournalTurns, ...repairedBackendTurnOutboxes]) {
         const surface = this.getOptionalRow(
           `SELECT agent_session_id FROM surface_conversations
            WHERE conversation_id = ? ORDER BY last_active_at_ms DESC LIMIT 1`,
@@ -820,6 +837,7 @@ export class SqliteAgentStore implements AgentStore {
         repairedBindingProfileReferenceIds: repairedProfileReferences.bindingIds,
         repairedLegacyJournalTurnIds,
         reconciledJournalTurnIds: reconciledJournalTurns.map((repair) => repair.turnId),
+        repairedBackendTurnOutboxIds: repairedBackendTurnOutboxes.map((repair) => repair.turnId),
         recoveryDispatchIds,
         clearedAttemptInstanceIds,
         clearedBindingInstanceIds,
@@ -1844,6 +1862,55 @@ function reconcileNonterminalJournalRows(
       code,
     };
   });
+}
+
+function reconcileBackendTurnOutboxRows(
+  db: Pick<DatabaseSync, "prepare">,
+  nowMs: number,
+): StartupJournalRepair[] {
+  const rows = db.prepare(
+    `SELECT ct.*, outbox.payload_hash AS outbox_payload_hash
+     FROM backend_turn_outbox outbox
+     JOIN conversation_turns ct
+       ON ct.conversation_id = outbox.conversation_id
+      AND ct.turn_id = outbox.turn_id
+     WHERE outbox.status IN ('pending', 'retrying', 'delivering')
+       AND ct.status IN ('completed', 'failed')
+     ORDER BY outbox.created_at_ms ASC, outbox.turn_id ASC`,
+  ).all() as Row[];
+  const repairs: StartupJournalRepair[] = [];
+  for (const row of rows) {
+    const turn = conversationTurnFromRow(row);
+    const payloadHash = backendTurnPayloadHash(backendTurnPayload(turn));
+    if (payloadHash === text(row.outbox_payload_hash)) continue;
+    const tombstoneCode = backendTombstoneCode(turn);
+    db.prepare(
+      `UPDATE backend_turn_outbox
+       SET payload_hash = ?,
+           status = CASE WHEN ? IS NOT NULL THEN 'failed' ELSE 'pending' END,
+           attempt_count = 0,
+           available_at_ms = ?,
+           lease_expires_at_ms = NULL,
+           last_error_code = ?,
+           updated_at_ms = ?
+       WHERE turn_id = ? AND payload_hash != ?`,
+    ).run(
+      payloadHash,
+      tombstoneCode,
+      nowMs,
+      tombstoneCode,
+      nowMs,
+      turn.turnId,
+      payloadHash,
+    );
+    repairs.push({
+      turnId: turn.turnId,
+      conversationId: turn.conversationId,
+      producingRunId: turn.producingRunId,
+      code: "daemon_restart_outbox_revision_repair",
+    });
+  }
+  return repairs;
 }
 
 function rewriteJournalRow(
@@ -3135,6 +3202,55 @@ function runJournalProducingAttemptMigration(
     `);
     db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
       JOURNAL_PRODUCING_ATTEMPT_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runLocalOnlyJournalDeliveryMigration(
+  db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">,
+  appliedAtMs: number,
+): void {
+  runTransaction(db, () => {
+    // Canonical surface ownership is the delivery authority. Remove only rows
+    // whose owner and conversation both resolve to a local-only surface so an
+    // upgrade cannot flush previously queued onboarding/task data to backend.
+    db.exec(`
+      DELETE FROM backend_turn_outbox
+      WHERE EXISTS (
+        SELECT 1
+        FROM surface_conversations
+        WHERE surface_conversations.conversation_id = backend_turn_outbox.conversation_id
+          AND surface_conversations.owner_id = backend_turn_outbox.owner_id
+          AND surface_conversations.surface_kind IN ('onboarding', 'task_chat', 'workstream')
+      );
+      DELETE FROM backend_conversation_delete_outbox
+      WHERE EXISTS (
+        SELECT 1
+        FROM surface_conversations
+        WHERE surface_conversations.conversation_id = backend_conversation_delete_outbox.conversation_id
+          AND surface_conversations.owner_id = backend_conversation_delete_outbox.owner_id
+          AND surface_conversations.surface_kind IN ('onboarding', 'task_chat', 'workstream')
+      );
+      DELETE FROM backend_reconcile_state
+      WHERE EXISTS (
+        SELECT 1
+        FROM surface_conversations
+        WHERE surface_conversations.conversation_id = backend_reconcile_state.conversation_id
+          AND surface_conversations.owner_id = backend_reconcile_state.owner_id
+          AND surface_conversations.surface_kind IN ('onboarding', 'task_chat', 'workstream')
+      );
+      DELETE FROM cleared_backend_turn_claims
+      WHERE EXISTS (
+        SELECT 1
+        FROM surface_conversations
+        WHERE surface_conversations.conversation_id = cleared_backend_turn_claims.conversation_id
+          AND surface_conversations.owner_id = cleared_backend_turn_claims.owner_id
+          AND surface_conversations.surface_kind IN ('onboarding', 'task_chat', 'workstream')
+      );
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      LOCAL_ONLY_JOURNAL_DELIVERY_MIGRATION_VERSION,
       appliedAtMs,
     );
   });

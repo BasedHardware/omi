@@ -110,14 +110,14 @@ def test_apply_writes_merge_when_update_acknowledged():
     assert all(merge is True for _, _, merge in db.writes)
 
 
-def test_v3_read_prereq_inspection_reports_missing_and_present_docs():
+def test_v3_read_prereq_inspection_rejects_legacy_shaped_state_head():
     script = load_script()
     db = _Db({'users/uid-a/memory_state/head': {'source': 'memory_state_head'}})
 
     result = script.inspect_v3_read_prerequisites(db, uid='uid-a')
 
     assert result == {
-        'users/uid-a/memory_state/head': True,
+        'users/uid-a/memory_state/head': False,
         'users/uid-a/v3_compatibility_projection/state': False,
     }
 
@@ -125,7 +125,7 @@ def test_v3_read_prereq_inspection_reports_missing_and_present_docs():
 def test_read_stage_apply_requires_prerequisite_docs():
     script = load_script()
 
-    with pytest.raises(RuntimeError, match='requires existing v3 read prerequisite docs'):
+    with pytest.raises(RuntimeError, match='requires valid v3 read prerequisite docs'):
         script.assert_v3_read_prerequisites_ready(
             {
                 'users/uid-a/memory_state/head': True,

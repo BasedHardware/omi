@@ -1800,20 +1800,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get lovingOmi => 'Vă place Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Ajută-ne să ajungem la mai mulți oameni lăsând o recenzie în App Store. Feedback-ul tău înseamnă enorm pentru noi!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Ajutați-ne să ajungem la mai multe persoane lăsând o recenzie în Google Play Store. Feedback-ul dvs. înseamnă enorm pentru noi!';
-
-  @override
-  String get rateOnAppStore => 'Evaluează în App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Evaluează pe Google Play';
-
-  @override
   String get maybeLater => 'Poate mai târziu';
 
   @override
@@ -2149,6 +2135,18 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Editează amintirea';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Îmi place să mănânc înghețată...';
@@ -9030,7 +9028,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get billingYearly => 'Anual';
 
   @override
-  String get savePercent => 'Economisiți ~17%';
+  String savePercent(int percent) {
+    return 'Economisiți ~$percent%';
+  }
 
   @override
   String get popular => 'Popular';
@@ -9645,4 +9645,177 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Fără conexiune — se înregistrează local. Va fi transcris când revii online.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Datele tale sunt securizate în mod implicit cu criptare puternică, iar tu controlezi modul în care sunt stocate și utilizate.';
+
+  @override
+  String get sttModelAccuracy => 'Acuratețe';
+
+  @override
+  String get whisperModelSizeBase => 'De bază';
+
+  @override
+  String get cloudTranscription => 'Transcriere în cloud';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Șterge modelul';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Sigur doriți să ștergeți acest model?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Descărcat';
+
+  @override
+  String get sttModelFaster => 'Mai rapid';
+
+  @override
+  String get sttFilterAuto => 'Automat';
+
+  @override
+  String get sttModelHigher => 'Mai mare';
+
+  @override
+  String get whisperModelSizeLarge => 'Mare';
+
+  @override
+  String get sttModelLower => 'Mai mică';
+
+  @override
+  String get whisperModelSizeMedium => 'Mediu';
+
+  @override
+  String get onDeviceModelDeleted => 'Model șters';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Descărcarea modelului a eșuat';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Descărcarea modelului Whisper a eșuat. Încercați din nou.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Model descărcat';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Modelul Whisper a fost descărcat cu succes';
+
+  @override
+  String get onDeviceModelSize => 'Dimensiunea modelului';
+
+  @override
+  String get sttNone => 'Niciunul';
+
+  @override
+  String get onDeviceTranscription => 'Transcriere pe dispozitiv';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transcrierea este procesată local pe dispozitivul dvs.';
+
+  @override
+  String get sttModelSlower => 'Mai lent';
+
+  @override
+  String get whisperModelSizeSmall => 'Mic';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Furnizor vorbire-în-text';
+
+  @override
+  String get speechToTextProviderDesc => 'Selectați serviciul utilizat pentru transcriere';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Viteză';
+
+  @override
+  String get whisperModelSizeTiny => 'Foarte mic';
+
+  @override
+  String get transcriptionLanguage => 'Limba transcrierii';
+
+  @override
+  String get transcriptionLanguageDesc => 'Selectați limba pentru transcrierea vorbirii';
+
+  @override
+  String get whisperModel => 'Model Whisper';
+
+  @override
+  String get whisperModelDesc => 'Selectați modelul pentru transcrierea pe dispozitiv';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Treceți la planul gratuit?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Veți întâmpina aceste limitări:';
+
+  @override
+  String get downgradeLimitBattery => 'Consum de baterie de 7 ori mai mare';
+
+  @override
+  String get downgradeLimitQuality => 'Calitate a transcrierii cu 30% mai slabă';
+
+  @override
+  String get downgradeLimitDelay => 'Întârziere de 5-7 secunde';
+
+  @override
+  String get downgradeLimitSpeakers => 'Vorbitorii nu pot fi identificați';
+
+  @override
+  String get downgradeAnyway => 'Retrogradează oricum';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Calendar neconectat';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'Conectați-vă Google Calendar pentru a asocia conversațiile cu evenimente din calendar.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Asociat cu „$title”';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Asocierea evenimentului din calendar a eșuat';
+
+  @override
+  String get thanksForYourFeedback => 'Mulțumim pentru feedback!';
+
+  @override
+  String get copyMessage => 'Copiază mesajul';
+
+  @override
+  String get searchSettings => 'Caută în setări…';
+
+  @override
+  String get errorLoadingAudio => 'Eroare la încărcarea audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Alege microfonul Ray-Ban Meta';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Selectează microfonul Bluetooth al ochelarilor. Muzica este întreruptă cât timp Omi îl folosește.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Nu s-au găsit microfoane Bluetooth. Conectează ochelarii în Configurările iPhone și încearcă din nou.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Microfoanele Bluetooth nu au putut fi încărcate. Verifică dacă Bluetooth este activat și încearcă din nou.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Nu s-a putut conecta la acel microfon. Asigură-te că este conectat în Configurările iPhone.';
 }

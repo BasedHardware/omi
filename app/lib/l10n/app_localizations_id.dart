@@ -1796,20 +1796,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get lovingOmi => 'Menyukai Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Bantu kami menjangkau lebih banyak orang dengan meninggalkan ulasan di App Store. Masukan Anda sangat berarti bagi kami!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Bantu kami menjangkau lebih banyak orang dengan meninggalkan ulasan di Google Play Store. Masukan Anda sangat berarti bagi kami!';
-
-  @override
-  String get rateOnAppStore => 'Beri Nilai di App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Beri Nilai di Google Play';
-
-  @override
   String get maybeLater => 'Mungkin nanti';
 
   @override
@@ -2145,6 +2131,18 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Edit Memori';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Saya suka makan es krim...';
@@ -8998,7 +8996,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get billingYearly => 'Tahunan';
 
   @override
-  String get savePercent => 'Hemat ~17%';
+  String savePercent(int percent) {
+    return 'Hemat ~$percent%';
+  }
 
   @override
   String get popular => 'Populer';
@@ -9608,4 +9608,177 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Tidak ada koneksi — merekam secara lokal. Akan ditranskripsikan saat Anda kembali daring.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Data Anda diamankan secara default dengan enkripsi kuat, dan Anda mengendalikan bagaimana data disimpan dan digunakan.';
+
+  @override
+  String get sttModelAccuracy => 'Akurasi';
+
+  @override
+  String get whisperModelSizeBase => 'Dasar';
+
+  @override
+  String get cloudTranscription => 'Transkripsi cloud';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Hapus Model';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Apakah Anda yakin ingin menghapus model ini?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Terunduh';
+
+  @override
+  String get sttModelFaster => 'Lebih cepat';
+
+  @override
+  String get sttFilterAuto => 'Otomatis';
+
+  @override
+  String get sttModelHigher => 'Lebih tinggi';
+
+  @override
+  String get whisperModelSizeLarge => 'Besar';
+
+  @override
+  String get sttModelLower => 'Lebih rendah';
+
+  @override
+  String get whisperModelSizeMedium => 'Sedang';
+
+  @override
+  String get onDeviceModelDeleted => 'Model dihapus';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Unduhan model gagal';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Gagal mengunduh model Whisper. Silakan coba lagi.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Model terunduh';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Model Whisper berhasil diunduh';
+
+  @override
+  String get onDeviceModelSize => 'Ukuran Model';
+
+  @override
+  String get sttNone => 'Tidak ada';
+
+  @override
+  String get onDeviceTranscription => 'Transkripsi di perangkat';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkripsi diproses secara lokal di perangkat Anda';
+
+  @override
+  String get sttModelSlower => 'Lebih lambat';
+
+  @override
+  String get whisperModelSizeSmall => 'Kecil';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Penyedia ucapan-ke-teks';
+
+  @override
+  String get speechToTextProviderDesc => 'Pilih layanan yang digunakan untuk transkripsi';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Kecepatan';
+
+  @override
+  String get whisperModelSizeTiny => 'Sangat kecil';
+
+  @override
+  String get transcriptionLanguage => 'Bahasa transkripsi';
+
+  @override
+  String get transcriptionLanguageDesc => 'Pilih bahasa untuk transkripsi ucapan';
+
+  @override
+  String get whisperModel => 'Model Whisper';
+
+  @override
+  String get whisperModelDesc => 'Pilih model untuk transkripsi di perangkat';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Turunkan ke paket gratis?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Anda akan mengalami keterbatasan berikut:';
+
+  @override
+  String get downgradeLimitBattery => 'Konsumsi baterai 7x lipat';
+
+  @override
+  String get downgradeLimitQuality => 'Kualitas transkripsi 30% lebih rendah';
+
+  @override
+  String get downgradeLimitDelay => 'Jeda 5-7 detik';
+
+  @override
+  String get downgradeLimitSpeakers => 'Tidak dapat mengidentifikasi pembicara';
+
+  @override
+  String get downgradeAnyway => 'Tetap Turunkan';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Calendar Belum Terhubung';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'Hubungkan Google Calendar Anda untuk menautkan percakapan ke acara kalender.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Ditautkan ke “$title”';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Gagal menautkan acara kalender';
+
+  @override
+  String get thanksForYourFeedback => 'Terima kasih atas masukan Anda!';
+
+  @override
+  String get copyMessage => 'Salin pesan';
+
+  @override
+  String get searchSettings => 'Cari pengaturan…';
+
+  @override
+  String get errorLoadingAudio => 'Gagal memuat audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Pilih mikrofon Ray-Ban Meta Anda';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Pilih mikrofon Bluetooth untuk kacamata Anda. Musik dijeda saat Omi menggunakannya.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Tidak ada mikrofon Bluetooth yang ditemukan. Hubungkan kacamata di Pengaturan iPhone, lalu coba lagi.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Mikrofon Bluetooth tidak dapat dimuat. Pastikan Bluetooth aktif, lalu coba lagi.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Tidak dapat terhubung ke mikrofon tersebut. Pastikan mikrofon terhubung di Pengaturan iPhone.';
 }

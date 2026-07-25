@@ -7,6 +7,7 @@ final class MemoryExportStatusTests: XCTestCase {
 
   override func setUp() {
     super.setUp()
+    DesktopDiagnosticsManager.shared.resetForTests()
     resetMemoryExportDefaults()
     tempHome = FileManager.default.temporaryDirectory
       .appendingPathComponent("memory-export-status-\(UUID().uuidString)", isDirectory: true)
@@ -39,6 +40,18 @@ final class MemoryExportStatusTests: XCTestCase {
     XCTAssertFalse(claudeCodeStatus.hasConnection)
     XCTAssertFalse(openClawStatus.hasConnection)
     XCTAssertFalse(hermesStatus.hasConnection)
+  }
+
+  /// The ChatGPT directory listing is a single global plugin that always
+  /// authorizes under `omi-chatgpt-prod`, even on a build pointed at the dev
+  /// backend. Grant verification must accept that prod client ID regardless of
+  /// `chatgptOAuthClientID`'s env switch, or ChatGPT never flips to connected on
+  /// Beta (the shipped symptom: Claude verified, ChatGPT stuck).
+  func testChatGPTGrantVerificationAcceptsProdDirectoryClientOnAnyBackend() {
+    XCTAssertTrue(MemoryExportDestination.chatgpt.cloudOAuthGrantClientIDs.contains("omi-chatgpt-prod"))
+    XCTAssertTrue(MemoryExportDestination.chatgpt.cloudOAuthGrantClientIDs.contains("omi-chatgpt-dev"))
+    XCTAssertEqual(MemoryExportDestination.claude.cloudOAuthGrantClientIDs, ["omi-claude-prod"])
+    XCTAssertTrue(MemoryExportDestination.notion.cloudOAuthGrantClientIDs.isEmpty)
   }
 
   func testMarkConnectedDoesNotMaskMissingLocalMCPConfig() async {
@@ -74,6 +87,21 @@ final class MemoryExportStatusTests: XCTestCase {
     XCTAssertFalse(status.isConfigured)
     XCTAssertFalse(status.hasConnection)
     XCTAssertEqual(presentation.primaryActionTitle, "Add Omi to ChatGPT")
+  }
+
+  func testCachedCloudGrantStatusReadSignalsInferredConnectorAuthority() async {
+    await MemoryExportService.shared.markConnected(.chatgpt)
+
+    let status = await MemoryExportService.shared.status(for: .chatgpt)
+
+    XCTAssertTrue(status.hasConnection)
+    let signal = DesktopDiagnosticsManager.shared.currentSnapshotsForSentry().last {
+      $0["seam"] as? String == DesktopStateAuthoritySeam.connectorStatus.rawValue
+    }
+    XCTAssertEqual(signal?["direction"] as? String, "cloud_grant_status_inferred")
+    XCTAssertEqual(signal?["from"] as? String, "cached_or_derived")
+    XCTAssertEqual(signal?["to"] as? String, "connected")
+    XCTAssertEqual(signal?["subject"] as? String, "chatgpt")
   }
 
   func testOnlyLocalAgentSetupDestinationsHaveLocallyVerifiableLiveSetup() {

@@ -139,7 +139,7 @@ enum DashboardTaskRefreshService {
       }
       guard isCurrent(authorizationSnapshot) else { return }
       log(
-        "DashboardTaskRefreshService: Dashboard freshness reconciled sync=\(plan.itemsToSync.count), hardDeleted=\(plan.backendIdsToHardDelete.count), visible=\(plan.dashboardVisibleServerIds.count), completed=\(plan.completedServerIds.count), movedOut=\(plan.movedOutServerIds.count) without loading Tasks page list"
+        "DashboardTaskRefreshService: Dashboard freshness reconciled sync=\(plan.itemsToSync.count), hardDeleted=\(plan.backendIdsToHardDelete.count), visible=\(plan.dashboardVisibleServerIds.count), terminal=\(plan.terminalServerIds.count), movedOut=\(plan.movedOutServerIds.count) without loading Tasks page list"
       )
     } catch {
       if isCurrent(authorizationSnapshot) {

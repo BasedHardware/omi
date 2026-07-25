@@ -129,6 +129,7 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
     defer { try? FileManager.default.removeItem(at: userDir) }
 
     await RewindIndexer.shared.reset()
+    await RewindStorage.shared.reset()
     await RewindDatabase.shared.close()
     RewindDatabase.currentUserId = testUserId
     await RewindDatabase.shared.configure(userId: testUserId)
@@ -148,6 +149,7 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
       "initializing the indexer must reopen a database closed after the indexer was initialized")
 
     await RewindIndexer.shared.reset()
+    await RewindStorage.shared.reset()
     await RewindDatabase.shared.close()
     RewindDatabase.currentUserId = nil
   }
@@ -165,6 +167,7 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
     defer { try? FileManager.default.removeItem(at: userDir) }
 
     await RewindIndexer.shared.reset()
+    await RewindStorage.shared.reset()
     await RewindDatabase.shared.close()
     RewindDatabase.currentUserId = testUserId
     await RewindDatabase.shared.configure(userId: testUserId)
@@ -196,6 +199,7 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
       "processing a frame must reopen a database closed after the indexer was initialized")
 
     await RewindIndexer.shared.reset()
+    await RewindStorage.shared.reset()
     await RewindDatabase.shared.close()
     RewindDatabase.currentUserId = nil
   }

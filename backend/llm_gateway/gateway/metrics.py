@@ -7,9 +7,10 @@ from typing import Protocol
 
 from prometheus_client import Counter, Histogram
 
+from llm_gateway.gateway.accounting import AccountingEvent
 from llm_gateway.gateway.errors import GatewayError
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, output_budget_bucket
-from llm_gateway.gateway.schemas import FailureClass
+from llm_gateway.gateway.schemas import FailureClass, ProviderRejection
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ _REQUEST_LABELS = [
     'fallback_reason',
     'outcome',
     'error_class',
+    'provider_rejection',
     'budget_source',
     'output_budget',
     'completion_size',
@@ -67,6 +69,12 @@ STREAM_TTFB_SECONDS = Histogram(
     'Time to first non-empty stream chunk by bounded API surface, provider, and credential source',
     ['api_surface', 'provider', 'credential_source'],
     buckets=(0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 40, 60, 120),
+)
+
+ACCOUNTING_EVENTS_TOTAL = Counter(
+    'llm_gateway_accounting_events_total',
+    'LLM gateway accounting-event delivery by bounded provider and accounting state',
+    ['api_surface', 'provider', 'payer', 'usage_status', 'cost_status', 'delivery'],
 )
 
 
@@ -144,14 +152,15 @@ def observe_error(
         started_at,
         lane_id=lane_id,
         route_artifact_id=route_artifact_id,
-        provider='none',
-        model='none',
+        provider=error.provider,
+        model=error.model,
         credential_source=credential_source,
         used_lkg=False,
         fallback_used=False,
         fallback_reason=error.failure_class,
         outcome='error',
         error_class=error.code.value,
+        provider_rejection=error.provider_rejection,
         request_id=request_id,
         api_surface=api_surface,
         streaming=streaming,
@@ -176,6 +185,7 @@ def observe_route_result(
     api_surface: str,
     streaming: bool,
     phase: str,
+    provider_rejection: ProviderRejection | str = ProviderRejection.NONE,
     ttfb_seconds: float | None = None,
     budget_source: str = 'none',
     output_budget: str = 'none',
@@ -196,6 +206,7 @@ def observe_route_result(
         'fallback_reason': _enum_label(fallback_reason, default='none'),
         'outcome': _bounded(outcome),
         'error_class': _bounded(error_class),
+        'provider_rejection': _provider_rejection_label(provider_rejection),
         'budget_source': _budget_source_label(budget_source),
         'output_budget': _output_budget_label(output_budget),
         'completion_size': _completion_size_label(completion_size),
@@ -213,6 +224,7 @@ def observe_route_result(
     terminal_log(
         'llm_gateway_terminal request_id=%s surface=%s streaming=%s phase=%s lane=%s route=%s provider=%s '
         'model=%s credential_source=%s outcome=%s error_class=%s failure_class=%s fallback_used=%s '
+        'provider_rejection=%s '
         'budget_source=%s output_budget=%s completion_size=%s finish_reason=%s ttfb_seconds=%s',
         request_id,
         _bounded(api_surface),
@@ -227,6 +239,7 @@ def observe_route_result(
         labels['error_class'],
         labels['fallback_reason'],
         labels['fallback_used'],
+        labels['provider_rejection'],
         labels['budget_source'],
         labels['output_budget'],
         labels['completion_size'],
@@ -249,6 +262,19 @@ def observe_request_rejection(*, api_surface: str, error_class: str, request_id:
         surface_label,
         error_label,
     )
+
+
+def observe_accounting_event(event: AccountingEvent, *, delivery: str) -> None:
+    """Observe accounting delivery without user, request, or model labels."""
+    delivery_label = delivery if delivery in {'written', 'duplicate', 'failed', 'dropped'} else 'unknown'
+    ACCOUNTING_EVENTS_TOTAL.labels(
+        api_surface=_bounded(event.api_surface),
+        provider=_bounded(event.provider),
+        payer=_bounded(event.payer),
+        usage_status=_bounded(event.usage_status.value),
+        cost_status=_bounded(event.cost_status.value),
+        delivery=delivery_label,
+    ).inc()
 
 
 def report_observation_failure(*, api_surface: str, request_id: str) -> None:
@@ -278,6 +304,14 @@ def _enum_label(value: object, *, default: str = 'unknown') -> str:
     if raw_value is None:
         return default
     return _bounded(str(raw_value))
+
+
+def _provider_rejection_label(value: object) -> str:
+    raw_value = getattr(value, 'value', value)
+    try:
+        return ProviderRejection(str(raw_value)).value
+    except ValueError:
+        return ProviderRejection.OTHER_4XX.value
 
 
 def _bounded(value: str) -> str:

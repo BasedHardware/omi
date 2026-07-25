@@ -38,7 +38,7 @@ Non-secret keys in `backend/.env.local-dev` are **ignored** — see `make dev-st
 ### Useful commands
 
 ```bash
-make dev-init      # one-time venv + template copy
+make dev-init      # one-time backend/.venv setup + template copy
 make dev           # services + auto-seed
 make dev-status    # endpoints, provider mode, seeded users
 make dev-verify    # signed-in check + chat smoke + no aud errors

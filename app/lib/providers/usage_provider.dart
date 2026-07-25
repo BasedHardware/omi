@@ -64,10 +64,7 @@ class UsageProvider with ChangeNotifier {
   // straight to the existing unlimited behavior.
   PhoneCallQuota? get phoneCallQuota => _subscription?.phoneCallQuota;
 
-  bool get _isPaidPlan {
-    final plan = _subscription?.subscription.plan;
-    return plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect;
-  }
+  bool get _isPaidPlan => _subscription?.subscription.plan.isPaid ?? false;
 
   bool get canAccessPhoneCalls {
     if (_isPaidPlan) return true;
@@ -96,8 +93,9 @@ class UsageProvider with ChangeNotifier {
     if (_forceOutOfCredits) return true;
     if (_subscription == null) return false;
     final plan = _subscription!.subscription.plan;
-    if (plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect) return false;
-    // For basic plan, check if used is >= limit and limit is not 0 (unlimited).
+    // Plus is paid but metered, so it falls through to the usage check below.
+    if (plan.hasUnlimitedTranscription) return false;
+    // For metered plans, check if used is >= limit and limit is not 0 (unlimited).
     if (_subscription!.transcriptionSecondsLimit > 0 &&
         _subscription!.transcriptionSecondsUsed >= _subscription!.transcriptionSecondsLimit) {
       return true;

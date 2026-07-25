@@ -1,6 +1,5 @@
 import OmiTheme
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// Streaming markdown response view for the floating control bar.
 struct AIResponseView: View {
@@ -8,10 +7,6 @@ struct AIResponseView: View {
   @Binding var isLoading: Bool
   let currentMessage: ChatMessage?
   @State private var isQuestionExpanded = false
-  @Binding var followUpText: String
-  @State private var attachments: [ChatAttachment] = []
-  @State private var isDropTargeted = false
-  @FocusState private var isFollowUpFocused: Bool
 
   let userInput: String
   let chatHistory: [FloatingChatExchange]
@@ -20,7 +15,8 @@ struct AIResponseView: View {
 
   var onClearVisibleConversation: (() -> Void)?
   var onEscape: (() -> Void)?
-  var onSendFollowUp: ((String) -> Void)?
+  /// Typing lives in the main app now — the bar only offers a jump there.
+  var onOpenMainApp: (() -> Void)?
   var onRate: ((String, Int?) -> Void)?
   var onShareLink: (() async -> String?)?
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)?
@@ -54,6 +50,9 @@ struct AIResponseView: View {
         currentContentView
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .overlay(alignment: .bottom) {
+        ChatComposerFade()
+      }
 
       if let shareFeedbackMessage, showShareFeedback {
         shareFeedbackBanner
@@ -72,22 +71,6 @@ struct AIResponseView: View {
     .omiAnimation(.spring(response: 0.28, dampingFraction: 0.85), value: showShareFeedback)
     .onExitCommand {
       onEscape?()
-    }
-    .onAppear {
-      if !isLoading {
-        // Restored conversation: focus follow-up field immediately
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-          isFollowUpFocused = true
-        }
-      }
-    }
-    .onChange(of: isLoading) {
-      if !isLoading {
-        // Auto-focus follow-up field when loading finishes
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-          isFollowUpFocused = true
-        }
-      }
     }
   }
 
@@ -197,13 +180,14 @@ struct AIResponseView: View {
       ForEach(grouped) { group in
         switch group {
         case .text(_, let text):
-          SelectableMarkdown(text: text, sender: .ai)
+          OmiMarkdown(text: text, sender: .ai)
             .textSelection(.enabled)
             .environment(\.colorScheme, .dark)
             .frame(maxWidth: .infinity, alignment: .leading)
         case .toolCalls(_, let calls):
           ToolCallsGroup(
             calls: calls,
+            compact: true,
             onOpenAgent: onOpenAgent,
             onOpenAgentRef: onOpenAgentRef
           )
@@ -242,7 +226,7 @@ struct AIResponseView: View {
         }
       }
     } else if !message.text.isEmpty {
-      SelectableMarkdown(text: message.text, sender: .ai)
+      OmiMarkdown(text: message.text, sender: .ai)
         .textSelection(.enabled)
         .environment(\.colorScheme, .dark)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -413,12 +397,13 @@ struct AIResponseView: View {
         .padding(.horizontal, OmiSpacing.xxs)
         .padding(.bottom, OmiSpacing.xs)
         .contextMenu {
+          let finalOutput = message.copyableText
           Button("Copy") {
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(message.text, forType: .string)
+            NSPasteboard.general.setString(finalOutput, forType: .string)
           }
           Button("Copy Question & Answer") {
-            let combined = "Q: \(userInput)\n\nA: \(message.text)"
+            let combined = "Q: \(userInput)\n\nA: \(finalOutput)"
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(combined, forType: .string)
           }
@@ -439,15 +424,7 @@ struct AIResponseView: View {
   @State private var isSharingLink = false
 
   private var followUpInputView: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-      if !attachments.isEmpty {
-        AttachmentPreviewRow(
-          attachments: attachments,
-          onRemove: removeAttachment
-        )
-        .environment(\.colorScheme, .dark)
-      }
-
+    VStack(spacing: 0) {
       HStack(spacing: OmiSpacing.xs) {
         Button(action: { shareLink() }) {
           Image(systemName: showShareFeedback ? "checkmark" : "arrowshape.turn.up.right")
@@ -458,32 +435,27 @@ struct AIResponseView: View {
         .help("Copy share link")
         .disabled(isSharingLink)
 
-        TextField("Ask follow up...", text: $followUpText)
-          .textFieldStyle(.plain)
-          .scaledFont(size: OmiType.body)
+        Button(action: { onOpenMainApp?() }) {
+          HStack(spacing: OmiSpacing.xs) {
+            Text("Continue in Omi")
+              .scaledFont(size: OmiType.body, weight: .medium)
+              .foregroundColor(.white.opacity(0.85))
+            Spacer(minLength: 0)
+            Image(systemName: "arrow.up.forward.app")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(.secondary)
+          }
           .padding(.horizontal, OmiSpacing.sm)
           .padding(.vertical, OmiSpacing.xs)
-          .background(Color.white.opacity(isDropTargeted ? 0.18 : 0.10))
+          .background(Color.white.opacity(0.10))
           .cornerRadius(OmiChrome.elementRadius)
-          .focused($isFollowUpFocused)
-          .onSubmit {
-            sendFollowUp()
-          }
-
-        Button(action: { sendFollowUp() }) {
-          Image(systemName: "arrow.up.circle.fill")
-            .scaledFont(size: OmiType.heading)
-            .foregroundColor(canSendFollowUp ? .white : .secondary)
+          .contentShape(Rectangle())
         }
-        .disabled(!canSendFollowUp)
         .buttonStyle(.plain)
+        .help("Open the Omi app to keep chatting")
       }
+      .chatComposerShell(fill: OmiColors.backgroundSecondary.opacity(0.82))
     }
-    .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleAttachmentDrop)
-  }
-
-  private var canSendFollowUp: Bool {
-    !followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
   }
 
   private var shareFeedbackBanner: some View {
@@ -539,35 +511,6 @@ struct AIResponseView: View {
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: workItem)
   }
 
-  private func sendFollowUp() {
-    let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let staged = attachments
-    guard !trimmed.isEmpty || !staged.isEmpty else { return }
-    followUpText = trimmed
-    attachments = []
-    if !staged.isEmpty {
-      FloatingControlBarManager.shared.sharedFloatingProvider?.addAttachments(staged)
-    }
-    onSendFollowUp?(trimmed)
-  }
-
-  private func handleAttachmentDrop(providers: [NSItemProvider]) -> Bool {
-    ChatAttachmentDropHandler.collectURLs(from: providers) { urls in
-      addAttachmentURLs(urls)
-    }
-  }
-
-  private func addAttachmentURLs(_ urls: [URL]) {
-    let remaining = max(0, kMaxChatAttachments - attachments.count)
-    guard remaining > 0 else { return }
-    let staged = urls.prefix(remaining).compactMap(ChatAttachment.from(url:))
-    guard !staged.isEmpty else { return }
-    attachments.append(contentsOf: staged)
-  }
-
-  private func removeAttachment(_ id: String) {
-    attachments.removeAll { $0.id == id }
-  }
 }
 
 // MARK: - Message Hover Overlay
@@ -629,7 +572,7 @@ struct MessageHoverOverlay<Content: View>: View {
     // Capture the message's value-type fields once per body evaluation so every
     // button action operates on the exact message the user sees — not whatever
     // `self.message` happens to point to when the click is dispatched.
-    let messageText = message.text
+    let finalOutput = message.copyableText
     let currentRating = message.rating
     return HStack(alignment: .top, spacing: OmiSpacing.xs) {
       Spacer(minLength: 0)
@@ -665,11 +608,19 @@ struct MessageHoverOverlay<Content: View>: View {
           }
           .buttonStyle(.plain)
           .help("Not helpful")
+          // Sync the dedupe shadow to the live rating. The overlay is keyed
+          // `.id(message.id)` so it re-mounts with lastSubmittedRating == nil,
+          // while a restored/history message already carries a rating — without
+          // this, clicking to clear it computes newRating == nil ==
+          // lastSubmittedRating and the guard swallows the tap (rating stuck).
+          .onChange(of: message.rating, initial: true) { _, newValue in
+            lastSubmittedRating = newValue
+          }
 
-          // Copy — captures `messageText` explicitly so we always copy the
+          // Copy — captures `finalOutput` explicitly so we always copy the
           // message this button was drawn for, even if SwiftUI reuses the
           // overlay view across re-renders.
-          Button(action: { [messageText] in copyText(messageText) }) {
+          Button(action: { [finalOutput] in copyText(finalOutput) }) {
             Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
               .scaledFont(size: OmiType.caption)
               .foregroundColor(showCopied ? .green : .secondary)

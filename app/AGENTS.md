@@ -5,15 +5,16 @@ Inherits all rules from the root [`../AGENTS.md`](../AGENTS.md). This file adds 
 ## Build Bootstrap
 
 ### Flavors
-- **dev**: `com.friend.ios.dev` — uses `.dev.env`, Firebase project `based-hardware-dev`
-- **prod**: `com.friend.ios` — uses `.prod.env`, Firebase project `based-hardware-prod`
+- **dev**: Android `com.friend.ios.dev`, iOS `com.friend-app-with-wearable.ios12.development` — uses `.dev.env`, Firebase project `based-hardware-dev`
+- **prod**: Android `com.friend.ios`, iOS `com.friend-app-with-wearable.ios12` — uses `.prod.env`, Firebase project `based-hardware-prod`
+- **raybanDat**: camera-capable iOS target with the same iOS development identity; use `scripts/rayban_dat.sh`, which excludes mcumgr only for that transaction and restores the default graph.
 
 ### Generated Files (never edit manually)
 | Generator | Source | Output | Command |
 |-----------|--------|--------|---------|
 | envied | `lib/env/dev_env.dart`, `lib/env/prod_env.dart` | `*.g.dart` (obfuscated secrets) | `flutter pub run build_runner build` |
 | json_serializable | `@JsonSerializable` models | `*.g.dart` (fromJson/toJson) | `flutter pub run build_runner build` |
-| pigeon | `lib/watch_interface.dart` | `lib/gen/flutter_communicator.g.dart` + iOS/Android stubs | `flutter pub run build_runner build` |
+| pigeon | `lib/pigeon_interfaces.dart` | `lib/gen/pigeon_communicator.g.dart` + iOS/Android stubs | `flutter pub run build_runner build` |
 | flutter_gen | `pubspec.yaml` assets/fonts | `lib/gen/assets.gen.dart`, `lib/gen/fonts.gen.dart` | `flutter pub run build_runner build` |
 | flutter_localizations | `lib/l10n/*.arb` | `lib/gen_l10n/app_localizations*.dart` | `flutter gen-l10n` |
 
@@ -31,24 +32,28 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 ## Native Bridge
 
 ### Pigeon Interface (bidirectional, iOS ↔ Dart)
-- Contract: `lib/watch_interface.dart` — 13 methods (recording, audio, battery, permissions)
-- Dart side: `lib/gen/flutter_communicator.g.dart`
-- iOS side: `ios/Runner/FlutterCommunicator.g.swift`
+- Contract: `lib/pigeon_interfaces.dart` — paired host/Flutter APIs for the watch recorder, BLE, and Ray-Ban Meta
+- Dart side: `lib/gen/pigeon_communicator.g.dart`
+- iOS side: `ios/Runner/PigeonCommunicator.g.swift`
+- Android side: `android/app/src/main/kotlin/com/friend/ios/PigeonCommunicator.g.kt`
 - Implementation: `ios/Runner/RecorderHostApiImpl.swift`
-- After editing `watch_interface.dart`, regenerate: `flutter pub run build_runner build`
+- After editing the contract, regenerate: `flutter pub run build_runner build`
 
 ### MethodChannel (Phone Calls)
 - Channel: `com.omi/phone_calls` + EventChannel `com.omi/phone_calls/events`
 - Dart: `lib/services/phone_call_service.dart`
-- iOS: `ios/Runner/PhoneCallsPlugin.swift`
+- iOS: `ios/Runner/PhoneCalls/OmiPhoneCallsPlugin.swift`
+- Android: `android/app/src/main/kotlin/com/friend/ios/phonecalls/PhoneCallsPlugin.kt`
 - Methods: initialize, makeCall, endCall, toggleMute, toggleSpeaker
 
-### Pigeon (Phone Mic — iOS conversation capture)
-- Contract: `lib/phone_mic_interface.dart` → `lib/gen/phone_mic_pigeon.g.dart` + `ios/Runner/PhoneMic/PhoneMicPigeon.g.swift`
+### Pigeon (Phone Mic — conversation capture)
+- Contract: `lib/phone_mic_interface.dart` → `lib/gen/phone_mic_pigeon.g.dart` + `ios/Runner/PhoneMic/PhoneMicPigeon.g.swift` + `android/app/src/main/kotlin/com/friend/ios/phonemic/PhoneMicPigeon.g.kt`
 - Regenerate: `dart run pigeon --input lib/phone_mic_interface.dart`
 - iOS module: `ios/Runner/PhoneMic/` — self-healing AVAudioEngine capture (interruptions/route changes recover natively; Dart only mirrors state)
-- Dart service: `lib/services/mic/native_mic_recorder_service.dart` behind `ServiceManager.phoneMic`; chat memos/speech profile/Android stay on flutter_sound via `ServiceManager.mic`; `MicArbiter` prevents the two stacks contending
-- Two capture modes, fixed per session at `start(mode)`: `stream` (realtime frames → Dart → socket/WAL) and `batch` (Transcribe Later — native opus encode via OpusKit → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = 1Hz `onBatchProgress`). Mode selection lives in `CaptureController.streamRecording` (explicit `batchModeEnabled` or automatic offline fallback; iOS only); `omibatchphoneauto` recordings auto-upload on reconnect
+- Android module: `android/app/src/main/kotlin/com/friend/ios/phonemic/` — AudioRecord capture with a self-healing rebuild loop + silencing detection (calls/assistant recover natively; Dart only mirrors state); `PhoneMicForegroundService` (microphone FGS) keeps background capture alive; batch opus encode via a JNI shim over the plugin-shipped libopus
+- Dart service: `lib/services/mic/native_mic_recorder_service.dart` behind `ServiceManager.phoneMic`; chat memos/speech profile stay on flutter_sound via `ServiceManager.mic`; `MicArbiter` prevents the two stacks contending
+- Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops any event whose id is not the current session's, so a late/stale native event can't clobber a fresh session, and a `start()` onto a still-live native session adopts the new id and re-emits the current state so the caller converges. `stop()` always forwards to native (kills an orphaned session) and runs local teardown once
+- Two capture modes, fixed per session at `start(mode)`: `stream` (realtime frames → Dart → socket/WAL) and `batch` (Transcribe Later — native opus encode (OpusKit on iOS, libopus JNI shim on Android) → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = 1Hz `onBatchProgress`). Mode selection lives in `CaptureController.streamRecording` (explicit `batchModeEnabled` or automatic offline fallback; iOS + Android); `omibatchphoneauto` recordings auto-upload on reconnect
 
 ## Permission Matrix
 

@@ -30,49 +30,38 @@ enum MemoryGraphPresentationMode: Equatable {
 
 struct MemoryGraphPage: View {
   @ObservedObject var viewModel: MemoryGraphViewModel
-  @Environment(\.dismiss) private var dismiss
 
   var body: some View {
     ZStack {
-      // Full-bleed background + 3D scene
-      OmiColors.backgroundSecondary.ignoresSafeArea()
+      // Match the SceneKit canvas to the page, so the graph blends into the
+      // Memory page instead of drawing a separate gray rectangle.
+      OmiColors.backgroundPrimary.ignoresSafeArea()
 
       if !viewModel.isEmpty {
         MemoryGraphSceneView(viewModel: viewModel)
           .ignoresSafeArea()
       }
 
-      // Minimal floating controls — no boxes, no backgrounds
+      // Minimal floating controls — no boxes, no backgrounds. (The Brain Map is
+      // a Memory tab now, not a modal, so there's no close button.)
       VStack {
         HStack {
+          Spacer()
+
+          // Rebuild control: while rebuilding it just dims and disables — the
+          // single centered spinner below is the only progress indicator, so
+          // the header never shows a second spinner of its own.
           Button {
-            dismiss()
+            Task { await viewModel.rebuildGraph() }
           } label: {
-            Image(systemName: "xmark")
-              .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(.white.opacity(0.5))
+            Image(systemName: "arrow.clockwise")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(.white.opacity(viewModel.isRebuilding ? 0.2 : 0.5))
               .frame(width: 28, height: 28)
           }
           .buttonStyle(.plain)
-
-          Spacer()
-
-          if viewModel.isRebuilding {
-            ProgressView()
-              .scaleEffect(0.6)
-              .tint(.white.opacity(0.5))
-          } else {
-            Button {
-              Task { await viewModel.rebuildGraph() }
-            } label: {
-              Image(systemName: "arrow.clockwise")
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(.white.opacity(0.5))
-                .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.plain)
-            .help("Rebuild graph")
-          }
+          .disabled(viewModel.isRebuilding)
+          .help("Rebuild graph")
         }
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.top, OmiSpacing.md)
@@ -80,82 +69,26 @@ struct MemoryGraphPage: View {
         Spacer()
       }
 
-      // Loading / empty state — centered spinner, no extra chrome
-      if viewModel.isLoading || (viewModel.isEmpty && !viewModel.isRebuilding) {
+      // Exactly one status view: a single centered spinner while loading or
+      // rebuilding, otherwise an empty-state message — never a perpetual spinner
+      // (the empty case used to spin forever because there was no exit).
+      if viewModel.isLoading || viewModel.isRebuilding {
         ProgressView()
           .scaleEffect(1.2)
           .tint(.white.opacity(0.4))
+      } else if viewModel.isEmpty {
+        VStack(spacing: OmiSpacing.sm) {
+          Image(systemName: "brain")
+            .scaledFont(size: OmiType.heading)
+            .foregroundColor(.white.opacity(0.3))
+          Text("Brain map will appear once enough linked memories are available.")
+            .scaledFont(size: 12.5)
+            .foregroundColor(.white.opacity(0.5))
+            .multilineTextAlignment(.center)
+        }
+        .padding(OmiSpacing.lg)
       }
     }
-    .task {
-      await viewModel.prepareGraph()
-    }
-  }
-}
-
-struct MemoryGraphInlineCard: View {
-  @ObservedObject var viewModel: MemoryGraphViewModel
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.md) {
-      HStack(alignment: .center, spacing: OmiSpacing.md) {
-        Text("Brain Map")
-          .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
-
-        Spacer()
-
-        if viewModel.isRebuilding {
-          ProgressView()
-            .scaleEffect(0.7)
-            .frame(width: 32, height: 32)
-        } else {
-          Button {
-            Task { await viewModel.rebuildGraph() }
-          } label: {
-            Image(systemName: "arrow.clockwise")
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
-              .frame(width: 32, height: 32)
-              .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 12)
-          }
-          .buttonStyle(.plain)
-          .help("Rebuild brain map")
-        }
-      }
-
-      ZStack {
-        OmiColors.backgroundSecondary
-
-        if !viewModel.isEmpty {
-          MemoryGraphSceneView(viewModel: viewModel)
-        }
-
-        if viewModel.isLoading || (viewModel.isEmpty && !viewModel.isRebuilding) {
-          ProgressView()
-            .scaleEffect(1.1)
-            .tint(.white.opacity(0.45))
-        } else if viewModel.isEmpty {
-          VStack(spacing: OmiSpacing.sm) {
-            Image(systemName: "brain")
-              .scaledFont(size: OmiType.heading)
-              .foregroundColor(OmiColors.textTertiary)
-            Text("Brain map will appear once enough linked memories are available.")
-              .scaledFont(size: 12.5)
-              .foregroundColor(OmiColors.textSecondary)
-              .multilineTextAlignment(.center)
-          }
-          .padding(OmiSpacing.lg)
-        }
-      }
-      .frame(height: 350)
-      .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
-    }
-    .padding(OmiSpacing.lg)
-    .omiPanel(
-      fill: OmiColors.backgroundSecondary, radius: 24, stroke: OmiColors.border.opacity(0.14),
-      shadowOpacity: 0.14, shadowRadius: 12, shadowY: 8
-    )
     .task {
       await viewModel.prepareGraph()
     }
@@ -173,8 +106,7 @@ struct MemoryGraphSceneView: NSViewRepresentable {
     scnView.pointOfView = viewModel.cameraNode
     scnView.allowsCameraControl = true
     scnView.autoenablesDefaultLighting = false  // We set up our own lights
-    scnView.backgroundColor = NSColor(
-      red: 0x1A / 255.0, green: 0x1A / 255.0, blue: 0x1A / 255.0, alpha: 1.0)  // Match OmiColors.backgroundSecondary
+    scnView.backgroundColor = NSColor(OmiColors.backgroundPrimary)
     scnView.antialiasingMode = .multisampling2X  // Lighter AA
     scnView.preferredFramesPerSecond = 30  // Cap render rate
 

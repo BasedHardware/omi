@@ -3,6 +3,8 @@ import SwiftUI
 
 /// Onboarding step explaining that omi auto-creates tasks.
 struct OnboardingTasksStepView: View {
+  var stepIndex: Int
+  var totalSteps: Int
   var onComplete: () -> Void
   var onSkip: (() -> Void)? = nil
   var onForceComplete: (() -> Void)?
@@ -10,11 +12,43 @@ struct OnboardingTasksStepView: View {
   @State private var pulseAnimation = false
   @State private var showTasks = false
 
-  private let mockTasks: [(String, String, Bool)] = [
+  @ObservedObject private var tasksStore = TasksStore.shared
+
+  /// Shown only when the user has no real tasks yet (fresh account, or Gmail/Calendar
+  /// not connected so onboarding synthesis created nothing).
+  private let placeholderTasks: [(String, String, Bool)] = [
     ("Task 1", "From today's meeting", false),
     ("Task 2", "Mentioned in Slack", false),
     ("Task 3", "Getting started", true),
   ]
+
+  /// Real tasks when present, otherwise the placeholder. Always ends on a "done"
+  /// card (a real completed task when there is one, otherwise the last row shown
+  /// as complete) so the task-done treatment stays part of the screen.
+  private var displayTasks: [(String, String, Bool)] {
+    let open = tasksStore.incompleteTasks
+    guard !open.isEmpty || !tasksStore.completedTasks.isEmpty else { return placeholderTasks }
+
+    if let done = tasksStore.completedTasks.first {
+      let openRows = open.prefix(2).map { ($0.description, taskSubtitle(for: $0), false) }
+      return openRows + [(done.description, taskSubtitle(for: done), true)]
+    }
+
+    // No completed task yet: render the last open row as the done illustration.
+    var rows = open.prefix(3).map { ($0.description, taskSubtitle(for: $0), false) }
+    if rows.count > 1 { rows[rows.count - 1].2 = true }
+    return rows
+  }
+
+  private func taskSubtitle(for task: TaskActionItem) -> String {
+    if let due = task.dueAt {
+      return "Due " + due.formatted(date: .abbreviated, time: .omitted)
+    }
+    if let category = task.category, !category.isEmpty {
+      return category.capitalized
+    }
+    return "From your recent activity"
+  }
 
   var body: some View {
     VStack(spacing: 0) {
@@ -28,6 +62,10 @@ struct OnboardingTasksStepView: View {
 
       Divider()
         .background(OmiColors.backgroundTertiary)
+
+      OnboardingProgressBar(stepIndex: stepIndex, totalSteps: totalSteps)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, OmiSpacing.xl)
 
       Spacer()
 
@@ -67,10 +105,10 @@ struct OnboardingTasksStepView: View {
           .lineSpacing(4)
         }
 
-        // Mock task cards
+        // Task cards — real onboarding tasks, or the placeholder when none exist yet
         if showTasks {
           VStack(spacing: OmiSpacing.sm) {
-            ForEach(Array(mockTasks.enumerated()), id: \.offset) { index, task in
+            ForEach(Array(displayTasks.enumerated()), id: \.offset) { index, task in
               mockTaskRow(title: task.0, subtitle: task.1, checked: task.2)
                 .transition(
                   .asymmetric(
@@ -86,7 +124,9 @@ struct OnboardingTasksStepView: View {
 
       Spacer()
 
-      VStack(spacing: OmiSpacing.md) {
+      HStack(spacing: OmiSpacing.md) {
+        OnboardingBackButton()
+
         Button(action: onComplete) {
           Text("Take me to Omi")
             .font(.system(size: 15, weight: .semibold))
@@ -98,7 +138,6 @@ struct OnboardingTasksStepView: View {
         }
         .buttonStyle(.plain)
         .keyboardShortcut(.defaultAction)
-
       }
       .padding(.bottom, OmiSpacing.section)
     }
@@ -111,6 +150,13 @@ struct OnboardingTasksStepView: View {
           showTasks = true
         }
       }
+    }
+    .task {
+      // Pull the tasks onboarding synthesis just created (Gmail/Calendar follow-ups)
+      // so the cards show the user's real tasks instead of the placeholder, plus a
+      // completed one to keep the task-done card.
+      await tasksStore.loadTasksIfNeeded()
+      await tasksStore.loadCompletedTasks()
     }
   }
 

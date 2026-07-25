@@ -1776,18 +1776,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get lovingOmi => 'Amando o Omi?';
 
   @override
-  String get leaveReviewIos => 'Ajude-nos a alcançar mais pessoas deixando uma avaliação na App Store.';
-
-  @override
-  String get leaveReviewAndroid => 'Ajude-nos a alcançar mais pessoas deixando uma avaliação na Google Play.';
-
-  @override
-  String get rateOnAppStore => 'Avaliar na App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Avaliar na Google Play';
-
-  @override
   String get maybeLater => 'Talvez depois';
 
   @override
@@ -2113,6 +2101,18 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Editar memória';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Eu gosto de sorvete...';
@@ -8992,7 +8992,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get billingYearly => 'Anual';
 
   @override
-  String get savePercent => 'Economize ~17%';
+  String savePercent(int percent) {
+    return 'Economize ~$percent%';
+  }
 
   @override
   String get popular => 'Popular';
@@ -9605,4 +9607,177 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Sem conexão — gravando localmente. Será transcrito quando você voltar a ficar online.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Seus dados são protegidos por padrão com criptografia forte, e você controla como são armazenados e usados.';
+
+  @override
+  String get sttModelAccuracy => 'Precisão';
+
+  @override
+  String get whisperModelSizeBase => 'Base';
+
+  @override
+  String get cloudTranscription => 'Transcrição na nuvem';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Excluir modelo';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Tem certeza de que deseja excluir este modelo?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Baixado';
+
+  @override
+  String get sttModelFaster => 'Mais rápido';
+
+  @override
+  String get sttFilterAuto => 'Automático';
+
+  @override
+  String get sttModelHigher => 'Maior';
+
+  @override
+  String get whisperModelSizeLarge => 'Grande';
+
+  @override
+  String get sttModelLower => 'Menor';
+
+  @override
+  String get whisperModelSizeMedium => 'Médio';
+
+  @override
+  String get onDeviceModelDeleted => 'Modelo excluído';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Falha ao baixar o modelo';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Não foi possível baixar o modelo Whisper. Tente novamente.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Modelo baixado';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Modelo Whisper baixado com sucesso';
+
+  @override
+  String get onDeviceModelSize => 'Tamanho do modelo';
+
+  @override
+  String get sttNone => 'Nenhum';
+
+  @override
+  String get onDeviceTranscription => 'Transcrição no dispositivo';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'A transcrição é processada localmente no seu dispositivo';
+
+  @override
+  String get sttModelSlower => 'Mais lento';
+
+  @override
+  String get whisperModelSizeSmall => 'Pequeno';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Provedor de fala para texto';
+
+  @override
+  String get speechToTextProviderDesc => 'Selecione o serviço usado para transcrição';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Velocidade';
+
+  @override
+  String get whisperModelSizeTiny => 'Minúsculo';
+
+  @override
+  String get transcriptionLanguage => 'Idioma da transcrição';
+
+  @override
+  String get transcriptionLanguageDesc => 'Selecione o idioma para transcrição de fala';
+
+  @override
+  String get whisperModel => 'Modelo Whisper';
+
+  @override
+  String get whisperModelDesc => 'Selecione o modelo para transcrição no dispositivo';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Mudar para o plano gratuito?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Você terá estas limitações:';
+
+  @override
+  String get downgradeLimitBattery => 'Consumo de bateria 7x maior';
+
+  @override
+  String get downgradeLimitQuality => 'Qualidade de transcrição 30% menor';
+
+  @override
+  String get downgradeLimitDelay => 'Atraso de 5 a 7 segundos';
+
+  @override
+  String get downgradeLimitSpeakers => 'Não identifica os falantes';
+
+  @override
+  String get downgradeAnyway => 'Fazer downgrade mesmo assim';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Calendar não conectado';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'Conecte seu Google Calendar para vincular conversas a eventos do calendário.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Vinculado a “$title”';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Falha ao vincular o evento do calendário';
+
+  @override
+  String get thanksForYourFeedback => 'Obrigado pelo seu feedback!';
+
+  @override
+  String get copyMessage => 'Copiar mensagem';
+
+  @override
+  String get searchSettings => 'Pesquisar configurações…';
+
+  @override
+  String get errorLoadingAudio => 'Erro ao carregar o áudio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Escolha o microfone dos Ray-Ban Meta';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Selecione o microfone Bluetooth dos óculos. A música é pausada enquanto o Omi o utiliza.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Nenhum microfone Bluetooth encontrado. Ligue os óculos nas Definições do iPhone e tente novamente.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Não foi possível carregar os microfones Bluetooth. Verifique se o Bluetooth está ligado e tente novamente.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Não foi possível ligar a esse microfone. Certifique-se de que está ligado nas Definições do iPhone.';
 }

@@ -57,7 +57,7 @@ struct DashboardTaskReconciliationPlan {
   let itemsToSync: [TaskActionItem]
   let backendIdsToHardDelete: Set<String>
   let dashboardVisibleServerIds: Set<String>
-  let completedServerIds: Set<String>
+  let terminalServerIds: Set<String>
   let movedOutServerIds: Set<String>
 
   var shouldMarkIncompleteTasksLoaded: Bool {
@@ -81,17 +81,17 @@ enum DashboardTaskReconciliationPlanner {
     var itemsById = dashboardWindowServerItems.reduce(into: [String: TaskActionItem]()) { result, item in
       result[item.id] = item
     }
-    exactServerItemsById.values.forEach { item in
+    for item in exactServerItemsById.values {
       itemsById[item.id] = item
     }
 
     var dashboardVisibleServerIds = Set<String>()
-    var completedServerIds = Set<String>()
+    var terminalServerIds = Set<String>()
     var movedOutServerIds = Set<String>()
 
     for item in exactServerItemsById.values {
-      if item.completed || item.deleted == true {
-        completedServerIds.insert(item.id)
+      if item.completed || item.isRetired {
+        terminalServerIds.insert(item.id)
       } else if isDashboardVisible(item, now: now, calendar: calendar) {
         dashboardVisibleServerIds.insert(item.id)
       } else {
@@ -107,7 +107,7 @@ enum DashboardTaskReconciliationPlanner {
       itemsToSync: Array(itemsById.values),
       backendIdsToHardDelete: missingServerIds.intersection(localDashboardIds),
       dashboardVisibleServerIds: dashboardVisibleServerIds,
-      completedServerIds: completedServerIds,
+      terminalServerIds: terminalServerIds,
       movedOutServerIds: movedOutServerIds
     )
   }
@@ -117,7 +117,7 @@ enum DashboardTaskReconciliationPlanner {
     now: Date = Date(),
     calendar: Calendar = .current
   ) -> Bool {
-    guard !item.completed, item.deleted != true else { return false }
+    guard !item.completed, !item.isRetired else { return false }
 
     let startOfToday = calendar.startOfDay(for: now)
     guard

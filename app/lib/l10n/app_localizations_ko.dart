@@ -1446,7 +1446,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get payYourSttProvider => 'Omi를 자유롭게 사용하세요. STT 제공업체에 직접 비용을 지불하기만 하면 됩니다.';
 
   @override
-  String get freeMinutesMonth => '월 600분 무료 포함. ';
+  String get freeMinutesMonth => '월 300분 무료 포함. ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1759,18 +1759,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Omi가 마음에 드시나요?';
-
-  @override
-  String get leaveReviewIos => 'App Store에 리뷰를 남겨 더 많은 사람들에게 다가가도록 도와주세요. 귀하의 피드백은 저희에게 큰 의미가 있습니다!';
-
-  @override
-  String get leaveReviewAndroid => 'Google Play 스토어에 리뷰를 남겨 더 많은 사람들에게 다가가도록 도와주세요. 귀하의 피드백은 저희에게 큰 의미가 있습니다!';
-
-  @override
-  String get rateOnAppStore => 'App Store에서 평가하기';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play에서 평가하기';
 
   @override
   String get maybeLater => '나중에';
@@ -2099,6 +2087,18 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ 메모리 편집';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => '아이스크림 먹는 걸 좋아해요...';
@@ -4625,7 +4625,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get noSpecificDataAccessConfigured => '특정 데이터 액세스가 구성되지 않았습니다.';
 
   @override
-  String get basicPlanDescription => '600 프리미엄 분 + 무제한 온디바이스';
+  String get basicPlanDescription => '300 프리미엄 분 + 무제한 온디바이스';
 
   @override
   String get minutes => '분';
@@ -5895,7 +5895,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get cloudProvider => '클라우드 제공자';
 
   @override
-  String get premiumMinutesInfo => '월 600분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.';
+  String get premiumMinutesInfo => '월 300분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.';
 
   @override
   String get viewUsage => '사용량 보기';
@@ -5973,7 +5973,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get batteryDrainSignificantly => '배터리 소모가 크게 증가합니다.';
 
   @override
-  String get premiumMinutesMonth => '월 600 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ';
+  String get premiumMinutesMonth => '월 300 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ';
 
   @override
   String get audioProcessedLocally => '오디오가 로컬에서 처리됩니다. 오프라인 작동, 더 프라이빗하지만 배터리 사용량이 더 많습니다.';
@@ -8846,7 +8846,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get billingYearly => '연간';
 
   @override
-  String get savePercent => '~17% 절약';
+  String savePercent(int percent) {
+    return '~$percent% 절약';
+  }
 
   @override
   String get popular => '인기';
@@ -9441,4 +9443,171 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get phoneMicOfflineFallbackMessage => '연결 없음 — 로컬에 녹음 중입니다. 다시 온라인 상태가 되면 텍스트로 변환됩니다.';
+
+  @override
+  String get dataEncryptedBanner => '귀하의 데이터는 기본적으로 강력한 암호화로 보호되며, 저장 및 사용 방식은 귀하가 관리합니다.';
+
+  @override
+  String get sttModelAccuracy => '정확도';
+
+  @override
+  String get whisperModelSizeBase => '기본';
+
+  @override
+  String get cloudTranscription => '클라우드 전사';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => '모델 삭제';
+
+  @override
+  String get deleteOnDeviceModelConfirm => '이 모델을 삭제하시겠습니까?';
+
+  @override
+  String get onDeviceModelDownloaded => '다운로드됨';
+
+  @override
+  String get sttModelFaster => '더 빠름';
+
+  @override
+  String get sttFilterAuto => '자동';
+
+  @override
+  String get sttModelHigher => '더 높음';
+
+  @override
+  String get whisperModelSizeLarge => '대형';
+
+  @override
+  String get sttModelLower => '더 낮음';
+
+  @override
+  String get whisperModelSizeMedium => '중형';
+
+  @override
+  String get onDeviceModelDeleted => '모델 삭제됨';
+
+  @override
+  String get onDeviceModelDownloadFailed => '모델 다운로드 실패';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Whisper 모델을 다운로드하지 못했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => '모델 다운로드 완료';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper 모델을 성공적으로 다운로드했습니다';
+
+  @override
+  String get onDeviceModelSize => '모델 크기';
+
+  @override
+  String get sttNone => '없음';
+
+  @override
+  String get onDeviceTranscription => '온디바이스 전사';
+
+  @override
+  String get onDeviceTranscriptionDesc => '전사가 기기에서 로컬로 처리됩니다';
+
+  @override
+  String get sttModelSlower => '더 느림';
+
+  @override
+  String get whisperModelSizeSmall => '소형';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => '음성-텍스트 변환 제공자';
+
+  @override
+  String get speechToTextProviderDesc => '전사에 사용할 서비스를 선택하세요';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => '속도';
+
+  @override
+  String get whisperModelSizeTiny => '초소형';
+
+  @override
+  String get transcriptionLanguage => '전사 언어';
+
+  @override
+  String get transcriptionLanguageDesc => '음성 전사 언어를 선택하세요';
+
+  @override
+  String get whisperModel => 'Whisper 모델';
+
+  @override
+  String get whisperModelDesc => '온디바이스 전사에 사용할 모델을 선택하세요';
+
+  @override
+  String get downgradeToFreemiumTitle => '무료 요금제로 다운그레이드할까요?';
+
+  @override
+  String get downgradeLimitationsHeading => '다음과 같은 제한이 적용됩니다:';
+
+  @override
+  String get downgradeLimitBattery => '배터리 소모 7배 증가';
+
+  @override
+  String get downgradeLimitQuality => '전사 품질 30% 저하';
+
+  @override
+  String get downgradeLimitDelay => '5~7초 지연';
+
+  @override
+  String get downgradeLimitSpeakers => '화자를 식별할 수 없음';
+
+  @override
+  String get downgradeAnyway => '그래도 다운그레이드';
+
+  @override
+  String get googleCalendarNotConnected => 'Google 캘린더가 연결되지 않음';
+
+  @override
+  String get googleCalendarConnectPrompt => '대화를 캘린더 일정에 연결하려면 Google 캘린더를 연결하세요.';
+
+  @override
+  String linkedToEvent(String title) {
+    return '“$title”에 연결됨';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => '캘린더 일정 연결에 실패했습니다';
+
+  @override
+  String get thanksForYourFeedback => '피드백 감사합니다!';
+
+  @override
+  String get copyMessage => '메시지 복사';
+
+  @override
+  String get searchSettings => '설정 검색…';
+
+  @override
+  String get errorLoadingAudio => '오디오를 불러오지 못했습니다';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Ray-Ban Meta 마이크 선택';
+
+  @override
+  String get rayBanMetaMicPickerDescription => '안경의 Bluetooth 마이크를 선택하세요. Omi가 사용하는 동안 음악이 일시 정지됩니다.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty => 'Bluetooth 마이크를 찾을 수 없습니다. iPhone 설정에서 안경을 연결한 후 다시 시도하세요.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError => 'Bluetooth 마이크를 불러올 수 없습니다. Bluetooth가 켜져 있는지 확인한 후 다시 시도하세요.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError => '해당 마이크에 연결할 수 없습니다. iPhone 설정에서 연결되어 있는지 확인하세요.';
 }

@@ -1796,20 +1796,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get lovingOmi => 'Omi\'yi Beğeniyor musunuz?';
 
   @override
-  String get leaveReviewIos =>
-      'App Store\'da bir yorum bırakarak daha fazla insana ulaşmamıza yardımcı olun. Geri bildiriminiz bizim için çok değerli!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Google Play Store\'da bir yorum bırakarak daha fazla insana ulaşmamıza yardımcı olun. Geri bildiriminiz bizim için çok değerli!';
-
-  @override
-  String get rateOnAppStore => 'App Store\'da Değerlendir';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play\'de Değerlendir';
-
-  @override
   String get maybeLater => 'Belki sonra';
 
   @override
@@ -2145,6 +2131,18 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Hafızayı düzenle';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Dondurma yemeyi severim...';
@@ -9001,7 +8999,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get billingYearly => 'Yıllık';
 
   @override
-  String get savePercent => '~%17 tasarruf';
+  String savePercent(int percent) {
+    return '~%$percent tasarruf';
+  }
 
   @override
   String get popular => 'Popüler';
@@ -9610,4 +9610,177 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Bağlantı yok — yerel olarak kaydediliyor. Tekrar çevrimiçi olduğunuzda yazıya dökülecek.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Verileriniz varsayılan olarak güçlü şifreleme ile korunur ve nasıl saklanıp kullanılacağını siz kontrol edersiniz.';
+
+  @override
+  String get sttModelAccuracy => 'Doğruluk';
+
+  @override
+  String get whisperModelSizeBase => 'Temel';
+
+  @override
+  String get cloudTranscription => 'Bulut transkripsiyonu';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Modeli Sil';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Bu modeli silmek istediğinizden emin misiniz?';
+
+  @override
+  String get onDeviceModelDownloaded => 'İndirildi';
+
+  @override
+  String get sttModelFaster => 'Daha hızlı';
+
+  @override
+  String get sttFilterAuto => 'Otomatik';
+
+  @override
+  String get sttModelHigher => 'Daha yüksek';
+
+  @override
+  String get whisperModelSizeLarge => 'Büyük';
+
+  @override
+  String get sttModelLower => 'Daha düşük';
+
+  @override
+  String get whisperModelSizeMedium => 'Orta';
+
+  @override
+  String get onDeviceModelDeleted => 'Model silindi';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Model indirilemedi';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Whisper modeli indirilemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Model indirildi';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper modeli başarıyla indirildi';
+
+  @override
+  String get onDeviceModelSize => 'Model Boyutu';
+
+  @override
+  String get sttNone => 'Yok';
+
+  @override
+  String get onDeviceTranscription => 'Cihaz üzerinde transkripsiyon';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkripsiyon cihazınızda yerel olarak işlenir';
+
+  @override
+  String get sttModelSlower => 'Daha yavaş';
+
+  @override
+  String get whisperModelSizeSmall => 'Küçük';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Konuşmadan metne sağlayıcı';
+
+  @override
+  String get speechToTextProviderDesc => 'Transkripsiyon için kullanılan hizmeti seçin';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Hız';
+
+  @override
+  String get whisperModelSizeTiny => 'Çok küçük';
+
+  @override
+  String get transcriptionLanguage => 'Transkripsiyon dili';
+
+  @override
+  String get transcriptionLanguageDesc => 'Konuşma transkripsiyonu için dil seçin';
+
+  @override
+  String get whisperModel => 'Whisper modeli';
+
+  @override
+  String get whisperModelDesc => 'Cihaz üzerinde transkripsiyon için model seçin';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Ücretsiz plana düşürülsün mü?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Şu kısıtlamalarla karşılaşacaksınız:';
+
+  @override
+  String get downgradeLimitBattery => '7 kat pil tüketimi';
+
+  @override
+  String get downgradeLimitQuality => '%30 daha düşük transkripsiyon kalitesi';
+
+  @override
+  String get downgradeLimitDelay => '5-7 saniye gecikme';
+
+  @override
+  String get downgradeLimitSpeakers => 'Konuşmacılar tanımlanamaz';
+
+  @override
+  String get downgradeAnyway => 'Yine de Düşür';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Takvim Bağlı Değil';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'Konuşmaları takvim etkinliklerine bağlamak için Google Takvim hesabınızı bağlayın.';
+
+  @override
+  String linkedToEvent(String title) {
+    return '\"$title\" etkinliğine bağlandı';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Takvim etkinliği bağlanamadı';
+
+  @override
+  String get thanksForYourFeedback => 'Geri bildiriminiz için teşekkürler!';
+
+  @override
+  String get copyMessage => 'Mesajı kopyala';
+
+  @override
+  String get searchSettings => 'Ayarlarda ara…';
+
+  @override
+  String get errorLoadingAudio => 'Ses yüklenirken hata oluştu';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Ray-Ban Meta mikrofonunuzu seçin';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Gözlüğünüzün Bluetooth mikrofonunu seçin. Omi mikrofonu kullanırken müzik duraklatılır.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Bluetooth mikrofonu bulunamadı. Gözlüğünüzü iPhone Ayarları\'ndan bağlayıp tekrar deneyin.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth mikrofonları yüklenemedi. Bluetooth\'un açık olduğunu kontrol edip tekrar deneyin.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Bu mikrofona bağlanılamadı. iPhone Ayarları\'nda bağlı olduğundan emin olun.';
 }

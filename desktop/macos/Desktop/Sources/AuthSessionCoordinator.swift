@@ -106,7 +106,7 @@ final class AuthSessionCoordinator {
   func invalidateSession(reason: InvalidateReason, auth: AuthService) async {
     NSLog("OMI AUTH: invalidateSession reason=%@", reason.rawValue)
     guard await auth.performLightSessionInvalidation() else {
-      NSLog("OMI AUTH: stale invalidateSession completion ignored")
+      NSLog("OMI AUTH: invalidateSession failed or was superseded; existing session remains authoritative")
       return
     }
     NotificationCenter.default.post(

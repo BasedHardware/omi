@@ -98,6 +98,8 @@ final class VoiceTurnCoordinator {
   private var timeline: [VoiceTurnTimelineEntry] = []
   private let timelineLimit: Int
   private var timelineSequence: UInt64 = 0
+  private var turnStartedAt: [VoiceTurnID: ContinuousClock.Instant] = [:]
+  private var turnFullAnswerDurationMs: [VoiceTurnID: Int] = [:]
   private var pendingFacts: [VoiceTurnFact] = []
   private var isDrainingEvents = false
 
@@ -255,12 +257,19 @@ final class VoiceTurnCoordinator {
       lane: lane,
       identity: identity)
     publish(.playbackStartedScoped(turnID: turnID, lease: lease))
-    return activeTurn?.activeLease == lease ? .acquired(lease) : .staleTurn
+    guard activeTurn?.activeLease == lease else { return .staleTurn }
+    if lane != .filler {
+      turnFullAnswerDurationMs.removeValue(forKey: turnID)
+    }
+    return .acquired(lease)
   }
 
   @discardableResult
   func releaseOutput(_ lease: VoiceOutputLease) -> Bool {
     guard activeTurn?.activeLease == lease else { return false }
+    if lease.lane != .filler, let startedAt = turnStartedAt[lease.turnID] {
+      turnFullAnswerDurationMs[lease.turnID] = Self.elapsedMilliseconds(since: startedAt)
+    }
     publish(
       .playbackDrainedScoped(
         turnID: lease.turnID,
@@ -315,7 +324,15 @@ final class VoiceTurnCoordinator {
     if model.turn?.phase.isTerminal == true {
       publish(.reset)
     }
+    turnStartedAt[id] = ContinuousClock.now
     publish(.start(turnID: id, ownerID: ownerID ?? ownerIDProvider(), intent: intent))
+    if activeTurnID == id {
+      DesktopDiagnosticsManager.shared.recordVoiceTurnStarted(
+        turnID: id.description,
+        intent: intent.rawValue)
+    } else {
+      turnStartedAt.removeValue(forKey: id)
+    }
     return id
   }
 
@@ -453,9 +470,15 @@ final class VoiceTurnCoordinator {
       case .cancelAllDeadlines(let turnID):
         cancelAll(turnID: turnID)
       case .terminal(let terminal):
+        let terminalDurationMs = turnStartedAt.removeValue(forKey: terminal.turnID).map(Self.elapsedMilliseconds)
+        let fullAnswerDurationMs = turnFullAnswerDurationMs.removeValue(forKey: terminal.turnID)
         DesktopDiagnosticsManager.shared.recordVoiceTurnTerminal(
+          turnID: terminal.turnID.description,
           reason: terminal.reason.rawValue,
           route: Self.routeLabel(terminal.route),
+          intent: model.turn?.intent.rawValue ?? "unknown",
+          durationMs: fullAnswerDurationMs ?? terminalDurationMs,
+          answerDelivered: fullAnswerDurationMs != nil,
           staleEventCount: model.staleEventCount,
           invalidTransitionCount: model.invalidTransitionCount)
         log(
@@ -500,6 +523,14 @@ final class VoiceTurnCoordinator {
       .staleEventDropped, .invalidTransition:
       return nil
     }
+  }
+
+  private static func elapsedMilliseconds(since startedAt: ContinuousClock.Instant) -> Int {
+    let components = (ContinuousClock.now - startedAt).components
+    let milliseconds =
+      Int(components.seconds) * 1_000
+      + Int(components.attoseconds / 1_000_000_000_000_000)
+    return max(0, milliseconds)
   }
 
   private func schedule(turnID: VoiceTurnID, deadline: VoiceTurnDeadline, interval: TimeInterval) {

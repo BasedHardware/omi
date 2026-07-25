@@ -856,11 +856,27 @@ extension AppState {
         isAppleSilicon: Self.isAppleSilicon
       )
     else {
+      // Could not fail open (no local STT): record the exhausted cloud→stopped rotation.
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "cloud_stt",
+        from: "cloud",
+        to: "stopped",
+        reason: "cloud_stt_reconnect_failed",
+        outcome: .exhausted,
+        extra: ["source": currentConversationSource.rawValue])
       stopTranscription()
       return
     }
     sttSession.beginCloudToLocalFallback()
     log("Transcription: cloud STT unreachable (reconnects exhausted) — falling back to on-device Parakeet")
+    // Fail-open cloud → on-device Parakeet switch: shared fallback telemetry (AGENTS.md).
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "cloud_stt",
+      from: "cloud",
+      to: "local",
+      reason: "cloud_stt_reconnect_failed",
+      outcome: .recovered,
+      extra: ["source": currentConversationSource.rawValue])
     AnalyticsManager.shared.recordingError(
       error: "cloud_stt_reconnect_failed_fallback_local",
       reason: "cloud_stt_reconnect_failed",
@@ -1015,11 +1031,18 @@ extension AppState {
         let onLocalSegments: LocalTranscriptionService.SegmentsHandler = { [weak self] segments in
           self?.handleBackendSegments(segments)
         }
+        // Mirror startTranscription: wire onModelLoadFailed so a Parakeet model
+        // load failure on the re-armed instances falls back to cloud instead of
+        // recording into a void (a silent blank transcript). Without this, every
+        // conversation after the first in a session loses that protection.
+        let onModelLoadFailed: @MainActor () -> Void = { [weak self] in
+          self?.handleLocalSTTModelLoadFailure()
+        }
         let mic = LocalTranscriptionService(language: effectiveLanguage, isUser: true)
-        mic.start(onSegments: onLocalSegments)
+        mic.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
         localMicService = mic
         let system = LocalTranscriptionService(language: effectiveLanguage, isUser: false)
-        system.start(onSegments: onLocalSegments)
+        system.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
         localSystemService = system
         log("Transcription: Re-armed on-device Parakeet (mic + system) for next conversation")
       } else {
@@ -1041,7 +1064,12 @@ extension AppState {
           onError: { [weak self] error in
             Task { @MainActor in
               logError("Transcription error (reconnect)", error: error)
-              self?.stopTranscription()
+              // Mirror startTranscription: on cloud reconnect exhaustion, fail
+              // over to on-device Parakeet (Apple Silicon) instead of hard-
+              // stopping capture mid-meeting. Plain stopTranscription() here
+              // dropped the cloud->local resilience for every conversation after
+              // the first.
+              self?.handleCloudSTTReconnectFailure()
             }
           },
           onConnected: {

@@ -100,6 +100,15 @@ for mod_name in [
 
 sys.modules["utils.chat"].initial_message_util = MagicMock()
 sys.modules["utils.llm.clients"].get_llm = MagicMock()
+usage_tracker_stub = _stub_module("utils.llm.usage_tracker")
+
+
+class _Features:
+    CHAT = "chat"
+
+
+usage_tracker_stub.Features = _Features
+usage_tracker_stub.track_usage = MagicMock()
 
 # Stub google.cloud.firestore sentinels
 firestore_stub = sys.modules["google.cloud.firestore"]
@@ -1624,6 +1633,41 @@ class TestScoreComputation:
 
         # Verify created_at was used in filter calls (for weekly query)
         assert 'created_at' in captured_filters, f"Expected created_at in filters, got: {captured_filters}"
+
+    def test_weekly_window_spans_seven_days_ending_on_date(self):
+        """The weekly window is the 7 days ending on `date`, i.e. [date-6, date+1).
+
+        Regression: it was [date-7, date+1) — 8 calendar days — which over-counted
+        every task created on the date-7 day, inconsistent with the docstring and
+        with the one-day daily window [date, date+1).
+        """
+        from datetime import timedelta
+
+        mock_col = MagicMock()
+        empty = MagicMock()
+        empty.where.return_value = empty
+        empty.stream.return_value = []
+        mock_col.where.return_value = empty
+        mock_col.stream.return_value = []
+
+        captured = []  # (field, op, value)
+        original_ff = action_items_db.FieldFilter
+
+        def tracking_filter(field, op, value):
+            captured.append((field, op, value))
+            return original_ff(field, op, value)
+
+        with patch.object(action_items_db, 'db') as patched_db, patch.object(
+            action_items_db, 'FieldFilter', side_effect=tracking_filter
+        ):
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            action_items_db.get_scores('test-uid', date='2026-07-19')
+
+        day = datetime(2026, 7, 19, tzinfo=timezone.utc)
+        created_at_lower = [v for (f, op, v) in captured if f == 'created_at' and op == '>=']
+        assert created_at_lower, f"no created_at >= filter captured: {captured}"
+        # 7 days ending on 2026-07-19 -> lower bound is 2026-07-13 (day-6), not 2026-07-12 (day-7).
+        assert created_at_lower[0] == day - timedelta(days=6), created_at_lower[0]
 
     def test_default_tab_daily_when_highest(self):
         """default_tab is 'daily' when daily has tasks and highest score."""

@@ -57,6 +57,8 @@ enum ChatQueryFailureDisposition: Equatable, Sendable {
         return .failed(.authentication)
       case .agentError where bridgeError.isSessionAuthenticationFailure:
         return .failed(.authentication)
+      case .agentRuntimeFailure(let failure) where failure.failureCode == .authentication:
+        return .failed(.authentication)
       case .failedToStart:
         return .failed(.bridgeStartFailed)
       case .nodeNotFound, .bridgeScriptNotFound, .notRunning, .processExited, .restarting:
@@ -92,6 +94,8 @@ struct ChatQueryTelemetryContext: Equatable, Sendable {
   let attemptId: String
   let surface: String
   let harness: String
+  let bridgeModePreference: String?
+  let sessionAdapterId: String?
   let runtimeSurface: String?
   let inputLengthBucket: String
   let attachmentCount: Int
@@ -101,6 +105,8 @@ struct ChatQueryTelemetryContext: Equatable, Sendable {
     attemptId: String,
     surface: String,
     harness: String,
+    bridgeModePreference: String? = nil,
+    sessionAdapterId: String? = nil,
     runtimeSurface: String? = nil,
     inputLengthBucket: String = "unknown",
     attachmentCount: Int = 0,
@@ -109,6 +115,8 @@ struct ChatQueryTelemetryContext: Equatable, Sendable {
     self.attemptId = attemptId
     self.surface = surface
     self.harness = harness
+    self.bridgeModePreference = bridgeModePreference.map { String($0.prefix(64)) }
+    self.sessionAdapterId = sessionAdapterId.map { String($0.prefix(64)) }
     self.runtimeSurface = runtimeSurface
     self.inputLengthBucket = inputLengthBucket
     self.attachmentCount = attachmentCount
@@ -205,7 +213,8 @@ enum ChatQueryTelemetryEvent: Equatable, Sendable {
     ChatQueryTelemetryContext,
     durationMs: Int,
     errorClass: ChatQueryErrorClass,
-    partialResponse: Bool
+    partialResponse: Bool,
+    watchdogFired: Bool = false
   )
   case cancelled(
     ChatQueryTelemetryContext,
@@ -253,13 +262,14 @@ extension ChatQueryTelemetryEvent {
       if let runtimeAttemptId = metrics.runtimeAttemptId {
         properties["runtime_attempt_id"] = runtimeAttemptId
       }
-    case .failed(let eventContext, let durationMs, let errorClass, let partialResponse):
+    case .failed(let eventContext, let durationMs, let errorClass, let partialResponse, let watchdogFired):
       eventName = "chat_agent_error"
       context = eventContext
       properties = [
         "duration_ms": durationMs,
         "error_class": errorClass.rawValue,
         "partial_response": partialResponse,
+        "watchdog_fired": watchdogFired,
       ]
     case .cancelled(let eventContext, let durationMs, let reason, let partialResponse):
       eventName = "chat_agent_query_cancelled"
@@ -274,6 +284,20 @@ extension ChatQueryTelemetryEvent {
     properties["attempt_id"] = context.attemptId
     properties["surface"] = context.surface
     properties["harness"] = context.harness
+    if let bridgeModePreference = context.bridgeModePreference {
+      properties["bridge_mode_preference"] = bridgeModePreference
+    }
+    if let sessionAdapterId = context.sessionAdapterId {
+      properties["session_adapter_id"] = sessionAdapterId
+      let harnessNorm = context.harness.lowercased()
+      let adapterNorm = sessionAdapterId.lowercased()
+      let harnessMatchesAdapter =
+        harnessNorm == adapterNorm
+        || (harnessNorm == "pimono" && adapterNorm == "pi-mono")
+      if !harnessMatchesAdapter {
+        properties["adapter_harness_mismatch"] = true
+      }
+    }
     properties["input_length_bucket"] = context.inputLengthBucket
     properties["attachment_count"] = context.attachmentCount
     properties["has_image"] = context.hasImage
@@ -281,11 +305,15 @@ extension ChatQueryTelemetryEvent {
       properties["runtime_surface"] = runtimeSurface
     }
     properties["telemetry_schema_version"] = 2
-    if case .failed(_, _, let errorClass, _) = self {
+    if case .failed(_, _, let errorClass, _, _) = self {
       // One-release compatibility alias for existing PostHog breakdowns.
       // It is bounded and contains the same value as `error_class`, never the
       // raw exception. Remove after LXEMscAj and Hermes exports migrate to v2.
       properties["error"] = errorClass.rawValue
+      if errorClass == .authentication {
+        properties["turn_disposition"] = "auth_blocked"
+        properties["root_cause"] = "provider_claude"
+      }
     }
     return ChatQueryAnalyticsPayload(eventName: eventName, properties: properties)
   }
@@ -306,12 +334,16 @@ final class ChatQueryTelemetryAttempt {
 
   private let elapsedMilliseconds: () -> Int
   private let eventSink: EventSink
+  private var boundSessionAdapterId: String?
+  private var boundBridgeModePreference: String?
   private(set) var isTerminal = false
 
   init(
     attemptId: String = UUID().uuidString,
     surface: String,
     harness: String,
+    bridgeModePreference: String? = nil,
+    sessionAdapterId: String? = nil,
     runtimeSurface: String? = nil,
     inputLength: Int = 0,
     attachmentCount: Int = 0,
@@ -323,6 +355,8 @@ final class ChatQueryTelemetryAttempt {
       attemptId: attemptId,
       surface: String(surface.prefix(64)),
       harness: String(harness.prefix(64)),
+      bridgeModePreference: bridgeModePreference.map { String($0.prefix(64)) },
+      sessionAdapterId: sessionAdapterId,
       runtimeSurface: runtimeSurface.map { String($0.prefix(64)) },
       inputLengthBucket: Self.inputLengthBucket(inputLength),
       attachmentCount: min(max(0, attachmentCount), 20),
@@ -341,13 +375,46 @@ final class ChatQueryTelemetryAttempt {
       }
     }
     self.eventSink = eventSink ?? { AnalyticsManager.shared.chatQueryTelemetry($0) }
-    self.eventSink(.started(context))
+    self.eventSink(.started(eventContext()))
+  }
+
+  func bindSessionAdapter(_ adapterId: String) {
+    boundSessionAdapterId = String(adapterId.prefix(64))
+  }
+
+  func bindBridgeModePreference(_ bridgeMode: String) {
+    boundBridgeModePreference = String(bridgeMode.prefix(64))
+  }
+
+  var resolvedSessionAdapterId: String? {
+    boundSessionAdapterId ?? context.sessionAdapterId
+  }
+
+  private func eventContext() -> ChatQueryTelemetryContext {
+    let sessionAdapterId = boundSessionAdapterId ?? context.sessionAdapterId
+    let bridgeModePreference = boundBridgeModePreference ?? context.bridgeModePreference
+    if sessionAdapterId == context.sessionAdapterId
+      && bridgeModePreference == context.bridgeModePreference
+    {
+      return context
+    }
+    return ChatQueryTelemetryContext(
+      attemptId: context.attemptId,
+      surface: context.surface,
+      harness: context.harness,
+      bridgeModePreference: bridgeModePreference,
+      sessionAdapterId: sessionAdapterId,
+      runtimeSurface: context.runtimeSurface,
+      inputLengthBucket: context.inputLengthBucket,
+      attachmentCount: context.attachmentCount,
+      hasImage: context.hasImage
+    )
   }
 
   @discardableResult
   func complete(metrics: ChatQueryCompletionMetrics) -> Bool {
     guard beginTerminalEvent() else { return false }
-    eventSink(.completed(context, durationMs: durationMs(), metrics: metrics))
+    eventSink(.completed(eventContext(), durationMs: durationMs(), metrics: metrics))
     return true
   }
 
@@ -364,7 +431,11 @@ final class ChatQueryTelemetryAttempt {
       toolStallAbortFired: toolStallAbortFired
     ) {
     case .failed(let errorClass):
-      return fail(errorClass: errorClass, partialResponse: partialResponse)
+      return fail(
+        errorClass: errorClass,
+        partialResponse: partialResponse,
+        watchdogFired: watchdogFired
+      )
     case .cancelled(let reason):
       return cancel(reason: reason, partialResponse: partialResponse)
     }
@@ -386,14 +457,19 @@ final class ChatQueryTelemetryAttempt {
   }
 
   @discardableResult
-  func fail(errorClass: ChatQueryErrorClass, partialResponse: Bool = false) -> Bool {
+  func fail(
+    errorClass: ChatQueryErrorClass,
+    partialResponse: Bool = false,
+    watchdogFired: Bool = false
+  ) -> Bool {
     guard beginTerminalEvent() else { return false }
     eventSink(
       .failed(
-        context,
+        eventContext(),
         durationMs: durationMs(),
         errorClass: errorClass,
-        partialResponse: partialResponse
+        partialResponse: partialResponse,
+        watchdogFired: watchdogFired
       )
     )
     return true
@@ -407,7 +483,7 @@ final class ChatQueryTelemetryAttempt {
     guard beginTerminalEvent() else { return false }
     eventSink(
       .cancelled(
-        context,
+        eventContext(),
         durationMs: durationMs(),
         reason: reason,
         partialResponse: partialResponse

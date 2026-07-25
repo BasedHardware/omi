@@ -19,17 +19,22 @@ on:
       - "desktop/macos/Backend-Rust/src/services/firestore/**"
       - "desktop/macos/scripts/desktop-core-harness.sh"
       - "desktop/macos/scripts/desktop-flow-lint.py"
+      - "desktop/macos/scripts/desktop_flow_contract.py"
       - "desktop/macos/e2e/**"
       - "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift"
+      - "desktop/macos/Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift"
       - "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift"
+      - "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift"
+      - "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift"
+      - "desktop/macos/Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift"
 
 jobs:
   desktop-core-e2e-t0:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version-file: backend/.python-version
 
@@ -53,13 +58,13 @@ jobs:
       FIRESTORE_EMULATOR_HOST: localhost:8787
       GOOGLE_CLOUD_PROJECT: omi-contract-tests
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version-file: backend/.python-version
 
-      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+      - uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
           enable-cache: true
           cache-dependency-glob: backend/pylock*.toml

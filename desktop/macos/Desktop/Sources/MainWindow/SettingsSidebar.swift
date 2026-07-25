@@ -278,11 +278,11 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["voice speed", "speech speed", "playback speed", "tts speed"],
       section: .floatingBar, icon: "sparkles", settingId: "floatingbar.voicespeed"),
     SettingsSearchItem(
-      name: "Shortcuts", subtitle: "Configure Ask omi and push-to-talk keyboard shortcuts",
+      name: "Shortcuts", subtitle: "Configure Open Omi and push-to-talk keyboard shortcuts",
       keywords: ["shortcuts", "keyboard", "hotkeys", "push to talk"], section: .shortcuts,
       icon: "keyboard", settingId: "floatingbar.shortcut"),
     SettingsSearchItem(
-      name: "Ask omi Shortcut", subtitle: "Global shortcut to open Ask omi from anywhere",
+      name: "Open Omi Shortcut", subtitle: "Global shortcut to open the Omi app from anywhere",
       keywords: ["shortcut", "hotkey", "keyboard", "global shortcut"], section: .shortcuts,
       icon: "keyboard", settingId: "floatingbar.shortcut"),
     SettingsSearchItem(

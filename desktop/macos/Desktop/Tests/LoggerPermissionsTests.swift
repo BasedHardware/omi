@@ -97,6 +97,119 @@ final class LoggerPermissionsTests: XCTestCase {
     XCTAssertEqual(try posixPermissions(of: path), 0o700)
   }
 
+  func testLogFileAppenderReturnsFailureWhenWriteThrowsAfterSeek() throws {
+    let path = tempDir.appendingPathComponent("write-failure.log")
+    XCTAssertTrue(FileManager.default.createFile(atPath: path.path, contents: Data()))
+    var didSeek = false
+    var closeAttempts = 0
+
+    let result = OmiLogFileAppender.append(
+      Data("log line\n".utf8),
+      to: path,
+      seekToEnd: { handle in
+        didSeek = true
+        try handle.seekToEnd()
+      },
+      write: { _, _ in throw TestError.writeFailure },
+      close: { handle in
+        closeAttempts += 1
+        try handle.close()
+      })
+
+    XCTAssertTrue(didSeek)
+    XCTAssertEqual(closeAttempts, 1)
+    if case .success = result {
+      XCTFail("A failed write must be returned instead of escaping as an exception")
+    }
+  }
+
+  func testLogFileAppenderClosesHandleAfterSeekFailure() throws {
+    let path = tempDir.appendingPathComponent("seek-failure.log")
+    XCTAssertTrue(FileManager.default.createFile(atPath: path.path, contents: Data()))
+    var closeAttempts = 0
+
+    let result = OmiLogFileAppender.append(
+      Data("log line\n".utf8),
+      to: path,
+      seekToEnd: { _ in throw TestError.seekFailure },
+      close: { handle in
+        closeAttempts += 1
+        try handle.close()
+      })
+
+    XCTAssertEqual(closeAttempts, 1)
+    if case .success = result {
+      XCTFail("A failed seek must be returned instead of escaping as an exception")
+    }
+  }
+
+  func testLogFileAppenderReturnsFailureWhenCloseThrowsAfterWrite() throws {
+    let path = tempDir.appendingPathComponent("close-failure.log")
+    XCTAssertTrue(FileManager.default.createFile(atPath: path.path, contents: Data()))
+    var didWrite = false
+
+    let result = OmiLogFileAppender.append(
+      Data("log line\n".utf8),
+      to: path,
+      write: { handle, data in
+        didWrite = true
+        try handle.write(contentsOf: data)
+      },
+      close: { handle in
+        try handle.close()
+        throw TestError.closeFailure
+      })
+
+    XCTAssertTrue(didWrite)
+    if case .success = result {
+      XCTFail("A close failure must be returned instead of being silently discarded")
+    }
+  }
+
+  func testWriteToLogFileReportsCloseFailure() throws {
+    let path = tempDir.appendingPathComponent("reported-close-failure.log")
+    XCTAssertTrue(FileManager.default.createFile(atPath: path.path, contents: Data()))
+    var reportedFailures = 0
+
+    writeToLogFile(
+      Data("log line\n".utf8),
+      to: path,
+      appendFile: { data, file in
+        OmiLogFileAppender.append(
+          data,
+          to: file,
+          close: { handle in
+            try handle.close()
+            throw TestError.closeFailure
+          })
+      },
+      reportFailure: { _ in reportedFailures += 1 })
+
+    XCTAssertEqual(reportedFailures, 1)
+  }
+
+  func testWriteToLogFileReportsOnlyFirstPersistentFailure() {
+    let path = tempDir.appendingPathComponent("persistent-failure.log")
+    var reportedFailures = 0
+    let reporter = OmiLogFileFailureReporter { _ in reportedFailures += 1 }
+    let appendFailure: (Data, URL) -> Result<Void, Error> = { _, _ in .failure(TestError.writeFailure) }
+
+    writeToLogFile(Data("first\n".utf8), to: path, appendFile: appendFailure) { error in
+      reporter.report(error)
+    }
+    writeToLogFile(Data("second\n".utf8), to: path, appendFile: appendFailure) { error in
+      reporter.report(error)
+    }
+
+    XCTAssertEqual(reportedFailures, 1)
+  }
+
+  private enum TestError: Error {
+    case seekFailure
+    case writeFailure
+    case closeFailure
+  }
+
   private func posixPermissions(of path: String) throws -> Int {
     let attributes = try FileManager.default.attributesOfItem(atPath: path)
     let number = try XCTUnwrap(attributes[.posixPermissions] as? NSNumber)

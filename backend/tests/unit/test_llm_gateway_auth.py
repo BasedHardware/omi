@@ -136,6 +136,23 @@ def test_auth_dependency_returns_service_caller_model():
     assert caller.tenant_id == 'tenant-abc'
 
 
+def test_authenticated_usage_feature_is_available_but_not_response_serialized(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    request = TestClient(_protected_app()).get(
+        '/protected',
+        headers={
+            'authorization': 'Bearer shared-secret',
+            'x-omi-service-caller': 'backend',
+            'x-omi-llm-feature': 'conversation_processing',
+        },
+    )
+
+    assert request.status_code == 200
+    assert 'usage_feature' not in request.json()
+    caller = ServiceCaller(name='backend', usage_feature=' conversation_processing ')
+    assert caller.usage_feature == 'conversation_processing'
+
+
 def test_primary_service_token_env_var_is_accepted(monkeypatch):
     """Gateway must accept OMI_LLM_GATEWAY_SERVICE_TOKEN (the client's primary var)."""
     monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 'primary-token')

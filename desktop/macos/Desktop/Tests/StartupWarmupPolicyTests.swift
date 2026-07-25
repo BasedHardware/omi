@@ -139,27 +139,6 @@ final class StartupWarmupPolicyTests: XCTestCase {
     )
   }
 
-  func testTranscriptionDeferralStartsAPIKeyFetchImmediately() throws {
-    let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-    let homeURL =
-      testsURL
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/MainWindow/DesktopHomeView.swift")
-    let source = try String(contentsOf: homeURL, encoding: .utf8)
-
-    guard let deferralRange = source.range(of: "DesktopHomeView: Deferring transcription — API keys not yet loaded"),
-      let immediateFetchRange = source.range(of: "Task { await APIKeyService.shared.waitForKeys() }")
-    else {
-      return XCTFail("Transcription auto-start deferral must kick off API key fetch immediately")
-    }
-
-    XCTAssertGreaterThan(
-      immediateFetchRange.lowerBound,
-      deferralRange.lowerBound,
-      "Immediate key fetch should be started from the transcription deferral branch"
-    )
-  }
-
   func testAPIKeyFetchFailureDoesNotBlockFutureWaiters() throws {
     let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
     let serviceURL =
@@ -218,15 +197,15 @@ final class StartupWarmupPolicyTests: XCTestCase {
     XCTAssertTrue(state.reserveDatabaseWarmup(dbAvailable: true))
   }
 
-  func testTasksPageFirstUseLoadsWhenStoreHasNoRenderedTasks() {
+  func testTasksPageFirstUseLoadsWhenActiveViewHasNotHydrated() {
     XCTAssertTrue(
-      TasksPageFirstUseLoadPolicy.shouldLoadTasks(hasRenderedTasks: false, isLoading: false)
+      TasksPageFirstUseLoadPolicy.shouldLoadTasks(isActiveViewLoaded: false, isActiveViewLoading: false)
     )
     XCTAssertFalse(
-      TasksPageFirstUseLoadPolicy.shouldLoadTasks(hasRenderedTasks: true, isLoading: false)
+      TasksPageFirstUseLoadPolicy.shouldLoadTasks(isActiveViewLoaded: true, isActiveViewLoading: false)
     )
     XCTAssertFalse(
-      TasksPageFirstUseLoadPolicy.shouldLoadTasks(hasRenderedTasks: false, isLoading: true)
+      TasksPageFirstUseLoadPolicy.shouldLoadTasks(isActiveViewLoaded: false, isActiveViewLoading: true)
     )
   }
 

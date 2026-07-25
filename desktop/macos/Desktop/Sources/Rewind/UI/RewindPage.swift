@@ -22,9 +22,10 @@ struct RewindPage: View {
   @FocusState private var isPageFocused: Bool
 
   // Monitoring toggle state
-  @State private var isMonitoring = false
-  @State private var isTogglingMonitoring = false
-  @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
+  @State var isMonitoring = false
+  @State var screenCaptureHealth: ScreenCaptureHealth = .stopped
+  @State var isTogglingMonitoring = false
+  @AppStorage("screenAnalysisEnabled") var screenAnalysisEnabled = true
 
   // Recording animation state
   @State private var isRecordingPulsing = false
@@ -138,16 +139,18 @@ struct RewindPage: View {
     }
     .onAppear {
       isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
+      screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
       isPageFocused = true
     }
     .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
       let pluginState = ProactiveAssistantsPlugin.shared.isMonitoring
-      isMonitoring = pluginState
-      // Keep persistent setting in sync when monitoring stops due to errors
-      if !pluginState && screenAnalysisEnabled {
-        screenAnalysisEnabled = false
-        AssistantSettings.shared.screenAnalysisEnabled = false
-      }
+      let state = RewindCaptureState.afterMonitoringChange(
+        captureEnabled: screenAnalysisEnabled,
+        monitoring: pluginState
+      )
+      isMonitoring = state.isMonitoring
+      screenAnalysisEnabled = state.captureEnabled
+      screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
     }
     .onReceive(NotificationCenter.default.publisher(for: .expandRewindTranscript)) { _ in
       OmiMotion.withGated(.easeInOut(duration: 0.2)) {
@@ -317,76 +320,6 @@ struct RewindPage: View {
     }
   }
 
-  // MARK: - Rewind Toggle
-
-  private var rewindToggle: some View {
-    ZStack {
-      Capsule()
-        .fill(isMonitoring ? OmiColors.accent : Color.red)
-        .frame(width: 36, height: 20)
-
-      Circle()
-        .fill(isMonitoring ? OmiColors.backgroundPrimary : Color.white)
-        .frame(width: 16, height: 16)
-        .shadow(color: .black.opacity(0.15), radius: 1, x: 0, y: 1)
-        .offset(x: isMonitoring ? 8 : -8)
-        .omiAnimation(.easeInOut(duration: 0.15), value: isMonitoring)
-    }
-    .opacity(isTogglingMonitoring ? 0.5 : 1.0)
-    .overlay {
-      if isTogglingMonitoring {
-        ProgressView()
-          .scaleEffect(0.5)
-      }
-    }
-    .onTapGesture {
-      if !isTogglingMonitoring {
-        toggleMonitoring(enabled: !isMonitoring)
-      }
-    }
-    .help(isMonitoring ? "Rewind is capturing - click to stop" : "Rewind is off - click to start capturing")
-  }
-
-  private func toggleMonitoring(enabled: Bool) {
-    if enabled {
-      // Refresh permission cache before checking (may be stale after user granted access)
-      ProactiveAssistantsPlugin.shared.refreshScreenRecordingPermission()
-    }
-
-    if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
-      isMonitoring = false
-      ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
-      return
-    }
-
-    isTogglingMonitoring = true
-    isMonitoring = enabled
-
-    AnalyticsManager.shared.settingToggled(setting: "monitoring", enabled: enabled)
-
-    screenAnalysisEnabled = enabled
-    AssistantSettings.shared.screenAnalysisEnabled = enabled
-
-    if enabled {
-      ProactiveAssistantsPlugin.shared.startMonitoring { success, _ in
-        DispatchQueue.main.async {
-          isTogglingMonitoring = false
-          if !success {
-            isMonitoring = false
-            // Revert persistent setting so UI and auto-start stay in sync
-            screenAnalysisEnabled = false
-            AssistantSettings.shared.screenAnalysisEnabled = false
-          }
-        }
-      }
-    } else {
-      ProactiveAssistantsPlugin.shared.stopMonitoring()
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-        isTogglingMonitoring = false
-      }
-    }
-  }
-
   // MARK: - Unified Top Bar (persistent search field)
 
   private var unifiedTopBar: some View {
@@ -492,6 +425,16 @@ struct RewindPage: View {
       .help("Rewind Settings")
 
       // Rewind on/off toggle (screen capture only)
+      if let badgeText = screenCaptureHealth.rewindBadgeText {
+        Text(badgeText)
+          .scaledFont(size: OmiType.micro, weight: .medium)
+          .foregroundColor(OmiColors.warning)
+          .padding(.horizontal, OmiSpacing.xs)
+          .padding(.vertical, OmiSpacing.hairline)
+          .background(OmiColors.warning.opacity(0.15))
+          .cornerRadius(OmiChrome.stripRadius)
+          .help(screenCaptureHealth.statusText)
+      }
       rewindToggle
     }
     .padding(.horizontal, OmiSpacing.lg)
@@ -1617,7 +1560,10 @@ struct SearchResultListItem: View {
 
   private func loadThumbnail() async {
     do {
-      let image = try await RewindStorage.shared.loadScreenshotImage(for: screenshot)
+      // 120×80 pt row @2x retina — decode a downsampled thumbnail, not the
+      // full-resolution screenshot, to keep a long results list light on memory.
+      let image = try await RewindStorage.shared.loadScreenshotThumbnail(
+        for: screenshot, maxPixelSize: 240)
       await MainActor.run {
         thumbnail = image
       }
@@ -1779,7 +1725,10 @@ struct SearchResultGroupItem: View {
 
   private func loadThumbnail() async {
     do {
-      let image = try await RewindStorage.shared.loadScreenshotImage(for: group.representativeScreenshot)
+      // 120×80 pt row @2x retina — decode a downsampled thumbnail, not the
+      // full-resolution screenshot, to keep a long results list light on memory.
+      let image = try await RewindStorage.shared.loadScreenshotThumbnail(
+        for: group.representativeScreenshot, maxPixelSize: 240)
       await MainActor.run {
         thumbnail = image
       }

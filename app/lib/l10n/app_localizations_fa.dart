@@ -1468,7 +1468,7 @@ class AppLocalizationsFa extends AppLocalizations {
       'آزادانه از omi استفاده کنید. شما فقط مستقیماً ارائه‌دهنده STT خود را پرداخت می‌کنید.';
 
   @override
-  String get freeMinutesMonth => '600 دقیقه رایگان/ماه شامل است. نامحدود با ';
+  String get freeMinutesMonth => '300 دقیقه رایگان/ماه شامل است. نامحدود با ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1790,20 +1790,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Omi را دوست داشتید؟';
-
-  @override
-  String get leaveReviewIos =>
-      'با گذاشتن نظری در App Store، کمک کنید ما به مردم بیشتری برسیم. بازخوردتان برای ما بسیار مهم است!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'با گذاشتن نظری در Google Play Store، کمک کنید ما به مردم بیشتری برسیم. بازخوردتان برای ما بسیار مهم است!';
-
-  @override
-  String get rateOnAppStore => 'در App Store امتیاز دهید';
-
-  @override
-  String get rateOnGooglePlay => 'در Google Play امتیاز دهید';
 
   @override
   String get maybeLater => 'شاید بعداً';
@@ -2137,6 +2123,18 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ ویرایش خاطره';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'من دوست دارم بستنی بخورم...';
@@ -4712,7 +4710,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'هیچ دسترسی داده خاصی تنظیم‌نشده است.';
 
   @override
-  String get basicPlanDescription => '600 دقیقه حرفه‌ای + نامحدود روی‌دستگاه';
+  String get basicPlanDescription => '300 دقیقه حرفه‌ای + نامحدود روی‌دستگاه';
 
   @override
   String get minutes => 'دقیقه';
@@ -6003,7 +6001,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get cloudProvider => 'ارائه دهنده ابری';
 
   @override
-  String get premiumMinutesInfo => '600 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.';
+  String get premiumMinutesInfo => '300 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.';
 
   @override
   String get viewUsage => 'مشاهده استفاده';
@@ -6083,7 +6081,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get batteryDrainSignificantly => 'تخلیه باتری به طور قابل توجهی افزایش خواهد یافت.';
 
   @override
-  String get premiumMinutesMonth => '600 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.';
+  String get premiumMinutesMonth => '300 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.';
 
   @override
   String get audioProcessedLocally =>
@@ -8990,7 +8988,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get billingYearly => 'سالانه';
 
   @override
-  String get savePercent => '~17% صرفه‌جویی';
+  String savePercent(int percent) {
+    return '~$percent% صرفه‌جویی';
+  }
 
   @override
   String get popular => 'محبوب';
@@ -9600,4 +9600,177 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'اتصالی نیست — به‌صورت محلی ضبط می‌شود. وقتی دوباره آنلاین شوید رونویسی می‌شود.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'داده‌های شما به‌طور پیش‌فرض با رمزگذاری قوی محافظت می‌شوند و شما کنترل می‌کنید که چگونه ذخیره و استفاده شوند.';
+
+  @override
+  String get sttModelAccuracy => 'دقت';
+
+  @override
+  String get whisperModelSizeBase => 'پایه';
+
+  @override
+  String get cloudTranscription => 'رونویسی ابری';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'حذف مدل';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'آیا مطمئن هستید که می‌خواهید این مدل را حذف کنید؟';
+
+  @override
+  String get onDeviceModelDownloaded => 'دانلود شده';
+
+  @override
+  String get sttModelFaster => 'سریع‌تر';
+
+  @override
+  String get sttFilterAuto => 'خودکار';
+
+  @override
+  String get sttModelHigher => 'بالاتر';
+
+  @override
+  String get whisperModelSizeLarge => 'بزرگ';
+
+  @override
+  String get sttModelLower => 'پایین‌تر';
+
+  @override
+  String get whisperModelSizeMedium => 'متوسط';
+
+  @override
+  String get onDeviceModelDeleted => 'مدل حذف شد';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'دانلود مدل ناموفق بود';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'دانلود مدل Whisper ناموفق بود. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'مدل دانلود شد';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'مدل Whisper با موفقیت دانلود شد';
+
+  @override
+  String get onDeviceModelSize => 'اندازه مدل';
+
+  @override
+  String get sttNone => 'هیچ‌کدام';
+
+  @override
+  String get onDeviceTranscription => 'رونویسی روی دستگاه';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'رونویسی به صورت محلی روی دستگاه شما پردازش می‌شود';
+
+  @override
+  String get sttModelSlower => 'کندتر';
+
+  @override
+  String get whisperModelSizeSmall => 'کوچک';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'ارائه‌دهنده تبدیل گفتار به متن';
+
+  @override
+  String get speechToTextProviderDesc => 'سرویس مورد استفاده برای رونویسی را انتخاب کنید';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'سرعت';
+
+  @override
+  String get whisperModelSizeTiny => 'خیلی کوچک';
+
+  @override
+  String get transcriptionLanguage => 'زبان رونویسی';
+
+  @override
+  String get transcriptionLanguageDesc => 'زبان رونویسی گفتار را انتخاب کنید';
+
+  @override
+  String get whisperModel => 'مدل Whisper';
+
+  @override
+  String get whisperModelDesc => 'مدل مورد استفاده برای رونویسی روی دستگاه را انتخاب کنید';
+
+  @override
+  String get downgradeToFreemiumTitle => 'تنزل به طرح رایگان؟';
+
+  @override
+  String get downgradeLimitationsHeading => 'با این محدودیت‌ها مواجه خواهید شد:';
+
+  @override
+  String get downgradeLimitBattery => '۷ برابر مصرف باتری';
+
+  @override
+  String get downgradeLimitQuality => '۳۰٪ کیفیت رونویسی کمتر';
+
+  @override
+  String get downgradeLimitDelay => '۵ تا ۷ ثانیه تأخیر';
+
+  @override
+  String get downgradeLimitSpeakers => 'عدم امکان شناسایی گویندگان';
+
+  @override
+  String get downgradeAnyway => 'با این حال تنزل بده';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Calendar متصل نیست';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'برای پیوند دادن گفتگوها به رویدادهای تقویم، Google Calendar خود را متصل کنید.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'به «$title» پیوند داده شد';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'پیوند دادن رویداد تقویم ناموفق بود';
+
+  @override
+  String get thanksForYourFeedback => 'از بازخورد شما متشکریم!';
+
+  @override
+  String get copyMessage => 'کپی پیام';
+
+  @override
+  String get searchSettings => 'جستجوی تنظیمات…';
+
+  @override
+  String get errorLoadingAudio => 'خطا در بارگذاری صدا';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'میکروفون Ray-Ban Meta را انتخاب کنید';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'میکروفون Bluetooth عینک خود را انتخاب کنید. هنگام استفاده Omi از آن، موسیقی متوقف می‌شود.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'هیچ میکروفون Bluetooth پیدا نشد. عینک را در تنظیمات iPhone متصل کنید و دوباره امتحان کنید.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'میکروفون‌های Bluetooth بارگیری نشدند. روشن بودن Bluetooth را بررسی کنید و دوباره امتحان کنید.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'اتصال به این میکروفون ممکن نشد. مطمئن شوید در تنظیمات iPhone متصل است.';
 }
