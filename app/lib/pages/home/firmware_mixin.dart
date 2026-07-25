@@ -143,6 +143,10 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       if (state == mcumgr.FirmwareUpgradeState.success) {
         Logger.debug('update success');
         killMcuUpdateManager();
+        // This listener fires from the native DFU plugin on its own async timeline, which
+        // can easily outlive the widget (user backgrounds the app or navigates away
+        // mid-update) - calling setState() after dispose() throws.
+        if (!mounted) return;
         setState(() {
           isInstalling = false;
           isInstalled = true;
@@ -154,6 +158,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
 
     updateManager.progressStream.listen((progress) {
       Logger.debug('progress: $progress');
+      if (!mounted) return;
       setState(() {
         installProgress = (progress.bytesSent / progress.imageSize * 100).round();
       });
@@ -194,12 +199,17 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       androidSpecialParameter: const AndroidSpecialParameter(packetReceiptNotificationsEnabled: true, rebootTime: 1000),
       onProgressChanged: (deviceAddress, percent, speed, avgSpeed, currentPart, partsTotal) {
         Logger.debug('deviceAddress: $deviceAddress, percent: $percent');
+        // These native-plugin callbacks fire on their own async timeline throughout the
+        // DFU process, which can easily outlive the widget (user backgrounds the app or
+        // navigates away mid-update). setState()/context after dispose() throws.
+        if (!mounted) return;
         setState(() {
           installProgress = percent.toInt();
         });
       },
       onError: (deviceAddress, error, errorType, message) {
         Logger.debug('deviceAddress: $deviceAddress, error: $error, errorType: $errorType, message: $message');
+        if (!mounted) return;
         setState(() {
           isInstalling = false;
         });
@@ -215,6 +225,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       onFirmwareValidating: (deviceAddress) => Logger.debug('address: $deviceAddress, onFirmwareValidating'),
       onDfuCompleted: (deviceAddress) {
         Logger.debug('deviceAddress: $deviceAddress, onDfuCompleted');
+        if (!mounted) return;
         setState(() {
           isInstalling = false;
           isInstalled = true;
@@ -275,6 +286,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
 
     String dir = (await getApplicationDocumentsDirectory()).path;
 
+    if (!mounted) return;
     setState(() {
       isDownloading = true;
       isDownloaded = false;
@@ -295,9 +307,13 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
           downloaded += chunk.length;
           if (totalBytes != null && totalBytes > 0) {
             Logger.debug('downloadPercentage: ${downloaded / totalBytes * 100}');
-            setState(() {
-              downloadProgress = (downloaded / totalBytes * 100).toInt();
-            });
+            // The stream keeps delivering chunks for as long as the download runs, which
+            // can outlive the widget (user navigates away mid-download).
+            if (mounted) {
+              setState(() {
+                downloadProgress = (downloaded / totalBytes * 100).toInt();
+              });
+            }
           }
         },
         onDone: () async {
@@ -311,11 +327,13 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
               offset += chunk.length;
             }
             await file.writeAsBytes(bytes);
-            setState(() {
-              isDownloading = false;
-              isDownloaded = true;
-              downloadProgress = 100;
-            });
+            if (mounted) {
+              setState(() {
+                isDownloading = false;
+                isDownloaded = true;
+                downloadProgress = 100;
+              });
+            }
             completer.complete();
           } catch (e) {
             completer.completeError(e);
@@ -323,9 +341,11 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
         },
         onError: (error) {
           Logger.debug('Download error: $error');
-          setState(() {
-            isDownloading = false;
-          });
+          if (mounted) {
+            setState(() {
+              isDownloading = false;
+            });
+          }
           deviceProvider.resetFirmwareUpdateState();
           completer.completeError(error);
         },

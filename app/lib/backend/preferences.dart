@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/schema/app.dart';
@@ -17,6 +18,36 @@ class SharedPreferencesUtil {
   static final SharedPreferencesUtil _instance = SharedPreferencesUtil._internal();
   static SharedPreferences? _preferences;
 
+  // The Firebase bearer token is sent as `Authorization: Bearer $authToken` on every API/
+  // WebSocket call, so it belongs in the platform Keychain/Keystore, not plaintext
+  // SharedPreferences (an unencrypted XML file on Android, readable via file-system/backup
+  // extraction or on a rooted/jailbroken device). It is now authoritatively stored via
+  // flutter_secure_storage; flutter_secure_storage's read/write API is async-only, so the
+  // token is mirrored into this in-memory cache (populated once at init()) to preserve the
+  // synchronous `authToken` getter every Dart call site already depends on.
+  //
+  // encryptedSharedPreferences: true makes the plugin back Android storage with a real
+  // androidx.security.crypto.EncryptedSharedPreferences file (not its own undocumented custom
+  // cipher scheme) - required so android/app/.../batch/OmiBackgroundAudioStreamer.kt's
+  // secureStringPref() can read the same value natively (it authenticates background audio
+  // uploads when no Dart isolate is running, so it can't go through this class). See that
+  // function's doc comment for the exact file/key derivation this must stay in sync with.
+  //
+  // KNOWN RESIDUAL EXPOSURE (PARTIAL, PENDING ON-DEVICE VERIFICATION): the native reader above
+  // was derived by reading the flutter_secure_storage plugin's source (not by testing on a
+  // real device, which this environment doesn't have) and always falls back to the legacy
+  // plaintext `FlutterSharedPreferences` copy if the secure read fails for any reason - so the
+  // setter below still writes that plaintext copy too, keeping background streaming safe even
+  // if the native secure-read path turns out to be wrong. Once someone verifies on a real
+  // Android device that background audio streaming still authenticates correctly with the
+  // plaintext copy absent, remove: this plaintext write-through, the legacy-migration path in
+  // _loadAuthTokenFromSecureStorage below, and this comment.
+  static const _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+  static const _authTokenSecureKey = 'authToken';
+  static String? _authTokenCache;
+
   factory SharedPreferencesUtil() {
     return _instance;
   }
@@ -28,6 +59,24 @@ class SharedPreferencesUtil {
 
   static Future<void> init() async {
     _preferences = await SharedPreferences.getInstance();
+    await _loadAuthTokenFromSecureStorage();
+  }
+
+  static Future<void> _loadAuthTokenFromSecureStorage() async {
+    final secureToken = await _secureStorage.read(key: _authTokenSecureKey);
+    if (secureToken != null && secureToken.isNotEmpty) {
+      _authTokenCache = secureToken;
+      return;
+    }
+    // One-time migration: earlier app versions stored the token only in plaintext
+    // SharedPreferences. Copy it into secure storage so existing signed-in users aren't
+    // logged out by this change. The plaintext copy is intentionally left in place for
+    // the native background streamer (see the class-level comment above).
+    final legacyToken = _preferences?.getString('authToken') ?? '';
+    _authTokenCache = legacyToken;
+    if (legacyToken.isNotEmpty) {
+      await _secureStorage.write(key: _authTokenSecureKey, value: legacyToken);
+    }
   }
 
   /// Picks up values written natively (the Dart cache doesn't see those otherwise).
@@ -677,9 +726,20 @@ class SharedPreferencesUtil {
 
   //--------------------------------- Auth ------------------------------------//
 
-  String get authToken => getString('authToken');
+  String get authToken => _authTokenCache ?? '';
 
-  set authToken(String value) => saveString('authToken', value);
+  set authToken(String value) {
+    _authTokenCache = value;
+    if (value.isEmpty) {
+      _secureStorage.delete(key: _authTokenSecureKey);
+    } else {
+      _secureStorage.write(key: _authTokenSecureKey, value: value);
+    }
+    // See the class-level KNOWN RESIDUAL EXPOSURE comment: keeps the native Android
+    // background streamer (which reads this key directly, not through this class)
+    // working until it's migrated to read secure storage instead.
+    saveString('authToken', value);
+  }
 
   int get tokenExpirationTime => getInt('tokenExpirationTime');
 

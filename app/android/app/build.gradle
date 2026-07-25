@@ -161,6 +161,14 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
     implementation 'androidx.multidex:multidex:2.0.1'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    // Reads the same androidx.security.crypto.EncryptedSharedPreferences store the
+    // flutter_secure_storage plugin writes to (see OmiBackgroundAudioStreamer.kt's
+    // secureStringPref()). flutter_secure_storage declares this as `implementation`
+    // (not `api`), which does not expose it on this module's compile classpath even
+    // though it ends up on the merged app's runtime classpath - so it must be declared
+    // here too. Version pinned to match flutter_secure_storage 9.2.2's own dependency
+    // (see its android/build.gradle) so both modules resolve to the same artifact.
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
     implementation 'androidx.constraintlayout:constraintlayout:2.0.0-alpha3'
     implementation 'io.intercom.android:intercom-sdk:latest.release'
     implementation 'com.twilio:voice-android:6.10.2'
