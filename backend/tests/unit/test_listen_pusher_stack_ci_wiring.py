@@ -58,6 +58,13 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     assert "state_dir / 'inline-stale-orphan'" in runner
     assert "'task_already_exists'" in task_seam
     assert 'OMI_STACK_FINALIZATION_RACE_PARTIES' in listener_entrypoint
+    assert 'OMI_STACK_RECORDING_LIFECYCLE_FAULT' in listener_entrypoint
+    assert '_recording_lifecycle_fault_enforce' in runner
+    assert '_recording_lifecycle_fault_compatibility' in runner
+    assert "state_dir / f'lifecycle-fault-{mode.replace(\"_\", \"-\")}'" in runner
+    assert "('enforce', 'stack-lifecycle-enforce'" in runner
+    assert "('shadow', 'stack-lifecycle-shadow'" in runner
+    assert "('dual_write', 'stack-lifecycle-dual-write'" in runner
     assert 'last {min(len(lines), 120)} line(s) from {child.log_path}' in runner
     # #10468 r4: the emulator concurrency tests are chained after the gauntlet
     # in the same Firestore emulator session, not left as a skipped pytest.
