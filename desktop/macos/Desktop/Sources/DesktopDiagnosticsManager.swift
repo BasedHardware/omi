@@ -1092,8 +1092,8 @@ final class DesktopDiagnosticsManager {
     return result
   }
 
-  #if DEBUG
-    func resetForTests() {
+  func resetForTests() {  // body is DEBUG-only; the signature must link in -c release
+    #if DEBUG
       lock.lock()
       snapshots.removeAll()
       betaTrailSnapshots.removeAll()
@@ -1103,8 +1103,8 @@ final class DesktopDiagnosticsManager {
       lastPTTWatchdogIncidentAt = nil
       lastUserVisibleSentryIncidentAt.removeAll()
       lock.unlock()
-    }
-  #endif
+    #endif
+  }
 
   private func shouldCaptureIncident(area: String, failureClass: String) -> Bool {
     let key = "\(area):\(failureClass)"
