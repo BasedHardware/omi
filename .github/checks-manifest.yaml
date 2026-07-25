@@ -29,6 +29,16 @@ checks:
     triggers: ["Makefile", "backend/scripts/sync-python-deps.sh", "scripts/pre-push", "scripts/test-make-setup.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "make setup must provision the minimal, rerunnable backend environment required by selected pre-push checks"
+  - id: failure-class-retirement-author
+    command: ["python3", ".github/scripts/test_failure_class_retirement.py"]
+    triggers: [".github/scripts/failure_class_retirement.py", ".github/scripts/test_failure_class_retirement.py", ".github/workflows/repo-hygiene.yml", "scripts/failure-class", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the weekly retirement author must refuse a truncated event feed; a short feed reports every class as instance-free, so the job would stay green while retiring nothing"
+  - id: desktop-auto-beta-candidate-gate-tests
+    command: ["python3", ".github/scripts/test_check_desktop_auto_beta_candidate.py"]
+    triggers: [".github/scripts/check-desktop-auto-beta-candidate.py", ".github/scripts/test_check_desktop_auto_beta_candidate.py", "codemagic.yaml", "desktop/macos/scripts/smoke-signed-desktop-artifact.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the candidate gate validates signed-smoke evidence; a stable-only flag change must not fail-close the first dual-identity release"
   - id: check-manifest-contract
     command: ["python3", ".github/scripts/test_run_checks.py"]
     triggers: ["all"]
@@ -96,11 +106,26 @@ checks:
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "all changes must be free of whitespace errors and conflict markers"
+  - id: package-architecture-map-guardrail-tests
+    command: ["python3", ".github/scripts/test_check_package_architecture_maps.py"]
+    triggers: [".github/scripts/check_package_architecture_maps.py", ".github/scripts/test_check_package_architecture_maps.py", ".github/scripts/package_architecture_baseline.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the package-map ratchet is only a ratchet while its own baseline behavior stays covered"
   - id: architecture-guardrails
     command: ["python3", ".github/scripts/check_arch_guardrails.py", "--changed-files", "{changed_files}", "--base", "{base}"]
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "advisory size checks plus oversized package-map baseline ratchet"
+  - id: product-invariant-checker-tests
+    command: ["python3", ".github/scripts/test_check_product_invariants.py"]
+    triggers: [".github/scripts/check_product_invariants.py", ".github/scripts/test_check_product_invariants.py", "docs/product/invariants/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "locked invariant citation enforcement must keep rejecting an uncited path match"
+  - id: pr-preflight-contract-tests
+    command: ["python3", ".github/scripts/test_pr_preflight.py"]
+    triggers: [".github/scripts/pr_preflight.py", ".github/scripts/test_pr_preflight.py", ".github/scripts/pr_metadata.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "preflight resolves the check selection every PR depends on"
   - id: product-invariants
     command: ["python3", ".github/scripts/check_product_invariants.py", "--changed-files", "{changed_files}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["all"]
@@ -134,6 +159,11 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "desktop Swift sources changed; compare against the pinned macOS formatter before requiring a flow cover"
+  - id: brand-ui-ratchet-tests
+    command: ["python3", ".github/scripts/test_check_brand_ui.py"]
+    triggers: [".github/scripts/check_brand_ui.py", ".github/scripts/test_check_brand_ui.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "INV-UI-1 is a no-increase ratchet; its counting behavior must stay covered"
   - id: brand-ui
     command: ["python3", ".github/scripts/check_brand_ui.py", "--changed-files", "{changed_files}", "--base", "{base}"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "app/lib/**/*.dart", "web/**/*.ts", "web/**/*.tsx", "web/**/*.js", "web/**/*.jsx", "web/**/*.css"]
@@ -234,11 +264,21 @@ checks:
     triggers: ["backend/database/**/*.py", ".github/scripts/check_firestore_model_read_boundary.py", ".github/scripts/firestore_model_read_boundary_baseline.json"]
     lanes: ["local", "ci"]
     reason: "#9494 -> #9696 malformed Firestore documents must use the shared read boundary"
+  - id: lifecycle-header-checker-tests
+    command: ["python3", ".github/scripts/test_check_lifecycle_headers.py"]
+    triggers: [".github/scripts/check_lifecycle_headers.py", ".github/scripts/test_check_lifecycle_headers.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "one-time rollout scaffolding must keep requiring a DELETE-AFTER reference"
   - id: lifecycle-headers
     command: ["python3", ".github/scripts/check_lifecycle_headers.py", "--changed-files", "{changed_files}"]
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "rollout scaffolding may require lifecycle headers"
+  - id: version-prefixed-filename-tests
+    command: ["python3", ".github/scripts/test_check_version_prefixed_filenames.py"]
+    triggers: [".github/scripts/check_version_prefixed_filenames.py", ".github/scripts/test_check_version_prefixed_filenames.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the repository-wide filename contract must keep rejecting a version-prefixed path"
   - id: version-prefixed-filenames
     command: ["python3", ".github/scripts/check_version_prefixed_filenames.py"]
     triggers: ["all"]
