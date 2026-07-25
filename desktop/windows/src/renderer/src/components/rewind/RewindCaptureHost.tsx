@@ -5,6 +5,9 @@ import type { RewindSettings, RewindCaptureDirective } from '../../../../shared/
 // canvas grab + JPEG encode cheap.
 const MAX_EDGE = 1600
 const JPEG_QUALITY = 0.6
+// Wait before re-opening a stream whose track died, so a source that is
+// unavailable in bursts (display asleep, GPU reset) can't spin getUserMedia.
+const RESTART_DELAY_MS = 2000
 
 /**
  * Background screen-capture host for Rewind. Mounted app-wide (while the window
@@ -58,8 +61,13 @@ export function RewindCaptureHost(): React.JSX.Element {
     const enabled = !!settings?.captureEnabled && !paused
     const intervalMs = effectiveIntervalMs
     let cancelled = false
+    // Bumped on every teardown so a grab still in flight (a save is an IPC
+    // round-trip) can't reschedule itself onto a stream that is already gone —
+    // otherwise each recovery would leave an extra sampling loop running.
+    let generation = 0
 
     const stop = (): void => {
+      generation++
       if (timerRef.current) {
         clearTimeout(timerRef.current)
         timerRef.current = null
@@ -69,13 +77,28 @@ export function RewindCaptureHost(): React.JSX.Element {
       if (videoRef.current) videoRef.current.srcObject = null
     }
 
+    const isLive = (): boolean =>
+      streamRef.current?.getVideoTracks().some((t) => t.readyState === 'live') ?? false
+
+    // A desktop-capture track can die while the app keeps running (display sleep,
+    // GPU/driver reset, resolution or session change). Nothing used to notice: the
+    // sampler kept drawing a dead <video>, so the timeline filled with blank frames
+    // and capture never came back. Re-open the stream instead. Our own teardown
+    // uses track.stop(), which does not fire 'ended', so this can't self-trigger.
+    const onTrackEnded = (): void => {
+      if (cancelled) return
+      console.warn('[rewind] capture track ended — reopening stream')
+      stop()
+      timerRef.current = setTimeout(() => void start(), RESTART_DELAY_MS)
+    }
+
     // Self-pacing: schedule the next grab only after the current one settles, so
     // a slow save can never stack concurrent captures.
-    const grabAndSchedule = async (): Promise<void> => {
-      if (cancelled) return
+    const grabAndSchedule = async (gen: number): Promise<void> => {
+      if (cancelled || gen !== generation) return
       try {
         const v = videoRef.current
-        if (v && v.videoWidth && v.videoHeight && !savingRef.current) {
+        if (v && isLive() && v.videoWidth && v.videoHeight && !savingRef.current) {
           const scale = Math.min(1, MAX_EDGE / Math.max(v.videoWidth, v.videoHeight))
           const w = Math.round(v.videoWidth * scale)
           const h = Math.round(v.videoHeight * scale)
@@ -89,7 +112,7 @@ export function RewindCaptureHost(): React.JSX.Element {
             const blob = await new Promise<Blob | null>((r) =>
               canvas.toBlob(r, 'image/jpeg', JPEG_QUALITY)
             )
-            if (blob && !cancelled) {
+            if (blob && !cancelled && gen === generation) {
               savingRef.current = true
               try {
                 await window.omi.rewindSaveFrame(new Uint8Array(await blob.arrayBuffer()))
@@ -102,7 +125,9 @@ export function RewindCaptureHost(): React.JSX.Element {
       } catch (e) {
         console.error('[rewind] sample failed:', (e as Error).message)
       } finally {
-        if (!cancelled) timerRef.current = setTimeout(() => void grabAndSchedule(), intervalMs)
+        if (!cancelled && gen === generation) {
+          timerRef.current = setTimeout(() => void grabAndSchedule(gen), intervalMs)
+        }
       }
     }
 
@@ -136,12 +161,14 @@ export function RewindCaptureHost(): React.JSX.Element {
           return
         }
         streamRef.current = stream
+        stream.getVideoTracks().forEach((t) => t.addEventListener('ended', onTrackEnded))
+        const gen = generation
         const v = videoRef.current
         if (v) {
           v.srcObject = stream
           await v.play().catch(() => undefined)
         }
-        timerRef.current = setTimeout(() => void grabAndSchedule(), intervalMs)
+        timerRef.current = setTimeout(() => void grabAndSchedule(gen), intervalMs)
       } catch (e) {
         console.error('[rewind] failed to start capture:', (e as Error).message)
       }
