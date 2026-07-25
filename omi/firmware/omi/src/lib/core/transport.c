@@ -715,17 +715,14 @@ static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
 
 static void _le_param_updated(struct bt_conn *conn, uint16_t interval, uint16_t latency, uint16_t timeout)
 {
+    ARG_UNUSED(conn);
+
     double connection_interval = interval * 1.25; // in ms
     uint16_t supervision_timeout = timeout * 10;  // in ms
     LOG_INF("Connection parameters updated: interval %.2f ms, latency %d intervals, timeout %d ms",
             connection_interval,
             latency,
             supervision_timeout);
-
-    if (interval > 24) {
-        LOG_WRN("Connection interval still high (%u units). Re-requesting preferred params.", interval);
-        update_conn_params(conn);
-    }
 }
 
 static void _le_phy_updated(struct bt_conn *conn, struct bt_conn_le_phy_info *param)
