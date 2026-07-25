@@ -166,6 +166,8 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
             "desktop/macos",
             "codemagic.yaml",
             ".github/scripts/plan-desktop-release.py",
+            ".github/scripts/desktop-release-source-identity.py",
+            ".github/scripts/publish-desktop-candidate-tag.py",
             ".github/workflows/desktop_auto_release.yml",
             ".github/workflows/desktop-swift-ci.yml",
         ]
@@ -345,7 +347,7 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn(LATEST_TAG, lines[1])
         self.assertEqual(sleep.call_args_list, [((30,), {}), ((30,), {})])
 
-    def test_workflow_has_no_input_manual_trigger_and_tags_the_changelog_commit(self) -> None:
+    def test_workflow_has_no_input_manual_trigger_and_tags_only_the_merged_main_source(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
         # workflow_dispatch stays bare (no manual inputs). Continuous deployment:
         # auto-release fires on macOS-affecting merges to main (push); the schedule
@@ -360,9 +362,16 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertEqual(workflow.count("--source-check-wait-seconds 720"), 2)
         self.assertEqual(workflow.count("--source-check-poll-seconds 30"), 2)
         self.assertLess(
-            workflow.index('git commit -m "chore: consolidate changelog for v${VERSION}"'),
-            workflow.index('git tag "$RELEASE_TAG"'),
+            workflow.index("Create and regular-merge PR to sync changelog back to main"),
+            workflow.index("Atomically tag exact live main source"),
         )
+        self.assertIn('git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main', workflow)
+        self.assertEqual(workflow.count('CANDIDATE_SHA="$MAIN_SHA"'), 2)
+        self.assertIn('BRANCH="changelog/v${VERSION}-${PLANNED_SOURCE_SHA:0:12}"', workflow)
+        self.assertIn('CHANGELOG_PARENT_SHA="$(git rev-parse "${CHANGELOG_COMMIT}^1")"', workflow)
+        self.assertIn('--changelog-parent-sha "$CHANGELOG_PARENT_SHA"', workflow)
+        self.assertIn('python3 .github/scripts/publish-desktop-candidate-tag.py', workflow)
+        self.assertIn('test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$CANDIDATE_SHA"', workflow)
 
     def test_candidate_creation_has_no_selfhosted_pre_tag_gate(self) -> None:
         # Continuous deployment: candidate creation (tag-release) must depend only
