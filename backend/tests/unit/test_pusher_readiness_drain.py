@@ -225,12 +225,19 @@ def test_real_app_registers_readiness_routes_and_shutdown_drain(handlers):
     assert handlers.shutdown_calls_begin_drain() is True
 
 
-def test_ws_drain_rejects_after_accept_not_before():
-    """The drain rejection in _websocket_util_trigger must accept the WS handshake
-    FIRST, then close 1001. A pre-accept close is surfaced as a failed HTTP
-    upgrade by the websockets client and recorded as a circuit-breaker failure
-    in backend-listen (backend/utils/pusher.py), which can trip the pusher
-    circuit during a normal rollout.
+def test_ws_drain_reject_ordering_is_static_tripwire():
+    """STATIC source-ordering tripwire (NOT behavioral coverage): asserts that, in
+    the source of ``_websocket_util_trigger``, ``await websocket.accept()`` precedes
+    the ``ReadinessGate.is_serving()`` drain check, which precedes
+    ``await websocket.close(code=1001)``. It does NOT drive a live WebSocket
+    handshake or observe a real close frame; per AGENTS.md this is a static
+    tripwire, labeled as such.
+
+    Why the ordering matters (context for the tripwire, not what it proves):
+    accepting the handshake first lets a draining pod return a clean 1001 Going
+    Away close instead of a failed HTTP upgrade, which backend-listen would
+    otherwise record as a circuit-breaker failure (backend/utils/pusher.py) and
+    could trip the pusher circuit during a normal rollout.
     """
     import inspect
 
