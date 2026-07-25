@@ -23,6 +23,7 @@ from run_checks import (
     detect_platform,
     execute_checks,
     load_manifest,
+    resolve_check_selections,
     resolve_checks,
     skipped_platform_checks,
     validate_manifest,
@@ -264,6 +265,58 @@ class PlatformTests(unittest.TestCase):
         for plat in ("macos", "linux"):
             selected = resolve_checks(manifest, ["any/file"], "ci", platform=plat)
             self.assertEqual([c.id for c in selected], ["portable"])
+
+    def test_exclusive_macos_query_excludes_portable_checks(self):
+        manifest = Manifest(
+            checks=(
+                Check(id="portable", command=("true",), triggers=("all",), lanes=("ci",), reason="portable"),
+                Check(
+                    id="mac-only",
+                    command=("true",),
+                    triggers=("all",),
+                    lanes=("ci",),
+                    reason="macOS",
+                    platforms=("macos",),
+                ),
+            ),
+            exempt=(),
+        )
+        self.assertEqual(
+            [check.id for check in resolve_checks(manifest, ["any/file"], "ci", platform="macos")],
+            ["portable", "mac-only"],
+        )
+        self.assertEqual(
+            [
+                check.id
+                for check in resolve_checks(
+                    manifest,
+                    ["any/file"],
+                    "ci",
+                    platform="macos",
+                    exclusive_platform=True,
+                )
+            ],
+            ["mac-only"],
+        )
+
+    def test_machine_readable_selection_carries_path_and_reason(self):
+        manifest = Manifest(
+            checks=(
+                Check(
+                    id="target",
+                    command=("true",),
+                    triggers=("desktop/macos/**",),
+                    lanes=("ci",),
+                    reason="desktop source changed",
+                ),
+            ),
+            exempt=(),
+        )
+        selections = resolve_check_selections(manifest, ["desktop/macos/Desktop/Sources/App.swift"], "ci")
+        self.assertEqual(len(selections), 1)
+        self.assertEqual(selections[0].check.id, "target")
+        self.assertEqual(selections[0].matched_paths, ("desktop/macos/Desktop/Sources/App.swift",))
+        self.assertEqual(selections[0].check.reason, "desktop source changed")
 
     def test_skipped_platform_checks_reports_macos_on_linux(self):
         manifest = Manifest(

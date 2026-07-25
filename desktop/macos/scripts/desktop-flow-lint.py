@@ -8,6 +8,8 @@ import re
 import sys
 from pathlib import Path
 
+from desktop_flow_contract import ACTION_SOURCE_RELATIVE_PATHS
+
 try:
     import yaml
 except ImportError as exc:  # pragma: no cover - surfaced in CI with install hint
@@ -21,14 +23,7 @@ except ImportError as exc:  # pragma: no cover - surfaced in CI with install hin
 SCRIPT_DIR = Path(__file__).resolve().parent
 DESKTOP_DIR = SCRIPT_DIR.parent
 FLOWS_DIR = DESKTOP_DIR / "e2e" / "flows"
-BRIDGE_SOURCE = DESKTOP_DIR / "Desktop/Sources/DesktopAutomationBridge.swift"
-REWIND_GAUNTLET_SOURCE = DESKTOP_DIR / "Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift"
-HUB_SOURCE = DESKTOP_DIR / "Desktop/Sources/FloatingControlBar/RealtimeHubController.swift"
-OPEN_OMI_SHORTCUT_QA_SOURCE = DESKTOP_DIR / "Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift"
-VIEW_MODEL_ACTION_SOURCES = (
-    DESKTOP_DIR / "Desktop/Sources/MainWindow/Pages/TasksPage.swift",
-    DESKTOP_DIR / "Desktop/Sources/MainWindow/Pages/MemoriesPage.swift",
-)
+ACTION_SOURCES = tuple(DESKTOP_DIR / path for path in ACTION_SOURCE_RELATIVE_PATHS)
 
 TYPED_STEP_KEYS = {
     "bridge.navigate",
@@ -55,13 +50,7 @@ def fail(message: str) -> None:
 def registered_actions() -> set[str]:
     actions: set[str] = set()
     pattern = re.compile(r'name:\s*"([^"]+)"')
-    for path in (
-        BRIDGE_SOURCE,
-        REWIND_GAUNTLET_SOURCE,
-        HUB_SOURCE,
-        OPEN_OMI_SHORTCUT_QA_SOURCE,
-        *VIEW_MODEL_ACTION_SOURCES,
-    ):
+    for path in ACTION_SOURCES:
         if not path.is_file():
             fail(f"missing automation source: {path}")
         actions.update(pattern.findall(path.read_text(encoding="utf-8")))
