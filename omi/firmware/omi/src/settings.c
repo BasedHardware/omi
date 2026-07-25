@@ -280,12 +280,12 @@ int app_settings_save_device_name(const char *name, size_t len)
     if (name == NULL || len == 0 || len > CONFIG_BT_DEVICE_NAME_MAX) {
         return -EINVAL;
     }
-    memcpy(device_name, name, len);
-    device_name[len] = '\0';
-    int err = settings_save_one("omi/dev_name", device_name, len);
+    int err = settings_save_one("omi/dev_name", name, len);
     if (err) {
         LOG_ERR("Failed to save dev_name (err %d)", err);
     } else {
+        memcpy(device_name, name, len);
+        device_name[len] = '\0';
         LOG_INF("Saved dev_name: %s", device_name);
     }
     return err;
