@@ -170,6 +170,11 @@ const FRESH_PUBLIC_PHRASES: &[&str] = &[
     "who is the current",
     "today's news",
     "news today",
+    "recent news",
+    "released this week",
+    "released today",
+    "released recently",
+    "newly released",
 ];
 
 /// Weather lookups commonly place the location between "weather" and the
@@ -496,6 +501,20 @@ pub(crate) fn prepend_latest_user_instruction(
 mod tests {
     use super::*;
 
+    #[derive(serde::Deserialize)]
+    struct PublicWebRoutingContractFixture {
+        version: u32,
+        cases: Vec<PublicWebRoutingContractCase>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct PublicWebRoutingContractCase {
+        name: String,
+        prompt: String,
+        #[serde(rename = "requiresPublicWeb")]
+        requires_public_web: bool,
+    }
+
     fn message(role: &str, text: &str) -> ChatMessage {
         ChatMessage {
             role: role.to_string(),
@@ -512,6 +531,25 @@ mod tests {
         assert!(policy.requires(RetrievalSource::PublicWeb));
         assert!(!policy.requires(RetrievalSource::OmiPrivate));
         assert_eq!(policy.reason, RetrievalReason::ExplicitWeb);
+    }
+
+    #[test]
+    fn matches_cross_runtime_public_web_routing_contract() {
+        let fixture: PublicWebRoutingContractFixture = serde_json::from_str(include_str!(
+            "../../../agent/contracts/v1/public-web-routing-contract.fixture.json"
+        ))
+        .expect("public-web routing contract fixture must decode");
+
+        assert_eq!(fixture.version, 1);
+        for test_case in fixture.cases {
+            let policy = retrieval_policy(&[message("user", &test_case.prompt)]);
+            assert_eq!(
+                policy.requires(RetrievalSource::PublicWeb),
+                test_case.requires_public_web,
+                "{}",
+                test_case.name
+            );
+        }
     }
 
     #[test]

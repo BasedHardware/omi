@@ -119,6 +119,15 @@ function makeErrorTurnEndEvent(errorMessage: string) {
   };
 }
 
+type PublicWebRoutingContractFixture = {
+  version: number;
+  cases: Array<{
+    name: string;
+    prompt: string;
+    requiresPublicWeb: boolean;
+  }>;
+};
+
 describe("PiMonoAdapter prompt correlation", () => {
   it("forwards tool execution updates as content-free progress activity", async () => {
     const { adapter, events } = createAdapter();
@@ -186,6 +195,25 @@ describe("PiMonoAdapter prompt correlation", () => {
       "what did I do today?",
     ]) {
       expect(routePromptForPublicWeb(message)).toBe(message);
+    }
+  });
+
+  it("matches the cross-runtime public-web routing contract", () => {
+    const fixture = JSON.parse(
+      readFileSync(
+        fileURLToPath(
+          new URL("../contracts/v1/public-web-routing-contract.fixture.json", import.meta.url)
+        ),
+        "utf8"
+      )
+    ) as PublicWebRoutingContractFixture;
+
+    expect(fixture.version).toBe(1);
+    for (const testCase of fixture.cases) {
+      const routed = routePromptForPublicWeb(testCase.prompt);
+      expect(routed.includes("<omi_retrieval_policy>"), testCase.name).toBe(
+        testCase.requiresPublicWeb
+      );
     }
   });
 

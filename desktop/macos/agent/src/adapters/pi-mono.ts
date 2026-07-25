@@ -211,7 +211,9 @@ const PUBLIC_WEB_ROUTING_INSTRUCTION = "<omi_retrieval_policy>Web search is requ
 
 const EXPLICIT_WEB_REQUESTS = [
   "search the web", "search web", "search the internet", "search online",
-  "look it up online", "find it online", "google it", "browse the web",
+  "look it up online", "look this up online", "look that up online",
+  "find it online", "find this online", "find that online",
+  "google it", "google this", "google that", "browse the web",
   "web search", "internet search",
 ];
 
@@ -280,6 +282,16 @@ const FRESH_PUBLIC_LOOKUP_TERMS = [
   "score", "weather", "price", "news", "release", "released", "election", "market",
 ];
 
+const RESEARCH_INTENT_VERBS = [
+  "find out", "look up", "look him up", "look her up", "look them up",
+  "research", "tell me about", "everything about", "everything on",
+  "all about", "information about", "information on", "who is", "who's",
+];
+
+const PUBLIC_WEB_LOCUS = ["online", "on the web", "on the internet"];
+const MAX_GENERIC_LOOKUP_CHARS = 240;
+const ALPHANUMERIC_CHAR = /[\p{L}\p{N}]/u;
+
 const EXPLICIT_PRIVATE_CONTEXT = [
   "my conversations", "our conversations", "my memories", "your memory of me",
   "my screen history", "my screen activity", "my calendar", "your calendar",
@@ -300,6 +312,23 @@ function currentUserInstruction(renderedPrompt: string): string {
   return delimiterIndex === -1
     ? renderedPrompt
     : renderedPrompt.slice(delimiterIndex + CURRENT_USER_MESSAGE_DELIMITER.length);
+}
+
+function containsWholeTerm(text: string, terms: string[]): boolean {
+  return terms.some((term) => {
+    let searchStart = 0;
+    while (searchStart < text.length) {
+      const start = text.indexOf(term, searchStart);
+      if (start < 0) return false;
+      const before = text[start - 1];
+      const after = text[start + term.length];
+      const beforeIsWord = before !== undefined && ALPHANUMERIC_CHAR.test(before);
+      const afterIsWord = after !== undefined && ALPHANUMERIC_CHAR.test(after);
+      if (!beforeIsWord && !afterIsWord) return true;
+      searchStart = start + term.length;
+    }
+    return false;
+  });
 }
 
 type PublicWebTurnState = {
@@ -324,9 +353,7 @@ export function routePromptForPublicWeb(message: string): string {
     .trim()
     .toLowerCase()
     .replace(/[\u2018\u2019]/g, "'");
-  if (!normalized || EXPLICIT_PRIVATE_CONTEXT.some((phrase) => normalized.includes(phrase))) {
-    return message;
-  }
+  if (!normalized) return message;
   const hasExplicitWebReference = EXPLICIT_WEB_REQUESTS.some(
     (phrase) => normalized.includes(phrase)
   );
@@ -336,13 +363,23 @@ export function routePromptForPublicWeb(message: string): string {
   ) {
     return message;
   }
-  const hasFreshPublicTemporalLookup = FRESH_PUBLIC_TEMPORAL_QUALIFIERS.some(
+  const hasExplicitPrivateContext = EXPLICIT_PRIVATE_CONTEXT.some(
     (phrase) => normalized.includes(phrase)
-  ) && FRESH_PUBLIC_LOOKUP_TERMS.some((term) => normalized.includes(term));
+  );
+  if (hasExplicitPrivateContext && !hasExplicitWebReference) return message;
+
+  const isShortLookup = normalized.length <= MAX_GENERIC_LOOKUP_CHARS;
+  const hasFreshPublicTemporalLookup = isShortLookup
+    && containsWholeTerm(normalized, FRESH_PUBLIC_TEMPORAL_QUALIFIERS)
+    && containsWholeTerm(normalized, FRESH_PUBLIC_LOOKUP_TERMS);
+  const hasResearchIntentLookup = isShortLookup
+    && containsWholeTerm(normalized, PUBLIC_WEB_LOCUS)
+    && RESEARCH_INTENT_VERBS.some((verb) => normalized.includes(verb));
   const requiresWeb = hasExplicitWebReference
     || FRESH_PUBLIC_REQUESTS.some((phrase) => normalized.includes(phrase))
     || CURRENT_WEATHER_PREFIXES.some((phrase) => normalized.includes(phrase))
-    || hasFreshPublicTemporalLookup;
+    || hasFreshPublicTemporalLookup
+    || hasResearchIntentLookup;
   return requiresWeb ? `${PUBLIC_WEB_ROUTING_INSTRUCTION}\n\n${message}` : message;
 }
 
