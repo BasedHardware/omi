@@ -82,11 +82,8 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
     Iterates comma-separated models (same pattern as STT_SERVICE_MODELS for streaming).
     First model allowed by the central serving policy that supports the language
     wins. Disabled-provider tokens are ignored, then policy-owned defaults provide
-    the serving fallback.
-
-    Capability matching stays exactly as configured so no working language changes
-    provider. Selection then has a Velma floor instead of raising, because the
-    narrow literal set below covers 10 languages while the clients offer 49.
+    the serving fallback. A language no capability map claims falls through to Velma
+    rather than failing selection.
     """
     base_lang = normalized_stt_language(language) or 'en'
 
@@ -112,17 +109,12 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
     if selected is not None:
         return selected
 
-    # Floor. Velma's batch API detects the language itself — we never send a code —
-    # so it can serve anything the capability maps have not enumerated, including a
-    # stored value that is not an ISO code at all. Ask for auto-detection rather
-    # than asserting an unrecognized language, and let the provider report what it
-    # heard. Reaching a provider always beats failing the job on a stale list.
+    # Velma's batch API detects the language itself — we never send a code — so it can
+    # serve languages the capability maps omit, and values that are not codes at all.
     if provider_is_enabled(MODULATE_PROVIDER, STTServingSurface.PRERECORDED):
         return PrerecordedSTTService.MODULATE, 'multi', 'velma-2'
 
-    # Only reachable when policy has disabled every pre-recorded provider, which no
-    # retry can resolve. Raise the typed non-retryable failure so callers finalize
-    # once instead of returning 5xx into an at-least-once retry loop.
+    # Only reachable with every pre-recorded provider disabled, which no retry resolves.
     raise TranscriptionFailure(TranscriptionOutcome.CONFIG_ERROR, retryable=False)
 
 
