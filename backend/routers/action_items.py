@@ -3,7 +3,7 @@ import hashlib
 import logging
 import uuid
 
-from utils.executors import db_executor
+from utils.executors import postprocess_executor, submit_with_context
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List
@@ -318,7 +318,7 @@ def create_action_item(request: ActionItemCreateRequest, uid: str = Depends(auth
     def _run_auto_sync():
         asyncio.run(auto_sync_action_item(uid, {"id": action_item_id, **action_item_data}, skip_apple_reminders=True))
 
-    db_executor.submit(_run_auto_sync)
+    submit_with_context(postprocess_executor, _run_auto_sync)
 
     return ActionItemResponse(**action_item)
 
