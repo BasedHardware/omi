@@ -84,11 +84,12 @@ struct DesktopTopBar: View {
   private var navPills: some View {
     // Flat, containerless nav so the bar blends with the chat page: unselected
     // items are muted text; the selected item gets a subtle highlight only.
-    HStack(spacing: OmiSpacing.xs) {
+    HStack(spacing: TopNavigationPillMetrics.itemSpacing) {
       ForEach(navItems) { item in
         if item.index == SidebarNavItem.conversations.rawValue {
           memoryNavigationItem(item)
         } else {
+          let badgeCount = newCount(for: item)
           Button {
             dismissMemoryDropdown()
             OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = item.index }
@@ -96,8 +97,9 @@ struct DesktopTopBar: View {
             TopNavigationPill(
               icon: item.icon,
               title: item.title,
-              badgeCount: newCount(for: item),
-              isSelected: selectedIndex == item.index
+              badgeCount: badgeCount,
+              isSelected: selectedIndex == item.index,
+              width: TopNavigationPillMetrics.width(for: item.index, badgeCount: badgeCount)
             )
           }
           .buttonStyle(.plain)
@@ -122,6 +124,8 @@ struct DesktopTopBar: View {
   private func memoryNavigationItem(_ item: NavItem) -> some View {
     let isSelected =
       selectedIndex == item.index && memoryDestination == .memories
+    let badgeCount = newCount(for: item)
+    let pillWidth = TopNavigationPillMetrics.width(for: item.index, badgeCount: badgeCount)
     return Button {
       selectMemoryDestination(.memories)
     } label: {
@@ -131,14 +135,14 @@ struct DesktopTopBar: View {
           .frame(width: TopNavigationPillMetrics.iconWidth)
         Text(item.title)
           .scaledFont(size: OmiType.caption, weight: .semibold)
-        memoryBadge(for: item)
+        memoryBadge(count: badgeCount)
       }
       .foregroundStyle(
         isSelected || isMemoryButtonHovered
           ? OmiColors.textPrimary : OmiColors.textSecondary
       )
-      .padding(.horizontal, OmiSpacing.md)
-      .frame(width: TopNavigationPillMetrics.width, height: TopNavigationPillMetrics.height)
+      .padding(.horizontal, TopNavigationPillMetrics.horizontalPadding)
+      .frame(width: pillWidth, height: TopNavigationPillMetrics.height)
       .background(
         Capsule(style: .continuous)
           .fill(
@@ -159,7 +163,7 @@ struct DesktopTopBar: View {
     }
     .overlay(alignment: .topLeading) {
       if memoryDropdownState.isPresented {
-        memoryDropdown
+        memoryDropdown(width: pillWidth)
           .offset(y: TopNavigationPillMetrics.height + 5)
           .transition(.opacity.combined(with: .move(edge: .top)))
           .zIndex(20)
@@ -168,17 +172,18 @@ struct DesktopTopBar: View {
     .zIndex(memoryDropdownState.isPresented ? 20 : 0)
   }
 
-  private var memoryDropdown: some View {
+  private func memoryDropdown(width: CGFloat) -> some View {
     VStack(alignment: .leading, spacing: 5) {
       ForEach(MemoryHubDestination.dropdownDestinations) { destination in
         MemoryDropdownRow(
           destination: destination,
           isSelected: memoryDestination == destination,
+          width: width,
           onSelect: { selectMemoryDestination(destination) }
         )
       }
     }
-    .frame(width: TopNavigationPillMetrics.width)
+    .frame(width: width)
     .onHover { isHovering in
       memoryDropdownHoverChanged(isHovering, in: .dropdown)
     }
@@ -208,9 +213,9 @@ struct DesktopTopBar: View {
   }
 
   @ViewBuilder
-  private func memoryBadge(for item: NavItem) -> some View {
-    if newCount(for: item) > 0 {
-      Text("+\(newCount(for: item))")
+  private func memoryBadge(count: Int) -> some View {
+    if count > 0 {
+      Text("+\(count)")
         .scaledFont(size: OmiType.micro, weight: .bold)
         .foregroundColor(OmiColors.textPrimary)
         .padding(.horizontal, 5)
@@ -231,10 +236,29 @@ struct DesktopTopBar: View {
   }
 }
 
-private enum TopNavigationPillMetrics {
-  static let width: CGFloat = 136
+enum TopNavigationPillMetrics {
+  static let itemSpacing: CGFloat = 4
+  static let horizontalPadding: CGFloat = 12
   static let height: CGFloat = 30
   static let iconWidth: CGFloat = 18
+  static let badgeWidth: CGFloat = 38
+
+  static func width(for itemIndex: Int, badgeCount: Int = 0) -> CGFloat {
+    let baseWidth: CGFloat
+    switch itemIndex {
+    case SidebarNavItem.dashboard.rawValue:
+      baseWidth = 88
+    case SidebarNavItem.conversations.rawValue:
+      baseWidth = 128
+    case SidebarNavItem.tasks.rawValue:
+      baseWidth = 84
+    case SidebarNavItem.apps.rawValue:
+      baseWidth = 80
+    default:
+      baseWidth = 88
+    }
+    return baseWidth + (badgeCount > 0 ? badgeWidth : 0)
+  }
 }
 
 private struct TopNavigationPill: View {
@@ -242,6 +266,7 @@ private struct TopNavigationPill: View {
   let title: String
   let badgeCount: Int
   let isSelected: Bool
+  let width: CGFloat
   @State private var isHovering = false
 
   var body: some View {
@@ -261,8 +286,8 @@ private struct TopNavigationPill: View {
       }
     }
     .foregroundStyle(isSelected || isHovering ? OmiColors.textPrimary : OmiColors.textTertiary)
-    .padding(.horizontal, OmiSpacing.md)
-    .frame(width: TopNavigationPillMetrics.width, height: TopNavigationPillMetrics.height)
+    .padding(.horizontal, TopNavigationPillMetrics.horizontalPadding)
+    .frame(width: width, height: TopNavigationPillMetrics.height)
     .background(
       Capsule(style: .continuous)
         .fill(
@@ -279,6 +304,7 @@ private struct TopNavigationPill: View {
 private struct MemoryDropdownRow: View {
   let destination: MemoryHubDestination
   let isSelected: Bool
+  let width: CGFloat
   let onSelect: () -> Void
   @State private var isHovering = false
 
@@ -294,8 +320,8 @@ private struct MemoryDropdownRow: View {
       .foregroundStyle(
         isSelected || isHovering ? OmiColors.textPrimary : OmiColors.textSecondary
       )
-      .padding(.horizontal, OmiSpacing.md)
-      .frame(width: TopNavigationPillMetrics.width, height: TopNavigationPillMetrics.height)
+      .padding(.horizontal, TopNavigationPillMetrics.horizontalPadding)
+      .frame(width: width, height: TopNavigationPillMetrics.height)
       .background(
         Capsule(style: .continuous)
           .fill(

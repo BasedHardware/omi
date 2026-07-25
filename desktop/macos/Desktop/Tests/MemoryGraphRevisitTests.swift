@@ -80,6 +80,35 @@ final class MemoryGraphRevisitTests: XCTestCase {
     XCTAssertFalse(state.isPresented)
   }
 
+  func testTopNavigationUsesCompactPillWidthsAndTightSpacing() {
+    XCTAssertEqual(TopNavigationPillMetrics.itemSpacing, 4)
+    XCTAssertEqual(TopNavigationPillMetrics.horizontalPadding, 12)
+    XCTAssertEqual(
+      TopNavigationPillMetrics.width(for: SidebarNavItem.dashboard.rawValue),
+      88
+    )
+    XCTAssertEqual(
+      TopNavigationPillMetrics.width(for: SidebarNavItem.conversations.rawValue),
+      128
+    )
+    XCTAssertEqual(
+      TopNavigationPillMetrics.width(for: SidebarNavItem.tasks.rawValue),
+      84
+    )
+    XCTAssertEqual(
+      TopNavigationPillMetrics.width(for: SidebarNavItem.apps.rawValue),
+      80
+    )
+    XCTAssertEqual(
+      TopNavigationPillMetrics.width(
+        for: SidebarNavItem.tasks.rawValue,
+        badgeCount: 93
+      ),
+      122,
+      "badged pills must grow instead of clipping their count"
+    )
+  }
+
   func testMemoryHubUsesReadableWidthUntilTheActiveTranscriptOpens() {
     XCTAssertEqual(MemoryHubLayoutPolicy.readableContentWidth, 900)
     XCTAssertFalse(
