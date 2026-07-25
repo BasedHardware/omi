@@ -19,6 +19,10 @@ image:
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
+  # Build-once promotion: set `digest: sha256:<64 lowercase hex>` (and clear
+  # `tag`, set `pullPolicy: IfNotPresent`) to promote the exact dev-qualified
+  # image by content address. Malformed/ambiguous identity is rejected at
+  # render time. See backend/scripts/verify_pusher_rollout_gate.py.
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -69,6 +73,12 @@ service:
   annotations:
     cloud.google.com/neg: '{"ingress": true}'
     cloud.google.com/backend-config: '{"default": "prod-pusher-backend-config"}'  # Link to BackendConfig
+
+# BackendConfig connectionDraining: bounds how long the LB waits before cutting
+# in-flight WS on endpoint removal (must be <= terminationGracePeriodSeconds 120).
+backendConfig:
+  connectionDraining:
+    drainingTimeoutSec: 60
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
@@ -325,7 +335,7 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
-    path: /health
+    path: /ready
     port: 8080
   failureThreshold: 3
   initialDelaySeconds: 0
@@ -386,7 +396,9 @@ terminationGracePeriodSeconds: 120
 lifecycle:
   preStop:
     exec:
-      command: ["sh", "-c", "sleep 15"]
+      # preStop flips readiness (via Lane A /__internal/drain) so the kubelet removes the endpoint
+      # early; sleep covers NEG->backend-service->ALB reprogram convergence before SIGTERM.
+      command: ["sh", "-c", "curl -sf -m 5 -X POST http://localhost:8080/__internal/drain || true; sleep 15"]
 
 # Additional volumes on the output Deployment definition.
 volumes: []
