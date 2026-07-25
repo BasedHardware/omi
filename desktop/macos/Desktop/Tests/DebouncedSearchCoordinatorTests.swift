@@ -7,6 +7,8 @@ final class DebouncedSearchCoordinatorTests: XCTestCase {
   func testQueryNormalizationMatchesAcrossSearchSurfaces() {
     XCTAssertEqual(DebouncedSearchCoordinator.normalized("  project atlas \n"), "project atlas")
     XCTAssertEqual(DebouncedSearchCoordinator.normalized(" \n\t "), "")
+    XCTAssertTrue(DebouncedSearchCoordinator.isActive(" project atlas "))
+    XCTAssertFalse(DebouncedSearchCoordinator.isActive(" \n\t "))
     XCTAssertEqual(DebouncedSearchCoordinator.standardDelayNanoseconds, 250_000_000)
   }
 

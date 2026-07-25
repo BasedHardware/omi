@@ -56,6 +56,10 @@ final class DebouncedSearchCoordinator: ObservableObject {
   static func normalized(_ query: String) -> String {
     query.trimmingCharacters(in: .whitespacesAndNewlines)
   }
+
+  static func isActive(_ query: String) -> Bool {
+    !normalized(query).isEmpty
+  }
 }
 
 /// Shared search chrome for desktop list pages.

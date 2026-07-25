@@ -52,6 +52,8 @@ struct DesktopHomeView: View {
   @AppStorage("onboardingFurthestStep") private var onboardingFurthestStep = 0
   @AppStorage("onboardingJustCompleted") private var onboardingJustCompleted = false
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
+  @AppStorage(MemoryHubDestination.storageKey) private var memoryDestinationRawValue =
+    MemoryHubDestination.memories.rawValue
   /// Reference instant for the top bar's "new since you were last here" counts —
   /// updated to now whenever Omi resigns front (see the didResignActive handler).
   @AppStorage("topBarNewSince") private var topBarNewSinceRaw: Double = 0
@@ -59,7 +61,6 @@ struct DesktopHomeView: View {
   // Settings sidebar state
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
   @State private var highlightedSettingId: String? = nil
-  @State private var memoryHubSegment = 0
   @State private var showTryAskingPopup = false
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
@@ -1062,7 +1063,6 @@ struct DesktopHomeView: View {
             viewModelContainer: viewModelContainer,
             selectedSettingsSection: $selectedSettingsSection,
             highlightedSettingId: $highlightedSettingId,
-            memoryHubSegment: $memoryHubSegment,
             selectedTabIndex: $selectedIndex
           )
         }
@@ -1147,14 +1147,17 @@ struct DesktopHomeView: View {
       if let rawValue = notification.userInfo?["rawValue"] as? Int,
         let item = SidebarNavItem(rawValue: rawValue)
       {
+        if let destination = MemoryHubDestination.destination(for: item) {
+          memoryDestinationRawValue = destination.rawValue
+        }
         selectedIndex = item.rawValue
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenConversationRequested)) { _ in
-      // Conversations now live behind the Memory hub's second segment. Route at
+      // Conversations now live behind the Memory menu. Route at
       // the owning shell before the detail page mounts; its retained request is
       // then consumed by ConversationsPage on appearance.
-      memoryHubSegment = 1
+      memoryDestinationRawValue = MemoryHubDestination.conversations.rawValue
       selectedIndex = SidebarNavItem.conversations.rawValue
     }
     .onChange(of: selectedIndex) { oldValue, newValue in
@@ -1283,7 +1286,6 @@ private struct PageContentView: View {
   let viewModelContainer: ViewModelContainer
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingId: String?
-  @Binding var memoryHubSegment: Int
   @Binding var selectedTabIndex: Int
 
   /// The list/detail pages (Conversations, Memories, Tasks, Apps) render their
@@ -1321,8 +1323,7 @@ private struct PageContentView: View {
       case 1:
         MemoryHubPage(
           appState: appState,
-          viewModelContainer: viewModelContainer,
-          segment: $memoryHubSegment
+          viewModelContainer: viewModelContainer
         )
       case 2:
         ChatPage(

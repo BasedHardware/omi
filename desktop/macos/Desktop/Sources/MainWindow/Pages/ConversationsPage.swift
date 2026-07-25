@@ -422,7 +422,7 @@ struct ConversationsPage: View {
       // embedded (no inner ScrollView); the page's outer ScrollView (see
       // `scrollingBody`) owns scrolling so the whole page scrolls together.
       // Floating load-more / merge bars live in `floatingActionBars`.
-      if !searchQuery.isEmpty {
+      if DebouncedSearchCoordinator.isActive(searchQuery) {
         // Search results view
         searchResultsView
       } else {

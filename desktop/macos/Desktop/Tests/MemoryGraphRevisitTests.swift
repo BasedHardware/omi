@@ -34,6 +34,18 @@ final class MemoryGraphRevisitTests: XCTestCase {
     XCTAssertEqual(MemoryHubDestination.conversations.title, "Conversations")
     XCTAssertEqual(MemoryHubDestination.brainMap.title, "Brain Map")
     XCTAssertEqual(MemoryHubDestination(rawValue: 1), .conversations)
+    XCTAssertEqual(
+      MemoryHubDestination.destination(for: .conversations),
+      .conversations
+    )
+    XCTAssertEqual(
+      MemoryHubDestination.destination(
+        for: .conversations,
+        requestedRawValue: MemoryHubDestination.brainMap.rawValue
+      ),
+      .brainMap
+    )
+    XCTAssertNil(MemoryHubDestination.destination(for: .tasks))
   }
 
   @MainActor
