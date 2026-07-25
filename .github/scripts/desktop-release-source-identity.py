@@ -81,22 +81,38 @@ def ensure_candidate_history_is_safe(
     except subprocess.CalledProcessError as error:
         raise ValueError("candidate main must descend from the planner source SHA") from error
 
-    changed_paths = git(
+    # A range endpoint diff hides a desktop change that a later commit reverts.
+    # The planner selects sources from first-parent history, so examine every
+    # first-parent commit after the planned source with the same release-input
+    # policy. Any newer releasable change must force a new exact-SHA gate even
+    # when its net tree effect is later undone.
+    commits_after_planned_source = git(
         repository_root,
-        [
-            "diff",
-            "--name-only",
-            "--diff-filter=ACDMR",
-            f"{planned_source_sha}..{candidate_source_sha}",
-            "--",
-            *DESKTOP_RELEASE_PATHS,
-        ],
+        ["rev-list", "--first-parent", f"{planned_source_sha}..{candidate_source_sha}"],
     ).splitlines()
-    newer_releasable_paths = releasable_desktop_paths(changed_paths)
-    if newer_releasable_paths:
+    newer_releasable_changes: list[str] = []
+    for commit_sha in commits_after_planned_source:
+        changed_paths = git(
+            repository_root,
+            [
+                "diff-tree",
+                "--no-commit-id",
+                "--name-only",
+                "--diff-filter=ACDMR",
+                "-r",
+                f"{commit_sha}^1",
+                commit_sha,
+                "--",
+                *DESKTOP_RELEASE_PATHS,
+            ],
+        ).splitlines()
+        newer_releasable_changes.extend(
+            f"{commit_sha}:{path}" for path in releasable_desktop_paths(changed_paths)
+        )
+    if newer_releasable_changes:
         raise ValueError(
             "candidate main contains newer releasable desktop changes after the planner source: "
-            + ", ".join(newer_releasable_paths)
+            + ", ".join(newer_releasable_changes)
         )
 
     if changelog_commit:

@@ -131,6 +131,28 @@ class DesktopReleaseSourceIdentityTests(unittest.TestCase):
                     candidate_source_sha=candidate_source_sha,
                 )
 
+    def test_reverted_newer_desktop_change_after_planned_source_still_fails_closed(self) -> None:
+        directory, repository, planned_source_sha = self._repository_with_planned_source()
+        with directory:
+            self._commit(
+                repository,
+                "desktop/macos/Desktop/Sources/App.swift",
+                "let releaseSource = false\n",
+                "newer desktop source",
+            )
+            candidate_source_sha = self._commit(
+                repository,
+                "desktop/macos/Desktop/Sources/App.swift",
+                "let releaseSource = true\n",
+                "revert newer desktop source",
+            )
+            with self.assertRaisesRegex(ValueError, "newer releasable desktop changes"):
+                identity.ensure_candidate_history_is_safe(
+                    repository_root=repository,
+                    planned_source_sha=planned_source_sha,
+                    candidate_source_sha=candidate_source_sha,
+                )
+
     def test_stale_changelog_parent_fails_closed(self) -> None:
         directory, repository, planned_source_sha = self._repository_with_planned_source()
         with directory:
