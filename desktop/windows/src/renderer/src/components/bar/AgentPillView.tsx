@@ -5,8 +5,9 @@
 // assistant text), NOT the shared Omi thread (INV-CHAT-1). This is the fix — a
 // click on a spawned-agent pill lands here, on that run's own conversation, never
 // the shared chat.
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { ChatMessages } from '../chat/ChatMessages'
+import { useLiveEdgeFollow } from '../../hooks/useLiveEdgeFollow'
 import { displayLabel, displayTintToken, isFinished, type AgentPill } from './agentPills'
 import { pillChipClasses } from './agentPillTranscript'
 import type { ChatMsg } from '../../hooks/useChat'
@@ -44,7 +45,6 @@ export function AgentPillView(props: AgentPillViewProps): React.JSX.Element {
   const finished = isFinished(pill.displayStatus)
   const scrollRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
-  const followRef = useRef(true)
 
   // Focus the surface so Esc/back keys land here on open.
   useEffect(() => {
@@ -52,32 +52,9 @@ export function AgentPillView(props: AgentPillViewProps): React.JSX.Element {
   }, [])
 
   // Keep the list pinned to the live edge while the assistant text streams, but
-  // disengage when the reader scrolls up (re-engage at the bottom). Mirrors the
-  // Omi conversation's follow logic in BarChatSurface.
-  useLayoutEffect(() => {
-    const el = scrollRef.current
-    const content = messagesRef.current
-    if (!el || !content) return
-    const pin = (): void => {
-      if (followRef.current) el.scrollTop = el.scrollHeight
-    }
-    pin()
-    const ro = new ResizeObserver(pin)
-    ro.observe(content)
-    const onWheel = (e: WheelEvent): void => {
-      if (e.deltaY < 0 && el.scrollHeight > el.clientHeight + 8) followRef.current = false
-    }
-    const onScroll = (): void => {
-      if (el.scrollHeight - el.scrollTop - el.clientHeight <= 8) followRef.current = true
-    }
-    el.addEventListener('wheel', onWheel, { passive: true })
-    el.addEventListener('scroll', onScroll, { passive: true })
-    return () => {
-      ro.disconnect()
-      el.removeEventListener('wheel', onWheel)
-      el.removeEventListener('scroll', onScroll)
-    }
-  }, [])
+  // disengage when the reader scrolls up (re-engage at the bottom). Same follow
+  // logic as the Omi conversation in BarChatSurface.
+  useLiveEdgeFollow(scrollRef, messagesRef)
 
   return (
     <div key={`agent-${pill.id}`} className="flex flex-col">

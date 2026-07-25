@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { ChatMessages } from '../../chat/ChatMessages'
+import { useLiveEdgeFollow } from '../../../hooks/useLiveEdgeFollow'
 import type { ChatMsg } from '../../../hooks/useChat'
 
 // The chat stage. It renders the app's ONE chat engine (useAppState().chat) through
@@ -21,37 +22,10 @@ export function HubChatPanel(props: {
   const { messages, sending, header, children } = props
   const scrollRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
-  const followRef = useRef(true)
 
-  // Pin the live edge. RevealMarkdown grows the streaming reply's text WITHOUT a
-  // history change, so watching `messages` alone would lag the reveal by a chunk —
-  // observe the content box and re-pin on every size change (mirrors BarChatSurface).
-  // Only pin while following: disengage when the reader scrolls up so a streaming
-  // reply can't yank them back to the bottom, re-engage on returning to the edge.
-  useEffect(() => {
-    const content = contentRef.current
-    const el = scrollRef.current
-    if (!content || !el) return
-    const pin = (): void => {
-      if (followRef.current) el.scrollTop = el.scrollHeight
-    }
-    pin()
-    const ro = new ResizeObserver(pin)
-    ro.observe(content)
-    const onWheel = (e: WheelEvent): void => {
-      if (e.deltaY < 0 && el.scrollHeight > el.clientHeight + 8) followRef.current = false
-    }
-    const onScroll = (): void => {
-      if (el.scrollHeight - el.scrollTop - el.clientHeight <= 8) followRef.current = true
-    }
-    el.addEventListener('wheel', onWheel, { passive: true })
-    el.addEventListener('scroll', onScroll, { passive: true })
-    return () => {
-      ro.disconnect()
-      el.removeEventListener('wheel', onWheel)
-      el.removeEventListener('scroll', onScroll)
-    }
-  }, [])
+  // Pin the live edge while the reply streams, releasing as soon as the reader
+  // scrolls up to read earlier messages (shared with the bar surfaces).
+  useLiveEdgeFollow(scrollRef, contentRef)
 
   return (
     <div
