@@ -196,8 +196,7 @@ actor MemoryAssistant: ProactiveAssistant {
       previousMemories.removeLast()
     }
 
-    // Save to SQLite first
-    let extractionRecord = await saveMemoryToSQLite(
+    let durability = await persistAndSyncMemory(
       memory: memory,
       screenshotId: screenshotId,
       contextSummary: memoryResult.contextSummary,
@@ -206,26 +205,18 @@ actor MemoryAssistant: ProactiveAssistant {
     )
     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
-    // Sync to backend with full extraction data
-    if let backendMemory = await syncMemoryToBackend(
-      memory: memory,
-      contextSummary: memoryResult.contextSummary,
-      windowTitle: windowTitle,
-      ownerID: ownerID)
-    {
-      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
-      // Update SQLite record with backend ID
-      if let recordId = extractionRecord?.id {
-        do {
-          try await MemoryStorage.shared.markSynced(id: recordId, serverMemory: backendMemory)
-          guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
-        } catch {
-          logError("Memory: Failed to update sync status", error: error)
-        }
-      }
-      await recordAnalysisOutcome(.synced, confidence: memory.confidence, ownerID: ownerID)
-    } else {
+    switch durability {
+    case .localPersistenceFailed:
+      // A failed insert never reaches backend sync and must never be reported as
+      // either the new synced terminal or the historical extraction success.
+      await recordAnalysisOutcome(.localPersistenceFailed, confidence: memory.confidence, ownerID: ownerID)
+      return
+    case .syncFailed:
       await recordAnalysisOutcome(.syncFailed, confidence: memory.confidence, ownerID: ownerID)
+    case .syncStatePersistenceFailed:
+      await recordAnalysisOutcome(.syncStatePersistenceFailed, confidence: memory.confidence, ownerID: ownerID)
+    case .synced:
+      await recordAnalysisOutcome(.synced, confidence: memory.confidence, ownerID: ownerID)
     }
 
     // Track memory extracted
@@ -272,6 +263,49 @@ actor MemoryAssistant: ProactiveAssistant {
     await MainActor.run {
       guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
       AnalyticsManager.shared.memoryAssistantAnalysisRun(outcome: outcome, confidence: confidence)
+    }
+  }
+
+  /// Executes the production SQLite insert → backend create → SQLite synced-state
+  /// update on this assistant actor. Each durability boundary maps to one closed
+  /// terminal; a failed insert returns before the backend call and therefore
+  /// cannot produce the historical extraction success event.
+  private func persistAndSyncMemory(
+    memory: ExtractedMemory,
+    screenshotId: Int64?,
+    contextSummary: String,
+    windowTitle: String?,
+    ownerID: String
+  ) async -> MemoryAssistantDurability.Outcome {
+    guard
+      let extractionRecord = await saveMemoryToSQLite(
+        memory: memory,
+        screenshotId: screenshotId,
+        contextSummary: contextSummary,
+        windowTitle: windowTitle,
+        ownerID: ownerID
+      ), let recordId = extractionRecord.id
+    else {
+      return .localPersistenceFailed
+    }
+
+    guard
+      let backendMemory = await syncMemoryToBackend(
+        memory: memory,
+        contextSummary: contextSummary,
+        windowTitle: windowTitle,
+        ownerID: ownerID
+      )
+    else {
+      return .syncFailed
+    }
+
+    do {
+      try await MemoryStorage.shared.markSynced(id: recordId, serverMemory: backendMemory)
+      return .synced
+    } catch {
+      logError("Memory: Failed to update sync status", error: error)
+      return .syncStatePersistenceFailed
     }
   }
 

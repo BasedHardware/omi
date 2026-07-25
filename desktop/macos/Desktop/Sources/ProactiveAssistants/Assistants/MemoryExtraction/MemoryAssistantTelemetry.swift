@@ -75,6 +75,12 @@ enum MemoryAssistantTelemetry {
     /// Analysis succeeded and the memory passed the threshold and was saved
     /// locally, but backend synchronization failed.
     case syncFailed = "sync_failed"
+    /// The SQLite insert did not complete, so no backend sync was attempted and
+    /// no historical `Memory Extracted` success is emitted.
+    case localPersistenceFailed = "local_persistence_failed"
+    /// Backend create completed, but writing the local synced-state receipt
+    /// failed. This is deliberately distinct from a fully synced extraction.
+    case syncStatePersistenceFailed = "sync_state_persistence_failed"
     /// The analysis call itself failed (provider error / no decodable result)
     /// before any memory could be classified.
     case analysisFailed = "analysis_failed"
@@ -104,5 +110,52 @@ enum MemoryAssistantTelemetry {
       properties["confidence_bucket"] = confidenceBucket(confidence)
     }
     return properties
+  }
+}
+
+/// The durability boundary for a proactive memory extraction after the model has
+/// produced a candidate. Keeping the three real persistence operations in this
+/// injectable helper lets tests exercise SQLite-insert and sync-state failures
+/// without constructing the Gemini-backed assistant actor.
+enum MemoryAssistantDurability {
+  enum Outcome: String, Equatable {
+    /// Local SQLite insert, backend create, and local synced-state update all
+    /// completed. This is the only fully synced terminal.
+    case synced
+    /// No local record was durably inserted, so backend sync must not run.
+    case localPersistenceFailed = "local_persistence_failed"
+    /// The local record exists, but backend create did not succeed.
+    case syncFailed = "sync_failed"
+    /// Backend create succeeded but the local record could not be marked synced.
+    case syncStatePersistenceFailed = "sync_state_persistence_failed"
+
+    /// Preserve the historical `Memory Extracted` success meaning: it requires
+    /// a durable local memory record, but is not a claim that the local
+    /// `backendSynced` bookkeeping update completed.
+    var shouldEmitMemoryExtracted: Bool {
+      self != .localPersistenceFailed
+    }
+  }
+
+  /// Runs the real local-insert → backend-create → local-sync-state sequence.
+  /// The closures are deliberately injectable so error boundaries are covered
+  /// behaviorally with deterministic SQLite/API stand-ins.
+  static func persistAndSync<LocalRecord, BackendMemory>(
+    persist: () async -> LocalRecord?,
+    sync: (LocalRecord) async -> BackendMemory?,
+    markSynced: (LocalRecord, BackendMemory) async throws -> Void
+  ) async -> Outcome {
+    guard let localRecord = await persist() else {
+      return .localPersistenceFailed
+    }
+    guard let backendMemory = await sync(localRecord) else {
+      return .syncFailed
+    }
+    do {
+      try await markSynced(localRecord, backendMemory)
+      return .synced
+    } catch {
+      return .syncStatePersistenceFailed
+    }
   }
 }

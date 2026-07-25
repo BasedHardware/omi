@@ -1,6 +1,6 @@
 # macOS Release-Health Metric Specification
 
-**Status:** active · **Schema version:** 2 · **Owner:** desktop/macos · **Tracking:** [#10425](https://github.com/BasedHardware/omi/issues/10425)
+**Status:** active · **Schema version:** 3 · **Owner:** desktop/macos · **Tracking:** [#10425](https://github.com/BasedHardware/omi/issues/10425)
 
 This is the **authoritative query contract** for macOS release-health telemetry. It
 defines, per signal, the exact numerator, denominator, time window, minimum cohort,
@@ -177,8 +177,10 @@ emitted (enforced by `MemoryAssistantTelemetryTests` and
   toggle was previously invisible. This event makes the true denominator
   measurable.
 - **Emission rule:** exactly one event per **user-initiated persisted change** to
-  either setting — never on app startup, default reads, or migrations (the setter
-  compares old vs new and skips no-ops).
+  either setting — never on remote settings sync, app startup, default reads,
+  migrations, or programmatic resets. The two UI toggle paths use the dedicated
+  user-intent API, which compares old vs new and skips no-ops; raw setters are
+  intentionally silent.
 - **Activation metric:** proactive extraction users (`Memory Extracted`) ÷
   monitoring users (`Monitoring Started`) with `notifications_enabled = true`,
   scoped `$app_namespace='com.omi.computer-macos'` AND `$os='macOS'`. Stop
@@ -188,17 +190,22 @@ emitted (enforced by `MemoryAssistantTelemetryTests` and
 
 - **Source event:** `Memory Assistant Analysis Run` (desktop). Closed properties:
   `outcome` ∈ {`synced`, `filtered_low_confidence`, `no_new_memory`,
-  `sync_failed`, `analysis_failed`}; optional `confidence_bucket` (closed decile
-  range, e.g. `70_80`) present only for outcomes where the model returned a
-  confidence.
+  `sync_failed`, `local_persistence_failed`, `sync_state_persistence_failed`,
+  `analysis_failed`}; optional `confidence_bucket` (closed decile range, e.g.
+  `70_80`) present only for outcomes where the model returned a confidence.
 - **Emission rule:** exactly one event per **actual Gemini analysis attempt** —
   not per captured frame, and not on disabled/gated paths. Every reachable
   terminal maps to exactly one outcome. It **supplements** — does not replace or
   alter — the existing `Memory Extracted` success terminal (which still fires only
-  on the local-persistence success leg, for both `synced` and `sync_failed`).
+  after a local SQLite insert, including `synced`, `sync_failed`, and
+  `sync_state_persistence_failed`; it never fires after
+  `local_persistence_failed`).
 - **Metric:** outcome distribution among analysis attempts. `synced` is the only
-  fully-successful terminal; `sync_failed` isolates backend-sync loss from
-  extraction failure; `filtered_low_confidence` shows the 0.70 threshold's effect.
+  fully-successful terminal; `sync_failed` isolates backend-create loss,
+  `local_persistence_failed` isolates failed SQLite durability before any backend
+  call, and `sync_state_persistence_failed` isolates a failed local synced-state
+  receipt after backend success. `filtered_low_confidence` shows the 0.70
+  threshold's effect.
 
 #### 3. Transcript conversation memory-extraction success — `Conversation Memories Extracted` (backend)
 
@@ -212,9 +219,12 @@ emitted (enforced by `MemoryAssistantTelemetryTests` and
   the root cause of the recording→memory observability gap.
 - **Emission rule:** exactly one event **after a durable successful persistence
   result**, at the `extract_memories` public boundary. Zero extraction → no event
-  (no false success). Persistence exception → propagates, no event. Exactly one
-  per successful pass; the count reflects that pass only (never cached), so
-  re-finalization/retry re-emits the true count for that pass.
+  (no false success). Persistence exception → propagates, no event. A durable,
+  per-`(uid, conversation)` Redis `SET NX EX` claim emits at most once across
+  re-finalization/retries; a Redis outage is fail-open (a rare duplicate is
+  preferred to breaking finalization). Conversation ids are lock keys only and
+  never PostHog properties. PostHog import, client construction, and capture are
+  all fail-open, so telemetry can never undo a durable extraction.
 - **Metric:** transcript memory-extraction success = users emitting
   `Conversation Memories Extracted` ÷ finalized conversations (denominator:
   `Memory Created`, the recording-reconciliation proxy). Join by uid + window.

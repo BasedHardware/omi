@@ -108,10 +108,13 @@ def emit_conversation_memories_extracted(
         "source": source,
         "path": path,
     }
-    client = _get_posthog_client()
-    if client is None:
-        return
     try:
+        # Client construction belongs inside the fail-open boundary too: a
+        # configured-but-broken SDK must never turn durable memory extraction
+        # into a finalization failure.
+        client = _get_posthog_client()
+        if client is None:
+            return
         client.capture(
             distinct_id=uid,
             event=CONVERSATION_MEMORIES_EXTRACTED,
@@ -154,12 +157,11 @@ def _get_posthog_client() -> Optional[Any]:
     try:
         posthog_module = importlib.import_module("posthog")
         posthog_client_cls = getattr(posthog_module, "Posthog")
+        _posthog_client = posthog_client_cls(project_api_key=api_key, host=host)
     except Exception as exc:  # noqa: BLE001 - fail open, never break extraction
-        logger.warning("conversation memory telemetry posthog_import_failed error=%s", type(exc).__name__)
+        logger.warning("conversation memory telemetry posthog_client_failed error=%s", type(exc).__name__)
         _posthog_disabled = True
         return None
-
-    _posthog_client = posthog_client_cls(project_api_key=api_key, host=host)
     return _posthog_client
 
 
