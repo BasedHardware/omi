@@ -1,6 +1,6 @@
 {
   "name": "omi-windows",
-  "version": "1.0.8",
+  "version": "1.0.13",
   "description": "An Electron application with React and TypeScript",
   "main": "./out/main/index.js",
   "author": "Based Hardware",
