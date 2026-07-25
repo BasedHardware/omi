@@ -115,7 +115,12 @@ def github_check_status(repository: str, sha: str, check_name: str) -> tuple[str
         [
             "gh",
             "api",
-            f"repos/{repository}/commits/{sha}/check-runs?filter=latest",
+            # A busy source SHA can accumulate more than GitHub's default 30
+            # check runs (for example, planner and deployment backstops). Scan
+            # every page so an older required source gate is not misreported as
+            # missing after later checks arrive.
+            f"repos/{repository}/commits/{sha}/check-runs?filter=latest&per_page=100",
+            "--paginate",
             "--jq",
             f'.check_runs[] | select(.name=="{check_name}") | [.status, (.conclusion // "")] | @tsv',
         ],

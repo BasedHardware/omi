@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -101,6 +102,35 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertEqual(
             checked,
             [(SOURCE_SHA, check_name) for check_name in planner.REQUIRED_SOURCE_CHECK_NAMES],
+        )
+
+    def test_required_source_check_is_found_beyond_the_default_first_check_run_page(self) -> None:
+        required_name = "Release Eligibility"
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="completed\tsuccess\n",
+            stderr="",
+        )
+
+        with patch.object(planner.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(
+                planner.github_check_status(REPOSITORY, SOURCE_SHA, required_name),
+                ("completed", "success", None),
+            )
+
+        run.assert_called_once_with(
+            [
+                "gh",
+                "api",
+                f"repos/{REPOSITORY}/commits/{SOURCE_SHA}/check-runs?filter=latest&per_page=100",
+                "--paginate",
+                "--jq",
+                f'.check_runs[] | select(.name=="{required_name}") | [.status, (.conclusion // "")] | @tsv',
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
 
     def test_each_missing_skipped_or_failed_exact_source_check_blocks_the_gate(self) -> None:
