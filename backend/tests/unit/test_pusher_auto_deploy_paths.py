@@ -24,5 +24,8 @@ def test_pusher_auto_deploy_tracks_its_shared_lifecycle_and_observability_import
         'backend/utils/conversations/lifecycle.py',
         'backend/utils/metrics.py',
         'backend/utils/observability/journeys.py',
+        'backend/scripts/verify_pusher_live_deployment_gate.py',
+        'backend/scripts/verify_pusher_dev_observability.py',
+        'backend/scripts/verify_pusher_promotion_evidence.py',
         '.github/workflows/gcp_backend_pusher_auto_deploy.yml',
     }
