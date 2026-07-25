@@ -129,7 +129,57 @@ def definitions_directory(root: Path) -> Path:
     return root / DEFINITIONS_RELATIVE_PATH
 
 
-def validate_definition(data: Any, path: Path) -> list[dict[str, Any]]:
+def validate_canonical_prevention_artifact(value: Any, path: Path, root: Path) -> list[dict[str, Any]]:
+    """Return errors for the optional guard-artifact field.
+
+    The field names the reusable guard surface that makes recurrence of this
+    class mechanically harder — a checker, a shared fixture, or a behavioral
+    contract test. Every listed path must exist so a rename cannot silently
+    leave a class claiming a guard it no longer has.
+    """
+    if (
+        not isinstance(value, list)
+        or not value
+        or any(not isinstance(item, str) or not item.strip() for item in value)
+    ):
+        return [
+            error(
+                "invalid_canonical_prevention_artifact",
+                "'canonical_prevention_artifact', when present, must be a non-empty array of repository-relative paths",
+                path=str(path),
+            )
+        ]
+    errors: list[dict[str, Any]] = []
+    if len(set(value)) != len(value):
+        errors.append(
+            error(
+                "invalid_canonical_prevention_artifact",
+                "'canonical_prevention_artifact' must not contain duplicates",
+                path=str(path),
+            )
+        )
+    for item in value:
+        candidate = Path(item)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            errors.append(
+                error(
+                    "invalid_canonical_prevention_artifact",
+                    f"'{item}' must be a repository-relative path without '..'",
+                    path=str(path),
+                )
+            )
+        elif not (root / candidate).exists():
+            errors.append(
+                error(
+                    "missing_canonical_prevention_artifact",
+                    f"'canonical_prevention_artifact' path does not exist: {item}",
+                    path=str(path),
+                )
+            )
+    return errors
+
+
+def validate_definition(data: Any, path: Path, root: Path) -> list[dict[str, Any]]:
     """Return schema errors without allowing malformed files to fail open."""
     if not isinstance(data, dict):
         return [error("invalid_definition", "definition must be a JSON object", path=str(path))]
@@ -142,7 +192,7 @@ def validate_definition(data: Any, path: Path) -> list[dict[str, Any]]:
         "evidence_prs",
         "status",
     }
-    allowed = required | {"scope_hints", "dormant_since"}
+    allowed = required | {"scope_hints", "dormant_since", "canonical_prevention_artifact"}
     errors: list[dict[str, Any]] = []
     for key in sorted(required - data.keys()):
         errors.append(error("missing_definition_field", f"missing required field '{key}'", path=str(path)))
@@ -195,6 +245,9 @@ def validate_definition(data: Any, path: Path) -> list[dict[str, Any]]:
                 path=str(path),
             )
         )
+    if "canonical_prevention_artifact" in data:
+        errors.extend(validate_canonical_prevention_artifact(data["canonical_prevention_artifact"], path, root))
+
     status = data.get("status")
     if status not in {"open", "dormant"}:
         errors.append(error("invalid_status", "'status' must be 'open' or 'dormant'", path=str(path)))
@@ -250,7 +303,7 @@ def load_definitions(root: Path) -> tuple[list[Definition], list[dict[str, Any]]
         except (OSError, json.JSONDecodeError) as exc:
             errors.append(error("invalid_definition_json", str(exc), path=str(path)))
             continue
-        errors.extend(validate_definition(data, path))
+        errors.extend(validate_definition(data, path, root))
         if isinstance(data, dict) and isinstance(data.get("id"), str):
             if data["id"] in ids:
                 errors.append(
