@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -68,6 +69,24 @@ def _parse_push_filter(workflow_text: str) -> tuple[list[str], set[str]]:
 
 
 class DesktopCandidateSourceCheckTests(unittest.TestCase):
+    def test_check_lookup_paginates_past_the_default_check_run_page(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="completed\tsuccess\n", stderr=""
+        )
+
+        with patch.object(planner.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(
+                planner.github_check_status(REPOSITORY, SOURCE_SHA, "Release Eligibility"),
+                ("completed", "success", None),
+            )
+
+        args = run.call_args.args[0]
+        self.assertEqual(args[:3], ["gh", "api", "--paginate"])
+        self.assertIn(
+            f"repos/{REPOSITORY}/commits/{SOURCE_SHA}/check-runs?filter=latest&per_page=100",
+            args,
+        )
+
     def test_codemagic_config_is_a_releasable_desktop_input(self) -> None:
         expected_args = [
             "diff",
