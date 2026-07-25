@@ -228,6 +228,7 @@ class _LiveSTTAttempt:
 
 def _live_transcription_runtime(*, close_code=1001, stt_terminal_failure=False, live_transcription_failed=False):
     runtime = object.__new__(ListenSessionRuntime)
+    runtime.use_custom_stt = False
     runtime.state = SimpleNamespace(
         close_code=close_code,
         stt_terminal_failure=stt_terminal_failure,
@@ -255,6 +256,21 @@ def test_live_transcription_journey_starts_once_and_success_wins_over_teardown(m
     assert _LiveSTTAttempt.instances[0].provider == 'deepgram'
     assert _LiveSTTAttempt.instances[0].platform == 'ios'
     assert _LiveSTTAttempt.instances[0].terminals == [('success', 'transcript_delivery')]
+
+
+def test_custom_stt_does_not_create_a_backend_provider_attempt(monkeypatch):
+    import routers.listen.runtime as runtime_module
+
+    _LiveSTTAttempt.instances = []
+    monkeypatch.setattr(runtime_module, 'LiveSTTAttempt', _LiveSTTAttempt)
+    runtime = _live_transcription_runtime()
+    runtime.use_custom_stt = True
+
+    runtime.start_live_transcription()
+    runtime.complete_live_transcription()
+    runtime._finish_live_transcription()
+
+    assert _LiveSTTAttempt.instances == []
 
 
 @pytest.mark.parametrize(

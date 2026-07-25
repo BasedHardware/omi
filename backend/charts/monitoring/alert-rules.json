@@ -9198,7 +9198,7 @@
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "omi-resilience-fallbacks",
-      "__panelId__": "7",
+      "__panelId__": "10",
       "summary": "Live-transcription failures exceed 10% with at least 20 accepted real attempts in 30m",
       "threshold": "failure share > 0.10; accepted attempts >= 20",
       "user_impact": "Users may not receive live transcript text or may experience degraded results.",

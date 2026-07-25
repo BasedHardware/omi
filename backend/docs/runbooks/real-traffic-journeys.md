@@ -65,11 +65,12 @@ image, provider-model, or content labels.
 
 ## Dashboard, alerts, and scrape health
 
-The **Resilience / Fallbacks** dashboard includes the separate Live STT
-failure/accepted-attempt rate. It intentionally uses only terminal
-`success` and `failure` outcomes: cancelled client/transport endings and
-stale fenced capture jobs stay visible but do not masquerade as application
-failures.
+The **Resilience / Fallbacks** dashboard retains the generic journey terminal
+success rate for `chat_response`, `pusher_session`, and `capture_finalization`,
+and adds a separate Live STT failure/accepted-attempt rate. The generic rate
+intentionally uses only terminal `success` and `failure` outcomes: cancelled
+client/transport endings and stale fenced capture jobs stay visible but do not
+masquerade as application failures.
 
 The terminal-success-rate panel stays empty (N/A) until a journey has a terminal
 success-or-failure outcome; it never presents idle traffic as a 0% success rate.

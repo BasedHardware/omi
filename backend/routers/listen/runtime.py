@@ -185,6 +185,8 @@ class ListenSessionRuntime:
 
     def start_live_transcription(self) -> None:
         """Accept the journey once the listen socket has received real audio."""
+        if self.use_custom_stt:
+            return
         if self.state.live_transcription_attempt is None:
             self.state.live_transcription_attempt = LiveSTTAttempt(
                 provider=getattr(self.stt_service, 'value', self.stt_service),

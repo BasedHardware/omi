@@ -239,4 +239,4 @@ def test_live_transcription_alert_is_traffic_gated_and_ignores_idle_no_data():
         assert 'omi_live_stt_accepted_total' in rule["data"][1]["model"]["expr"]
         assert rule["data"][2]["model"]["expression"] == "$A >= 20 && $B > 0.10"
         assert rule["annotations"]["__dashboardUid__"] == "omi-resilience-fallbacks"
-        assert rule["annotations"]["__panelId__"] == "7"
+        assert rule["annotations"]["__panelId__"] == "10"

@@ -157,7 +157,7 @@ def test_idle_metrics_and_monitoring_contract_distinguish_traffic_from_a_missing
         rule for rule in product_rules if rule['uid'] == 'omi-journey-live-transcription-fail'
     )
     assert live_transcription_rule['noDataState'] == 'OK'
-    assert live_transcription_rule['annotations']['__panelId__'] == '7'
+    assert live_transcription_rule['annotations']['__panelId__'] == '10'
     assert all(
         rule['noDataState'] == 'NoData'
         for rule in product_rules
@@ -172,12 +172,19 @@ def test_idle_metrics_and_monitoring_contract_distinguish_traffic_from_a_missing
         (monitoring / 'dashboards/omi-services/resilience-fallbacks.json').read_text(encoding='utf-8')
     )
     panel_titles = {panel['title'] for panel in dashboard['panels']}
+    assert 'Journey terminal success rate (success / success + failure)' in panel_titles
     assert 'Live STT attempt failure rate (failure / accepted)' in panel_titles
     assert 'Journey acceptance-to-terminal latency (p95)' in panel_titles
     assert 'Capture finalization durable projection and nonterminal work' in panel_titles
     live_stt_panel = next(
         panel for panel in dashboard['panels'] if panel['title'].startswith('Live STT attempt failure')
     )
+    generic_terminal_panel = next(panel for panel in dashboard['panels'] if panel['id'] == 7)
+    assert generic_terminal_panel['title'] == 'Journey terminal success rate (success / success + failure)'
+    assert 'omi_journey_terminal_total{outcome=~"success|failure"}' in generic_terminal_panel['targets'][0]['expr']
+    assert 'and on (journey)' in generic_terminal_panel['targets'][0]['expr']
+    assert live_stt_panel['id'] == 10
+    assert live_stt_panel['gridPos'] == {'h': 8, 'w': 24, 'x': 0, 'y': 40}
     assert 'omi_live_stt_terminal_total{outcome="failure"}' in live_stt_panel['targets'][0]['expr']
     assert 'omi_live_stt_accepted_total' in live_stt_panel['targets'][0]['expr']
     capture_rule = next(rule for rule in split_alerts if rule['uid'] == 'omi-journey-capture-fail')

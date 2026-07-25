@@ -550,13 +550,13 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(sum(increase(omi_live_stt_terminal_total{outcome=\"failure\"}[$__rate_interval])) / clamp_min(sum(increase(omi_live_stt_accepted_total[$__rate_interval])), 1)) and (sum(increase(omi_live_stt_accepted_total[$__rate_interval])) > 0)",
-          "legendFormat": "live STT",
+          "expr": "(sum by (journey) (increase(omi_journey_terminal_total{outcome=\"success\"}[$__rate_interval])) / sum by (journey) (increase(omi_journey_terminal_total{outcome=~\"success|failure\"}[$__rate_interval]))) and on (journey) (sum by (journey) (increase(omi_journey_terminal_total{outcome=~\"success|failure\"}[$__rate_interval])) > 0)",
+          "legendFormat": "{{journey}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Live STT attempt failure rate (failure / accepted)",
+      "title": "Journey terminal success rate (success / success + failure)",
       "type": "timeseries"
     },
     {
@@ -701,6 +701,55 @@
         }
       ],
       "title": "Capture finalization durable projection and nonterminal work",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "max": 1,
+          "min": 0,
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": ["lastNotNull"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "(sum(increase(omi_live_stt_terminal_total{outcome=\"failure\"}[$__rate_interval])) / clamp_min(sum(increase(omi_live_stt_accepted_total[$__rate_interval])), 1)) and (sum(increase(omi_live_stt_accepted_total[$__rate_interval])) > 0)",
+          "legendFormat": "live STT",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Live STT attempt failure rate (failure / accepted)",
       "type": "timeseries"
     }
   ],
