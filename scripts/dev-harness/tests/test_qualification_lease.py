@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import multiprocessing
 import os
 import signal
 import socket
@@ -60,6 +61,51 @@ def _start_fault_injector(state: Path, token: str, port: int) -> int:
         check=True,
     )
     return int((state / "pid").read_text(encoding="utf-8"))
+
+
+def _lock_process(root: str, ready, acquired, release) -> None:
+    ready.set()
+    with qualification._locked(Path(root)):
+        acquired.set()
+        release.wait()
+
+
+def test_qualification_file_lock_serializes_processes(tmp_path: Path) -> None:
+    root = tmp_path / "qualification"
+    context = multiprocessing.get_context("spawn")
+    holder_ready, holder_acquired, holder_release = context.Event(), context.Event(), context.Event()
+    contender_ready, contender_acquired, contender_release = context.Event(), context.Event(), context.Event()
+    contender_release.set()
+    holder = context.Process(target=_lock_process, args=(str(root), holder_ready, holder_acquired, holder_release))
+    contender = context.Process(
+        target=_lock_process,
+        args=(str(root), contender_ready, contender_acquired, contender_release),
+    )
+    started: list[multiprocessing.Process] = []
+    try:
+        holder.start()
+        started.append(holder)
+        assert holder_ready.wait(timeout=5), f"holder exited with {holder.exitcode}"
+        assert holder_acquired.wait(timeout=5), f"holder exited with {holder.exitcode}"
+
+        contender.start()
+        started.append(contender)
+        assert contender_ready.wait(timeout=5), f"contender exited with {contender.exitcode}"
+        assert not contender_acquired.wait(timeout=1)
+
+        holder_release.set()
+        assert contender_acquired.wait(timeout=5), f"contender exited with {contender.exitcode}"
+        holder.join(timeout=5)
+        contender.join(timeout=5)
+        assert holder.exitcode == 0
+        assert contender.exitcode == 0
+    finally:
+        holder_release.set()
+        contender_release.set()
+        for process in reversed(started):
+            if process.is_alive():
+                process.kill()
+            process.join(timeout=5)
 
 
 def test_active_lease_serializes_qualification_runs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -249,14 +295,24 @@ def test_stale_owned_stack_is_reclaimed_without_touching_foreign_listener(
     owned_pid, stopped, signalled = 42424, set(), []
     foreign = subprocess.Popen(
         [sys.executable, "-c", "import socket,time; s=socket.socket(); s.bind(('127.0.0.1', 49199)); s.listen(); time.sleep(60)"],
-        start_new_session=True,
+        start_new_session=os.name != "nt",
+        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
     )
     try:
-        original_exists = safety.process_exists
-        monkeypatch.setattr(safety, "process_exists", lambda pid: pid == owned_pid and pid not in stopped or original_exists(pid))
+        monkeypatch.setattr(
+            safety,
+            "process_exists",
+            lambda pid: pid == os.getpid() or (pid == owned_pid and pid not in stopped),
+        )
         monkeypatch.setattr(safety, "command_line_for_pid", lambda pid: marker if pid == owned_pid else "")
-        monkeypatch.setattr(qualification.os, "getpgid", lambda pid: pid)
-        monkeypatch.setattr(qualification.os, "killpg", lambda pid, sig: (signalled.append((pid, sig)), stopped.add(pid)))
+        monkeypatch.setattr(safety, "listening_pids", lambda _port: ())
+        monkeypatch.setattr(qualification.os, "getpgid", lambda pid: pid, raising=False)
+        monkeypatch.setattr(
+            qualification.os,
+            "killpg",
+            lambda pid, sig: (signalled.append((pid, sig)), stopped.add(pid)),
+            raising=False,
+        )
         _stale_lease(root, old_id, owned_pid, 49198)
         replacement = qualification.acquire(
             repo_root=REPO_ROOT, lease_id="qualification-replacement", owner_pid=os.getpid(), port_offset=1001
@@ -267,10 +323,9 @@ def test_stale_owned_stack_is_reclaimed_without_touching_foreign_listener(
             repo_root=REPO_ROOT, lease_id="qualification-replacement", token=str(replacement["token"])
         )
     finally:
-        for proc in (foreign,):
-            if proc.poll() is None:
-                proc.terminate()
-                proc.wait(timeout=10)
+        if foreign.poll() is None:
+            foreign.terminate()
+            foreign.wait(timeout=10)
 
 
 def test_dead_lease_with_missing_sentinel_is_quarantined_before_a_fresh_lease_acquires(
@@ -386,13 +441,15 @@ def test_supervisor_dead_with_recorded_port_still_open_retains_incomplete_lease(
     monkeypatch.setattr(
         qualification,
         "STOP_PHASES",
-        ((qualification.signal.SIGINT, 0), (qualification.signal.SIGTERM, 0), (qualification.signal.SIGKILL, 0)),
+        tuple((sig, 0) for sig, _wait_seconds in qualification.STOP_PHASES),
     )
+    monkeypatch.setattr(safety, "process_exists", lambda pid: pid == os.getpid())
     acquired = qualification.acquire(repo_root=REPO_ROOT, lease_id=lease_id, owner_pid=os.getpid(), port_offset=1000)
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.bind(("127.0.0.1", 0))
     listener.listen()
     port = listener.getsockname()[1]
+    monkeypatch.setattr(safety, "listening_pids", lambda candidate: (os.getpid(),) if candidate == port else ())
     try:
         _stale_lease(root, lease_id, pid=42424, port=port)
         with pytest.raises(qualification.QualificationLeaseError, match="port.*still open"):

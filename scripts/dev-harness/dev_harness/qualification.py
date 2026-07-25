@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import fcntl
+import errno
 import hashlib
 import json
 import os
@@ -15,7 +15,12 @@ import tempfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, TextIO
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 from . import config, safety
 
@@ -26,10 +31,10 @@ DEFAULT_RETENTION_MAX_AGE_SECONDS = 14 * 24 * 60 * 60
 COMPLETION_FILENAME = "qualification-completed.json"
 QUARANTINE_DIRNAME = "quarantined-lease-pointers"
 FAULT_STATE_DIRNAME = "fault"
-STOP_PHASES: tuple[tuple[signal.Signals, float], ...] = (
-    (signal.SIGINT, 8),
-    (signal.SIGTERM, 5),
-    (signal.SIGKILL, 2),
+STOP_PHASES: tuple[tuple[signal.Signals, float], ...] = tuple(
+    (signal.Signals(value), wait_seconds)
+    for name, wait_seconds in (("SIGINT", 8), ("SIGTERM", 5), ("SIGKILL", 2))
+    if (value := getattr(signal, name, None)) is not None
 )
 
 
@@ -56,15 +61,40 @@ def _validate_root(root: Path, repo_root: Path) -> Path:
     return resolved
 
 
+def _acquire_file_lock(lock_file: TextIO) -> None:
+    if os.name != "nt":
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        return
+
+    while True:
+        lock_file.seek(0)
+        try:
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+            return
+        except OSError as exc:
+            if exc.errno not in {errno.EACCES, errno.EAGAIN}:
+                raise
+            time.sleep(0.05)
+
+
+def _release_file_lock(lock_file: TextIO) -> None:
+    if os.name != "nt":
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        return
+
+    lock_file.seek(0)
+    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+
+
 @contextmanager
 def _locked(root: Path) -> Iterator[None]:
     root.mkdir(parents=True, exist_ok=True)
     with (root / ".qualification-lease.lock").open("a+", encoding="utf-8") as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        _acquire_file_lock(lock_file)
         try:
             yield
         finally:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            _release_file_lock(lock_file)
 
 
 def _lease_path(root: Path) -> Path:
