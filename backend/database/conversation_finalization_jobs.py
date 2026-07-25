@@ -456,6 +456,7 @@ def _mark_finalization_completed_txn(
         {
             'status': 'completed',
             'completed_at': now,
+            'terminal_outcome': 'success',
             'updated_at': now,
             'lease_expires_at': now,
             'reconcile_after_at': firestore.DELETE_FIELD,
@@ -526,6 +527,7 @@ def _fenced_finalization_update(now: datetime) -> dict[str, Any]:
         'reconcile_after_at': firestore.DELETE_FIELD,
         'last_failure_code': None,
         'finalization_outcome': 'fenced',
+        'terminal_outcome': 'stale',
         'fanout_status': 'fenced',
         'fanout_fenced_at': now,
     }
@@ -736,6 +738,7 @@ def _mark_finalization_dead_letter_txn(
             'status': 'dead_letter',
             'updated_at': now,
             'terminal_at': now,
+            'terminal_outcome': 'failure',
             'lease_expires_at': now,
             'reconcile_after_at': firestore.DELETE_FIELD,
             'task_retry_count': retry_count,
@@ -1149,14 +1152,24 @@ def reacquire_deferred_processing(uid: str, conversation_id: str, *, firestore_c
 
 
 def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, float | int]:
-    """Privacy-safe aggregate counts plus a bounded overdue-age sample."""
+    """Privacy-safe durable lifecycle projection plus a bounded overdue-age sample."""
     client = _client(firestore_client)
     now = _now()
     collection = client.collection(FINALIZATION_JOBS_COLLECTION)
+
+    def count(query: Any) -> int:
+        aggregate = query.count().get()
+        return int(aggregate[0][0].value) if aggregate and aggregate[0] else 0
+
     counts: dict[str, int] = {}
     for status in (*NONTERMINAL_JOB_STATUSES, *TERMINAL_JOB_STATUSES):
-        aggregate = collection.where('status', '==', status).count().get()
-        counts[status] = int(aggregate[0][0].value) if aggregate and aggregate[0] else 0
+        counts[status] = count(collection.where('status', '==', status))
+
+    terminal_outcomes = {
+        outcome: count(collection.where('terminal_outcome', '==', outcome))
+        for outcome in ('success', 'failure', 'stale')
+    }
+    terminal_unknown = max(0, counts['completed'] + counts['dead_letter'] - sum(terminal_outcomes.values()))
 
     oldest_age_seconds = 0.0
     # The bounded due page prevents historical terminal rows from making the
@@ -1166,10 +1179,16 @@ def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, f
         if isinstance(created_at, datetime):
             oldest_age_seconds = max(oldest_age_seconds, max(0.0, (now - created_at).total_seconds()))
     return {
+        'accepted': count(collection),
+        'success': terminal_outcomes['success'],
+        'failure': terminal_outcomes['failure'],
+        'stale': terminal_outcomes['stale'],
+        'nonterminal': counts['queued'] + counts['leased'],
         'queued': counts['queued'],
         'leased': counts['leased'],
         'blocked_byok': counts['blocked_byok'],
         'completed': counts['completed'],
         'dead_letter': counts['dead_letter'],
+        'terminal_unknown': terminal_unknown,
         'oldest_nonterminal_age_seconds': oldest_age_seconds,
     }

@@ -661,8 +661,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(increase(omi_journey_accepted_total{journey=\"capture_finalization\"}[6h])) - sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\"}[6h]))",
-          "legendFormat": "accepted minus terminal (6h)",
+          "expr": "max by (state) (listen_finalization_durable_jobs)",
+          "legendFormat": "durable {{state}}",
           "range": true,
           "refId": "A"
         },
@@ -672,8 +672,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(omi_capture_finalization_reconciliations_total[15m]))",
-          "legendFormat": "stale reconciliations / second",
+          "expr": "sum(clamp_min(delta((max by (state) (listen_finalization_durable_jobs{state=~\"success|failure|stale\"}))[30m:]), 0))",
+          "legendFormat": "new durable terminals (30m)",
           "range": true,
           "refId": "B"
         },
@@ -700,7 +700,7 @@
           "refId": "D"
         }
       ],
-      "title": "Capture finalization reconciliation and nonterminal work",
+      "title": "Capture finalization durable projection and nonterminal work",
       "type": "timeseries"
     }
   ],

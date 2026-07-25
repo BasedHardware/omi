@@ -1084,7 +1084,11 @@ async def _shutdown_window_retries_through_cloud_tasks(stack: Stack) -> None:
         raise StackFailure(f'retry Cloud Tasks delivery did not complete: {(status_code, body)}')
     completed_job = _one_job(stack, uid, conversation_id)
     completed_conversation = stack.conversation(uid, conversation_id)
-    if completed_job.get('status') != 'completed' or completed_job.get('attempt_count') != 2:
+    if (
+        completed_job.get('status') != 'completed'
+        or completed_job.get('terminal_outcome') != 'success'
+        or completed_job.get('attempt_count') != 2
+    ):
         raise StackFailure('successful retry did not complete the exact durable job')
     if completed_job.get('fanout_status') != 'completed':
         raise StackFailure('successful retry did not complete durable fanout')
@@ -1119,6 +1123,7 @@ async def _terminal_cloud_tasks_failure_dead_letters(stack: Stack) -> None:
     conversation = stack.conversation(uid, conversation_id)
     if (
         dead_letter.get('status') != 'dead_letter'
+        or dead_letter.get('terminal_outcome') != 'failure'
         or dead_letter.get('attempt_count') != 2
         or dead_letter.get('task_retry_count') != 2
     ):

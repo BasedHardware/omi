@@ -6,6 +6,10 @@ on:
     paths:
       - 'backend/pusher/**'
       - 'backend/charts/pusher/**'
+      - 'backend/database/conversation_finalization_jobs.py'
+      - 'backend/services/conversation_finalization.py'
+      - 'backend/utils/metrics.py'
+      - '.github/workflows/gcp_backend_pusher_auto_deploy.yml'
 
 # Share the development pusher lock with manual deployments.
 concurrency:

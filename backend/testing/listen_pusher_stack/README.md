@@ -82,8 +82,8 @@ Scenarios:
    recovery path from #9960 enqueues one opaque Cloud Tasks task, then a real
    worker retry preserves `processing` until it completes the same job;
 8. a worker exhausting its two-attempt test budget atomically dead-letters the
-   job and marks the still-current conversation `failed`/`discarded`, while a
-   later duplicate delivery is fenced;
+   job with `terminal_outcome=failure` and marks the still-current conversation
+   `failed`/`discarded`, while a later duplicate delivery is fenced;
 9. an integration failure after processing retries only durable fanout, never
    re-runs completed conversation processing.
 

@@ -464,6 +464,7 @@ def test_finalization_completion_requires_durable_fanout_completion():
 
     completed = _Transaction()
     assert jobs._mark_finalization_completed_txn(completed, ref, 1, 4, now) is True
+    assert completed.updates[0][1]['terminal_outcome'] == 'success'
 
 
 def test_fanout_claim_terminally_fences_a_discard_that_wins_before_its_transaction():
@@ -550,6 +551,7 @@ def test_fenced_finalization_is_a_terminal_no_fanout_outcome():
     update = transaction.updates[0][1]
     assert update['status'] == 'completed'
     assert update['finalization_outcome'] == 'fenced'
+    assert update['terminal_outcome'] == 'stale'
     assert update['fanout_status'] == 'fenced'
 
 
@@ -661,6 +663,7 @@ def test_final_attempt_sets_visible_dead_letter_instead_of_completed():
     assert jobs._mark_finalization_dead_letter_txn(transaction, ref, 3, 1, 5, _now()) is True
     update = transaction.updates[0][1]
     assert update['status'] == 'dead_letter'
+    assert update['terminal_outcome'] == 'failure'
     assert update['task_retry_count'] == 5
     assert 'completed_at' not in update
 
@@ -707,6 +710,7 @@ def test_final_attempt_atomically_closes_its_bound_processing_conversation():
                 'status': 'dead_letter',
                 'updated_at': _now(),
                 'terminal_at': _now(),
+                'terminal_outcome': 'failure',
                 'lease_expires_at': _now(),
                 'reconcile_after_at': jobs.firestore.DELETE_FIELD,
                 'task_retry_count': 5,
@@ -722,6 +726,63 @@ def test_final_attempt_atomically_closes_its_bound_processing_conversation():
             },
         ),
     ]
+
+
+def test_durable_summary_distinguishes_terminal_outcomes_and_legacy_terminal_rows(monkeypatch):
+    class Query:
+        def __init__(self, counts, key):
+            self.counts = counts
+            self.key = key
+
+        def where(self, field, _operator, value):
+            return Query(self.counts, (field, value))
+
+        def count(self):
+            return self
+
+        def get(self):
+            return [[SimpleNamespace(value=self.counts.get(self.key, 0))]]
+
+        def limit(self, _limit):
+            return self
+
+        def stream(self):
+            return iter(())
+
+    class Client:
+        def collection(self, name):
+            assert name == jobs.FINALIZATION_JOBS_COLLECTION
+            return Query(
+                {
+                    None: 11,
+                    ('status', 'queued'): 2,
+                    ('status', 'leased'): 1,
+                    ('status', 'blocked_byok'): 3,
+                    ('status', 'completed'): 4,
+                    ('status', 'dead_letter'): 1,
+                    ('terminal_outcome', 'success'): 2,
+                    ('terminal_outcome', 'stale'): 1,
+                    ('terminal_outcome', 'failure'): 1,
+                },
+                None,
+            )
+
+    summary = jobs.get_finalization_job_summary(firestore_client=Client())
+
+    assert summary == {
+        'accepted': 11,
+        'success': 2,
+        'failure': 1,
+        'stale': 1,
+        'nonterminal': 3,
+        'queued': 2,
+        'leased': 1,
+        'blocked_byok': 3,
+        'completed': 4,
+        'dead_letter': 1,
+        'terminal_unknown': 1,
+        'oldest_nonterminal_age_seconds': 0.0,
+    }
 
 
 class _BoundedReplayCollection:
