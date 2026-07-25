@@ -147,14 +147,26 @@ def test_source_for_conversation_distinguishes_transcript_from_external_integrat
     assert source_for_conversation(SimpleNamespace(source=None)) == SOURCE_TRANSCRIPTION
 
 
-def test_posthog_failure_is_swallowed_and_never_breaks_extraction():
+def test_posthog_failure_is_swallowed_and_records_bounded_fallback(monkeypatch):
     class ExplodingPosthog:
         def capture(self, *, distinct_id, event, properties):
             raise RuntimeError('posthog down')
 
+    fallbacks = []
+    monkeypatch.setattr(met, 'record_fallback', lambda **fields: fallbacks.append(fields))
     met.set_posthog_client_for_tests(ExplodingPosthog())
     # Must not raise — telemetry is fail-open.
     _emit('uid-1', 'conv-1', count=2)
+    assert fallbacks == [
+        {
+            'component': 'memory_analytics',
+            'from_mode': 'posthog_capture',
+            'to_mode': 'telemetry_skipped',
+            'reason': 'other',
+            'outcome': 'degraded',
+            'log': met.logger,
+        }
+    ]
 
 
 def test_payload_properties_carry_no_content_or_identifiers():
@@ -221,12 +233,24 @@ def test_durable_claim_outage_skips_telemetry_and_retry_never_duplicates(monkeyp
         raise RuntimeError('firestore down')
 
     monkeypatch.setattr(met, "try_claim_conversation_memory_analytics", _raising_claim)
+    fallbacks = []
+    monkeypatch.setattr(met, 'record_fallback', lambda **fields: fallbacks.append(fields))
     fake = FakePosthog()
     met.set_posthog_client_for_tests(fake)
 
     # Must not raise, and must not emit a potentially duplicate success.
     _emit('uid-1', 'conv-A', count=2)
     assert fake.calls == []
+    assert fallbacks == [
+        {
+            'component': 'memory_analytics',
+            'from_mode': 'durable_claim',
+            'to_mode': 'telemetry_skipped',
+            'reason': 'other',
+            'outcome': 'degraded',
+            'log': met.logger,
+        }
+    ]
 
     claimed = _FakeDurableClaim()
     claimed.claimed.add(('uid-1', 'conv-A'))
@@ -249,6 +273,8 @@ def test_posthog_constructor_failure_is_fail_open_at_public_extraction_boundary(
     monkeypatch.setattr(met, "_posthog_disabled", False)
 
     constructor_calls = []
+    fallbacks = []
+    monkeypatch.setattr(met, 'record_fallback', lambda **fields: fallbacks.append(fields))
 
     class BrokenPosthog:
         def __init__(self, **_kwargs):
@@ -262,3 +288,13 @@ def test_posthog_constructor_failure_is_fail_open_at_public_extraction_boundary(
     process_conversation.extract_memories("uid-1", SimpleNamespace(id="conv-1"))
     assert constructor_calls == [True]
     assert met._posthog_client is None
+    assert fallbacks == [
+        {
+            'component': 'memory_analytics',
+            'from_mode': 'posthog_client',
+            'to_mode': 'telemetry_skipped',
+            'reason': 'config_incomplete',
+            'outcome': 'degraded',
+            'log': met.logger,
+        }
+    ]

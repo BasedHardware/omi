@@ -9,6 +9,9 @@ private struct EventPayloadBox: @unchecked Sendable {
 
 /// Memory extraction assistant that identifies facts and wisdom from screen content
 actor MemoryAssistant: ProactiveAssistant {
+  typealias ExtractionOverride =
+    @Sendable (_ jpegData: Data, _ appName: String) async throws -> MemoryExtractionResult?
+
   // MARK: - ProactiveAssistant Protocol
 
   nonisolated let identifier = "memory-extraction"
@@ -27,7 +30,8 @@ actor MemoryAssistant: ProactiveAssistant {
 
   // MARK: - Properties
 
-  private let geminiClient: GeminiClient
+  private let geminiClient: GeminiClient?
+  private let extractionOverride: ExtractionOverride?
   private let durabilityPipeline: MemoryAssistantDurabilityPipeline
   private var isRunning = false
   private var lastAnalysisTime: Date = .distantPast
@@ -71,7 +75,10 @@ actor MemoryAssistant: ProactiveAssistant {
   init(apiKey: String? = nil) throws {
     // Use Gemini Flash for memory extraction (text+vision, no tool loop — Flash-safe)
     self.geminiClient = try GeminiClient(apiKey: apiKey)
-    self.durabilityPipeline = MemoryAssistantDurabilityPipeline(runner: MemoryAssistantProductionDurability())
+    self.extractionOverride = nil
+    self.durabilityPipeline = MemoryAssistantDurabilityPipeline(
+      runner: MemoryAssistantProductionDurability(operations: MemoryAssistantLiveDurabilityOperations())
+    )
 
     let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
     self.frameSignal = stream
@@ -81,6 +88,22 @@ actor MemoryAssistant: ProactiveAssistant {
     Task {
       await self.startProcessing()
     }
+  }
+
+  /// Hermetic analysis-attempt initializer. It uses the same `processFrame`
+  /// catch and analytics boundary as production without constructing a live
+  /// Gemini client or starting the background frame loop.
+  init(
+    extractionOverride: @escaping ExtractionOverride,
+    durabilityRunner: any MemoryAssistantDurabilityRunning
+  ) {
+    self.geminiClient = nil
+    self.extractionOverride = extractionOverride
+    self.durabilityPipeline = MemoryAssistantDurabilityPipeline(runner: durabilityRunner)
+
+    let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
+    self.frameSignal = stream
+    self.frameSignalContinuation = continuation
   }
 
   // MARK: - Processing
@@ -312,7 +335,7 @@ actor MemoryAssistant: ProactiveAssistant {
 
   // MARK: - Analysis
 
-  private func processFrame(_ frame: CapturedFrame) async {
+  func processFrame(_ frame: CapturedFrame) async {
     guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
     let enabled = await isEnabled
     guard enabled else {
@@ -346,10 +369,18 @@ actor MemoryAssistant: ProactiveAssistant {
       }
     } catch {
       logError("Memory extraction error", error: error)
+      await recordAnalysisOutcome(.analysisFailed, ownerID: ownerID)
     }
   }
 
   private func extractMemories(from jpegData: Data, appName: String) async throws -> MemoryExtractionResult? {
+    if let extractionOverride {
+      return try await extractionOverride(jpegData, appName)
+    }
+    guard let geminiClient else {
+      return nil
+    }
+
     // Build context with previous memories for deduplication
     var prompt = "Analyze this screenshot from \(appName).\n\n"
 
@@ -393,18 +424,13 @@ actor MemoryAssistant: ProactiveAssistant {
       required: ["has_new_memory", "memories", "context_summary", "current_activity"]
     )
 
-    do {
-      let responseText = try await geminiClient.sendRequest(
-        prompt: prompt,
-        imageData: jpegData,
-        systemPrompt: currentSystemPrompt,
-        responseSchema: responseSchema
-      )
+    let responseText = try await geminiClient.sendRequest(
+      prompt: prompt,
+      imageData: jpegData,
+      systemPrompt: currentSystemPrompt,
+      responseSchema: responseSchema
+    )
 
-      return try JSONDecoder().decode(MemoryExtractionResult.self, from: Data(responseText.utf8))
-    } catch {
-      logError("Memory analysis error", error: error)
-      return nil
-    }
+    return try JSONDecoder().decode(MemoryExtractionResult.self, from: Data(responseText.utf8))
   }
 }
