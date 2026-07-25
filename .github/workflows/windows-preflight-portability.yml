@@ -40,10 +40,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Resolve supported Python minor
+        id: python-version
+        shell: pwsh
+        run: |
+          $parts = (Get-Content backend/.python-version -Raw).Trim().Split('.')
+          if ($parts.Count -lt 2) {
+            throw 'backend/.python-version must contain at least major.minor'
+          }
+          "version=$($parts[0]).$($parts[1])" >> $env:GITHUB_OUTPUT
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version-file: backend/.python-version
+          python-version: ${{ steps.python-version.outputs.version }}
 
       - name: Run Windows portability checks from the manifest
         run: >-
