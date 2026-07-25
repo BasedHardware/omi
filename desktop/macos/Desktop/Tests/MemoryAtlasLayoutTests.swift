@@ -44,6 +44,65 @@ final class MemoryAtlasLayoutTests: XCTestCase {
       })
   }
 
+  func testSingleActiveTypeTakesTheStarCenterInsteadOfTheRing() {
+    // Regression: a one-type atlas placed its only constellation at the top of
+    // the ring (0.5, 0.25), stranding every node in the upper-middle of the
+    // canvas with the rest of the viewport empty.
+    let centers = MemoryAtlasCluster.centers(for: [.concept])
+
+    XCTAssertEqual(centers.count, 1)
+    XCTAssertEqual(centers[.concept], MemoryAtlasCluster.starCenter)
+  }
+
+  func testTwoOrMoreActiveTypesStillFormTheRing() {
+    let centers = MemoryAtlasCluster.centers(for: [.organization, .thing])
+
+    XCTAssertEqual(centers[.organization], CGPoint(x: 0.5, y: 0.25))
+    XCTAssertEqual(centers[.thing], CGPoint(x: 0.5, y: 0.75))
+  }
+
+  func testSparseAtlasesExpandOrbitsAndDenseOnesKeepTunedDensity() {
+    // The ring is what fills the canvas when several types are active. With
+    // one or two, the orbits have to do that work instead.
+    XCTAssertGreaterThan(
+      MemoryAtlasLayoutEngine.orbitSpreadScale(activeClusterCount: 1),
+      MemoryAtlasLayoutEngine.orbitSpreadScale(activeClusterCount: 2)
+    )
+    XCTAssertGreaterThan(
+      MemoryAtlasLayoutEngine.orbitSpreadScale(activeClusterCount: 2),
+      MemoryAtlasLayoutEngine.orbitSpreadScale(activeClusterCount: 3)
+    )
+    // Three or more keeps the density the viewport budgets and the performance
+    // harness were measured against — do not let this drift.
+    for count in 3...5 {
+      XCTAssertEqual(MemoryAtlasLayoutEngine.orbitSpreadScale(activeClusterCount: count), 1)
+    }
+  }
+
+  func testSingleTypeAtlasActuallySpreadsAcrossTheCanvas() throws {
+    let nodes = (0..<40).map {
+      KnowledgeGraphNode(id: "c\($0)", label: "Concept \($0)", nodeType: .concept)
+    }
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(
+      graph: KnowledgeGraphResponse(nodes: nodes, edges: []),
+      userName: "David"
+    )
+
+    XCTAssertEqual(snapshot.activeClusters, [.concept])
+
+    let ys = snapshot.nodes.map(\.normalizedPosition.y)
+    let xs = snapshot.nodes.map(\.normalizedPosition.x)
+    let verticalSpread = (ys.max() ?? 0) - (ys.min() ?? 0)
+    let horizontalSpread = (xs.max() ?? 0) - (xs.min() ?? 0)
+
+    // Before the fix this atlas occupied roughly the top third of the canvas.
+    XCTAssertGreaterThan(verticalSpread, 0.5)
+    XCTAssertGreaterThan(horizontalSpread, 0.25)
+    // Still inside the clamped drawing area.
+    XCTAssertGreaterThanOrEqual(ys.min() ?? 0, 0.08)
+    XCTAssertLessThanOrEqual(ys.max() ?? 1, 0.92)
+  }
+
   func testEmptyTypesRedistributeAroundTheStar() {
     let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: sampleGraph(), userName: "David")
 
@@ -366,6 +425,99 @@ final class MemoryAtlasLayoutTests: XCTestCase {
         KnowledgeGraphEdge(id: "uses", sourceId: "david", targetId: "python", label: "uses"),
       ]
     )
+  }
+
+  func testSmallAtlasNamesEveryEntityAtOverviewZoom() {
+    // Regression: the label budgets are tuned for thousands of entities. A
+    // 26-entity atlas inherited "3 per cluster, 12 total" and rendered as a
+    // handful of unnamed dots on an empty canvas.
+    let nodes = (0..<26).map {
+      KnowledgeGraphNode(id: "c\($0)", label: "Concept \($0)", nodeType: .concept)
+    }
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(
+      graph: KnowledgeGraphResponse(nodes: nodes, edges: []),
+      userName: "David"
+    )
+    let plan = MemoryAtlasRenderPlanner.makePlan(
+      snapshot: snapshot,
+      viewportSize: CGSize(width: 1_200, height: 800),
+      zoom: 1,
+      pan: .zero,
+      compact: false,
+      selectedNodeID: nil,
+      matchingNodeIDs: nil
+    )
+
+    XCTAssertEqual(plan.detailLevel, .overview)
+    // Collision admission still has the final say, so this asserts the budget
+    // is no longer the binding constraint rather than an exact count.
+    XCTAssertGreaterThan(plan.labelNodeIDs.count, 12)
+  }
+
+  func testSmallAtlasDrawsALargerMarkThanADenseOne() {
+    let small = MemoryAtlasNodeVisualPolicy.radius(
+      clusterRank: 3, zoom: 1, compact: false,
+      isFullyLabelled: false, isInspect: false, isFocus: false, isSmallAtlas: true
+    )
+    let dense = MemoryAtlasNodeVisualPolicy.radius(
+      clusterRank: 3, zoom: 1, compact: false,
+      isFullyLabelled: false, isInspect: false, isFocus: false, isSmallAtlas: false
+    )
+
+    XCTAssertGreaterThan(small, dense)
+    // The compact inline card must keep its own tuned scale.
+    XCTAssertEqual(
+      MemoryAtlasNodeVisualPolicy.radius(
+        clusterRank: 3, zoom: 1, compact: true,
+        isFullyLabelled: false, isInspect: false, isFocus: false, isSmallAtlas: true
+      ),
+      MemoryAtlasNodeVisualPolicy.radius(
+        clusterRank: 3, zoom: 1, compact: true,
+        isFullyLabelled: false, isInspect: false, isFocus: false, isSmallAtlas: false
+      )
+    )
+  }
+
+  /// STATIC CHECKER, not behavioral coverage: the timeline footer regressed by
+  /// growing a flexible child, and SwiftUI gives no seam to measure a rendered
+  /// subview's height from a unit test. A bare `Spacer()` inside the footer's
+  /// VStack expands vertically and takes the height away from the atlas canvas
+  /// — that is exactly how the bar came to fill roughly 40% of the window.
+  func testStaticCheckerTimelineFooterHasNoVerticallyExpandingChild() throws {
+    let source = try atlasSource()
+
+    guard let start = source.range(of: "private var timelineBar: some View {"),
+      let end = source.range(of: "private var timelineTrack: some View {")
+    else {
+      return XCTFail("Could not locate the timelineBar declaration")
+    }
+    let body = String(source[start.upperBound..<end.lowerBound])
+
+    XCTAssertFalse(
+      body.contains("Spacer()"),
+      """
+      A bare Spacer() in the timeline footer expands to fill and steals canvas \
+      from the atlas. Use Spacer(minLength:) inside a horizontal row instead.
+      """
+    )
+    XCTAssertTrue(
+      body.contains("Spacer(minLength:"),
+      "The header row should still push its trailing controls to the edge."
+    )
+  }
+
+  private func atlasSource() throws -> String {
+    let testsDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    let packageDirectory = testsDirectory.deletingLastPathComponent()
+    let sourceURL =
+      packageDirectory
+      .appendingPathComponent("Sources")
+      .appendingPathComponent("MainWindow")
+      .appendingPathComponent("Pages")
+      .appendingPathComponent("MemoryGraph")
+      .appendingPathComponent("CanonicalMemoryAtlasView.swift")
+    // omi-test-quality: source-inspection -- static contract: a SwiftUI subview's rendered height is not observable from a unit test, so the footer's no-flexible-child rule is asserted on source; the layout behavior itself is covered by the placement tests above.
+    return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
   private func fiveTypeGraph() -> KnowledgeGraphResponse {

@@ -62,6 +62,13 @@ enum MemoryAtlasCluster: String, CaseIterable, Identifiable {
   static func centers(for activeClusters: [Self]) -> [Self: CGPoint] {
     guard !activeClusters.isEmpty else { return [:] }
 
+    // A single active type has no constellation to form. Parking it on the ring
+    // would strand every node in one corner of the canvas and leave the rest
+    // empty, so it takes the center and orbits the anchor directly.
+    if activeClusters.count == 1 {
+      return [activeClusters[0]: starCenter]
+    }
+
     let startingAngle = -Double.pi / 2
     let angularStep = 2 * Double.pi / Double(activeClusters.count)
     var result: [Self: CGPoint] = [:]
@@ -342,6 +349,10 @@ enum MemoryAtlasDetailLevel: Equatable {
 }
 
 enum MemoryAtlasZoomPolicy {
+  /// At or below this entity count the whole atlas fits on one screen, so the
+  /// density budgets tuned for thousands of entities stop being a kindness and
+  /// start being the reason the page looks empty.
+  static let smallAtlasCeiling = 60
   static let minimumZoom: CGFloat = 0.75
   static let compactMaximumZoom: CGFloat = 1.35
   static let focusModeZoom: CGFloat = 3.2
@@ -399,10 +410,16 @@ enum MemoryAtlasNodeVisualPolicy {
     compact: Bool,
     isFullyLabelled: Bool,
     isInspect: Bool,
-    isFocus: Bool
+    isFocus: Bool,
+    isSmallAtlas: Bool = false
   ) -> CGFloat {
     if isFullyLabelled || isInspect {
       return clusterRank == 0 ? 16 : 12
+    }
+    // A 2.1pt dot is the right mark among thousands of peers and far too timid
+    // when there are two dozen. Scale the mark to the graph, not just the zoom.
+    if isSmallAtlas && !compact && !isFocus {
+      return clusterRank == 0 ? 9 : 6
     }
     if isFocus {
       return clusterRank == 0 ? 10 : 7.2
@@ -493,21 +510,34 @@ enum MemoryAtlasRenderPlanner {
       case .focus: 260
       case .inspect: 360
       }
+    // These budgets exist to keep a multi-thousand-entity graph legible. An
+    // atlas small enough to name in full needs no rationing: withholding
+    // labels there just leaves unreadable dots on an empty canvas. Collision
+    // admission still decides what actually fits.
+    let isSmallAtlas = !compact && snapshot.nodes.count <= MemoryAtlasZoomPolicy.smallAtlasCeiling
     let labelsPerCluster: Int =
-      switch detailLevel {
-      case .overview: compact ? 2 : 3
-      case .neighborhood: compact ? 4 : 7
-      case .detail: compact ? 5 : 11
-      case .focus: compact ? 5 : 24
-      case .inspect: compact ? 5 : 96
+      if isSmallAtlas {
+        snapshot.nodes.count
+      } else {
+        switch detailLevel {
+        case .overview: compact ? 2 : 3
+        case .neighborhood: compact ? 4 : 7
+        case .detail: compact ? 5 : 11
+        case .focus: compact ? 5 : 24
+        case .inspect: compact ? 5 : 96
+        }
       }
     let labelLimit: Int =
-      switch detailLevel {
-      case .overview: 12
-      case .neighborhood: 24
-      case .detail: 36
-      case .focus: 72
-      case .inspect: 96
+      if isSmallAtlas {
+        snapshot.nodes.count
+      } else {
+        switch detailLevel {
+        case .overview: 12
+        case .neighborhood: 24
+        case .detail: 36
+        case .focus: 72
+        case .inspect: 96
+        }
       }
 
     var relatedNodeIDs: Set<String> = []
@@ -1013,7 +1043,12 @@ enum MemoryAtlasLayoutEngine {
     // the star. More active groups should get slightly denser, but never
     // collapse into a single point at overview scale.
     let densityScale = 1 - 0.05 * Double(max(activeClusterCount - 1, 0))
-    let radiusY = (0.04 + 0.11 * sqrt(normalizedIndex)) * densityScale * radialJitter
+    // Few active types leave most of the canvas unused, because the ring that
+    // separates constellations is what normally fills it. Spread those orbits
+    // out so a one- or two-type atlas reads at the same scale as a full one
+    // instead of as a small knot in the middle.
+    let spreadScale = Self.orbitSpreadScale(activeClusterCount: activeClusterCount)
+    let radiusY = (0.04 + 0.11 * sqrt(normalizedIndex)) * densityScale * radialJitter * spreadScale
     let radiusX = radiusY * 0.58
     let x = center.x + cos(angle) * radiusX
     let y = center.y + sin(angle) * radiusY
@@ -1021,6 +1056,17 @@ enum MemoryAtlasLayoutEngine {
       x: min(max(x, 0.04), 0.96),
       y: min(max(y, 0.08), 0.92)
     )
+  }
+
+  /// Orbit expansion for sparse atlases. Three or more types already spread
+  /// across the ring, so they keep the tuned density the viewport budgets and
+  /// performance harness were measured against.
+  static func orbitSpreadScale(activeClusterCount: Int) -> Double {
+    switch activeClusterCount {
+    case ...1: return 2.6
+    case 2: return 1.6
+    default: return 1
+    }
   }
 
   private static func stableFraction(_ value: String) -> Double {
@@ -1139,7 +1185,9 @@ struct CanonicalMemoryAtlasPage: View {
       CanonicalMemoryAtlasSurface(
         graph: viewModel.graphResponse,
         compact: false,
-        onViewEvidence: onViewEvidence
+        onViewEvidence: onViewEvidence,
+        onRebuild: { Task { await viewModel.rebuildGraph() } },
+        isRebuilding: viewModel.isRebuilding
       )
     }
     .background(OmiColors.backgroundPrimary)
@@ -1168,7 +1216,9 @@ struct CanonicalMemoryAtlasTabView: View {
     CanonicalMemoryAtlasSurface(
       graph: viewModel.graphResponse,
       compact: false,
-      onViewEvidence: onViewEvidence
+      onViewEvidence: onViewEvidence,
+      onRebuild: { Task { await viewModel.rebuildGraph() } },
+      isRebuilding: viewModel.isRebuilding
     )
     .background(OmiColors.backgroundPrimary)
     .accessibilityIdentifier("canonical_memory_atlas_tab")
@@ -1338,6 +1388,10 @@ private struct CanonicalMemoryAtlasSurface: View {
   let graph: KnowledgeGraphResponse
   let compact: Bool
   let onViewEvidence: ([String]) -> Void
+  /// Regenerating the server-side graph. Absent on surfaces that have no
+  /// view model to drive it (the inline preview, offscreen export renders).
+  let onRebuild: (() -> Void)?
+  let isRebuilding: Bool
   private let snapshot: MemoryAtlasSnapshot
   private let renderPlanCache: MemoryAtlasRenderPlanCache
   /// The cursor at which each relationship can first be painted. Precomputing
@@ -1373,11 +1427,15 @@ private struct CanonicalMemoryAtlasSurface: View {
     graph: KnowledgeGraphResponse,
     compact: Bool,
     onViewEvidence: @escaping ([String]) -> Void,
+    onRebuild: (() -> Void)? = nil,
+    isRebuilding: Bool = false,
     previewTimeCursor: Double? = nil
   ) {
     self.graph = graph
     self.compact = compact
     self.onViewEvidence = onViewEvidence
+    self.onRebuild = onRebuild
+    self.isRebuilding = isRebuilding
     self.previewTimeCursor = previewTimeCursor
     _timeCursor = State(initialValue: previewTimeCursor ?? 1)
     let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1646,6 +1704,23 @@ private struct CanonicalMemoryAtlasSurface: View {
         }
         .foregroundColor(OmiColors.textSecondary)
       }
+
+      // The legacy Brain Map carried a rebuild control; without it a thin or
+      // stale server graph has no recovery path from inside the atlas.
+      if let onRebuild {
+        Button(action: onRebuild) {
+          Image(systemName: "arrow.clockwise")
+            .scaledFont(size: 11, weight: .medium)
+            .foregroundColor(OmiColors.textSecondary.opacity(isRebuilding ? 0.35 : 1))
+            .frame(width: 26, height: 26)
+            .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 9)
+        }
+        .buttonStyle(.plain)
+        .disabled(isRebuilding)
+        .help(isRebuilding ? "Rebuilding your atlas…" : "Rebuild the atlas from your memories")
+        .accessibilityLabel("Rebuild atlas")
+        .accessibilityIdentifier("memory_atlas_rebuild")
+      }
     }
     .padding(.horizontal, compact ? 12 : 18)
     .frame(height: compact ? 40 : 44)
@@ -1882,6 +1957,10 @@ private struct CanonicalMemoryAtlasSurface: View {
     }
   }
 
+  private var isSmallAtlas: Bool {
+    !compact && snapshot.nodes.count <= MemoryAtlasZoomPolicy.smallAtlasCeiling
+  }
+
   private func nodeRadius(for placement: MemoryAtlasNodePlacement) -> CGFloat {
     MemoryAtlasNodeVisualPolicy.radius(
       clusterRank: placement.clusterRank,
@@ -1889,13 +1968,17 @@ private struct CanonicalMemoryAtlasSurface: View {
       compact: compact,
       isFullyLabelled: isFullyLabelledMode,
       isInspect: isInspectMode,
-      isFocus: isFocusMode
+      isFocus: isFocusMode,
+      isSmallAtlas: isSmallAtlas
     )
   }
 
   @ViewBuilder
   private func clusterTitles(size: CGSize) -> some View {
-    ForEach(snapshot.activeClusters) { cluster in
+    // A lone constellation sits on the star center, which is where the anchor
+    // already is — the title would print straight through "you". It also names
+    // nothing the user can contrast it against, so it is simply dropped.
+    ForEach(snapshot.activeClusters.count > 1 ? snapshot.activeClusters : []) { cluster in
       let titlePosition = clusterTitlePosition(for: cluster)
       Text(cluster.title)
         .scaledFont(size: compact ? 10 : 12, weight: .medium)
@@ -1931,27 +2014,33 @@ private struct CanonicalMemoryAtlasSurface: View {
     let color = placement.cluster?.color ?? OmiColors.textPrimary
     let diameter = nodeDiameter(placement, selected: selected)
 
+    // Keeping the label out of the laid-out frame is what makes the ring land
+    // on the node. A VStack of ring-over-label is centered by `.position`, so
+    // the ring floats above the point while the Canvas paints the dot on it —
+    // two marks per entity, visibly offset once dots are more than a few px.
+    let hitDiameter = max(diameter, 24)
+
     return Button {
       selectedNodeID = selected ? nil : placement.id
     } label: {
-      VStack(spacing: 5) {
-        ZStack {
-          if selected {
-            Circle()
-              .stroke(color.opacity(0.22), lineWidth: 7)
-              .frame(width: diameter + 14, height: diameter + 14)
-          }
+      ZStack {
+        if selected {
           Circle()
-            .fill(OmiColors.backgroundRaised)
-            .overlay(Circle().stroke(color, lineWidth: selected ? 2.2 : 1.4))
-            .frame(width: diameter, height: diameter)
-          if placement.id == snapshot.anchorNodeID {
-            Image(systemName: "person.fill")
-              .scaledFont(size: max(9, diameter * 0.38))
-              .foregroundColor(OmiColors.textPrimary)
-          }
+            .stroke(color.opacity(0.22), lineWidth: 7)
+            .frame(width: diameter + 14, height: diameter + 14)
         }
-
+        Circle()
+          .fill(OmiColors.backgroundRaised)
+          .overlay(Circle().stroke(color, lineWidth: selected ? 2.2 : 1.4))
+          .frame(width: diameter, height: diameter)
+        if placement.id == snapshot.anchorNodeID {
+          Image(systemName: "person.fill")
+            .scaledFont(size: max(9, diameter * 0.38))
+            .foregroundColor(OmiColors.textPrimary)
+        }
+      }
+      .frame(width: hitDiameter, height: hitDiameter)
+      .overlay(alignment: .top) {
         if showLabel {
           Text(placement.node.label)
             .scaledFont(
@@ -1962,7 +2051,12 @@ private struct CanonicalMemoryAtlasSurface: View {
             .lineLimit(1)
             .truncationMode(.tail)
             .multilineTextAlignment(.center)
+            .fixedSize()
             .frame(maxWidth: compact ? 110 : 150)
+            // Hangs below the ring without joining the layout, so the frame
+            // stays centered on the entity's own position.
+            .offset(y: hitDiameter / 2 + diameter / 2 + 5)
+            .allowsHitTesting(false)
         }
       }
       .contentShape(Rectangle())
@@ -2080,38 +2174,43 @@ private struct CanonicalMemoryAtlasSurface: View {
 
   // MARK: - Time axis
 
+  /// Two tight rows: state on top, scrubber below. Everything here is
+  /// secondary to the atlas itself, so the bar stays a footer and never takes
+  /// canvas away from the graph.
   private var timelineBar: some View {
-    HStack(spacing: 12) {
-      Button(action: togglePlayback) {
-        ZStack {
-          Circle().fill(OmiColors.textPrimary).frame(width: 28, height: 28)
-          Image(systemName: isTimePlaying ? "pause.fill" : "play.fill")
-            .scaledFont(size: 10, weight: .bold)
-            .foregroundColor(OmiColors.backgroundPrimary)
-            .offset(x: isTimePlaying ? 0 : 1)
+    VStack(spacing: 5) {
+      HStack(spacing: 8) {
+        Button(action: togglePlayback) {
+          ZStack {
+            Circle().fill(OmiColors.textPrimary).frame(width: 22, height: 22)
+            Image(systemName: isTimePlaying ? "pause.fill" : "play.fill")
+              .scaledFont(size: 9, weight: .bold)
+              .foregroundColor(OmiColors.backgroundPrimary)
+              .offset(x: isTimePlaying ? 0 : 1)
+          }
         }
-      }
-      .buttonStyle(.plain)
-      .help(isTimePlaying ? "Pause" : "Play your memory forward")
-      .accessibilityLabel(isTimePlaying ? "Pause memory timeline" : "Play memory timeline")
-      .accessibilityIdentifier("memory_atlas_timeline_play")
+        .buttonStyle(.plain)
+        .help(isTimePlaying ? "Pause" : "Play your memory forward")
+        .accessibilityLabel(isTimePlaying ? "Pause memory timeline" : "Play memory timeline")
+        .accessibilityIdentifier("memory_atlas_timeline_play")
 
-      VStack(spacing: 3) {
-        HStack(spacing: 10) {
-          Text(asOfLabel)
-            .scaledFont(size: 11, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
-          Text("\(visibleEntityCount) entities · \(visibleConnectionCount) connections")
-            .scaledFont(size: 10)
-            .foregroundColor(OmiColors.textTertiary)
-            .monospacedDigit()
-        }
+        Text(asOfLabel)
+          .scaledFont(size: 11, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+          .lineLimit(1)
 
-        Spacer()
+        Text("\(visibleEntityCount) entities · \(visibleConnectionCount) connections")
+          .scaledFont(size: 10)
+          .foregroundColor(OmiColors.textTertiary)
+          .monospacedDigit()
+          .lineLimit(1)
+
+        Spacer(minLength: 8)
 
         Text(atlasLevelLabel)
           .scaledFont(size: 10, weight: .medium)
           .foregroundColor(OmiColors.textTertiary)
+          .lineLimit(1)
 
         if timeCursor < 0.9995 {
           Button(action: jumpToNow) {
@@ -2119,26 +2218,31 @@ private struct CanonicalMemoryAtlasSurface: View {
               .scaledFont(size: 10, weight: .semibold)
               .foregroundColor(OmiColors.textSecondary)
               .padding(.horizontal, 8)
-              .frame(height: 20)
-              .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 7)
+              .frame(height: 18)
+              .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 6)
           }
           .buttonStyle(.plain)
           .accessibilityIdentifier("memory_atlas_timeline_now")
         }
+      }
+
+      // The range endpoints flank the scrubber instead of taking a third row.
+      HStack(spacing: 8) {
+        Text(shortDate(timeline?.start))
+          .scaledFont(size: 9)
+          .foregroundColor(OmiColors.textQuaternary)
+          .lineLimit(1)
 
         timelineTrack
 
-        HStack {
-          Text(shortDate(timeline?.start))
-          Spacer()
-          Text(timeline?.hasChronologicalRange == true ? "Now" : "Imported")
-        }
-        .scaledFont(size: 8)
-        .foregroundColor(OmiColors.textQuaternary)
+        Text(timeline?.hasChronologicalRange == true ? "Now" : "Imported")
+          .scaledFont(size: 9)
+          .foregroundColor(OmiColors.textQuaternary)
+          .lineLimit(1)
       }
     }
     .padding(.horizontal, 18)
-    .padding(.vertical, 7)
+    .padding(.vertical, 8)
     .background(OmiColors.backgroundSecondary)
     .overlay(alignment: .top) {
       Divider().overlay(OmiColors.border.opacity(0.24))
@@ -2157,7 +2261,7 @@ private struct CanonicalMemoryAtlasSurface: View {
           .onChanged { value in scrub(to: value.location.x / max(geo.size.width, 1)) }
       )
     }
-    .frame(height: 26)
+    .frame(height: 20)
     .accessibilityIdentifier("memory_atlas_timeline_track")
     .accessibilityElement()
     .accessibilityLabel("Memory timeline")
@@ -2782,6 +2886,61 @@ enum MemoryAtlasExportPreview {
           )
         }
       }
+    }
+
+    return KnowledgeGraphResponse(nodes: nodes, edges: edges)
+  }
+
+  /// A one-type atlas — the shape a narrow or young account actually has, and
+  /// the case that regressed into a small knot in the upper middle of an
+  /// otherwise empty canvas. Kept as its own export so that layout stays
+  /// reviewable without an account that happens to have only one entity type.
+  static func singleTypeSurface(timeCursor: Double = 1) -> AnyView {
+    AnyView(
+      CanonicalMemoryAtlasSurface(
+        graph: singleTypeGraph(),
+        compact: false,
+        onViewEvidence: { _ in },
+        onRebuild: {},
+        previewTimeCursor: timeCursor
+      )
+    )
+  }
+
+  private static func singleTypeGraph() -> KnowledgeGraphResponse {
+    let now = Date(timeIntervalSince1970: 1_752_000_000)
+    let span: TimeInterval = 120 * 24 * 60 * 60
+    let labels = [
+      "portable mechanics", "SENTRY_AUTH_TOKEN", "hermes-m4", "debug symbol upload",
+      "long-running tasks", "incident or trace", "production deploy", "403 error",
+      "GitHub Discussion", "Discord Issues", "canonical pull request", "Skill Hub",
+      "autonomy", "private fork bin", "break-glass hatch", "tmux", "screen",
+      "deliverable", "GitHub issue", "release pointer", "worktree", "merge queue",
+      "failure class", "ratchet baseline", "changelog fragment",
+    ]
+
+    var nodes: [KnowledgeGraphNode] = [
+      KnowledgeGraphNode(
+        id: "david", label: "David", nodeType: .person, memoryIds: ["m0"],
+        createdAt: now.addingTimeInterval(-span)
+      )
+    ]
+    var edges: [KnowledgeGraphEdge] = []
+
+    for (index, label) in labels.enumerated() {
+      let id = "concept-\(index)"
+      let created = now.addingTimeInterval(-span * (1 - Double(index) / Double(labels.count)))
+      nodes.append(
+        KnowledgeGraphNode(
+          id: id, label: label, nodeType: .concept, memoryIds: ["mem-\(id)"], createdAt: created
+        )
+      )
+      edges.append(
+        KnowledgeGraphEdge(
+          id: "edge-\(id)", sourceId: "david", targetId: id, label: "relates_to",
+          memoryIds: ["mem-\(id)"], createdAt: created
+        )
+      )
     }
 
     return KnowledgeGraphResponse(nodes: nodes, edges: edges)
