@@ -16,6 +16,7 @@ from collections import Counter
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 from run_checks import (
     VALID_PLATFORMS,
@@ -286,6 +287,7 @@ class ManifestContractTests(unittest.TestCase):
 
 
 class RunnerBehaviorTests(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "requires a POSIX shell")
     def test_firestore_contention_runner_uses_uv_without_backend_venv(self) -> None:
         source = REPO_ROOT / "backend/testing/desktop_beta_admission/run.sh"
         with tempfile.TemporaryDirectory() as tmp:
@@ -553,13 +555,17 @@ class PlatformTests(unittest.TestCase):
         manifest = Manifest(
             checks=(
                 Check(
-                    id="bad", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("windows",)
+                    id="bad", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("plan9",)
                 ),
             ),
             exempt=(),
         )
         errors = validate_manifest(manifest, REPO_ROOT)
         self.assertTrue(any("invalid platforms" in e for e in errors))
+
+    def test_detect_platform_maps_windows(self):
+        with patch("run_checks._platform_mod.system", return_value="Windows"):
+            self.assertEqual(detect_platform(), "windows")
 
     def test_detect_platform_returns_known_value(self):
         plat = detect_platform()
