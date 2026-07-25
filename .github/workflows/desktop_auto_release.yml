@@ -64,7 +64,9 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           python3 .github/scripts/plan-desktop-release.py \
-            --repository "${{ github.repository }}"
+            --repository "${{ github.repository }}" \
+            --source-check-wait-seconds 720 \
+            --source-check-poll-seconds 30
 
       - name: Show release plan
         run: echo "${{ steps.plan.outputs.reason }}"
@@ -109,7 +111,9 @@ jobs:
           fi
 
           python3 .github/scripts/plan-desktop-release.py \
-            --repository "${{ github.repository }}"
+            --repository "${{ github.repository }}" \
+            --source-check-wait-seconds 720 \
+            --source-check-poll-seconds 30
 
       - name: Checkout exact releasable desktop source
         if: steps.recheck.outputs.should_release == 'true'
