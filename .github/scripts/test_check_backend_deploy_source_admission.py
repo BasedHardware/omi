@@ -10,7 +10,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parents[1]
 CHECKER_PATH = SCRIPT_DIR / "check_backend_deploy_source_admission.py"
@@ -42,6 +41,7 @@ def admitted_run(**overrides: object) -> dict[str, object]:
         "event": "push",
         "status": "completed",
         "conclusion": "success",
+        "run_attempt": 1,
         "head_branch": "main",
         "head_sha": SHA,
         "head_repository": {"full_name": REPOSITORY},
@@ -63,6 +63,18 @@ class ReleaseAdmissionVerifierTests(unittest.TestCase):
             sha=SHA,
             repository=REPOSITORY,
         )
+
+    def test_backend_default_accepts_successful_rerun(self) -> None:
+        VERIFIER.validate_admission(self.payload(run_attempt=2), sha=SHA, repository=REPOSITORY)
+
+    def test_gateway_first_attempt_mode_rejects_rerun(self) -> None:
+        with self.assertRaisesRegex(VERIFIER.ReleaseAdmissionError, "no successful main"):
+            VERIFIER.validate_admission(
+                self.payload(run_attempt=2),
+                sha=SHA,
+                repository=REPOSITORY,
+                require_first_attempt=True,
+            )
 
     def test_rejects_ambiguous_release_sha(self) -> None:
         for value in ("main", "a" * 7, "A" * 40, "0" * 40):
@@ -169,14 +181,26 @@ class WorkflowContractTests(unittest.TestCase):
 
         root = self.fixture_root()
         self.mutate(root, CHECKER.AUTO_WORKFLOW_PATH, 'workflows: ["Release Eligibility"]', 'workflows: ["Build"]')
-        self.assertIn("auto backend deploy must consume completed Release Eligibility runs on main", CHECKER.validate(root))
+        self.assertIn(
+            "auto backend deploy must consume completed Release Eligibility runs on main", CHECKER.validate(root)
+        )
 
     def test_auto_workflow_rejects_wrong_event_conclusion_branch_or_repository(self) -> None:
         cases = (
             ("event", "workflow_run.event == 'push'", "workflow_run.event == 'pull_request'", "push-originated"),
-            ("conclusion", "workflow_run.conclusion == 'success'", "workflow_run.conclusion == 'failure'", "successful Release Eligibility"),
+            (
+                "conclusion",
+                "workflow_run.conclusion == 'success'",
+                "workflow_run.conclusion == 'failure'",
+                "successful Release Eligibility",
+            ),
             ("rerun", "workflow_run.run_attempt == 1", "workflow_run.run_attempt == 2", "first run attempt"),
-            ("branch", "workflow_run.head_branch == 'main'", "workflow_run.head_branch == 'release'", "main Release Eligibility"),
+            (
+                "branch",
+                "workflow_run.head_branch == 'main'",
+                "workflow_run.head_branch == 'release'",
+                "main Release Eligibility",
+            ),
             (
                 "repository",
                 "workflow_run.head_repository.full_name == github.repository",
@@ -190,8 +214,7 @@ class WorkflowContractTests(unittest.TestCase):
                 self.mutate(root, CHECKER.AUTO_WORKFLOW_PATH, old, new)
                 self.assertTrue(
                     any(
-                        expected in error
-                        or "exactly the fail-closed Release Eligibility predicate" in error
+                        expected in error or "exactly the fail-closed Release Eligibility predicate" in error
                         for error in CHECKER.validate(root)
                     )
                 )
@@ -526,11 +549,15 @@ class WorkflowContractTests(unittest.TestCase):
     def test_manual_workflow_rejects_arbitrary_branch_or_missing_proof_query(self) -> None:
         root = self.fixture_root()
         self.mutate(root, CHECKER.MANUAL_WORKFLOW_PATH, "      release_sha:\n", "      branch:\n")
-        self.assertIn("manual backend deploy must keep release_sha optional for traffic-only repair", CHECKER.validate(root))
+        self.assertIn(
+            "manual backend deploy must keep release_sha optional for traffic-only repair", CHECKER.validate(root)
+        )
 
         root = self.fixture_root()
         self.mutate(root, CHECKER.MANUAL_WORKFLOW_PATH, "        required: false", "        required: true")
-        self.assertIn("manual backend deploy must keep release_sha optional for traffic-only repair", CHECKER.validate(root))
+        self.assertIn(
+            "manual backend deploy must keep release_sha optional for traffic-only repair", CHECKER.validate(root)
+        )
 
         root = self.fixture_root()
         self.mutate(
@@ -604,7 +631,12 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("traffic-only repair must use exactly the main-ref recovery condition", CHECKER.validate(root))
 
         root = self.fixture_root()
-        self.mutate(root, CHECKER.MANUAL_WORKFLOW_PATH, "          ref: main", "          ref: ${{ github.event.inputs.release_sha }}")
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            "          ref: main",
+            "          ref: ${{ github.event.inputs.release_sha }}",
+        )
         self.assertIn("traffic-only repair must not require a release-source admission", CHECKER.validate(root))
 
 

@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 MAIN_BRANCH = "main"
 RELEASE_WORKFLOW_NAME = "Release Eligibility"
 RELEASE_WORKFLOW_PATH = ".github/workflows/release-eligibility.yml"
@@ -41,7 +40,7 @@ def _is_release_workflow_path(value: object) -> bool:
     return value in {RELEASE_WORKFLOW_PATH, f"{RELEASE_WORKFLOW_PATH}@{MAIN_BRANCH}"}
 
 
-def is_admitted_run(run: object, *, sha: str, repository: str) -> bool:
+def is_admitted_run(run: object, *, sha: str, repository: str, require_first_attempt: bool = False) -> bool:
     """Return whether one REST workflow-run record proves the requested SHA."""
 
     if not isinstance(run, dict):
@@ -52,13 +51,14 @@ def is_admitted_run(run: object, *, sha: str, repository: str) -> bool:
         and run.get("event") == "push"
         and run.get("status") == "completed"
         and run.get("conclusion") == "success"
+        and (not require_first_attempt or run.get("run_attempt") == 1)
         and run.get("head_branch") == MAIN_BRANCH
         and run.get("head_sha") == sha
         and _head_repository_name(run) == repository
     )
 
 
-def validate_admission(payload: object, *, sha: str, repository: str) -> None:
+def validate_admission(payload: object, *, sha: str, repository: str, require_first_attempt: bool = False) -> None:
     """Require an exact successful main proof from the canonical workflow."""
 
     require_full_sha(sha)
@@ -69,7 +69,10 @@ def validate_admission(payload: object, *, sha: str, repository: str) -> None:
     runs = payload.get("workflow_runs")
     if not isinstance(runs, list):
         raise ReleaseAdmissionError("workflow-run response is missing workflow_runs")
-    if not any(is_admitted_run(run, sha=sha, repository=repository) for run in runs):
+    if not any(
+        is_admitted_run(run, sha=sha, repository=repository, require_first_attempt=require_first_attempt)
+        for run in runs
+    ):
         raise ReleaseAdmissionError(
             "release SHA has no successful main Release Eligibility workflow run from this repository"
         )
@@ -80,6 +83,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sha", required=True)
     parser.add_argument("--repository", required=True)
     parser.add_argument("--workflow-runs", type=Path, required=True)
+    parser.add_argument("--require-first-attempt", action="store_true")
     return parser.parse_args()
 
 
@@ -87,7 +91,12 @@ def main() -> int:
     args = parse_args()
     try:
         payload = json.loads(args.workflow_runs.read_text(encoding="utf-8"))
-        validate_admission(payload, sha=args.sha, repository=args.repository)
+        validate_admission(
+            payload,
+            sha=args.sha,
+            repository=args.repository,
+            require_first_attempt=args.require_first_attempt,
+        )
     except (OSError, json.JSONDecodeError, ReleaseAdmissionError) as exc:
         print(f"backend release admission failed: {exc}", file=sys.stderr)
         return 1
