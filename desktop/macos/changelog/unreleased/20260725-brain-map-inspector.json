@@ -1,0 +1,3 @@
+{
+  "change": "Selecting an entity in Brain Map now opens a side inspector with its connections and source memories instead of jumping to Memories, and opening a memory uses the same side panel rather than a popup"
+}

@@ -316,11 +316,7 @@ enum ViewExporter {
         "full-memories", 3,
         {
           AnyView(
-            MemoriesPage(
-              viewModel: previewMemoriesViewModel(),
-              graphViewModel: MemoryGraphViewModel(),
-              onOpenAtlas: {}
-            )
+            MemoriesPage(viewModel: previewMemoriesViewModel())
           )
         }
       ),

@@ -1621,8 +1621,6 @@ class MemoriesViewModel: ObservableObject {
 
 struct MemoriesPage: View {
   @ObservedObject var viewModel: MemoriesViewModel
-  let graphViewModel: MemoryGraphViewModel
-  let onOpenAtlas: () -> Void
   @State private var showCategoryFilter = false
   @State private var categorySearchText = ""
   @State private var pendingSelectedTags: Set<MemoryTag> = []
@@ -1643,7 +1641,7 @@ struct MemoriesPage: View {
     }
   }
 
-  private var mainMemoriesView: some View {
+  private var memoriesColumn: some View {
     VStack(spacing: 0) {
       // Header (includes search, filters, and action buttons)
       header
@@ -1661,6 +1659,41 @@ struct MemoriesPage: View {
         memoryList
       }
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  private func memoryDetailPanel(_ memory: ServerMemory) -> some View {
+    MemoryDetailSheet(
+      memory: memory,
+      viewModel: viewModel,
+      categoryIcon: categoryIcon,
+      categoryColor: categoryColor,
+      tagColorFor: tagColorFor,
+      formatDate: formatDate,
+      onDismiss: { viewModel.selectedMemory = nil }
+    )
+    .frame(width: 360)
+    .frame(maxHeight: .infinity)
+    .background(OmiColors.backgroundSecondary)
+    .overlay(alignment: .leading) {
+      Rectangle().fill(OmiColors.border.opacity(0.25)).frame(width: 1)
+    }
+    .accessibilityIdentifier("memory_detail_panel")
+  }
+
+  private var mainMemoriesView: some View {
+    // A memory opens into a side panel, not a modal. The Brain Map's inspector
+    // works the same way, so reading one thing never covers the list you were
+    // reading it from, and the two Memory surfaces behave identically.
+    HStack(spacing: 0) {
+      memoriesColumn
+
+      if let memory = viewModel.selectedMemory {
+        memoryDetailPanel(memory)
+          .transition(.move(edge: .trailing).combined(with: .opacity))
+      }
+    }
+    .animation(OmiMotion.gated(.easeOut(duration: 0.18)), value: viewModel.selectedMemory?.id)
     .background(Color.clear)
     .dismissableSheet(isPresented: $viewModel.showingAddMemory) {
       AddMemorySheet(viewModel: viewModel, onDismiss: { viewModel.showingAddMemory = false })
@@ -1671,18 +1704,6 @@ struct MemoriesPage: View {
         memory: memory, viewModel: viewModel, onDismiss: { viewModel.editingMemory = nil }
       )
       .frame(width: 400)
-    }
-    .dismissableSheet(item: $viewModel.selectedMemory) { memory in
-      MemoryDetailSheet(
-        memory: memory,
-        viewModel: viewModel,
-        categoryIcon: categoryIcon,
-        categoryColor: categoryColor,
-        tagColorFor: tagColorFor,
-        formatDate: formatDate,
-        onDismiss: { viewModel.selectedMemory = nil }
-      )
-      .frame(width: 450, height: 600)
     }
     .overlay(alignment: .bottom) {
       undoDeleteToast
@@ -2234,20 +2255,11 @@ struct MemoriesPage: View {
   private var memoryList: some View {
     ScrollView {
       LazyVStack(alignment: .leading, spacing: OmiSpacing.md) {
-        // Brain Map now lives in its own hub tab (beside Memories/Conversations),
-        // so the legacy graph is no longer embedded at the top of the memory
-        // list. The rollout-gated Canonical Atlas is a distinct successor
-        // surface still worth surfacing here as its own entry point.
-        if MemoryGraphPresentationMode.resolve(
-          canonicalLifecycleExposed: viewModel.canonicalLifecycleExposed,
-          forceCanonicalAtlasForLocalQA: MemoryGraphPresentationMode.localQAOverrideEnabled
-        ) == .canonicalAtlas {
-          CanonicalMemoryAtlasInlineCard(
-            viewModel: graphViewModel,
-            onOpenAtlas: onOpenAtlas
-          )
-        }
-
+        // Brain Map lives in its own hub tab (beside Memories/Conversations)
+        // and nowhere else. Both the legacy graph and the canonical atlas were
+        // previously embedded at the top of the memory list too; a second entry
+        // point to the same surface only competed with the memories the page
+        // exists to show.
         LazyVStack(spacing: OmiSpacing.sm) {
           ForEach(viewModel.filteredMemories) { memory in
             MemoryCardView(

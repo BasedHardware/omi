@@ -1109,78 +1109,208 @@ enum MemoryAtlasLayoutEngine {
   }
 }
 
-// MARK: - Canonical Atlas Containers
+// MARK: - Node Inspector
 
-struct CanonicalMemoryAtlasInlineCard: View {
-  @ObservedObject var viewModel: MemoryGraphViewModel
-  let onOpenAtlas: () -> Void
+/// One memory backing a selected entity, flattened so the atlas surface does
+/// not depend on the memories layer. The panel renders these directly instead
+/// of navigating away, which is what makes the Brain Map a place you can stay
+/// in while reading what an entity is made of.
+struct MemoryAtlasEvidence: Identifiable, Equatable {
+  let id: String
+  let content: String
+  let createdAt: Date?
 
-  var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack(spacing: 10) {
-        VStack(alignment: .leading, spacing: 2) {
-          Text("Memory atlas")
-            .scaledFont(size: 15, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
-          Text("Explore the people, organizations, places, things, and concepts in your memories")
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textTertiary)
-        }
-
-        Spacer()
-
-        Button(action: onOpenAtlas) {
-          Label("Open atlas", systemImage: "arrow.right")
-            .scaledFont(size: 12, weight: .medium)
-            .foregroundColor(OmiColors.textSecondary)
-            .padding(.horizontal, 12)
-            .frame(height: 32)
-            .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 12)
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("memory_atlas_expand")
-      }
-
-      Button(action: onOpenAtlas) {
-        atlasPreview
-          .frame(height: 320)
-          .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-      }
-      .buttonStyle(.plain)
-      .accessibilityIdentifier("memory_atlas_preview")
-      .help("Open memory atlas")
-    }
-    .padding(16)
-    .omiPanel(
-      fill: OmiColors.backgroundSecondary,
-      radius: 24,
-      stroke: OmiColors.border.opacity(0.14),
-      shadowOpacity: 0.14,
-      shadowRadius: 12,
-      shadowY: 8
-    )
-    .task { await viewModel.prepareCanonicalAtlas() }
-  }
-
-  @ViewBuilder
-  private var atlasPreview: some View {
-    if viewModel.isLoading && viewModel.graphResponse.nodes.isEmpty {
-      ZStack {
-        OmiColors.backgroundPrimary
-        ProgressView().tint(OmiColors.textTertiary)
-      }
-    } else if viewModel.graphResponse.nodes.isEmpty {
-      MemoryAtlasEmptyState()
-    } else {
-      CanonicalMemoryAtlasPreview(graph: viewModel.graphResponse)
+  /// Resolves cited memory ids against whatever the memories layer has loaded,
+  /// preserving that order so the inspector reads newest-first like the list.
+  /// Ids with no loaded memory are simply absent — the panel reports the gap
+  /// rather than the surface pretending the entity has less evidence than it
+  /// does.
+  static func resolve(_ ids: [String], in memories: [ServerMemory]) -> [MemoryAtlasEvidence] {
+    let wanted = Set(ids)
+    guard !wanted.isEmpty else { return [] }
+    return memories.filter { wanted.contains($0.id) }.map {
+      MemoryAtlasEvidence(id: $0.id, content: $0.content, createdAt: $0.createdAt)
     }
   }
 }
 
+/// Right-hand inspector for the selected entity.
+///
+/// Replaces the "View evidence" jump to Memories: selecting a node used to
+/// change pages, which lost the camera, the time cursor, and the selection.
+struct MemoryAtlasDetailPanel: View {
+  let title: String
+  let typeName: String?
+  let accent: Color
+  let connectionSummary: String
+  let relationships: [MemoryAtlasRelationshipRow]
+  let evidence: [MemoryAtlasEvidence]
+  let unresolvedEvidenceCount: Int
+  let onFocus: () -> Void
+  let onClose: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      header
+
+      Divider().overlay(OmiColors.border.opacity(0.2))
+
+      ScrollView {
+        VStack(alignment: .leading, spacing: 18) {
+          if !relationships.isEmpty {
+            section("Connections") {
+              ForEach(relationships) { row in
+                relationshipRow(row)
+              }
+            }
+          }
+
+          section("From your memories") {
+            if evidence.isEmpty && unresolvedEvidenceCount == 0 {
+              Text("Source memories are still being linked for this entity.")
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.textQuaternary)
+                .fixedSize(horizontal: false, vertical: true)
+            } else {
+              ForEach(evidence) { item in
+                evidenceRow(item)
+              }
+              if unresolvedEvidenceCount > 0 {
+                // Memories page in, so an entity can cite one that has not been
+                // fetched yet. Saying so beats silently showing a short list.
+                Text(
+                  "\(unresolvedEvidenceCount) more memory\(unresolvedEvidenceCount == 1 ? "" : " entries") not loaded yet"
+                )
+                .scaledFont(size: 10)
+                .foregroundColor(OmiColors.textQuaternary)
+              }
+            }
+          }
+        }
+        .padding(16)
+      }
+    }
+    .frame(width: 320)
+    .background(OmiColors.backgroundSecondary)
+    .overlay(alignment: .leading) {
+      Rectangle().fill(OmiColors.border.opacity(0.25)).frame(width: 1)
+    }
+    .accessibilityIdentifier("memory_atlas_detail_panel")
+  }
+
+  private var header: some View {
+    HStack(alignment: .top, spacing: 10) {
+      Circle()
+        .fill(accent.opacity(0.14))
+        .overlay(Circle().stroke(accent, lineWidth: 1.5))
+        .frame(width: 30, height: 30)
+
+      VStack(alignment: .leading, spacing: 3) {
+        Text(title)
+          .scaledFont(size: 15, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+          .fixedSize(horizontal: false, vertical: true)
+        Text([typeName, connectionSummary].compactMap { $0 }.joined(separator: " · "))
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+      }
+
+      Spacer(minLength: 4)
+
+      Button(action: onFocus) {
+        Image(systemName: "scope")
+          .scaledFont(size: 11, weight: .medium)
+          .foregroundColor(OmiColors.textSecondary)
+          .frame(width: 24, height: 24)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .help("Center the map on this entity")
+      .accessibilityIdentifier("memory_atlas_focus_selection")
+
+      Button(action: onClose) {
+        Image(systemName: "xmark")
+          .scaledFont(size: 10, weight: .semibold)
+          .foregroundColor(OmiColors.textTertiary)
+          .frame(width: 24, height: 24)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .help("Clear selection (Esc)")
+      .accessibilityIdentifier("memory_atlas_clear_selection")
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 14)
+  }
+
+  @ViewBuilder
+  private func section<Content: View>(
+    _ title: String,
+    @ViewBuilder content: () -> Content
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text(title.uppercased())
+        .scaledFont(size: 9.5, weight: .semibold)
+        .foregroundColor(OmiColors.textQuaternary)
+        .tracking(0.6)
+      content()
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private func relationshipRow(_ row: MemoryAtlasRelationshipRow) -> some View {
+    HStack(alignment: .top, spacing: 8) {
+      Circle()
+        .fill(row.accent)
+        .frame(width: 5, height: 5)
+        .padding(.top, 5)
+      VStack(alignment: .leading, spacing: 1) {
+        Text(row.otherLabel)
+          .scaledFont(size: 12, weight: .medium)
+          .foregroundColor(OmiColors.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
+        Text(row.relationship)
+          .scaledFont(size: 10)
+          .foregroundColor(OmiColors.textQuaternary)
+      }
+      Spacer(minLength: 0)
+    }
+  }
+
+  private func evidenceRow(_ item: MemoryAtlasEvidence) -> some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Text(item.content)
+        .scaledFont(size: 11.5)
+        .foregroundColor(OmiColors.textSecondary)
+        .fixedSize(horizontal: false, vertical: true)
+      if let createdAt = item.createdAt {
+        Text(createdAt.formatted(date: .abbreviated, time: .shortened))
+          .scaledFont(size: 9.5)
+          .foregroundColor(OmiColors.textQuaternary)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(10)
+    .background(
+      RoundedRectangle(cornerRadius: 10, style: .continuous)
+        .fill(OmiColors.backgroundRaised.opacity(0.6))
+    )
+  }
+}
+
+struct MemoryAtlasRelationshipRow: Identifiable, Equatable {
+  let id: String
+  let otherLabel: String
+  let relationship: String
+  let accent: Color
+}
+
+// MARK: - Canonical Atlas Containers
+
 struct CanonicalMemoryAtlasPage: View {
   @ObservedObject var viewModel: MemoryGraphViewModel
   let onBack: () -> Void
-  let onViewEvidence: ([String]) -> Void
+  let evidenceProvider: ([String]) -> [MemoryAtlasEvidence]
 
   var body: some View {
     VStack(spacing: 0) {
@@ -1196,7 +1326,11 @@ struct CanonicalMemoryAtlasPage: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("memory_atlas_back_to_memories")
 
-        Text("Memory atlas")
+        // "Brain Map" everywhere the user can see it: the atlas replaces the
+        // legacy graph on the destination that already had that name, so
+        // introducing a second name for the same place only splits the domain
+        // vocabulary. "Atlas" survives in type and symbol names only.
+        Text("Brain Map")
           .scaledFont(size: 17, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
 
@@ -1215,7 +1349,7 @@ struct CanonicalMemoryAtlasPage: View {
       CanonicalMemoryAtlasSurface(
         graph: viewModel.graphResponse,
         compact: false,
-        onViewEvidence: onViewEvidence,
+        evidenceProvider: evidenceProvider,
         onRebuild: { Task { await viewModel.rebuildGraph() } },
         isRebuilding: viewModel.isRebuilding
       )
@@ -1240,13 +1374,13 @@ struct CanonicalMemoryAtlasPage: View {
 /// for users still on the legacy graph.
 struct CanonicalMemoryAtlasTabView: View {
   @ObservedObject var viewModel: MemoryGraphViewModel
-  let onViewEvidence: ([String]) -> Void
+  let evidenceProvider: ([String]) -> [MemoryAtlasEvidence]
 
   var body: some View {
     CanonicalMemoryAtlasSurface(
       graph: viewModel.graphResponse,
       compact: false,
-      onViewEvidence: onViewEvidence,
+      evidenceProvider: evidenceProvider,
       onRebuild: { Task { await viewModel.rebuildGraph() } },
       isRebuilding: viewModel.isRebuilding
     )
@@ -1261,163 +1395,15 @@ struct CanonicalMemoryAtlasTabView: View {
   }
 }
 
-/// The Memories page deliberately uses this bounded Canvas-only preview rather
-/// than embedding a second interactive atlas. It gives the page a fast visual
-/// cue while reserving gesture, search, and hit-testing work for the full page.
-private struct CanonicalMemoryAtlasPreview: View {
-  private let snapshot: MemoryAtlasSnapshot
-
-  init(graph: KnowledgeGraphResponse) {
-    let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
-    snapshot = MemoryAtlasLayoutEngine.makeSnapshot(
-      graph: graph,
-      userName: givenName.isEmpty ? nil : givenName
-    )
-  }
-
-  var body: some View {
-    GeometryReader { proxy in
-      let plan = MemoryAtlasRenderPlanner.makePreviewPlan(snapshot: snapshot)
-      ZStack {
-        OmiColors.backgroundPrimary
-        Canvas(opaque: false, colorMode: .linear) { context, _ in
-          drawContours(context: &context, size: proxy.size)
-          drawEdges(context: &context, size: proxy.size, plan: plan)
-          drawNodes(context: &context, size: proxy.size, plan: plan)
-        }
-
-        ForEach(snapshot.activeClusters) { cluster in
-          Text(cluster.title)
-            .scaledFont(size: 10, weight: .medium)
-            .foregroundColor(cluster.color.opacity(0.82))
-            .position(point(for: previewTitlePosition(for: cluster), in: proxy.size))
-        }
-
-        Label("Open full atlas", systemImage: "arrow.right")
-          .scaledFont(size: 11, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
-          .padding(.horizontal, 10)
-          .padding(.vertical, 7)
-          .omiControlSurface(fill: OmiColors.backgroundRaised.opacity(0.92), radius: 10)
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-          .padding(12)
-      }
-      .clipped()
-    }
-    .accessibilityHidden(true)
-  }
-
-  private func drawContours(context: inout GraphicsContext, size: CGSize) {
-    let diameter = min(size.width * 0.22, size.height * 0.36)
-    for cluster in snapshot.activeClusters {
-      let center = point(for: snapshot.center(for: cluster), in: size)
-      for inset in 0..<2 {
-        let amount = CGFloat(inset) * 8
-        let rect = CGRect(
-          x: center.x - diameter / 2 + amount,
-          y: center.y - diameter / 2 + amount,
-          width: diameter - amount * 2,
-          height: diameter - amount * 2
-        )
-        context.stroke(
-          Path(ellipseIn: rect),
-          with: .color(cluster.color.opacity(0.07 - Double(inset) * 0.02)),
-          lineWidth: 1
-        )
-      }
-    }
-  }
-
-  private func drawEdges(
-    context: inout GraphicsContext,
-    size: CGSize,
-    plan: MemoryAtlasRenderPlan
-  ) {
-    for cluster in snapshot.activeClusters {
-      var path = Path()
-      for edge in plan.visibleEdges where edge.cluster == cluster {
-        path.move(to: point(for: edge.source, in: size))
-        path.addLine(to: point(for: edge.target, in: size))
-      }
-      guard !path.isEmpty else { continue }
-      context.stroke(path, with: .color(cluster.color.opacity(0.18)), lineWidth: 0.75)
-    }
-  }
-
-  private func drawNodes(
-    context: inout GraphicsContext,
-    size: CGSize,
-    plan: MemoryAtlasRenderPlan
-  ) {
-    for cluster in snapshot.activeClusters {
-      var path = Path()
-      for placement in plan.visibleNodes where placement.cluster == cluster {
-        let radius: CGFloat = placement.clusterRank == 0 ? 4 : 1.8
-        let center = point(for: placement.normalizedPosition, in: size)
-        path.addEllipse(
-          in: CGRect(
-            x: center.x - radius,
-            y: center.y - radius,
-            width: radius * 2,
-            height: radius * 2
-          ))
-      }
-      guard !path.isEmpty else { continue }
-      context.fill(path, with: .color(cluster.color.opacity(0.8)))
-    }
-
-    if let anchorNodeID = snapshot.anchorNodeID,
-      let anchor = plan.visibleNodes.first(where: { $0.id == anchorNodeID })
-    {
-      let center = point(for: anchor.normalizedPosition, in: size)
-      context.fill(
-        Path(ellipseIn: CGRect(x: center.x - 6, y: center.y - 6, width: 12, height: 12)),
-        with: .color(OmiColors.textPrimary.opacity(0.9))
-      )
-    }
-  }
-
-  private func point(for normalized: CGPoint, in size: CGSize) -> CGPoint {
-    CGPoint(x: normalized.x * size.width, y: normalized.y * size.height)
-  }
-
-  private func previewTitlePosition(for cluster: MemoryAtlasCluster) -> CGPoint {
-    let center = snapshot.center(for: cluster)
-    let deltaX = center.x - MemoryAtlasCluster.starCenter.x
-    let deltaY = center.y - MemoryAtlasCluster.starCenter.y
-    let distance = max(hypot(deltaX, deltaY), 0.001)
-    return CGPoint(
-      x: min(max(center.x + deltaX / distance * 0.13, 0.08), 0.92),
-      y: min(max(center.y + deltaY / distance * 0.13, 0.1), 0.88)
-    )
-  }
-}
-
-private struct MemoryAtlasEmptyState: View {
-  var body: some View {
-    ZStack {
-      OmiColors.backgroundPrimary
-      VStack(spacing: 8) {
-        Image(systemName: "point.3.connected.trianglepath.dotted")
-          .scaledFont(size: 22)
-          .foregroundColor(OmiColors.textTertiary)
-        Text("Your memory atlas is taking shape")
-          .scaledFont(size: 14, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
-        Text("Connected entities will appear as long-term memories grow.")
-          .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textTertiary)
-      }
-    }
-  }
-}
-
 // MARK: - Interactive Atlas Surface
 
 private struct CanonicalMemoryAtlasSurface: View {
   let graph: KnowledgeGraphResponse
   let compact: Bool
-  let onViewEvidence: ([String]) -> Void
+  /// Resolves the memory ids an entity cites into readable evidence for the
+  /// inspector. The surface stays independent of the memories layer; callers
+  /// that have no memories to offer (offscreen exports) return nothing.
+  let evidenceProvider: ([String]) -> [MemoryAtlasEvidence]
   /// Regenerating the server-side graph. Absent on surfaces that have no
   /// view model to drive it (the inline preview, offscreen export renders).
   let onRebuild: (() -> Void)?
@@ -1456,14 +1442,14 @@ private struct CanonicalMemoryAtlasSurface: View {
   init(
     graph: KnowledgeGraphResponse,
     compact: Bool,
-    onViewEvidence: @escaping ([String]) -> Void,
+    evidenceProvider: @escaping ([String]) -> [MemoryAtlasEvidence] = { _ in [] },
     onRebuild: (() -> Void)? = nil,
     isRebuilding: Bool = false,
     previewTimeCursor: Double? = nil
   ) {
     self.graph = graph
     self.compact = compact
-    self.onViewEvidence = onViewEvidence
+    self.evidenceProvider = evidenceProvider
     self.onRebuild = onRebuild
     self.isRebuilding = isRebuilding
     self.previewTimeCursor = previewTimeCursor
@@ -1543,6 +1529,21 @@ private struct CanonicalMemoryAtlasSurface: View {
   }
 
   var body: some View {
+    // The inspector is a sibling of the whole map, not an overlay on it: the
+    // canvas keeps its full height and the map simply narrows, so opening an
+    // entity never hides the part of the map you were looking at.
+    HStack(spacing: 0) {
+      mapColumn
+
+      if !compact, let selectedNode {
+        detailPanel(for: selectedNode)
+          .transition(.move(edge: .trailing).combined(with: .opacity))
+      }
+    }
+    .animation(OmiMotion.gated(.easeOut(duration: 0.18)), value: selectedNodeID)
+  }
+
+  private var mapColumn: some View {
     VStack(spacing: 0) {
       atlasToolbar
 
@@ -1598,7 +1599,9 @@ private struct CanonicalMemoryAtlasSurface: View {
             .padding(.bottom, selectedNode == nil ? 0 : (compact ? 50 : 56))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
 
-          if let selectedNode {
+          // Compact surfaces have no room for a side panel, so they keep the
+          // strip. Wide surfaces use the inspector instead.
+          if compact, let selectedNode {
             selectionStrip(for: selectedNode)
               .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
           }
@@ -1748,8 +1751,8 @@ private struct CanonicalMemoryAtlasSurface: View {
         }
         .buttonStyle(.plain)
         .disabled(isRebuilding)
-        .help(isRebuilding ? "Rebuilding your atlas…" : "Rebuild the atlas from your memories")
-        .accessibilityLabel("Rebuild atlas")
+        .help(isRebuilding ? "Rebuilding your Brain Map…" : "Rebuild the Brain Map from your memories")
+        .accessibilityLabel("Rebuild Brain Map")
         .accessibilityIdentifier("memory_atlas_rebuild")
       }
     }
@@ -2116,6 +2119,35 @@ private struct CanonicalMemoryAtlasSurface: View {
     .accessibilityValue(placement.node.nodeType.rawValue)
   }
 
+  private func detailPanel(for placement: MemoryAtlasNodePlacement) -> some View {
+    let accent = placement.cluster?.color ?? OmiColors.textPrimary
+    let edges = selectedEdges
+    let evidenceIds = Array(Set(edges.flatMap(\.edge.memoryIds)))
+    let evidence = evidenceProvider(evidenceIds)
+    let relationships: [MemoryAtlasRelationshipRow] = edges.compactMap { edge in
+      let otherID = edge.edge.sourceId == placement.id ? edge.edge.targetId : edge.edge.sourceId
+      guard let other = snapshot.nodeByID[otherID] else { return nil }
+      return MemoryAtlasRelationshipRow(
+        id: edge.id,
+        otherLabel: other.node.label,
+        relationship: MemoryAtlasLayoutEngine.relationshipDisplayName(edge.edge.label),
+        accent: other.cluster?.color ?? OmiColors.textTertiary
+      )
+    }
+
+    return MemoryAtlasDetailPanel(
+      title: placement.node.label,
+      typeName: placement.cluster?.title,
+      accent: accent,
+      connectionSummary: "\(placement.degree) connection\(placement.degree == 1 ? "" : "s")",
+      relationships: relationships,
+      evidence: evidence,
+      unresolvedEvidenceCount: max(0, evidenceIds.count - evidence.count),
+      onFocus: { focus(on: placement) },
+      onClose: { selectedNodeID = nil }
+    )
+  }
+
   private func selectionStrip(for placement: MemoryAtlasNodePlacement) -> some View {
     let primaryEdge = selectedEdges.first
     let sourceNode = primaryEdge.flatMap { snapshot.nodeByID[$0.edge.sourceId] }
@@ -2159,21 +2191,15 @@ private struct CanonicalMemoryAtlasSurface: View {
         .accessibilityIdentifier("memory_atlas_focus_selection")
       }
 
-      if evidenceIds.isEmpty {
-        Text("Source details are still being linked")
-          .scaledFont(size: 10)
-          .foregroundColor(OmiColors.textQuaternary)
-      } else {
-        Button {
-          onViewEvidence(evidenceIds)
-        } label: {
-          Label("View evidence", systemImage: "arrow.right")
-            .scaledFont(size: 11, weight: .medium)
-            .foregroundColor(placement.cluster?.color ?? OmiColors.textSecondary)
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("memory_atlas_view_evidence")
-      }
+      // Compact surfaces cannot fit the inspector, so the strip reports the
+      // evidence count rather than offering a jump that would leave the map.
+      Text(
+        evidenceIds.isEmpty
+          ? "Source details are still being linked"
+          : "\(evidenceIds.count) source memor\(evidenceIds.count == 1 ? "y" : "ies")"
+      )
+      .scaledFont(size: 10)
+      .foregroundColor(OmiColors.textQuaternary)
 
       Button {
         selectedNodeID = nil
@@ -2370,7 +2396,7 @@ private struct CanonicalMemoryAtlasSurface: View {
   }
 
   private var asOfLabel: String {
-    guard let asOf = asOfDate else { return "Now — the whole atlas" }
+    guard let asOf = asOfDate else { return "Now — the whole map" }
     let formatter = DateFormatter()
     formatter.dateStyle = .medium
     formatter.timeStyle = .none
@@ -2482,7 +2508,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       }
       .help("Return to overview")
       .accessibilityIdentifier("memory_atlas_reset_viewport")
-      .accessibilityLabel("Reset atlas viewport")
+      .accessibilityLabel("Reset Brain Map viewport")
       .accessibilityValue("\(Int(zoom * 100)) percent")
       Button {
         zoomIn()
@@ -2490,7 +2516,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         Image(systemName: "plus").frame(width: 28, height: 28)
       }
       .disabled(zoom >= maximumZoom)
-      .help(compact ? "Open the atlas for deeper exploration" : "Zoom in (accelerates for large atlases)")
+      .help(compact ? "Open the Brain Map for deeper exploration" : "Zoom in (accelerates for large maps)")
       .accessibilityIdentifier("memory_atlas_zoom_in")
       .accessibilityLabel("Zoom in")
     }
@@ -2872,7 +2898,7 @@ enum MemoryAtlasExportPreview {
       CanonicalMemoryAtlasSurface(
         graph: sampleGraph(),
         compact: false,
-        onViewEvidence: { _ in },
+        evidenceProvider: { _ in [] },
         previewTimeCursor: timeCursor
       )
     )
@@ -2947,7 +2973,7 @@ enum MemoryAtlasExportPreview {
       CanonicalMemoryAtlasSurface(
         graph: singleTypeGraph(),
         compact: false,
-        onViewEvidence: { _ in },
+        evidenceProvider: { _ in [] },
         onRebuild: {},
         previewTimeCursor: timeCursor
       )

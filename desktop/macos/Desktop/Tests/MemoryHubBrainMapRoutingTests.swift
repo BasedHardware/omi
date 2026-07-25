@@ -78,6 +78,70 @@ final class MemoryHubBrainMapRoutingTests: XCTestCase {
     )
   }
 
+  func testEvidenceResolvesOnlyLoadedMemoriesAndPreservesListOrder() {
+    let memories = [
+      makeMemory(id: "m3", content: "third"),
+      makeMemory(id: "m1", content: "first"),
+      makeMemory(id: "m2", content: "second"),
+    ]
+
+    // "m9" is cited by the graph but not in the loaded page. It must be absent
+    // rather than fabricated, so the panel can report the gap.
+    let resolved = MemoryAtlasEvidence.resolve(["m1", "m9", "m3"], in: memories)
+
+    XCTAssertEqual(resolved.map(\.id), ["m3", "m1"])
+    XCTAssertEqual(resolved.map(\.content), ["third", "first"])
+    XCTAssertTrue(MemoryAtlasEvidence.resolve([], in: memories).isEmpty)
+  }
+
+  func testStaticCheckerBrainMapReadsEvidenceInPlaceInsteadOfSwitchingDestination() throws {
+    // STATIC CHECKER. Selecting an entity used to switch the hub to Memories,
+    // discarding the camera, the time cursor, and the selection. The inspector
+    // reads the same evidence without leaving the map, so no destination write
+    // may survive on the Brain Map's evidence path.
+    let source = try desktopHomeViewSource()
+    let atlasCall =
+      source.components(separatedBy: "CanonicalMemoryAtlasTabView(").last ?? ""
+    let atlasBlock = String(atlasCall.prefix(600))
+
+    XCTAssertTrue(atlasBlock.contains("evidenceProvider:"))
+    XCTAssertFalse(
+      atlasBlock.contains("destinationRawValue = MemoryHubDestination.memories.rawValue"),
+      "Reading evidence must not navigate away from the Brain Map")
+    XCTAssertFalse(
+      atlasBlock.contains("memoriesViewModel.selectedMemory ="),
+      "Reading evidence must not reach into the Memories page's selection")
+  }
+
+  private func makeMemory(id: String, content: String) -> ServerMemory {
+    ServerMemory(
+      id: id,
+      content: content,
+      category: .system,
+      tier: .shortTerm,
+      createdAt: Date(timeIntervalSince1970: 1),
+      updatedAt: Date(timeIntervalSince1970: 2),
+      conversationId: nil,
+      reviewed: false,
+      userReview: nil,
+      visibility: "private",
+      manuallyAdded: false,
+      scoring: nil,
+      source: "desktop",
+      confidence: nil,
+      sourceApp: nil,
+      contextSummary: nil,
+      isRead: false,
+      isDismissed: false,
+      tags: [],
+      reasoning: nil,
+      currentActivity: nil,
+      inputDeviceName: nil,
+      windowTitle: nil,
+      headline: nil
+    )
+  }
+
   private func desktopHomeViewSource() throws -> String {
     let testsDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
     let packageDirectory = testsDirectory.deletingLastPathComponent()

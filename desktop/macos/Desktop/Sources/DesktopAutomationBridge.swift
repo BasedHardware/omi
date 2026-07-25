@@ -3072,6 +3072,31 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "memory_graph_rebuild",
+      summary:
+        "Regenerate the server-side knowledge graph from the signed-in account's memories",
+      params: []
+    ) { _ in
+      // Mutating and not undoable: the backend deletes the stored graph before
+      // the background rebuild runs, so a caller that loses the race sees an
+      // empty graph. Exposed for cursor-free QA of the Brain Map's own rebuild
+      // control, which is otherwise only reachable by clicking.
+      do {
+        let response = try await APIClient.shared.rebuildKnowledgeGraph()
+        return [
+          "status": response.status,
+          "nodes_count": "\(response.nodesCount ?? 0)",
+          "edges_count": "\(response.edgesCount ?? 0)",
+        ]
+      } catch {
+        return [
+          "has_error": "true",
+          "error_message": error.localizedDescription,
+        ]
+      }
+    }
+
+    register(
       name: "memory_graph_snapshot",
       summary: "Return knowledge graph node/edge counts (no SceneKit rendering)",
       params: []

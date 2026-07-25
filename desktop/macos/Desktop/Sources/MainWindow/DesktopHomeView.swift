@@ -1345,17 +1345,7 @@ private struct MemoryHubPage: View {
     switch destination {
     case .memories:
       adaptiveContent(
-        MemoriesPage(
-          viewModel: viewModelContainer.memoriesViewModel,
-          graphViewModel: viewModelContainer.memoryGraphViewModel,
-          onOpenAtlas: {
-            // The Hub's Memories destination has no local atlas presentation
-            // state of its own; route through the same request the automation
-            // bridge uses so DesktopHomeView opens the full atlas page.
-            NotificationCenter.default.post(
-              name: .desktopAutomationOpenMemoryAtlasRequested, object: nil)
-          }
-        ),
+        MemoriesPage(viewModel: viewModelContainer.memoriesViewModel),
         conversationID: viewModelContainer.memoriesViewModel.linkedConversation?.id
       )
     case .conversations:
@@ -1378,14 +1368,11 @@ private struct MemoryHubPage: View {
     case .canonicalAtlas:
       CanonicalMemoryAtlasTabView(
         viewModel: viewModelContainer.memoryGraphViewModel,
-        onViewEvidence: { memoryIds in
-          // Evidence lives on the Memories destination, so route there and
-          // open the referenced memory once the switch has committed.
-          destinationRawValue = MemoryHubDestination.memories.rawValue
-          DispatchQueue.main.async {
-            memoriesViewModel.selectedMemory =
-              memoriesViewModel.memories.first { memoryIds.contains($0.id) }
-          }
+        // Evidence is read in place in the Brain Map's own inspector. The
+        // earlier behavior switched the hub to Memories, which threw away the
+        // camera, the time cursor, and the selection just to read one memory.
+        evidenceProvider: { memoryIds in
+          MemoryAtlasEvidence.resolve(memoryIds, in: memoriesViewModel.memories)
         }
       )
     case .legacyBrainMap:
@@ -1400,7 +1387,8 @@ private struct MemoryHubPage: View {
     let usesAvailableWidth = MemoryHubLayoutPolicy.usesAvailableWidth(
       conversationID: conversationID,
       presentedConversationID: conversationDetailState.openConversationId,
-      transcriptDrawerOpen: conversationDetailState.transcriptDrawerOpen
+      transcriptDrawerOpen: conversationDetailState.transcriptDrawerOpen,
+      memoryDetailOpen: memoriesViewModel.selectedMemory != nil
     )
 
     return
@@ -1492,20 +1480,22 @@ private struct PageContentView: View {
           CanonicalMemoryAtlasPage(
             viewModel: viewModelContainer.memoryGraphViewModel,
             onBack: { isShowingMemoryAtlasPage = false },
-            onViewEvidence: { memoryIds in
-              isShowingMemoryAtlasPage = false
-              DispatchQueue.main.async {
-                viewModelContainer.memoriesViewModel.selectedMemory =
-                  viewModelContainer.memoriesViewModel.memories.first { memoryIds.contains($0.id) }
-              }
+            evidenceProvider: { memoryIds in
+              MemoryAtlasEvidence.resolve(
+                memoryIds, in: viewModelContainer.memoriesViewModel.memories)
             }
           )
         } else {
-          constrainedListPage(
-            MemoriesPage(
-              viewModel: viewModelContainer.memoriesViewModel,
-              graphViewModel: viewModelContainer.memoryGraphViewModel,
-              onOpenAtlas: { isShowingMemoryAtlasPage = true }))
+          // Same rule as the hub's Memories destination: the readable-width
+          // cap yields while the detail panel is open so the panel takes new
+          // space instead of eating the list's column.
+          MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
+            .frame(
+              maxWidth: viewModelContainer.memoriesViewModel.selectedMemory == nil
+                ? MemoryHubLayoutPolicy.readableContentWidth : .infinity,
+              maxHeight: .infinity
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
       case 4:
         constrainedListPage(
