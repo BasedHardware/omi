@@ -549,6 +549,43 @@ private func testSubscribeThenSameTargetReadRechecksNotificationState() {
     queue.isSessionActive, "safe read rejection must not tear down an otherwise healthy session")
 }
 
+private func testNotificationTransitionCoalescesLatestDesiredState() {
+  let state = BleGattNotificationTransitionState(confirmed: false)
+
+  expect(state.request(true) == true, "initial enable should start immediately")
+  expect(state.request(false) == nil, "disable should wait behind the active enable")
+  expect(state.request(true) == nil, "latest enable should replace the queued disable intent")
+  expect(
+    state.complete(attempted: true, success: true) == nil,
+    "completed enable should not launch the superseded disable")
+  expect(state.currentInFlight == nil, "coalesced final state should have no transition in flight")
+  expect(state.request(true) == nil, "confirmed final state should not generate a redundant write")
+}
+
+private func testNotificationTransitionRunsOppositeLatestState() {
+  let state = BleGattNotificationTransitionState(confirmed: false)
+
+  expect(state.request(true) == true, "initial enable should start immediately")
+  expect(state.request(false) == nil, "disable should wait for the active enable callback")
+  expect(
+    state.complete(attempted: true, success: true) == false,
+    "latest opposite state should start after the active transition")
+  expect(state.currentInFlight == false, "follow-up disable should be marked in flight")
+  expect(
+    state.complete(attempted: false, success: true) == nil,
+    "confirmed latest state should finish without another transition")
+}
+
+private func testFailedNotificationTransitionWaitsForSessionRecovery() {
+  let state = BleGattNotificationTransitionState(confirmed: false)
+
+  expect(state.request(true) == true, "initial enable should start immediately")
+  expect(
+    state.complete(attempted: true, success: false) == nil,
+    "failed transition must not retry on the compromised session")
+  expect(state.currentInFlight == nil, "failed transition must release its in-flight marker")
+}
+
 private func testReconnectBackoffIsBounded() {
   expect(BleReconnectBackoff.delay(forAttempt: 0) == 0.5, "first reconnect should be prompt")
   expect(BleReconnectBackoff.delay(forAttempt: 1) == 1, "repeated failure should back off")
@@ -598,6 +635,9 @@ private enum BleGattOperationSchedulerTests {
     testLateEnableCallbackCannotCompleteActiveDisable()
     testNotificationFailureFencesDependentCommands()
     testSubscribeThenSameTargetReadRechecksNotificationState()
+    testNotificationTransitionCoalescesLatestDesiredState()
+    testNotificationTransitionRunsOppositeLatestState()
+    testFailedNotificationTransitionWaitsForSessionRecovery()
     testReconnectBackoffIsBounded()
     testReconnectBackoffResetsOnlyAfterDeviceReady()
     print("BleGattOperationSchedulerTests: PASS")

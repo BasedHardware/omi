@@ -25,6 +25,14 @@ final class OmiBleManager: NSObject {
   /// One serialized CoreBluetooth operation queue per peripheral.
   private var operationSchedulers: [String: BleGattOperationScheduler] = [:]
 
+  private struct NotificationTransitionKey: Hashable {
+    let peripheralUuid: String
+    let target: BleGattTarget
+  }
+
+  /// Latest requested CCCD state per characteristic in the active connection session.
+  private var notificationTransitions: [NotificationTransitionKey: BleGattNotificationTransitionState] = [:]
+
   private struct CharacteristicContext {
     let peripheralUuid: String
     let sessionId: UInt64
@@ -533,6 +541,7 @@ final class OmiBleManager: NSObject {
     let scheduler = operationScheduler(for: uuid)
     scheduler.beginSession()
     characteristicContexts = characteristicContexts.filter { $0.value.peripheralUuid != uuid }
+    notificationTransitions = notificationTransitions.filter { $0.key.peripheralUuid != uuid }
     pendingWritesWithoutResponse.removeValue(forKey: uuid)
   }
 
@@ -573,18 +582,33 @@ final class OmiBleManager: NSObject {
       return
     }
 
+    let key = NotificationTransitionKey(peripheralUuid: peripheralUuid, target: context.target)
+    let transitionState =
+      notificationTransitions[key]
+      ?? BleGattNotificationTransitionState(confirmed: characteristic.isNotifying)
+    notificationTransitions[key] = transitionState
+    guard let transition = transitionState.request(enabled) else { return }
+
+    startNotificationTransition(
+      transition,
+      key: key,
+      peripheral: peripheral,
+      characteristic: characteristic,
+      context: context
+    )
+  }
+
+  private func startNotificationTransition(
+    _ enabled: Bool,
+    key: NotificationTransitionKey,
+    peripheral: CBPeripheral,
+    characteristic: CBCharacteristic,
+    context: CharacteristicContext
+  ) {
+    let peripheralUuid = key.peripheralUuid
+    let characteristicUuid = context.target.characteristicUuid
     let scheduler = operationScheduler(for: peripheralUuid)
     let requestedKind = BleGattOperationKind.setNotifications(enabled)
-    if scheduler.contains(kind: requestedKind, target: context.target) {
-      return
-    }
-    let oppositeChangeIsQueued = scheduler.contains(
-      kind: .setNotifications(!enabled),
-      target: context.target
-    )
-    if characteristic.isNotifying == enabled, !oppositeChangeIsQueued {
-      return
-    }
 
     scheduler.enqueue(
       kind: requestedKind,
@@ -599,13 +623,40 @@ final class OmiBleManager: NSObject {
         }
         peripheral.setNotifyValue(enabled, for: characteristic)
       },
-      completion: { result in
-        if case .failure(let error) = result {
+      completion: { [weak self, weak peripheral] result in
+        guard let self else { return }
+        let success: Bool
+        switch result {
+        case .success:
+          success = true
+        case .failure(let error):
+          success = false
           NSLog(
             "[OmiBle] Failed to set notification state for \(characteristicUuid): "
               + error.localizedDescription
           )
         }
+
+        guard
+          let next = self.notificationTransitions[key]?.complete(
+            attempted: enabled,
+            success: success
+          ),
+          let peripheral,
+          peripheral.state == .connected,
+          self.characteristicContexts[ObjectIdentifier(characteristic)]?.sessionId
+            == context.sessionId
+        else {
+          return
+        }
+
+        self.startNotificationTransition(
+          next,
+          key: key,
+          peripheral: peripheral,
+          characteristic: characteristic,
+          context: context
+        )
       }
     )
   }
@@ -871,6 +922,9 @@ final class OmiBleManager: NSObject {
     }
     discoveredServices.removeValue(forKey: peripheralUuid)
     pendingWritesWithoutResponse.removeValue(forKey: peripheralUuid)
+    notificationTransitions = notificationTransitions.filter {
+      $0.key.peripheralUuid != peripheralUuid
+    }
     characteristicContexts = characteristicContexts.filter {
       $0.value.peripheralUuid != peripheralUuid
     }
