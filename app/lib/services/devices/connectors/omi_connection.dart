@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -19,6 +20,8 @@ class OmiDeviceConnection extends DeviceConnection {
   static const String settingsDimRatioCharacteristicUuid = '19b10011-e8f2-537e-4f6c-d104768a1214';
   static const String settingsMicGainCharacteristicUuid = '19b10012-e8f2-537e-4f6c-d104768a1214';
   static const String settingsChargingStatusCharacteristicUuid = '19b10013-e8f2-537e-4f6c-d104768a1214';
+  static const String settingsSleepCommandCharacteristicUuid = '19b10014-e8f2-537e-4f6c-d104768a1214';
+  static const String settingsDeviceNameCharacteristicUuid = '19b10016-e8f2-537e-4f6c-d104768a1214';
   static const String featuresServiceUuid = '19b10020-e8f2-537e-4f6c-d104768a1214';
   static const String featuresCharacteristicUuid = '19b10021-e8f2-537e-4f6c-d104768a1214';
 
@@ -906,6 +909,38 @@ class OmiDeviceConnection extends DeviceConnection {
       });
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error setting up charging status listener: $e');
+      return null;
+    }
+  }
+
+  Future<bool> sleepDevice() async {
+    try {
+      await transport.writeCharacteristic(settingsServiceUuid, settingsSleepCommandCharacteristicUuid, [1]);
+      return true;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error sending sleep command: $e');
+      return false;
+    }
+  }
+
+  Future<bool> setDeviceName(String name) async {
+    final value = utf8.encode(name.trim());
+    if (value.isEmpty || value.length > 25 || value.contains(0)) return false;
+    try {
+      await transport.writeCharacteristic(settingsServiceUuid, settingsDeviceNameCharacteristicUuid, value);
+      return true;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error setting device name: $e');
+      return false;
+    }
+  }
+
+  Future<String?> readDeviceName() async {
+    try {
+      final value = await transport.readCharacteristic(settingsServiceUuid, settingsDeviceNameCharacteristicUuid);
+      return value.isEmpty ? null : utf8.decode(value);
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error reading device name: $e');
       return null;
     }
   }

@@ -13,13 +13,12 @@
 #include <zephyr/sys/poweroff.h>
 
 #include "haptic.h"
+#include "imu.h"
 #include "led.h"
 #include "mic.h"
 #include "speaker.h"
 #include "transport.h"
 #include "wdog_facade.h"
-
-#include "imu.h"
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 #include "sd_card.h"
 #endif
@@ -103,6 +102,7 @@ static inline void notify_press()
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL) {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+        bt_conn_unref(conn);
     }
 }
 
@@ -113,6 +113,7 @@ static inline void notify_unpress()
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL) {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+        bt_conn_unref(conn);
     }
 }
 
@@ -123,6 +124,7 @@ static inline void notify_tap()
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL) {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+        bt_conn_unref(conn);
     }
 }
 
@@ -133,6 +135,7 @@ static inline void notify_double_tap()
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL) {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+        bt_conn_unref(conn);
     }
 }
 
@@ -143,6 +146,7 @@ static inline void notify_long_tap()
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL) {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+        bt_conn_unref(conn);
     }
 }
 
@@ -420,7 +424,6 @@ void turnoff_all()
         return;
     }
 
-    
     /* Persist an IMU timestamp base so we can estimate time across system_off. */
     lsm6dsl_time_prepare_for_system_off();
     k_msleep(1000);

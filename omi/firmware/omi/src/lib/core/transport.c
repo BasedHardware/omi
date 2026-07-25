@@ -54,7 +54,8 @@ extern bool is_capturing;
 #endif
 static atomic_t pusher_stop_flag;
 
-struct bt_conn *current_connection = NULL;
+static struct bt_conn *current_connection = NULL;
+static struct k_spinlock current_connection_lock;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
 
@@ -182,6 +183,27 @@ static struct bt_uuid_128 settings_mic_gain_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10012, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 settings_charging_status_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10013, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+#if defined(CONFIG_OMI_ENABLE_BLE_SLEEP_CMD) || defined(CONFIG_OMI_ENABLE_CAPTURE_LED)
+static int validate_single_write(uint16_t len, uint16_t offset, uint8_t flags)
+{
+    if (offset != 0) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+    }
+    if ((flags & BT_GATT_WRITE_FLAG_PREPARE) != 0) {
+        return BT_GATT_ERR(BT_ATT_ERR_NOT_SUPPORTED);
+    }
+    if (len != 1) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+    return 0;
+}
+#endif
+
+#ifdef CONFIG_OMI_ENABLE_DEVICE_NAME_RW
+static int update_advertising_name(const char *name, size_t len);
+#endif
+
 #ifdef CONFIG_OMI_ENABLE_BLE_SLEEP_CMD
 static struct bt_uuid_128 settings_sleep_cmd_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10014, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
@@ -203,19 +225,20 @@ static ssize_t settings_sleep_cmd_write_handler(struct bt_conn *conn,
                                                 uint16_t offset,
                                                 uint8_t flags)
 {
-    if (len != 1) {
+    int err = validate_single_write(len, offset, flags);
+    if (err) {
         LOG_WRN("Invalid length for sleep command write: %u", len);
-        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+        return err;
     }
 
     uint8_t cmd = ((uint8_t *) buf)[0];
-    if (cmd == OMI_SLEEP_CMD_MAGIC) {
-        LOG_INF("Sleep command received; powering off");
-        k_work_submit(&sleep_cmd_work);
-    } else {
+    if (cmd != OMI_SLEEP_CMD_MAGIC) {
         LOG_WRN("Ignoring sleep command with unexpected value: %u", cmd);
+        return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
     }
 
+    LOG_INF("Sleep command received; powering off");
+    k_work_submit(&sleep_cmd_work);
     return len;
 }
 #endif
@@ -231,12 +254,18 @@ static ssize_t settings_capture_state_write_handler(struct bt_conn *conn,
                                                     uint16_t offset,
                                                     uint8_t flags)
 {
-    if (len != 1) {
+    int err = validate_single_write(len, offset, flags);
+    if (err) {
         LOG_WRN("Invalid length for capture state write: %u", len);
-        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+        return err;
     }
 
-    is_capturing = ((uint8_t *) buf)[0] != 0;
+    uint8_t value = ((uint8_t *) buf)[0];
+    if (value > 1) {
+        return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
+    }
+
+    is_capturing = value != 0;
     LOG_INF("Capture state set to %u", is_capturing);
     return len;
 }
@@ -263,14 +292,23 @@ static ssize_t settings_device_name_write_handler(struct bt_conn *conn,
                                                   uint16_t offset,
                                                   uint8_t flags)
 {
-    if (len == 0 || len > CONFIG_BT_DEVICE_NAME_MAX) {
+    if (offset != 0) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+    }
+    if ((flags & BT_GATT_WRITE_FLAG_PREPARE) != 0) {
+        return BT_GATT_ERR(BT_ATT_ERR_NOT_SUPPORTED);
+    }
+    if (len == 0 || len > CONFIG_BT_DEVICE_NAME_MAX || len > 25 || memchr(buf, '\0', len) != NULL) {
         LOG_WRN("Invalid length for device name write: %u", len);
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
     }
 
     char new_name[CONFIG_BT_DEVICE_NAME_MAX + 1];
+    char old_name[CONFIG_BT_DEVICE_NAME_MAX + 1];
     memcpy(new_name, buf, len);
     new_name[len] = '\0';
+    strncpy(old_name, bt_get_name(), CONFIG_BT_DEVICE_NAME_MAX);
+    old_name[CONFIG_BT_DEVICE_NAME_MAX] = '\0';
 
     int err = bt_set_name(new_name);
     if (err) {
@@ -278,7 +316,18 @@ static ssize_t settings_device_name_write_handler(struct bt_conn *conn,
         return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
     }
 
-    (void) app_settings_save_device_name(new_name, len);
+    err = update_advertising_name(new_name, len);
+    if (err) {
+        (void) bt_set_name(old_name);
+        return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+    }
+
+    err = app_settings_save_device_name(new_name, len);
+    if (err) {
+        (void) update_advertising_name(old_name, strlen(old_name));
+        (void) bt_set_name(old_name);
+        return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+    }
     LOG_INF("Device name set to: %s", new_name);
     return len;
 }
@@ -434,13 +483,19 @@ static struct bt_gatt_service time_sync_service = BT_GATT_SERVICE(time_sync_serv
 static const struct bt_data bt_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
     BT_DATA(BT_DATA_UUID128_ALL, audio_service_uuid.val, sizeof(audio_service_uuid.val)),
-    BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
 };
 
 // Scan response data
-static const struct bt_data bt_sd[] = {
-    BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_DIS_VAL)),
-};
+#ifdef CONFIG_OMI_ENABLE_DEVICE_NAME_RW
+static int update_advertising_name(const char *name, size_t len)
+{
+    struct bt_data sd[] = {
+        BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_DIS_VAL)),
+        BT_DATA(BT_DATA_NAME_COMPLETE, name, len),
+    };
+    return bt_le_adv_update_data(bt_ad, ARRAY_SIZE(bt_ad), sd, ARRAY_SIZE(sd));
+}
+#endif
 
 //
 // State and Characteristics
@@ -469,8 +524,10 @@ static void charging_status_ccc_config_changed_handler(const struct bt_gatt_attr
 
     if (value == BT_GATT_CCC_NOTIFY) {
         LOG_INF("Client subscribed for charging status notifications");
-        if (current_connection != NULL) {
-            (void) notify_charging_status(current_connection, true);
+        struct bt_conn *conn = get_current_connection();
+        if (conn != NULL) {
+            (void) notify_charging_status(conn, true);
+            bt_conn_unref(conn);
         }
     } else if (value == 0) {
         LOG_INF("Client unsubscribed from charging status notifications");
@@ -629,6 +686,12 @@ features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, voi
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     features |= OMI_FEATURE_OFFLINE_STORAGE;
 #endif
+#ifdef CONFIG_OMI_ENABLE_BLE_SLEEP_CMD
+    features |= OMI_FEATURE_SLEEP_COMMAND;
+#endif
+#ifdef CONFIG_OMI_ENABLE_DEVICE_NAME_RW
+    features |= OMI_FEATURE_DEVICE_NAME;
+#endif
     // LED dimming is always enabled now with PWM.
     features |= OMI_FEATURE_LED_DIMMING;
     // Mic gain control is always enabled.
@@ -695,22 +758,22 @@ void broadcast_battery_level(struct k_work *work_item)
 {
     (void) work_item;
     uint16_t battery_millivolt;
-    uint32_t next_refresh_interval = (is_connected && current_connection != NULL)
-                                         ? BATTERY_REFRESH_INTERVAL_CONNECTED
-                                         : BATTERY_REFRESH_INTERVAL_DISCONNECTED;
+    struct bt_conn *conn = get_current_connection();
+    uint32_t next_refresh_interval =
+        (is_connected && conn != NULL) ? BATTERY_REFRESH_INTERVAL_CONNECTED : BATTERY_REFRESH_INTERVAL_DISCONNECTED;
 
     if (battery_get_millivolt(&battery_millivolt) == 0 &&
         battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
         LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
-        if (is_connected && current_connection != NULL) {
+        if (is_connected && conn != NULL) {
             /* Report battery even during an SD sync. It's 1 byte at most every few
              * seconds and AUDIO_TX_RESERVED_SLOTS keeps TX buffers free for
              * non-audio notifications, so it can't starve the sync/audio stream.
              * The old storage_transfer_active() early-return meant the app never
              * got a battery update for the whole (often long) duration of a sync. */
-            (void) notify_charging_status(current_connection, false);
+            (void) notify_charging_status(conn, false);
 
             // Use the Zephyr BAS function to set (and notify) the battery level
             int err = bt_bas_set_battery_level(battery_percentage);
@@ -726,6 +789,9 @@ void broadcast_battery_level(struct k_work *work_item)
         LOG_ERR("Failed to read battery level");
     }
 
+    if (conn != NULL) {
+        bt_conn_unref(conn);
+    }
     k_work_reschedule(&battery_work, K_MSEC(next_refresh_interval));
 }
 #endif
@@ -744,12 +810,17 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     err = bt_conn_get_info(conn, &info);
     if (err) {
         LOG_ERR("Failed to get connection info (err %d)", err);
-        bt_conn_unref(conn);
         return;
     }
 
     LOG_INF("bluetooth activated");
+    k_spinlock_key_t key = k_spin_lock(&current_connection_lock);
+    struct bt_conn *old_connection = current_connection;
     current_connection = bt_conn_ref(conn);
+    k_spin_unlock(&current_connection_lock, key);
+    if (old_connection != NULL) {
+        bt_conn_unref(old_connection);
+    }
     uint16_t mtu = bt_gatt_get_mtu(conn);
     current_mtu = mtu;
 
@@ -772,18 +843,18 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     mtu_recheck_attempts = 0;
 
     // Request aggressive connection params for higher BLE sync throughput.
-    update_conn_params(current_connection);
+    update_conn_params(conn);
 
     // Delay a bit before PHY request to avoid early HCI race on some phones.
     k_sleep(K_MSEC(300));
 
     // Initiate PHY, Data Length, and MTU updates
-    update_phy(current_connection);
+    update_phy(conn);
 
     // Add a delay before data length and MTU updates as per Nordic example
     k_sleep(K_MSEC(1000));
-    update_data_length(current_connection);
-    update_mtu(current_connection);
+    update_data_length(conn);
+    update_mtu(conn);
     schedule_mtu_recheck();
 
     is_connected = true;
@@ -834,9 +905,14 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 
     LOG_INF("Transport disconnected");
 
-    if (current_connection != NULL) {
-        bt_conn_unref(current_connection);
+    k_spinlock_key_t key = k_spin_lock(&current_connection_lock);
+    struct bt_conn *old_connection = current_connection == conn ? current_connection : NULL;
+    if (old_connection != NULL) {
         current_connection = NULL;
+    }
+    k_spin_unlock(&current_connection_lock, key);
+    if (old_connection != NULL) {
+        bt_conn_unref(old_connection);
     }
     current_mtu = 0;
     charging_status_last_notified = -1;
@@ -1004,7 +1080,7 @@ static void mtu_recheck_work_handler(struct k_work *work)
 {
     ARG_UNUSED(work);
 
-    struct bt_conn *conn = current_connection;
+    struct bt_conn *conn = get_current_connection();
     if (!conn) {
         mtu_recheck_attempts = 0;
         return;
@@ -1015,6 +1091,7 @@ static void mtu_recheck_work_handler(struct k_work *work)
     if (mtu > 23) {
         LOG_INF("MTU recheck success: negotiated MTU is now %u (payload %u)", mtu, mtu - 3);
         mtu_recheck_attempts = 0;
+        bt_conn_unref(conn);
         return;
     }
 
@@ -1025,6 +1102,7 @@ static void mtu_recheck_work_handler(struct k_work *work)
     if (mtu_recheck_attempts < MTU_RECHECK_MAX_ATTEMPTS) {
         schedule_mtu_recheck();
     }
+    bt_conn_unref(conn);
 }
 
 static void update_mtu(struct bt_conn *conn)
@@ -1329,10 +1407,7 @@ void test_pusher(void)
     uint32_t runs_count = 0;
     while (1) {
         k_sleep(K_MSEC(1));
-        struct bt_conn *conn = current_connection;
-        if (conn) {
-            conn = bt_conn_ref(conn);
-        }
+        struct bt_conn *conn = get_current_connection();
         bool valid = true;
         if (current_mtu < MINIMAL_PACKET_SIZE) {
             valid = false;
@@ -1366,10 +1441,9 @@ void pusher(void)
         }
 
         while (read_from_tx_queue()) {
-            struct bt_conn *conn = current_connection;
+            struct bt_conn *conn = get_current_connection();
             bool is_subscribed = false;
             if (conn) {
-                conn = bt_conn_ref(conn);
                 if (current_mtu >= MINIMAL_PACKET_SIZE) {
                     is_subscribed = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
                 }
@@ -1411,10 +1485,13 @@ int transport_off()
     }
 
     // First disconnect any active connections
-    if (current_connection != NULL) {
-        bt_conn_disconnect(current_connection, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
-        bt_conn_unref(current_connection);
-        current_connection = NULL;
+    k_spinlock_key_t key = k_spin_lock(&current_connection_lock);
+    struct bt_conn *conn = current_connection;
+    current_connection = NULL;
+    k_spin_unlock(&current_connection_lock, key);
+    if (conn != NULL) {
+        bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+        bt_conn_unref(conn);
     }
 
     // Stop advertising
@@ -1516,7 +1593,7 @@ int transport_start()
         LOG_INF("Accelerometer failed to activate\n");
     } else {
         LOG_INF("Accelerometer initialized");
-        register_accel_service(current_connection);
+        register_accel_service(NULL);
     }
 #endif
     //  Enable button
@@ -1555,6 +1632,11 @@ int transport_start()
     memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
     bt_gatt_service_register(&storage_service);
 #endif
+    const char *device_name = bt_get_name();
+    struct bt_data bt_sd[] = {
+        BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_DIS_VAL)),
+        BT_DATA(BT_DATA_NAME_COMPLETE, device_name, strlen(device_name)),
+    };
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err) {
         LOG_ERR("Transport advertising failed to start (err %d), continuing without BLE", err);
@@ -1606,16 +1688,21 @@ int transport_start()
 
 struct bt_conn *get_current_connection()
 {
-    return current_connection;
+    k_spinlock_key_t key = k_spin_lock(&current_connection_lock);
+    struct bt_conn *conn = current_connection == NULL ? NULL : bt_conn_ref(current_connection);
+    k_spin_unlock(&current_connection_lock, key);
+    return conn;
 }
 
 bool transport_is_audio_subscribed(void)
 {
-    struct bt_conn *conn = current_connection;
+    struct bt_conn *conn = get_current_connection();
     if (conn == NULL) {
         return false;
     }
-    return bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
+    bool subscribed = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
+    bt_conn_unref(conn);
+    return subscribed;
 }
 
 int broadcast_audio_packets(uint8_t *buffer, size_t size)
