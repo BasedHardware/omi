@@ -71,6 +71,15 @@ struct bt_conn *get_current_connection(void);
 bool transport_storage_snapshot_ready(void);
 
 /**
+ * Prefer a fixed 15 ms interval while adjacent durable ring ranges are being
+ * drained. The request is best-effort; rejected updates never fail the sync.
+ * Normal 15-30 ms parameters are restored after an idle grace period, or
+ * immediately when the client explicitly stops.
+ */
+void transport_bulk_sync_begin(void);
+void transport_bulk_sync_end(bool immediate);
+
+/**
  * @brief Acquire / release a shared BLE TX-throttle slot.
  *
  * The audio pusher and the storage-sync path both take a slot before each bulk

@@ -413,6 +413,7 @@ static int send_ring_info_response(struct bt_conn *conn)
 
 static void reset_transfer_state(void)
 {
+    bool had_active_transfer = transfer_active;
     transfer_active = false;
     read_begin_sent = false;
     done_pending = false;
@@ -421,6 +422,10 @@ static void reset_transfer_state(void)
     remaining_packets = 0;
     transfer_end_status = 0;
     transfer_data_crc = 0U;
+
+    if (had_active_transfer) {
+        transport_bulk_sync_end(false);
+    }
 }
 
 void storage_stop_transfer(void)
@@ -441,6 +446,7 @@ static bool consume_stop_request(void)
 
     stop_requested = 0;
     storage_stop_transfer();
+    transport_bulk_sync_end(true);
     return true;
 }
 
@@ -474,6 +480,7 @@ static int start_pending_read(struct bt_conn *conn)
     transfer_end_status = 0;
     transfer_data_crc = 0U;
     sync_speed_reset(SYNC_SPEED_MODE_NONE);
+    transport_bulk_sync_begin();
 
     return 0;
 }
