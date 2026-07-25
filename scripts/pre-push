@@ -306,6 +306,10 @@ require_flutter_generated_prerequisites() {
   if [ ! -f app/.dart_tool/package_config.json ]; then
     echo "FAIL: Flutter generated-output checks need resolved app dependencies." >&2
     echo "      Run: cd app && flutter pub get" >&2
+    # make setup provisions the backend venv only, so a contributor who never
+    # touches app/ can reach this with no Flutter toolchain at all -- and the
+    # selector wakes this lane for any ROUTING_INPUTS edit. CI still runs it.
+    echo "      Deliberate hatch: PRE_PUSH_SKIP_FLUTTER_GENERATED=1 git push" >&2
     return 1
   fi
 }
@@ -664,6 +668,7 @@ check_workflows_if_needed() {
     actionlint_cmd=(go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12)
   else
     echo "FAIL: actionlint or go is required to validate changed workflow files." >&2
+    echo "      Deliberate hatch: PRE_PUSH_SKIP_ACTIONLINT=1 git push" >&2
     return 1
   fi
 
