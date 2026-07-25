@@ -2,8 +2,8 @@
 
 - Original Memory-page source: `/var/folders/kb/_t49s35n2zzff8_7f3jjfktr0000gn/T/codex-clipboard-d55c273c-4c96-42fe-81fb-41e172a79ea1.png`
 - Latest top-navigation source: `/var/folders/kb/_t49s35n2zzff8_7f3jjfktr0000gn/T/codex-clipboard-6ce35eac-e3f0-4c81-b8dc-f3d426ee22f6.png`
-- Implementation capture: `/tmp/omi-top-nav-unified.png`
-- Combined reference and implementation input: `/tmp/omi-top-nav-comparison.png`
+- Implementation capture: `/tmp/omi-top-nav-unified-final.png`
+- Combined reference and implementation input: `/tmp/omi-top-nav-comparison-final.png`
 - Viewport: maximized signed-in `omi-qa-main` macOS window in dark appearance.
 
 **Findings**
@@ -22,7 +22,7 @@
 - Initial issue: the Memory list and Conversations surface were unnecessarily wide, and Memory navigation used an oversized picker-like menu.
 - Iteration: replaced native picker chrome with an Omi-style hover stack, made Memory directly clickable, and removed the disclosure icon.
 - Final polish: tightened the three Memory pills, made unselected rows transparent, and unified the complete top nav under equal metrics and interaction styling.
-- Evidence: `/tmp/omi-top-nav-comparison.png`, the running `/Applications/omi-qa-main.app`, and `MemoryGraphRevisitTests` (9 passing).
+- Evidence: `/tmp/omi-top-nav-comparison-final.png`, the running `/Applications/omi-qa-main.app`, and `MemoryGraphRevisitTests` (9 passing).
 
 **Implementation Checklist**
 
