@@ -128,7 +128,8 @@ test("each emulator config has explicit, isolated API and websocket ports", asyn
 });
 
 for (const [label, trigger, expectedCode, timeoutMs] of [
-  ["timeout", undefined, 124, 100],
+  // Startup may be slow on macOS CI; the deadline must leave time for the owned fixture to become observable.
+  ["timeout", undefined, 124, 1_000],
   // Give the parent enough time to install its signal handlers; a 100ms
   // deadline races the test's readiness observation and can legitimately
   // report the timeout exit instead of exercising SIGTERM cleanup.
