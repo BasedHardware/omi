@@ -35,10 +35,15 @@ versus after the first non-empty chunk are separate bounded phases. Provider com
 client received the terminal chunk.
 
 `llm_gateway_requests_total` and `llm_gateway_request_latency_seconds` include bounded `api_surface`, `streaming`,
-`phase`, and `credential_source` labels. `llm_gateway_stream_ttfb_seconds` measures time to the first non-empty
-chunk. Request IDs are opaque UUIDs emitted only in response headers and structured logs, never as Prometheus
-labels. Pre-route contract failures use `llm_gateway_request_rejections_total{api_surface,error_class}`; service
-authentication failures use `llm_gateway_auth_rejections_total{reason}`.
+`phase`, `credential_source`, and `provider_rejection` labels. The provider-rejection label is parsed from only an
+allowlisted set of upstream error codes and parameter roots; unknown values collapse to `other_4xx`, and provider
+messages, request values, and raw bodies never become labels or terminal-log fields. Provider 4xx responses that
+describe unsupported parameters remain `capability_mismatch`; invalid requests such as
+`context_length_exceeded` use the separate, non-fallback `provider_invalid_request` failure class.
+`llm_gateway_stream_ttfb_seconds` measures time to the first non-empty chunk. Request IDs are opaque UUIDs emitted
+only in response headers and structured logs, never as Prometheus labels. Pre-route contract failures use
+`llm_gateway_request_rejections_total{api_surface,error_class}`; service authentication failures use
+`llm_gateway_auth_rejections_total{reason}`.
 
 ## Usage accounting ledger
 

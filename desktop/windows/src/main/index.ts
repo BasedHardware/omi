@@ -411,6 +411,20 @@ if (gotSingleInstanceLock) initSentry()
 // rewrites the live instance's flag. The clean-exit write is in will-quit below.
 if (gotSingleInstanceLock) initCrashSentinel()
 
+// Linux: default to XWayland (x11 ozone). On a native Wayland session Electron
+// cannot register global shortcuts (push-to-talk / overlay summon) and the X11
+// active-window path is blind, so XWayland gives the fullest experience. Set
+// OMI_OZONE=wayland to run natively (accepting those limitations). Also enable
+// the PipeWire capturer (portal screen share) and PulseAudio monitor-source
+// loopback for system-audio capture when pipewire-pulse/Pulse is present.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('ozone-platform', process.env.OMI_OZONE || 'x11')
+  app.commandLine.appendSwitch(
+    'enable-features',
+    'WebRTCPipeWireCapturer,PulseaudioLoopbackForScreenShare'
+  )
+}
+
 const icon = nativeImage.createFromPath(iconPath)
 import {
   remapConversationId,

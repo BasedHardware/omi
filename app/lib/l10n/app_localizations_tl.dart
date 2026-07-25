@@ -1799,20 +1799,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get lovingOmi => 'Gusto mo ba ang Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Tumulong sa amin na maabot ang mas maraming tao sa pamamagitan ng pag-iwan ng review sa App Store. Ang iyong feedback ay napakahalagang para sa amin!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Tumulong sa amin na maabot ang mas maraming tao sa pamamagitan ng pag-iwan ng review sa Google Play Store. Ang iyong feedback ay napakahalagang para sa amin!';
-
-  @override
-  String get rateOnAppStore => 'Mag-rate sa App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Mag-rate sa Google Play';
-
-  @override
   String get maybeLater => 'Siguro mamaya';
 
   @override
@@ -2152,6 +2138,18 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ I-edit ang Alaala';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Gusto ko na kumain ng ice cream...';

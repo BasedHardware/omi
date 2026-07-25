@@ -285,7 +285,7 @@ const EXPLICIT_PRIVATE_CONTEXT = [
   "my screen history", "my screen activity", "my calendar", "your calendar",
   "my email", "your email", "my files", "your files", "my tasks", "your tasks",
   "my action items", "my notes", "your notes", "what did i say", "what have i said",
-  "when did i", "what was i doing", "what do you remember about me",
+  "what did i do", "when did i", "what was i doing", "what do you remember about me",
 ];
 
 const PUBLIC_WEB_ACCESS_DENIAL = /\b(?:I\s+)?(?:do\s+not|don't|cannot|can't|can not)\s+(?:(?:have\s+)?(?:direct\s+)?(?:access\s+to\s+)?(?:the\s+)?(?:internet|web(?:[ -]?search)?|browser|real[- ]time(?:\s+\w+){0,2}(?:\s+data)?)(?:\s+(?:or|and)\s+(?:the\s+)?(?:internet|web(?:[ -]?search)?|browser|real[- ]time(?:\s+\w+){0,2}(?:\s+data)?))*|(?:have\s+)?(?:direct\s+)?(?:internet|web(?:[ -]?search)?|browser)\s+access|(?:browse|search)\s+(?:the\s+)?(?:web|internet))/i;

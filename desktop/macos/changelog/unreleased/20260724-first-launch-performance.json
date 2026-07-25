@@ -1,0 +1,3 @@
+{
+  "change": "Reduced first-launch disruption by removing system-wide icon cache maintenance"
+}

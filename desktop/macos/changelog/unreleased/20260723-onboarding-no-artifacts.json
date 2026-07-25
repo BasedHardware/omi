@@ -1,0 +1,3 @@
+{
+  "change": "Onboarding no longer leaves artifacts in your real data: the screen-demo conversation stays isolated instead of appearing in the Chat tab, and the \"Run omi for two days\" placeholder task is no longer added to your Tasks"
+}

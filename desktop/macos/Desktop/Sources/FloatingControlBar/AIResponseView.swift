@@ -180,7 +180,7 @@ struct AIResponseView: View {
       ForEach(grouped) { group in
         switch group {
         case .text(_, let text):
-          SelectableMarkdown(text: text, sender: .ai)
+          OmiMarkdown(text: text, sender: .ai)
             .textSelection(.enabled)
             .environment(\.colorScheme, .dark)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -226,7 +226,7 @@ struct AIResponseView: View {
         }
       }
     } else if !message.text.isEmpty {
-      SelectableMarkdown(text: message.text, sender: .ai)
+      OmiMarkdown(text: message.text, sender: .ai)
         .textSelection(.enabled)
         .environment(\.colorScheme, .dark)
         .frame(maxWidth: .infinity, alignment: .leading)

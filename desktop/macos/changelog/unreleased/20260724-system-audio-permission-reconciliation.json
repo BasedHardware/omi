@@ -1,0 +1,3 @@
+{
+  "change": "Fixed system audio permission being requested again after setup"
+}

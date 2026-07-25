@@ -71,8 +71,34 @@ CATEGORY_TO_FOLDER_MAPPING: Dict[str, str] = {
     'weather': 'social',
     'environment': 'social',
     'real': 'social',
-    'other': 'personal',
+    # 'other' is intentionally omitted: it is the catch-all category and routes to the
+    # user's default folder, not a category bucket (handled in resolve_category_folder_id, #4043).
 }
+
+
+def resolve_category_folder_id(category: Optional[str], user_folders: List[dict]) -> Optional[str]:
+    """Folder id of the system folder that owns a conversation's category.
+
+    Every meaningful conversation category folds onto one of the three system buckets via
+    ``CATEGORY_TO_FOLDER_MAPPING``; this returns the user's folder for that bucket so AI
+    folder assignment can fall back to the category-aligned folder instead of the
+    catch-all default when the model is unsure (issue #4043). Returns None for the
+    catch-all ``other`` category (so genuinely uncertain conversations stay in the default
+    folder rather than Personal), when the category is unknown, or when the user has no
+    folder for that bucket (e.g. they deleted a system folder).
+    """
+    # 'other' is the catch-all category, not a meaningful topic. Treat it like a missing
+    # category so an uncertain conversation falls back to the user's default folder rather
+    # than the Personal bucket 'other' would otherwise fold onto (issue #4043).
+    if not category or str(category).lower() == 'other':
+        return None
+    bucket = CATEGORY_TO_FOLDER_MAPPING.get(str(category).lower())
+    if not bucket:
+        return None
+    for folder in user_folders or []:
+        if folder.get('category_mapping') == bucket:
+            return folder.get('id')
+    return None
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:

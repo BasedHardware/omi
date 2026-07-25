@@ -24,6 +24,8 @@ import {
   inheritContextSnapshotForSession,
   kernelSystemPolicy,
   renderContextSnapshot,
+  renderContextSnapshotForBinding,
+  type ContextDeliveryCursor,
 } from "./context-snapshot.js";
 import { repairPersistedAgentSpawnJournals } from "./agent-spawn-journal.js";
 import {
@@ -172,6 +174,7 @@ export class KernelCore {
   protected readonly subscribers = new Set<KernelEventSubscriber>();
   protected readonly activeExecutions = new Map<string, ActiveExecution>();
   protected readonly bindingResolutionLocks = new Map<string, Promise<void>>();
+  protected readonly contextDeliveryByBinding = new Map<string, ContextDeliveryCursor>();
   protected readonly toolCapabilities: RunToolCapabilityBroker;
   private transactionDepth = 0;
   private pendingSubscriberEvents: AgentEvent[] = [];
@@ -992,17 +995,30 @@ export class KernelCore {
 
       let effectivePrompt = attemptInput.prompt;
       let effectivePromptBlocks = attemptInput.promptBlocks;
+      let nextContextDelivery: ContextDeliveryCursor | undefined;
       if (surfaceRef) {
         const snapshot = attemptInput.admittedContextSnapshot;
         if (!snapshot) throw new Error("Run is missing its admitted context snapshot");
         const attachments = input.attachments?.length
           ? `\n\n# Attachments\n${stableJsonStringify(input.attachments)}`
           : "";
-        effectivePrompt = `${renderContextSnapshot(
-          snapshot,
-          accepted.session.surfaceKind,
-          accepted.session.executionRole,
-        )}${attachments}\n\n# User Message\n${input.prompt}`;
+        const renderedContext = adapterId === "pi-mono" && handle.bindingId
+          ? renderContextSnapshotForBinding(
+              snapshot,
+              accepted.session.surfaceKind,
+              accepted.session.executionRole,
+              this.contextDeliveryByBinding.get(handle.bindingId),
+            )
+          : {
+              rendered: renderContextSnapshot(
+                snapshot,
+                accepted.session.surfaceKind,
+                accepted.session.executionRole,
+              ),
+              next: undefined,
+            };
+        nextContextDelivery = renderedContext.next;
+        effectivePrompt = `${renderedContext.rendered}${attachments}\n\n# User Message\n${input.prompt}`;
         effectivePromptBlocks = attemptInput.promptBlocks
           ? attemptInput.promptBlocks.map((block) =>
               block.type === "text" ? { ...block, text: effectivePrompt } : block,
@@ -1056,6 +1072,9 @@ export class KernelCore {
         });
         this.activeExecutions.delete(accepted.run.runId);
         assertExecutionAuthority();
+        if (handle.bindingId && nextContextDelivery) {
+          this.contextDeliveryByBinding.set(handle.bindingId, nextContextDelivery);
+        }
         if (
           (
             this.runStatus(accepted.run.runId) === "cancelling"
@@ -2114,6 +2133,7 @@ export class KernelCore {
   }
 
   protected markBindingStale(binding: AdapterBinding, attempt: RunAttempt, reason: string): void {
+    this.contextDeliveryByBinding.delete(binding.bindingId);
     const run = this.readRun(attempt.runId);
     this.withTransaction(() => {
       this.updateBinding(binding.bindingId, {
@@ -2132,6 +2152,7 @@ export class KernelCore {
   }
 
   protected markEvictedBindingStale(bindingId: string, reason: string): void {
+    this.contextDeliveryByBinding.delete(bindingId);
     const binding = this.readBinding(bindingId);
     this.withTransaction(() => {
       this.updateBinding(binding.bindingId, {

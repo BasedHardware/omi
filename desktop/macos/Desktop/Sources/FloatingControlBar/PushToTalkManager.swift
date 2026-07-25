@@ -330,7 +330,7 @@ class PushToTalkManager: ObservableObject {
     log("PushToTalkManager: setup complete, micPermission=\(hasMicPermission)")
   }
 
-  private func configureVoiceTurnCoordinator(barState: FloatingControlBarState) {
+  func configureVoiceTurnCoordinator(barState: FloatingControlBarState) {
     voiceTurnCoordinator.configure(barState: barState)
     voiceTurnCoordinator.setEffectHandler { [weak self] effect in
       self?.handleVoiceTurnEffect(effect)
@@ -797,6 +797,7 @@ class PushToTalkManager: ObservableObject {
         hasOmniDriver: realtimeOmniService != nil,
         captureGeneration: micCaptureGeneration)
     }
+
   #endif
 
   /// Cancel PTT without sending — used when conversation is closed mid-PTT.
@@ -808,6 +809,15 @@ class PushToTalkManager: ObservableObject {
 
   // MARK: - Automation (headless PTT for the desktop bridge)
 
+  private func ensureAutomationBarConfigured() {
+    if barState == nil {
+      let state = FloatingControlBarState()
+      automationBarState = state
+      barState = state
+      configureVoiceTurnCoordinator(barState: state)
+    }
+  }
+
   /// Begin a push-to-talk capture exactly as the shortcut key-down does
   /// (`handleShortcutDown` → `startListening`), so the automation bridge can drive
   /// MIC-01 without synthetic key events. `startListening()`'s own guard makes this a
@@ -815,12 +825,7 @@ class PushToTalkManager: ObservableObject {
   /// `endPushToTalkForAutomation()`.
   @discardableResult
   func beginPushToTalkForAutomation() -> [String: String] {
-    if barState == nil {
-      let state = FloatingControlBarState()
-      automationBarState = state
-      barState = state
-      configureVoiceTurnCoordinator(barState: state)
-    }
+    ensureAutomationBarConfigured()
     automationCaptureBypass = true
     automationExercisesRealtimePath = false
     startListening()
@@ -836,12 +841,7 @@ class PushToTalkManager: ObservableObject {
   /// shortcut hold.
   @discardableResult
   func beginRealtimePushToTalkForAutomation() -> [String: String] {
-    if barState == nil {
-      let state = FloatingControlBarState()
-      automationBarState = state
-      barState = state
-      configureVoiceTurnCoordinator(barState: state)
-    }
+    ensureAutomationBarConfigured()
     automationCaptureBypass = true
     automationExercisesRealtimePath = true
     let admission = RealtimeHubController.shared.pttAdmission

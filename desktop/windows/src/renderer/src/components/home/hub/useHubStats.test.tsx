@@ -13,7 +13,11 @@ const h = vi.hoisted(() => ({
   currentUser: { uid: 'A' } as { uid: string } | null,
   cb: null as ((u: { uid: string } | null) => void) | null,
   tasks: [] as { id: string }[],
-  frames: 0
+  frames: 0,
+  // Captured onRewindCaptured subscriber + a COUNT(*) call counter, for the
+  // live-refresh / throttle assertions below.
+  rewindCapturedCb: null as (() => void) | null,
+  frameCountCalls: 0
 }))
 
 vi.mock('../../../lib/firebase', () => ({
@@ -51,9 +55,20 @@ beforeEach(() => {
   h.cb = null
   h.tasks = []
   h.frames = 0
+  h.rewindCapturedCb = null
+  h.frameCountCalls = 0
   ;(window as unknown as { omi: unknown }).omi = {
-    rewindFrameCount: () => Promise.resolve(h.frames),
-    onTasksChanged: () => () => {}
+    rewindFrameCount: () => {
+      h.frameCountCalls++
+      return Promise.resolve(h.frames)
+    },
+    onTasksChanged: () => () => {},
+    onRewindCaptured: (cb: () => void) => {
+      h.rewindCapturedCb = cb
+      return () => {
+        h.rewindCapturedCb = null
+      }
+    }
   }
 })
 
@@ -114,5 +129,37 @@ describe('useHubStats — in-place account switch (no remount)', () => {
     // and A's 2 must not be stamped under B.
     expect(result.current.conversations).toBeNull()
     expect(getCachedHubStats('B').conversations).toBeNull()
+  })
+})
+
+describe('useHubStats — live screenshot count', () => {
+  it('re-reads the count when a frame is captured (does not freeze at its mount value)', async () => {
+    // The reported bug: the Hub fetched the count once on mount and never again,
+    // so a session left open all day showed a frozen number while capture ran.
+    h.frames = 5
+    const { result } = renderHook(() => useHubStats())
+    await waitFor(() => expect(result.current.screenshots).toBe(5))
+
+    // A new frame is stored while the Hub stays mounted.
+    h.frames = 6
+    act(() => h.rewindCapturedCb?.())
+    await waitFor(() => expect(result.current.screenshots).toBe(6))
+  })
+
+  it('throttles a burst of captures instead of one COUNT(*) per frame', async () => {
+    h.frames = 5
+    const { result } = renderHook(() => useHubStats())
+    await waitFor(() => expect(result.current.screenshots).toBe(5))
+    const callsAfterMount = h.frameCountCalls
+
+    // A rapid burst of stored frames within one throttle window: only the leading
+    // edge re-reads synchronously; the rest collapse into a single pending trailing
+    // read, so this is not one COUNT(*) per captured frame.
+    act(() => {
+      h.rewindCapturedCb?.()
+      h.rewindCapturedCb?.()
+      h.rewindCapturedCb?.()
+    })
+    expect(h.frameCountCalls).toBe(callsAfterMount + 1)
   })
 })

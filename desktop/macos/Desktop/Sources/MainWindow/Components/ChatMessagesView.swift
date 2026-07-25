@@ -121,12 +121,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Tracks work items for delayed initial bottom scrolls so they can be
   /// canceled on user scroll or disappear.
   @State private var initialScrollWorkItems: [DispatchWorkItem] = []
-  /// Last visible scroll viewport size. When a chat panel opens, sidebars
-  /// resize, or the window is dragged wider/taller, SwiftUI can lay out the
-  /// transcript after our first scroll request; this lets us re-follow the
-  /// latest message while still respecting explicit user scrolls.
-  @State private var lastScrollViewportSize: CGSize = .zero
-
   // MARK: - Local Send Anchoring
 
   /// Last observed local send token generation. When it increments, we know
@@ -184,7 +178,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       .padding(.vertical, OmiSpacing.xl)
       // Do not enable text selection on the whole stack. SelectionOverlay on every
       // chrome Text (agent card headers, tool summaries, timestamps) can peg the
-      // main thread in GraphHost layout. Message bodies opt in via SelectableMarkdown.
+      // main thread in GraphHost layout. Message bodies opt in via OmiMarkdown.
       .background(scrollDetectors)
 
       // Invisible anchor lives OUTSIDE the LazyVStack so it is always
@@ -273,7 +267,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     .onDisappear {
       cancelAllPendingScrolls()
     }
-    .background(viewportResizeDetector(proxy: proxy))
   }
 
   // MARK: - Message Count Change Handler
@@ -394,36 +387,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   }
 
   // MARK: - Scheduled Scrolls
-
-  private func handleViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy) {
-    guard size.width > 0, size.height > 0 else { return }
-    guard size != lastScrollViewportSize else { return }
-    lastScrollViewportSize = size
-
-    guard
-      !isLoadingInitial,
-      scrollMode == .followingBottom,
-      !userIsScrolling,
-      !isInitialRestorePending,
-      !messages.isEmpty
-    else {
-      return
-    }
-    scrollToBottom(proxy: proxy)
-    scheduleInitialScroll(proxy: proxy, delay: 0.08)
-  }
-
-  private func viewportResizeDetector(proxy: ScrollViewProxy) -> some View {
-    GeometryReader { geometry in
-      Color.clear
-        .onAppear {
-          handleViewportSizeChange(geometry.size, proxy: proxy)
-        }
-        .onChange(of: geometry.size) { _, newSize in
-          handleViewportSizeChange(newSize, proxy: proxy)
-        }
-    }
-  }
 
   /// Schedules a delayed bottom scroll that is mode-aware and cancelable.
   private func scheduleInitialScroll(proxy: ScrollViewProxy, delay: TimeInterval) {

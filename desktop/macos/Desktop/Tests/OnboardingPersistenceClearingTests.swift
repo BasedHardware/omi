@@ -93,5 +93,11 @@ final class OnboardingPersistenceClearingTests: XCTestCase {
     XCTAssertNil(
       tail.range(of: "removeObject(forKey: \"onboardingStep\")"),
       "resetOnboardingAndRestart() must not keep a hand-rolled onboarding key list")
+    XCTAssertNil(
+      tail.range(of: "deleteKnowledgeGraph"),
+      "resetting onboarding must not delete the user's server knowledge graph")
+    XCTAssertNil(
+      tail.range(of: "KnowledgeGraphStorage.shared.clearAll"),
+      "resetting onboarding must not clear the user's local knowledge graph")
   }
 }

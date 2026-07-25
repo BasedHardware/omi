@@ -464,6 +464,11 @@ async def _run_anthropic_agent_stream(
                 messages=messages,
                 tools=tool_schemas,
                 max_tokens=8192,
+                # Anthropic moves this breakpoint to the last cacheable message
+                # block on every request. That incrementally caches both the
+                # append-only inter-turn history epoch and each agentic tool-loop
+                # iteration while the explicit system breakpoint remains stable.
+                cache_control={"type": "ephemeral", "ttl": "1h"},
             ) as stream:
                 async for event in stream:
                     # Stream text tokens

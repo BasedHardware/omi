@@ -32,6 +32,12 @@ EXEMPT_DESKTOP_PATHS = {
 EXEMPT_DESKTOP_PATH_PREFIXES = (
     "desktop/macos/Backend-Rust/",
     "desktop/macos/tests/",
+    # Generated Swift (e.g. Sources/Generated/OmiApi.generated.swift) is
+    # deterministically derived from the backend OpenAPI contract, never a
+    # user-facing app note. Regenerating it after a spec change must not demand
+    # a changelog fragment, and — like tests/ above — the post-merge push run
+    # would otherwise redden main. Same directory the swift-format linter skips.
+    "desktop/macos/Desktop/Sources/Generated/",
 )
 
 

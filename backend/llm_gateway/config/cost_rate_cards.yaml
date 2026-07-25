@@ -25,6 +25,7 @@ rate_cards:
     input_micro_usd_per_million: 1000000
     cached_input_micro_usd_per_million: 100000
     output_micro_usd_per_million: 6000000
+    cache_write_micro_usd_per_million: 1250000
 
   - rate_card_id: vertex.gemini-2.5-flash.2026-07-17
     provider: gemini

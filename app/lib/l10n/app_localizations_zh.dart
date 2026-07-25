@@ -1759,18 +1759,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lovingOmi => '喜欢 Omi 吗？';
 
   @override
-  String get leaveReviewIos => '在 App Store 留下评论，帮助我们。';
-
-  @override
-  String get leaveReviewAndroid => '在 Google Play 留下评论，帮助我们。';
-
-  @override
-  String get rateOnAppStore => '在 App Store 评价';
-
-  @override
-  String get rateOnGooglePlay => '在 Google Play 评价';
-
-  @override
   String get maybeLater => '以后再说';
 
   @override
@@ -2095,6 +2083,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ 编辑记忆';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => '我喜欢冰淇淋...';

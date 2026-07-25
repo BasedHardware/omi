@@ -162,7 +162,7 @@ async fn upsert_pinecone_vectors(
         return Ok(());
     }
 
-    let client = reqwest::Client::new();
+    let client = crate::services::http::bounded_client(std::time::Duration::from_secs(30));
     let url = format!("{}/vectors/upsert", host);
 
     // Pinecone limit: 100 vectors per upsert

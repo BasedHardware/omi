@@ -56,6 +56,11 @@ final class SBOnboardingModel: ObservableObject {
 
   var launchAtLogin: Bool = LaunchAtLoginManager.shared.isEnabled
 
+  /// One-shot guard: fire a single throwaway ScreenCaptureKit capture to surface
+  /// the "bypass the private window picker" consent in-context once Screen
+  /// Recording is granted, so the live screen demo doesn't hit that prompt.
+  var didPrimeScreenCapture = false
+
   // Summon shortcut
   @Published var shortcutTokens: [String] = []
   @Published var shortcutPicked = false
@@ -84,6 +89,10 @@ final class SBOnboardingModel: ObservableObject {
   // ("idle" | "connecting" | "on" | "unavailable" | "needsSignIn").
   @Published var agentStates: [String: String] = [:]
   @Published var contextStates: [String: String] = [:]
+  /// Actionable connector detail replaces the generic row subtitle after a
+  /// failed functional probe. Values use bounded product copy; raw cookie,
+  /// response, and exception data never reaches this projection.
+  @Published var contextDetails: [String: String] = [:]
 
   unowned let appState: AppState
   let chatProvider: ChatProvider
@@ -108,7 +117,7 @@ final class SBOnboardingModel: ObservableObject {
     // Isolate any onboarding chat/voice turns to the throwaway `.onboarding()`
     // journal surface so they never pollute the real Chat tab. Cleared on
     // complete()/skip(), after which the Chat tab reloads the clean default surface.
-    chatProvider.isOnboarding = true
+    chatProvider.beginOnboardingJournal()
     // Detect the user's real name automatically (mirrors the legacy paged intro):
     // seed the editable field from what we already know, kick a backend fetch if we
     // don't have it yet, and adopt an async arrival — so onboarding greets by name
@@ -157,11 +166,12 @@ final class SBOnboardingModel: ObservableObject {
     case .screen:
       return "Let me see your screen, so I can help with whatever you're looking at."
     case .files:
-      return "Let me read your files, so I can point to your real documents. Read-only."
+      return
+        "Let me read your files, so I can point to your real documents. Read-only, it stays on this Mac, and you can turn it off anytime."
     case .accessibility:
       return "Turn on Accessibility, so I can use your shortcut and click and type for you."
     case .automation:
-      return "Turn on Automation, so I can control your other apps and get things done."
+      return "Turn on Automation, so I can help with tasks in the apps you choose."
     case .shortcutOpen:
       return "How do you want to open me? Just press one of these to set it."
     case .shortcutTalk:
@@ -391,7 +401,6 @@ final class SBOnboardingModel: ObservableObject {
     chatProvider.stopAgent(owner: .mainChat)
     UserDefaults.standard.set(true, forKey: DefaultsKey.onboardingJustCompleted)
     UserDefaults.standard.removeObject(forKey: Self.resumeStepKey)
-    chatProvider.isOnboarding = false
     // Greet the user in the Home chat with the personalized opener + starters.
     chatProvider.presentOnboardingOpener()
     ChatToolExecutor.onboardingAppState = nil
@@ -399,12 +408,9 @@ final class SBOnboardingModel: ObservableObject {
     ChatDraftStore.shared.clear(.onboardingMain)
     ChatDraftStore.shared.clear(.onboardingFloating)
     onComplete?()
-    // Wipe the default main-chat journal so the Chat tab opens clean (any stray
-    // demo turns lived on the .onboarding() surface; this clears the default
-    // surface the tab actually loads) before we reveal it.
     Task { [weak self] in
       guard let self else { return }
-      _ = await self.chatProvider.clearDefaultJournalForOnboardingReset()
+      await self.chatProvider.finishOnboardingJournal()
       self.appState.hasCompletedOnboarding = true
     }
   }
@@ -416,9 +422,13 @@ final class SBOnboardingModel: ObservableObject {
     chatProvider.stopAgent(owner: .mainChat)
     UserDefaults.standard.set(true, forKey: DefaultsKey.onboardingJustCompleted)
     UserDefaults.standard.removeObject(forKey: Self.resumeStepKey)
-    if !AppBuild.usesLazyDevPermissions {
-      UserDefaults.standard.set(true, forKey: DefaultsKey.hasCompletedFileIndexing)
-    }
+    // Do NOT mark file indexing complete here. Onboarding never actually scans, so
+    // setting this flag "faked" the Files connector as connected while indexing
+    // nothing — and, worse, permanently suppressed the Home view's automatic
+    // first-run backfill (`scheduleInitialFileIndexing`, gated on this flag being
+    // false) and every later rescan. Leaving it false lets that existing silent
+    // backfill actually index the standard folders once the app is up, so the
+    // Files connector becomes truly connected with real content.
     chatProvider.isOnboarding = false
     // Greet the user in the Home chat with the personalized opener + starters.
     chatProvider.presentOnboardingOpener()
@@ -428,10 +438,9 @@ final class SBOnboardingModel: ObservableObject {
     ChatDraftStore.shared.clear(.onboardingFloating)
 
     onComplete?()
-    // Wipe the default main-chat journal so the Chat tab opens clean before reveal.
     Task { [weak self] in
       guard let self else { return }
-      _ = await self.chatProvider.clearDefaultJournalForOnboardingReset()
+      await self.chatProvider.finishOnboardingJournal()
       self.appState.hasCompletedOnboarding = true
     }
 
@@ -453,13 +462,10 @@ final class SBOnboardingModel: ObservableObject {
       if startListening { appState.startTranscription() }
       await appState.reconcileCapture()
     }
-    Task {
-      let welcome = "Run omi for two days to start receiving helpful insights"
-      let exists = await ActionItemStorage.shared.actionItemExists(description: welcome)
-      if !exists {
-        _ = await TasksStore.shared.createTask(description: welcome, dueAt: Date(), priority: "low")
-      }
-    }
+    // NOTE: previously this created a "Run omi for two days…" welcome task. That
+    // seeded onboarding scaffolding into the user's real Tasks surface (there is no
+    // hidden/system-task concept to hang it on), so it's been removed — onboarding
+    // must not leave artifacts in product data.
   }
 
   /// Apply the user's launch-at-login selection at completion — **preserve** their
@@ -482,7 +488,9 @@ final class SBOnboardingModel: ObservableObject {
   /// Cancel every live task/monitor this model owns. Safe to call repeatedly.
   private func teardownAll() {
     streamTask?.cancel()
-    pollTasks.values.forEach { $0.cancel() }
+    for pollTask in pollTasks.values {
+      pollTask.cancel()
+    }
     pollTasks.removeAll()
     disarmShortcutSummon()
     teardownVoiceDemo()

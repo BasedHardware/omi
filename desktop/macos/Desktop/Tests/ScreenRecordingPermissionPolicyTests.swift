@@ -156,32 +156,73 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
     XCTAssertEqual(frame.maxY, anchor.minY - 12)
   }
 
-  /// When the Settings window sits too low to fit the card beneath it, the card
-  /// flips to just above the window rather than clamping back over the drop target.
+  /// When Settings leaves no room below it, the card stays in the bottom quarter
+  /// instead of jumping to the top of the screen.
   @MainActor
-  func testDragCardFlipsAboveWhenNoRoomBelow() {
+  func testDragCardUsesBottomQuarterWhenNoRoomBelow() {
     let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
     let card = CGSize(width: 180, height: 164)
-    // Low, short window: no 164pt of room below its bottom edge (minY = 20).
-    let anchor = CGRect(x: 900, y: 20, width: 600, height: 200)
+    let anchor = CGRect(x: 900, y: 0, width: 600, height: 1000)
 
     let frame = CloudConnectorGuidanceOverlay.dragCardFrame(
       anchor: anchor, cardSize: card, visibleFrame: visible)
     XCTAssertEqual(frame.midX, anchor.midX)
-    XCTAssertGreaterThanOrEqual(frame.minY, anchor.maxY)
+    XCTAssertEqual(frame.midY, visible.height / 8)
   }
 
-  /// With no Settings window detected yet, the card falls back to the bottom
-  /// quarter of the screen, centered horizontally.
+  /// Card sits below the window → arrow points up at the list above it.
   @MainActor
-  func testDragCardFallsBackToBottomQuarterWithoutAnchor() {
+  func testDragArrowPointsUpWhenCardIsBelowWindow() {
     let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
     let card = CGSize(width: 180, height: 164)
+    let anchor = CGRect(x: 900, y: 300, width: 600, height: 500)
+    XCTAssertFalse(
+      CloudConnectorGuidanceOverlay.dragCardArrowPointsDown(
+        anchor: anchor, cardSize: card, visibleFrame: visible),
+      "Card below the window must point its arrow UP toward the list")
+  }
 
-    let centered = CloudConnectorGuidanceOverlay.dragCardFrame(
-      anchor: nil, cardSize: card, visibleFrame: visible)
-    XCTAssertEqual(centered.midX, visible.midX)
-    XCTAssertLessThanOrEqual(centered.maxY, visible.minY + visible.height / 4)
+  /// The bottom-quarter fallback remains below the permission target.
+  @MainActor
+  func testDragArrowPointsUpInBottomQuarter() {
+    let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+    let card = CGSize(width: 180, height: 164)
+    let anchor = CGRect(x: 900, y: 0, width: 600, height: 1000)
+    XCTAssertFalse(
+      CloudConnectorGuidanceOverlay.dragCardArrowPointsDown(
+        anchor: anchor, cardSize: card, visibleFrame: visible),
+      "Bottom-quarter card must point its arrow UP toward the list")
+  }
+
+  @MainActor
+  func testSettingsWindowFrameUsesWindowServerMetadataWithoutAccessibility() {
+    let settingsPID: pid_t = 42
+    let windows: [[String: Any]] = [
+      [
+        kCGWindowOwnerPID as String: settingsPID,
+        kCGWindowLayer as String: 0,
+        kCGWindowBounds as String: [
+          "X": CGFloat(200), "Y": CGFloat(100), "Width": CGFloat(700), "Height": CGFloat(600),
+        ],
+      ],
+      [
+        kCGWindowOwnerPID as String: settingsPID,
+        kCGWindowLayer as String: 0,
+        kCGWindowBounds as String: [
+          "X": CGFloat(250), "Y": CGFloat(150), "Width": CGFloat(300), "Height": CGFloat(200),
+        ],
+      ],
+      [
+        kCGWindowOwnerPID as String: pid_t(99),
+        kCGWindowLayer as String: 0,
+        kCGWindowBounds as String: ["X": CGFloat(0), "Y": CGFloat(0), "Width": CGFloat(1200), "Height": CGFloat(900)],
+      ],
+    ]
+
+    let frame = CloudConnectorFormAutomation.appKitWindowFrame(pid: settingsPID, windows: windows)
+    XCTAssertEqual(frame?.minX, 200)
+    XCTAssertEqual(frame?.width, 700)
+    XCTAssertEqual(frame?.height, 600)
   }
 
   @MainActor

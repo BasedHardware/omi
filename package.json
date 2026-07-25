@@ -29,6 +29,12 @@
   "overrides": {
     "@xmldom/xmldom": "^0.9.8",
     "tar": "^7.5.11",
-    "postcss": "^8.5.10"
-  }
+    "postcss": "^8.5.10",
+    "shell-quote": ">=1.8.4",
+    "uuid": ">=11.1.1",
+    "ws": ">=8.17.0",
+    "@babel/core": "^7.26.0",
+    "fast-uri": "^3.1.4"
+  },
+  "name": "omi-memory-ingestion-pipeline"
 }

@@ -112,6 +112,7 @@ def conv():
         "utils.conversations.calendar_linking": AutoMockModule("utils.conversations.calendar_linking"),
         "utils.conversations.calendar_utils": AutoMockModule("utils.conversations.calendar_utils"),
         "utils.conversations.location": AutoMockModule("utils.conversations.location"),
+        "utils.conversations.analytics": AutoMockModule("utils.conversations.analytics"),
         # utils.llm / speaker / integrations / retrieval
         "utils.llm.conversation_processing": AutoMockModule("utils.llm.conversation_processing"),
         "utils.speaker_identification": AutoMockModule("utils.speaker_identification"),

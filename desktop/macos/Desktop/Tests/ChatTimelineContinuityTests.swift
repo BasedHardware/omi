@@ -1263,11 +1263,11 @@ final class ChatTimelineContinuityTests: XCTestCase {
     )
 
     XCTAssertTrue(
-      chatBubbleSource.contains("SelectableMarkdown(text: summary.output, sender: .ai)"),
+      chatBubbleSource.contains("OmiMarkdown(text: summary.output, sender: .ai)"),
       "background agent summary body must render markdown"
     )
     XCTAssertTrue(
-      chatBubbleSource.contains("SelectableMarkdown(text: output, sender: .ai)"),
+      chatBubbleSource.contains("OmiMarkdown(text: output, sender: .ai)"),
       "agent completion body must render markdown"
     )
     XCTAssertTrue(chatBubbleSource.contains("Text(\"Collapse\")"))
@@ -1309,7 +1309,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
       encoding: .utf8
     )
     let markdownSource = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/SelectableMarkdown.swift"),
+      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/OmiMarkdown.swift"),
       encoding: .utf8
     )
     let bubbleSource = try String(
@@ -1321,9 +1321,13 @@ final class ChatTimelineContinuityTests: XCTestCase {
       messagesSource.contains(".textSelection(.enabled)"),
       "chat message stack must not enable selection on chrome Text views"
     )
-    XCTAssertTrue(
+    XCTAssertFalse(
       markdownSource.contains(".textSelection(.enabled)"),
-      "SelectableMarkdown must opt message bodies into selection"
+      "chat Markdown must not create SelectionOverlay views that can loop while scrolling"
+    )
+    XCTAssertTrue(
+      markdownSource.contains(".textSelection(.disabled)"),
+      "the OmiMarkdown boundary must explicitly suppress inherited text selection"
     )
     XCTAssertTrue(
       bubbleSource.contains(".textSelection(.disabled)"),

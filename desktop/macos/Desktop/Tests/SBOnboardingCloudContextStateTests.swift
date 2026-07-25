@@ -2,29 +2,80 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// Regression coverage for the onboarding ChatGPT/Claude connect chip (#new-onboarding).
+/// Regression coverage for context-connector routing and failure projection.
 ///
-/// The connect flow opens the provider's OAuth page in the browser and used to
-/// check the local connection status immediately after — which always read "not
-/// connected" (OAuth hadn't happened yet) and silently reset the chip to
-/// "Connect", never flipping to "✓ on" even after a successful authorization.
-/// Resolution now happens through a backend grant refresh when the app becomes
-/// active again, mapped through `cloudContextState`.
+/// Memory import and live MCP export are different product operations. The
+/// context rows must use the same importer as Apps > Imports, while Google
+/// functional-probe failures retain sanitized, actionable copy.
 final class SBOnboardingCloudContextStateTests: XCTestCase {
 
-  func testConnectedFlipsChipOnFromAnyState() {
-    for current in [nil, "idle", "connecting", "needsSignIn", "on"] {
-      XCTAssertEqual(SBOnboardingModel.cloudContextState(current: current, connected: true), "on")
+  func testMemoryContextRowsRouteToCanonicalImportConnectors() {
+    XCTAssertEqual(SBOnboardingModel.contextConnectionRoute(for: "chatgpt"), .importConnector("chatgpt"))
+    XCTAssertEqual(SBOnboardingModel.contextConnectionRoute(for: "claude"), .importConnector("claude"))
+    XCTAssertEqual(SBOnboardingModel.contextConnectionRoute(for: "calendar"), .direct)
+    XCTAssertEqual(SBOnboardingModel.contextConnectionRoute(for: "gmail"), .direct)
+
+    for connectorID in ["chatgpt", "claude"] {
+      let connector = ImportConnector.all.first(where: { $0.id == connectorID })
+      XCTAssertEqual(connector?.subtitle, "Memory import")
+      XCTAssertEqual(connector?.description, "Paste a memory export into Omi.")
     }
   }
 
-  func testUnfinishedConnectingResolvesToIdleSoConnectButtonReturns() {
-    XCTAssertEqual(SBOnboardingModel.cloudContextState(current: "connecting", connected: false), "idle")
+  func testGoogleSignInFailurePreservesActionableMessage() {
+    let resolution = SBOnboardingModel.googleContextResolution(
+      connectorID: "gmail",
+      connected: false,
+      needsSignIn: true
+    )
+
+    XCTAssertEqual(resolution.state, "needsSignIn")
+    XCTAssertEqual(
+      resolution.detail,
+      "Open Gmail in Chrome, Arc, Brave, or Edge, sign in, then retry."
+    )
+    XCTAssertTrue(resolution.shouldOpenSignIn)
   }
 
-  func testNotConnectedLeavesNonConnectingStatesUntouched() {
-    for current in [nil, "idle", "on", "unavailable"] {
-      XCTAssertNil(SBOnboardingModel.cloudContextState(current: current, connected: false))
-    }
+  func testGoogleOperationalFailureUsesBoundedCopyAndDoesNotOpenSignIn() {
+    let resolution = SBOnboardingModel.googleContextResolution(
+      connectorID: "calendar",
+      connected: false,
+      needsSignIn: false
+    )
+
+    XCTAssertEqual(resolution.state, "error")
+    XCTAssertEqual(
+      resolution.detail,
+      "Couldn't verify Google Calendar. Check your browser session and connection, then retry."
+    )
+    XCTAssertFalse(resolution.shouldOpenSignIn)
+  }
+
+  func testGoogleSuccessClearsOldFailureDetail() {
+    let resolution = SBOnboardingModel.googleContextResolution(
+      connectorID: "gmail",
+      connected: true,
+      needsSignIn: false
+    )
+
+    XCTAssertEqual(resolution.state, "on")
+    XCTAssertNil(resolution.detail)
+    XCTAssertFalse(resolution.shouldOpenSignIn)
+  }
+
+  @MainActor
+  func testPassiveGoogleRecoveryClearsThePreviouslyProjectedFailure() {
+    let model = SBOnboardingModel(
+      appState: AppState(),
+      chatProvider: ChatProvider(),
+      onComplete: nil)
+    model.contextStates["calendar"] = "error"
+    model.contextDetails["calendar"] = "Couldn't verify Google Calendar."
+
+    model.markContextConnected("calendar")
+
+    XCTAssertEqual(model.contextStates["calendar"], "on")
+    XCTAssertNil(model.contextDetails["calendar"])
   }
 }

@@ -336,3 +336,19 @@ def extract_and_update_progress(
         }
 
     return {'updated': False, 'reason': result.get('message', 'No progress found in text')}
+
+
+# Declared after the static /v1/goals/* routes (/all, /suggest, /advice, /extract-progress) so
+# those match first and are not captured as a goal_id.
+@router.get('/v1/goals/{goal_id}', tags=['goals'], response_model=GoalResponse)
+def get_goal_by_id(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> dict:
+    """Fetch a single goal by id.
+
+    The list routes cap how many goals are returned, and update/delete/progress/history/advice
+    already address a goal by id, so this exposes the matching read for one goal (404 if it does
+    not exist or belongs to another user).
+    """
+    goal = goals_db.get_goal_by_id(uid, goal_id)
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    return normalize_goal_response(goal)

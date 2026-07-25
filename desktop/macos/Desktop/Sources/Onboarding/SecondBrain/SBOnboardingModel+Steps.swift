@@ -13,11 +13,13 @@ extension SBOnboardingModel {
       appState.requestMicrophonePermission()
       pollPermission(key)
     case "system_audio":
-      // System-audio capture (Core Audio process tap) has no prompt of its own —
-      // macOS gates it behind Screen Recording TCC. Requesting/reading screen
-      // recording is the only thing that actually prompts + reliably detects.
+      // A Core Audio process tap has its own consent in addition to Screen
+      // Recording TCC. Wait for Screen Recording, then reconcile a real tap
+      // attempt before marking this permission granted.
       sysState = .waiting
-      ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
+      if !appState.hasScreenRecordingPermission {
+        ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
+      }
       pollPermission(key)
     case "screen_recording":
       scrState = .waiting
@@ -73,6 +75,12 @@ extension SBOnboardingModel {
     // Cancel only this key's prior poll — never a sibling permission's, so the
     // "both" mic+system-audio step can poll two grants at once.
     pollTasks[key]?.cancel()
+
+    if key == "system_audio" {
+      pollSystemAudioPermission()
+      return
+    }
+
     pollTasks[key] = Task { [weak self] in
       for _ in 0..<40 {  // ~20s
         try? await Task.sleep(nanoseconds: 500_000_000)
@@ -80,16 +88,6 @@ extension SBOnboardingModel {
         self.refreshPermCheck(key)
         if self.isGranted(key) {
           self.setPermOn(key)
-          // System audio needs a SEPARATE Core Audio tap consent (the "bypass the
-          // private window picker … screen and audio" prompt) beyond the Screen
-          // Recording TCC this step grants. Prime it here — in-context on this step,
-          // and awaited BEFORE we advance — so the modal surfaces on the system-audio
-          // step (not a later one) and the real capture path never re-prompts after
-          // onboarding. Screen Recording (which the tap requires) is granted now.
-          if key == "system_audio", #available(macOS 14.4, *) {
-            _ = await SystemAudioCaptureService.primePermission()
-            guard !Task.isCancelled else { return }
-          }
           // Auto-advance once the grant lands — the user shouldn't have to click
           // Continue after granting. Brief pause so the ✓ is visible, then only
           // advance if they're still on this permission's step (a late poll for a
@@ -108,11 +106,49 @@ extension SBOnboardingModel {
     }
   }
 
+  /// Screen Recording TCC is only a prerequisite for system audio. The
+  /// authoritative grant is a successful Core Audio tap attempt.
+  private func pollSystemAudioPermission() {
+    // A precheck and an Allow click can race to start this poll. Preserve one
+    // authoritative consent attempt so an older task cannot advance the flow
+    // after the replacement has already reconciled a newer result.
+    pollTasks["system_audio"]?.cancel()
+    pollTasks["system_audio"] = Task { [weak self] in
+      for _ in 0..<40 {  // ~20s
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        guard let self, !Task.isCancelled else { return }
+        // Skipping this step is an explicit choice not to surface its consent.
+        // Never let a late Screen Recording grant trigger the modal elsewhere.
+        guard self.step == .systemAudio else { return }
+        self.appState.checkScreenRecordingPermission()
+        guard self.appState.hasScreenRecordingPermission else { continue }
+
+        let granted = await self.appState.primeSystemAudioPermission()
+        guard !Task.isCancelled else { return }
+        guard granted else {
+          self.resetPermToAsk("system_audio")
+          return
+        }
+
+        self.setPermOn("system_audio")
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        guard !Task.isCancelled else { return }
+        self.autoAdvanceIfCurrent("system_audio")
+        return
+      }
+
+      guard let self, !Task.isCancelled else { return }
+      self.resetPermToAsk("system_audio")
+    }
+  }
+
   /// Re-probe a single permission (each check writes the matching AppState flag).
   private func refreshPermCheck(_ key: String) {
     switch key {
     case "microphone": appState.checkMicrophonePermission()
-    case "system_audio": appState.checkScreenRecordingPermission()  // shares Screen Recording TCC
+    case "system_audio":
+      appState.checkScreenRecordingPermission()
+      appState.checkSystemAudioPermission()
     case "screen_recording": appState.checkScreenRecordingPermission()
     case "full_disk_access": appState.checkFullDiskAccess()
     case "accessibility": appState.checkAccessibilityPermission()
@@ -127,20 +163,34 @@ extension SBOnboardingModel {
     refreshPermCheck(key)
     if isGranted(key) {
       setPermOn(key)
-      // If the user lands on the system-audio step already holding Screen Recording,
-      // prime the separate Core Audio tap consent here (in-context) so it isn't
-      // deferred to the first capture after onboarding. precheck doesn't advance, so
-      // fire-and-forget is fine — the modal shows while this step is on screen.
-      if key == "system_audio", #available(macOS 14.4, *) {
-        Task.detached { _ = await SystemAudioCaptureService.primePermission() }
-      }
+    } else if key == "system_audio", appState.hasScreenRecordingPermission,
+      appState.systemAudioPermissionStatus == .unknown
+    {
+      // Already holding Screen Recording must not skip this separate consent.
+      // Prime while its own onboarding step is visible and reconcile the result.
+      sysState = .waiting
+      pollSystemAudioPermission()
+    }
+  }
+
+  /// Fire a single throwaway ScreenCaptureKit capture the first time Screen
+  /// Recording is confirmed granted during onboarding, so macOS surfaces the
+  /// "bypass the private window picker" consent here — while the user is already
+  /// granting screen access — instead of mid-question during the live screen demo
+  /// (the exact spot users hit it). See `ScreenCaptureService.primeCaptureConsent`.
+  func primeScreenCaptureConsentIfNeeded() {
+    guard !didPrimeScreenCapture else { return }
+    didPrimeScreenCapture = true
+    if #available(macOS 14.0, *) {
+      Task.detached { await ScreenCaptureService.primeCaptureConsent() }
     }
   }
 
   func isGranted(_ key: String) -> Bool {
     switch key {
     case "microphone": return appState.hasMicrophonePermission
-    case "system_audio": return appState.hasScreenRecordingPermission  // shares Screen Recording TCC
+    case "system_audio":
+      return appState.hasSystemAudioPermission || appState.systemAudioPermissionStatus == .unsupported
     case "screen_recording": return appState.hasScreenRecordingPermission
     case "full_disk_access": return appState.hasFullDiskAccess
     case "accessibility": return appState.hasAccessibilityPermission && !appState.isAccessibilityBroken
@@ -152,8 +202,14 @@ extension SBOnboardingModel {
   func setPermOn(_ key: String) {
     switch key {
     case "microphone": micState = .on
-    case "system_audio": sysState = .on
-    case "screen_recording": scrState = .on
+    case "system_audio":
+      sysState = .on
+      // System audio shares Screen Recording TCC; once it's on, the ScreenCaptureKit
+      // capture consent can be primed so the demo doesn't surface it later.
+      primeScreenCaptureConsentIfNeeded()
+    case "screen_recording":
+      scrState = .on
+      primeScreenCaptureConsentIfNeeded()
     case "full_disk_access":
       fdaState = .on
       // The Files connector row shares the FDA grant; reflect it here so the row
@@ -262,10 +318,10 @@ extension SBOnboardingModel {
     [
       // ⌘O is registered as its own always-on Carbon hotkey (GlobalShortcutManager
       // .registerCommandO), so it reliably summons Omi globally — the natural,
-      // expected "open" chord. Offer it first.
+      // expected "open" chord. Offer it first. (⌘J was dropped: onboarding testers
+      // read it as arbitrary/random with no mnemonic, unlike ⌘O = "open".)
       ("cmdO", ShortcutSettings.askOmiCommandOShortcut, "tap to open"),
       ("cmdReturn", ShortcutSettings.askOmiCommandReturnShortcut, "tap to open"),
-      ("cmdJ", ShortcutSettings.askOmiCommandJShortcut, "tap to open"),
     ]
   }
 
@@ -408,12 +464,25 @@ extension SBOnboardingModel {
     resetFloatingBarConversation()
     if let bar = FloatingControlBarManager.shared.barState {
       PushToTalkManager.shared.setup(barState: bar)
-      // Mark the demo done the first time Omi actually responds in the notch, so
-      // the Continue button only appears once the user has seen it work.
-      voiceCancellable = bar.$showingAIResponse
-        .filter { $0 }
-        .receive(on: DispatchQueue.main)
-        .sink { [weak self] _ in self?.screenDemoDone = true }
+      // Mark the demo done the first time Omi actually answers, so the Continue
+      // button appears once the user has seen it work. The demo forces push-to-talk
+      // (`pttTranscriptionModeDemoOverride = .live`), and a *voice* answer surfaces
+      // through `voiceProjection` (the notch response phase) — it never flips
+      // `showingAIResponse`, which is only set by the typed/`.mainResponse` path.
+      // Watching only `showingAIResponse` is why the demo never advanced. Observe
+      // BOTH signals so either a voice or a typed answer reveals Continue.
+      // `resetFloatingBarConversation()` above cleared `showingAIResponse`, so its
+      // subscribe-time value is already false. `voiceProjection` has no such reset,
+      // and @Published replays its CURRENT value on subscribe — so on a resume/
+      // re-entry of the demo a stale `isResponseActive` would fire immediately and
+      // reveal Continue before the user does anything. `dropFirst()` ignores that
+      // replayed value; a real answer is always a later emission.
+      voiceCancellable = Publishers.Merge(
+        bar.$showingAIResponse.filter { $0 }.map { _ in () },
+        bar.$voiceProjection.dropFirst().filter { $0.isResponseActive }.map { _ in () }
+      )
+      .receive(on: DispatchQueue.main)
+      .sink { [weak self] _ in self?.screenDemoDone = true }
     }
     ShortcutSettings.shared.pttTranscriptionModeDemoOverride = .live
     Task { await chatProvider.warmupBridge() }
@@ -543,6 +612,17 @@ extension SBOnboardingModel {
 // MARK: - Context (connect what I can see)
 
 extension SBOnboardingModel {
+  enum ContextConnectionRoute: Equatable {
+    case importConnector(String)
+    case direct
+  }
+
+  struct GoogleContextResolution: Equatable {
+    let state: String
+    let detail: String?
+    let shouldOpenSignIn: Bool
+  }
+
   var contextRows: [(id: String, name: String, detail: String)] {
     [
       ("calendar", "Calendar", "meetings + prep"),
@@ -558,15 +638,6 @@ extension SBOnboardingModel {
     if appState.hasFullDiskAccess { contextStates["files"] = "on" }
     Task { [weak self] in
       guard let self else { return }
-      for id in ["chatgpt", "claude"] {
-        let dest: MemoryExportDestination = id == "chatgpt" ? .chatgpt : .claude
-        // OAuth for these completes in the browser, so only the backend grant
-        // list knows the truth — a local status check would never flip the chip.
-        let connected = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: dest).hasConnection
-        if let resolved = Self.cloudContextState(current: self.contextStates[id], connected: connected) {
-          self.contextStates[id] = resolved
-        }
-      }
       // Apple Notes rides the same Full Disk Access grant that powers Files, so a
       // readable NoteStore should show "✓ on" up front — not a "Connect" button
       // that would only flip to on for nothing (this precheck was missing, which
@@ -577,19 +648,47 @@ extension SBOnboardingModel {
         self.contextStates["applenotes"] = "on"
       }
       let cal = await CalendarReaderService.shared.verifyConnection()
-      if cal.isConnected { self.contextStates["calendar"] = "on" }
+      if cal.isConnected { self.markContextConnected("calendar") }
       let gmail = await GmailReaderService.shared.verifyConnection()
-      if gmail.isConnected { self.contextStates["gmail"] = "on" }
+      if gmail.isConnected { self.markContextConnected("gmail") }
     }
   }
 
-  /// Chip state for a cloud OAuth connector (ChatGPT/Claude) after a backend
-  /// grant refresh: connected always wins; an unfinished "connecting" (the user
-  /// came back without completing OAuth) resolves to "idle" so the Connect
-  /// button returns; anything else is left unchanged (nil).
-  nonisolated static func cloudContextState(current: String?, connected: Bool) -> String? {
-    if connected { return "on" }
-    return current == "connecting" ? "idle" : nil
+  func markContextConnected(_ id: String) {
+    contextStates[id] = "on"
+    contextDetails[id] = nil
+  }
+
+  /// ChatGPT and Claude on this surface mean importing existing memories into
+  /// Omi. Live MCP exports are a separate Apps > Exports action and must never
+  /// be substituted here.
+  nonisolated static func contextConnectionRoute(for id: String) -> ContextConnectionRoute {
+    switch id {
+    case "chatgpt", "claude":
+      return .importConnector(id)
+    default:
+      return .direct
+    }
+  }
+
+  nonisolated static func googleContextResolution(
+    connectorID: String,
+    connected: Bool,
+    needsSignIn: Bool
+  ) -> GoogleContextResolution {
+    if connected {
+      return GoogleContextResolution(state: "on", detail: nil, shouldOpenSignIn: false)
+    }
+    let name = connectorID == "gmail" ? "Gmail" : "Google Calendar"
+    let detail =
+      needsSignIn
+      ? "Open \(name) in Chrome, Arc, Brave, or Edge, sign in, then retry."
+      : "Couldn't verify \(name). Check your browser session and connection, then retry."
+    return GoogleContextResolution(
+      state: needsSignIn ? "needsSignIn" : "error",
+      detail: detail,
+      shouldOpenSignIn: needsSignIn
+    )
   }
 
   /// Resolve a cookie-based Google connector (Calendar, Gmail). These don't OAuth —
@@ -597,32 +696,67 @@ extension SBOnboardingModel {
   /// isn't an error to shrug at: OPEN the Google page so the user can actually sign
   /// in, then Retry picks up the new session. (An `.error`, e.g. a not-yet-loaded
   /// API key, just leaves a Retry button — opening Google wouldn't help.)
-  private func resolveGoogleConnect(_ id: String, connected: Bool, needsSignIn: Bool, signInURL: String) {
-    if connected {
-      contextStates[id] = "on"
-      return
+  private func resolveGoogleConnect(
+    _ id: String,
+    connected: Bool,
+    needsSignIn: Bool,
+    signInURL: String
+  ) {
+    let resolution = Self.googleContextResolution(
+      connectorID: id,
+      connected: connected,
+      needsSignIn: needsSignIn
+    )
+    contextStates[id] = resolution.state
+    contextDetails[id] = resolution.detail
+    if resolution.shouldOpenSignIn, let url = URL(string: signInURL) {
+      NSWorkspace.shared.open(url)
     }
-    contextStates[id] = "needsSignIn"
-    if needsSignIn, let url = URL(string: signInURL) { NSWorkspace.shared.open(url) }
   }
 
   func connectContext(_ id: String) {
     guard contextStates[id] != "connecting", contextStates[id] != "on" else { return }
+    // The view owns import-sheet presentation. Keep this guard so another
+    // caller cannot accidentally route a memory import into the MCP exporter.
+    guard Self.contextConnectionRoute(for: id) == .direct else { return }
     contextStates[id] = "connecting"
+    contextDetails[id] = nil
     switch id {
     case "calendar":
       Task { [weak self] in
         let s = await CalendarReaderService.shared.verifyConnection()
-        let needsSignIn = { if case .needsSignIn = s { return true } else { return false } }()
+        let needsSignIn = {
+          switch s {
+          case .connected, .error:
+            return false
+          case .needsSignIn:
+            return true
+          }
+        }()
         self?.resolveGoogleConnect(
-          "calendar", connected: s.isConnected, needsSignIn: needsSignIn, signInURL: "https://calendar.google.com")
+          "calendar",
+          connected: s.isConnected,
+          needsSignIn: needsSignIn,
+          signInURL: "https://calendar.google.com"
+        )
       }
     case "gmail":
       Task { [weak self] in
         let s = await GmailReaderService.shared.verifyConnection()
-        let needsSignIn = { if case .needsSignIn = s { return true } else { return false } }()
+        let needsSignIn = {
+          switch s {
+          case .connected, .error:
+            return false
+          case .needsSignIn:
+            return true
+          }
+        }()
         self?.resolveGoogleConnect(
-          "gmail", connected: s.isConnected, needsSignIn: needsSignIn, signInURL: "https://mail.google.com")
+          "gmail",
+          connected: s.isConnected,
+          needsSignIn: needsSignIn,
+          signInURL: "https://mail.google.com"
+        )
       }
     case "applenotes":
       Task { [weak self] in
@@ -665,25 +799,14 @@ extension SBOnboardingModel {
         requestFullDiskAccess()
         contextStates["files"] = "idle"
       }
-    case "chatgpt", "claude":
-      let dest: MemoryExportDestination = id == "chatgpt" ? .chatgpt : .claude
-      Task { [weak self] in
-        let outcome: MemoryExportExecutor.Outcome
-        do {
-          outcome = try await MemoryExportExecutor.run(dest)
-        } catch {
-          self?.contextStates[id] = "unavailable"
-          return
-        }
-        // Assisted/directory flows finish in the browser — checking now would
-        // always read "not connected" and reset the chip. Keep it "connecting";
-        // the app-activation refresh resolves it when the user comes back.
-        guard outcome.mode == .completed else { return }
-        let connected = await MemoryExportService.shared.status(for: dest).hasConnection
-        self?.contextStates[id] = connected ? "on" : "idle"
-      }
     default: break
     }
+  }
+
+  func markContextImportConnected(_ connectorID: String) {
+    guard Self.contextConnectionRoute(for: connectorID) == .importConnector(connectorID) else { return }
+    contextStates[connectorID] = "on"
+    contextDetails[connectorID] = nil
   }
 
   func answerContext() { advance(userAnswer: "Continue", to: .capture) }

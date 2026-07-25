@@ -218,16 +218,18 @@ final class CloudConnectorGuidanceOverlay {
   }
 
   /// Screen Recording helper whose app icon can be dropped into System Settings.
-  func presentDragToGrantCard(appIcon: NSImage, appName: String, appURL: URL, near anchor: CGRect?) {
+  func presentDragToGrantCard(appIcon: NSImage, appName: String, appURL: URL, near anchor: CGRect) {
     dismissTask?.cancel()
     settingsWatchTask?.cancel()
     window?.close()
 
     let cardSize = Self.dragCardSize(appName: appName)
     dragCardSize = cardSize
-    let dragTargetState = ScreenRecordingDragTargetState(frame: anchor)
-    self.dragTargetState = dragTargetState
     let screen = Self.screen(forAnchor: anchor)
+    let pointsDown = Self.dragCardArrowPointsDown(
+      anchor: anchor, cardSize: cardSize, visibleFrame: screen.visibleFrame)
+    let dragTargetState = ScreenRecordingDragTargetState(frame: anchor, arrowPointsDown: pointsDown)
+    self.dragTargetState = dragTargetState
     let frame = Self.dragCardFrame(
       anchor: anchor, cardSize: cardSize, visibleFrame: screen.visibleFrame)
 
@@ -308,6 +310,8 @@ final class CloudConnectorGuidanceOverlay {
     guard let window, let size = dragCardSize else { return }
     dragTargetState?.frame = anchor
     let screen = Self.screen(forAnchor: anchor)
+    dragTargetState?.arrowPointsDown = Self.dragCardArrowPointsDown(
+      anchor: anchor, cardSize: size, visibleFrame: screen.visibleFrame)
     let frame = Self.dragCardFrame(
       anchor: anchor, cardSize: size, visibleFrame: screen.visibleFrame)
     window.setFrame(frame, display: true)
@@ -315,25 +319,29 @@ final class CloudConnectorGuidanceOverlay {
   }
 
   /// Drag-card placement: horizontally centered on the anchor (Settings window)
-  /// and pinned directly beneath it, so the card follows the window and never
-  /// covers the drop target. If there's no room below (Settings sits near the
-  /// screen bottom), flip to just above the window instead. With no anchor yet,
-  /// fall back to the bottom quarter of the screen.
-  static func dragCardFrame(anchor: CGRect?, cardSize: CGSize, visibleFrame: CGRect) -> CGRect {
+  /// and pinned directly beneath it. If Settings fills the screen and leaves no
+  /// room below, keep the card in the screen's bottom quarter where it remains
+  /// close to the permission list instead of jumping to the top.
+  static func dragCardFrame(anchor: CGRect, cardSize: CGSize, visibleFrame: CGRect) -> CGRect {
     let gap: CGFloat = 12
     let padding: CGFloat = 12
-    let x = (anchor ?? visibleFrame).midX - cardSize.width / 2
+    let x = anchor.midX - cardSize.width / 2
     let y: CGFloat
-    if let anchor {
-      // AppKit is bottom-left origin: the window's bottom edge is `minY`, so
-      // "under" the window is a smaller y.
-      let below = anchor.minY - gap - cardSize.height
-      y = below >= visibleFrame.minY + padding ? below : anchor.maxY + gap
-    } else {
-      y = visibleFrame.minY + (visibleFrame.height / 4 - cardSize.height) / 2
-    }
+    // AppKit is bottom-left origin: the window's bottom edge is `minY`, so
+    // "under" the window is a smaller y.
+    let below = anchor.minY - gap - cardSize.height
+    y =
+      below >= visibleFrame.minY + padding
+      ? below
+      : visibleFrame.minY + (visibleFrame.height / 4 - cardSize.height) / 2
     let proposed = CGRect(x: x, y: y, width: cardSize.width, height: cardSize.height)
     return SpatialOverlayGeometry.clamped(proposed, to: visibleFrame, padding: padding)
+  }
+
+  /// The card always stays below the permission target, including its bottom-quarter
+  /// fallback, so its arrow points up.
+  static func dragCardArrowPointsDown(anchor: CGRect, cardSize: CGSize, visibleFrame: CGRect) -> Bool {
+    false
   }
 
   /// A named development bundle can have a much longer display name than the
@@ -680,11 +688,15 @@ private final class TransparentHostingView<Content: View>: NSHostingView<Content
   override var isOpaque: Bool { false }
 }
 
-final class ScreenRecordingDragTargetState {
+final class ScreenRecordingDragTargetState: ObservableObject {
   var frame: CGRect?
+  /// Drives the drag card's arrow direction — true when the card sits above the
+  /// Settings window (list is below → point down), false when below (point up).
+  @Published var arrowPointsDown: Bool
 
-  init(frame: CGRect?) {
+  init(frame: CGRect?, arrowPointsDown: Bool = false) {
     self.frame = frame
+    self.arrowPointsDown = arrowPointsDown
   }
 }
 
@@ -807,13 +819,18 @@ private struct ScreenRecordingDragCardView: View {
   let appIcon: NSImage
   let appName: String
   let appURL: URL
-  let targetState: ScreenRecordingDragTargetState
+  @ObservedObject var targetState: ScreenRecordingDragTargetState
   let size: CGSize
 
-  /// Idle hint: the icon + chevron drift up a few points and settle, on a slow
-  /// loop, so the card reads as "drag me up into the list". Respects reduce-motion.
+  /// Idle hint: the icon + chevron drift toward the list and settle, on a slow
+  /// loop, so the card reads as "drag me into the list". Respects reduce-motion.
   @State private var hintUp = false
   private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+  /// Direction the drop target sits relative to the card (down when the card is
+  /// flipped above the Settings window). The idle drift follows the same axis.
+  private var pointsDown: Bool { targetState.arrowPointsDown }
+  private var hintOffset: CGFloat { (pointsDown ? 1 : -1) * (hintUp ? 3 : -1) }
+  private var iconHintOffset: CGFloat { (pointsDown ? 1 : -1) * (hintUp ? 6 : 0) }
 
   var body: some View {
     ZStack {
@@ -825,15 +842,15 @@ private struct ScreenRecordingDragCardView: View {
       )
 
       VStack(spacing: 7) {
-        Image(systemName: "chevron.up")
+        Image(systemName: pointsDown ? "chevron.down" : "chevron.up")
           .scaledFont(size: 14, weight: .bold)
           .foregroundColor(OmiColors.textSecondary.opacity(hintUp ? 1 : 0.6))
-          .offset(y: hintUp ? -3 : 1)
+          .offset(y: hintOffset)
 
         AppBundleDragSource(icon: appIcon, appURL: appURL, targetState: targetState)
           .frame(width: 64, height: 64)
           .shadow(color: Color.black.opacity(0.58), radius: 12, y: 5)
-          .offset(y: hintUp ? -6 : 0)
+          .offset(y: iconHintOffset)
           .help("Drag \(appName) into the Screen Recording list")
           .accessibilityLabel("Drag \(appName) to enable Screen Recording")
 

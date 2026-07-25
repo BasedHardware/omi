@@ -1,0 +1,3 @@
+{
+  "change": "Smoother permission granting in onboarding: the drag-to-grant helper now waits for System Settings to open and points its arrow at the actual list, and the screen-capture consent is requested up front so it no longer interrupts the live screen demo"
+}

@@ -1,0 +1,3 @@
+{
+  "change": "Improved desktop test reliability by isolating owner-transition fixtures and bounding stalled suites"
+}

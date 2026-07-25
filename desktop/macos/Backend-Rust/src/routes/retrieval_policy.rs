@@ -142,11 +142,17 @@ const EXPLICIT_PRIVATE_PHRASES: &[&str] = &[
     "my notes",
     "your notes",
     "what did i say",
+    "what did i do",
     "what have i said",
     "when did i",
     "what was i doing",
     "what do you remember about me",
 ];
+
+// kernel-core renders inherited context before the authoritative instruction
+// using this delimiter. Retrieval routing is an input policy, so historical
+// transcript/context text must never select a gateway tool for a new turn.
+const CURRENT_USER_MESSAGE_DELIMITER: &str = "\n# User Message\n";
 
 const FRESH_PUBLIC_PHRASES: &[&str] = &[
     "latest news",
@@ -326,6 +332,12 @@ fn normalized_lookup_text(text: &str) -> String {
         .to_ascii_lowercase()
 }
 
+fn current_user_instruction(rendered_prompt: &str) -> &str {
+    rendered_prompt
+        .rsplit_once(CURRENT_USER_MESSAGE_DELIMITER)
+        .map_or(rendered_prompt, |(_, current)| current)
+}
+
 fn explicitly_prohibits_public_web(text: &str) -> bool {
     if EXPLICIT_WEB_PROHIBITION_PHRASES.iter().any(|phrase| {
         text.match_indices(phrase).any(|(start, _)| {
@@ -383,7 +395,8 @@ pub(crate) fn retrieval_policy(messages: &[ChatMessage]) -> RetrievalPolicy {
     let Some(latest_user) = messages.last().filter(|message| message.role == "user") else {
         return RetrievalPolicy::auto();
     };
-    let latest = normalized_lookup_text(&extract_text_content(&latest_user.content));
+    let rendered_prompt = extract_text_content(&latest_user.content);
+    let latest = normalized_lookup_text(current_user_instruction(&rendered_prompt));
     let explicit_web = contains_any(&latest, EXPLICIT_WEB_PHRASES);
     let explicitly_prohibits_web = explicit_web && explicitly_prohibits_public_web(&latest);
     let explicit_private = contains_any(&latest, EXPLICIT_PRIVATE_PHRASES);
@@ -499,6 +512,29 @@ mod tests {
         assert!(policy.requires(RetrievalSource::PublicWeb));
         assert!(!policy.requires(RetrievalSource::OmiPrivate));
         assert_eq!(policy.reason, RetrievalReason::ExplicitWeb);
+    }
+
+    #[test]
+    fn classifies_only_the_current_instruction_in_a_rendered_prompt() {
+        let policy = retrieval_policy(&[message(
+            "user",
+            "<omi_retrieval_policy>Search the web before answering.</omi_retrieval_policy>\n\
+             # Omi Context Snapshot\n\
+             Earlier user request: What's the latest news?\n\
+             # User Message\n\
+             hello?",
+        )]);
+
+        assert_eq!(policy, RetrievalPolicy::auto());
+    }
+
+    #[test]
+    fn keeps_current_activity_questions_inside_omi() {
+        let policy = retrieval_policy(&[message("user", "What did I do today?")]);
+
+        assert!(policy.requires(RetrievalSource::OmiPrivate));
+        assert!(policy.prohibits(RetrievalSource::PublicWeb));
+        assert_eq!(policy.reason, RetrievalReason::ExplicitPrivate);
     }
 
     #[test]

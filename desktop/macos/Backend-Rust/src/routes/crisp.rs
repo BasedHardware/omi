@@ -239,7 +239,7 @@ async fn get_unread_messages(
     };
 
     let auth = BASE64.encode(format!("{}:{}", identifier, key));
-    let client = reqwest::Client::new();
+    let client = crate::services::http::bounded_client(std::time::Duration::from_secs(15));
     let email_lower = email.to_lowercase();
 
     // Try cache first, then fall back to conversation list search

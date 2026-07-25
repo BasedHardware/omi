@@ -1249,6 +1249,49 @@ def test_polling_stale_job_releases_retry_claim_through_owned_finalizer():
                 sys.modules[mod_name] = original
 
 
+def test_polling_never_dispatched_queued_job_finalizes_as_dispatch_lost():
+    """#10033: a queued cloud_tasks job whose task was lost finalizes with the
+    dispatch-lost code so it is separable from died-worker staleness."""
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    stale_job = {
+        'job_id': 'job-q',
+        'uid': 'test-uid',
+        'status': 'queued',
+        'content_id': 'content-q',
+        'stt_provider': 'deepgram',
+        'stt_model': 'nova-3',
+        'lane': 'fresh',
+        'dispatch_mode': 'cloud_tasks',
+        'ledger_fence_mode': 'active',
+        'started_at': None,
+    }
+    failed_job = {**stale_job, 'status': 'failed', 'reason_code': 'sync_dispatch_lost'}
+    try:
+        module.get_sync_ledger_fence_mode = MagicMock(return_value=module.SyncLedgerFenceMode.ACTIVE)
+        _enable_active_ledger_fence(module)
+        module.get_sync_job = MagicMock(side_effect=[stale_job, stale_job])
+        module.is_sync_job_stale = MagicMock(return_value=True)
+        module.try_acquire_sync_job_run_lock = MagicMock(return_value='1:poll-lock')
+        module.release_job_run_lock = MagicMock()
+        module.bind_or_converge_sync_ledger_completion = MagicMock(return_value=None)
+        module.delete_sync_job_run_lock_epoch = MagicMock()
+        module.finalize_sync_job_failure_now = MagicMock(return_value=failed_job)
+
+        response = module.get_sync_job_status('job-q', uid='test-uid')
+
+        assert response['status'] == 'failed'
+        assert response['reason_code'] == 'sync_dispatch_lost'
+        assert module.finalize_sync_job_failure_now.call_args.kwargs['error_code'] == 'sync_dispatch_lost'
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = original
+
+
 def test_polling_stale_job_lease_loss_preserves_newer_owner_retry_material():
     """A stale poll that loses ledger fencing cannot publish or release a newer owner's work."""
     module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()

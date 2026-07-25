@@ -85,12 +85,22 @@ final class DashboardCaptureStateTests: XCTestCase {
 
   func testHomeAskBarRefocusesAfterOpeningChatStage() throws {
     let source = try dashboardSource()
+    let openChat = try methodBody(named: "openHomeChat", in: source)
 
     XCTAssertTrue(source.contains("private func openHomeChat(focusInput: Bool = true)"))
     XCTAssertTrue(source.contains("focusHomeAskFieldAfterStageTransition()"))
     XCTAssertTrue(source.contains("await Task.yield()"))
     XCTAssertTrue(source.contains("homeAskFieldFocused = true"))
     XCTAssertTrue(source.contains("openHomeChat(focusInput: false)"))
+    // omi-test-quality: source-inspection -- static contract: the SwiftUI focus
+    // state and navigation method are private view wiring, so the hotkey's
+    // already-visible-chat path cannot be driven from the test host.
+    XCTAssertTrue(
+      openChat.contains("if homeMode != .chat {"),
+      "Opening an already-visible chat must still continue to the input-focus request")
+    XCTAssertFalse(
+      openChat.contains("guard homeMode != .chat else { return }"),
+      "An early return drops the hotkey's input focus when chat is already visible")
   }
 
   func testSecondaryHomePagesReturnHomeOnEscape() throws {

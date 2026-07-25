@@ -113,4 +113,41 @@ final class BrowserGoogleSessionTests: XCTestCase {
       String(data: result.stderr, encoding: .utf8) ?? "Python cookie check failed"
     )
   }
+
+  func testRequestCookieValueUsesOnlyCookiesApplicableToTheTargetHost() throws {
+    let script =
+      BrowserGoogleSession.chromiumCookiePythonSupport + """
+
+        cookies = [
+            {
+                'domain': 'accounts.google.com',
+                'name': 'SAPISID',
+                'value': 'wrong-host-cookie',
+                'path': '/',
+                'secure': True,
+            },
+            {
+                'domain': '.google.com',
+                'name': 'SAPISID',
+                'value': 'calendar-cookie',
+                'path': '/',
+                'secure': True,
+            },
+        ]
+        jar = make_cookie_jar(cookies)
+        value = cookie_value_for_request(
+            jar,
+            'https://clients6.google.com/calendar/v3/calendars/primary/events',
+            ('SAPISID', '__Secure-3PAPISID'),
+        )
+        assert value == 'calendar-cookie', value
+        """
+
+    let result = try BrowserPythonRunner.run(script: script, arguments: [])
+    XCTAssertEqual(
+      result.terminationStatus,
+      0,
+      String(data: result.stderr, encoding: .utf8) ?? "Python cookie selection check failed"
+    )
+  }
 }

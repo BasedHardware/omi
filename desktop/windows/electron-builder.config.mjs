@@ -140,12 +140,27 @@ export default {
     artifactName: '${name}-${version}.${ext}'
   },
   linux: {
-    target: ['AppImage', 'snap', 'deb'],
+    // AppImage + deb only — snap omitted: strict confinement blocks
+    // xprop/tesseract/proc used by Linux active-window and OCR seams.
+    target: ['AppImage', 'deb'],
     maintainer: 'Based Hardware <team@basedhardware.com>',
-    category: 'Utility'
+    category: 'Utility',
+    synopsis: 'AI that sees your screen, listens, and remembers'
   },
   appImage: {
     artifactName: '${name}-${version}.${ext}'
+  },
+  deb: {
+    // Runtime tools/libs the Linux platform seams call out of process. Missing
+    // ones degrade gracefully (OCR/active-window return empty), but packaging the
+    // depends keeps the shipped App experience complete on Debian/Ubuntu.
+    depends: [
+      'tesseract-ocr',
+      'tesseract-ocr-eng',
+      'libnotify4',
+      'libxss1',
+      'x11-utils'
+    ]
   },
   npmRebuild: false,
   // --- AUTO-UPDATE ---

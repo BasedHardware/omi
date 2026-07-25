@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the Files connector showing as connected after onboarding while nothing was actually indexed — onboarding no longer prematurely marks indexing complete, so your files get scanned and become searchable"
+}

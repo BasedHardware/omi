@@ -1795,20 +1795,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get lovingOmi => 'Обичате ли Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Помогнете ни да достигнем до повече хора, като оставите отзив в App Store. Вашата обратна връзка е много важна за нас!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Помогнете ни да достигнем до повече хора, като оставите отзив в Google Play Store. Вашата обратна връзка е много важна за нас!';
-
-  @override
-  String get rateOnAppStore => 'Оценете в App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Оценете в Google Play';
-
-  @override
   String get maybeLater => 'Може би по-късно';
 
   @override
@@ -2143,6 +2129,18 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Редактирай спомен';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Обичам да ям сладолед...';

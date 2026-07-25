@@ -848,7 +848,7 @@ class MemoriesViewModel: ObservableObject {
       // Backend rejected device_scope for a non-canonical user — retry unscoped.
       log("MemoriesViewModel: device_scope unsupported by backend, retrying unscoped")
       DesktopDiagnosticsManager.shared.recordFallback(
-        area: "other",
+        area: "memory_scope",
         from: "device_scoped",
         to: "unscoped",
         reason: "capability_mismatch",
