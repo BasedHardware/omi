@@ -1430,13 +1430,26 @@ class TestPrerecordedProviderFactory(unittest.TestCase):
         self.assertIsInstance(provider, ModulatePrerecordedProvider)
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('modulate-velma-2', 'dg-nova-3'))
-    def test_unsupported_language_fails_closed_without_deepgram_fallback(self):
-        from utils.stt.pre_recorded import get_prerecorded_provider, get_prerecorded_service
+    def test_uncovered_language_reaches_velma_instead_of_failing_closed(self):
+        """Failing closed on an uncovered language stranded real users' audio.
 
-        with self.assertRaises(RuntimeError):
-            get_prerecorded_service('hi')
-        with self.assertRaises(RuntimeError):
-            get_prerecorded_provider('hi')
+        Hindi is in neither the literal Velma set nor Parakeet's batch model, so this
+        raised — and the raise surfaced as a retryable error that Cloud Tasks retried
+        until sustained 5xx throttled the sync queue. Velma's batch API detects the
+        language itself, so it can serve anything the capability maps omit.
+        """
+        from utils.stt.pre_recorded import (
+            ModulatePrerecordedProvider,
+            PrerecordedSTTService,
+            get_prerecorded_provider,
+            get_prerecorded_service,
+        )
+
+        svc, lang, model = get_prerecorded_service('hi')
+        self.assertEqual(svc, PrerecordedSTTService.MODULATE)
+        self.assertEqual(lang, 'multi')
+        self.assertEqual(model, 'velma-2')
+        self.assertIsInstance(get_prerecorded_provider('hi'), ModulatePrerecordedProvider)
 
     def test_providers_implement_abc(self):
         from utils.stt.pre_recorded import (
