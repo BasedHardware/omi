@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import type { RewindSettings, RewindCaptureDirective } from '../../../../shared/types'
+import { onCaptureStreamDeath } from './captureSupervisor'
 
 // Cap the longest sampled edge — plenty for a timeline + OCR, and keeps each
 // canvas grab + JPEG encode cheap.
 const MAX_EDGE = 1600
 const JPEG_QUALITY = 0.6
+// Wait before rebuilding a stream whose track ended, so a source that is
+// permanently gone (e.g. an unplugged display) can't hot-loop getUserMedia.
+const STREAM_RESTART_BACKOFF_MS = 3000
 
 /**
  * Background screen-capture host for Rewind. Mounted app-wide (while the window
@@ -19,6 +23,8 @@ export function RewindCaptureHost(): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const detachDeathRef = useRef<(() => void) | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const savingRef = useRef(false)
   const [settings, setSettings] = useState<RewindSettings | null>(null)
@@ -64,6 +70,14 @@ export function RewindCaptureHost(): React.JSX.Element {
         clearTimeout(timerRef.current)
         timerRef.current = null
       }
+      if (restartTimerRef.current) {
+        clearTimeout(restartTimerRef.current)
+        restartTimerRef.current = null
+      }
+      // Detach before stopping the tracks so our own teardown is never mistaken
+      // for the stream dying.
+      detachDeathRef.current?.()
+      detachDeathRef.current = null
       streamRef.current?.getTracks().forEach((t) => t.stop())
       streamRef.current = null
       if (videoRef.current) videoRef.current.srcObject = null
@@ -136,6 +150,18 @@ export function RewindCaptureHost(): React.JSX.Element {
           return
         }
         streamRef.current = stream
+        // A track can end mid-session (display reconfig, GPU/driver reset, source
+        // gone) without any power/lock directive. Without this the loop keeps
+        // sampling a dead <video> and every frame is blank/dark until restart
+        // (#10504). Rebuild the stream when the track dies, after a backoff.
+        detachDeathRef.current = onCaptureStreamDeath(stream, () => {
+          if (cancelled || streamRef.current !== stream) return
+          console.warn('[rewind] capture track ended; restarting stream')
+          stop()
+          restartTimerRef.current = setTimeout(() => {
+            if (!cancelled && enabled) void start()
+          }, STREAM_RESTART_BACKOFF_MS)
+        })
         const v = videoRef.current
         if (v) {
           v.srcObject = stream
