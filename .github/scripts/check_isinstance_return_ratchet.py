@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Reject new assigned-call ``isinstance``-then-return flow control."""
 
+from __future__ import annotations
+
 import argparse
 import ast
 import json

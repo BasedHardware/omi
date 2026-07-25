@@ -347,9 +347,9 @@ check_flutter_generated_if_needed() {
     echo "==> Flutter build_runner generated-output check"
     (
       cd app
-      dart run build_runner build --delete-conflicting-outputs
+      flutter pub run build_runner build --delete-conflicting-outputs
       git diff --exit-code -- lib || {
-        echo "FAIL: generated Dart files are stale. Run: cd app && dart run build_runner build --delete-conflicting-outputs" >&2
+        echo "FAIL: generated Dart files are stale. Run: cd app && flutter pub run build_runner build --delete-conflicting-outputs" >&2
         exit 1
       }
       untracked=$(git ls-files --others --exclude-standard -- lib)
