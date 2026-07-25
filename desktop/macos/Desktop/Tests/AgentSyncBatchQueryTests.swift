@@ -364,7 +364,6 @@ final class AgentSyncBatchQueryTests: XCTestCase {
     private var storageFixture: RewindStorageTestIsolation.Fixture?
     private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot?
 
-
     override func setUp() async throws {
       try await super.setUp()
       let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "agent-sync-recovery")
