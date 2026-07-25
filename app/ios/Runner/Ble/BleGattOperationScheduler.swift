@@ -30,12 +30,51 @@ enum BleGattNotificationStateAdmission: Equatable {
   }
 }
 
-struct BleGattTarget: Equatable {
+struct BleGattTarget: Equatable, Hashable {
   let serviceUuid: String
   let characteristicUuid: String
   let instanceId: UInt64
 
   static let rssi = BleGattTarget(serviceUuid: "", characteristicUuid: "rssi", instanceId: 0)
+}
+
+/// Coalesces notification requests for one characteristic into the latest desired state.
+///
+/// CoreBluetooth callbacks identify the characteristic but not the request that
+/// initiated the state change. Keep one transition in flight and launch at most
+/// one follow-up transition after its callback.
+final class BleGattNotificationTransitionState {
+  private var confirmed: Bool?
+  private var desired: Bool?
+  private var inFlight: Bool?
+
+  init(confirmed: Bool? = nil) {
+    self.confirmed = confirmed
+  }
+
+  func request(_ enabled: Bool) -> Bool? {
+    desired = enabled
+    guard inFlight == nil, confirmed != enabled else { return nil }
+    inFlight = enabled
+    return enabled
+  }
+
+  var currentInFlight: Bool? { inFlight }
+
+  /// Returns the next desired transition, already marked as in flight.
+  ///
+  /// A failed transition waits for connection-session recovery instead of
+  /// retrying against a CoreBluetooth session that may no longer be usable.
+  func complete(attempted: Bool, success: Bool) -> Bool? {
+    guard inFlight == attempted else { return nil }
+    inFlight = nil
+    guard success else { return nil }
+    confirmed = attempted
+
+    guard let next = desired, next != confirmed else { return nil }
+    inFlight = next
+    return next
+  }
 }
 
 struct BleGattOperationToken: Equatable {
