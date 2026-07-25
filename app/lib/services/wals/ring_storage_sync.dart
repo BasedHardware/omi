@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -467,7 +468,7 @@ class RingStorageSyncImpl implements RingStorageSync {
   }) async {
     final completer = Completer<bool>();
     final reassembler = RingRecordReassembler();
-    final pendingRecords = <_RecoveredRingRecord>[];
+    final pendingRecords = ListQueue<_RecoveredRingRecord>();
     int recordsConsumed = 0;
     int segment = 0;
     int? previousRecordTimestamp;
@@ -494,7 +495,7 @@ class RingStorageSyncImpl implements RingStorageSync {
         var frameCount = 0;
         while (pendingRecords.isNotEmpty && pendingRecords.first.segment == firstSegment) {
           if (frameCount >= chunkFrames) break;
-          final record = pendingRecords.removeAt(0);
+          final record = pendingRecords.removeFirst();
           chunkRecords.add(record);
           frameCount += record.frames.length;
         }
@@ -753,14 +754,19 @@ class RingStorageSyncImpl implements RingStorageSync {
     final directory = await _documentsDirectoryProvider();
     final filePath = '${directory.path}/${wal.getFileNameByTimeStarts(timerStart, sourceId: sourceId)}';
 
-    final List<int> data = [];
+    var dataLength = 0;
     for (final frame in frames) {
-      final byteFrame = ByteData(frame.length);
-      for (int j = 0; j < frame.length; j++) {
-        byteFrame.setUint8(j, frame[j]);
-      }
-      data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
-      data.addAll(byteFrame.buffer.asUint8List());
+      dataLength += Uint32List.bytesPerElement + frame.length;
+    }
+
+    final data = Uint8List(dataLength);
+    final writer = ByteData.sublistView(data);
+    var offset = 0;
+    for (final frame in frames) {
+      writer.setUint32(offset, frame.length, Endian.little);
+      offset += Uint32List.bytesPerElement;
+      data.setRange(offset, offset + frame.length, frame);
+      offset += frame.length;
     }
 
     final file = File(filePath);
