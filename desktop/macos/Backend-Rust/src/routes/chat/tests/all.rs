@@ -1065,6 +1065,45 @@ fn test_retrieval_policy_uses_model_selected_web_search_for_current_weather() {
 }
 
 #[test]
+fn test_pause_turn_stream_accumulator_preserves_raw_content_for_continuation() {
+    let mut blocks = StreamedContentBlocks::default();
+    blocks.start_block(0, json!({"type": "text", "text": "Searching"}));
+    blocks.append_delta(0, &json!({"type": "text_delta", "text": "..."}));
+    blocks.stop_block(0);
+    blocks.start_block(
+        1,
+        json!({
+            "type": "server_tool_use",
+            "id": "srvtoolu_123",
+            "name": "web_search",
+            "input": {}
+        }),
+    );
+    blocks.append_delta(
+        1,
+        &json!({"type": "input_json_delta", "partial_json": "{\"query\":"}),
+    );
+    blocks.append_delta(
+        1,
+        &json!({"type": "input_json_delta", "partial_json": "\"NYC weather\"}"}),
+    );
+    blocks.stop_block(1);
+
+    assert_eq!(
+        blocks.into_value(),
+        json!([
+            {"type": "text", "text": "Searching..."},
+            {
+                "type": "server_tool_use",
+                "id": "srvtoolu_123",
+                "name": "web_search",
+                "input": {"query": "NYC weather"}
+            }
+        ])
+    );
+}
+
+#[test]
 fn test_pause_turn_continuation_preserves_raw_assistant_content_and_tools() {
     let req = test_request(vec![user_message(
         "Search the web for current weather in NYC",
@@ -1153,7 +1192,16 @@ fn test_pause_turn_server_tool_response_decodes_and_preserves_raw_content() {
 
 #[test]
 fn test_translate_request_degrades_when_web_search_disabled() {
-    let req = test_request(vec![user_message("Search the web for HumanPost")]);
+    let mut req = test_request(vec![user_message("Search the web for HumanPost")]);
+    req.tools = Some(vec![ToolDefinition {
+        tool_type: "function".to_string(),
+        function: FunctionDefinition {
+            name: "search_memories".to_string(),
+            description: Some("Search Omi memories".to_string()),
+            parameters: None,
+        },
+    }]);
+    assert!(should_record_web_search_fallback(&req, false));
     let result = translate_request_inner(
         &req,
         "claude-sonnet-4-6",
@@ -1161,7 +1209,8 @@ fn test_translate_request_degrades_when_web_search_disabled() {
         ReasoningEffort::Unspecified,
     )
     .unwrap();
-    assert!(result.tools.is_none());
+    assert_eq!(server_tool_available_from(&result.tools), "model_knowledge");
+    assert_eq!(result.tools.unwrap().len(), 1);
 }
 
 #[test]
@@ -1885,6 +1934,7 @@ async fn incremental_translation_preserves_split_utf8_tool_chunks_usage_and_done
             upstream_model: "claude-sonnet-4-6".to_string(),
             firestore: None,
         },
+        None,
     )
     .collect::<Vec<_>>()
     .await;
@@ -1941,6 +1991,7 @@ async fn incremental_translation_terminates_a_partial_stream_at_eof() {
             upstream_model: "claude-sonnet-4-6".to_string(),
             firestore: None,
         },
+        None,
     )
     .collect::<Vec<_>>()
     .await;
@@ -2085,6 +2136,7 @@ async fn thinking_deltas_stream_as_reasoning_content() {
             upstream_model: "claude-sonnet-4-6".to_string(),
             firestore: None,
         },
+        None,
     )
     .collect::<Vec<_>>()
     .await;

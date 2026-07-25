@@ -123,6 +123,22 @@ sequenceDiagram
     end
 ```
 
+### Live STT observability
+
+For backend-provider `/v4/listen` sessions, `omi_live_stt_accepted_total`
+increments when the listener receives its first nontrivial audio frame. A
+successful terminal is emitted only after a nonempty transcript has been
+delivered to the client WebSocket. Provider failures finish the same attempt
+through `terminate_live_stt_session`, preserving their bounded failure phase;
+other attempts that end before delivery are classified during teardown as
+`failure` or `cancelled`.
+
+These metrics use only the closed `provider`, client `platform`, deployment
+environment, outcome, and phase labels. They do not include transcript content,
+user IDs, model revisions, or other high-cardinality request data. Custom-STT
+sessions are excluded because the backend does not own their provider socket or
+provider attempt lifecycle.
+
 ### Terminal STT provider failure
 
 Provider initialization failure, a latched dead provider socket, or an audio

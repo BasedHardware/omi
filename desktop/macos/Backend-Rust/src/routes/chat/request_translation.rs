@@ -1,4 +1,4 @@
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::models::chat_completions::*;
 
@@ -638,5 +638,46 @@ pub(super) fn translate_response(
             finish_reason,
         }],
         usage: Some(usage),
+    }
+}
+
+pub(super) fn response_text_content(resp: &AnthropicResponse) -> Option<String> {
+    let text = resp
+        .content
+        .iter()
+        .filter_map(|block| match block {
+            AnthropicContentBlock::Text { text } => Some(text.as_str()),
+            AnthropicContentBlock::ToolUse { .. }
+            | AnthropicContentBlock::ServerToolUse { .. }
+            | AnthropicContentBlock::WebSearchToolResult {}
+            | AnthropicContentBlock::Thinking { .. }
+            | AnthropicContentBlock::RedactedThinking {} => None,
+        })
+        .collect::<Vec<_>>()
+        .join("");
+
+    (!text.is_empty()).then_some(text)
+}
+
+pub(super) fn should_record_web_search_fallback(
+    req: &ChatCompletionRequest,
+    web_search_supported: bool,
+) -> bool {
+    !web_search_supported && req.tools.as_ref().is_some_and(|tools| !tools.is_empty())
+}
+
+pub(super) fn server_tool_available_from(tools: &Option<Vec<AnthropicToolDef>>) -> &'static str {
+    if tools.as_ref().is_some_and(|defs| {
+        defs.iter().any(|def| match def {
+            AnthropicToolDef::Server(value) => value
+                .get("name")
+                .and_then(Value::as_str)
+                .is_some_and(|name| name == "web_search"),
+            AnthropicToolDef::Custom(_) => false,
+        })
+    }) {
+        "anthropic_web_search"
+    } else {
+        "model_knowledge"
     }
 }

@@ -1,0 +1,28 @@
+"""Contract for development Pusher image freshness on shared runtime imports."""
+
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[3]
+WORKFLOW = REPO / '.github/workflows/gcp_backend_pusher_auto_deploy.yml'
+
+
+def test_pusher_auto_deploy_tracks_its_shared_lifecycle_and_observability_imports():
+    lines = WORKFLOW.read_text(encoding='utf-8').splitlines()
+    paths_start = lines.index('    paths:') + 1
+    paths = set()
+    for line in lines[paths_start:]:
+        if not line.startswith('      - '):
+            break
+        paths.add(line.split("'", 2)[1])
+
+    assert paths == {
+        'backend/pusher/**',
+        'backend/charts/pusher/**',
+        'backend/database/conversation_finalization_jobs.py',
+        'backend/routers/pusher.py',
+        'backend/services/conversation_finalization.py',
+        'backend/utils/conversations/lifecycle.py',
+        'backend/utils/metrics.py',
+        'backend/utils/observability/journeys.py',
+        '.github/workflows/gcp_backend_pusher_auto_deploy.yml',
+    }

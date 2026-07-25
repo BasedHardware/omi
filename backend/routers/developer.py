@@ -14,7 +14,7 @@ import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
 from database._client import db
-from database.vector_db import upsert_memory_vectors_batch
+from database.vector_db import search_memories_by_vector, upsert_memory_vectors_batch
 
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
@@ -434,6 +434,42 @@ def get_memories(
     return valid_memories
 
 
+def _legacy_developer_vector_items(uid: str, query: str, limit: int) -> List[dict]:
+    """Relevance-ranked legacy `memories` results for a legacy-cohort vector search.
+
+    The default-read vector path returns USE_LEGACY_SAFE (or DENY + missing_rollout_state)
+    for an un-enrolled legacy account; that account's authoritative surface is the legacy
+    `memories` collection, so search it directly instead of failing closed. IDs come back
+    ordered by vector relevance; hydration preserves that order. Locked memories are
+    content-redacted exactly as GET /v1/dev/user/memories does. Scores aren't exposed by
+    the legacy index, so relevance_score is left null.
+    """
+    memory_ids = search_memories_by_vector(uid, query, limit)
+    if not memory_ids:
+        return []
+    hydrated = {
+        m['id']: m for m in memories_db.get_memories_by_ids(uid, memory_ids) if isinstance(m, dict) and m.get('id')
+    }
+    items: List[dict] = []
+    for memory_id in memory_ids:  # preserve vector-relevance order
+        memory = hydrated.get(memory_id)
+        if memory is None:
+            continue
+        content = str(memory.get('content') or '')
+        if memory.get('is_locked', False):
+            content = (content[:70] + '...') if len(content) > 70 else content
+        category = memory.get('category')
+        items.append(
+            {
+                'id': memory['id'],
+                'content': content,
+                'category': category if isinstance(category, str) and category.strip() else None,
+                'relevance_score': None,
+            }
+        )
+    return items
+
+
 @router.get(
     "/v1/dev/user/memories/vector/search",
     tags=["developer"],
@@ -508,11 +544,36 @@ def search_memories_vector(
         db_client=db,
         rollout_decision=memory_rollout,
     )
-    if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
-        raise HTTPException(
-            status_code=403, detail=_developer_memory_access_not_ready_detail(memory_result.fallback_reason)
+    # A legacy-cohort account (explicit USE_LEGACY_SAFE, or an un-enrolled account whose
+    # only signal is missing_rollout_state) reads the legacy `memories` collection — the
+    # same recovery GET /v1/dev/user/memories and the MCP path already apply (#10094/#10095).
+    # Vector search previously failed closed with 403 here, so those accounts could list
+    # memories but not vector-search them (#10203).
+    serve_legacy = memory_result.should_use_legacy_fallback or (
+        memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}
+        and memory_result.fallback_reason == 'missing_rollout_state'
+    )
+    if serve_legacy:
+        record_fallback(
+            component='other',
+            from_mode='memory_default_read_vector',
+            to_mode='legacy_memories',
+            reason='policy',
+            outcome='recovered',
         )
-    if memory_result.should_use_legacy_fallback:
+        legacy_items = _legacy_developer_vector_items(uid, query, limit)
+        return {
+            'items': legacy_items,
+            'returned_count': len(legacy_items),
+            'archive_default_visible': False,
+            'policy': {
+                'consumer': 'developer_api',
+                'app_has_default_memory_grant': True,
+                'archive_capability': False,
+                'raw_provenance_capability': False,
+            },
+        }
+    if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
         raise HTTPException(
             status_code=403, detail=_developer_memory_access_not_ready_detail(memory_result.fallback_reason)
         )
