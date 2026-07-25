@@ -29,6 +29,11 @@ checks:
     triggers: ["Makefile", "backend/scripts/sync-python-deps.sh", "scripts/pre-push", "scripts/test-make-setup.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "make setup must provision the minimal, rerunnable backend environment required by selected pre-push checks"
+  - id: failure-class-retirement-author
+    command: ["python3", ".github/scripts/test_failure_class_retirement.py"]
+    triggers: [".github/scripts/failure_class_retirement.py", ".github/scripts/test_failure_class_retirement.py", ".github/workflows/repo-hygiene.yml", "scripts/failure-class", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the weekly retirement author must refuse a truncated event feed; a short feed reports every class as instance-free, so the job would stay green while retiring nothing"
   - id: check-manifest-contract
     command: ["python3", ".github/scripts/test_run_checks.py"]
     triggers: ["all"]
