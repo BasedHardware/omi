@@ -126,6 +126,36 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
             stderr=subprocess.PIPE,
         )
 
+    def test_github_check_status_uses_numeric_id_to_break_timestamp_ties(self) -> None:
+        response = [
+            {
+                "check_runs": [
+                    {
+                        "id": 99_999_999_999,
+                        "name": "Release Eligibility",
+                        "status": "completed",
+                        "conclusion": "success",
+                        "started_at": "2026-07-25T21:28:00Z",
+                        "completed_at": "2026-07-25T21:28:16Z",
+                    },
+                    {
+                        "id": 100_000_000_000,
+                        "name": "Release Eligibility",
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "started_at": "2026-07-25T21:28:00Z",
+                        "completed_at": "2026-07-25T21:28:16Z",
+                    },
+                ]
+            }
+        ]
+        completed = subprocess.CompletedProcess([], 0, stdout=json.dumps(response), stderr="")
+
+        with patch.object(planner.subprocess, "run", return_value=completed):
+            status, conclusion, error = planner.github_check_status(REPOSITORY, SOURCE_SHA, "Release Eligibility")
+
+        self.assertEqual((status, conclusion, error), ("completed", "failure", None))
+
     def test_codemagic_config_is_a_releasable_desktop_input(self) -> None:
         expected_args = [
             "diff",
