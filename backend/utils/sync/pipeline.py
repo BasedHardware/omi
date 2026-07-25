@@ -104,7 +104,6 @@ from utils.stt.outcomes import (
     TranscriptionFailure,
     TranscriptionOutcome,
     bounded_provider,
-    empty_unexpected_failure,
     failure_from_exception,
 )
 from utils.stt.speaker_embedding import (
@@ -122,6 +121,10 @@ from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_
 logger = logging.getLogger(__name__)
 
 MAX_VAD_SEGMENT_SECONDS = int(os.getenv('SYNC_MAX_VAD_SEGMENT_SECONDS', '300'))
+
+# Segment outcomes that are valid terminal results, not errors: a transcript, or
+# audio that carried no transcribable speech. Everything else is a real failure.
+_NON_ERROR_SEGMENT_OUTCOMES = frozenset({TranscriptionOutcome.SUCCESS, TranscriptionOutcome.EXPECTED_SILENCE})
 _SYNC_STT_MODELS = {'nova-3', 'velma-2', 'parakeet'}
 _PARTIAL_RESULT_FENCED_CONVERSATION_IDS = 'fenced_conversation_ids'
 _RESPONSE_FENCED_CONVERSATION_IDS = '_fenced_conversation_ids'
@@ -206,7 +209,7 @@ def _record_sync_segment_outcome(
             # completing. A later retry may duplicate this metric, but not the
             # customer-visible transcription result.
             logger.warning('event=sync_transcription_metric outcome=dedupe_failed kind=segment')
-    log = logger.info if outcome == TranscriptionOutcome.SUCCESS else logger.error
+    log = logger.info if outcome in _NON_ERROR_SEGMENT_OUTCOMES else logger.error
     log(
         'event=sync_transcription_segment outcome=%s provider=%s model=%s lane=%s retryable=%s',
         outcome.value,
@@ -250,6 +253,36 @@ def _record_sync_segment_failure(
         )
     with lock:
         errors.append(failure.error_code)
+
+
+def _record_empty_segment_as_silence(
+    *,
+    provider: str,
+    model: str,
+    lane: str,
+    deferred_outcome: dict | None,
+) -> None:
+    """Record a speech-free segment as a valid empty result, not a failure.
+
+    Records the outcome exactly as the success path does but appends nothing to
+    the job's error list, so a job whose every segment is speech-free finalizes
+    completed rather than failed and the client stops re-uploading it.
+    """
+    _set_deferred_segment_outcome(
+        deferred_outcome,
+        outcome=TranscriptionOutcome.EXPECTED_SILENCE,
+        provider=provider,
+        model=model,
+        retryable=False,
+    )
+    if deferred_outcome is None:
+        _record_sync_segment_outcome(
+            TranscriptionOutcome.EXPECTED_SILENCE,
+            provider=provider,
+            model=model,
+            lane=lane,
+            retryable=False,
+        )
 
 
 def _set_deferred_segment_outcome(
@@ -1040,43 +1073,30 @@ def process_segment(
         )
         language = user_language if (single_language_mode and user_language) else detected_language
         if not words:
-            # Every process_segment input has already passed VAD and is therefore
-            # speech-eligible. A provider returning no words here is not the same
-            # as the valid zero-segment result produced by the VAD phase.
-            failure = empty_unexpected_failure(provider)
-            _set_deferred_segment_outcome(
-                deferred_outcome,
-                outcome=failure.outcome,
-                provider=failure.provider,
-                model=model,
-                retryable=failure.retryable,
-            )
-            _record_sync_segment_failure(
-                failure,
+            # A provider that returns without error and produces no words is
+            # reporting that the audio holds no transcribable speech. VAD
+            # admitting the segment is not evidence to the contrary — it
+            # over-reports on noise — so this is the same valid empty result as
+            # VAD finding nothing, not a failure to retry. Counting it as a
+            # failed segment finalized the whole job failed, and the client
+            # re-uploaded the same noise on every pass until it gave up and
+            # showed the recording as permanently failed.
+            _record_empty_segment_as_silence(
+                provider=provider,
                 model=model,
                 lane=sync_lane,
-                lock=lock,
-                errors=errors,
-                record_metric=deferred_outcome is None,
+                deferred_outcome=deferred_outcome,
             )
             return False
         transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
         if not transcript_segments:
-            failure = empty_unexpected_failure(provider)
-            _set_deferred_segment_outcome(
-                deferred_outcome,
-                outcome=failure.outcome,
-                provider=failure.provider,
-                model=model,
-                retryable=failure.retryable,
-            )
-            _record_sync_segment_failure(
-                failure,
+            # Words survived the provider but nothing survived post-processing:
+            # again no transcribable speech, valid and empty rather than failed.
+            _record_empty_segment_as_silence(
+                provider=provider,
                 model=model,
                 lane=sync_lane,
-                lock=lock,
-                errors=errors,
-                record_metric=deferred_outcome is None,
+                deferred_outcome=deferred_outcome,
             )
             return False
 
@@ -2019,6 +2039,11 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 _RESPONSE_FENCED_CONVERSATION_IDS: fenced_conversation_ids,
             }
             segment_errors = []
+            # Segments that yielded a transcript, distinct from ones that failed
+            # and ones that held no speech. Only transcribed audio is billed, so
+            # a job of nothing but silence records no usage even though it is not
+            # a failure.
+            content_segment_count = [0]
             segment_lock = threading.Lock()
 
             # Segments that fully landed in a prior Cloud Tasks attempt are skipped
@@ -2079,6 +2104,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     # Therefore any skipped segment on a retry has its visible
                     # conversation IDs available for response hydration.
                     with segment_lock:
+                        content_segment_count[0] += 1
                         partial = {
                             'new_memories': sorted(response['new_memories']),
                             'updated_memories': sorted(response['updated_memories']),
@@ -2241,7 +2267,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 result['total_segments'] = total_segments
                 result['errors'] = segment_errors[:10]
 
-            if successful_segments > 0:
+            if content_segment_count[0] > 0:
                 try:
                     usage_seconds = int(total_speech_seconds)
                     should_record_usage = bool(content_id) or await run_blocking(
