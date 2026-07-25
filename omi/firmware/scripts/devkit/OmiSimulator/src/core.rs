@@ -2,13 +2,15 @@ use btleplug::{
     api::{Central, Manager as _, Peripheral as _, ScanFilter},
     platform::Manager,
 };
+use serde::Serialize;
 use std::{
     fs,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
 };
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Product {
     Omi,
     OmiDevKit,
@@ -101,7 +103,7 @@ impl Product {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
 pub struct Capabilities {
     pub button: bool,
     pub audio: bool,
@@ -130,7 +132,8 @@ impl Capabilities {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 #[repr(i32)]
 pub enum ButtonEvent {
     Single = 1,
@@ -146,9 +149,25 @@ impl ButtonEvent {
         packet[..4].copy_from_slice(&(self as i32).to_le_bytes());
         packet
     }
+
+    pub fn decode(packet: &[u8]) -> Result<Self, String> {
+        let bytes: [u8; 4] = packet
+            .get(..4)
+            .ok_or("button value is shorter than four bytes")?
+            .try_into()
+            .map_err(|error| format!("invalid button value: {error}"))?;
+        match i32::from_le_bytes(bytes) {
+            1 => Ok(Self::Single),
+            2 => Ok(Self::Double),
+            3 => Ok(Self::Long),
+            4 => Ok(Self::Press),
+            5 => Ok(Self::Release),
+            value => Err(format!("unknown button event {value}")),
+        }
+    }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct BluetoothTarget {
     pub name: String,
     pub address: String,
@@ -241,6 +260,53 @@ pub fn set_bluetooth_connection(id: &str, connect: bool) -> Result<(), String> {
     })
 }
 
+pub fn read_button_event(id: &str) -> Result<ButtonEvent, String> {
+    let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;
+    runtime.block_on(async {
+        let manager = Manager::new().await.map_err(|error| error.to_string())?;
+        let adapter = manager
+            .adapters()
+            .await
+            .map_err(|error| error.to_string())?
+            .into_iter()
+            .next()
+            .ok_or("no Bluetooth adapter available")?;
+        let peripheral = adapter
+            .peripherals()
+            .await
+            .map_err(|error| error.to_string())?
+            .into_iter()
+            .find(|peripheral| peripheral.id().to_string() == id)
+            .ok_or("selected peripheral is no longer available")?;
+        if !peripheral
+            .is_connected()
+            .await
+            .map_err(|error| error.to_string())?
+        {
+            peripheral
+                .connect()
+                .await
+                .map_err(|error| error.to_string())?;
+        }
+        peripheral
+            .discover_services()
+            .await
+            .map_err(|error| error.to_string())?;
+        let characteristic = peripheral
+            .characteristics()
+            .into_iter()
+            .find(|characteristic| {
+                characteristic.uuid.to_string() == "23ba7925-0000-1000-7450-346eac492e92"
+            })
+            .ok_or("selected product does not expose the Omi button characteristic")?;
+        let value = peripheral
+            .read(&characteristic)
+            .await
+            .map_err(|error| error.to_string())?;
+        ButtonEvent::decode(&value)
+    })
+}
+
 #[derive(Default)]
 pub struct PeripheralCatalog {
     targets: Vec<(BluetoothTarget, u64)>,
@@ -275,7 +341,7 @@ impl PeripheralCatalog {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct FirmwareImage {
     pub path: PathBuf,
     pub version: String,
@@ -346,6 +412,15 @@ impl FlashSession {
     }
 }
 
+impl Drop for FlashSession {
+    fn drop(&mut self) {
+        if self.child.try_wait().ok().flatten().is_none() {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -361,6 +436,11 @@ mod tests {
         assert_eq!(ButtonEvent::Single.packet(), [1, 0, 0, 0, 0, 0, 0, 0]);
         assert_eq!(ButtonEvent::Double.packet(), [2, 0, 0, 0, 0, 0, 0, 0]);
         assert_eq!(ButtonEvent::Long.packet(), [3, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(
+            ButtonEvent::decode(&ButtonEvent::Double.packet()).unwrap(),
+            ButtonEvent::Double
+        );
+        assert!(ButtonEvent::decode(&[6, 0, 0, 0]).is_err());
     }
 
     #[test]
