@@ -58,7 +58,7 @@ class _Transaction:
     def update(self, ref, data):
         self.updates.append((ref, data))
 
-    def set(self, ref, data):
+    def set(self, ref, data, **_kwargs):
         self.sets.append((ref, data))
 
 
@@ -169,6 +169,7 @@ def test_create_or_get_intent_retries_read_contention_with_a_fresh_transaction(m
 
     conversation_ref = _conversation()
     jobs_collection = _Collection({})
+    projection_collection = _Collection({})
     transactions: list[_Transaction] = []
 
     class _Client:
@@ -178,8 +179,10 @@ def test_create_or_get_intent_retries_read_contention_with_a_fresh_transaction(m
             return transaction
 
         def collection(self, name: str):
-            assert name == jobs.FINALIZATION_JOBS_COLLECTION
-            return jobs_collection
+            if name == jobs.FINALIZATION_JOBS_COLLECTION:
+                return jobs_collection
+            assert name == jobs.FINALIZATION_PROJECTION_COLLECTION
+            return projection_collection
 
     transactional_calls = 0
 
@@ -217,8 +220,15 @@ def test_create_or_get_intent_retries_read_contention_with_a_fresh_transaction(m
     assert transactional_calls == 2
     assert len(transactions) == 2
     assert transactions[0] is not transactions[1]
+    assert transactions[0].sets == []
     assert intent['status'] == 'queued'
-    assert len(transactions[1].sets) == 1
+    # The retry's committed transaction creates exactly one job and one shard
+    # delta; the aborted attempt never contributes a second accepted count.
+    assert len(transactions[1].sets) == 2
+    assert transactions[1].sets[1][0].id == jobs._projection_shard_id(
+        jobs.FINALIZATION_PROJECTION_GENERATION,
+        transactions[1].sets[0][1]['projection_shard'],
+    )
 
 
 def test_photo_only_conversation_with_durable_content_marker_is_admitted():
@@ -465,6 +475,68 @@ def test_finalization_completion_requires_durable_fanout_completion():
     completed = _Transaction()
     assert jobs._mark_finalization_completed_txn(completed, ref, 1, 4, now) is True
     assert completed.updates[0][1]['terminal_outcome'] == 'success'
+
+
+def test_admitted_terminal_replay_updates_its_shard_once():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 4,
+            'fanout_status': 'completed',
+            'projection_generation': jobs.FINALIZATION_PROJECTION_GENERATION,
+            'projection_shard': jobs._projection_shard('job-1'),
+        },
+    )
+    projection = _Collection({})
+
+    first = _Transaction()
+    assert jobs._mark_finalization_completed_txn(first, ref, 1, 4, now, projection) is True
+    assert len(first.sets) == 1
+    assert first.sets[0][0].id == jobs._projection_shard_id(
+        jobs.FINALIZATION_PROJECTION_GENERATION, jobs._projection_shard('job-1')
+    )
+
+    # A Firestore retry observes the committed terminal snapshot and performs
+    # no second aggregate write, even though the API remains idempotently true.
+    ref.data = ref.data | first.updates[0][1]
+    replay = _Transaction()
+    assert jobs._mark_finalization_completed_txn(replay, ref, 1, 4, now, projection) is True
+    assert replay.updates == []
+    assert replay.sets == []
+
+
+def test_pre_projection_terminal_keeps_its_outcome_without_moving_the_new_denominator():
+    ref = _Ref(
+        'legacy-job',
+        {'status': 'leased', 'dispatch_generation': 1, 'lease_epoch': 1, 'fanout_status': 'completed'},
+    )
+    transaction = _Transaction()
+
+    assert jobs._mark_finalization_completed_txn(transaction, ref, 1, 1, _now(), _Collection({})) is True
+    assert transaction.updates[0][1]['terminal_outcome'] == 'success'
+    assert transaction.sets == []
+
+
+def test_byok_resume_moves_only_its_admitted_projection_state():
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'blocked_byok',
+            'requires_byok': True,
+            'projection_generation': jobs.FINALIZATION_PROJECTION_GENERATION,
+            'projection_shard': 3,
+        },
+    )
+    transaction = _Transaction()
+
+    intent = jobs._resume_blocked_byok_job_txn(transaction, ref, _now(), _Collection({}))
+
+    assert intent['status'] == 'queued'
+    assert transaction.updates[0][1]['status'] == 'queued'
+    assert transaction.sets[0][0].id == jobs._projection_shard_id(jobs.FINALIZATION_PROJECTION_GENERATION, 3)
 
 
 def test_fanout_claim_terminally_fences_a_discard_that_wins_before_its_transaction():
@@ -728,59 +800,82 @@ def test_final_attempt_atomically_closes_its_bound_processing_conversation():
     ]
 
 
-def test_durable_summary_distinguishes_terminal_outcomes_and_legacy_terminal_rows(monkeypatch):
-    class Query:
-        def __init__(self, counts, key):
-            self.counts = counts
-            self.key = key
+def test_durable_summary_reads_a_fixed_projection_shard_set_without_job_aggregations():
+    class Snapshot:
+        def __init__(self, data):
+            self.exists = data is not None
+            self._data = data
 
-        def where(self, field, _operator, value):
-            return Query(self.counts, (field, value))
+        def to_dict(self):
+            return self._data
 
-        def count(self):
+    class Projection:
+        def __init__(self):
+            self.read_ids: list[str] = []
+
+        def document(self, doc_id):
+            projection = self
+
+            class Ref:
+                def get(self):
+                    projection.read_ids.append(doc_id)
+                    shard = int(doc_id.rsplit('-', 1)[1])
+                    if shard != 0:
+                        return Snapshot(None)
+                    return Snapshot(
+                        {
+                            'generation': jobs.FINALIZATION_PROJECTION_GENERATION,
+                            'shard': 0,
+                            'accepted': 8,
+                            'queued': 2,
+                            'leased': 1,
+                            'blocked_byok': 2,
+                            'completed': 2,
+                            'dead_letter': 1,
+                            'success': 1,
+                            'stale': 1,
+                            'failure': 1,
+                        }
+                    )
+
+            return Ref()
+
+    class JobQuery:
+        def where(self, field, operator, _value):
+            assert (field, operator) == ('reconcile_after_at', '<=')
             return self
 
-        def get(self):
-            return [[SimpleNamespace(value=self.counts.get(self.key, 0))]]
-
-        def limit(self, _limit):
+        def limit(self, value):
+            assert value == 100
             return self
 
         def stream(self):
             return iter(())
 
+    projection = Projection()
+
     class Client:
         def collection(self, name):
+            if name == jobs.FINALIZATION_PROJECTION_COLLECTION:
+                return projection
             assert name == jobs.FINALIZATION_JOBS_COLLECTION
-            return Query(
-                {
-                    None: 11,
-                    ('status', 'queued'): 2,
-                    ('status', 'leased'): 1,
-                    ('status', 'blocked_byok'): 3,
-                    ('status', 'completed'): 4,
-                    ('status', 'dead_letter'): 1,
-                    ('terminal_outcome', 'success'): 2,
-                    ('terminal_outcome', 'stale'): 1,
-                    ('terminal_outcome', 'failure'): 1,
-                },
-                None,
-            )
+            return JobQuery()
 
     summary = jobs.get_finalization_job_summary(firestore_client=Client())
 
+    assert len(projection.read_ids) == jobs.FINALIZATION_PROJECTION_SHARD_COUNT
     assert summary == {
-        'accepted': 11,
-        'success': 2,
+        'accepted': 8,
+        'success': 1,
         'failure': 1,
         'stale': 1,
         'nonterminal': 3,
         'queued': 2,
         'leased': 1,
-        'blocked_byok': 3,
-        'completed': 4,
+        'blocked_byok': 2,
+        'completed': 2,
         'dead_letter': 1,
-        'terminal_unknown': 1,
+        'terminal_unknown': 0,
         'oldest_nonterminal_age_seconds': 0.0,
     }
 
