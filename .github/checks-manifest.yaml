@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: firmware-nrf5340-babblesim
+    command: ["bash", "omi/firmware/scripts/ci/check-bsim.sh"]
+    triggers: ["omi/firmware/bsim/**", "omi/firmware/omi/src/lib/core/button.c", "omi/firmware/omi/src/lib/core/button.h", "omi/firmware/omi/src/lib/core/button_service.c", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/src/settings.c", "omi/firmware/omi/CMakeLists.txt", "omi/firmware/omi/Kconfig", "omi/firmware/scripts/ci/check-bsim.sh", "omi/firmware/scripts/ci/run-bsim.sh"]
+    lanes: ["local", "ci"]
+    reason: "the nRF5340 BabbleSim lane executes Omi production advertising, connection, button GATT, and persistent settings contracts over the simulated radio"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
     triggers: ["scripts/dev-harness/**", ".github/checks-manifest.yaml"]
