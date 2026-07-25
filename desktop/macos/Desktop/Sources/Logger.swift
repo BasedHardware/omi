@@ -573,8 +573,24 @@ struct DesktopErrorTelemetryDescriptor: Equatable {
   }
 }
 
+/// Bounded, non-PII fields that may accompany a shared `logError` Sentry event.
+/// Callers must construct these from enums, booleans, and numeric measurements;
+/// paths, exception messages, identifiers, and user content do not belong here.
+struct DesktopErrorDiagnosticContext {
+  let values: [String: Any]
+
+  init(_ values: [String: Any]) {
+    self.values = values
+  }
+}
+
 /// Log an error and capture it in Sentry
-func logError(_ message: String, error: Error? = nil, fileID: StaticString = #fileID) {
+func logError(
+  _ message: String,
+  error: Error? = nil,
+  context: DesktopErrorDiagnosticContext? = nil,
+  fileID: StaticString = #fileID
+) {
   let timestamp = dateFormatter.string(from: Date())
   let errorDesc = error?.localizedDescription ?? ""
   let fullMessage = error != nil ? "\(message): \(errorDesc)" : message
@@ -592,6 +608,7 @@ func logError(_ message: String, error: Error? = nil, fileID: StaticString = #fi
   DesktopDiagnosticsManager.shared.recordBetaLogError(
     message: message,
     error: error,
+    failureDiagnostics: context?.values,
     enabled: enhancedBetaDiagnostics)
 
   // Transient network/IO errors (offline, timeouts, cancellations, socket resets)
@@ -633,6 +650,9 @@ func logError(_ message: String, error: Error? = nil, fileID: StaticString = #fi
         "error_domain": telemetry.errorDomain,
         "error_code": telemetry.errorCode,
       ], key: "app_context")
+    if let context {
+      scope.setContext(value: context.values, key: "failure_diagnostics")
+    }
     if let attachmentURL {
       scope.addAttachment(
         Attachment(

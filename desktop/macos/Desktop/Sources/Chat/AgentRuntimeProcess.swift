@@ -542,6 +542,13 @@ actor AgentRuntimeProcess {
   /// an actor blocked writing to the frozen process. See DebugSuspendControl.
   private nonisolated let debugSuspend = DebugSuspendControl()
   private var lastExitWasOOM = false
+  private var startupBeganAt: Date?
+  private var startupBinaryPresent = false
+  private var startupBinaryPresentChecked = false
+  private var startupPermissionGrantedChecked = false
+  private var pendingStartFailureDiagnostics: DesktopErrorDiagnosticContext?
+  private var startupPermissionGranted = false
+  private var startupExitCode: Int32?
   private var clients: [String: ClientRegistration] = [:]
   private var activeRequests: [RuntimeMessage.RequestKey: ActiveRequest] = [:]
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
@@ -2484,6 +2491,12 @@ actor AgentRuntimeProcess {
     admissionAuthorityEpoch: UInt64,
     requiresCredentials: Bool
   ) async throws -> StartupReceipt {
+    startupBeganAt = Date()
+    startupBinaryPresent = false
+    startupBinaryPresentChecked = false
+    startupPermissionGrantedChecked = false
+    startupPermissionGranted = false
+    startupExitCode = nil
     // `startProcess` owns the launch through `startupSingleFlight`. Do not use
     // the reducer's `.starting` state as a join signal here: the launch owner
     // intentionally sets it *before* this operation is scheduled.
@@ -2531,6 +2544,8 @@ actor AgentRuntimeProcess {
 
     let nodeExists = FileManager.default.isExecutableFile(atPath: nodePath)
     let bridgeExists = FileManager.default.fileExists(atPath: bridgePath)
+    startupBinaryPresentChecked = true
+    startupBinaryPresent = nodeExists && bridgeExists
     let bridgeDir = (bridgePath as NSString).deletingLastPathComponent
     let pkgJsonPath = ((bridgeDir as NSString).deletingLastPathComponent as NSString)
       .appendingPathComponent("package.json")
@@ -2620,8 +2635,11 @@ actor AgentRuntimeProcess {
     } else if let authHeader,
       let token = Self.bearerToken(from: authHeader)
     {
+      startupPermissionGrantedChecked = requiresPiMonoCredentials
+      startupPermissionGranted = requiresPiMonoCredentials
       env["OMI_AUTH_TOKEN"] = token
     } else if requiresPiMonoCredentials {
+      startupPermissionGrantedChecked = true
       log("AgentRuntimeProcess: pi-mono start refused, Firebase ID token is missing")
       throw BridgeError.authMissing
     } else if preferredAdapterId == .piMono {
@@ -2924,6 +2942,50 @@ actor AgentRuntimeProcess {
         "recovery_action": "retry_start",
         "recovery_result": "exhausted",
       ])
+    pendingStartFailureDiagnostics = bridgeStartFailureContext(failure)
+  }
+
+  func consumePendingStartFailureDiagnostics() -> DesktopErrorDiagnosticContext? {
+    defer { pendingStartFailureDiagnostics = nil }
+    return pendingStartFailureDiagnostics
+  }
+
+  private func bridgeStartFailureContext(
+    _ failure: AgentRuntimeBridgeLifecycle.StartFailure
+  ) -> DesktopErrorDiagnosticContext {
+    let elapsedMs = startupBeganAt.map { Int(Date().timeIntervalSince($0) * 1_000) } ?? -1
+    return Self.startFailureDiagnostics(
+      failure: failure,
+      elapsedMs: elapsedMs,
+      exitCode: startupExitCode,
+      binaryPresent: startupBinaryPresent,
+      binaryPresentChecked: startupBinaryPresentChecked,
+      permissionGrantedChecked: startupPermissionGrantedChecked,
+      permissionGranted: startupPermissionGranted)
+  }
+
+  nonisolated static func startFailureDiagnostics(
+    failure: AgentRuntimeBridgeLifecycle.StartFailure,
+    elapsedMs: Int,
+    exitCode: Int32?,
+    binaryPresent: Bool,
+    binaryPresentChecked: Bool,
+    permissionGrantedChecked: Bool,
+    permissionGranted: Bool
+  ) -> DesktopErrorDiagnosticContext {
+    DesktopErrorDiagnosticContext([
+      "startup_stage": failure.rawValue,
+      "exit_code": exitCode.map(Int.init) ?? -1,
+      "elapsed_ms": elapsedMs,
+      "configured_timeout_ms": 30_000,
+      "binary_present_checked": binaryPresentChecked,
+      "binary_present": binaryPresent,
+      // The JSONL bridge has no TCP listener; report that the port precondition was not checked.
+      "port_bound_checked": false,
+      "port_bound": false,
+      "permission_granted_checked": permissionGrantedChecked,
+      "permission_granted": permissionGranted,
+    ])
   }
 
   private func cleanupFailedStart(process failedProcess: Process, error: Error) async {
@@ -4006,6 +4068,9 @@ actor AgentRuntimeProcess {
     }
 
     let likelyOOM = lastExitWasOOM || oomDiagnosticLatch.isConfirmed(generation: processGeneration)
+    if bridgeLifecycle.state == .starting {
+      startupExitCode = exitCode
+    }
     let error: BridgeError = likelyOOM ? .outOfMemory : .processExited
     lastExitWasOOM = false
     oomDiagnosticLatch.reset(generation: processGeneration)

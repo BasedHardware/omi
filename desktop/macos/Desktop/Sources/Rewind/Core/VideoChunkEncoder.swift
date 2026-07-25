@@ -358,7 +358,13 @@ actor VideoChunkEncoder {
         consecutiveWriteFailures += 1
         logError(
           "VideoChunkEncoder: Failed to start video writer (\(consecutiveWriteFailures)/\(maxConsecutiveFailures))",
-          error: error)
+          error: error,
+          context: StorageFailureDiagnostics.context(
+            pathClass: "video-chunk",
+            containingURL: videosDir,
+            databaseURL: nil,
+            error: error,
+            appIsTerminating: RewindDatabase.isTerminationInProgress))
 
         // Reset the half-initialized chunk state so the NEXT frame cleanly retries
         // starting the writer. Without this, currentChunkStartTime stays set while
@@ -414,7 +420,14 @@ actor VideoChunkEncoder {
       }
       consecutiveWriteFailures += 1
       logError(
-        "VideoChunkEncoder: Failed to write frame (\(consecutiveWriteFailures)/\(maxConsecutiveFailures))", error: error
+        "VideoChunkEncoder: Failed to write frame (\(consecutiveWriteFailures)/\(maxConsecutiveFailures))",
+        error: error,
+        context: StorageFailureDiagnostics.context(
+          pathClass: "video-chunk",
+          containingURL: videosDir,
+          databaseURL: nil,
+          error: error,
+          appIsTerminating: RewindDatabase.isTerminationInProgress)
       )
 
       if consecutiveWriteFailures >= maxConsecutiveFailures {
