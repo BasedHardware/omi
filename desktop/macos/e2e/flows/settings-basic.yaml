@@ -1,94 +1,115 @@
 version: 2
 name: settings-basic
-tier: manual
-description: Settings navigation smoke — open Settings via gear icon, navigate all 9 sections (v0.12.119+ redesign)
-app: com.omi.computer-macos
+tier: 2
+description: Settings navigation smoke — navigate all 9 sections via bridge (v0.12.119+ redesign)
+app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+General.swift
   - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
 preconditions:
-  - auth_ready
+  - automation_bridge_ready
 
 steps:
   - id: S1
-    name: Open Settings via gear icon
-    do: "Click the Settings gear icon (label 'gearshape') in the top-right of the nav bar. Verify Settings page opens showing all 9 section names."
-    expect:
-      interactive_count: { min: 9 }
-      text_visible:
-        - Settings
-        - General
+    name: Navigate to Settings
+    bridge.navigate:
+      target: settings
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 9
 
   - id: S2
-    name: Navigate to General section
-    do: "Click 'General' in the Settings section list. Verify General settings load with app preferences and startup behavior options."
-    expect:
-      text_visible:
-        - General
+    name: General section
+    bridge.navigate:
+      target: settings
+      settingsSection: General
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: General
 
   - id: S3
-    name: Navigate to Account & Plan section
-    do: "Click 'Account & Plan' in the Settings section list. Verify account information shows user name, email, Sign Out and Delete buttons. Plan and Usage section should show current subscription."
-    expect:
-      text_visible:
-        - Account & Plan
+    name: Account section
+    bridge.navigate:
+      target: settings
+      settingsSection: Account
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Account
 
   - id: S4
-    name: Navigate to Transcription section
-    do: "Click 'Transcription' in the Settings section list. Verify Language Mode card appears with 'Auto-Detect (Multi-Language)' and 'Single Language (Better Accuracy)' options. Voice Assistant Languages and Custom Vocabulary sections should be visible."
-    expect:
-      text_visible:
-        - Transcription
-        - Language Mode
+    name: Transcription section
+    bridge.navigate:
+      target: settings
+      settingsSection: Transcription
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Transcription
 
   - id: S5
-    name: Navigate to Floating Bar section
-    do: "Click 'Floating Bar' in the Settings section list. Verify Floating Bar settings load with toggles for show/hide, background style, draggable, typed questions, screen sharing, and voice selection."
-    expect:
-      text_visible:
-        - Floating Bar
+    name: Floating Bar section
+    bridge.navigate:
+      target: settings
+      settingsSection: Floating Bar
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Floating Bar
 
   - id: S6
-    name: Navigate to Notifications & Privacy section
-    do: "Click 'Notifications & Privacy' in the Settings section list. Verify notification preferences appear with frequency slider, focus/task/insight/memory notification toggles, and Daily Summary settings."
-    expect:
-      text_visible:
-        - Notifications & Privacy
+    name: Notifications section
+    bridge.navigate:
+      target: settings
+      settingsSection: Notifications
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Notifications
 
   - id: S7
-    name: Navigate to Rewind section
-    do: "Click 'Rewind' in the Settings section list. Verify Rewind settings show storage info (frames count, size) and Excluded Apps list with Reset to Defaults button."
-    expect:
-      text_visible:
-        - Rewind
-        - Storage
+    name: Rewind section
+    bridge.navigate:
+      target: settings
+      settingsSection: Rewind
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Rewind
 
   - id: S8
-    name: Navigate to Shortcuts section
-    do: "Click 'Shortcuts' in the Settings section list. Verify shortcut settings show Open Omi Shortcut options, Push to Talk key options, PTT microphone selector, and toggle options."
-    expect:
-      text_visible:
-        - Shortcuts
+    name: Shortcuts section
+    bridge.navigate:
+      target: settings
+      settingsSection: Shortcuts
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Shortcuts
 
   - id: S9
-    name: Navigate to Advanced section
-    do: "Click 'Advanced' in the Settings section list. Verify Advanced settings show AI Setup section with Voice Model and AI Provider dropdowns, Workspace browser, Browser Extension toggle, and Dev Mode toggle."
-    expect:
-      text_visible:
-        - Advanced
-        - AI Setup
+    name: Advanced section
+    bridge.navigate:
+      target: settings
+      settingsSection: Advanced
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Advanced
 
   - id: S10
-    name: Navigate to About section
-    do: "Click 'About' in the Settings section list. Verify About section shows app name, version info, links (What's New, Visit Website, Help Center, Privacy Policy, Terms of Service), Software Updates with Check Now button, and Update Channel."
-    expect:
-      text_visible:
-        - About
+    name: About section
+    bridge.navigate:
+      target: settings
+      settingsSection: About
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: About
 
   - id: S11
-    name: Return to app via Back button
-    do: "Click the Back button to return from Settings. Verify the previous tab loads with the top nav bar visible."
-    expect:
-      text_visible:
-        - Home
+    name: Return to Home
+    bridge.navigate:
+      target: dashboard
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 0
+
+  - id: S12
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
