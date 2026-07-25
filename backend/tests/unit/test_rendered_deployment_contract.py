@@ -142,6 +142,24 @@ def test_dev_pusher_rollout_preserves_the_existing_replica(contracts: SimpleName
     assert rolling_update["maxSurge"] == 1
 
 
+def test_pusher_dedicated_pool_toleration_is_dev_only(contracts: SimpleNamespace):
+    helm = shutil.which("helm")
+    assert helm is not None, "helm must be installed for the rendered deployment contract"
+    contract = next(contract for contract in contracts.CONTRACTS if contract.service == "pusher")
+
+    dev_documents = contracts.render_chart(contract, "dev", helm)
+    dev_deployment = contracts.deployment_for(dev_documents, contracts.release_name(contract, "dev"))
+    prod_documents = contracts.render_chart(contract, "prod", helm)
+    prod_deployment = contracts.deployment_for(prod_documents, contracts.release_name(contract, "prod"))
+
+    assert dev_deployment is not None
+    assert prod_deployment is not None
+    assert dev_deployment["spec"]["template"]["spec"].get("tolerations") == [
+        {"key": "dedicated", "operator": "Equal", "value": "pusher", "effect": "NoSchedule"}
+    ]
+    assert prod_deployment["spec"]["template"]["spec"].get("tolerations") is None
+
+
 @pytest.mark.parametrize("environment", ("dev", "prod"))
 def test_pusher_explicit_zero_min_ready_seconds_renders(contracts: SimpleNamespace, environment: str):
     helm = shutil.which("helm")
