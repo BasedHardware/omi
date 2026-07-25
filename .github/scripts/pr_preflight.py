@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from pr_metadata import PullRequestMetadata, load_from_api, load_from_gh
+from pr_metadata import TransientPRMetadataError, PullRequestMetadata, load_from_api, load_from_event_file, load_from_gh
 from run_checks import detect_platform, load_manifest, resolve_checks
 
 
@@ -65,16 +65,12 @@ def format_failure_class_suggest(payload: dict) -> str:
     """
     lines = ["## Failure class (fixes)", ""]
     if not payload.get("requires_declaration"):
-        lines.extend(
-            ["No `fix:` commits were detected; no declaration is required.", ""]
-        )
+        lines.extend(["No `fix:` commits were detected; no declaration is required.", ""])
         return "\n".join(lines)
 
     patch = payload.get("pr_body_patch", {})
     declaration = (
-        patch.get("text", "Failure-Class: none\n").strip()
-        if isinstance(patch, dict)
-        else "Failure-Class: none"
+        patch.get("text", "Failure-Class: none\n").strip() if isinstance(patch, dict) else "Failure-Class: none"
     )
     lines.extend(
         [
@@ -97,6 +93,7 @@ def resolve_pr_metadata(
     body_file: Path | None,
     repository: str | None,
     pr_number: int | None,
+    event_payload_file: Path | None,
 ) -> PullRequestMetadata | None:
     if body_file is None:
         env_body = os.getenv("OMI_PR_BODY_FILE", "").strip()
@@ -114,7 +111,17 @@ def resolve_pr_metadata(
             source=str(resolved.resolve()),
         )
     if repository and pr_number:
-        return load_from_api(repository, pr_number, os.getenv("GITHUB_TOKEN", ""))
+        try:
+            return load_from_api(repository, pr_number, os.getenv("GITHUB_TOKEN", ""))
+        except TransientPRMetadataError as api_error:
+            if event_payload_file is None:
+                raise
+            try:
+                metadata = load_from_event_file(event_payload_file, pr_number)
+            except RuntimeError as event_error:
+                raise RuntimeError(f"{api_error}; GitHub event fallback failed: {event_error}") from event_error
+            print(f"WARNING: {api_error}; using the PR snapshot from {event_payload_file}.", file=sys.stderr)
+            return metadata
     try:
         return load_from_gh(root)
     except RuntimeError as exc:
@@ -132,6 +139,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pr-body-file", type=Path)
     parser.add_argument("--repository", help="GitHub repository as owner/name; requires --pr-number")
     parser.add_argument("--pr-number", type=int, help="Load current PR metadata through the GitHub API")
+    parser.add_argument(
+        "--event-payload-file",
+        type=Path,
+        help="Use the triggering pull_request event only after transient GitHub API metadata failures",
+    )
     parser.add_argument("--head-branch", help="PR head branch, used for release-changelog policy")
     parser.add_argument("--list", action="store_true", help="Print selected checks without running them")
     parser.add_argument(
@@ -227,7 +239,9 @@ def main() -> int:
             return 0
 
         try:
-            metadata = resolve_pr_metadata(root, args.pr_body_file, args.repository, args.pr_number)
+            metadata = resolve_pr_metadata(
+                root, args.pr_body_file, args.repository, args.pr_number, args.event_payload_file
+            )
         except RuntimeError as exc:
             print(f"FAIL: {exc}", file=sys.stderr)
             return 1

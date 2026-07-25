@@ -12,7 +12,6 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-
 ROOT = Path(__file__).resolve().parents[2]
 STATIC_PATH = ROOT / ".github" / "scripts" / "check_public_build_contract.py"
 PREFLIGHT_PATH = ROOT / ".github" / "scripts" / "preflight_public_build_config.py"
@@ -38,7 +37,7 @@ RUNTIME_PREFLIGHT = load_module("preflight_public_build_runtime", RUNTIME_PREFLI
 
 def fixture_contract() -> dict:
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "configuration": {
             "source": "repository_config",
             "path": "config/public-build-values.json",
@@ -55,6 +54,9 @@ def fixture_contract() -> dict:
                     "platforms": ["linux/amd64"],
                     "flags": [],
                     "runtime_secrets": {"FAKE_RUNTIME_SECRET": "FAKE_RUNTIME_SECRET:latest"},
+                    "preserve_runtime_secrets": [],
+                    "runtime_env_vars": {},
+                    "remove_runtime_secrets": [],
                 },
                 "canary_component": "web/fake/public-build-canary.tsx",
                 "inputs": [
@@ -151,7 +153,7 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
         self.write(
             ".github/workflows/gcp_fake.yml",
             (self.root / ".github/workflows/gcp_fake.yml").read_text(encoding="utf-8")
-            + "  - uses: docker/build-push-action@v6\n",
+            + "  - uses: docker/build-push-action@v7\n",
         )
 
         self.assertIn("bypasses centralized public-build deployment", "\n".join(self.errors()))
@@ -175,6 +177,52 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
         )
 
         self.assertIn("must not schedule drift checks", "\n".join(STATIC.validate_jit_preflight_workflow(self.root)))
+
+    def test_rejects_overlap_across_runtime_binding_groups(self) -> None:
+        binding_groups = {
+            "runtime_secrets": {"SHARED_RUNTIME_BINDING": "shared-runtime-binding:latest"},
+            "preserve_runtime_secrets": ["SHARED_RUNTIME_BINDING"],
+            "runtime_env_vars": {"SHARED_RUNTIME_BINDING": "reviewed.example"},
+            "remove_runtime_secrets": ["SHARED_RUNTIME_BINDING"],
+        }
+        group_names = tuple(binding_groups)
+        for index, left in enumerate(group_names):
+            for right in group_names[index + 1 :]:
+                with self.subTest(left=left, right=right):
+                    contract = fixture_contract()
+                    deployment = contract["targets"]["fake"]["deployment"]
+                    for name in group_names:
+                        deployment[name] = {} if name in {"runtime_secrets", "runtime_env_vars"} else []
+                    deployment[left] = binding_groups[left]
+                    deployment[right] = binding_groups[right]
+                    self.write_json("config/public-build-contract.json", contract)
+
+                    with self.assertRaisesRegex(ValueError, "runtime binding groups cannot overlap"):
+                        self.target()
+
+    def test_rejects_runtime_env_values_that_cannot_be_rendered_as_action_input(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["runtime_env_vars"] = {"FAKE_RUNTIME_CONFIG": "one,two"}
+        self.write_json("config/public-build-contract.json", contract)
+
+        with self.assertRaisesRegex(
+            ValueError, "runtime_env_vars must map environment names to non-empty deploy-safe values"
+        ):
+            self.target()
+
+    def test_runtime_env_vars_must_be_classified_as_reviewed_config(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["runtime_env_vars"] = {"FAKE_RUNTIME_CONFIG": "reviewed.example"}
+        self.write_json("config/public-build-contract.json", contract)
+
+        self.assertEqual(
+            STATIC.validate_target(self.root, self.target(), {"FAKE_PUBLIC_INPUT"}, {"FAKE_RUNTIME_CONFIG"}),
+            [],
+        )
+        self.assertEqual(
+            STATIC.validate_target(self.root, self.target(), {"FAKE_PUBLIC_INPUT"}),
+            ["fake: runtime env FAKE_RUNTIME_CONFIG is not classified config"],
+        )
 
     def test_runtime_preflight_rejects_literal_binding(self) -> None:
         service = {
@@ -205,7 +253,7 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
                         "env": [
                             {
                                 "name": "FAKE_RUNTIME_SECRET",
-                                "valueSource": {"secretKeyRef": {"name": "FAKE_RUNTIME_SECRET", "key": "latest"}},
+                                "valueSource": {"secretKeyRef": {"secret": "FAKE_RUNTIME_SECRET", "version": "latest"}},
                             }
                         ]
                     }
@@ -226,9 +274,7 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
                                 "env": [
                                     {
                                         "name": "FAKE_RUNTIME_SECRET",
-                                        "valueFrom": {
-                                            "secretKeyRef": {"name": "FAKE_RUNTIME_SECRET", "key": "latest"}
-                                        },
+                                        "valueFrom": {"secretKeyRef": {"name": "FAKE_RUNTIME_SECRET", "key": "latest"}},
                                     }
                                 ]
                             }
@@ -240,6 +286,96 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
 
         self.assertEqual(RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), service), [])
 
+    def test_runtime_preflight_normalizes_v1_and_v2_secret_binding_shapes(self) -> None:
+        v1_service = {
+            "spec": {
+                "template": {
+                    "spec": {
+                        "containers": [
+                            {
+                                "env": [
+                                    {
+                                        "name": "FAKE_RUNTIME_SECRET",
+                                        "valueFrom": {"secretKeyRef": {"name": "legacy-secret", "key": "7"}},
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+        v2_service = {
+            "template": {
+                "containers": [
+                    {
+                        "env": [
+                            {
+                                "name": "FAKE_RUNTIME_SECRET",
+                                "valueSource": {"secretKeyRef": {"secret": "legacy-secret", "version": "7"}},
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+
+        expected = {"FAKE_RUNTIME_SECRET": RUNTIME_PREFLIGHT.RuntimeBinding("secret", "legacy-secret:7")}
+        self.assertEqual(RUNTIME_PREFLIGHT.current_bindings(v1_service), expected)
+        self.assertEqual(RUNTIME_PREFLIGHT.current_bindings(v2_service), expected)
+
+    def test_runtime_preflight_fails_closed_for_malformed_or_ambiguous_secret_binding_shapes(self) -> None:
+        malformed_sources = (
+            {"valueFrom": {"secretKeyRef": {"name": "legacy-secret"}}},
+            {"valueFrom": {"secretKeyRef": {"key": "7"}}},
+            {"valueSource": {"secretKeyRef": {"secret": "legacy-secret"}}},
+            {"valueSource": {"secretKeyRef": {"version": "7"}}},
+            {"valueSource": {"secretKeyRef": {"secret": "legacy-secret", "version": 7}}},
+            {"valueFrom": {"secretKeyRef": {"secret": "legacy-secret", "version": "7"}}},
+            {"valueSource": {"secretKeyRef": {"name": "legacy-secret", "key": "7"}}},
+            {
+                "valueSource": {
+                    "secretKeyRef": {
+                        "name": "legacy-secret",
+                        "key": "7",
+                        "secret": "other-secret",
+                        "version": "8",
+                    }
+                }
+            },
+            {
+                "valueSource": {
+                    "secretKeyRef": {"secret": "legacy-secret", "version": "7"},
+                    "configMapKeyRef": {"name": "other-source"},
+                }
+            },
+            {
+                "valueFrom": {"secretKeyRef": {"name": "legacy-secret", "key": "7"}},
+                "valueSource": {"secretKeyRef": {"secret": "other-secret", "version": "8"}},
+            },
+            {
+                "value": "literal",
+                "valueFrom": {"secretKeyRef": {"name": "legacy-secret", "key": "7"}},
+            },
+            {
+                "value": "literal",
+                "valueSource": {"secretKeyRef": {"secret": "legacy-secret", "version": "7"}},
+            },
+        )
+
+        for source in malformed_sources:
+            with self.subTest(source=source):
+                service = {"template": {"containers": [{"env": [{"name": "FAKE_RUNTIME_SECRET", **source}]}]}}
+
+                self.assertEqual(
+                    RUNTIME_PREFLIGHT.current_bindings(service),
+                    {"FAKE_RUNTIME_SECRET": RUNTIME_PREFLIGHT.RuntimeBinding("invalid")},
+                )
+                self.assertEqual(
+                    RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), service),
+                    ["fake-service: runtime binding FAKE_RUNTIME_SECRET has an ambiguous or malformed value source"],
+                )
+
     def test_runtime_preflight_rejects_disabled_secret_version(self) -> None:
         original = RUNTIME_PREFLIGHT._gcloud_json
         RUNTIME_PREFLIGHT._gcloud_json = lambda _args: {"state": "DISABLED"}
@@ -248,7 +384,342 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
         finally:
             RUNTIME_PREFLIGHT._gcloud_json = original
 
-        self.assertEqual(errors, ["fake: required Secret Manager version FAKE_RUNTIME_SECRET:latest is not enabled"])
+        self.assertEqual(
+            errors,
+            [
+                "fake-service: runtime binding FAKE_RUNTIME_SECRET requires enabled Secret Manager version "
+                "FAKE_RUNTIME_SECRET:latest"
+            ],
+        )
+
+    def test_runtime_preflight_reports_service_and_binding_for_an_unavailable_secret_version(self) -> None:
+        original = RUNTIME_PREFLIGHT._gcloud_json
+
+        def missing_version(_args):
+            raise RUNTIME_PREFLIGHT.RuntimePreflightError("resource not found", category="not_found")
+
+        RUNTIME_PREFLIGHT._gcloud_json = missing_version
+        try:
+            errors = RUNTIME_PREFLIGHT.validate_secret_versions(target=self.target(), project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original
+
+        self.assertEqual(
+            errors,
+            [
+                "fake-service: runtime binding FAKE_RUNTIME_SECRET requires Secret Manager version "
+                "FAKE_RUNTIME_SECRET:latest, but it is unavailable (resource not found)"
+            ],
+        )
+
+    def test_runtime_preflight_accepts_an_enabled_secret_version(self) -> None:
+        original = RUNTIME_PREFLIGHT._gcloud_json
+        RUNTIME_PREFLIGHT._gcloud_json = lambda _args: {"state": "ENABLED"}
+        try:
+            errors = RUNTIME_PREFLIGHT.validate_secret_versions(target=self.target(), project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original
+
+        self.assertEqual(errors, [])
+
+    def test_runtime_preflight_rejects_a_live_secret_binding_missing_from_the_deployment_contract(self) -> None:
+        service = {
+            "template": {
+                "containers": [
+                    {
+                        "env": [
+                            {
+                                "name": "STALE_RUNTIME_SECRET",
+                                "valueSource": {"secretKeyRef": {"secret": "stale-secret", "version": "latest"}},
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+
+        self.assertEqual(
+            RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), service),
+            ["fake-service: secret binding STALE_RUNTIME_SECRET is missing from the deployment contract"],
+        )
+
+    def test_runtime_preflight_allows_a_live_secret_binding_rendered_for_removal(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["remove_runtime_secrets"] = ["STALE_RUNTIME_SECRET"]
+        self.write_json("config/public-build-contract.json", contract)
+        service = {
+            "template": {
+                "containers": [
+                    {
+                        "env": [
+                            {
+                                "name": "STALE_RUNTIME_SECRET",
+                                "valueSource": {"secretKeyRef": {"secret": "stale-secret", "version": "latest"}},
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+
+        self.assertEqual(RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), service), [])
+
+    def test_runtime_preflight_preserves_the_live_secret_reference_without_guessing_it(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["preserve_runtime_secrets"] = ["PRESERVED_RUNTIME_SECRET"]
+        self.write_json("config/public-build-contract.json", contract)
+        service = {
+            "template": {
+                "containers": [
+                    {
+                        "env": [
+                            {
+                                "name": "PRESERVED_RUNTIME_SECRET",
+                                "valueSource": {"secretKeyRef": {"secret": "legacy-secret", "version": "7"}},
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+
+        self.assertEqual(RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), service), [])
+        calls: list[list[str]] = []
+        original = RUNTIME_PREFLIGHT._gcloud_json
+
+        def enabled(arguments):
+            calls.append(arguments)
+            return {"state": "ENABLED"}
+
+        RUNTIME_PREFLIGHT._gcloud_json = enabled
+        try:
+            errors = RUNTIME_PREFLIGHT.validate_preserved_secret_versions(
+                target=self.target(), service=service, project_id="fake-project"
+            )
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original
+
+        self.assertEqual(errors, [])
+        self.assertIn("--secret=legacy-secret", calls[0])
+        self.assertIn("7", calls[0])
+
+    def test_runtime_preflight_rejects_a_disabled_preserved_secret_version(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["preserve_runtime_secrets"] = ["PRESERVED_RUNTIME_SECRET"]
+        self.write_json("config/public-build-contract.json", contract)
+        service = {
+            "template": {
+                "containers": [
+                    {
+                        "env": [
+                            {
+                                "name": "PRESERVED_RUNTIME_SECRET",
+                                "valueSource": {"secretKeyRef": {"secret": "legacy-secret", "version": "7"}},
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+        original = RUNTIME_PREFLIGHT._gcloud_json
+        RUNTIME_PREFLIGHT._gcloud_json = lambda _args: {"state": "DISABLED"}
+        try:
+            errors = RUNTIME_PREFLIGHT.validate_preserved_secret_versions(
+                target=self.target(), service=service, project_id="fake-project"
+            )
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original
+
+        self.assertEqual(
+            errors,
+            [
+                "fake-service: runtime binding PRESERVED_RUNTIME_SECRET requires enabled Secret Manager version "
+                "legacy-secret:7"
+            ],
+        )
+
+    def test_runtime_preflight_rejects_missing_or_literal_preserved_secret(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["preserve_runtime_secrets"] = ["PRESERVED_RUNTIME_SECRET"]
+        self.write_json("config/public-build-contract.json", contract)
+        literal_service = {
+            "template": {"containers": [{"env": [{"name": "PRESERVED_RUNTIME_SECRET", "value": "not-a-secret"}]}]}
+        }
+
+        self.assertEqual(
+            RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), {"template": {}}),
+            [
+                "fake: preserved runtime secret PRESERVED_RUNTIME_SECRET is absent; expected an enabled Secret Manager binding"
+            ],
+        )
+        self.assertEqual(
+            RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), literal_service),
+            [
+                "fake: preserved runtime secret PRESERVED_RUNTIME_SECRET is a literal; expected an enabled Secret Manager binding"
+            ],
+        )
+
+    def test_runtime_preflight_rejects_a_literal_secret_union_for_a_preserved_binding(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["preserve_runtime_secrets"] = ["PRESERVED_RUNTIME_SECRET"]
+        self.write_json("config/public-build-contract.json", contract)
+        service = {
+            "template": {
+                "containers": [
+                    {
+                        "env": [
+                            {
+                                "name": "PRESERVED_RUNTIME_SECRET",
+                                "value": "literal",
+                                "valueSource": {"secretKeyRef": {"secret": "legacy-secret", "version": "7"}},
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+
+        self.assertEqual(
+            RUNTIME_PREFLIGHT.current_bindings(service),
+            {"PRESERVED_RUNTIME_SECRET": RUNTIME_PREFLIGHT.RuntimeBinding("invalid")},
+        )
+        self.assertEqual(
+            RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), service),
+            ["fake-service: runtime binding PRESERVED_RUNTIME_SECRET has an ambiguous or malformed value source"],
+        )
+
+    def test_runtime_preflight_requires_a_live_service_to_preserve_secret_bindings(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["preserve_runtime_secrets"] = ["PRESERVED_RUNTIME_SECRET"]
+        self.write_json("config/public-build-contract.json", contract)
+        original_validate = RUNTIME_PREFLIGHT.validate_secret_versions
+        original_load = RUNTIME_PREFLIGHT.load_current_service
+        RUNTIME_PREFLIGHT.validate_secret_versions = lambda **_kwargs: []
+        RUNTIME_PREFLIGHT.load_current_service = lambda **_kwargs: None
+        try:
+            errors = RUNTIME_PREFLIGHT.preflight(target=self.target(), project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT.validate_secret_versions = original_validate
+            RUNTIME_PREFLIGHT.load_current_service = original_load
+
+        self.assertEqual(
+            errors,
+            ["fake: cannot preserve runtime secrets because current Cloud Run service fake-service is absent"],
+        )
+
+    def test_runtime_preflight_rejects_secret_where_reviewed_runtime_config_will_be_applied(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["runtime_env_vars"] = {"FAKE_RUNTIME_CONFIG": "reviewed.example"}
+        self.write_json("config/public-build-contract.json", contract)
+        service = {
+            "template": {
+                "containers": [
+                    {
+                        "env": [
+                            {
+                                "name": "FAKE_RUNTIME_CONFIG",
+                                "valueSource": {"secretKeyRef": {"secret": "incorrect", "version": "latest"}},
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+
+        self.assertEqual(
+            RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), service),
+            ["fake: runtime config FAKE_RUNTIME_CONFIG is a Secret Manager binding; expected a literal value"],
+        )
+
+    def test_personas_contract_reconciles_the_failed_live_runtime_bindings(self) -> None:
+        # Static deployment-contract fixture: the handler must consume the
+        # reviewed linkedin-api8 host for its documented profile-data endpoint
+        # while the API key stays a runtime secret.
+        contract = STATIC.load_contract(ROOT / "config" / "public-build-contract.json")
+        personas = contract.targets["personas"]
+        self.assertNotIn("LINKEDIN_API_HOST", personas.deployment.runtime_secrets)
+        self.assertEqual(personas.deployment.runtime_secrets["LINKEDIN_API_KEY"], "NEXT_PUBLIC_LINKEDIN_API_KEY:latest")
+        self.assertEqual(
+            personas.deployment.runtime_env_vars,
+            {"LINKEDIN_RAPIDAPI_HOST": "linkedin-api8.p.rapidapi.com"},
+        )
+        self.assertEqual(
+            personas.deployment.preserve_runtime_secrets,
+            ("REDIS_HOST", "REDIS_PASSWORD", "NEXT_PUBLIC_OMI_APP_ID", "NEXT_PUBLIC_OMI_API_KEY"),
+        )
+        self.assertEqual(
+            personas.deployment.remove_runtime_secrets,
+            (
+                "LINKEDIN_API_HOST",
+                "NEXT_PUBLIC_FIREBASE_API_KEY",
+                "NEXT_PUBLIC_FIREBASE_APP_ID",
+                "NEXT_PUBLIC_FIREBASE_VAPID_KEY",
+                "NEXT_PUBLIC_MIXPANEL_TOKEN",
+                "NEXT_PUBLIC_RAPIDAPI_KEY",
+                "NEXT_PUBLIC_RAPIDAPI_HOST",
+                "NEXT_PUBLIC_LINKEDIN_API_KEY",
+                "CLAUDE_API_KEY",
+            ),
+        )
+        live_bindings = {
+            name: {"valueSource": {"secretKeyRef": {"secret": reference.rsplit(":", 1)[0], "version": "latest"}}}
+            for name, reference in personas.deployment.runtime_secrets.items()
+        }
+        live_bindings.update(
+            {
+                "REDIS_HOST": {"valueSource": {"secretKeyRef": {"secret": "legacy-redis-host", "version": "9"}}},
+                "REDIS_PASSWORD": {
+                    "valueSource": {"secretKeyRef": {"secret": "legacy-redis-password", "version": "4"}}
+                },
+                "NEXT_PUBLIC_OMI_APP_ID": {
+                    "valueSource": {"secretKeyRef": {"secret": "legacy-app-id", "version": "2"}}
+                },
+                "NEXT_PUBLIC_OMI_API_KEY": {
+                    "valueSource": {"secretKeyRef": {"secret": "legacy-api-key", "version": "6"}}
+                },
+                "LINKEDIN_API_HOST": {
+                    "valueSource": {"secretKeyRef": {"secret": "NEXT_PUBLIC_LINKEDIN_API_HOST", "version": "latest"}}
+                },
+                **{
+                    name: {"valueSource": {"secretKeyRef": {"secret": f"retired-{name.lower()}", "version": "latest"}}}
+                    for name in personas.deployment.remove_runtime_secrets
+                    if name != "LINKEDIN_API_HOST"
+                },
+            }
+        )
+        service = {
+            "template": {
+                "containers": [{"env": [{"name": name, **binding} for name, binding in live_bindings.items()]}]
+            }
+        }
+
+        self.assertEqual(RUNTIME_PREFLIGHT.validate_current_bindings(personas, service), [])
+        calls: list[list[str]] = []
+        original = RUNTIME_PREFLIGHT._gcloud_json
+
+        def enabled(arguments):
+            calls.append(arguments)
+            return {"state": "ENABLED"}
+
+        RUNTIME_PREFLIGHT._gcloud_json = enabled
+        try:
+            self.assertEqual(RUNTIME_PREFLIGHT.validate_secret_versions(target=personas, project_id="fake-project"), [])
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original
+        self.assertNotIn(
+            "--secret=NEXT_PUBLIC_LINKEDIN_API_HOST",
+            [argument for call in calls for argument in call],
+        )
+        route = (ROOT / "web/personas-open-source/src/app/api/social-profile/route.ts").read_text(encoding="utf-8")
+        self.assertIn("process.env.LINKEDIN_RAPIDAPI_HOST", route)
+        self.assertNotIn("process.env.LINKEDIN_API_HOST", route)
+        self.assertIn("headers = rapidApiHeaders(linkedinApiKey, linkedinRapidApiHost);", route)
+        self.assertIn(
+            "https://${linkedinRapidApiHost}/profile-data-connection-count-posts?username=${encodeURIComponent(", route
+        )
+        readme = (ROOT / "web/personas-open-source/README.md").read_text(encoding="utf-8")
+        self.assertIn("/rockapis-rockapis-default/api/linkedin-api8", readme)
+        self.assertIn("LINKEDIN_RAPIDAPI_HOST=linkedin-api8.p.rapidapi.com", readme)
 
     def test_rejects_a_required_value_missing_from_reviewed_source(self) -> None:
         contract = STATIC.load_contract(self.root / "config/public-build-contract.json")

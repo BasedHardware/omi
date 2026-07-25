@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Load current pull-request metadata without trusting a stale event payload."""
+"""Load current pull-request metadata, preferring the API over event payloads."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -22,6 +23,10 @@ class PullRequestMetadata:
     updated_at: str
     labels: tuple[str, ...]
     source: str
+
+
+class TransientPRMetadataError(RuntimeError):
+    """The current metadata API was unavailable after bounded retries."""
 
 
 def _parse_metadata(data: dict, source: str) -> PullRequestMetadata:
@@ -45,12 +50,36 @@ def _parse_metadata(data: dict, source: str) -> PullRequestMetadata:
     )
 
 
+# A single flaky GitHub API response must not fail an unrelated PR's required
+# preflight, so transient failures receive bounded deterministic retries.
+_API_ATTEMPTS = 3
+_TRANSIENT_HTTP_STATUSES = frozenset({500, 502, 503, 504})
+
+
+def load_from_event_file(event_path: Path, expected_number: int) -> PullRequestMetadata:
+    """Read the PR snapshot that triggered this workflow after an API outage."""
+    try:
+        event = json.loads(event_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"could not read GitHub event payload: {exc}") from exc
+    if not isinstance(event, dict) or not isinstance(event.get("pull_request"), dict):
+        raise RuntimeError("GitHub event payload did not include a pull_request object")
+    pull_request = {**event["pull_request"], "number": event.get("number")}
+    metadata = _parse_metadata(pull_request, f"GitHub event payload {event_path}")
+    if metadata.number != expected_number:
+        raise RuntimeError(
+            f"GitHub event payload PR number {metadata.number} did not match expected PR #{expected_number}"
+        )
+    return metadata
+
+
 def load_from_api(
     repository: str,
     number: int,
     token: str,
     *,
     opener: Callable[..., object] = urllib.request.urlopen,
+    sleeper: Callable[[float], None] = time.sleep,
 ) -> PullRequestMetadata:
     if not token:
         raise RuntimeError("GITHUB_TOKEN is required to read current PR metadata")
@@ -64,16 +93,28 @@ def load_from_api(
             "User-Agent": "omi-pr-preflight",
         },
     )
-    try:
-        with opener(request, timeout=15) as response:  # type: ignore[attr-defined]
-            payload = json.load(response)
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"GitHub API returned HTTP {exc.code} while reading PR #{number}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"GitHub API request failed while reading PR #{number}: {exc.reason}") from exc
-    if not isinstance(payload, dict):
-        raise RuntimeError(f"GitHub API returned invalid metadata for PR #{number}")
-    return _parse_metadata(payload, f"GitHub API PR #{number}")
+    for attempt in range(1, _API_ATTEMPTS + 1):
+        retryable: RuntimeError
+        try:
+            with opener(request, timeout=15) as response:  # type: ignore[attr-defined]
+                payload = json.load(response)
+        except urllib.error.HTTPError as exc:
+            error = RuntimeError(f"GitHub API returned HTTP {exc.code} while reading PR #{number}")
+            exc.close()
+            if exc.code not in _TRANSIENT_HTTP_STATUSES:
+                raise error from exc
+            retryable = error
+        except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+            reason = getattr(exc, "reason", exc)
+            retryable = RuntimeError(f"GitHub API request failed while reading PR #{number}: {reason}")
+        else:
+            if not isinstance(payload, dict):
+                raise RuntimeError(f"GitHub API returned invalid metadata for PR #{number}")
+            return _parse_metadata(payload, f"GitHub API PR #{number}")
+        if attempt == _API_ATTEMPTS:
+            raise TransientPRMetadataError(str(retryable)) from retryable
+        sleeper(2.0 * attempt)
+    raise AssertionError("unreachable")
 
 
 def load_from_gh(root: Path) -> PullRequestMetadata:

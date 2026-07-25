@@ -15,10 +15,33 @@ DESKTOP_PREFIX = "desktop/macos/"
 EXEMPT_DESKTOP_PATHS = {
     "desktop/macos/CHANGELOG.json",
     "desktop/macos/AGENTS.md",
+    "desktop/macos/docs/release.md",
+    "desktop/macos/scripts/qualify-desktop-beta.sh",
+    # Sibling qualification-runner helper to qualify-desktop-beta.sh: internal
+    # release infrastructure with no user-facing app surface.
+    "desktop/macos/scripts/qualification-swift-cache.sh",
+    # Pre-tag readiness gate script: internal release infrastructure (runs on the
+    # trusted M1 before tagging), no user-facing app surface.
+    "desktop/macos/scripts/pre-tag-readiness.sh",
+    # CI-only flow-validation script and its shared action-source inventory do
+    # not alter the desktop application a user receives.
+    "desktop/macos/scripts/desktop-flow-lint.py",
+    "desktop/macos/scripts/desktop_flow_contract.py",
 }
 # Server-side Rust backend changes are internal reliability work, not user-facing app notes.
+# Test and release-infra changes are likewise never user-facing app notes; the
+# `no-changelog-needed` PR label only satisfies the PR run, so post-merge push
+# runs of this gate must exempt these paths by path or they redden main
+# (qualify-desktop-beta.sh timeout bump #10374 tripped tests/ on the merge push).
 EXEMPT_DESKTOP_PATH_PREFIXES = (
     "desktop/macos/Backend-Rust/",
+    "desktop/macos/tests/",
+    # Generated Swift (e.g. Sources/Generated/OmiApi.generated.swift) is
+    # deterministically derived from the backend OpenAPI contract, never a
+    # user-facing app note. Regenerating it after a spec change must not demand
+    # a changelog fragment, and — like tests/ above — the post-merge push run
+    # would otherwise redden main. Same directory the swift-format linter skips.
+    "desktop/macos/Desktop/Sources/Generated/",
 )
 
 
