@@ -18,7 +18,7 @@ from utils.stt.streaming import (
 
 
 def _exercise_abrupt_modulate_close():
-    audio_chunk = b'audio_chunk'
+    audio_chunk = b'audio_chunks'
     provider_frames = []
     audio_sent = asyncio.Event()
     send_loop_waiting_for_stop = asyncio.Event()
@@ -251,14 +251,14 @@ class TestSafeModulateSocket(unittest.TestCase):
             sock = SafeModulateSocket(ws, lambda s: None, loop, preseconds=0)
             sock.set_wav_header(b'')
             sock._recv_task.cancel()
-            sock.send(b'audio_chunk')
+            sock.send(b'audio_chunks')
             sock._done_event.set()
             await sock.drain_and_close()
             return sent_data
 
         try:
             result = loop.run_until_complete(run())
-            self.assertIn(b'audio_chunk', result, 'audio_chunk was not sent')
+            self.assertIn(b'audio_chunks', result, 'audio_chunks was not sent')
             self.assertIn('', result, 'empty text frame EOS must be sent on drain')
             self.assertNotIn(b'__EOS__', result, 'EOS sentinel must not be forwarded to ws')
         finally:
@@ -268,7 +268,7 @@ class TestSafeModulateSocket(unittest.TestCase):
         """close() is an abrupt stop — no EOS frame sent to provider."""
         provider_frames = _exercise_abrupt_modulate_close()
 
-        self.assertEqual(provider_frames, [b'audio_chunk'], 'close must stop after real audio without sending EOS')
+        self.assertEqual(provider_frames, [b'audio_chunks'], 'close must stop after real audio without sending EOS')
 
     def test_send_queue_full_marks_dead(self):
         """QueueFull inside event loop callback must mark socket dead."""
@@ -879,10 +879,10 @@ class TestProcessAudioParakeet(unittest.TestCase):
 
                     allow_enter.set()
                     sock = await asyncio.wait_for(socket_task, timeout=1)
-                    self.assertTrue(sock.send(b'pcm'))
+                    self.assertTrue(sock.send(b'pcm0'))
                     await sock.drain_and_close()
 
-                self.assertEqual(ws.sent, [b'pcm', 'finalize'])
+                self.assertEqual(ws.sent, [b'pcm0', 'finalize'])
                 self.assertEqual(segments, [{'text': 'hello', 'speaker': 'SPEAKER_00', 'start': 0, 'end': 1}])
                 return mock_ws_module.connect.call_args
 
