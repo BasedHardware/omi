@@ -1319,22 +1319,35 @@ printf 'launch_mode=%s fast_reason=%s bundle_id=%s profile_root=%q\n' \
     "$LAUNCH_MODE" "$FAST_BUNDLE_REASON" "$BUNDLE_ID" "$PROFILE_ROOT"
 
 auth_debug "BEFORE launch: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
+
+# `open` starts the app from launchd, not this shell, so documented QA
+# overrides must be forwarded explicitly or they silently do nothing. Only the
+# direct-exec fallback below inherits this shell's environment.
+build_launch_env_args() {
+    LAUNCH_ENV_ARGS=()
+    if [ -n "${OMI_FORCE_CANONICAL_MEMORY_ATLAS:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_CANONICAL_MEMORY_ATLAS=$OMI_FORCE_CANONICAL_MEMORY_ATLAS")
+    fi
+}
+
+build_launch_env_args
+
 LAUNCH_TRANSPORT="open"
 if [ -n "$DESKTOP_LAUNCH_TOKEN" ]; then
     # `-n` guarantees this invocation creates a process carrying the capability
     # token instead of focusing an existing instance of the same app.
     LAUNCH_ARGS=("${AUTOMATION_ARGS[@]}" "--omi-launch-token=$DESKTOP_LAUNCH_TOKEN")
-    if ! open -n "$APP_PATH" --args "${LAUNCH_ARGS[@]}"; then
+    if ! open -n ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH" --args "${LAUNCH_ARGS[@]}"; then
         LAUNCH_TRANSPORT="direct"
         "$APP_PATH/Contents/MacOS/$BINARY_NAME" "${LAUNCH_ARGS[@]}" &
     fi
 elif [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
-    if ! open "$APP_PATH" --args "${AUTOMATION_ARGS[@]}"; then
+    if ! open ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH" --args "${AUTOMATION_ARGS[@]}"; then
         LAUNCH_TRANSPORT="direct"
         "$APP_PATH/Contents/MacOS/$BINARY_NAME" "${AUTOMATION_ARGS[@]}" &
     fi
 else
-    if ! open "$APP_PATH"; then
+    if ! open ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH"; then
         LAUNCH_TRANSPORT="direct"
         "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
     fi
