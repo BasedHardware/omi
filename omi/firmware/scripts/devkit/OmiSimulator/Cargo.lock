@@ -3656,6 +3656,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "omi-firmware-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "omi-product-emulator"
 version = "0.1.0"
 dependencies = [
@@ -3663,6 +3670,7 @@ dependencies = [
  "crepuscularity-gpui",
  "ctrlc",
  "gpui",
+ "omi-firmware-core",
  "serde",
  "serde_json",
  "tempfile",
