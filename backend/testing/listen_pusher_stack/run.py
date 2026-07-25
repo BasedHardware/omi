@@ -33,6 +33,7 @@ import redis
 import websockets
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from websockets.exceptions import ConnectionClosed
 
 from testing.listen_pusher_stack.cloud_tasks import FINALIZATION_HANDLER_PATH, LOCAL_TASK_TOKEN_ENV, TASK_EVENTS_FILE
 
@@ -48,6 +49,8 @@ REST_FINALIZATION_RACE_ENV = (
     'OMI_STACK_FINALIZATION_RACE_CONVERSATION_ID',
     'OMI_STACK_FINALIZATION_RACE_PARTIES',
 )
+RECORDING_LIFECYCLE_FAULT_ENV = 'OMI_STACK_RECORDING_LIFECYCLE_FAULT'
+RECORDING_LIFECYCLE_FAULT_KEYS = frozenset({'uid', 'recording_session_id', 'conversation_id', 'phase'})
 
 
 class StackFailure(AssertionError):
@@ -134,6 +137,8 @@ class Stack:
         hold_inline_finalization: bool = False,
         rest_finalization_race_uid: str | None = None,
         rest_finalization_race_parties: int = 0,
+        recording_session_mode: str = 'dual_write',
+        recording_lifecycle_fault: dict[str, str] | None = None,
     ):
         if finalization_mode not in {'inline', 'cloud_tasks'}:
             raise ValueError(f'unsupported finalization mode: {finalization_mode}')
@@ -145,6 +150,15 @@ class Stack:
             raise ValueError('REST finalization race party count cannot be negative')
         if rest_finalization_race_uid and rest_finalization_race_parties < 2:
             raise ValueError('REST finalization race requires at least two parties')
+        if recording_session_mode not in {'shadow', 'dual_write', 'enforce'}:
+            raise ValueError(f'unsupported recording session mode: {recording_session_mode}')
+        if recording_lifecycle_fault is not None:
+            if set(recording_lifecycle_fault) != RECORDING_LIFECYCLE_FAULT_KEYS:
+                raise ValueError(
+                    f'recording lifecycle fault must contain exactly {sorted(RECORDING_LIFECYCLE_FAULT_KEYS)}'
+                )
+            if not all(recording_lifecycle_fault[key] for key in RECORDING_LIFECYCLE_FAULT_KEYS):
+                raise ValueError('recording lifecycle fault values must be non-empty')
         self.state_dir = state_dir
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.finalization_mode = finalization_mode
@@ -156,6 +170,9 @@ class Stack:
         self.rest_finalization_race_conversation_id = (
             str(uuid.uuid4()) if rest_finalization_race_uid is not None else None
         )
+        self.recording_session_mode = recording_session_mode
+        self.recording_lifecycle_fault = recording_lifecycle_fault
+        self.recording_lifecycle_retry_file = self.state_dir / 'release-recording-lifecycle-retry'
         self.redis_port = _free_port()
         self.backend_port = _free_port()
         self.finalization_worker_port = _free_port()
@@ -204,6 +221,7 @@ class Stack:
                 'STT_SERVICE_MODELS': 'parakeet',
                 'TRIAL_PAYWALL_ENABLED': 'false',
                 'LISTEN_FINALIZATION_DISPATCH_MODE': self.finalization_mode,
+                'RECORDING_SESSION_MODE': self.recording_session_mode,
                 'OMI_STACK_STATE_DIR': str(self.state_dir),
                 'PYTHONPATH': str(BACKEND),
                 # Child logs are evidence when a process fails to bind; avoid
@@ -235,6 +253,8 @@ class Stack:
                     'OMI_STACK_FINALIZATION_RACE_PARTIES': str(self.rest_finalization_race_parties),
                 }
             )
+        if self.recording_lifecycle_fault is not None:
+            env[RECORDING_LIFECYCLE_FAULT_ENV] = json.dumps(self.recording_lifecycle_fault, sort_keys=True)
         return env
 
     @property
@@ -347,7 +367,9 @@ class Stack:
 
     def _start_backend(self, *, enable_rest_finalization_race: bool = True) -> None:
         backend_app = (
-            'testing.listen_pusher_stack.listener_app:app' if self.finalization_mode == 'cloud_tasks' else 'main:app'
+            'testing.listen_pusher_stack.listener_app:app'
+            if self.finalization_mode == 'cloud_tasks' or self.recording_lifecycle_fault is not None
+            else 'main:app'
         )
         backend_child = self._start(
             'backend',
@@ -410,6 +432,10 @@ class Stack:
     @property
     def finalization_task_events(self) -> list[dict[str, Any]]:
         return _read_events(self.state_dir / TASK_EVENTS_FILE)
+
+    @property
+    def recording_lifecycle_fault_events(self) -> list[dict[str, Any]]:
+        return _read_events(self.state_dir / 'recording_lifecycle_fault.jsonl')
 
     @property
     def finalization_tasks(self) -> list[dict[str, Any]]:
@@ -499,6 +525,16 @@ class Stack:
         )
         return snapshot.to_dict() if snapshot.exists else None
 
+    def recording_session(self, uid: str, recording_session_id: str) -> dict[str, Any] | None:
+        snapshot = (
+            self.firestore.collection('users')
+            .document(uid)
+            .collection('recording_sessions')
+            .document(recording_session_id)
+            .get()
+        )
+        return snapshot.to_dict() if snapshot.exists else None
+
     def jobs_for(self, uid: str, conversation_id: str) -> list[dict[str, Any]]:
         query = self.firestore.collection('conversation_finalization_jobs').where(filter=FieldFilter('uid', '==', uid))
         jobs: list[dict[str, Any]] = []
@@ -519,6 +555,11 @@ class Stack:
         if not self.hold_inline_finalization:
             raise StackFailure('inline finalization hold was not configured')
         self.inline_finalization_release_file.touch()
+
+    def release_recording_lifecycle_retry(self) -> None:
+        if self.recording_session_mode != 'enforce' or self.recording_lifecycle_fault is None:
+            raise StackFailure('recording lifecycle retry release requires an enforce fault scenario')
+        self.recording_lifecycle_retry_file.touch()
 
     def seed_bare_processing_conversation(
         self,
@@ -619,6 +660,30 @@ async def _receive_until(websocket: Any, predicate: Callable[[Any], bool], *, la
             if predicate(payload):
                 return payload
     raise StackFailure(f'timed out waiting for {label}; observed {len(seen)} JSON messages')
+
+
+async def _assert_no_event(
+    websocket: Any,
+    predicate: Callable[[Any], bool],
+    *,
+    label: str,
+    timeout: float = 1.0,
+) -> None:
+    """Assert a bounded client stream contains no matching lifecycle event."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            message = await asyncio.wait_for(websocket.recv(), timeout=max(0.05, deadline - time.monotonic()))
+        except asyncio.TimeoutError:
+            continue
+        except ConnectionClosed as error:
+            raise StackFailure(f'client disconnected while checking for suppressed {label}') from error
+        if not isinstance(message, str):
+            continue
+        with suppress(json.JSONDecodeError):
+            payload = json.loads(message)
+            if predicate(payload):
+                raise StackFailure(f'unexpected {label}: {payload!r}')
 
 
 async def _connect(stack: Stack, uid: str, session_id: str | None) -> tuple[Any, dict[str, Any]]:
@@ -807,6 +872,123 @@ async def _normal_and_terminal_reconnect(stack: Stack) -> None:
     jobs = stack.jobs_for(uid, session_id)
     if len(jobs) != 1 or jobs[0].get('id') != job.get('id'):
         raise StackFailure('terminal reconnect changed the original durable finalization job')
+
+
+def _selected_fault_operation(stack: Stack) -> tuple[str, str]:
+    fault = stack.recording_lifecycle_fault
+    if fault is None:
+        raise StackFailure('recording lifecycle fault scenario requires an operation selector')
+    if fault['recording_session_id'] != fault['conversation_id'] or fault['phase'] != 'completed':
+        raise StackFailure('recording lifecycle fault scenario requires one completed native-session write')
+    return fault['uid'], fault['recording_session_id']
+
+
+def _is_matching_memory_created(payload: Any, *, conversation_id: str) -> bool:
+    return (
+        isinstance(payload, dict)
+        and payload.get('type') == 'memory_created'
+        and payload.get('conversation_id') == conversation_id
+    )
+
+
+async def _recording_lifecycle_fault_enforce(stack: Stack) -> None:
+    """Enforce fails closed, then a fault-free controller retry succeeds once."""
+    if stack.recording_session_mode != 'enforce':
+        raise StackFailure('enforce lifecycle fault scenario requires RECORDING_SESSION_MODE=enforce')
+    uid, conversation_id = _selected_fault_operation(stack)
+    stack.seed_user(uid)
+    websocket, _ = await _connect(stack, uid, conversation_id)
+    await _record_audio(websocket)
+    stack.age_conversation(uid, conversation_id)
+
+    _wait_until(
+        lambda: len(stack.recording_lifecycle_fault_events) == 1,
+        label='selected enforce lifecycle write failure',
+        timeout=25.0,
+    )
+    _wait_for_job(stack, uid, conversation_id, 'completed')
+    failed_state = stack.recording_session(uid, conversation_id)
+    if not failed_state or (
+        failed_state.get('lifecycle_phase'),
+        failed_state.get('lifecycle_sequence'),
+    ) != ('processing', 1):
+        raise StackFailure(f'enforce fault advanced durable lifecycle state: {failed_state!r}')
+    await _assert_no_event(
+        websocket,
+        lambda payload: _is_matching_memory_created(payload, conversation_id=conversation_id),
+        label='enforce memory_created before durable completion',
+    )
+
+    stack.release_recording_lifecycle_retry()
+    retry_event = await _receive_until(
+        websocket,
+        lambda payload: _is_matching_memory_created(payload, conversation_id=conversation_id),
+        label='fault-free enforce completion retry',
+    )
+    expected_envelope = {
+        'recording_session_id': conversation_id,
+        'conversation_id': conversation_id,
+        'lifecycle_version': 1,
+        'lifecycle_phase': 'completed',
+        'lifecycle_sequence': 2,
+    }
+    if {key: retry_event.get(key) for key in expected_envelope} != expected_envelope:
+        raise StackFailure(f'fault-free retry emitted the wrong durable envelope: {retry_event!r}')
+    accepted_state = stack.recording_session(uid, conversation_id)
+    if not accepted_state or (
+        accepted_state.get('lifecycle_phase'),
+        accepted_state.get('lifecycle_sequence'),
+    ) != ('completed', 2):
+        raise StackFailure(f'fault-free retry did not advance exactly one durable envelope: {accepted_state!r}')
+    if len(stack.recording_lifecycle_fault_events) != 1:
+        raise StackFailure('one-shot lifecycle fault fired more than once')
+    await _assert_no_event(
+        websocket,
+        lambda payload: _is_matching_memory_created(payload, conversation_id=conversation_id),
+        label='duplicate enforce memory_created after retry',
+        timeout=0.5,
+    )
+    await websocket.close(code=1000)
+
+
+async def _recording_lifecycle_fault_compatibility(stack: Stack) -> None:
+    """Migration modes retain only their unsequenced legacy compatibility event."""
+    if stack.recording_session_mode not in {'shadow', 'dual_write'}:
+        raise StackFailure('compatibility lifecycle fault scenario requires shadow or dual_write mode')
+    uid, conversation_id = _selected_fault_operation(stack)
+    stack.seed_user(uid)
+    websocket, _ = await _connect(stack, uid, conversation_id)
+    await _record_audio(websocket)
+    stack.age_conversation(uid, conversation_id)
+
+    event = await _receive_until(
+        websocket,
+        lambda payload: _is_matching_memory_created(payload, conversation_id=conversation_id),
+        label=f'{stack.recording_session_mode} legacy completion fallback',
+        timeout=25.0,
+    )
+    _wait_for_job(stack, uid, conversation_id, 'completed')
+    _wait_until(
+        lambda: len(stack.recording_lifecycle_fault_events) == 1,
+        label=f'selected {stack.recording_session_mode} lifecycle write failure',
+    )
+    if any(event.get(key) is not None for key in ('lifecycle_version', 'lifecycle_phase', 'lifecycle_sequence')):
+        raise StackFailure(
+            f'{stack.recording_session_mode} fault incorrectly claimed a sequenced durable envelope: {event!r}'
+        )
+    durable_state = stack.recording_session(uid, conversation_id)
+    if not durable_state or (
+        durable_state.get('lifecycle_phase'),
+        durable_state.get('lifecycle_sequence'),
+    ) != ('processing', 1):
+        raise StackFailure(f'{stack.recording_session_mode} fallback advanced durable lifecycle: {durable_state!r}')
+    await _assert_no_event(
+        websocket,
+        lambda payload: _is_matching_memory_created(payload, conversation_id=conversation_id),
+        label=f'duplicate {stack.recording_session_mode} legacy completion fallback',
+        timeout=0.5,
+    )
+    await websocket.close(code=1000)
 
 
 async def _inline_finalization_survives_source_close(stack: Stack) -> None:
@@ -1411,6 +1593,8 @@ def _run_stack_scenario(
     hold_inline_finalization: bool = False,
     rest_finalization_race_uid: str | None = None,
     rest_finalization_race_parties: int = 0,
+    recording_session_mode: str = 'dual_write',
+    recording_lifecycle_fault: dict[str, str] | None = None,
     scenario: Callable[[Stack], Any],
 ) -> None:
     stack = Stack(
@@ -1420,6 +1604,8 @@ def _run_stack_scenario(
         hold_inline_finalization=hold_inline_finalization,
         rest_finalization_race_uid=rest_finalization_race_uid,
         rest_finalization_race_parties=rest_finalization_race_parties,
+        recording_session_mode=recording_session_mode,
+        recording_lifecycle_fault=recording_lifecycle_fault,
     )
     try:
         stack.start()
@@ -1457,6 +1643,28 @@ def main() -> int:
             finalizer_failures=None,
             scenario=_stale_processing_orphan_reconciled_inline,
         )
+        for mode, uid, conversation_id in (
+            ('enforce', 'stack-lifecycle-enforce', '7bc7ca9b-570a-4b02-8ff9-66c1465beeba'),
+            ('shadow', 'stack-lifecycle-shadow', '55f1b279-c1e5-41bd-a999-b04f9329b976'),
+            ('dual_write', 'stack-lifecycle-dual-write', 'd847dff1-6c8b-46e6-a80c-dc60ece1e0e0'),
+        ):
+            _run_stack_scenario(
+                state_dir / f'lifecycle-fault-{mode.replace("_", "-")}',
+                finalization_mode='inline',
+                finalizer_failures=None,
+                recording_session_mode=mode,
+                recording_lifecycle_fault={
+                    'uid': uid,
+                    'recording_session_id': conversation_id,
+                    'conversation_id': conversation_id,
+                    'phase': 'completed',
+                },
+                scenario=(
+                    _recording_lifecycle_fault_enforce
+                    if mode == 'enforce'
+                    else _recording_lifecycle_fault_compatibility
+                ),
+            )
         _run_stack_scenario(
             state_dir / 'cloud-rest-restart',
             finalization_mode='cloud_tasks',

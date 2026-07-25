@@ -82,9 +82,11 @@ reuse a production-family identity.
 - `desktop/macos/Desktop/Sources/AppBuild.swift`
 - `desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift`
 - `desktop/macos/Desktop/Sources/GoogleService-Info*.plist`
-- `desktop/macos/Backend-Rust/charts/desktop-backend/*values.yaml`
+- `desktop/macos/Backend-Rust/charts/**` and `backend/charts/**` (retired: no GKE desktop-backend chart may return)
+- `.github/workflows/**` (retired: no GKE desktop-backend deployment authority may return)
 - `.github/scripts/check-mobile-production-routing.py`
 - `.github/scripts/test_check_mobile_production_routing.py`
+- `docs/runbooks/desktop-backend-cloud-run-ownership.md`
 
 ## PR rule
 

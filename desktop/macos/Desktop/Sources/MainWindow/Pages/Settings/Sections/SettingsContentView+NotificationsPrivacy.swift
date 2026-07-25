@@ -89,7 +89,7 @@ extension SettingsContentView {
                 .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
                 .onChange(of: memoryNotificationsEnabled) { _, newValue in
-                  MemoryAssistantSettings.shared.notificationsEnabled = newValue
+                  MemoryAssistantSettings.shared.applyUserSettingChange(.notificationsEnabled, value: newValue)
                   SettingsSyncManager.shared.pushPartialUpdate(
                     AssistantSettingsResponse(
                       memory: MemorySettingsResponse(notificationsEnabled: newValue)))

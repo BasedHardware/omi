@@ -15,7 +15,7 @@ import OmiTheme
 /// `textSelection(.enabled)` installs AppKit-backed `SelectionOverlay` views
 /// that can form a non-converging setFont → intrinsic-size → AttributeGraph
 /// loop when a long transcript scrolls. Chat bubbles already provide a
-/// whole-message copy action; code blocks and tables add focused copy actions.
+/// whole-message copy action; code blocks add a focused copy action.
 struct OmiMarkdown: View {
   enum Style: Equatable {
     case assistant
@@ -372,7 +372,6 @@ struct OmiMarkdownTable: Equatable {
   let header: [String]
   let alignments: [ColumnAlignment]
   let rows: [[String]]
-  let rawMarkdown: String
 
   fileprivate static func parse(
     lines: [String],
@@ -387,7 +386,6 @@ struct OmiMarkdownTable: Equatable {
     let parsedAlignments = separatorCells.compactMap(parseAlignment)
     guard parsedAlignments.count == header.count else { return nil }
 
-    var rawLines = [lines[startIndex], lines[startIndex + 1]]
     var rows = [[String]]()
     var cursor = startIndex + 2
 
@@ -398,7 +396,6 @@ struct OmiMarkdownTable: Equatable {
       guard rowCells.count >= 2 else { break }
 
       rows.append(normalize(rowCells, columnCount: header.count))
-      rawLines.append(line)
       cursor += 1
     }
 
@@ -406,8 +403,7 @@ struct OmiMarkdownTable: Equatable {
       OmiMarkdownTable(
         header: header,
         alignments: parsedAlignments,
-        rows: rows,
-        rawMarkdown: rawLines.joined(separator: "\n")
+        rows: rows
       ),
       cursor
     )
@@ -506,29 +502,25 @@ private struct OmiMarkdownTableView: View {
   }
 
   var body: some View {
-    VStack(alignment: .trailing, spacing: OmiSpacing.xxs) {
-      MarkdownTableCopyButton(markdown: table.rawMarkdown)
-
-      Grid(alignment: .topLeading, horizontalSpacing: 1, verticalSpacing: 1) {
-        ForEach(Array(allRows.enumerated()), id: \.offset) { rowIndex, row in
-          GridRow(alignment: .top) {
-            ForEach(Array(row.enumerated()), id: \.offset) { columnIndex, content in
-              cell(content, row: rowIndex, column: columnIndex)
-            }
+    Grid(alignment: .topLeading, horizontalSpacing: 1, verticalSpacing: 1) {
+      ForEach(Array(allRows.enumerated()), id: \.offset) { rowIndex, row in
+        GridRow(alignment: .top) {
+          ForEach(Array(row.enumerated()), id: \.offset) { columnIndex, content in
+            cell(content, row: rowIndex, column: columnIndex)
           }
         }
       }
-      .padding(1)
-      .background(borderColor)
-      .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(borderColor, lineWidth: 1)
-      )
-      .frame(maxWidth: .infinity, alignment: .leading)
     }
-    // A table remains copyable through its dedicated action, but does not
-    // create one AppKit SelectionOverlay per cell inside the live transcript.
+    .padding(1)
+    .background(borderColor)
+    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
+    .overlay(
+      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+        .stroke(borderColor, lineWidth: 1)
+    )
+    .frame(maxWidth: .infinity, alignment: .leading)
+    // Tables do not create one AppKit SelectionOverlay per cell inside the
+    // live transcript. Copy remains available only on fenced code blocks.
     .textSelection(.disabled)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("omi-markdown-table")
@@ -599,29 +591,6 @@ private struct OmiMarkdownTableView: View {
     case .leading:
       return (120, 180, 280)
     }
-  }
-}
-
-private struct MarkdownTableCopyButton: View {
-  let markdown: String
-  @State private var copied = false
-
-  var body: some View {
-    Button {
-      NSPasteboard.general.clearContents()
-      NSPasteboard.general.setString(markdown, forType: .string)
-      copied = true
-      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-        copied = false
-      }
-    } label: {
-      Label(copied ? "Copied" : "Copy table", systemImage: copied ? "checkmark" : "doc.on.doc")
-        .scaledFont(size: OmiType.micro, weight: .medium)
-        .foregroundColor(copied ? .green : OmiColors.textTertiary)
-    }
-    .buttonStyle(.plain)
-    .accessibilityIdentifier("omi-markdown-table-copy")
-    .help("Copy table")
   }
 }
 
