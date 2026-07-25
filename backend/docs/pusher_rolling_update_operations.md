@@ -201,7 +201,58 @@ rollout cannot be judged healthy against telemetry that does not exist. It does
 not scrape live values; use `... rollback --env <env>` for the rollback-mode
 contract check. Do not weaken the chart to make a check pass; fix the input.
 
-### 3. Deploy the immutable tag
+### 3. Shared ConfigMap/Secret migration guard (required on key changes)
+
+The 2026-07-22 production Pusher outage was a *non-atomic cross-resource
+migration*: the shared key `REDIS_DB_HOST` stopped materializing in its source
+while live pusher pods still referenced it. Pusher bulk-loads **all** of its
+ConfigMap keys via `envFrom`, so a key removed from that object left pods
+`CreateContainerConfigError` while `/health` stayed green — the fleet dropped to
+zero healthy pods with no probe signal. `verify_shared_config_migration.py`
+fails CLOSED before any mutation when a serving workload still references a
+ConfigMap/Secret source or key the proposed state removes or reclassifies.
+
+- **Preflight (CI / pre-push, stdlib-only).**
+  `python3 backend/scripts/verify_shared_config_migration.py preflight` scans the
+  pusher chart values and fails on a dual-source binding or a malformed
+  `valueFrom`. Registered as `shared-config-migration-preflight` in
+  `.github/checks-manifest.yaml`; it runs automatically. It has no inventory, so
+  it cannot detect a key removed from a bulk-loaded object.
+
+- **Guard mode (operator-invoked — the actual incident root-fix).** Run this
+  before **any** change that adds, removes, or moves a ConfigMap/Secret **key**
+  consumed by pusher or any serving workload (Deployment/StatefulSet/DaemonSet/
+  Job/CronJob/ReplicaSet, incl. `initContainers`). It resolves every
+  `env.valueFrom`, `envFrom`, and per-key reference against the proposed source
+  inventory and fails closed on a removed/reclassified key. It reads object and
+  key NAMES only — never ConfigMap/Secret values.
+
+  ```bash
+  # Render the proposed state (--rendered is repeatable across envs/workloads):
+  helm template pusher backend/charts/pusher \
+      -f backend/charts/pusher/prod_omi_pusher_values.yaml \
+      --set image.tag=<immutable-tag> > /tmp/pusher-prod.yaml
+
+  # Capture the CURRENT live key names in the guard's inventory format
+  # ({configmaps: {<obj>: [key,...]}, secrets: {...}} — names only, never values):
+  kubectl -n <env>-omi-backend get configmap <cfg> -o json \
+      | jq '{configmaps: {(.metadata.name): (.data | keys)}}' > /tmp/live-keys.yaml
+
+  # Write /tmp/proposed-keys.yaml in the same shape with the keys the object will
+  # carry AFTER the change, then run the guard. --previous-inventory is what
+  # catches a key removed from an envFrom bulk-loaded object (the outage class);
+  # without it, envFrom removals are silent.
+  python3 backend/scripts/verify_shared_config_migration.py guard \
+      --rendered /tmp/pusher-prod.yaml \
+      --source-inventory /tmp/proposed-keys.yaml \
+      --previous-inventory /tmp/live-keys.yaml
+  ```
+
+  Non-zero exit = a serving workload still references a source/key the proposed
+  state removes or reclassifies; do not apply. Needs PyYAML (the backend venv, or
+  `pip install pyyaml`).
+
+### 4. Deploy the immutable tag
 
 Deploy the exact short-SHA image tag. Never deploy `latest`, and never let a
 chart-only deploy reset the workload to `latest` (per `.github/AGENTS.md`). The
@@ -209,7 +260,7 @@ deploy workflow must wait for rollout completion with
 `kubectl rollout status deploy/<env>-omi-pusher --timeout=...` and fail on
 timeout.
 
-### 4. Rollback
+### 5. Rollback
 
 Roll back by re-running the Helm deploy against the **prior immutable image tag**
 (not `latest`). Because traffic/runtime rollback to N-1 is always safe by design
