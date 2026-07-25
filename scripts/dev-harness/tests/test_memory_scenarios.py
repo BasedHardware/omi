@@ -20,7 +20,10 @@ def _env(tmp_path: Path) -> dict[str, str]:
     env = os.environ.copy()
     env["PROVIDER_MODE"] = "offline"
     env["OMI_LOCAL_STATE_ROOT"] = str(tmp_path / "state")
-    env["PYTHONPATH"] = f"{REPO_ROOT / 'scripts' / 'dev-harness'}:{env.get('PYTHONPATH', '')}"
+    pythonpath = [str(REPO_ROOT / "scripts" / "dev-harness")]
+    if existing := env.get("PYTHONPATH"):
+        pythonpath.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(pythonpath)
     return env
 
 
