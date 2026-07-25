@@ -45,7 +45,7 @@ typedef RecordingTransferPass = Future<void> Function();
 typedef RecordingTransferDrain = Future<RecordingTransferDrainResult> Function();
 typedef RecordingTransferCooldownScheduler = void Function(Duration delay, void Function() callback);
 
-/// The single foreground owner for recording recovery.
+/// The single owner for recording recovery.
 ///
 /// It deliberately knows no provider or transport details. Production wires
 /// the seams once, while tests use the same coordinator with fake connectivity,
@@ -57,6 +57,7 @@ class RecordingTransferCoordinator {
     required RecordingTransferPass refreshPending,
     required RecordingTransferDrain drain,
     required bool Function() autoUploadEnabled,
+    bool Function()? backgroundDeviceRecoveryEnabled,
     Stream<bool>? connectivityChanges,
     bool initiallyConnected = true,
     DateTime Function()? clock,
@@ -66,6 +67,7 @@ class RecordingTransferCoordinator {
         _refreshPending = refreshPending,
         _drain = drain,
         _autoUploadEnabled = autoUploadEnabled,
+        _backgroundDeviceRecoveryEnabled = backgroundDeviceRecoveryEnabled ?? _disabled,
         _clock = clock ?? DateTime.now,
         _scheduleCooldown = scheduleCooldown {
     _configured = true;
@@ -78,6 +80,7 @@ class RecordingTransferCoordinator {
         _refreshPending = _noop,
         _drain = _skippedDrain,
         _autoUploadEnabled = _disabled,
+        _backgroundDeviceRecoveryEnabled = _disabled,
         _clock = DateTime.now;
 
   static final RecordingTransferCoordinator instance = RecordingTransferCoordinator._singleton();
@@ -98,6 +101,7 @@ class RecordingTransferCoordinator {
   RecordingTransferPass _refreshPending;
   RecordingTransferDrain _drain;
   bool Function() _autoUploadEnabled;
+  bool Function() _backgroundDeviceRecoveryEnabled;
   final DateTime Function() _clock;
   RecordingTransferCooldownScheduler? _scheduleCooldown;
 
@@ -125,6 +129,7 @@ class RecordingTransferCoordinator {
     required RecordingTransferPass refreshPending,
     required RecordingTransferDrain drain,
     required bool Function() autoUploadEnabled,
+    required bool Function() backgroundDeviceRecoveryEnabled,
     required Stream<bool> connectivityChanges,
     required bool initiallyConnected,
   }) {
@@ -133,6 +138,7 @@ class RecordingTransferCoordinator {
     _refreshPending = refreshPending;
     _drain = drain;
     _autoUploadEnabled = autoUploadEnabled;
+    _backgroundDeviceRecoveryEnabled = backgroundDeviceRecoveryEnabled;
     _configured = true;
     _listenToConnectivity(connectivityChanges, initiallyConnected);
 
@@ -170,15 +176,21 @@ class RecordingTransferCoordinator {
   /// Coalesces concurrent events into a single extra serial pass. Five wakes
   /// during one pass therefore run at most two passes and never parallel drains.
   Future<void> wake(WakeTrigger trigger) {
-    // Recovery is foreground-only. Persisted WAL state is recovered by the
-    // foreground wake, so background connectivity/device callbacks must not
-    // start discovery or a whole-WAL drain.
-    if (!_foreground) return Future.value();
-
     if (!_configured) {
       _wakeBeforeConfigured = _preferWake(_wakeBeforeConfigured, trigger);
       return Future.value();
     }
+
+    // Android's persistent BLE mode is an explicit user opt-in. Its native
+    // reconnect callback may run one recovery pass while Dart is still alive
+    // in the background, but only when automatic uploads are also enabled.
+    // Every other background wake remains suppressed; persisted state is
+    // recovered by the next foreground wake.
+    final allowedBackgroundDeviceReconnect = !_foreground &&
+        trigger == WakeTrigger.deviceConnected &&
+        _backgroundDeviceRecoveryEnabled() &&
+        _autoUploadEnabled();
+    if (!_foreground && !allowedBackgroundDeviceReconnect) return Future.value();
 
     final active = _inFlight;
     if (active != null) {

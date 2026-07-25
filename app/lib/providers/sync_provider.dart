@@ -390,6 +390,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         drain: _drainEligibleWals,
         autoUploadEnabled: () =>
             !SharedPreferencesUtil().useCustomStt && SharedPreferencesUtil().autoSyncOfflineRecordings,
+        backgroundDeviceRecoveryEnabled: () =>
+            defaultTargetPlatform == TargetPlatform.android && SharedPreferencesUtil().backgroundModeEnabled,
         connectivityChanges: ConnectivityService().onConnectionChange,
         initiallyConnected: ConnectivityService().isConnected,
       );
