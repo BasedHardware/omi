@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 import os
 import re
 import shutil
@@ -67,6 +68,53 @@ def registered_script_paths() -> set[str]:
     return {token for check in manifest.checks for token in check.command if token.endswith(".py")}
 
 
+TEST_MODULE_RE = re.compile(r"(?:^|/)test[_-][A-Za-z0-9_.-]*\.py$")
+
+
+def interpreter_invoked_test_modules(command: tuple[str, ...]) -> list[str]:
+    """Test modules a command hands straight to the interpreter.
+
+    Commands that name an explicit runner (`-m pytest`, `-m unittest`) delegate
+    discovery to that runner and are not subject to the self-running contract.
+    """
+    if any(token in {"-m", "pytest", "unittest"} for token in command):
+        return []
+    return [token for token in command if TEST_MODULE_RE.search(token)]
+
+
+def non_self_running_reason(source: str) -> str | None:
+    """Explain why `python3 <module>` would execute no test cases, or None."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:  # pragma: no cover - a syntax error fails louder elsewhere
+        return f"could not be parsed: {exc}"
+
+    has_test_case = any(
+        isinstance(node, ast.ClassDef)
+        and any(
+            (isinstance(base, ast.Attribute) and base.attr.endswith("TestCase"))
+            or (isinstance(base, ast.Name) and base.id.endswith("TestCase"))
+            for base in node.bases
+        )
+        for node in ast.walk(tree)
+    )
+    if not has_test_case:
+        return "defines no unittest.TestCase subclass, so unittest.main() would collect nothing"
+
+    has_main_runner = any(
+        isinstance(node, ast.If)
+        and any(
+            isinstance(cmp_, ast.Constant) and cmp_.value == "__main__"
+            for cmp_ in getattr(node.test, "comparators", [])
+        )
+        and any(isinstance(inner, ast.Expr) and isinstance(inner.value, ast.Call) for inner in ast.walk(node))
+        for node in ast.walk(tree)
+    )
+    if not has_main_runner:
+        return "has no __main__ block invoking a test runner"
+    return None
+
+
 class ManifestContractTests(unittest.TestCase):
     def test_manifest_is_valid(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
@@ -109,6 +157,58 @@ class ManifestContractTests(unittest.TestCase):
         self.assertIn("--skip-pr-body-checks", workflow)
         manifest = load_manifest(MANIFEST_PATH)
         self.assertTrue(any("ci" in check.lanes for check in manifest.checks))
+
+    def test_manifest_test_modules_execute_their_cases(self) -> None:
+        """A registered test command must not be able to pass without running tests.
+
+        `python3 some_test_module.py` exits 0 when the module defines only
+        module-level `def test_*` functions, because `unittest.main()` discovers
+        `TestCase` subclasses. Such a check is green forever without asserting
+        anything, which is indistinguishable from a guard that works.
+        """
+        manifest = load_manifest(MANIFEST_PATH)
+        offenders: list[str] = []
+        for check in manifest.checks:
+            for relative in interpreter_invoked_test_modules(check.command):
+                path = REPO_ROOT / relative
+                if not path.exists():
+                    offenders.append(f"{check.id}: {relative} does not exist")
+                    continue
+                reason = non_self_running_reason(path.read_text(encoding="utf-8"))
+                if reason:
+                    offenders.append(f"{check.id}: {relative} {reason}")
+        self.assertEqual(offenders, [], f"manifest test commands that execute no cases: {offenders}")
+
+    def test_pytest_only_module_is_reported_as_non_self_running(self) -> None:
+        """The guard above must fail on the real historical shape it exists to catch."""
+        pytest_only = (
+            "from pathlib import Path\n"
+            "\n"
+            "def test_something(tmp_path: Path) -> None:\n"
+            "    assert True\n"
+        )
+        self.assertIn("defines no unittest.TestCase", non_self_running_reason(pytest_only) or "")
+
+        with_runner = (
+            "import unittest\n"
+            "\n"
+            "class T(unittest.TestCase):\n"
+            "    def test_something(self) -> None:\n"
+            "        self.assertTrue(True)\n"
+            "\n"
+            'if __name__ == "__main__":\n'
+            "    unittest.main()\n"
+        )
+        self.assertIsNone(non_self_running_reason(with_runner))
+
+        no_main = (
+            "import unittest\n"
+            "\n"
+            "class T(unittest.TestCase):\n"
+            "    def test_something(self) -> None:\n"
+            "        self.assertTrue(True)\n"
+        )
+        self.assertIn("has no __main__", non_self_running_reason(no_main) or "")
 
     def test_unregistered_fake_workflow_check_is_named(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
