@@ -72,6 +72,12 @@ LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     ['status'],
 )
 
+LISTEN_FINALIZATION_DURABLE_JOBS = Gauge(
+    'listen_finalization_durable_jobs',
+    'Authoritative Firestore finalization jobs by closed durable lifecycle state',
+    ['state'],
+)
+
 LISTEN_FINALIZATION_RETRIES_TOTAL = Counter(
     'listen_finalization_retries_total',
     'Durable listen finalization jobs replayed by the reconciler',

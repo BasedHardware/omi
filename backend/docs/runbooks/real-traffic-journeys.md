@@ -14,6 +14,7 @@ traffic it scrapes, with no cross-environment comparison or labels.
 | `omi_journey_latency_seconds` | `journey`, `outcome` | Acceptance-to-terminal latency. |
 | `omi_capture_finalization_reconciliations_total` | `outcome` | A stale durable capture job was requeued, or its requeue handoff failed. |
 | `listen_finalization_oldest_nonterminal_age_seconds` | none | Age of the oldest queued, leased, or BYOK-blocked capture finalization job. |
+| `listen_finalization_durable_jobs` | `state` | Authoritative Firestore job projection: `accepted`, `success`, `failure`, `stale`, `nonterminal`, `blocked_byok`, or `terminal_unknown`. |
 
 `journey` is exactly `chat_response`, `pusher_session`, `live_transcription`,
 or `capture_finalization`. `outcome` is exactly `success`, `failure`,
@@ -43,9 +44,13 @@ provider, or content labels.
 - `capture_finalization` is accepted only once, when the Firestore finalization
   outbox creates a new durable job. Successful completion is `success`, a
   dead-letter is `failure`, and a lifecycle-fenced durable job is `stale`.
-  Existing job re-dispatches do not increment acceptance. A nonterminal job is
-  reconciled after its bounded stale delay; use the reconciliation counter and
-  oldest-nonterminal-age gauge to interpret accepted minus terminal work.
+  Existing job re-dispatches do not increment acceptance. Historical terminal
+  rows without the bounded field are `terminal_unknown`; `blocked_byok` stays
+  intentionally nonterminal. This Firestore projection is the capture
+  denominator: PromQL takes `max` across listener pods, then uses
+  `clamp_min(delta(...), 0)` for movement. It never sums replicated global
+  gauges. A dead-emission condition is bounded new `accepted` movement with
+  zero new `success`/`failure`/`stale` movement.
 
 ## Dashboard, alerts, and scrape health
 
