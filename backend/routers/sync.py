@@ -1757,14 +1757,11 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                     return JSONResponse(status_code=200, content={'status': 'done', 'reconciled': True})
             failure = failure_from_exception(e, provider=latest_job.get('stt_provider'))
             sync_model = latest_job.get('stt_model')
-            final_attempt = task_retry_count >= max_attempts - 1
-            # Sustained 5xx throttles the whole queue's dispatch rate, so a failure that
-            # no retry can resolve must not consume the retry budget.
-            if not failure.retryable or final_attempt:
+            if not failure.retryable or task_retry_count >= max_attempts - 1:
                 logger.error(
-                    'event=sync_transcription_job outcome=%s status=%s lane=%s ' 'attempt=%d exception_type=%s',
+                    'event=sync_transcription_job outcome=%s status=failed_final lane=%s '
+                    'attempt=%d exception_type=%s',
                     failure.outcome.value,
-                    'failed_final' if final_attempt else 'failed_not_retryable',
                     sync_lane,
                     task_retry_count + 1,
                     type(e).__name__,
