@@ -63,7 +63,7 @@ class MetadataTests(unittest.TestCase):
     def test_api_loader_retries_transient_failures_then_succeeds(self) -> None:
         payload = json.dumps({"number": 9847, "body": "ok", "updated_at": "u", "labels": []}).encode()
         outcomes: list[object] = [
-            urllib.error.HTTPError("url", 502, "bad gateway", None, None),  # type: ignore[arg-type]
+            urllib.error.HTTPError("url", 502, "bad gateway", None, io.BytesIO()),  # type: ignore[arg-type]
             TimeoutError("timed out"),
             FakeResponse(payload),
         ]
@@ -84,7 +84,7 @@ class MetadataTests(unittest.TestCase):
 
         def opener(request: object, timeout: int) -> FakeResponse:
             calls["count"] += 1
-            raise urllib.error.HTTPError("url", 404, "not found", None, None)  # type: ignore[arg-type]
+            raise urllib.error.HTTPError("url", 404, "not found", None, io.BytesIO())  # type: ignore[arg-type]
 
         with self.assertRaisesRegex(RuntimeError, "HTTP 404") as raised:
             load_from_api("BasedHardware/omi", 9847, "test-token", opener=opener, sleeper=lambda _: None)
