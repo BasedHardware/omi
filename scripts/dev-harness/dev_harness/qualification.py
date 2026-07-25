@@ -1,0 +1,383 @@
+"""Ownership-safe lifecycle primitives for macOS qualification stacks."""
+
+from __future__ import annotations
+
+import fcntl
+import hashlib
+import json
+import os
+import secrets
+import shutil
+import signal
+import tempfile
+import time
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Iterator
+
+from . import safety
+
+LEASE_SCHEMA_VERSION = 1
+LEASE_OWNER = "omi-desktop-qualification"
+DEFAULT_RETAINED_RUNS = 3
+DEFAULT_RETENTION_MAX_AGE_SECONDS = 14 * 24 * 60 * 60
+COMPLETION_FILENAME = "qualification-completed.json"
+STOP_PHASES: tuple[tuple[signal.Signals, float], ...] = (
+    (signal.SIGINT, 8),
+    (signal.SIGTERM, 5),
+    (signal.SIGKILL, 2),
+)
+
+
+class QualificationLeaseError(RuntimeError):
+    """A lease is active or cannot be proven safe to reclaim."""
+
+
+def _real(path: Path) -> Path:
+    return path.expanduser().resolve(strict=False)
+
+
+def lease_root_from_env(env: dict[str, str] | None = None) -> Path:
+    source = os.environ if env is None else env
+    configured = source.get("OMI_QUALIFICATION_LEASE_ROOT", "").strip()
+    return _real(Path(configured)) if configured else _real(Path(tempfile.gettempdir()) / LEASE_OWNER)
+
+
+def _validate_root(root: Path, repo_root: Path) -> Path:
+    resolved = _real(root)
+    if resolved in {Path(resolved.anchor), _real(Path.home()), _real(repo_root)}:
+        raise QualificationLeaseError(f"Unsafe qualification lease root: {resolved}")
+    if resolved in _real(repo_root).parents:
+        raise QualificationLeaseError(f"Qualification lease root cannot parent the source worktree: {resolved}")
+    return resolved
+
+
+@contextmanager
+def _locked(root: Path) -> Iterator[None]:
+    root.mkdir(parents=True, exist_ok=True)
+    with (root / ".qualification-lease.lock").open("a+", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _lease_path(root: Path) -> Path:
+    return root / "qualification-lease.json"
+
+
+def _read_lease(path: Path) -> dict[str, object] | None:
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise QualificationLeaseError(f"Invalid qualification lease at {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise QualificationLeaseError(f"Invalid qualification lease at {path}")
+    return payload
+
+
+def _write_lease(path: Path, payload: dict[str, object]) -> None:
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.replace(path)
+
+
+def _lease_provenance(lease: dict[str, object], root: Path) -> tuple[str, Path, Path, int, str]:
+    if lease.get("schema_version") != LEASE_SCHEMA_VERSION or lease.get("owner") != LEASE_OWNER:
+        raise QualificationLeaseError("Existing lease is not owned by the qualification harness")
+    lease_id = safety.validate_instance_name(str(lease.get("lease_id", "")))
+    state_root = _real(Path(str(lease.get("state_root", ""))))
+    if state_root != _real(root / "state" / lease_id):
+        raise QualificationLeaseError("Qualification lease state root does not match its recorded lease ID")
+    repo_root = _real(Path(str(lease.get("repo_root", ""))))
+    if not repo_root.is_dir():
+        raise QualificationLeaseError("Qualification lease source worktree no longer exists")
+    try:
+        owner_pid = int(lease.get("owner_pid", -1))
+    except (TypeError, ValueError) as exc:
+        raise QualificationLeaseError("Qualification lease has an invalid owner PID") from exc
+    token = str(lease.get("token", ""))
+    if len(token) < 32:
+        raise QualificationLeaseError("Qualification lease has an invalid ownership token")
+    return lease_id, state_root, repo_root, owner_pid, token
+
+
+def _load_records(path: Path, key: str) -> list[dict[str, object]]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise QualificationLeaseError(f"Cannot validate recorded qualification {key}: {exc}") from exc
+    records = payload.get(key) if isinstance(payload, dict) else None
+    if not isinstance(records, list) or not all(isinstance(record, dict) for record in records):
+        raise QualificationLeaseError(f"Invalid qualification {key} manifest")
+    return records
+
+
+def _validated_owned_records(
+    state_root: Path, repo_root: Path, lease_id: str, ownership_token: str
+) -> tuple[list[dict[str, object]], Path, Path]:
+    safety.read_and_validate_sentinel(state_root, repo_root=repo_root, instance=lease_id)
+    process_manifest = state_root / "manifests" / "processes.json"
+    port_manifest = state_root / "manifests" / "ports.json"
+    if not process_manifest.exists() and not port_manifest.exists():
+        # A cancellation can land immediately after acquire, before dev-up has
+        # created any process records. There is no process to signal in that
+        # state, and the sentinel still proves the directory is ours.
+        return [], process_manifest, port_manifest
+    if not process_manifest.is_file() or not port_manifest.is_file():
+        raise QualificationLeaseError("Qualification lease is missing process or port provenance")
+    records = _load_records(process_manifest, "processes")
+    ports = _load_records(port_manifest, "ports")
+    by_service = {(str(record.get("service")), int(record.get("pid", -1))): record for record in ports}
+    validated: list[dict[str, object]] = []
+    for record in records:
+        service = str(record.get("service", ""))
+        pid = int(record.get("pid", -1))
+        marker = str(record.get("ownership_marker", ""))
+        process_group = int(record.get("process_group", -1))
+        expected_marker = f"omi-dev-harness:{lease_id}:{service}:{ownership_token}"
+        if not service or marker != expected_marker:
+            raise QualificationLeaseError("Qualification process marker does not match the recorded lease")
+        if process_group != pid:
+            raise QualificationLeaseError("Qualification process group does not match its recorded leader")
+        port_record = by_service.get((service, pid))
+        if port_record is None or int(port_record.get("port", -1)) != int(record.get("port", -2)):
+            raise QualificationLeaseError("Qualification process has no matching recorded port provenance")
+        if safety.process_exists(pid):
+            safety.validate_owned_pid(pid, process_manifest=process_manifest, service=service)
+            if os.getpgid(pid) != process_group:
+                raise QualificationLeaseError("Qualification process is no longer in its recorded process group")
+            safety.validate_port_owner(
+                int(record["port"]),
+                pid=pid,
+                port_manifest=port_manifest,
+                process_manifest=process_manifest,
+                service=service,
+            )
+        validated.append(record)
+    return validated, process_manifest, port_manifest
+
+
+def _validated_signal(
+    record: dict[str, object], process_manifest: Path, port_manifest: Path, sig: signal.Signals
+) -> None:
+    """Signal only a current supervisor whose listener children still prove lease lineage."""
+
+    pid = int(record["pid"])
+    service = str(record["service"])
+    process_group = int(record["process_group"])
+    port = int(record["port"])
+    safety.validate_owned_pid(pid, process_manifest=process_manifest, service=service)
+    if os.getpgid(pid) != process_group or process_group != pid:
+        raise QualificationLeaseError("Refusing to signal a qualification process group whose ownership changed")
+    safety.validate_port_owner(
+        port, pid=pid, port_manifest=port_manifest, process_manifest=None, service=service
+    )
+    for listener_pid in safety.listening_pids(port):
+        if os.getpgid(listener_pid) != process_group or not safety.is_descendant_of(listener_pid, pid):
+            raise QualificationLeaseError("Refusing to signal a qualification listener whose lease lineage is unproven")
+    try:
+        os.killpg(process_group, sig)
+    except (ProcessLookupError, PermissionError) as exc:
+        raise QualificationLeaseError(f"Cannot signal recorded qualification process group: {exc}") from exc
+
+
+def _open_recorded_ports(records: list[dict[str, object]]) -> list[tuple[str, int, tuple[int, ...]]]:
+    """Re-read every lease port from the OS, never infer closure from supervisor exit."""
+
+    open_ports: list[tuple[str, int, tuple[int, ...]]] = []
+    for record in records:
+        service, port = str(record["service"]), int(record["port"])
+        listeners = safety.listening_pids(port)
+        if listeners:
+            open_ports.append((service, port, listeners))
+    return open_ports
+
+
+def _wait_for_ports_to_close(records: list[dict[str, object]], seconds: float) -> list[tuple[str, int, tuple[int, ...]]]:
+    deadline = time.monotonic() + seconds
+    open_ports = _open_recorded_ports(records)
+    while open_ports and time.monotonic() < deadline:
+        time.sleep(0.2)
+        open_ports = _open_recorded_ports(records)
+    return open_ports
+
+
+def _stop_owned_records(records: list[dict[str, object]], process_manifest: Path, port_manifest: Path) -> None:
+    for sig, wait_seconds in STOP_PHASES:
+        for record in records:
+            pid = int(record["pid"])
+            if safety.process_exists(pid):
+                _validated_signal(record, process_manifest, port_manifest, sig)
+        open_ports = _wait_for_ports_to_close(records, wait_seconds)
+        if not open_ports:
+            return
+    details = ", ".join(f"{service}:{port} (listeners {','.join(map(str, pids))})" for service, port, pids in open_ports)
+    raise QualificationLeaseError(f"Qualification port still open after cleanup; retaining incomplete lease state: {details}")
+
+
+def _safe_remove_state(state_root: Path, repo_root: Path, lease_id: str) -> None:
+    safety.read_and_validate_sentinel(state_root, repo_root=repo_root, instance=lease_id)
+    safety.validate_destructive_target(state_root, state_root=state_root, repo_root=repo_root)
+    shutil.rmtree(state_root)
+
+
+def _completion_path(state_root: Path) -> Path:
+    return state_root / COMPLETION_FILENAME
+
+
+def _mark_completed(state_root: Path, repo_root: Path, lease_id: str, token: str) -> None:
+    safety.read_and_validate_sentinel(state_root, repo_root=repo_root, instance=lease_id)
+    _write_lease(
+        _completion_path(state_root),
+        {
+            "schema_version": LEASE_SCHEMA_VERSION,
+            "owner": LEASE_OWNER,
+            "lease_id": lease_id,
+            "token_sha256": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+            "completed_at": int(time.time()),
+        },
+    )
+
+
+def _completed_at(state_root: Path, lease_id: str) -> int | None:
+    completion = _read_lease(_completion_path(state_root))
+    if completion is None:
+        return None
+    try:
+        completed_at = int(completion.get("completed_at", -1))
+    except (TypeError, ValueError):
+        return None
+    if (
+        completion.get("schema_version") != LEASE_SCHEMA_VERSION
+        or completion.get("owner") != LEASE_OWNER
+        or completion.get("lease_id") != lease_id
+        or completed_at <= 0
+    ):
+        return None
+    return completed_at
+
+
+def _prune(root: Path, *, keep_lease_ids: set[str], retained_runs: int, retention_age_seconds: int) -> None:
+    if retained_runs < 0:
+        raise QualificationLeaseError("Qualification retention must be non-negative")
+    if retention_age_seconds < 0:
+        raise QualificationLeaseError("Qualification retention age must be non-negative")
+    state_base, logs_base = root / "state", root / "logs"
+    entries = [entry for entry in state_base.iterdir() if entry.is_dir()] if state_base.is_dir() else []
+    eligible: list[tuple[float, str, Path, Path]] = []
+    for state_root in entries:
+        lease_id = state_root.name
+        try:
+            sentinel = safety.read_and_validate_sentinel(state_root, instance=lease_id)
+            repo_root = _real(Path(str(sentinel.get("repo_root", ""))))
+            completed_at = _completed_at(state_root, lease_id)
+        except safety.SafetyError:
+            continue
+        if completed_at is not None:
+            eligible.append((float(completed_at), lease_id, state_root, repo_root))
+    eligible.sort(reverse=True)
+    kept = 0
+    now = time.time()
+    for completed_at, lease_id, state_root, repo_root in eligible:
+        if lease_id in keep_lease_ids:
+            continue
+        if now - completed_at <= retention_age_seconds and kept < retained_runs:
+            kept += 1
+            continue
+        _safe_remove_state(state_root, repo_root, lease_id)
+        log_dir = logs_base / lease_id
+        if log_dir.is_dir():
+            shutil.rmtree(log_dir)
+
+
+def acquire(
+    *, repo_root: Path, lease_id: str, owner_pid: int, port_offset: int, retained_runs: int = DEFAULT_RETAINED_RUNS,
+    retention_age_seconds: int = DEFAULT_RETENTION_MAX_AGE_SECONDS,
+) -> dict[str, object]:
+    root = _validate_root(lease_root_from_env(), repo_root)
+    lease_id = safety.validate_instance_name(lease_id)
+    if owner_pid <= 0 or not safety.process_exists(owner_pid):
+        raise QualificationLeaseError(f"Qualification lease owner PID is not running: {owner_pid}")
+    if port_offset < 0:
+        raise QualificationLeaseError("Qualification port offset must be non-negative")
+    with _locked(root):
+        path = _lease_path(root)
+        existing = _read_lease(path)
+        if existing is not None:
+            old_id, old_state, old_repo, old_owner, old_token = _lease_provenance(existing, root)
+            if safety.process_exists(old_owner):
+                raise QualificationLeaseError(
+                    f"Qualification lease {old_id!r} is held by live PID {old_owner}; refusing concurrent stack use"
+                )
+            records, process_manifest, port_manifest = _validated_owned_records(old_state, old_repo, old_id, old_token)
+            _stop_owned_records(records, process_manifest, port_manifest)
+            _safe_remove_state(old_state, old_repo, old_id)
+            old_logs = root / "logs" / old_id
+            if old_logs.is_dir():
+                shutil.rmtree(old_logs)
+            path.unlink(missing_ok=True)
+
+        state_root = _real(root / "state" / lease_id)
+        if state_root.exists():
+            try:
+                sentinel = safety.read_and_validate_sentinel(state_root, instance=lease_id)
+                previous_repo = _real(Path(str(sentinel.get("repo_root", ""))))
+                _safe_remove_state(state_root, previous_repo, lease_id)
+            except safety.SafetyError as exc:
+                raise QualificationLeaseError(f"Refusing to replace unproven qualification state {state_root}: {exc}") from exc
+        safety.create_state_layout(repo_root, lease_id, {"OMI_LOCAL_STATE_ROOT": str(root / "state")})
+        log_dir = root / "logs" / lease_id
+        log_dir.mkdir(parents=True, exist_ok=True)
+        token = secrets.token_urlsafe(24)
+        lease = {
+            "schema_version": LEASE_SCHEMA_VERSION,
+            "owner": LEASE_OWNER,
+            "lease_id": lease_id,
+            "owner_pid": owner_pid,
+            "repo_root": str(_real(repo_root)),
+            "state_root": str(state_root),
+            "port_offset": port_offset,
+            "token": token,
+            "created_at": int(time.time()),
+        }
+        _write_lease(path, lease)
+        _prune(
+            root,
+            keep_lease_ids={lease_id},
+            retained_runs=retained_runs,
+            retention_age_seconds=retention_age_seconds,
+        )
+        return {**lease, "lease_root": str(root), "log_dir": str(log_dir)}
+
+
+def release(
+    *, repo_root: Path, lease_id: str, token: str, retained_runs: int = DEFAULT_RETAINED_RUNS,
+    retention_age_seconds: int = DEFAULT_RETENTION_MAX_AGE_SECONDS,
+) -> None:
+    root = _validate_root(lease_root_from_env(), repo_root)
+    with _locked(root):
+        path = _lease_path(root)
+        lease = _read_lease(path)
+        if lease is None:
+            return
+        recorded_id, state_root, recorded_repo, _owner_pid, recorded_token = _lease_provenance(lease, root)
+        if recorded_id != lease_id or str(lease.get("token", "")) != token:
+            raise QualificationLeaseError("Qualification lease token does not match the active lease")
+        if recorded_repo != _real(repo_root):
+            raise QualificationLeaseError("Qualification lease belongs to a different source worktree")
+        records, process_manifest, port_manifest = _validated_owned_records(
+            state_root, recorded_repo, recorded_id, recorded_token
+        )
+        _stop_owned_records(records, process_manifest, port_manifest)
+        path.unlink(missing_ok=True)
+        _mark_completed(state_root, recorded_repo, recorded_id, recorded_token)
+        _prune(
+            root,
+            keep_lease_ids=set(),
+            retained_runs=retained_runs,
+            retention_age_seconds=retention_age_seconds,
+        )
