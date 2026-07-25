@@ -46,6 +46,32 @@ def test_prod_pusher_requires_successful_dev_attestation_and_never_rebuilds() ->
     assert 'image.tag=${IMAGE_TAG}' not in MANUAL[helm - 300 : helm + 500]
 
 
+def test_prod_pusher_compares_full_dockerfile_source_closure_not_subset() -> None:
+    """The prod freshness check must derive comparison paths from the Dockerfile's
+    COPY instructions, not a hardcoded two-directory subset.  Otherwise a change
+    to a shared backend module (e.g. backend/utils/apps.py) would silently ship
+    a stale digest."""
+    assert "verify_pusher_source_closure.py" in MANUAL
+    assert "PUSHER_SOURCE_PATHS" in MANUAL
+    assert '"${PUSHER_SOURCE_PATHS[@]}"' in MANUAL
+    # The stale hardcoded subset must not be present.
+    assert "backend/pusher backend/charts/pusher" not in MANUAL
+
+
+def test_live_capacity_gate_has_break_glass_hatch() -> None:
+    """Every gated surface must have a break-glass hatch (AGENTS.md L122-L129).
+    The live surge-capacity gate queries cluster metadata and can fail during an
+    urgent rollout, so it must be skippable with confirm-and-reason."""
+    gate = MANUAL.index("Verify live Pusher surge capacity and digest render")
+    # The if: condition is on the line AFTER the - name: line, not before it.
+    gate_if = MANUAL.index("\n        if:", gate)
+    assert "github.event.inputs.skip_live_capacity_gate != 'true'" in MANUAL[gate : gate_if + 200]
+    assert "skip_live_capacity_gate:" in MANUAL
+    assert "break_glass_confirm:" in MANUAL
+    assert "break_glass_reason:" in MANUAL
+    assert "Record live-capacity-gate break-glass use" in MANUAL
+
+
 def test_real_config_and_capacity_gates_precede_every_pusher_helm_mutation() -> None:
     for workflow in (MANUAL, AUTO):
         config = workflow.index("verify_pusher_config_references.py")

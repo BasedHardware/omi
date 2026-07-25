@@ -587,7 +587,8 @@
         "backend/scripts/verify_pusher_rollout_budget.py",
         "backend/scripts/verify_pusher_live_deployment_gate.py",
         "backend/scripts/verify_pusher_promotion_evidence.py",
-        "backend/scripts/verify_pusher_dev_observability.py"
+        "backend/scripts/verify_pusher_dev_observability.py",
+        "backend/scripts/verify_pusher_source_closure.py"
       ],
       "tests": [
         "tests/unit/test_verify_pusher_rollout_budget.py",
@@ -601,7 +602,9 @@
         "Pusher's Kubernetes progress deadline and CI rollout wait both cover every configured healthy-availability wave at the committed HPA ceiling",
         "a chart change to Pusher startup/readiness/min-ready, HPA, or RollingUpdate inputs cannot silently make a healthy rollout appear failed",
         "production Pusher deploys only an exact digest attested by a successful automatic development rollout and never rebuilds that production artifact",
-        "the live deployment gate rejects missing matching-node surge capacity before Helm can mutate the release"
+        "the live deployment gate rejects missing matching-node surge capacity before Helm can mutate the release",
+        "the prod freshness check compares the full Dockerfile COPY source closure so a post-qualification change to any shared backend module cannot ship a stale digest",
+        "the live capacity gate has a confirm-and-reason break-glass hatch that records a tracking issue, matching the repo's gated-surface contract"
       ]
     },
     {

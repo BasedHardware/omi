@@ -31,6 +31,19 @@ on:
         description: 'Production Pusher only: successful gcp_backend_pusher_auto_deploy.yml run ID that qualified the digest'
         required: false
         default: ''
+      skip_live_capacity_gate:
+        description: 'Break-glass: deploy without the live surge-capacity gate (still requires a merged main SHA and immutable digest)'
+        required: false
+        default: false
+        type: boolean
+      break_glass_confirm:
+        description: 'Type skip-live-capacity-gate when skip_live_capacity_gate is set'
+        required: false
+        default: ''
+      break_glass_reason:
+        description: 'Why the live capacity gate is unavailable (required with skip_live_capacity_gate)'
+        required: false
+        default: ''
 
 # The LLM Gateway path reapplies shared backend-secrets; standalone pusher only
 # mutates its own GKE release and therefore keeps a separate environment lock.
@@ -64,6 +77,18 @@ jobs:
           fi
           if [[ "${{ env.SERVICE }}" == "llm-gateway" && "${{ github.event.inputs.environment }}" != "development" ]]; then
             echo "LLM Gateway deploys are dev-only until the prod launch checklist is explicitly completed."
+            exit 1
+          fi
+
+      - name: Validate live-capacity-gate break-glass inputs
+        if: env.SERVICE == 'pusher' && github.event.inputs.skip_live_capacity_gate == 'true'
+        run: |
+          if [[ "${{ github.event.inputs.break_glass_confirm }}" != "skip-live-capacity-gate" ]]; then
+            echo "ERROR: skip_live_capacity_gate requires break_glass_confirm=skip-live-capacity-gate." >&2
+            exit 1
+          fi
+          if [[ -z "${{ github.event.inputs.break_glass_reason }}" ]]; then
+            echo "ERROR: skip_live_capacity_gate requires a non-empty break_glass_reason." >&2
             exit 1
           fi
 
@@ -132,8 +157,15 @@ jobs:
             echo "Development qualification source is not a commit on fresh origin/main." >&2
             exit 1
           fi
-          if ! git diff --quiet "$QUALIFIED_SOURCE_SHA" "$CHECKED_OUT_SHA" -- backend/pusher backend/charts/pusher; then
-            echo "Current main changed Pusher source or chart since the selected dev qualification; run a new dev bake." >&2
+          # Compare the full Pusher image source closure, not a hardcoded subset.
+          # The Dockerfile COPYs backend/{config,database,models,routers,services,
+          # utils,pusher}/, so a change to any of those after qualification would
+          # silently ship a stale digest. Derive the paths from the Dockerfile
+          # itself so this never drifts from what the image actually baked in.
+          mapfile -t PUSHER_SOURCE_PATHS < <(python3 backend/scripts/verify_pusher_source_closure.py)
+          if ! git diff --quiet "$QUALIFIED_SOURCE_SHA" "$CHECKED_OUT_SHA" -- "${PUSHER_SOURCE_PATHS[@]}"; then
+            echo "Current main changed Pusher image source or chart since the selected dev qualification; run a new dev bake." >&2
+            git diff --stat "$QUALIFIED_SOURCE_SHA" "$CHECKED_OUT_SHA" -- "${PUSHER_SOURCE_PATHS[@]}" >&2 || true
             exit 1
           fi
           {
@@ -290,7 +322,7 @@ jobs:
             --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend
 
       - name: Verify live Pusher surge capacity and digest render
-        if: env.SERVICE == 'pusher'
+        if: env.SERVICE == 'pusher' && github.event.inputs.skip_live_capacity_gate != 'true'
         run: |
           python3 backend/scripts/verify_pusher_live_deployment_gate.py \
             --environment ${{ vars.ENV }} \
@@ -462,6 +494,27 @@ jobs:
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
         run: echo "${{ env.SERVICE }} deployed to ${{ github.event.inputs.environment }}"
+
+      - name: Record live-capacity-gate break-glass use
+        if: always() && env.SERVICE == 'pusher' && github.event.inputs.skip_live_capacity_gate == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Match the repo's break-glass audit convention from gcp_backend.yml.
+          # The gate being unusable is the defect; this issue tracks fixing it.
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "Pusher live capacity gate bypassed for ${CHECKED_OUT_SHA:0:10} (${{ github.event.inputs.environment }})" \
+            --body "$(printf '%s\n' \
+              "Pusher deploy ran without the live surge-capacity gate." \
+              "" \
+              "- SHA: \`${CHECKED_OUT_SHA}\` (verified ancestor of main)" \
+              "- Environment: ${{ github.event.inputs.environment }}" \
+              "- Operator: @${GITHUB_ACTOR}" \
+              "- Reason: ${{ github.event.inputs.break_glass_reason }}" \
+              "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+              "" \
+              "The gate being unusable is the defect. Fix the gate, then close this.")" || true
 
       - name: Generate deployment summary
         if: always() && github.event.inputs.environment == 'prod'
