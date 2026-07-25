@@ -24,10 +24,9 @@ final class ChatQueryTelemetryTests: XCTestCase {
     XCTAssertEqual(ChatTelemetryDimension.toolOutcome("interrupted"), "interrupted")
     XCTAssertEqual(ChatTelemetryDimension.toolOutcome("completed"), "completed")
 
-    // Unknown adapter vocabulary must not leak; it reads as completed, the same
-    // default `ToolCallStatus.fromBridgeStatus` applies.
-    XCTAssertEqual(ChatTelemetryDimension.toolOutcome("some_new_status"), "completed")
-    XCTAssertEqual(ChatTelemetryDimension.toolOutcome(""), "completed")
+    // Unknown adapter vocabulary must not leak or inflate successful calls.
+    XCTAssertEqual(ChatTelemetryDimension.toolOutcome("some_new_status"), "unknown")
+    XCTAssertEqual(ChatTelemetryDimension.toolOutcome(""), "unknown")
   }
 
   /// User Stop is not a tool defect. `ToolCallStatus` deliberately collapses
