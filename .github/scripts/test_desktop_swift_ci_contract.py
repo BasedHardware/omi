@@ -12,6 +12,7 @@ compiler the flags run against.
 from __future__ import annotations
 
 import re
+import sys
 import unittest
 from pathlib import Path
 
@@ -19,6 +20,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/desktop-swift-ci.yml"
 RUNNER_PATH = REPO_ROOT / "desktop/macos/scripts/run-swift-ci.sh"
 PRE_PUSH_PATH = REPO_ROOT / "scripts/pre-push"
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
+from pre_push_ci_prediction import resolve_impact  # noqa: E402
 
 EXPECTED_XCODE_VERSION = "16.4"
 EXPECTED_XCODE_BUILD = "16F6"
@@ -102,8 +106,6 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
     def test_release_control_inputs_produce_exact_sha_checks(self):
         """Candidate-building config must run the checks consumed by the release planner."""
-        changes = self.jobs["changes"]
-
         for path in (
             "codemagic.yaml",
             ".github/scripts/plan-desktop-release.py",
@@ -111,7 +113,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             ".github/workflows/desktop-swift-ci.yml",
         ):
             with self.subTest(path=path):
-                self.assertIn(path, changes)
+                self.assertTrue(resolve_impact([path], event="push").includes("desktop-ci-only"))
 
     def test_macos_jobs_have_a_bounded_runner_budget(self):
         """A stuck Swift invocation must not consume hosted macOS capacity forever."""
@@ -130,16 +132,16 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("github.event.action != 'closed'", changes)
 
     def test_notification_boundary_runs_targeted_release_regression(self):
-        changes = self.jobs["changes"]
         job = self.jobs["desktop-swift-verify"]
         for path in (
-            "AppState[+]Permissions[.]swift",
-            "Sources/.*Notification.*[.]swift",
-            "OmiApp[.]swift",
-            "Providers/(ChatToolExecutor|DeviceProvider)[.]swift",
-            "Tests/.*Notification.*Tests[.]swift",
+            "desktop/macos/Desktop/Sources/AppState/AppState+Permissions.swift",
+            "desktop/macos/Desktop/Sources/NotificationProbe.swift",
+            "desktop/macos/Desktop/Sources/OmiApp.swift",
+            "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift",
+            "desktop/macos/Desktop/Tests/NotificationProbeTests.swift",
         ):
-            self.assertIn(path, changes)
+            with self.subTest(path=path):
+                self.assertTrue(resolve_impact([path]).includes("desktop-swift-notification-release-regression"))
         self.assertIn("runs-on: macos-15", job)
         self.assertIn("--release-notification-regression", job)
         self.assertIn("should_notification_release_regression", job)
@@ -159,38 +161,17 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
     def test_full_swift_suite_is_selected_only_for_its_inputs(self):
         """Asset/config candidates retain static evidence without a second Mac job."""
-        changes = self.jobs["changes"]
         verify_job = self.jobs["desktop-swift-verify"]
-
-        self.assertIn("SHOULD_RUN_TESTS=false", changes)
-        self.assertIn("SHOULD_RUN_TESTS=true", changes)
         for path in (
-            "Desktop/(Sources|Tests)/.*[.]swift",
-            "Desktop/Package[.](swift|resolved)",
-            "scripts/(run-swift-ci|swift-test-suites",
-            "desktop/macos/tests/test-.*[.]sh",
-            ".github/workflows/desktop-swift-ci[.]yml",
+            "desktop/macos/Desktop/Sources/Probe.swift",
+            "desktop/macos/Desktop/Package.resolved",
+            "desktop/macos/scripts/run-swift-ci.sh",
+            "desktop/macos/tests/test-probe.sh",
+            ".github/workflows/desktop-swift-ci.yml",
         ):
             with self.subTest(path=path):
-                self.assertIn(path, changes)
+                self.assertTrue(resolve_impact([path]).includes("desktop-swift-tests"))
         self.assertIn("needs.changes.outputs.should_run_tests", verify_job)
-
-    def test_static_macos_lane_is_selected_only_for_macos_contract_inputs(self):
-        """A releasable docs/assets change must not reserve an empty macOS lane."""
-        changes = self.jobs["changes"]
-        verify_job = self.jobs["desktop-swift-verify"]
-
-        self.assertIn("SHOULD_RUN_STATIC=false", changes)
-        self.assertIn("SHOULD_RUN_STATIC=true", changes)
-        for path in (
-            "Desktop/(Sources|Tests)/.*[.]swift",
-            "Desktop/(Package[.]swift|[.]swift-format",
-            "scripts/(swift-format-wrapper|prepare-swiftlint-baseline",
-            ".github/checks-manifest[.]yaml",
-        ):
-            with self.subTest(path=path):
-                self.assertIn(path, changes)
-        self.assertIn("needs.changes.outputs.should_run_static", verify_job)
 
     def test_static_and_test_lanes_share_one_hosted_macos_runner(self):
         """#10507: Swift CI must not reserve two scarce hosted Macs at once."""
@@ -198,6 +179,22 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
         self.assertEqual(MACOS_JOBS, ["desktop-swift-verify", "desktop-swift-release-compile"])
         self.assertIn("rather than claiming two", workflow)
+
+    def test_independent_macos_phases_publish_native_step_outcomes(self):
+        """A static failure must not mask the later independent Swift suite."""
+        job = self.jobs["desktop-swift-verify"]
+        for step_id, outcome in (
+            ("macos_manifest_checks", "STATIC_OUTCOME"),
+            ("desktop_launcher_tests", "LAUNCHER_OUTCOME"),
+            ("desktop_swift_tests", "TEST_OUTCOME"),
+            ("desktop_notification_regression", "NOTIFICATION_OUTCOME"),
+        ):
+            with self.subTest(step_id=step_id):
+                self.assertIn(f"id: {step_id}", job)
+                self.assertIn(f"steps.{step_id}.outcome", job)
+                self.assertIn(outcome, job)
+        self.assertIn("always() && !cancelled()", job)
+        self.assertIn("Require independent macOS phase verdicts", job)
 
     def test_ci_uses_one_worker_for_the_shared_swiftpm_build_directory(self):
         """#10507: parallel --skip-build invocations contend on Desktop/.build."""
@@ -310,25 +307,26 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
     def test_release_compile_gates_on_package_resolved(self):
         """Release compile must trigger when Package.resolved changes, even on
         a PR where the manifest source is unchanged."""
-        combined = self.jobs["changes"]
-        # The variable must be wired into the SHOULD_RUN conditional, not just
-        # declared or logged — removing the gate while keeping other references
-        # must fail this test.
         self.assertTrue(
-            re.search(r'"\$PACKAGE_RESOLVED"\s*=\s*"true"', combined),
-            "release-compile job must gate SHOULD_RUN on PACKAGE_RESOLVED=true",
+            resolve_impact(["desktop/macos/Desktop/Package.resolved"], event="pull_request").includes(
+                "desktop-swift-release-compile"
+            ),
+            "release-compile selection must include Package.resolved on pull requests",
         )
 
     def test_every_releasable_desktop_path_produces_exact_sha_checks(self):
         """Planner-eligible packaging/assets must not silently skip Swift evidence."""
-        changes = self.jobs["changes"]
-        self.assertIn("RELEASABLE_DESKTOP=false", changes)
-        self.assertIn("RELEASABLE_DESKTOP=true", changes)
-        self.assertIn("desktop/macos/*", changes)
-        for excluded in ("Backend-Rust/", "changelog/", "CHANGELOG[.]json", "AGENTS[.]md"):
-            self.assertIn(excluded, changes)
-        self.assertIn('"$RELEASABLE_DESKTOP" = "true"', changes)
-        self.assertIn("DESKTOP_SWIFT=$RELEASABLE_DESKTOP", changes)
+        for path in ("desktop/macos/Resources/Info.plist", "desktop/macos/scripts/prepare-bundle.sh"):
+            with self.subTest(path=path):
+                self.assertTrue(resolve_impact([path], event="push").includes("desktop-ci-only"))
+        for path in (
+            "desktop/macos/Backend-Rust/src/main.rs",
+            "desktop/macos/changelog/2026-07-25.json",
+            "desktop/macos/CHANGELOG.json",
+            "desktop/macos/AGENTS.md",
+        ):
+            with self.subTest(path=path):
+                self.assertFalse(resolve_impact([path], event="push").includes("desktop-ci-only"))
 
     def test_manifest_checks_use_the_changed_diff_base_on_pushes(self):
         """Pushes must lint the just-pushed diff, not checkout's origin/main HEAD."""
@@ -375,20 +373,6 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         job = _job_text(tampered, "desktop-swift-verify")
         key = re.search(r"key:\s*([^\n]+)", job).group(1)
         self.assertNotIn("Package.resolved", key)
-
-    def test_adversarial_remove_package_resolved_gate_detected(self):
-        """Removing the PACKAGE_RESOLVED gate from SHOULD_RUN while keeping
-        other references must fail the positive gate assertion."""
-        wf_text = WORKFLOW_PATH.read_text(encoding="utf-8")
-        tampered = wf_text.replace('|| [ "$PACKAGE_RESOLVED" = "true" ]', "")
-        combined = _job_text(tampered, "changes")
-        # PACKAGE_RESOLVED still appears (declared, detected, echoed) but the
-        # gate condition is gone — the regex must fail to match.
-        self.assertIn("PACKAGE_RESOLVED", combined)  # still referenced
-        self.assertIsNone(
-            re.search(r'"\$PACKAGE_RESOLVED"\s*=\s*"true"', combined),
-            "gate condition must be absent after removal",
-        )
 
 
 if __name__ == "__main__":
