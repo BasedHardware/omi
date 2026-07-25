@@ -44,7 +44,6 @@ class OmiBleForegroundService : Service() {
         private const val MTU_REQUEST_DELAY_MS = 100L
         private const val MTU_SIZE = 512
         private const val STABILITY_TIMER_MS = 60_000L
-        private const val RECONNECT_DELAY_MS = 3_000L
         private const val COMPANION_RATE_LIMIT_MS = 15_000L
         private const val PREFS_NAME = "ble_config"
         private const val PREFS_KEY = "managed_device"
@@ -143,10 +142,10 @@ class OmiBleForegroundService : Service() {
 
     // ── Per-device state ──
 
-    data class ManagedDevice(
+    private data class ManagedDevice(
         val address: String,
         var requiresBond: Boolean,
-        var retryCount: Int = 0,
+        val reconnectState: BleReconnectState = BleReconnectState(),
         var connectionStartTime: Long? = null,
         var currentGattHash: Int? = null,
         var hasEverConnected: Boolean = false,
@@ -186,8 +185,8 @@ class OmiBleForegroundService : Service() {
                 incrementReconnectionCount(addr)
                 backfillTimeToReconnect(addr, managed)
             }
-            managed.retryCount = 0
             managed.hasEverConnected = true
+            managed.reconnectState.markTransportConnected()
             managed.currentAttemptEstablished = true
             managed.pendingReconnect?.let { handler.removeCallbacks(it) }
             managed.pendingReconnect = null
@@ -195,7 +194,7 @@ class OmiBleForegroundService : Service() {
             managed.currentGattHash = gatt.hashCode()
 
             startStabilityTimer(addr)
-            bleManager.startRssiKeepAlive(addr)
+            bleManager.resumeRssiDiagnostics(addr)
             updateNotification("Connected to Omi")
         }
 
@@ -219,10 +218,7 @@ class OmiBleForegroundService : Service() {
                 bleManager.requestBond(addr) { result ->
                     val bonded = result.getOrDefault(false)
                     Log.i(TAG, "Bond result for $addr: $bonded")
-                    if (bonded) {
-                        managed.retryCount = 0
-                        managed.requiresBond = false
-                    }
+                    if (bonded) managed.requiresBond = false
                     requestMtuThenNotifyReady(addr, services)
                 }
             } else {
@@ -230,41 +226,18 @@ class OmiBleForegroundService : Service() {
             }
         }
 
-        override fun onMtuChanged(address: String, mtu: Int, status: Int) {
-            // Handled inline via the MTU flow in requestMtuThenNotifyReady
-        }
     }
 
     // ── Post-discovery pipeline ──
 
     private fun requestMtuThenNotifyReady(address: String, services: List<BleService>) {
         val addr = address.uppercase()
-        val gatt = bleManager.connectedGatts[addr] ?: return
-
-        val originalListener = bleManager.connectionListener
-        bleManager.connectionListener = object : OmiBleManager.BleConnectionListener by connectionListener {
-            override fun onMtuChanged(address: String, mtu: Int, status: Int) {
-                bleManager.connectionListener = originalListener
-                Log.i(TAG, "MTU done for $addr (mtu=$mtu, status=$status)")
-                fireDeviceReady(addr, services)
-            }
-        }
+        if (!bleManager.connectedGatts.containsKey(addr)) return
 
         handler.postDelayed({
-            bleManager.enqueueCommand {
-                try {
-                    if (!gatt.requestMtu(MTU_SIZE)) {
-                        Log.e(TAG, "requestMtu failed for $addr")
-                        bleManager.completeCommand()
-                        bleManager.connectionListener = originalListener
-                        fireDeviceReady(addr, services)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "requestMtu exception for $addr: ${e.message}")
-                    bleManager.completeCommand()
-                    bleManager.connectionListener = originalListener
-                    fireDeviceReady(addr, services)
-                }
+            bleManager.requestMtu(addr, MTU_SIZE) { mtu, status ->
+                Log.i(TAG, "MTU done for $addr (mtu=$mtu, status=$status)")
+                fireDeviceReady(addr, services)
             }
         }, MTU_REQUEST_DELAY_MS)
     }
@@ -317,12 +290,7 @@ class OmiBleForegroundService : Service() {
         }
 
         Log.i(TAG, "notifyReadyForConnectedGatt: rediscovering services for already-connected $addr")
-        bleManager.enqueueCommand {
-            if (!gatt.discoverServices()) {
-                Log.e(TAG, "notifyReadyForConnectedGatt: discoverServices returned false for $addr")
-                bleManager.completeCommand()
-            }
-        }
+        bleManager.discoverServices(addr)
         return true
     }
 
@@ -346,7 +314,7 @@ class OmiBleForegroundService : Service() {
         val existing = managedDevices[addr]
         if (existing != null && bleManager.isPeripheralConnected(addr)) {
             if (requiresBond && !existing.requiresBond) existing.requiresBond = true
-            existing.retryCount = 0
+            existing.reconnectState.resetForExplicitRequest()
             existing.currentGattHash = bleManager.connectedGatts[addr]?.hashCode()
             existing.hasEverConnected = true
             existing.currentAttemptEstablished = true
@@ -434,7 +402,7 @@ class OmiBleForegroundService : Service() {
 
         managed.pendingReconnect?.let { handler.removeCallbacks(it) }
         managed.pendingReconnect = null
-        managed.retryCount = 0
+        managed.reconnectState.resetForExplicitRequest()
         connectToDevice(addr, source)
     }
 
@@ -458,7 +426,7 @@ class OmiBleForegroundService : Service() {
                 // Cancel any pending retry so it doesn't race with the fresh attempt
                 managed.pendingReconnect?.let { handler.removeCallbacks(it) }
                 managed.pendingReconnect = null
-                managed.retryCount = 0
+                managed.reconnectState.resetForExplicitRequest()
                 // Close the stuck GATT so connectToDevice opens a fresh one
                 if (bleManager.connectedGatts.containsKey(addr)) {
                     bleManager.closeGatt(addr)
@@ -489,7 +457,7 @@ class OmiBleForegroundService : Service() {
 
             val duration = managed.connectionStartTime?.let { System.currentTimeMillis() - it } ?: 0
             if (duration >= STABILITY_TIMER_MS) {
-                managed.retryCount = 0
+                managed.reconnectState.markStable()
             }
 
             bleManager.disconnectGatt(addr)
@@ -541,15 +509,15 @@ class OmiBleForegroundService : Service() {
 
         if (isDestroying || status == -1 || status == 137 || !isBluetoothEnabled) return
 
-        managed.retryCount++
-        Log.i(TAG, "Retry #${managed.retryCount} for $addr in ${RECONNECT_DELAY_MS}ms (status=$status)")
+        val retry = managed.reconnectState.recordFailure(Math.random())
+        Log.i(TAG, "Retry #${retry.number} for $addr in ${retry.delayMillis}ms (status=$status)")
 
         val runnable = Runnable {
             managed.pendingReconnect = null
-            connectToDevice(addr, "retry_${managed.retryCount}")
+            connectToDevice(addr, "retry_${retry.number}")
         }
         managed.pendingReconnect = runnable
-        handler.postDelayed(runnable, RECONNECT_DELAY_MS)
+        handler.postDelayed(runnable, retry.delayMillis)
     }
 
     // ── Stability timer ──
@@ -560,7 +528,7 @@ class OmiBleForegroundService : Service() {
 
         managed.stabilityTimerRunnable?.let { handler.removeCallbacks(it) }
         val runnable = Runnable {
-            managed.retryCount = 0
+            managed.reconnectState.markStable()
         }
         managed.stabilityTimerRunnable = runnable
         handler.postDelayed(runnable, STABILITY_TIMER_MS)
@@ -580,7 +548,6 @@ class OmiBleForegroundService : Service() {
             when (bondState) {
                 BluetoothDevice.BOND_BONDED -> {
                     Log.i(TAG, "Bond completed for $address")
-                    managed.retryCount = 0
                 }
                 BluetoothDevice.BOND_NONE -> {
                     Log.w(TAG, "Bond removed/failed for $address")
@@ -605,7 +572,7 @@ class OmiBleForegroundService : Service() {
                         managed.pendingReconnect = null
                         managed.stabilityTimerRunnable?.let { handler.removeCallbacks(it) }
                         managed.stabilityTimerRunnable = null
-                        bleManager.stopRssiKeepAlive()
+                        bleManager.pauseRssiDiagnostics(addr)
                         bleManager.closeGatt(addr)
                         managed.currentGattHash = null
                         bleManager.mainHandler.post {
@@ -768,6 +735,7 @@ class OmiBleForegroundService : Service() {
         34 -> "link_key_mismatch"
         62 -> "connection_failed_instant_passed"
         -1 -> "app_closed"
+        -2 -> "gatt_operation_timeout"
         else -> "gatt_error_$status"
     }
 
