@@ -249,8 +249,8 @@ OMI_LIVE_STT_ACCEPTED_TOTAL = Counter(
 # them outright, so this counter is what tells a Velma canary if that was the cause.
 OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL = Counter(
     'omi_live_stt_misaligned_frames_total',
-    'Live-STT frames that were not a whole number of 16-bit samples, by bounded provider',
-    ['provider'],
+    'Live-STT frames that were not a whole number of 16-bit samples, by provider and pipeline stage',
+    ['provider', 'stage'],
 )
 
 OMI_LIVE_STT_TERMINAL_TOTAL = Counter(

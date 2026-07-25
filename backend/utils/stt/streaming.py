@@ -745,7 +745,9 @@ class SafeModulateSocket(STTSocket):
             else:
                 misaligned = False
             if misaligned:
-                OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL.labels(provider=STTService.modulate.value).inc()
+                OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL.labels(
+                    provider=STTService.modulate.value, stage='provider_send'
+                ).inc()
             if not aligned:
                 # One carried byte and nothing else yet: it is buffered, not dropped.
                 return True
