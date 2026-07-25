@@ -756,7 +756,12 @@ struct DashboardPage: View {
         homePanelStage(stageWidth: stageWidth, askBarWidth: askBarWidth)
       }
     }
-    .padding(.top, homeMode == .hub ? Self.homeStageTopPadding : OmiSpacing.lg)
+    .padding(
+      .top,
+      homeMode == .hub
+        ? Self.homeStageTopPadding
+        : (homeMode == .chat ? 0 : OmiSpacing.lg)
+    )
     .padding(.bottom, Self.homeStageBottomPadding)
   }
 
@@ -1120,6 +1125,7 @@ struct DashboardPage: View {
           FloatingControlBarManager.shared.openAgentChatFromTimeline(ref: ref, completion: completion)
         },
         horizontalContentPadding: 0,
+        verticalContentPadding: OmiSpacing.sm,
         trailingContentPadding: OmiSpacing.md,
         welcomeContent: { dashboardChatWelcome }
       )
@@ -1128,7 +1134,7 @@ struct DashboardPage: View {
         LinearGradient(
           stops: [
             .init(color: .clear, location: 0.0),
-            .init(color: .black, location: 0.05),
+            .init(color: .black, location: 0.025),
             .init(color: .black, location: 0.97),
             .init(color: .clear, location: 1.0),
           ],
@@ -1136,7 +1142,7 @@ struct DashboardPage: View {
           endPoint: .bottom
         )
       )
-      .padding(.vertical, OmiSpacing.xs)
+      .padding(.bottom, OmiSpacing.xs)
 
     }
     // Chat is the Home surface itself — no card chrome, it sits directly on

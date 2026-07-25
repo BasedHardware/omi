@@ -969,7 +969,7 @@ struct DesktopHomeView: View {
     viewModelContainer.tasksStore.isActive =
       index == SidebarNavItem.dashboard.rawValue || index == SidebarNavItem.tasks.rawValue
     viewModelContainer.memoriesViewModel.isActive =
-      index == SidebarNavItem.memories.rawValue
+      index == SidebarNavItem.conversations.rawValue || index == SidebarNavItem.memories.rawValue
   }
 
   private var mainContent: some View {
@@ -1229,61 +1229,57 @@ private struct HubSegmentedControl: View {
   }
 }
 
-/// "Memory" tab — Conversations + Memories folded into one surface.
-private struct MemoryHubPage: View {
-  let appState: AppState
-  let viewModelContainer: ViewModelContainer
-  @Binding var segment: Int
+enum MemoryHubDestination: Int, CaseIterable, Identifiable {
+  static let storageKey = "memoryHubDestination"
 
-  /// Memories and conversations stay easy to scan in a calm, readable column;
-  /// the spatial Brain Map needs the full content surface so users can pan and
-  /// zoom without hitting an artificial canvas boundary.
-  private static let listContentWidth: CGFloat = 900
+  case memories
+  case conversations
+  case brainMap
 
-  var body: some View {
-    Group {
-      if segment == 2 {
-        ZStack(alignment: .top) {
-          // Keep the graph's camera framing intact while removing the list-page
-          // width cap. The map only occupies more of the visual field when the
-          // user deliberately pans or zooms into it.
-          MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+  var id: Int { rawValue }
 
-          hubSegmentedControl
-        }
-      } else {
-        VStack(spacing: 0) {
-          hubSegmentedControl
-
-          if segment == 0 {
-            constrainedListContent(
-              MemoriesPage(
-                viewModel: viewModelContainer.memoriesViewModel,
-                graphViewModel: viewModelContainer.memoryGraphViewModel))
-          } else {
-            constrainedListContent(ConversationsPageHost(appState: appState))
-          }
-        }
-      }
+  var title: String {
+    switch self {
+    case .memories: return "Memories"
+    case .conversations: return "Conversations"
+    case .brainMap: return "Brain Map"
     }
   }
 
-  private var hubSegmentedControl: some View {
-    // The "Memory" rail item lands here, so Memories is the default segment;
-    // Conversations (with its live transcript) is second, and the Brain Map
-    // graph is its own tab.
-    HubSegmentedControl(segments: ["Memories", "Conversations", "Brain Map"], selection: $segment)
-      .frame(maxWidth: Self.listContentWidth)
-      .padding(.top, 22)
-      .padding(.horizontal, 28)
-      .padding(.bottom, 4)
+  var icon: String {
+    switch self {
+    case .memories: return "brain.head.profile"
+    case .conversations: return "text.bubble"
+    case .brainMap: return "point.3.connected.trianglepath.dotted"
+    }
+  }
+}
+
+private struct MemoryHubPage: View {
+  let appState: AppState
+  let viewModelContainer: ViewModelContainer
+  @AppStorage(MemoryHubDestination.storageKey) private var destinationRawValue =
+    MemoryHubDestination.memories.rawValue
+
+  private var destination: MemoryHubDestination {
+    MemoryHubDestination(rawValue: destinationRawValue) ?? .memories
   }
 
-  private func constrainedListContent<V: View>(_ content: V) -> some View {
-    content
-      .frame(maxWidth: Self.listContentWidth, maxHeight: .infinity)
+  var body: some View {
+    switch destination {
+    case .memories:
+      MemoriesPage(
+        viewModel: viewModelContainer.memoriesViewModel,
+        graphViewModel: viewModelContainer.memoryGraphViewModel
+      )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
+    case .conversations:
+      ConversationsPageHost(appState: appState)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    case .brainMap:
+      MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
   }
 }
 
