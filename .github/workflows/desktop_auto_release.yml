@@ -19,6 +19,7 @@ on:
       - 'desktop/macos/**'
       - 'codemagic.yaml'
       - '.github/scripts/plan-desktop-release.py'
+      - '.github/scripts/desktop-release-source-identity.py'
       - '.github/workflows/desktop_auto_release.yml'
       - '.github/workflows/desktop-swift-ci.yml'
   schedule:
@@ -159,39 +160,66 @@ jobs:
             --date "$TODAY" \
             --write
 
-      - name: Commit changelog and create tag
+      - name: Commit changelog and prepare sync branch
         if: steps.recheck.outputs.should_release == 'true'
+        id: changelog
         run: |
+          set -euo pipefail
           VERSION="${{ steps.version.outputs.version }}"
-          RELEASE_TAG="${{ steps.version.outputs.release_tag }}"
+          BRANCH="changelog/v${VERSION}"
+          PLANNED_SOURCE_SHA="${{ steps.recheck.outputs.source_sha }}"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # A rerun after the changelog PR merged must reuse that immutable
+          # branch commit. Rebuilding it would sever the evidence chain to the
+          # normal, regular merge already present on main.
+          if git ls-remote --exit-code origin "refs/heads/$BRANCH" >/dev/null; then
+            git fetch --no-tags origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+            CHANGELOG_COMMIT="$(git rev-parse "origin/$BRANCH^{commit}")"
+            test "$(git rev-parse "${CHANGELOG_COMMIT}^1")" = "$PLANNED_SOURCE_SHA"
+            git checkout -B "$BRANCH" "$CHANGELOG_COMMIT"
+            {
+              echo "changed=true"
+              echo "commit=$CHANGELOG_COMMIT"
+              echo "reused=true"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           git add desktop/macos/CHANGELOG.json desktop/macos/changelog
-          git commit -m "chore: consolidate changelog for v${VERSION}" || echo "No changelog changes to commit"
+          if git diff --cached --quiet; then
+            # Nothing needed to move through a PR. The direct tag path below
+            # still requires the planner SHA to be the fresh main tip.
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-          # The planner checked and this job checked out the newest queued
-          # releasable desktop source SHA.
-          # Tag this commit so Codemagic receives the consolidated release notes too.
-          # NOTE: commit message must NOT contain [skip ci].
-          git tag "$RELEASE_TAG"
-          git push origin "$RELEASE_TAG"
+          git commit -m "chore: consolidate changelog for v${VERSION}"
+          CHANGELOG_COMMIT="$(git rev-parse HEAD)"
+          git checkout -B "$BRANCH" "$CHANGELOG_COMMIT"
+          git push origin "$BRANCH"
+          {
+            echo "changed=true"
+            echo "commit=$CHANGELOG_COMMIT"
+            echo "reused=false"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Create and auto-merge PR to sync changelog back to main
-        if: steps.recheck.outputs.should_release == 'true'
+      - name: Create and regular-merge PR to sync changelog back to main
+        if: steps.recheck.outputs.should_release == 'true' && steps.changelog.outputs.changed == 'true'
+        id: changelog-pr
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
+          set -euo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then
-            echo "Omi Bot token not available; cannot auto-merge changelog PR."
+            echo "Omi Bot token not available; cannot merge changelog PR."
             exit 1
           fi
 
           VERSION="${{ steps.version.outputs.version }}"
           BRANCH="changelog/v${VERSION}"
-
-          git checkout -B "$BRANCH"
-          git push --force-with-lease origin "$BRANCH"
 
           PR_NUMBER=$(gh pr list \
             --head "$BRANCH" \
@@ -201,17 +229,103 @@ jobs:
             --jq '.[0].number')
 
           if [ -z "$PR_NUMBER" ]; then
-            PR_URL=$(gh pr create \
-              --title "Update desktop changelog for v${VERSION} [skip ci]" \
-              --body "Auto-generated: consolidates unreleased changelog fragments into v${VERSION} and regenerates CHANGELOG.json." \
+            PR_NUMBER=$(gh pr list \
+              --head "$BRANCH" \
               --base main \
-              --head "$BRANCH")
-            PR_NUMBER=$(echo "$PR_URL" | awk -F/ '{print $NF}')
+              --state merged \
+              --json number \
+              --jq '.[0].number')
+            if [ -z "$PR_NUMBER" ]; then
+              PR_URL=$(gh pr create \
+                --title "Update desktop changelog for v${VERSION} [skip ci]" \
+                --body "Auto-generated: consolidates unreleased changelog fragments into v${VERSION} and regenerates CHANGELOG.json." \
+                --base main \
+                --head "$BRANCH")
+              PR_NUMBER=$(echo "$PR_URL" | awk -F/ '{print $NF}')
+            fi
           fi
 
-          # Merge changelog PR in protected branches:
-          # 1) admin merge if allowed, 2) auto-merge if repo supports it, 3) regular merge if already mergeable.
-          gh pr merge "$PR_NUMBER" --merge --admin || \
-          gh pr merge "$PR_NUMBER" --merge --auto || \
-          gh pr merge "$PR_NUMBER" --merge || \
-          echo "Changelog PR #$PR_NUMBER requires manual merge."
+          PR_STATE=$(gh pr view "$PR_NUMBER" --json state --jq '.state')
+          if [ "$PR_STATE" != "MERGED" ]; then
+            # This remains a regular merge. If the bot lacks the protected
+            # branch override, the workflow must fail before it can create a
+            # tag instead of tagging a side branch.
+            gh pr merge "$PR_NUMBER" --merge --admin || gh pr merge "$PR_NUMBER" --merge
+          fi
+
+          PR_STATE=$(gh pr view "$PR_NUMBER" --json state --jq '.state')
+          test "$PR_STATE" = "MERGED"
+          MERGED_MAIN_SHA=$(gh pr view "$PR_NUMBER" --json mergeCommit --jq '.mergeCommit.oid')
+          PR_URL=$(gh pr view "$PR_NUMBER" --json url --jq '.url')
+          test -n "$MERGED_MAIN_SHA"
+          {
+            echo "number=$PR_NUMBER"
+            echo "url=$PR_URL"
+            echo "merged_main_sha=$MERGED_MAIN_SHA"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Bind immutable planner evidence to fresh main
+        if: steps.recheck.outputs.should_release == 'true'
+        id: identity
+        run: |
+          set -euo pipefail
+          PLANNED_SOURCE_SHA="${{ steps.recheck.outputs.source_sha }}"
+          CHANGELOG_CHANGED="${{ steps.changelog.outputs.changed }}"
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          MAIN_SHA="$(git rev-parse 'origin/main^{commit}')"
+
+          if [ "$CHANGELOG_CHANGED" = true ]; then
+            CANDIDATE_SHA="${{ steps.changelog-pr.outputs.merged_main_sha }}"
+            CHANGELOG_COMMIT="${{ steps.changelog.outputs.commit }}"
+            CHANGELOG_PR="${{ steps.changelog-pr.outputs.url }}"
+            test "$CANDIDATE_SHA" = "$MAIN_SHA"
+            test "$(git rev-parse "${CANDIDATE_SHA}^1")" = "$PLANNED_SOURCE_SHA"
+            test "$(git rev-parse "${CANDIDATE_SHA}^2")" = "$CHANGELOG_COMMIT"
+            python3 .github/scripts/desktop-release-source-identity.py \
+              --planned-source-sha "$PLANNED_SOURCE_SHA" \
+              --candidate-source-sha "$CANDIDATE_SHA" \
+              --origin-main-sha "$MAIN_SHA" \
+              --first-parent-sha "$PLANNED_SOURCE_SHA" \
+              --changelog-commit "$CHANGELOG_COMMIT" \
+              --changelog-pr "$CHANGELOG_PR" \
+              --output "$RUNNER_TEMP/desktop-release-source-identity.json"
+          else
+            CANDIDATE_SHA="$PLANNED_SOURCE_SHA"
+            test "$CANDIDATE_SHA" = "$MAIN_SHA"
+            python3 .github/scripts/desktop-release-source-identity.py \
+              --planned-source-sha "$PLANNED_SOURCE_SHA" \
+              --candidate-source-sha "$CANDIDATE_SHA" \
+              --origin-main-sha "$MAIN_SHA" \
+              --output "$RUNNER_TEMP/desktop-release-source-identity.json"
+          fi
+
+          {
+            echo "candidate_sha=$CANDIDATE_SHA"
+            echo "evidence_path=$RUNNER_TEMP/desktop-release-source-identity.json"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Retain immutable planner source evidence
+        if: steps.recheck.outputs.should_release == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-release-planner-source-identity-${{ steps.version.outputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.identity.outputs.evidence_path }}
+          if-no-files-found: error
+          overwrite: false
+
+      - name: Tag exact main source
+        if: steps.recheck.outputs.should_release == 'true'
+        run: |
+          set -euo pipefail
+          RELEASE_TAG="${{ steps.version.outputs.release_tag }}"
+          CANDIDATE_SHA="${{ steps.identity.outputs.candidate_sha }}"
+          EVIDENCE_PATH="${{ steps.identity.outputs.evidence_path }}"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null; then
+            echo "Refusing to reuse existing immutable candidate tag $RELEASE_TAG" >&2
+            exit 1
+          fi
+          test "$(git rev-parse 'origin/main^{commit}')" = "$CANDIDATE_SHA"
+          git tag -a "$RELEASE_TAG" "$CANDIDATE_SHA" -F "$EVIDENCE_PATH"
+          test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$CANDIDATE_SHA"
+          git push origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
