@@ -1366,12 +1366,12 @@ class TestLanguageRoutingExtended(unittest.TestCase):
 
 class TestPrerecordedServiceRouting(unittest.TestCase):
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-3',))
-    def test_retired_model_routes_to_modulate_default(self):
+    def test_retired_model_routes_to_policy_default(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
         svc, lang, model = get_prerecorded_service('en')
-        self.assertEqual(svc, PrerecordedSTTService.MODULATE)
-        self.assertEqual(model, 'velma-2')
+        self.assertEqual(svc, PrerecordedSTTService.PARAKEET)
+        self.assertEqual(model, 'parakeet')
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('modulate-velma-2',))
     def test_modulate_routes_correctly(self):
@@ -1391,12 +1391,12 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
         self.assertEqual(lang, 'pt')
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-2',))
-    def test_custom_retired_model_routes_to_modulate_default(self):
+    def test_custom_retired_model_routes_to_policy_default(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
         svc, lang, model = get_prerecorded_service('en')
-        self.assertEqual(svc, PrerecordedSTTService.MODULATE)
-        self.assertEqual(model, 'velma-2')
+        self.assertEqual(svc, PrerecordedSTTService.PARAKEET)
+        self.assertEqual(model, 'parakeet')
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-3',))
     def test_multi_language_falls_through_to_parakeet_capability(self):
@@ -1409,18 +1409,18 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
 
 class TestPrerecordedProviderFactory(unittest.TestCase):
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-3',))
-    def test_factory_returns_modulate_for_retired_model(self):
-        from utils.stt.pre_recorded import ModulatePrerecordedProvider, get_prerecorded_provider
+    def test_factory_returns_policy_default_for_retired_model(self):
+        from utils.stt.pre_recorded import ParakeetPrerecordedProvider, get_prerecorded_provider
 
         provider = get_prerecorded_provider()
-        self.assertIsInstance(provider, ModulatePrerecordedProvider)
+        self.assertIsInstance(provider, ParakeetPrerecordedProvider)
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-2',))
     def test_factory_ignores_custom_retired_model(self):
-        from utils.stt.pre_recorded import ModulatePrerecordedProvider, get_prerecorded_provider
+        from utils.stt.pre_recorded import ParakeetPrerecordedProvider, get_prerecorded_provider
 
         provider = get_prerecorded_provider()
-        self.assertIsInstance(provider, ModulatePrerecordedProvider)
+        self.assertIsInstance(provider, ParakeetPrerecordedProvider)
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('modulate-velma-2',))
     def test_factory_returns_modulate(self):
