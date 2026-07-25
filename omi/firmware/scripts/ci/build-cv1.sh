@@ -19,6 +19,10 @@ FW=/omi/firmware
 NCS_VERSION=v2.9.0
 BOARD=omi/nrf5340/cpuapp
 
+# A stale MCUboot version can make a client skip a changed app-core image while
+# still installing the network-core image from the same package.
+"$FW/scripts/ci/check-cv1-version-sync.sh" "$FW/omi/omi.conf"
+
 # west/git operate on the bind-mounted tree owned by the host user; the
 # container runs as root, so tell git the checkout is trusted.
 git config --global --add safe.directory '*'

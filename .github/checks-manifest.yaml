@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: cv1-firmware-version-sync-tests
+    command: ["bash", "omi/firmware/scripts/ci/test-check-cv1-version-sync.sh"]
+    triggers: ["omi/firmware/omi/omi.conf", "omi/firmware/scripts/ci/check-cv1-version-sync.sh", "omi/firmware/scripts/ci/set-cv1-version.sh", "omi/firmware/scripts/ci/sync-cv1-release-version.sh", "omi/firmware/scripts/ci/test-check-cv1-version-sync.sh", "omi/firmware/scripts/ci/build-cv1.sh", ".github/workflows/firmware_release.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the Jul 25 2026 CV1 physical recovery incident showed that a stale MCUboot version can skip the app core while a dual-core OTA still updates the network core"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
     triggers: ["Makefile", "scripts/dev-harness/**", "desktop/macos/scripts/qualification-lease-command.sh", "desktop/macos/scripts/omi-fault-inject.sh", "desktop/macos/scripts/release-keyvalue.py", ".github/checks-manifest.yaml"]
