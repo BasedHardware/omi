@@ -175,8 +175,14 @@ class MemoryAssistantSettings {
   var isEnabled: Bool {
     get { UserDefaults.standard.bool(forKey: enabledKey) }
     set {
+      let previous = UserDefaults.standard.bool(forKey: enabledKey)
       UserDefaults.standard.set(newValue, forKey: enabledKey)
       NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
+      // Activation-denominator telemetry: emit only on a real persisted change
+      // (never on default reads / startup / migrations).
+      if MemoryAssistantTelemetry.settingChangeIsPersistedChange(oldValue: previous, newValue: newValue) {
+        AnalyticsManager.shared.memoryAssistantSettingChanged(setting: .enabled, value: newValue)
+      }
     }
   }
 
@@ -226,8 +232,15 @@ class MemoryAssistantSettings {
   var notificationsEnabled: Bool {
     get { UserDefaults.standard.bool(forKey: notificationsEnabledKey) }
     set {
+      let previous = UserDefaults.standard.bool(forKey: notificationsEnabledKey)
       UserDefaults.standard.set(newValue, forKey: notificationsEnabledKey)
       NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
+      // Activation-denominator telemetry: this toggle is the effective analysis
+      // gate (notifications default off), so its change is the highest-signal
+      // activation event. Emit only on a real persisted change.
+      if MemoryAssistantTelemetry.settingChangeIsPersistedChange(oldValue: previous, newValue: newValue) {
+        AnalyticsManager.shared.memoryAssistantSettingChanged(setting: .notificationsEnabled, value: newValue)
+      }
     }
   }
 

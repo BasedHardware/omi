@@ -168,6 +168,7 @@ actor MemoryAssistant: ProactiveAssistant {
     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
     // Check if AI found new memories
     guard memoryResult.hasNewMemory, !memoryResult.memories.isEmpty else {
+      await recordAnalysisOutcome(.noNewMemory, ownerID: ownerID)
       return
     }
 
@@ -183,6 +184,7 @@ actor MemoryAssistant: ProactiveAssistant {
     // Check confidence threshold
     guard memory.confidence >= threshold else {
       log("Memory: [\(confidencePercent)% < \(Int(threshold * 100))%] Filtered: \"\(memory.content)\"")
+      await recordAnalysisOutcome(.filteredLowConfidence, confidence: memory.confidence, ownerID: ownerID)
       return
     }
 
@@ -221,6 +223,9 @@ actor MemoryAssistant: ProactiveAssistant {
           logError("Memory: Failed to update sync status", error: error)
         }
       }
+      await recordAnalysisOutcome(.synced, confidence: memory.confidence, ownerID: ownerID)
+    } else {
+      await recordAnalysisOutcome(.syncFailed, confidence: memory.confidence, ownerID: ownerID)
     }
 
     // Track memory extracted
@@ -253,6 +258,21 @@ actor MemoryAssistant: ProactiveAssistant {
         "memory": memory.toDictionary(),
         "contextSummary": memoryResult.contextSummary,
       ])
+  }
+
+  /// Record one analysis-outcome telemetry event, gated on the owner not having
+  /// switched mid-analysis (a prior owner's attempt must never be attributed to the
+  /// current PostHog identity). Supplements — never replaces — `Memory Extracted`,
+  /// which continues to fire only on the local-persistence success terminal below.
+  private func recordAnalysisOutcome(
+    _ outcome: MemoryAssistantTelemetry.AnalysisOutcome,
+    confidence: Double? = nil,
+    ownerID: String
+  ) async {
+    await MainActor.run {
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+      AnalyticsManager.shared.memoryAssistantAnalysisRun(outcome: outcome, confidence: confidence)
+    }
   }
 
   /// Save extracted memory to SQLite using MemoryStorage
@@ -391,6 +411,7 @@ actor MemoryAssistant: ProactiveAssistant {
     do {
       guard let result = try await extractMemories(from: frame.jpegData, appName: frame.appName) else {
         log("Memory: Analysis returned no result")
+        await recordAnalysisOutcome(.analysisFailed, ownerID: ownerID)
         return
       }
 
