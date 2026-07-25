@@ -24,6 +24,7 @@ from typing import Any, Deque, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.stt.socket import STTSocket
 from utils.stt.vad import (
@@ -589,12 +590,26 @@ class GatedSTTSocket(STTSocket):
     def death_reason(self) -> Optional[str]:
         return self._conn.death_reason
 
+    def _counted(self, audio: bytes) -> bytes:
+        """Count frames that are not whole 16-bit samples, as the provider receives them.
+
+        The gate re-chunks, so a count taken before it does not describe what a provider
+        gets. Deepgram accepts a misaligned frame silently; Velma rejects it and closes the
+        session, so the live Deepgram path is where that risk is measurable.
+        """
+        if len(audio) % 2:
+            OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL.labels(
+                provider=type(self._conn).__name__,
+                stage='provider_send',
+            ).inc()
+        return audio
+
     def send(self, data: bytes, wall_time: Optional[float] = None) -> bool:
         """Send audio through VAD gate and report whether it was accepted."""
         if self.is_connection_dead:
             return False
         if self._gate is None:
-            return self._conn.send(data)
+            return self._conn.send(self._counted(data))
 
         now = wall_time or time.time()
         try:
@@ -616,9 +631,9 @@ class GatedSTTSocket(STTSocket):
         if self._gated_file and gate_out.audio_to_send:
             self._gated_file.write(gate_out.audio_to_send)
         if self._passthrough_audio:
-            accepted = self._conn.send(data)
+            accepted = self._conn.send(self._counted(data))
         elif gate_out.audio_to_send:
-            accepted = self._conn.send(gate_out.audio_to_send)
+            accepted = self._conn.send(self._counted(gate_out.audio_to_send))
         else:
             # Deliberately filtered silence is accepted by the gate; it is not
             # a provider enqueue failure and must not terminate the session.
