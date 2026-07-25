@@ -647,7 +647,7 @@ def _typesense_command(cfg: config.HarnessConfig) -> list[str]:
         "--name",
         _typesense_container_name(cfg),
         "-p",
-        f"127.0.0.1:{cfg.typesense_port}:{cfg.typesense_port}",
+        f"127.0.0.1:{cfg.typesense_port}:{config.TYPESENSE_CONTAINER_PORT}",
         "-v",
         f"{typesense_dir}:/data",
         f"typesense/typesense:{config.TYPESENSE_PINNED_VERSION}",
