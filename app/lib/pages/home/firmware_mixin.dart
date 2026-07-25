@@ -21,6 +21,26 @@ import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/manifest/manifest.dart';
 
+class FirmwareDfuConnectionHandoff {
+  FirmwareDfuConnectionHandoff({required this.releaseUpdater, required this.resumeDeviceConnection});
+
+  final Future<void> Function() releaseUpdater;
+  final Future<void> Function() resumeDeviceConnection;
+  Future<void>? _finishFuture;
+
+  bool get hasStarted => _finishFuture != null;
+
+  Future<void> finish() => _finishFuture ??= _finish();
+
+  Future<void> _finish() async {
+    try {
+      await releaseUpdater();
+    } finally {
+      await resumeDeviceConnection();
+    }
+  }
+}
+
 mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   FirmwareUpdateBuildPolicy get firmwareUpdatePolicy => FirmwareUpdateBuildPolicy.current;
 
@@ -36,6 +56,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   late final mcumgr.FirmwareUpdateManagerFactory? managerFactory =
       firmwareUpdatePolicy.allowsOmiFirmwareUpdate ? mcumgr.FirmwareUpdateManagerFactory() : null;
   mcumgr.FirmwareUpdateManager? _mcuUpdateManager;
+  FirmwareDfuConnectionHandoff? _activeMcuDfuHandoff;
 
   /// Process ZIP file and return firmware image list
   Future<List<mcumgr.Image>> processZipFile(Uint8List zipFileData) async {
@@ -103,69 +124,139 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     }
   }
 
+  Future<void> finishDfuSession() async {
+    final handoff = _activeMcuDfuHandoff;
+    if (handoff == null) {
+      await killMcuUpdateManager();
+      return;
+    }
+    await _finishMcuDfuHandoff(handoff);
+  }
+
+  Future<void> _finishMcuDfuHandoff(FirmwareDfuConnectionHandoff handoff) async {
+    try {
+      await handoff.finish();
+    } finally {
+      if (identical(_activeMcuDfuHandoff, handoff)) {
+        _activeMcuDfuHandoff = null;
+      }
+    }
+  }
+
+  Future<void> _completeMcuDfu(FirmwareDfuConnectionHandoff handoff, {required bool successful, Object? error}) async {
+    final isFirstTerminalEvent = !handoff.hasStarted;
+    final finishFuture = _finishMcuDfuHandoff(handoff);
+
+    if (isFirstTerminalEvent && mounted) {
+      setState(() {
+        isInstalling = false;
+        isInstalled = successful;
+      });
+    }
+    if (error != null) {
+      Logger.debug('MCU firmware update failed: $error');
+    }
+
+    try {
+      await finishFuture;
+    } catch (e) {
+      Logger.debug('Failed to restore device connection after MCU firmware update: $e');
+    }
+  }
+
+  Future<void> _completeLegacyDfu(DeviceProvider deviceProvider, {required bool successful, Object? error}) async {
+    if (mounted) {
+      setState(() {
+        isInstalling = false;
+        isInstalled = successful;
+      });
+    }
+    if (error != null) {
+      Logger.debug('Legacy firmware update failed: $error');
+    }
+    try {
+      await deviceProvider.resumeConnectionAfterDFU();
+    } catch (e) {
+      Logger.debug('Failed to restore device connection after legacy firmware update: $e');
+    }
+  }
+
   Future<void> startMCUDfu(BtDevice btDevice, {bool fileInAssets = false, String? zipFilePath}) async {
     if (!firmwareUpdatePolicy.allowsOmiFirmwareUpdate) {
       Logger.debug('MCU firmware updates are unavailable in the Ray-Ban DAT build');
       return;
     }
-    setState(() {
-      isInstalling = true;
-    });
-    await Provider.of<DeviceProvider>(context, listen: false).prepareDFU();
-    await Future.delayed(const Duration(seconds: 2));
-
     String firmwareFile = zipFilePath ?? '${(await getApplicationDocumentsDirectory()).path}/firmware.zip';
     final file = File(firmwareFile);
     if (!await file.exists()) {
       Logger.debug('Firmware file not found: $firmwareFile');
-      if (mounted) {
-        setState(() {
-          isInstalling = false;
-        });
-      }
       return;
     }
     final bytes = await file.readAsBytes();
+    final images = await processZipFile(bytes);
     const configuration = mcumgr.FirmwareUpgradeConfiguration(
       estimatedSwapTime: Duration(seconds: 0),
       eraseAppSettings: true,
       pipelineDepth: 1,
     );
 
-    await killMcuUpdateManager();
-    final updateManager = await managerFactory!.getUpdateManager(btDevice.id);
-    _mcuUpdateManager = updateManager;
-    final images = await processZipFile(bytes);
+    if (!mounted) return;
+    setState(() {
+      isInstalling = true;
+    });
+    final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+    final handoff = FirmwareDfuConnectionHandoff(
+      releaseUpdater: killMcuUpdateManager,
+      resumeDeviceConnection: deviceProvider.resumeConnectionAfterDFU,
+    );
+    _activeMcuDfuHandoff = handoff;
 
-    final updateStream = updateManager.setup();
+    try {
+      await deviceProvider.prepareDFU();
+      await Future.delayed(const Duration(seconds: 2));
 
-    updateStream.listen((state) {
-      if (state == mcumgr.FirmwareUpgradeState.success) {
-        Logger.debug('update success');
-        killMcuUpdateManager();
+      await killMcuUpdateManager();
+      final updateManager = await managerFactory!.getUpdateManager(btDevice.id);
+      _mcuUpdateManager = updateManager;
+
+      final updateStream = updateManager.setup();
+
+      updateStream.listen(
+        (state) {
+          if (state == mcumgr.FirmwareUpgradeState.success) {
+            Logger.debug('update success');
+            unawaited(_completeMcuDfu(handoff, successful: true));
+          } else {
+            Logger.debug('update state: $state');
+          }
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          unawaited(_completeMcuDfu(handoff, successful: false, error: error));
+        },
+        onDone: () {
+          unawaited(_completeMcuDfu(handoff, successful: false));
+        },
+      );
+
+      updateManager.progressStream.listen((progress) {
+        Logger.debug('progress: $progress');
+        if (!mounted) return;
         setState(() {
-          isInstalling = false;
-          isInstalled = true;
+          installProgress = (progress.bytesSent / progress.imageSize * 100).round();
         });
-      } else {
-        Logger.debug('update state: $state');
-      }
-    });
-
-    updateManager.progressStream.listen((progress) {
-      Logger.debug('progress: $progress');
-      setState(() {
-        installProgress = (progress.bytesSent / progress.imageSize * 100).round();
       });
-    });
 
-    updateManager.logger.logMessageStream
-        .where((log) => log.level.rawValue > 1) // Filter debug messages
-        .listen((log) {
-      Logger.debug('dfu log: ${log.message}');
-    });
+      updateManager.logger.logMessageStream
+          .where((log) => log.level.rawValue > 1) // Filter debug messages
+          .listen((log) {
+        Logger.debug('dfu log: ${log.message}');
+      });
 
-    await updateManager.update(images, configuration: configuration);
+      await updateManager.update(images, configuration: configuration);
+    } catch (e) {
+      await _completeMcuDfu(handoff, successful: false, error: e);
+      rethrow;
+    }
   }
 
   Future<void> startLegacyDfu(BtDevice btDevice, {bool fileInAssets = false, String? zipFilePath}) async {
@@ -173,54 +264,65 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       Logger.debug('Legacy firmware updates are unavailable in the Ray-Ban DAT build');
       return;
     }
+    final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+    final firmwareFile = zipFilePath ?? '${(await getApplicationDocumentsDirectory()).path}/firmware.zip';
+    if (!fileInAssets && !await File(firmwareFile).exists()) {
+      Logger.debug('Firmware file not found: $firmwareFile');
+      return;
+    }
+
     setState(() {
       isInstalling = true;
     });
-    await Provider.of<DeviceProvider>(context, listen: false).prepareDFU();
+    await deviceProvider.prepareDFU();
     await Future.delayed(const Duration(seconds: 2));
-    String firmwareFile = zipFilePath ?? '${(await getApplicationDocumentsDirectory()).path}/firmware.zip';
     NordicDfu dfu = NordicDfu();
-    await dfu.startDfu(
-      btDevice.id,
-      firmwareFile,
-      fileInAsset: fileInAssets,
-      numberOfPackets: 8,
-      enableUnsafeExperimentalButtonlessServiceInSecureDfu: true,
-      iosSpecialParameter: const IosSpecialParameter(
-        packetReceiptNotificationParameter: 8,
-        forceScanningForNewAddressInLegacyDfu: true,
-        connectionTimeout: 60,
-      ),
-      androidSpecialParameter: const AndroidSpecialParameter(packetReceiptNotificationsEnabled: true, rebootTime: 1000),
-      onProgressChanged: (deviceAddress, percent, speed, avgSpeed, currentPart, partsTotal) {
-        Logger.debug('deviceAddress: $deviceAddress, percent: $percent');
-        setState(() {
-          installProgress = percent.toInt();
-        });
-      },
-      onError: (deviceAddress, error, errorType, message) {
-        Logger.debug('deviceAddress: $deviceAddress, error: $error, errorType: $errorType, message: $message');
-        setState(() {
-          isInstalling = false;
-        });
-        // Reset firmware update state on error
-        final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-        deviceProvider.resetFirmwareUpdateState();
-      },
-      onDeviceConnecting: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDeviceConnecting'),
-      onDeviceConnected: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDeviceConnected'),
-      onDfuProcessStarting: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDfuProcessStarting'),
-      onDfuProcessStarted: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDfuProcessStarted'),
-      onEnablingDfuMode: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onEnablingDfuMode'),
-      onFirmwareValidating: (deviceAddress) => Logger.debug('address: $deviceAddress, onFirmwareValidating'),
-      onDfuCompleted: (deviceAddress) {
-        Logger.debug('deviceAddress: $deviceAddress, onDfuCompleted');
-        setState(() {
-          isInstalling = false;
-          isInstalled = true;
-        });
-      },
-    );
+    try {
+      await dfu.startDfu(
+        btDevice.id,
+        firmwareFile,
+        fileInAsset: fileInAssets,
+        numberOfPackets: 8,
+        enableUnsafeExperimentalButtonlessServiceInSecureDfu: true,
+        iosSpecialParameter: const IosSpecialParameter(
+          packetReceiptNotificationParameter: 8,
+          forceScanningForNewAddressInLegacyDfu: true,
+          connectionTimeout: 60,
+        ),
+        androidSpecialParameter: const AndroidSpecialParameter(
+          packetReceiptNotificationsEnabled: true,
+          rebootTime: 1000,
+        ),
+        onProgressChanged: (deviceAddress, percent, speed, avgSpeed, currentPart, partsTotal) {
+          Logger.debug('deviceAddress: $deviceAddress, percent: $percent');
+          if (!mounted) return;
+          setState(() {
+            installProgress = percent.toInt();
+          });
+        },
+        onError: (deviceAddress, error, errorType, message) {
+          Logger.debug('deviceAddress: $deviceAddress, error: $error, errorType: $errorType, message: $message');
+          unawaited(_completeLegacyDfu(deviceProvider, successful: false, error: message));
+        },
+        onDfuAborted: (deviceAddress) {
+          Logger.debug('deviceAddress: $deviceAddress, onDfuAborted');
+          unawaited(_completeLegacyDfu(deviceProvider, successful: false));
+        },
+        onDeviceConnecting: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDeviceConnecting'),
+        onDeviceConnected: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDeviceConnected'),
+        onDfuProcessStarting: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDfuProcessStarting'),
+        onDfuProcessStarted: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDfuProcessStarted'),
+        onEnablingDfuMode: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onEnablingDfuMode'),
+        onFirmwareValidating: (deviceAddress) => Logger.debug('address: $deviceAddress, onFirmwareValidating'),
+        onDfuCompleted: (deviceAddress) {
+          Logger.debug('deviceAddress: $deviceAddress, onDfuCompleted');
+          unawaited(_completeLegacyDfu(deviceProvider, successful: true));
+        },
+      );
+    } catch (e) {
+      await _completeLegacyDfu(deviceProvider, successful: false, error: e);
+      rethrow;
+    }
   }
 
   Future getLatestVersion({

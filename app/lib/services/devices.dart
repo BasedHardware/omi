@@ -35,10 +35,7 @@ class OmiFeatures {
 abstract class IDeviceServiceSubsciption {
   void onDevices(List<BtDevice> devices);
   void onStatusChanged(DeviceServiceStatus status);
-  void onDeviceConnectionStateChanged(
-    String deviceId,
-    DeviceConnectionState state,
-  );
+  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state);
 }
 
 class DeviceService {
@@ -54,6 +51,9 @@ class DeviceService {
   final Map<Object, IDeviceServiceSubsciption> _subscriptions = {};
 
   DeviceConnection? _connection;
+  String? _dfuSuspendedDeviceId;
+  Future<void>? _dfuSuspendFuture;
+  Future<void>? _dfuResumeFuture;
   List<BtDevice> get devices => _devices;
 
   DeviceServiceStatus get status => _status;
@@ -114,16 +114,12 @@ class DeviceService {
     _connection = null;
 
     var device = _devices.firstWhereOrNull((f) => f.id == id);
-    Logger.debug(
-      '[DeviceService] device lookup result: ${device?.name ?? "NULL"} (locator: ${device?.locator?.kind})',
-    );
+    Logger.debug('[DeviceService] device lookup result: ${device?.name ?? "NULL"} (locator: ${device?.locator?.kind})');
 
     // If device not in discovered list, try to get it from SharedPreferences
     // This allows background reconnection without scanning
     if (device == null) {
-      Logger.debug(
-        '[DeviceService] Device not in discovered list, checking stored device',
-      );
+      Logger.debug('[DeviceService] Device not in discovered list, checking stored device');
       device = _getStoredDevice(id);
       if (device != null) {
         Logger.debug('[DeviceService] Using stored device: ${device.name}');
@@ -131,22 +127,16 @@ class DeviceService {
           _devices.add(device);
         }
       } else {
-        Logger.debug(
-          '[DeviceService] No stored device available for $id, returning',
-        );
+        Logger.debug('[DeviceService] No stored device available for $id, returning');
         return;
       }
     }
 
     _connection = DeviceConnectionFactory.create(device);
     if (_connection != null) {
-      await _connection!.connect(
-        onConnectionStateChanged: onDeviceConnectionStateChanged,
-      );
+      await _connection!.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
     } else {
-      Logger.debug(
-        '[DeviceService] Failed to create device connection for ${device.id}',
-      );
+      Logger.debug('[DeviceService] Failed to create device connection for ${device.id}');
     }
   }
 
@@ -188,15 +178,9 @@ class DeviceService {
     }
   }
 
-  void onDeviceConnectionStateChanged(
-    String deviceId,
-    DeviceConnectionState state,
-  ) {
+  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) {
     Logger.debug("device connection state changed...$deviceId...$state");
-    DebugLogManager.logEvent('device_connection_state', {
-      'device_id': deviceId,
-      'state': state.name,
-    });
+    DebugLogManager.logEvent('device_connection_state', {'device_id': deviceId, 'state': state.name});
     for (var s in _subscriptions.values) {
       s.onDeviceConnectionStateChanged(deviceId, state);
     }
@@ -210,15 +194,10 @@ class DeviceService {
 
   final Mutex _mutex = Mutex();
 
-  Future<DeviceConnection?> ensureConnection(
-    String deviceId, {
-    bool force = false,
-  }) async {
+  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
     await _mutex.acquire();
     try {
-      Logger.debug(
-        "ensureConnection ${_connection?.device.id} ${_connection?.status} $force",
-      );
+      Logger.debug("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
 
       // Connected to this device — return it
       if (_connection?.device.id == deviceId && _connection?.status == DeviceConnectionState.connected) {
@@ -274,6 +253,63 @@ class DeviceService {
     }
   }
 
+  /// Temporarily relinquishes the normal app BLE connection so a DFU plugin
+  /// can own the peripheral. The matching resume call must use the captured
+  /// device ID because the normal disconnect path clears provider state.
+  Future<void> suspendConnectionForDfu(String deviceId) {
+    if (_dfuSuspendedDeviceId != null) {
+      if (_dfuSuspendedDeviceId != deviceId) {
+        throw StateError('A different device is already suspended for DFU');
+      }
+      return _dfuSuspendFuture ?? Future.value();
+    }
+
+    _dfuSuspendedDeviceId = deviceId;
+    final suspendFuture = _suspendConnectionForDfu();
+    _dfuSuspendFuture = suspendFuture;
+    return suspendFuture;
+  }
+
+  Future<void> _suspendConnectionForDfu() async {
+    try {
+      await disconnectDevice();
+    } catch (_) {
+      _dfuSuspendedDeviceId = null;
+      rethrow;
+    } finally {
+      _dfuSuspendFuture = null;
+    }
+  }
+
+  /// Reclaims normal BLE ownership after any terminal DFU outcome.
+  ///
+  /// Concurrent or repeated terminal callbacks share one reconnect attempt.
+  Future<void> resumeConnectionAfterDfu() {
+    final inFlight = _dfuResumeFuture;
+    if (inFlight != null) return inFlight;
+
+    final deviceId = _dfuSuspendedDeviceId;
+    if (deviceId == null) return Future.value();
+
+    final resumeFuture = _resumeConnectionAfterDfu(deviceId);
+    _dfuResumeFuture = resumeFuture;
+    return resumeFuture;
+  }
+
+  Future<void> _resumeConnectionAfterDfu(String deviceId) async {
+    try {
+      final suspendFuture = _dfuSuspendFuture;
+      if (suspendFuture != null) {
+        await suspendFuture;
+      }
+      if (_dfuSuspendedDeviceId != deviceId) return;
+      await ensureConnection(deviceId, force: true);
+    } finally {
+      _dfuSuspendedDeviceId = null;
+      _dfuResumeFuture = null;
+    }
+  }
+
   Future<void> forgetDevice(String deviceId) async {
     Logger.debug("DeviceService: Forgetting device $deviceId");
     if (_connection != null) {
@@ -288,9 +324,7 @@ class DeviceService {
       try {
         await _connection!.transport.dispose();
       } catch (e) {
-        Logger.debug(
-          "DeviceService: transport dispose during forget failed: $e",
-        );
+        Logger.debug("DeviceService: transport dispose during forget failed: $e");
       }
       _connection = null;
     }
