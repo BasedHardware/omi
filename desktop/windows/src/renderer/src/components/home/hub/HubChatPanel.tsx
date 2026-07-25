@@ -21,21 +21,36 @@ export function HubChatPanel(props: {
   const { messages, sending, header, children } = props
   const scrollRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
+  const followRef = useRef(true)
 
   // Pin the live edge. RevealMarkdown grows the streaming reply's text WITHOUT a
   // history change, so watching `messages` alone would lag the reveal by a chunk —
   // observe the content box and re-pin on every size change (mirrors BarChatSurface).
+  // Only pin while following: disengage when the reader scrolls up so a streaming
+  // reply can't yank them back to the bottom, re-engage on returning to the edge.
   useEffect(() => {
     const content = contentRef.current
-    if (!content) return
+    const el = scrollRef.current
+    if (!content || !el) return
     const pin = (): void => {
-      const el = scrollRef.current
-      if (el) el.scrollTop = el.scrollHeight
+      if (followRef.current) el.scrollTop = el.scrollHeight
     }
     pin()
     const ro = new ResizeObserver(pin)
     ro.observe(content)
-    return () => ro.disconnect()
+    const onWheel = (e: WheelEvent): void => {
+      if (e.deltaY < 0 && el.scrollHeight > el.clientHeight + 8) followRef.current = false
+    }
+    const onScroll = (): void => {
+      if (el.scrollHeight - el.scrollTop - el.clientHeight <= 8) followRef.current = true
+    }
+    el.addEventListener('wheel', onWheel, { passive: true })
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      ro.disconnect()
+      el.removeEventListener('wheel', onWheel)
+      el.removeEventListener('scroll', onScroll)
+    }
   }, [])
 
   return (
