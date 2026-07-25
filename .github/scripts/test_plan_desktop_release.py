@@ -13,21 +13,72 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 SCRIPT = Path(__file__).with_name("plan-desktop-release.py")
+PUBLISH_SCRIPT = Path(__file__).with_name("publish-desktop-candidate-tag.py")
 WORKFLOW = Path(__file__).parents[1] / "workflows" / "desktop_auto_release.yml"
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("plan_desktop_release", SCRIPT)
 assert SPEC and SPEC.loader
 planner = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(planner)
+PUBLISH_SPEC = importlib.util.spec_from_file_location("publish_desktop_candidate_tag", PUBLISH_SCRIPT)
+assert PUBLISH_SPEC and PUBLISH_SPEC.loader
+publisher = importlib.util.module_from_spec(PUBLISH_SPEC)
+PUBLISH_SPEC.loader.exec_module(publisher)
 
 REPOSITORY = "BasedHardware/omi"
 SOURCE_SHA = "a" * 40
 LATER_NON_DESKTOP_SHA = "b" * 40
 LATEST_TAG = "v0.0.1+1-macos"
 RELEASABLE_PATH = "desktop/macos/Desktop/Sources/AppDelegate.swift"
+PR_NUMBER = 10603
+APPROVED_RELEASE_SOURCE_SHA = "79c29fa76e577379812d43b1cfaadc9602cc020a"
+DETACHED_CHANGELOG_SHA = "1c58581a124164e94cda66722c5ca4e1a3e409ca"
+MERGED_MAIN_SHA = "f48b2ddfbadcac3774366a1884461ef337607da2"
+CHANGED_MAIN_SHA = "9" * 40
+RELEASE_TAG = "v0.12.124+12124-macos"
+
+
+class PublicationFixture:
+    def __init__(
+        self,
+        *,
+        main_observations: list[str] | None = None,
+        pr_state: str = "MERGED",
+        merge_sha: str | None = MERGED_MAIN_SHA,
+        remote_tag_exists: bool = False,
+    ) -> None:
+        self.main_observations = iter(main_observations or [MERGED_MAIN_SHA, MERGED_MAIN_SHA])
+        self.pr_state = pr_state
+        self.merge_sha = merge_sha
+        self.remote_tag_exists = remote_tag_exists
+        self.calls: list[tuple[list[str], bool]] = []
+
+    def __call__(self, args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
+        self.calls.append((args, check))
+        stdout = ""
+        returncode = 0
+        if args[:3] == ["gh", "pr", "view"]:
+            merge_commit = {"oid": self.merge_sha} if self.merge_sha else None
+            stdout = json.dumps({"state": self.pr_state, "mergeCommit": merge_commit})
+        elif args == ["git", "rev-parse", "origin/main"]:
+            stdout = next(self.main_observations)
+        elif args[:2] == ["git", "merge-base"]:
+            stdout = APPROVED_RELEASE_SOURCE_SHA
+        elif args[:4] == ["git", "ls-remote", "--exit-code", "--tags"]:
+            returncode = 0 if self.remote_tag_exists else 2
+        return subprocess.CompletedProcess(args, returncode, stdout=stdout, stderr="")
+
+    @property
+    def commands(self) -> list[list[str]]:
+        return [args for args, _check in self.calls]
+
+
+def ready_gate(_repository: str, _sha: str) -> object:
+    return SimpleNamespace(state="ready", reason=None)
 
 
 def _parse_push_filter(workflow_text: str) -> tuple[list[str], set[str]]:
@@ -345,7 +396,7 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn(LATEST_TAG, lines[1])
         self.assertEqual(sleep.call_args_list, [((30,), {}), ((30,), {})])
 
-    def test_workflow_has_no_input_manual_trigger_and_tags_the_changelog_commit(self) -> None:
+    def test_workflow_has_no_input_manual_trigger_and_uses_merged_main_publisher(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
         # workflow_dispatch stays bare (no manual inputs). Continuous deployment:
         # auto-release fires on macOS-affecting merges to main (push); the schedule
@@ -359,10 +410,12 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
         self.assertEqual(workflow.count("--source-check-wait-seconds 720"), 2)
         self.assertEqual(workflow.count("--source-check-poll-seconds 30"), 2)
-        self.assertLess(
-            workflow.index('git commit -m "chore: consolidate changelog for v${VERSION}"'),
-            workflow.index('git tag "$RELEASE_TAG"'),
-        )
+        self.assertIn("id: changelog-pr", workflow)
+        self.assertIn("python3 .github/scripts/publish-desktop-candidate-tag.py", workflow)
+        self.assertIn('--pr-number "${{ steps.changelog-pr.outputs.pr_number }}"', workflow)
+        self.assertIn('--approved-source-sha "${{ steps.recheck.outputs.source_sha }}"', workflow)
+        self.assertNotIn('git tag "$RELEASE_TAG"', workflow)
+        self.assertNotIn('git push origin "$RELEASE_TAG"', workflow)
 
     def test_candidate_creation_has_no_selfhosted_pre_tag_gate(self) -> None:
         # Continuous deployment: candidate creation (tag-release) must depend only
@@ -397,6 +450,129 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
                 f"releasable desktop path {path!r} (expected push filter {expected!r}) "
                 "is missing from desktop_auto_release.yml push.paths",
             )
+
+
+class CandidateTagPublicationTests(unittest.TestCase):
+    def test_candidate_tag_targets_the_exact_merged_main_commit(self) -> None:
+        fixture = PublicationFixture()
+
+        target = publisher.publish_candidate_tag(
+            repository=REPOSITORY,
+            pr_number=PR_NUMBER,
+            release_tag=RELEASE_TAG,
+            approved_source_sha=APPROVED_RELEASE_SOURCE_SHA,
+            runner=fixture,
+            source_gate=ready_gate,
+            newest_source=lambda _ref: APPROVED_RELEASE_SOURCE_SHA,
+        )
+
+        self.assertEqual(target, MERGED_MAIN_SHA)
+        self.assertIn(["git", "tag", RELEASE_TAG, MERGED_MAIN_SHA], fixture.commands)
+        self.assertIn(
+            ["git", "push", "origin", f"refs/tags/{RELEASE_TAG}:refs/tags/{RELEASE_TAG}"],
+            fixture.commands,
+        )
+        self.assertEqual(
+            fixture.commands.count(
+                [
+                    "git",
+                    "fetch",
+                    "--force",
+                    "origin",
+                    "refs/heads/main:refs/remotes/origin/main",
+                ]
+            ),
+            2,
+        )
+
+    def test_old_detached_tag_then_merge_order_is_rejected(self) -> None:
+        fixture = PublicationFixture(main_observations=[DETACHED_CHANGELOG_SHA])
+
+        with self.assertRaisesRegex(
+            publisher.CandidatePublicationError,
+            "origin/main changed after the changelog merge",
+        ):
+            publisher.publish_candidate_tag(
+                repository=REPOSITORY,
+                pr_number=PR_NUMBER,
+                release_tag=RELEASE_TAG,
+                approved_source_sha=APPROVED_RELEASE_SOURCE_SHA,
+                runner=fixture,
+                source_gate=ready_gate,
+                newest_source=lambda _ref: APPROVED_RELEASE_SOURCE_SHA,
+            )
+
+        self.assertFalse(any(command[:2] == ["git", "tag"] for command in fixture.commands))
+        self.assertFalse(any(command[:2] == ["git", "push"] for command in fixture.commands))
+
+    def test_main_change_during_final_recheck_fails_closed(self) -> None:
+        fixture = PublicationFixture(main_observations=[MERGED_MAIN_SHA, CHANGED_MAIN_SHA])
+
+        with self.assertRaisesRegex(publisher.CandidatePublicationError, "origin/main changed before tag push"):
+            publisher.publish_candidate_tag(
+                repository=REPOSITORY,
+                pr_number=PR_NUMBER,
+                release_tag=RELEASE_TAG,
+                approved_source_sha=APPROVED_RELEASE_SOURCE_SHA,
+                runner=fixture,
+                source_gate=ready_gate,
+                newest_source=lambda _ref: APPROVED_RELEASE_SOURCE_SHA,
+            )
+
+        self.assertFalse(any(command[:2] == ["git", "tag"] for command in fixture.commands))
+        self.assertFalse(any(command[:2] == ["git", "push"] for command in fixture.commands))
+
+    def test_changed_releasable_source_fails_before_publication(self) -> None:
+        fixture = PublicationFixture()
+
+        with self.assertRaisesRegex(
+            publisher.CandidatePublicationError,
+            "newest releasable desktop source",
+        ):
+            publisher.publish_candidate_tag(
+                repository=REPOSITORY,
+                pr_number=PR_NUMBER,
+                release_tag=RELEASE_TAG,
+                approved_source_sha=APPROVED_RELEASE_SOURCE_SHA,
+                runner=fixture,
+                source_gate=ready_gate,
+                newest_source=lambda _ref: CHANGED_MAIN_SHA,
+            )
+
+        self.assertFalse(any(command[:2] == ["git", "tag"] for command in fixture.commands))
+
+    def test_open_changelog_pr_cannot_publish_a_tag(self) -> None:
+        fixture = PublicationFixture(pr_state="OPEN", merge_sha=None)
+
+        with self.assertRaisesRegex(publisher.CandidatePublicationError, "still open"):
+            publisher.publish_candidate_tag(
+                repository=REPOSITORY,
+                pr_number=PR_NUMBER,
+                release_tag=RELEASE_TAG,
+                approved_source_sha=APPROVED_RELEASE_SOURCE_SHA,
+                runner=fixture,
+                source_gate=ready_gate,
+                newest_source=lambda _ref: APPROVED_RELEASE_SOURCE_SHA,
+            )
+
+        self.assertFalse(any(command[:2] == ["git", "tag"] for command in fixture.commands))
+
+    def test_existing_immutable_tag_is_never_reused(self) -> None:
+        fixture = PublicationFixture(remote_tag_exists=True)
+
+        with self.assertRaisesRegex(publisher.CandidatePublicationError, "already exists; refusing reuse"):
+            publisher.publish_candidate_tag(
+                repository=REPOSITORY,
+                pr_number=PR_NUMBER,
+                release_tag=RELEASE_TAG,
+                approved_source_sha=APPROVED_RELEASE_SOURCE_SHA,
+                runner=fixture,
+                source_gate=ready_gate,
+                newest_source=lambda _ref: APPROVED_RELEASE_SOURCE_SHA,
+            )
+
+        self.assertFalse(any(command[:2] == ["git", "tag"] for command in fixture.commands))
+        self.assertFalse(any(command[:2] == ["git", "push"] for command in fixture.commands))
 
 
 if __name__ == "__main__":

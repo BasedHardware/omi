@@ -346,9 +346,9 @@ checks:
     reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved"
   - id: desktop-candidate-source-gate
     command: ["python3", ".github/scripts/test_plan_desktop_release.py"]
-    triggers: [".github/scripts/plan-desktop-release.py", ".github/scripts/test_plan_desktop_release.py", ".github/workflows/desktop_auto_release.yml"]
+    triggers: [".github/scripts/plan-desktop-release.py", ".github/scripts/publish-desktop-candidate-tag.py", ".github/scripts/test_plan_desktop_release.py", ".github/workflows/desktop_auto_release.yml"]
     lanes: ["local", "ci"]
-    reason: "candidate tags require successful Release Eligibility and both Desktop Swift checks for the exact newest queued releasable desktop SHA"
+    reason: "candidate tags require successful exact-SHA source checks and must bind the consolidated changelog to the exact merged origin/main commit"
   - id: desktop-manifest-routes
     command: ["python3", ".github/scripts/test_desktop_manifest_routes.py"]
     triggers: [".github/workflows/desktop-swift-ci.yml", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_manifest_routes.py"]

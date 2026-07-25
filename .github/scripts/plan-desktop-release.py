@@ -64,11 +64,16 @@ def latest_desktop_tag() -> str | None:
     return sorted(tags, key=version_sort_key)[-1]
 
 
-def releasable_desktop_changes_since(ref: str | None) -> list[str]:
+def releasable_desktop_changes_since(ref: str | None, *, head_ref: str = "HEAD") -> list[str]:
     if ref is None:
-        output = git(["ls-files", *DESKTOP_RELEASE_PATHS])
+        if head_ref == "HEAD":
+            output = git(["ls-files", *DESKTOP_RELEASE_PATHS])
+        else:
+            output = git(["ls-tree", "-r", "--name-only", head_ref, "--", *DESKTOP_RELEASE_PATHS])
     else:
-        output = git(["diff", "--name-only", "--diff-filter=ACDMR", f"{ref}..HEAD", "--", *DESKTOP_RELEASE_PATHS])
+        output = git(
+            ["diff", "--name-only", "--diff-filter=ACDMR", f"{ref}..{head_ref}", "--", *DESKTOP_RELEASE_PATHS]
+        )
 
     changes = []
     for path in output.splitlines():
@@ -112,12 +117,12 @@ def latest_change_age_seconds(paths: list[str]) -> int | None:
         return None
 
 
-def latest_releasable_desktop_sha(paths: list[str]) -> str | None:
+def latest_releasable_desktop_sha(paths: list[str], *, head_ref: str = "HEAD") -> str | None:
     if not paths:
         return None
 
     try:
-        return git(["log", "--first-parent", "-1", "--format=%H", "HEAD", "--", *paths]) or None
+        return git(["log", "--first-parent", "-1", "--format=%H", head_ref, "--", *paths]) or None
     except subprocess.CalledProcessError:
         return None
 
