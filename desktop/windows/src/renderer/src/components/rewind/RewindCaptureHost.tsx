@@ -5,6 +5,9 @@ import type { RewindSettings, RewindCaptureDirective } from '../../../../shared/
 // canvas grab + JPEG encode cheap.
 const MAX_EDGE = 1600
 const JPEG_QUALITY = 0.6
+// Wait before re-opening a stream whose track died, so a source that is
+// unavailable in bursts (display asleep, GPU reset) can't spin getUserMedia.
+const RESTART_DELAY_MS = 2000
 
 /**
  * Background screen-capture host for Rewind. Mounted app-wide (while the window
@@ -69,13 +72,28 @@ export function RewindCaptureHost(): React.JSX.Element {
       if (videoRef.current) videoRef.current.srcObject = null
     }
 
+    const isLive = (): boolean =>
+      streamRef.current?.getVideoTracks().some((t) => t.readyState === 'live') ?? false
+
+    // A desktop-capture track can die while the app keeps running (display sleep,
+    // GPU/driver reset, resolution or session change). Nothing used to notice: the
+    // sampler kept drawing a dead <video>, so the timeline filled with blank frames
+    // and capture never came back. Re-open the stream instead. Our own teardown
+    // uses track.stop(), which does not fire 'ended', so this can't self-trigger.
+    const onTrackEnded = (): void => {
+      if (cancelled) return
+      console.warn('[rewind] capture track ended — reopening stream')
+      stop()
+      timerRef.current = setTimeout(() => void start(), RESTART_DELAY_MS)
+    }
+
     // Self-pacing: schedule the next grab only after the current one settles, so
     // a slow save can never stack concurrent captures.
     const grabAndSchedule = async (): Promise<void> => {
       if (cancelled) return
       try {
         const v = videoRef.current
-        if (v && v.videoWidth && v.videoHeight && !savingRef.current) {
+        if (v && isLive() && v.videoWidth && v.videoHeight && !savingRef.current) {
           const scale = Math.min(1, MAX_EDGE / Math.max(v.videoWidth, v.videoHeight))
           const w = Math.round(v.videoWidth * scale)
           const h = Math.round(v.videoHeight * scale)
@@ -136,6 +154,7 @@ export function RewindCaptureHost(): React.JSX.Element {
           return
         }
         streamRef.current = stream
+        stream.getVideoTracks().forEach((t) => t.addEventListener('ended', onTrackEnded))
         const v = videoRef.current
         if (v) {
           v.srcObject = stream
