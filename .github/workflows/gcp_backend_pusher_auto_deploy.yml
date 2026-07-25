@@ -3,15 +3,19 @@ name: Auto Deploy Backend Pusher to GKE (Development)
 on:
   push:
     branches: [ "main" ]
+    # Keep this list in lockstep with the final-stage COPY source closure
+    # emitted by backend/scripts/verify_pusher_source_closure.py. A change to
+    # any copied source invalidates the development qualification artifact.
     paths:
+      - 'backend/config/**'
+      - 'backend/database/**'
+      - 'backend/models/**'
+      - 'backend/routers/**'
+      - 'backend/services/**'
+      - 'backend/utils/**'
       - 'backend/pusher/**'
       - 'backend/charts/pusher/**'
-      - 'backend/database/conversation_finalization_jobs.py'
-      - 'backend/routers/pusher.py'
-      - 'backend/services/conversation_finalization.py'
-      - 'backend/utils/conversations/lifecycle.py'
-      - 'backend/utils/metrics.py'
-      - 'backend/utils/observability/journeys.py'
+      - 'backend/scripts/verify_pusher_source_closure.py'
       - 'backend/scripts/verify_pusher_live_deployment_gate.py'
       - 'backend/scripts/verify_pusher_dev_observability.py'
       - 'backend/scripts/verify_pusher_promotion_evidence.py'

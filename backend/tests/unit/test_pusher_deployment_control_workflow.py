@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import runpy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -58,6 +59,16 @@ def test_prod_pusher_compares_full_dockerfile_source_closure_not_subset() -> Non
     assert "backend/pusher backend/charts/pusher" not in MANUAL
 
 
+def test_dev_auto_qualification_covers_every_pusher_dockerfile_source_input() -> None:
+    """A source change that can alter the Pusher image must trigger a new dev bake."""
+    closure = runpy.run_path(str(ROOT / "backend/scripts/verify_pusher_source_closure.py"))
+    source_paths = closure["final_stage_copy_sources"](ROOT / "backend/pusher/Dockerfile")
+
+    for source_path in source_paths:
+        assert f"'{source_path}**'" in AUTO, f"development qualification does not trigger for {source_path}"
+    assert "'backend/charts/pusher/**'" in AUTO
+
+
 def test_live_capacity_gate_has_break_glass_hatch() -> None:
     """Every gated surface must have a break-glass hatch (AGENTS.md L122-L129).
     The live surge-capacity gate queries cluster metadata and can fail during an
@@ -73,17 +84,18 @@ def test_live_capacity_gate_has_break_glass_hatch() -> None:
 
 
 def test_real_config_and_capacity_gates_precede_every_pusher_helm_mutation() -> None:
-    for workflow in (MANUAL, AUTO):
-        config = workflow.index("verify_pusher_config_references.py")
-        live = workflow.rindex("verify_pusher_live_deployment_gate.py")
-        helm = workflow.index("helm -n ${{ vars.ENV }}-omi-backend upgrade --install")
+    auto_config = AUTO.index("verify_pusher_config_references.py")
+    auto_live = AUTO.index("verify_pusher_live_deployment_gate.py", auto_config)
+    auto_helm = AUTO.index("helm -n ${{ vars.ENV }}-omi-backend upgrade --install")
+    assert auto_config < auto_live < auto_helm
+    assert "--image \"$PUSHER_IMAGE_REFERENCE\"" in AUTO[auto_live:auto_helm]
 
-        assert config < live < helm
-        assert "--image \"$PUSHER_IMAGE_REFERENCE\"" in workflow[live:helm]
+    render_only = MANUAL.index("Preflight existing pusher ConfigMap and Secret references")
+    apply_config = MANUAL.index("Apply non-secret pusher runtime config")
+    reconciled_config = MANUAL.index("Verify reconciled pusher ConfigMap and Secret references")
+    live = MANUAL.index("Verify live Pusher surge capacity and digest render", reconciled_config)
+    helm = MANUAL.index("helm -n ${{ vars.ENV }}-omi-backend upgrade --install")
 
-    assert MANUAL.index("Verify live Pusher surge capacity and digest render") < MANUAL.index(
-        "Apply non-secret pusher runtime config"
-    )
-    assert MANUAL.index("Apply non-secret pusher runtime config") < MANUAL.index(
-        "Verify reconciled pusher ConfigMap and Secret references"
-    )
+    assert render_only < apply_config < reconciled_config < live < helm
+    assert "--render-only" in MANUAL[render_only:apply_config]
+    assert "--image \"$PUSHER_IMAGE_REFERENCE\"" in MANUAL[live:helm]

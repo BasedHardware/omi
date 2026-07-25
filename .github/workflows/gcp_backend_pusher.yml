@@ -319,15 +319,7 @@ jobs:
         run: |
           python3 -m pip install -q pyyaml
           python3 backend/scripts/verify_pusher_config_references.py \
-            --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend
-
-      - name: Verify live Pusher surge capacity and digest render
-        if: env.SERVICE == 'pusher' && github.event.inputs.skip_live_capacity_gate != 'true'
-        run: |
-          python3 backend/scripts/verify_pusher_live_deployment_gate.py \
-            --environment ${{ vars.ENV }} \
-            --namespace ${{ vars.ENV }}-omi-backend \
-            --image "$PUSHER_IMAGE_REFERENCE"
+            --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend --render-only
 
       - name: Apply non-secret pusher runtime config
         if: env.SERVICE == 'pusher'
@@ -365,6 +357,14 @@ jobs:
           python3 -m pip install -q pyyaml
           python3 backend/scripts/verify_pusher_config_references.py \
             --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend
+
+      - name: Verify live Pusher surge capacity and digest render
+        if: env.SERVICE == 'pusher' && github.event.inputs.skip_live_capacity_gate != 'true'
+        run: |
+          python3 backend/scripts/verify_pusher_live_deployment_gate.py \
+            --environment ${{ vars.ENV }} \
+            --namespace ${{ vars.ENV }}-omi-backend \
+            --image "$PUSHER_IMAGE_REFERENCE"
 
       - name: Deploy Pusher to GKE cluster using Helm
         env:

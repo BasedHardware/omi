@@ -16,14 +16,15 @@ def test_pusher_auto_deploy_tracks_its_shared_lifecycle_and_observability_import
         paths.add(line.split("'", 2)[1])
 
     assert paths == {
+        'backend/config/**',
+        'backend/database/**',
+        'backend/models/**',
+        'backend/routers/**',
+        'backend/services/**',
+        'backend/utils/**',
         'backend/pusher/**',
         'backend/charts/pusher/**',
-        'backend/database/conversation_finalization_jobs.py',
-        'backend/routers/pusher.py',
-        'backend/services/conversation_finalization.py',
-        'backend/utils/conversations/lifecycle.py',
-        'backend/utils/metrics.py',
-        'backend/utils/observability/journeys.py',
+        'backend/scripts/verify_pusher_source_closure.py',
         'backend/scripts/verify_pusher_live_deployment_gate.py',
         'backend/scripts/verify_pusher_dev_observability.py',
         'backend/scripts/verify_pusher_promotion_evidence.py',
