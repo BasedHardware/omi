@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Rewind recovery after a failed video write so abandoned chunks cannot leave broken timeline frames behind"
-}
