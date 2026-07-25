@@ -122,8 +122,7 @@ logger = logging.getLogger(__name__)
 
 MAX_VAD_SEGMENT_SECONDS = int(os.getenv('SYNC_MAX_VAD_SEGMENT_SECONDS', '300'))
 
-# Segment outcomes that are valid terminal results, not errors: a transcript, or
-# audio that carried no transcribable speech. Everything else is a real failure.
+# Valid terminal segment results — a transcript, or audio with no speech. All else is a failure.
 _NON_ERROR_SEGMENT_OUTCOMES = frozenset({TranscriptionOutcome.SUCCESS, TranscriptionOutcome.EXPECTED_SILENCE})
 _SYNC_STT_MODELS = {'nova-3', 'velma-2', 'parakeet'}
 _PARTIAL_RESULT_FENCED_CONVERSATION_IDS = 'fenced_conversation_ids'
@@ -2039,10 +2038,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 _RESPONSE_FENCED_CONVERSATION_IDS: fenced_conversation_ids,
             }
             segment_errors = []
-            # Segments that yielded a transcript, distinct from ones that failed
-            # and ones that held no speech. Only transcribed audio is billed, so
-            # a job of nothing but silence records no usage even though it is not
-            # a failure.
+            # Segments that yielded a transcript, distinct from failed and
+            # speech-free ones: only transcribed audio is billed, so a silent
+            # job records no usage though it is not a failure.
             content_segment_count = [0]
             segment_lock = threading.Lock()
 
