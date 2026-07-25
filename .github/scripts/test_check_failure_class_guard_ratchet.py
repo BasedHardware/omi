@@ -128,15 +128,40 @@ class GuardRatchetTests(unittest.TestCase):
     def test_grandfathered_class_passes(self) -> None:
         self.define("FC-recurring-thing")
         self.declare("FC-recurring-thing", count=9)
-        self.allow([{"id": "FC-recurring-thing", "reason": "over threshold when the ratchet landed"}])
+        self.allow(
+            [
+                {
+                    "id": "FC-recurring-thing",
+                    "declarations_at_baseline": 9,
+                    "reason": "over threshold when the ratchet landed",
+                }
+            ]
+        )
         result = self.check()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("GRANDFATHERED", result.stdout)
 
+    def test_grandfathered_class_fails_on_new_recurrence(self) -> None:
+        self.define("FC-recurring-thing")
+        self.declare("FC-recurring-thing", count=10)
+        self.allow(
+            [
+                {
+                    "id": "FC-recurring-thing",
+                    "declarations_at_baseline": 9,
+                    "reason": "only the first nine are grandfathered",
+                }
+            ]
+        )
+        result = self.check()
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("FC-recurring-thing", result.stderr)
+        self.assertIn("baseline", result.stderr)
+
     def test_grandfathered_class_with_artifact_must_leave_the_allowlist(self) -> None:
         self.define("FC-recurring-thing", artifact=["guards/recurring.py"])
         self.declare("FC-recurring-thing", count=9)
-        self.allow([{"id": "FC-recurring-thing", "reason": "stale entry"}])
+        self.allow([{"id": "FC-recurring-thing", "declarations_at_baseline": 9, "reason": "stale entry"}])
         result = self.check()
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("only shrinks", result.stderr)

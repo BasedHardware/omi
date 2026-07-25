@@ -18,8 +18,10 @@ Determinism and hermeticity:
   first-parent history does not reach back to the window start, this prints a
   loud SKIP and exits 0 rather than passing silently or failing spuriously.
 - Classes already over threshold when this landed are grandfathered by an
-  explicit allowlist. The allowlist only shrinks: once a class gains an
-  artifact, its entry must be removed.
+  explicit allowlist up to each entry's `declarations_at_baseline`; a new
+  declaration above that baseline fails until a guard artifact is recorded.
+  The allowlist only shrinks: once a class gains an artifact, its entry must
+  be removed.
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ import re
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +46,12 @@ DECLARATION_RE = re.compile(r"^[ \t]*Failure-Class:[ \t]*(FC-[a-z0-9-]+)[ \t]*$"
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 RECORD_SEPARATOR = "\x1e"
 FIELD_SEPARATOR = "\x1f"
+
+
+@dataclass(frozen=True)
+class GrandfatherEntry:
+    reason: str
+    declarations_at_baseline: int
 
 
 class CheckError(Exception):
@@ -84,8 +93,8 @@ def load_definitions(root: Path) -> dict[str, dict[str, Any]]:
     return definitions
 
 
-def load_allowlist(root: Path) -> dict[str, str]:
-    """Return grandfathered class id -> reason.
+def load_allowlist(root: Path) -> dict[str, GrandfatherEntry]:
+    """Return grandfathered class id -> entry metadata.
 
     A missing allowlist is not an error: the ratchet is simply unrelaxed.
     """
@@ -101,17 +110,22 @@ def load_allowlist(root: Path) -> dict[str, str]:
     entries = data.get("grandfathered")
     if not isinstance(entries, list):
         raise CheckError(f"{ALLOWLIST_RELATIVE_PATH} must contain a 'grandfathered' array")
-    allowlist: dict[str, str] = {}
+    allowlist: dict[str, GrandfatherEntry] = {}
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict):
             raise CheckError(f"grandfathered[{index}] must be an object")
         class_id = entry.get("id")
         reason = entry.get("reason")
+        baseline = entry.get("declarations_at_baseline")
         if not isinstance(class_id, str) or not isinstance(reason, str) or not reason.strip():
             raise CheckError(f"grandfathered[{index}] requires a string 'id' and a non-empty 'reason'")
+        if not isinstance(baseline, int) or baseline < 0:
+            raise CheckError(
+                f"grandfathered[{index}] requires a non-negative integer 'declarations_at_baseline'"
+            )
         if class_id in allowlist:
             raise CheckError(f"grandfathered contains duplicate id '{class_id}'")
-        allowlist[class_id] = reason
+        allowlist[class_id] = GrandfatherEntry(reason=reason, declarations_at_baseline=baseline)
     return allowlist
 
 
@@ -166,7 +180,7 @@ def read_pr_body(path: Path | None) -> str:
 
 def evaluate(
     definitions: dict[str, dict[str, Any]],
-    allowlist: dict[str, str],
+    allowlist: dict[str, GrandfatherEntry],
     counts: dict[str, int],
     threshold: int,
 ) -> list[str]:
@@ -183,7 +197,17 @@ def evaluate(
         if definition.get("canonical_prevention_artifact"):
             continue
         if class_id in allowlist:
-            print(f"  GRANDFATHERED {class_id}: {count} declaration(s) — {allowlist[class_id]}")
+            entry = allowlist[class_id]
+            if count > entry.declarations_at_baseline:
+                failures.append(
+                    f"{class_id}: {count} declarations in the window (baseline "
+                    f"{entry.declarations_at_baseline}) with no 'canonical_prevention_artifact'. "
+                    f"A grandfathered class must not recur without recording its guard surface in "
+                    f"{DEFINITIONS_RELATIVE_PATH / (class_id + '.json')}, then removing its entry from "
+                    f"{ALLOWLIST_RELATIVE_PATH}."
+                )
+                continue
+            print(f"  GRANDFATHERED {class_id}: {count} declaration(s) — {entry.reason}")
             continue
         failures.append(
             f"{class_id}: {count} declarations in the window (threshold {threshold}) with no "
@@ -192,7 +216,7 @@ def evaluate(
             f"{ALLOWLIST_RELATIVE_PATH}."
         )
 
-    for class_id, reason in sorted(allowlist.items()):
+    for class_id, entry in sorted(allowlist.items()):
         definition = definitions.get(class_id)
         if definition is None:
             failures.append(
@@ -202,7 +226,7 @@ def evaluate(
         elif definition.get("canonical_prevention_artifact"):
             failures.append(
                 f"{class_id}: now records a 'canonical_prevention_artifact', so its grandfather entry in "
-                f"{ALLOWLIST_RELATIVE_PATH} must be removed. The allowlist only shrinks. ({reason})"
+                f"{ALLOWLIST_RELATIVE_PATH} must be removed. The allowlist only shrinks. ({entry.reason})"
             )
     return failures
 

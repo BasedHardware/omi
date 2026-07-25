@@ -386,6 +386,55 @@ def changed_definition_paths(root: Path, common: str, head: str) -> list[Path]:
     return [Path(line) for line in output.splitlines() if line]
 
 
+def definition_json_at_ref(root: Path, ref: str, relative: Path) -> dict[str, Any] | None:
+    try:
+        output = run_git(root, "show", f"{ref}:{relative.as_posix()}")
+    except CliError:
+        return None
+    try:
+        data = json.loads(output)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def is_artifact_only_definition_update(root: Path, common: str, relative: Path) -> bool:
+    """True when the only JSON delta is adding or updating canonical_prevention_artifact."""
+    head_path = root / relative
+    try:
+        head_data = json.loads(head_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(head_data, dict) or "canonical_prevention_artifact" not in head_data:
+        return False
+    base_data = definition_json_at_ref(root, common, relative)
+    if base_data is None:
+        return False
+    if base_data.get("canonical_prevention_artifact") == head_data.get("canonical_prevention_artifact"):
+        return False
+    for key in set(base_data) | set(head_data):
+        if key == "canonical_prevention_artifact":
+            continue
+        if base_data.get(key) != head_data.get(key):
+            return False
+    return True
+
+
+def instance_fix_registry_changes_allowed(
+    root: Path,
+    common: str,
+    declaration: str,
+    changed_paths: list[Path],
+) -> bool:
+    """Instance-fix PRs may record a guard artifact for the declared class only."""
+    if not changed_paths:
+        return True
+    expected = DEFINITIONS_RELATIVE_PATH / f"{declaration}.json"
+    if set(changed_paths) != {expected}:
+        return False
+    return is_artifact_only_definition_update(root, common, expected)
+
+
 def public_definition(definition: Definition, root: Path) -> dict[str, Any]:
     return {**definition.data, "path": str(definition.path.relative_to(root))}
 
@@ -482,11 +531,20 @@ def validate_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, An
             )
         )
 
-    if has_fix_commit and declaration != "new" and changed_definition_paths_in_range:
+    if (
+        has_fix_commit
+        and declaration not in (None, "new", "none")
+        and changed_definition_paths_in_range
+        and not instance_fix_registry_changes_allowed(
+            root, common, declaration, changed_definition_paths_in_range
+        )
+    ):
         errors.append(
             error(
                 "instance_fix_mutates_registry",
-                "an instance-fix PR must not edit failure-class definitions; use a separate registry-only lifecycle PR",
+                "an instance-fix PR must not edit failure-class definitions except to add or update "
+                "'canonical_prevention_artifact' on the declared class; other registry edits need a "
+                "separate registry-only lifecycle PR",
                 changed_paths=[str(path) for path in changed_definition_paths_in_range],
             )
         )
