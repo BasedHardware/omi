@@ -80,6 +80,19 @@ final class MemoryGraphRevisitTests: XCTestCase {
     XCTAssertFalse(state.isPresented)
   }
 
+  func testMemoryDropdownPillsUseAnOpaqueOmiSurface() throws {
+    // omi-test-quality: source-inspection -- static visual contract: dropdown rows must
+    // occlude the page beneath them while retaining Omi's neutral pill styling.
+    let source = try source(at: "Sources/MainWindow/DesktopTopBar.swift")
+    let dropdownRowSource =
+      source.components(separatedBy: "private struct MemoryDropdownRow").last ?? ""
+
+    XCTAssertTrue(dropdownRowSource.contains("OmiColors.backgroundSecondary"))
+    XCTAssertTrue(dropdownRowSource.contains("OmiColors.backgroundTertiary"))
+    XCTAssertTrue(dropdownRowSource.contains("OmiColors.border.opacity(0.55)"))
+    XCTAssertFalse(dropdownRowSource.contains(": Color.clear"))
+  }
+
   func testTopNavigationUsesCompactPillWidthsAndTightSpacing() {
     XCTAssertEqual(TopNavigationPillMetrics.itemSpacing, 4)
     XCTAssertEqual(TopNavigationPillMetrics.horizontalPadding, 12)

@@ -326,10 +326,15 @@ private struct MemoryDropdownRow: View {
         Capsule(style: .continuous)
           .fill(
             isSelected
-              ? OmiColors.textPrimary.opacity(0.10)
-              : isHovering ? OmiColors.textPrimary.opacity(0.06) : Color.clear
+              ? OmiColors.backgroundTertiary
+              : isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary
           )
       )
+      .overlay(
+        Capsule(style: .continuous)
+          .stroke(OmiColors.border.opacity(0.55), lineWidth: 1)
+      )
+      .shadow(color: Color.black.opacity(0.24), radius: 8, y: 3)
       .contentShape(Capsule())
     }
     .buttonStyle(.plain)
