@@ -302,13 +302,15 @@ async def execute_tool(
     }
     agent_config_context.set(config)
 
-    # Find the tool
+    # Find the tool. `load_app_tools` reads Redis plus one Firestore document
+    # per enabled app, so it must not run on the event loop — see the canonical
+    # path in utils/retrieval/agentic.py.
     all_tools = list(CORE_TOOLS)
     try:
-        app_tools = load_app_tools(uid)
+        app_tools = await run_blocking(db_executor, load_app_tools, uid)
         all_tools.extend(app_tools)
-    except Exception as e:
-        logger.error(f"⚠️ Error loading app tools: {e}")
+    except Exception as error:
+        logger.error("⚠️ Error loading app tools error_type=%s", type(error).__name__)
 
     target = None
     for t in all_tools:
@@ -327,10 +329,16 @@ async def execute_tool(
         if hasattr(target, "coroutine") and target.coroutine is not None:
             result = await target.coroutine(**params)
         else:
+            # Every CORE_TOOLS entry is a sync @tool that fans out to Firestore
+            # and Pinecone, so invoking it here would park the whole event loop
+            # for the duration. `run_blocking` copies the current context, so
+            # `agent_config_context` still resolves inside the worker thread.
             # Pass config as second arg (LangChain RunnableConfig), not as tool input
-            result = target.invoke(params, config=config)
+            result = await run_blocking(db_executor, target.invoke, params, config=config)
         result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))
         return {"result": result}
-    except Exception as e:
-        logger.error(f"❌ Error executing tool {body.tool_name}: {e}")
-        return {"error": str(e)}
+    except Exception as error:
+        # Never echo the exception text: it can embed the caller's tool params,
+        # which carry user content (pydantic renders `input_value=...`).
+        logger.error("❌ Error executing tool %s error_type=%s", body.tool_name, type(error).__name__)
+        return {"error": sanitize(str(error))}
