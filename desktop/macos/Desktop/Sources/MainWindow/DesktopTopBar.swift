@@ -1,4 +1,3 @@
-import AppKit
 import OmiTheme
 import SwiftUI
 
@@ -8,6 +7,7 @@ import SwiftUI
 /// and the Capture/Listening controls on the right.
 struct DesktopTopBar: View {
   @Binding var selectedIndex: Int
+  @Binding var memoryDestinationRawValue: Int
   @ObservedObject var appState: AppState
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   @ObservedObject var tasksStore: TasksStore
@@ -15,10 +15,9 @@ struct DesktopTopBar: View {
   /// last resigned front (see DesktopHomeView).
   let sinceDate: Date
   let onRewind: () -> Void
-  @AppStorage(MemoryHubDestination.storageKey) private var memoryDestinationRawValue =
-    MemoryHubDestination.memories.rawValue
-  @State private var memoryMenuHoverIntent = MemoryMenuHoverIntent()
-  @State private var memoryMenuHoverTask: Task<Void, Never>?
+  @State private var memoryDropdownState = MemoryDropdownInteractionState()
+  @State private var memoryDropdownTask: Task<Void, Never>?
+  @State private var isMemoryButtonHovered = false
 
   private struct NavItem: Identifiable {
     let index: Int
@@ -56,6 +55,9 @@ struct DesktopTopBar: View {
     .frame(height: 44)
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.sm)
+    .onDisappear {
+      memoryDropdownTask?.cancel()
+    }
   }
 
   /// Gear that opens Settings. The old left rail held the settings/profile entry;
@@ -63,6 +65,7 @@ struct DesktopTopBar: View {
   private var settingsButton: some View {
     let isActive = selectedIndex == SidebarNavItem.settings.rawValue
     return Button {
+      dismissMemoryDropdown()
       OmiMotion.withGated(.easeOut(duration: 0.08)) {
         selectedIndex = SidebarNavItem.settings.rawValue
       }
@@ -84,29 +87,18 @@ struct DesktopTopBar: View {
     HStack(spacing: OmiSpacing.xs) {
       ForEach(navItems) { item in
         if item.index == SidebarNavItem.conversations.rawValue {
-          Button {
-            memoryMenuHoverTask?.cancel()
-            memoryMenuHoverIntent.openImmediately()
-          } label: {
-            navLabel(for: item, showsDisclosure: true)
-          }
-          .buttonStyle(.plain)
-          .fixedSize()
-          .background {
-            NativeMemoryNavigationMenuPresenter(
-              presentationRequest: memoryMenuHoverIntent.presentationRequest,
-              selectedDestination: memoryDestination,
-              onSelect: selectMemoryDestination
-            )
-            .allowsHitTesting(false)
-          }
-          .onHover(perform: memoryMenuHoverChanged)
-          .help("Choose a Memory view — opens on hover")
+          memoryNavigationItem(item)
         } else {
           Button {
+            dismissMemoryDropdown()
             OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = item.index }
           } label: {
-            navLabel(for: item)
+            TopNavigationPill(
+              icon: item.icon,
+              title: item.title,
+              badgeCount: newCount(for: item),
+              isSelected: selectedIndex == item.index
+            )
           }
           .buttonStyle(.plain)
           .help(item.title)
@@ -120,56 +112,111 @@ struct DesktopTopBar: View {
   }
 
   private func selectMemoryDestination(_ destination: MemoryHubDestination) {
+    dismissMemoryDropdown()
     memoryDestinationRawValue = destination.rawValue
     OmiMotion.withGated(.easeOut(duration: 0.08)) {
       selectedIndex = SidebarNavItem.conversations.rawValue
     }
   }
 
-  private func memoryMenuHoverChanged(_ isHovering: Bool) {
-    memoryMenuHoverTask?.cancel()
-    guard let generation = memoryMenuHoverIntent.hoverChanged(isHovering) else {
-      memoryMenuHoverTask = nil
-      return
+  private func memoryNavigationItem(_ item: NavItem) -> some View {
+    let isSelected =
+      selectedIndex == item.index && memoryDestination == .memories
+    return Button {
+      selectMemoryDestination(.memories)
+    } label: {
+      HStack(spacing: 6) {
+        Image(systemName: item.icon)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .frame(width: TopNavigationPillMetrics.iconWidth)
+        Text(item.title)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+        memoryBadge(for: item)
+      }
+      .foregroundStyle(
+        isSelected || isMemoryButtonHovered
+          ? OmiColors.textPrimary : OmiColors.textSecondary
+      )
+      .padding(.horizontal, OmiSpacing.md)
+      .frame(width: TopNavigationPillMetrics.width, height: TopNavigationPillMetrics.height)
+      .background(
+        Capsule(style: .continuous)
+          .fill(
+            isSelected
+              ? OmiColors.textPrimary.opacity(0.10)
+              : isMemoryButtonHovered ? OmiColors.textPrimary.opacity(0.06) : Color.clear
+          )
+      )
+      .contentShape(Capsule())
     }
+    .buttonStyle(.plain)
+    .help("Open Memories — hover for more Memory views")
+    .accessibilityIdentifier("memory-navigation-button")
+    .onHover { isMemoryButtonHovered = $0 }
+    .fixedSize()
+    .onHover { isHovering in
+      memoryDropdownHoverChanged(isHovering, in: .anchor)
+    }
+    .overlay(alignment: .topLeading) {
+      if memoryDropdownState.isPresented {
+        memoryDropdown
+          .offset(y: TopNavigationPillMetrics.height + 5)
+          .transition(.opacity.combined(with: .move(edge: .top)))
+          .zIndex(20)
+      }
+    }
+    .zIndex(memoryDropdownState.isPresented ? 20 : 0)
+  }
 
-    memoryMenuHoverTask = Task { @MainActor in
-      try? await Task.sleep(for: .milliseconds(140))
-      guard !Task.isCancelled else { return }
-      memoryMenuHoverIntent.openAfterHoverDelay(generation: generation)
+  private var memoryDropdown: some View {
+    VStack(alignment: .leading, spacing: 5) {
+      ForEach(MemoryHubDestination.dropdownDestinations) { destination in
+        MemoryDropdownRow(
+          destination: destination,
+          isSelected: memoryDestination == destination,
+          onSelect: { selectMemoryDestination(destination) }
+        )
+      }
+    }
+    .frame(width: TopNavigationPillMetrics.width)
+    .onHover { isHovering in
+      memoryDropdownHoverChanged(isHovering, in: .dropdown)
     }
   }
 
-  private func navLabel(for item: NavItem, showsDisclosure: Bool = false) -> some View {
-    HStack(spacing: 6) {
-      Image(systemName: item.icon)
-        .scaledFont(size: OmiType.caption, weight: .semibold)
-      Text(item.title)
-        .scaledFont(size: OmiType.caption, weight: .semibold)
-      if showsDisclosure {
-        Image(systemName: "chevron.down")
-          .scaledFont(size: 8, weight: .bold)
-          .foregroundStyle(OmiColors.textQuaternary)
-      }
-      // New-item badge lives on the button it belongs to (Memory =
-      // memories + conversations, Tasks = tasks) since Omi was last front.
-      if newCount(for: item) > 0 {
-        Text("+\(newCount(for: item))")
-          .scaledFont(size: OmiType.micro, weight: .bold)
-          .foregroundColor(OmiColors.textPrimary)
-          .padding(.horizontal, 5)
-          .padding(.vertical, 1)
-          .background(Capsule(style: .continuous).fill(OmiColors.textPrimary.opacity(0.16)))
-      }
+  private func memoryDropdownHoverChanged(
+    _ isHovering: Bool,
+    in region: MemoryDropdownInteractionState.HoverRegion
+  ) {
+    memoryDropdownTask?.cancel()
+    guard let pendingPresentation = memoryDropdownState.hoverChanged(isHovering, in: region) else {
+      memoryDropdownTask = nil
+      return
     }
-    .foregroundColor(selectedIndex == item.index ? OmiColors.textPrimary : OmiColors.textTertiary)
-    .padding(.horizontal, OmiSpacing.md)
-    .padding(.vertical, 6)
-    .background(
-      Capsule(style: .continuous)
-        .fill(selectedIndex == item.index ? OmiColors.textPrimary.opacity(0.08) : Color.clear)
-    )
-    .contentShape(Capsule())
+
+    let delay: Duration = pendingPresentation.isPresented ? .milliseconds(140) : .milliseconds(180)
+    memoryDropdownTask = Task { @MainActor in
+      try? await Task.sleep(for: delay)
+      guard !Task.isCancelled else { return }
+      _ = memoryDropdownState.apply(pendingPresentation)
+    }
+  }
+
+  private func dismissMemoryDropdown() {
+    memoryDropdownTask?.cancel()
+    memoryDropdownState.dismiss()
+  }
+
+  @ViewBuilder
+  private func memoryBadge(for item: NavItem) -> some View {
+    if newCount(for: item) > 0 {
+      Text("+\(newCount(for: item))")
+        .scaledFont(size: OmiType.micro, weight: .bold)
+        .foregroundColor(OmiColors.textPrimary)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 1)
+        .background(Capsule(style: .continuous).fill(OmiColors.textPrimary.opacity(0.16)))
+    }
   }
 
   /// New-item count to badge on a nav button (since Omi was last in front).
@@ -184,76 +231,83 @@ struct DesktopTopBar: View {
   }
 }
 
-/// A deliberately tiny AppKit bridge: SwiftUI owns selection and hover intent;
-/// AppKit owns only native menu construction and tracking.
-private struct NativeMemoryNavigationMenuPresenter: NSViewRepresentable {
-  let presentationRequest: Int
-  let selectedDestination: MemoryHubDestination
-  let onSelect: @MainActor (MemoryHubDestination) -> Void
+private enum TopNavigationPillMetrics {
+  static let width: CGFloat = 136
+  static let height: CGFloat = 30
+  static let iconWidth: CGFloat = 18
+}
 
-  func makeCoordinator() -> Coordinator {
-    Coordinator(onSelect: onSelect)
-  }
+private struct TopNavigationPill: View {
+  let icon: String
+  let title: String
+  let badgeCount: Int
+  let isSelected: Bool
+  @State private var isHovering = false
 
-  func makeNSView(context: Context) -> NSView {
-    let view = NSView()
-    view.setAccessibilityElement(false)
-    return view
-  }
-
-  func updateNSView(_ nsView: NSView, context: Context) {
-    context.coordinator.onSelect = onSelect
-    guard presentationRequest != context.coordinator.lastPresentationRequest else { return }
-    context.coordinator.lastPresentationRequest = presentationRequest
-    context.coordinator.presentMenu(
-      selectedDestination: selectedDestination,
-      relativeTo: nsView
-    )
-  }
-
-  @MainActor
-  final class Coordinator: NSObject {
-    var onSelect: @MainActor (MemoryHubDestination) -> Void
-    var lastPresentationRequest = 0
-
-    init(onSelect: @escaping @MainActor (MemoryHubDestination) -> Void) {
-      self.onSelect = onSelect
-    }
-
-    func presentMenu(
-      selectedDestination: MemoryHubDestination,
-      relativeTo anchorView: NSView
-    ) {
-      let menu = NSMenu(title: "Memory")
-      menu.autoenablesItems = false
-      menu.minimumWidth = 190
-
-      for destination in MemoryHubDestination.allCases {
-        let item = NSMenuItem(
-          title: destination.title,
-          action: #selector(selectDestination(_:)),
-          keyEquivalent: ""
-        )
-        item.target = self
-        item.tag = destination.rawValue
-        item.state = destination == selectedDestination ? .on : .off
-        item.image = NSImage(
-          systemSymbolName: destination.icon,
-          accessibilityDescription: destination.title
-        )
-        menu.addItem(item)
+  var body: some View {
+    HStack(spacing: 6) {
+      Image(systemName: icon)
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .frame(width: TopNavigationPillMetrics.iconWidth)
+      Text(title)
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+      if badgeCount > 0 {
+        Text("+\(badgeCount)")
+          .scaledFont(size: OmiType.micro, weight: .bold)
+          .foregroundColor(OmiColors.textPrimary)
+          .padding(.horizontal, 5)
+          .padding(.vertical, 1)
+          .background(Capsule(style: .continuous).fill(OmiColors.textPrimary.opacity(0.16)))
       }
+    }
+    .foregroundStyle(isSelected || isHovering ? OmiColors.textPrimary : OmiColors.textTertiary)
+    .padding(.horizontal, OmiSpacing.md)
+    .frame(width: TopNavigationPillMetrics.width, height: TopNavigationPillMetrics.height)
+    .background(
+      Capsule(style: .continuous)
+        .fill(
+          isSelected
+            ? OmiColors.textPrimary.opacity(0.10)
+            : isHovering ? OmiColors.textPrimary.opacity(0.06) : Color.clear
+        )
+    )
+    .contentShape(Capsule())
+    .onHover { isHovering = $0 }
+  }
+}
 
-      menu.popUp(
-        positioning: menu.items.first(where: { $0.state == .on }),
-        at: NSPoint(x: 0, y: -4),
-        in: anchorView
+private struct MemoryDropdownRow: View {
+  let destination: MemoryHubDestination
+  let isSelected: Bool
+  let onSelect: () -> Void
+  @State private var isHovering = false
+
+  var body: some View {
+    Button(action: onSelect) {
+      HStack(spacing: 6) {
+        Image(systemName: destination.icon)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .frame(width: TopNavigationPillMetrics.iconWidth)
+        Text(destination.title)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+      }
+      .foregroundStyle(
+        isSelected || isHovering ? OmiColors.textPrimary : OmiColors.textSecondary
       )
+      .padding(.horizontal, OmiSpacing.md)
+      .frame(width: TopNavigationPillMetrics.width, height: TopNavigationPillMetrics.height)
+      .background(
+        Capsule(style: .continuous)
+          .fill(
+            isSelected
+              ? OmiColors.textPrimary.opacity(0.10)
+              : isHovering ? OmiColors.textPrimary.opacity(0.06) : Color.clear
+          )
+      )
+      .contentShape(Capsule())
     }
-
-    @objc private func selectDestination(_ sender: NSMenuItem) {
-      guard let destination = MemoryHubDestination(rawValue: sender.tag) else { return }
-      onSelect(destination)
-    }
+    .buttonStyle(.plain)
+    .onHover { isHovering = $0 }
+    .accessibilityIdentifier("memory-destination-\(destination.rawValue)")
   }
 }

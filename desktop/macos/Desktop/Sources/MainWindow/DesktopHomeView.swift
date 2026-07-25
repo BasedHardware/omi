@@ -1070,6 +1070,7 @@ struct DesktopHomeView: View {
           if showsTopBar {
             DesktopTopBar(
               selectedIndex: $selectedIndex,
+              memoryDestinationRawValue: $memoryDestinationRawValue,
               appState: appState,
               memoriesViewModel: viewModelContainer.memoriesViewModel,
               tasksStore: viewModelContainer.tasksStore,
@@ -1087,6 +1088,7 @@ struct DesktopHomeView: View {
             selectedIndex: selectedIndex,
             appState: appState,
             viewModelContainer: viewModelContainer,
+            memoryDestinationRawValue: $memoryDestinationRawValue,
             selectedSettingsSection: $selectedSettingsSection,
             highlightedSettingId: $highlightedSettingId,
             selectedTabIndex: $selectedIndex
@@ -1262,8 +1264,7 @@ private struct MemoryHubPage: View {
   let appState: AppState
   let viewModelContainer: ViewModelContainer
   @ObservedObject private var conversationDetailState = ConversationDetailAutomationState.shared
-  @AppStorage(MemoryHubDestination.storageKey) private var destinationRawValue =
-    MemoryHubDestination.memories.rawValue
+  @Binding var destinationRawValue: Int
 
   private var destination: MemoryHubDestination {
     MemoryHubDestination(rawValue: destinationRawValue) ?? .memories
@@ -1333,6 +1334,7 @@ private struct PageContentView: View {
   let selectedIndex: Int
   let appState: AppState
   let viewModelContainer: ViewModelContainer
+  @Binding var memoryDestinationRawValue: Int
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingId: String?
   @Binding var selectedTabIndex: Int
@@ -1370,7 +1372,8 @@ private struct PageContentView: View {
       case 1:
         MemoryHubPage(
           appState: appState,
-          viewModelContainer: viewModelContainer
+          viewModelContainer: viewModelContainer,
+          destinationRawValue: $memoryDestinationRawValue
         )
       case 2:
         ChatPage(

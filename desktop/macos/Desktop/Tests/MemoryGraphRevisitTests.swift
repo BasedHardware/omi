@@ -29,6 +29,10 @@ final class MemoryGraphRevisitTests: XCTestCase {
       MemoryHubDestination.allCases,
       [.memories, .conversations, .brainMap]
     )
+    XCTAssertEqual(
+      MemoryHubDestination.dropdownDestinations,
+      [.conversations, .brainMap]
+    )
     XCTAssertEqual(MemoryHubDestination.memories.title, "Memories")
     XCTAssertEqual(MemoryHubDestination.conversations.title, "Conversations")
     XCTAssertEqual(MemoryHubDestination.brainMap.title, "Brain Map")
@@ -47,20 +51,33 @@ final class MemoryGraphRevisitTests: XCTestCase {
     XCTAssertNil(MemoryHubDestination.destination(for: .tasks))
   }
 
-  func testMemoryMenuHoverIntentRejectsStaleHoverAndSupportsImmediateOpen() throws {
-    var intent = MemoryMenuHoverIntent()
+  func testMemoryDropdownRejectsStaleHoverAndKeepsPointerTransitOpen() throws {
+    var state = MemoryDropdownInteractionState()
 
-    let staleGeneration = try XCTUnwrap(intent.hoverChanged(true))
-    XCTAssertNil(intent.hoverChanged(false))
-    XCTAssertFalse(intent.openAfterHoverDelay(generation: staleGeneration))
-    XCTAssertEqual(intent.presentationRequest, 0)
+    let staleOpen = try XCTUnwrap(state.hoverChanged(true, in: .anchor))
+    XCTAssertNil(state.hoverChanged(false, in: .anchor))
+    XCTAssertFalse(state.apply(staleOpen))
+    XCTAssertFalse(state.isPresented)
 
-    let activeGeneration = try XCTUnwrap(intent.hoverChanged(true))
-    XCTAssertTrue(intent.openAfterHoverDelay(generation: activeGeneration))
-    XCTAssertEqual(intent.presentationRequest, 1)
+    let activeOpen = try XCTUnwrap(state.hoverChanged(true, in: .anchor))
+    XCTAssertTrue(state.apply(activeOpen))
+    XCTAssertTrue(state.isPresented)
 
-    intent.openImmediately()
-    XCTAssertEqual(intent.presentationRequest, 2)
+    let pendingClose = try XCTUnwrap(state.hoverChanged(false, in: .anchor))
+    XCTAssertNil(state.hoverChanged(true, in: .dropdown))
+    XCTAssertFalse(state.apply(pendingClose))
+    XCTAssertTrue(state.isPresented)
+  }
+
+  func testMemoryDropdownDismissesAfterNavigation() throws {
+    var state = MemoryDropdownInteractionState()
+
+    let pendingOpen = try XCTUnwrap(state.hoverChanged(true, in: .anchor))
+    XCTAssertTrue(state.apply(pendingOpen))
+    XCTAssertTrue(state.isPresented)
+
+    state.dismiss()
+    XCTAssertFalse(state.isPresented)
   }
 
   func testMemoryHubUsesReadableWidthUntilTheActiveTranscriptOpens() {

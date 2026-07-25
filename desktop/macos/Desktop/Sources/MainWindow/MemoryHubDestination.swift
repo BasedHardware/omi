@@ -3,6 +3,7 @@ import CoreGraphics
 /// Destinations available from the Memory navigation menu.
 enum MemoryHubDestination: Int, CaseIterable, Identifiable {
   static let storageKey = "memoryHubDestination"
+  static let dropdownDestinations: [MemoryHubDestination] = [.conversations, .brainMap]
 
   case memories
   case conversations
@@ -40,30 +41,54 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
   }
 }
 
-/// Deterministic hover intent for the native Memory menu.
+/// Deterministic interaction state for the Memory dropdown.
 ///
-/// SwiftUI owns this value. AppKit only presents the menu when
-/// `presentationRequest` advances, so crossing the navigation bar cannot open a
-/// stale menu after the pointer has already left.
-struct MemoryMenuHoverIntent: Equatable {
-  private(set) var generation = 0
-  private(set) var presentationRequest = 0
+/// The anchor and menu report hover independently so the pointer can cross the
+/// small visual gap without dismissing the menu. Delayed transitions carry a
+/// generation token so stale hover work cannot reopen or close the dropdown.
+struct MemoryDropdownInteractionState: Equatable {
+  enum HoverRegion {
+    case anchor
+    case dropdown
+  }
 
-  mutating func hoverChanged(_ isHovering: Bool) -> Int? {
+  struct PendingPresentation: Equatable {
+    let generation: Int
+    let isPresented: Bool
+  }
+
+  private(set) var generation = 0
+  private(set) var isPresented = false
+  private var isAnchorHovered = false
+  private var isDropdownHovered = false
+
+  mutating func hoverChanged(
+    _ isHovering: Bool,
+    in region: HoverRegion
+  ) -> PendingPresentation? {
     generation += 1
-    return isHovering ? generation : nil
+    switch region {
+    case .anchor: isAnchorHovered = isHovering
+    case .dropdown: isDropdownHovered = isHovering
+    }
+
+    let shouldPresent = isAnchorHovered || isDropdownHovered
+    guard shouldPresent != isPresented else { return nil }
+    return PendingPresentation(generation: generation, isPresented: shouldPresent)
   }
 
   @discardableResult
-  mutating func openAfterHoverDelay(generation expectedGeneration: Int) -> Bool {
-    guard generation == expectedGeneration else { return false }
-    presentationRequest += 1
+  mutating func apply(_ pendingPresentation: PendingPresentation) -> Bool {
+    guard generation == pendingPresentation.generation else { return false }
+    isPresented = pendingPresentation.isPresented
     return true
   }
 
-  mutating func openImmediately() {
+  mutating func dismiss() {
     generation += 1
-    presentationRequest += 1
+    isPresented = false
+    isAnchorHovered = false
+    isDropdownHovered = false
   }
 }
 
