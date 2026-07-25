@@ -28,6 +28,7 @@ actor MemoryAssistant: ProactiveAssistant {
   // MARK: - Properties
 
   private let geminiClient: GeminiClient
+  private let durabilityPipeline: MemoryAssistantDurabilityPipeline
   private var isRunning = false
   private var lastAnalysisTime: Date = .distantPast
   private var previousMemories: [ExtractedMemory] = []  // Last 20 extracted memories for deduplication
@@ -70,6 +71,7 @@ actor MemoryAssistant: ProactiveAssistant {
   init(apiKey: String? = nil) throws {
     // Use Gemini Flash for memory extraction (text+vision, no tool loop — Flash-safe)
     self.geminiClient = try GeminiClient(apiKey: apiKey)
+    self.durabilityPipeline = MemoryAssistantDurabilityPipeline(runner: MemoryAssistantProductionDurability())
 
     let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
     self.frameSignal = stream
@@ -196,34 +198,21 @@ actor MemoryAssistant: ProactiveAssistant {
       previousMemories.removeLast()
     }
 
-    let durability = await persistAndSyncMemory(
-      memory: memory,
-      screenshotId: screenshotId,
-      contextSummary: memoryResult.contextSummary,
-      windowTitle: windowTitle,
-      ownerID: ownerID
+    let durability = await durabilityPipeline.persistSyncAndEmit(
+      MemoryAssistantDurabilityRequest(
+        memory: memory,
+        screenshotId: screenshotId,
+        contextSummary: memoryResult.contextSummary,
+        windowTitle: windowTitle,
+        ownerID: ownerID
+      ),
+      confidence: memory.confidence
     )
     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
-
-    switch durability {
-    case .localPersistenceFailed:
-      // A failed insert never reaches backend sync and must never be reported as
-      // either the new synced terminal or the historical extraction success.
-      await recordAnalysisOutcome(.localPersistenceFailed, confidence: memory.confidence, ownerID: ownerID)
-      return
-    case .syncFailed:
-      await recordAnalysisOutcome(.syncFailed, confidence: memory.confidence, ownerID: ownerID)
-    case .syncStatePersistenceFailed:
-      await recordAnalysisOutcome(.syncStatePersistenceFailed, confidence: memory.confidence, ownerID: ownerID)
-    case .synced:
-      await recordAnalysisOutcome(.synced, confidence: memory.confidence, ownerID: ownerID)
-    }
-
-    // Track memory extracted
-    await MainActor.run {
-      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
-      AnalyticsManager.shared.memoryExtracted(memoryCount: 1)
-    }
+    // A failed insert never reaches backend sync and must never be reported as
+    // the historical extraction success. The pipeline already recorded exactly
+    // one closed analysis terminal (and historical success where appropriate).
+    guard durability.shouldEmitMemoryExtracted else { return }
     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
     // Send notification if enabled
@@ -263,116 +252,6 @@ actor MemoryAssistant: ProactiveAssistant {
     await MainActor.run {
       guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
       AnalyticsManager.shared.memoryAssistantAnalysisRun(outcome: outcome, confidence: confidence)
-    }
-  }
-
-  /// Executes the production SQLite insert → backend create → SQLite synced-state
-  /// update on this assistant actor. Each durability boundary maps to one closed
-  /// terminal; a failed insert returns before the backend call and therefore
-  /// cannot produce the historical extraction success event.
-  private func persistAndSyncMemory(
-    memory: ExtractedMemory,
-    screenshotId: Int64?,
-    contextSummary: String,
-    windowTitle: String?,
-    ownerID: String
-  ) async -> MemoryAssistantDurability.Outcome {
-    guard
-      let extractionRecord = await saveMemoryToSQLite(
-        memory: memory,
-        screenshotId: screenshotId,
-        contextSummary: contextSummary,
-        windowTitle: windowTitle,
-        ownerID: ownerID
-      ), let recordId = extractionRecord.id
-    else {
-      return .localPersistenceFailed
-    }
-
-    guard
-      let backendMemory = await syncMemoryToBackend(
-        memory: memory,
-        contextSummary: contextSummary,
-        windowTitle: windowTitle,
-        ownerID: ownerID
-      )
-    else {
-      return .syncFailed
-    }
-
-    do {
-      try await MemoryStorage.shared.markSynced(id: recordId, serverMemory: backendMemory)
-      return .synced
-    } catch {
-      logError("Memory: Failed to update sync status", error: error)
-      return .syncStatePersistenceFailed
-    }
-  }
-
-  /// Save extracted memory to SQLite using MemoryStorage
-  private func saveMemoryToSQLite(
-    memory: ExtractedMemory,
-    screenshotId: Int64?,
-    contextSummary: String,
-    windowTitle: String? = nil,
-    ownerID: String
-  ) async -> MemoryRecord? {
-    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
-    // Convert ExtractedMemory category to MemoryCategory string
-    let category = memory.category == .interesting ? "interesting" : "system"
-
-    let record = MemoryRecord(
-      backendSynced: false,
-      content: memory.content,
-      category: category,
-      source: "desktop",
-      screenshotId: screenshotId,
-      confidence: memory.confidence,
-      sourceApp: memory.sourceApp,
-      windowTitle: windowTitle,
-      contextSummary: contextSummary
-    )
-
-    do {
-      let inserted = try await MemoryStorage.shared.insertLocalMemory(record)
-      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
-      log("Memory: Saved to SQLite (id: \(inserted.id ?? -1))")
-      return inserted
-    } catch {
-      logError("Memory: Failed to save to SQLite", error: error)
-      return nil
-    }
-  }
-
-  /// Sync memory to backend API, returns backend ID if successful
-  private func syncMemoryToBackend(
-    memory: ExtractedMemory,
-    contextSummary: String? = nil,
-    windowTitle: String? = nil,
-    ownerID: String
-  ) async -> ServerMemory? {
-    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
-    do {
-      // Convert ExtractedMemory category to MemoryCategory
-      let category: MemoryCategory = memory.category == .interesting ? .interesting : .system
-
-      let response = try await APIClient.shared.createMemory(
-        content: memory.content,
-        visibility: "private",
-        category: category,
-        confidence: memory.confidence,
-        sourceApp: memory.sourceApp,
-        contextSummary: contextSummary,
-        windowTitle: windowTitle,
-        expectedOwnerId: ownerID
-      )
-      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
-
-      log("Memory: Synced to backend (id: \(response.id))")
-      return response
-    } catch {
-      logError("Memory: Failed to sync to backend", error: error)
-      return nil
     }
   }
 

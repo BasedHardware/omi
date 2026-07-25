@@ -219,12 +219,14 @@ emitted (enforced by `MemoryAssistantTelemetryTests` and
   the root cause of the recording→memory observability gap.
 - **Emission rule:** exactly one event **after a durable successful persistence
   result**, at the `extract_memories` public boundary. Zero extraction → no event
-  (no false success). Persistence exception → propagates, no event. A durable,
-  per-`(uid, conversation)` Redis `SET NX EX` claim emits at most once across
-  re-finalization/retries; a Redis outage is fail-open (a rare duplicate is
-  preferred to breaking finalization). Conversation ids are lock keys only and
-  never PostHog properties. PostHog import, client construction, and capture are
-  all fail-open, so telemetry can never undo a durable extraction.
+  (no false success). Persistence exception → propagates, no event. A permanent,
+  atomic Firestore marker under the authoritative per-`(uid, conversation)`
+  document emits at most once across re-finalization/retries, with no cache TTL
+  or eviction window. If that marker cannot be consulted, this optional metric
+  fails closed (no capture) while finalization continues. Conversation ids are
+  marker-path components only and never PostHog properties. PostHog import,
+  client construction, and capture are all fail-open, so telemetry can never undo
+  a durable extraction.
 - **Metric:** transcript memory-extraction success = users emitting
   `Conversation Memories Extracted` ÷ finalized conversations (denominator:
   `Memory Created`, the recording-reconciliation proxy). Join by uid + window.

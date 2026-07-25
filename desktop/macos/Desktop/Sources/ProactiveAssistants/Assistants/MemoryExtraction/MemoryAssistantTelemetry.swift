@@ -113,10 +113,25 @@ enum MemoryAssistantTelemetry {
   }
 }
 
-/// The durability boundary for a proactive memory extraction after the model has
-/// produced a candidate. Keeping the three real persistence operations in this
-/// injectable helper lets tests exercise SQLite-insert and sync-state failures
-/// without constructing the Gemini-backed assistant actor.
+/// Data needed by the real local-insert → backend-create → synced-receipt path.
+/// It contains product data only while in-process; the telemetry emitted by the
+/// pipeline below remains the closed, bounded schema in ``MemoryAssistantTelemetry``.
+struct MemoryAssistantDurabilityRequest: Sendable {
+  let memory: ExtractedMemory
+  let screenshotId: Int64?
+  let contextSummary: String
+  let windowTitle: String?
+  let ownerID: String
+}
+
+/// Injectable production boundary for a proactive memory extraction after the
+/// model has produced a candidate. The actor owns the real SQLite/API operations;
+/// tests inject a deterministic runner into the same pipeline used by
+/// ``MemoryAssistant`` rather than exercising a parallel helper.
+protocol MemoryAssistantDurabilityRunning: Sendable {
+  func persistAndSync(_ request: MemoryAssistantDurabilityRequest) async -> MemoryAssistantDurability.Outcome
+}
+
 enum MemoryAssistantDurability {
   enum Outcome: String, Equatable {
     /// Local SQLite insert, backend create, and local synced-state update all
@@ -135,27 +150,116 @@ enum MemoryAssistantDurability {
     var shouldEmitMemoryExtracted: Bool {
       self != .localPersistenceFailed
     }
+
+    var analysisOutcome: MemoryAssistantTelemetry.AnalysisOutcome {
+      switch self {
+      case .synced: .synced
+      case .localPersistenceFailed: .localPersistenceFailed
+      case .syncFailed: .syncFailed
+      case .syncStatePersistenceFailed: .syncStatePersistenceFailed
+      }
+    }
   }
 
-  /// Runs the real local-insert → backend-create → local-sync-state sequence.
-  /// The closures are deliberately injectable so error boundaries are covered
-  /// behaviorally with deterministic SQLite/API stand-ins.
-  static func persistAndSync<LocalRecord, BackendMemory>(
-    persist: () async -> LocalRecord?,
-    sync: (LocalRecord) async -> BackendMemory?,
-    markSynced: (LocalRecord, BackendMemory) async throws -> Void
-  ) async -> Outcome {
-    guard let localRecord = await persist() else {
+  /// The single production terminal mapping. This is deliberately at the real
+  /// analytics boundary so tests observe the same `AnalyticsManager` calls that
+  /// ship, including preservation of the historical success event.
+  @MainActor
+  static func emitPersistenceTerminal(_ outcome: Outcome, confidence: Double) {
+    AnalyticsManager.shared.memoryAssistantAnalysisRun(
+      outcome: outcome.analysisOutcome,
+      confidence: confidence
+    )
+    if outcome.shouldEmitMemoryExtracted {
+      AnalyticsManager.shared.memoryExtracted(memoryCount: 1)
+    }
+  }
+}
+
+/// Production implementation of the durable memory write sequence. It is an
+/// actor so the injectable protocol remains concurrency-safe without mutable
+/// global test hooks.
+actor MemoryAssistantProductionDurability: MemoryAssistantDurabilityRunning {
+  func persistAndSync(_ request: MemoryAssistantDurabilityRequest) async -> MemoryAssistantDurability.Outcome {
+    guard RuntimeOwnerIdentity.currentOwnerId() == request.ownerID else {
       return .localPersistenceFailed
     }
-    guard let backendMemory = await sync(localRecord) else {
+
+    let category = request.memory.category == .interesting ? "interesting" : "system"
+    let record = MemoryRecord(
+      backendSynced: false,
+      content: request.memory.content,
+      category: category,
+      source: "desktop",
+      screenshotId: request.screenshotId,
+      confidence: request.memory.confidence,
+      sourceApp: request.memory.sourceApp,
+      windowTitle: request.windowTitle,
+      contextSummary: request.contextSummary
+    )
+
+    let localRecord: MemoryRecord
+    do {
+      localRecord = try await MemoryStorage.shared.insertLocalMemory(record)
+      guard RuntimeOwnerIdentity.currentOwnerId() == request.ownerID, localRecord.id != nil else {
+        return .localPersistenceFailed
+      }
+      log("Memory: Saved to SQLite (id: \(localRecord.id ?? -1))")
+    } catch {
+      logError("Memory: Failed to save to SQLite", error: error)
+      return .localPersistenceFailed
+    }
+
+    let backendMemory: ServerMemory
+    do {
+      let category: MemoryCategory = request.memory.category == .interesting ? .interesting : .system
+      backendMemory = try await APIClient.shared.createMemory(
+        content: request.memory.content,
+        visibility: "private",
+        category: category,
+        confidence: request.memory.confidence,
+        sourceApp: request.memory.sourceApp,
+        contextSummary: request.contextSummary,
+        windowTitle: request.windowTitle,
+        expectedOwnerId: request.ownerID
+      )
+      guard RuntimeOwnerIdentity.currentOwnerId() == request.ownerID else {
+        return .syncFailed
+      }
+      log("Memory: Synced to backend (id: \(backendMemory.id))")
+    } catch {
+      logError("Memory: Failed to sync to backend", error: error)
       return .syncFailed
     }
+
     do {
-      try await markSynced(localRecord, backendMemory)
+      try await MemoryStorage.shared.markSynced(id: localRecord.id!, serverMemory: backendMemory)
       return .synced
     } catch {
+      logError("Memory: Failed to update sync status", error: error)
       return .syncStatePersistenceFailed
     }
+  }
+}
+
+/// The one path used by `MemoryAssistant` after a candidate passes confidence
+/// filtering. Keeping the runner injectable makes all four durability terminals
+/// behaviorally testable while preserving the real production wiring.
+actor MemoryAssistantDurabilityPipeline {
+  private let runner: any MemoryAssistantDurabilityRunning
+
+  init(runner: any MemoryAssistantDurabilityRunning) {
+    self.runner = runner
+  }
+
+  func persistSyncAndEmit(
+    _ request: MemoryAssistantDurabilityRequest,
+    confidence: Double
+  ) async -> MemoryAssistantDurability.Outcome {
+    let outcome = await runner.persistAndSync(request)
+    await MainActor.run {
+      MemoryAssistantDurability.emitPersistenceTerminal(outcome, confidence: confidence)
+    }
+    return outcome
   }
 }

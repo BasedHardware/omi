@@ -2,14 +2,14 @@ import Foundation
 
 // MARK: - Memory Category
 
-enum ExtractedMemoryCategory: String, Codable {
+enum ExtractedMemoryCategory: String, Codable, Sendable {
   case system
   case interesting
 }
 
 // MARK: - Extracted Memory
 
-struct ExtractedMemory: Codable {
+struct ExtractedMemory: Codable, Sendable {
   let content: String
   let category: ExtractedMemoryCategory
   let sourceApp: String

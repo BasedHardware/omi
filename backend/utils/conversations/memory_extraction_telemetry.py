@@ -16,12 +16,11 @@ Emission contract (see ``process_conversation.extract_memories``):
 * **Persistence failure** — emission runs only after the durable write returned
   successfully; a raised exception propagates and the event is skipped.
 * **Retry / idempotency** — at most one analytics success per
-  ``(uid, conversation_id)`` across retries/re-finalization. The emit claims a
-  durable, atomic per-conversation lock (``try_acquire_conversation_memory_analytics_lock``,
-  Redis ``SET NX EX``, mirroring ``try_acquire_conversation_goal_lock``); a retry
-  that re-persists the same conversation finds the lock held and emits nothing, so
-  it cannot inflate the metric. Fail-open on Redis error (rare duplicate preferred
-  over a lost extraction signal). ``conversation_id`` is the lock key only — it
+  ``(uid, conversation_id)`` across retries/re-finalization. The emit atomically
+  creates a permanent Firestore marker under the authoritative conversation
+  document; there is no cache TTL or eviction window. If that durable claim
+  cannot be consulted, telemetry is skipped (fail closed) while extraction keeps
+  running. ``conversation_id`` is used only for the internal marker path — it
   never appears in PostHog properties.
 
 The event is intentionally distinct from the desktop ``Memory Extracted``
@@ -37,7 +36,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-from database.redis_db import try_acquire_conversation_memory_analytics_lock
+from database.conversations import try_claim_conversation_memory_analytics
 from models.conversation import ConversationSource
 
 logger = logging.getLogger(__name__)
@@ -90,15 +89,17 @@ def emit_conversation_memories_extracted(
     captured the success for this conversation (retry/re-finalization)."""
     if not uid or not conversation_id or result.count <= 0:
         return
-    # Durable idempotency: claim the per-conversation analytics slot before
-    # capture. Atomic SET NX EX (see try_acquire_conversation_memory_analytics_lock);
-    # a retry that re-persists the same conversation finds the slot held and emits
-    # nothing, so re-finalization cannot inflate the metric. conversation_id is the
-    # lock key only — it never appears in the PostHog properties below.
+    # Durable idempotency: atomically claim a permanent Firestore marker under
+    # the conversation before capture. A retry/re-finalization finds that marker
+    # and emits nothing, so it cannot inflate the metric. If the authoritative
+    # store is unavailable, fail closed for this optional event: never capture a
+    # success whose duplicate-safety cannot be verified. conversation_id remains
+    # an internal marker path component and never reaches PostHog properties.
     try:
-        acquired = try_acquire_conversation_memory_analytics_lock(uid, conversation_id)
-    except Exception:  # noqa: BLE001 - telemetry must never break extraction
-        acquired = True  # fail-open: a rare duplicate is preferred over a lost signal
+        acquired = try_claim_conversation_memory_analytics(uid, conversation_id)
+    except Exception as exc:  # noqa: BLE001 - telemetry must never break extraction
+        logger.warning("conversation memory telemetry claim_unavailable error=%s", type(exc).__name__)
+        return
     if not acquired:
         return
     source = result.source if result.source in _VALID_SOURCES else SOURCE_TRANSCRIPTION
