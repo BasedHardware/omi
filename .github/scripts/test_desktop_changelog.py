@@ -81,11 +81,15 @@ class ChangelogRequirementTests(unittest.TestCase):
             "desktop/macos/tests/some-other-desktop-test.sh",
             # Rust backend prefix.
             "desktop/macos/Backend-Rust/src/main.rs",
+            # Generated Swift is derived from the OpenAPI contract, never a
+            # user-facing app note (EXEMPT_DESKTOP_PATH_PREFIXES).
+            "desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift",
         ):
             with self.subTest(path=path):
                 self.assertFalse(checker.is_desktop_change_requiring_changelog(path))
 
         # Product source still requires a changelog — the exemptions must not leak.
+        # Note the hand-written Sources file is NOT under Sources/Generated/.
         for path in (
             "desktop/macos/Desktop/Sources/AppDelegate.swift",
             "desktop/macos/scripts/some-user-facing-script.sh",
