@@ -691,9 +691,13 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
 
       // Enable default plugins in Redis
       try {
+        const enablePluginsIdToken = await auth.currentUser?.getIdToken();
         const enableRes = await fetch('/api/enable-plugins', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(enablePluginsIdToken ? { Authorization: `Bearer ${enablePluginsIdToken}` } : {}),
+          },
           body: JSON.stringify({ uid: uid }), // Use real UID
         });
         if (!enableRes.ok) {
@@ -837,9 +841,13 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
 
         // Enable default plugins in Redis
         try {
+          const enablePluginsIdToken = await auth.currentUser?.getIdToken();
           const enableRes = await fetch('/api/enable-plugins', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(enablePluginsIdToken ? { Authorization: `Bearer ${enablePluginsIdToken}` } : {}),
+            },
             body: JSON.stringify({ uid: uid }), // Use real UID
           });
           if (!enableRes.ok) {
@@ -882,14 +890,17 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
 
     // Initiate the background fact storage - DO NOT await this
     try {
-      fetch('/api/store-facts', {
-        // No await here!
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ uid, memories }),
-      })
+      (async () => {
+        const idToken = await auth.currentUser?.getIdToken().catch(() => undefined);
+        return fetch('/api/store-facts', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({ uid, memories }),
+        });
+      })()
         .then((response) => {
           if (!response.ok) {
             console.error(
@@ -996,11 +1007,17 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
       console.log(
         `[handleIntegrationClick] Triggering background /api/enable-plugins for UID: ${uid}`,
       );
-      fetch('/api/enable-plugins', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid: uid }),
-      })
+      (async () => {
+        const idToken = await auth.currentUser?.getIdToken().catch(() => undefined);
+        return fetch('/api/enable-plugins', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({ uid: uid }),
+        });
+      })()
         .then(async (response) => {
           if (!response.ok) {
             console.error(

@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import Redis from 'ioredis';
 
+import { authenticatedUid, isRateLimited } from '@/lib/server-auth';
+
+const ENABLE_PLUGINS_RATE_LIMIT_MAX_REQUESTS = 20;
+
 // Configure Redis client - credentials should be in environment variables
 console.log('Initializing Redis client configuration...');
 console.log(
@@ -49,6 +53,19 @@ export async function POST(req: Request) {
     if (!uid) {
       console.error('[API /api/enable-plugins] Error: Missing UID in request body');
       return NextResponse.json({ error: 'Missing uid' }, { status: 400 });
+    }
+
+    // Without this check, any anonymous caller could enable integrations on an
+    // arbitrary victim uid - verify the caller actually owns the uid they're targeting.
+    const callerUid = await authenticatedUid(req);
+    if (!callerUid) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (callerUid !== uid) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    if (isRateLimited(`enable-plugins:${callerUid}`, ENABLE_PLUGINS_RATE_LIMIT_MAX_REQUESTS)) {
+      return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
     }
 
     const key = `users:${uid}:enabled_plugins`;

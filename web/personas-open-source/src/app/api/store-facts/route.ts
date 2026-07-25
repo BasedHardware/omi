@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import Redis from 'ioredis';
 
+import { authenticatedUid, isRateLimited } from '@/lib/server-auth';
+
 // ... Redis client config ...
 
 interface PostBody {
   uid: string;
   memories: string[];
 }
+
+const STORE_FACTS_RATE_LIMIT_MAX_REQUESTS = 20;
 
 export async function POST(req: Request) {
   const connectedRedis = false;
@@ -20,6 +24,21 @@ export async function POST(req: Request) {
     if (!uid || !Array.isArray(memories) || memories.length === 0) {
       console.warn('[store-facts] Invalid request body:', { uid, memories });
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    }
+
+    // This route writes permanent memories/facts into a user's Omi account using the
+    // server's own API key, so it must confirm the caller actually is that uid -
+    // otherwise anyone who knows/guesses a victim's uid could plant fabricated
+    // memories in their account with no auth at all.
+    const callerUid = await authenticatedUid(req);
+    if (!callerUid) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (callerUid !== uid) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    if (isRateLimited(`store-facts:${callerUid}`, STORE_FACTS_RATE_LIMIT_MAX_REQUESTS)) {
+      return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
     }
 
     const appId = process.env.OMI_APP_ID || process.env.NEXT_PUBLIC_OMI_APP_ID;
