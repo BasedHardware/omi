@@ -118,7 +118,7 @@ struct DesktopHomeView: View {
           .onAppear {
             log("DesktopHomeView: Showing SignInView (not signed in)")
           }
-      } else if !appState.hasCompletedOnboarding {
+      } else if !hasCompletedOnboardingAtAuthorityRead {
         // State 2: Signed in but onboarding not complete
         if shouldSkipOnboarding() {
           Color.clear.onAppear {
@@ -633,6 +633,32 @@ struct DesktopHomeView: View {
     if !authState.isSignedIn { return "signed_out" }
     if !appState.hasCompletedOnboarding { return "onboarding" }
     return "main"
+  }
+
+  /// Preserve the existing AppStorage winner while observing disagreement at
+  /// the actual product/onboarding gate. This read still runs when the completed
+  /// flag prevents SBOnboardingModel from mounting.
+  private var hasCompletedOnboardingAtAuthorityRead: Bool {
+    let completed = appState.hasCompletedOnboarding
+    guard completed else { return false }
+    let savedRaw = UserDefaults.standard.integer(forKey: SBOnboardingModel.resumeStepKey)
+    if savedRaw > SBOnboardingModel.Step.promise.rawValue,
+      SBOnboardingModel.Step(rawValue: savedRaw) != nil
+    {
+      DesktopDiagnosticsManager.shared.recordStateAuthoritySignal(
+        seam: .onboardingSetupState,
+        from: "completed_flag",
+        to: "persisted_resume",
+        direction: "completed_flag_with_resume_state")
+    }
+    if viewModelContainer.chatProvider.isOnboarding {
+      DesktopDiagnosticsManager.shared.recordStateAuthoritySignal(
+        seam: .onboardingSetupState,
+        from: "completed_flag",
+        to: "setup_journal",
+        direction: "completed_flag_with_active_journal")
+    }
+    return true
   }
 
   private func reportAutomationState() {

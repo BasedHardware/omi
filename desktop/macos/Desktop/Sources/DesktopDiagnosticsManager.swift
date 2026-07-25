@@ -33,6 +33,12 @@ enum DesktopFallbackOutcome: String {
   case exhausted
 }
 
+enum DesktopStateAuthoritySeam: String {
+  case chatTranscriptProjection = "chat_transcript_projection"
+  case onboardingSetupState = "onboarding_setup_state"
+  case connectorStatus = "connector_status"
+}
+
 /// The immediate customer-turn/recovery decision made after a realtime transport
 /// closes. This is deliberately separate from the raw close event: the close is
 /// captured before the controller chooses a replacement, failover, or terminal
@@ -95,6 +101,10 @@ final class DesktopDiagnosticsManager {
   /// on turn reset so it can't grow unbounded.
   private var voiceToolStarts: [String: Date] = [:]
   private var realtimeProviderCloseAttemptID = 0
+  /// State-authority checks can sit on hot UI projection/read paths. Emit each
+  /// bounded seam/direction/subject at most once per process while still keeping
+  /// the check itself cheap enough to run at every authoritative read point.
+  private var reportedStateAuthoritySignals: Set<String> = []
   private let betaTrailSnapshotLimit = 50
   private var consecutiveNearZeroPTTTurns = 0
   private var lastPTTWatchdogIncidentAt: Date?
@@ -620,6 +630,45 @@ final class DesktopDiagnosticsManager {
     record(.fallbackTriggered, properties: properties, trackRemotely: true)
   }
 
+  /// Detects silent ownership disagreement without changing which state wins.
+  /// `subject` must be a closed product enum (for example a connector kind), not
+  /// a user, message, turn, file, or session identifier.
+  @discardableResult
+  func recordStateAuthoritySignal(
+    seam: DesktopStateAuthoritySeam,
+    from: String,
+    to: String,
+    direction: String,
+    subject: String? = nil
+  ) -> Bool {
+    let safeDirection = safeFallbackLabel(direction, default: "other")
+    let safeSubject = subject.map { safeFallbackLabel($0, default: "other") }
+    let dedupeKey = [seam.rawValue, safeDirection, safeSubject ?? "none"].joined(separator: "|")
+
+    lock.lock()
+    let inserted = reportedStateAuthoritySignals.insert(dedupeKey).inserted
+    lock.unlock()
+    guard inserted else { return false }
+
+    var extra: [String: Any] = [
+      "seam": seam.rawValue,
+      "direction": safeDirection,
+      "signal_scope": "process",
+      "failure_class": "FC-split-mutation-authority",
+    ]
+    if let safeSubject {
+      extra["subject"] = safeSubject
+    }
+    recordFallback(
+      area: "state_authority",
+      from: from,
+      to: to,
+      reason: seam == .connectorStatus ? "status_inferred" : "state_divergence",
+      outcome: .degraded,
+      extra: extra)
+    return true
+  }
+
   /// Realtime token-mint failure. `phase` is bucketed to a closed set (`warm` =
   /// background pre-warm vs `barge_in_replacement` = replacement during an active
   /// turn) so a release-health query has a bounded warm-vs-active dimension (#10425).
@@ -1039,6 +1088,7 @@ final class DesktopDiagnosticsManager {
       lock.lock()
       snapshots.removeAll()
       betaTrailSnapshots.removeAll()
+      reportedStateAuthoritySignals.removeAll()
       realtimeProviderCloseAttemptID = 0
       consecutiveNearZeroPTTTurns = 0
       lastPTTWatchdogIncidentAt = nil
@@ -1347,6 +1397,7 @@ final class DesktopDiagnosticsManager {
     "tts_fallback",
     "task_workflow",
     "auth_storage",
+    "state_authority",
     "other",
   ]
 
@@ -1378,6 +1429,8 @@ final class DesktopDiagnosticsManager {
     "ble_decode_failed",
     "bind_failed",
     "db_backoff",
+    "state_divergence",
+    "status_inferred",
   ]
 
   private func bucketFallbackArea(_ area: String) -> String {

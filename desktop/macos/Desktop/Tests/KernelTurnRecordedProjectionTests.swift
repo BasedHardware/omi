@@ -50,6 +50,55 @@ import XCTest
 
   @MainActor
   final class KernelTurnRecordedProjectionTests: XCTestCase {
+    override func setUp() {
+      super.setUp()
+      DesktopDiagnosticsManager.shared.resetForTests()
+    }
+
+    func testJournalProjectionSignalsValueOrderingAndDuplicateDivergenceWithoutChangingTheWinner() throws {
+      let provider = ChatProvider()
+      let surface = provider.mainChatSurfaceReference()
+      let timestamp = Date(timeIntervalSince1970: 1_700_000_000.001)
+      provider.messages = [
+        ChatMessage(
+          id: "assistant-newer",
+          clientTurnId: "turn-2",
+          text: "newer",
+          createdAt: timestamp.addingTimeInterval(1),
+          sender: .ai),
+        ChatMessage(
+          id: "assistant-canonical",
+          clientTurnId: "turn-1",
+          text: "stale projection",
+          createdAt: timestamp,
+          sender: .ai),
+        ChatMessage(
+          id: "assistant-duplicate",
+          clientTurnId: "turn-1",
+          text: "duplicate projection",
+          createdAt: timestamp,
+          sender: .ai),
+      ]
+
+      provider.projectJournalTurn(
+        try turn(
+          surface: surface,
+          turnId: "assistant-canonical",
+          turnSeq: 1,
+          content: "journal value",
+          status: .completed,
+          metadata: #"{"continuityKey":"turn-1"}"#))
+
+      XCTAssertEqual(provider.messages.first(where: { $0.id == "assistant-canonical" })?.text, "journal value")
+      let signals = DesktopDiagnosticsManager.shared.currentSnapshotsForSentry().filter {
+        $0["seam"] as? String == DesktopStateAuthoritySeam.chatTranscriptProjection.rawValue
+      }
+      XCTAssertEqual(
+        Set(signals.compactMap { $0["direction"] as? String }),
+        ["duplicate_turn", "projection_order_overridden", "projection_value_overridden"])
+      XCTAssertTrue(signals.allSatisfy { $0["failure_class"] as? String == "FC-split-mutation-authority" })
+    }
+
     func testRealtimeVoiceCompanionPreservesTheMainChatIdentity() {
       let main = AgentSurfaceReference.mainChat(chatId: "conversation-42")
       let surface = main.realtimeVoiceCompanion()
