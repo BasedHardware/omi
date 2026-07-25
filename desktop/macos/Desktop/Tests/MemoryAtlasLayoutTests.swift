@@ -449,9 +449,43 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     )
 
     XCTAssertEqual(plan.detailLevel, .overview)
-    // Collision admission still has the final say, so this asserts the budget
-    // is no longer the binding constraint rather than an exact count.
-    XCTAssertGreaterThan(plan.labelNodeIDs.count, 12)
+    // Raising the budget alone left collision admission as the new binding
+    // constraint: on the real 26-entity account 10 entities still rendered as
+    // anonymous dots. A name that collides below its mark now flips above
+    // instead of being dropped. Two near-coincident marks can still lose one
+    // name — with the dots overlapping, a second name there would be less
+    // readable than none — so this asserts the anonymous tail is gone, not
+    // that collision handling became perfect.
+    XCTAssertGreaterThanOrEqual(plan.labelNodeIDs.count, 24)
+    XCTAssertFalse(
+      plan.labelAboveNodeIDs.isEmpty,
+      "This layout collides below the mark, so the flip is what admits the last names")
+    XCTAssertTrue(plan.labelAboveNodeIDs.isSubset(of: plan.labelNodeIDs))
+  }
+
+  func testDenseAtlasStillDropsCollidingNamesInsteadOfFlippingThem() {
+    // The flip is a sparse-atlas affordance. Thousands of names never fit
+    // either way, so a dense atlas must keep dropping them — otherwise the
+    // label overlay grows unbounded at overview zoom.
+    let nodes = (0..<400).map {
+      KnowledgeGraphNode(id: "c\($0)", label: "Concept \($0)", nodeType: .concept)
+    }
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(
+      graph: KnowledgeGraphResponse(nodes: nodes, edges: []),
+      userName: "David"
+    )
+    let plan = MemoryAtlasRenderPlanner.makePlan(
+      snapshot: snapshot,
+      viewportSize: CGSize(width: 1_200, height: 800),
+      zoom: 1,
+      pan: .zero,
+      compact: false,
+      selectedNodeID: nil,
+      matchingNodeIDs: nil
+    )
+
+    XCTAssertTrue(plan.labelAboveNodeIDs.isEmpty)
+    XCTAssertLessThan(plan.labelNodeIDs.count, nodes.count)
   }
 
   func testSmallAtlasDrawsALargerMarkThanADenseOne() {

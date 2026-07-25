@@ -439,6 +439,10 @@ struct MemoryAtlasRenderPlan {
   let visibleEdges: [MemoryAtlasEdgePlacement]
   let interactiveNodes: [MemoryAtlasNodePlacement]
   let labelNodeIDs: Set<String>
+  /// Entities whose name is drawn above the mark instead of below it. Labels
+  /// default to hanging below; flipping is how a sparse atlas keeps a name that
+  /// would otherwise collide with an already-placed one and be dropped.
+  let labelAboveNodeIDs: Set<String>
   /// Canvas labels from the automatic inspection threshold onward. Keeping
   /// these outside the SwiftUI overlay means a large graph can label every
   /// on-screen dot without building thousands of view/hit-test nodes per
@@ -628,7 +632,8 @@ enum MemoryAtlasRenderPlanner {
       zoom: zoom,
       pan: pan,
       compact: compact,
-      forcedNodeIDs: Set([selectedNodeID, snapshot.anchorNodeID].compactMap { $0 })
+      forcedNodeIDs: Set([selectedNodeID, snapshot.anchorNodeID].compactMap { $0 }),
+      allowsFlipAbove: isSmallAtlas
     )
 
     return MemoryAtlasRenderPlan(
@@ -636,11 +641,12 @@ enum MemoryAtlasRenderPlanner {
       visibleEdges: visibleEdges,
       // Every entity remains on the Canvas at deep zoom, while the expensive
       // SwiftUI hit-target/label overlay stays bounded and grows gradually.
-      interactiveNodes: labels,
+      interactiveNodes: labels.placements,
       // Once inspection has enough density-aware space, labels move into
       // Canvas immediately. They therefore appear while panning/zooming and
       // are not gated by selection or by the bounded SwiftUI overlay.
-      labelNodeIDs: usesCanvasLabels ? [] : Set(labels.map(\.id)),
+      labelNodeIDs: usesCanvasLabels ? [] : Set(labels.placements.map(\.id)),
+      labelAboveNodeIDs: usesCanvasLabels ? [] : labels.aboveNodeIDs,
       canvasLabelNodes: usesCanvasLabels ? visibleNodes : [],
       usesCanvasLabels: usesCanvasLabels,
       isFullyLabelled: isFullyLabelled,
@@ -678,6 +684,7 @@ enum MemoryAtlasRenderPlanner {
       visibleEdges: visibleEdges,
       interactiveNodes: [],
       labelNodeIDs: [],
+      labelAboveNodeIDs: [],
       canvasLabelNodes: [],
       usesCanvasLabels: false,
       isFullyLabelled: false,
@@ -786,6 +793,12 @@ enum MemoryAtlasRenderPlanner {
     return result
   }
 
+  /// Labels admitted without collision, plus the subset drawn above their mark.
+  private struct AdmittedLabels {
+    var placements: [MemoryAtlasNodePlacement] = []
+    var aboveNodeIDs: Set<String> = []
+  }
+
   private static func admitLabels(
     _ candidates: [MemoryAtlasNodePlacement],
     limit: Int,
@@ -793,11 +806,12 @@ enum MemoryAtlasRenderPlanner {
     zoom: CGFloat,
     pan: CGSize,
     compact: Bool,
-    forcedNodeIDs: Set<String>
-  ) -> [MemoryAtlasNodePlacement] {
-    var admitted: [MemoryAtlasNodePlacement] = []
+    forcedNodeIDs: Set<String>,
+    allowsFlipAbove: Bool
+  ) -> AdmittedLabels {
+    var result = AdmittedLabels()
     var occupied: [CGRect] = []
-    admitted.reserveCapacity(limit)
+    result.placements.reserveCapacity(limit)
     occupied.reserveCapacity(limit)
 
     for placement in candidates {
@@ -811,20 +825,36 @@ enum MemoryAtlasRenderPlanner {
         compact ? 112.0 : 152.0,
         max(44.0, CGFloat(placement.node.label.count) * (compact ? 5.7 : 6.4) + 18)
       )
-      let rect = CGRect(
-        x: center.x - estimatedWidth / 2,
-        y: center.y + (compact ? 10 : 13),
-        width: estimatedWidth,
-        height: compact ? 22 : 26
-      )
-      let paddedRect = rect.insetBy(dx: -5, dy: -3)
+      let height: CGFloat = compact ? 22 : 26
+      let gap: CGFloat = compact ? 10 : 13
+      let x = center.x - estimatedWidth / 2
+      let below = CGRect(x: x, y: center.y + gap, width: estimatedWidth, height: height)
+        .insetBy(dx: -5, dy: -3)
+      // Flipping above is a second chance at the same name, not a second label.
+      // A dense atlas cannot afford one — there, a collision still means the
+      // name is dropped, because thousands of names never fit either way.
+      let above = CGRect(x: x, y: center.y - gap - height, width: estimatedWidth, height: height)
+        .insetBy(dx: -5, dy: -3)
+
       let forced = forcedNodeIDs.contains(placement.id)
-      guard forced || !occupied.contains(where: { $0.intersects(paddedRect) }) else { continue }
-      admitted.append(placement)
-      occupied.append(paddedRect)
-      if admitted.count == limit { break }
+      let fitsBelow = !occupied.contains { $0.intersects(below) }
+      let fitsAbove = allowsFlipAbove && !occupied.contains { $0.intersects(above) }
+
+      let chosen: CGRect
+      if fitsBelow || forced {
+        chosen = below
+      } else if fitsAbove {
+        chosen = above
+        result.aboveNodeIDs.insert(placement.id)
+      } else {
+        continue
+      }
+
+      result.placements.append(placement)
+      occupied.append(chosen)
+      if result.placements.count == limit { break }
     }
-    return admitted
+    return result
   }
 }
 
@@ -1557,7 +1587,8 @@ private struct CanonicalMemoryAtlasSurface: View {
                 placement,
                 size: proxy.size,
                 relatedNodeIDs: plan.relatedNodeIDs,
-                showLabel: plan.labelNodeIDs.contains(placement.id)
+                showLabel: plan.labelNodeIDs.contains(placement.id),
+                labelAbove: plan.labelAboveNodeIDs.contains(placement.id)
               )
             }
           }
@@ -2002,11 +2033,30 @@ private struct CanonicalMemoryAtlasSurface: View {
     )
   }
 
+  private func nodeLabel(
+    _ placement: MemoryAtlasNodePlacement,
+    selected: Bool
+  ) -> some View {
+    Text(placement.node.label)
+      .scaledFont(
+        size: compact ? 9.5 : (isInspectMode ? 14 : (isFocusMode ? 13 : 11)),
+        weight: selected ? .semibold : .medium
+      )
+      .foregroundColor(OmiColors.textPrimary)
+      .lineLimit(1)
+      .truncationMode(.tail)
+      .multilineTextAlignment(.center)
+      .fixedSize()
+      .frame(maxWidth: compact ? 110 : 150)
+      .allowsHitTesting(false)
+  }
+
   private func nodeButton(
     _ placement: MemoryAtlasNodePlacement,
     size: CGSize,
     relatedNodeIDs: Set<String>,
-    showLabel: Bool
+    showLabel: Bool,
+    labelAbove: Bool
   ) -> some View {
     let selected = selectedNodeID == placement.id
     let related = selectedNodeID == nil || relatedNodeIDs.contains(placement.id)
@@ -2040,23 +2090,20 @@ private struct CanonicalMemoryAtlasSurface: View {
         }
       }
       .frame(width: hitDiameter, height: hitDiameter)
+      // Both overlays hang the name outside the laid-out frame, so the frame
+      // stays centered on the entity's own position. `.top`/`.bottom` anchor
+      // the opposite edge of the text, which is what makes the same gap read
+      // identically whether the name sits under the mark or over it.
       .overlay(alignment: .top) {
-        if showLabel {
-          Text(placement.node.label)
-            .scaledFont(
-              size: compact ? 9.5 : (isInspectMode ? 14 : (isFocusMode ? 13 : 11)),
-              weight: selected ? .semibold : .medium
-            )
-            .foregroundColor(OmiColors.textPrimary)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .multilineTextAlignment(.center)
-            .fixedSize()
-            .frame(maxWidth: compact ? 110 : 150)
-            // Hangs below the ring without joining the layout, so the frame
-            // stays centered on the entity's own position.
+        if showLabel && !labelAbove {
+          nodeLabel(placement, selected: selected)
             .offset(y: hitDiameter / 2 + diameter / 2 + 5)
-            .allowsHitTesting(false)
+        }
+      }
+      .overlay(alignment: .bottom) {
+        if showLabel && labelAbove {
+          nodeLabel(placement, selected: selected)
+            .offset(y: -(hitDiameter / 2 + diameter / 2 + 5))
         }
       }
       .contentShape(Rectangle())
