@@ -374,6 +374,8 @@ class RingStorageSyncImpl implements RingStorageSync {
     final fps = wal.codec.getFramesPerSecond();
     final chunkFrames = sdcardChunkSizeSecs * fps;
     int? doneNextSeq;
+    int? transferStartSeq;
+    int? announcedPacketCount;
     bool doneOk = false;
     bool flushError = false;
     Future<void>? inFlightFlush;
@@ -425,6 +427,8 @@ class RingStorageSyncImpl implements RingStorageSync {
         if (opcode == RingProtocol.notifyReadBegin) {
           final begin = RingProtocol.parseReadBeginNotification(value);
           if (begin != null) {
+            transferStartSeq = begin.transferStartSeq;
+            announcedPacketCount = begin.packetCount;
             Logger.debug(
               'RingStorageSync: NOTIFY_READ_BEGIN start=${begin.transferStartSeq} count=${begin.packetCount}',
             );
@@ -591,7 +595,20 @@ class RingStorageSyncImpl implements RingStorageSync {
       Logger.debug('RingStorageSync: final flush error: $e');
     }
 
-    final advancedOk = reachedDone && doneOk && !flushError && !_isCancelled && doneNextSeq != null;
+    final receivedCompleteRange = RingProtocol.receivedCompleteRange(
+      transferStartSeq: transferStartSeq,
+      announcedPacketCount: announcedPacketCount,
+      doneNextSeq: doneNextSeq,
+      receivedPacketCount: recordsConsumed,
+      pendingBytes: reassembler.pendingBytes,
+    );
+    final advancedOk = RingProtocol.canAdvance(
+      reachedDone: reachedDone,
+      doneOk: doneOk,
+      flushError: flushError,
+      isCancelled: _isCancelled,
+      receivedCompleteRange: receivedCompleteRange,
+    );
     if (advancedOk) {
       final ok = await connection.advanceRing(doneNextSeq!);
       Logger.debug('RingStorageSync: advance(seq=$doneNextSeq) -> $ok (records=$recordsConsumed)');
@@ -603,7 +620,9 @@ class RingStorageSyncImpl implements RingStorageSync {
       return ok;
     } else {
       Logger.debug(
-        'RingStorageSync: skipping advance (reachedDone=$reachedDone doneOk=$doneOk flushError=$flushError cancelled=$_isCancelled records=$recordsConsumed)',
+        'RingStorageSync: skipping advance (reachedDone=$reachedDone doneOk=$doneOk flushError=$flushError '
+        'cancelled=$_isCancelled completeRange=$receivedCompleteRange records=$recordsConsumed '
+        'pendingBytes=${reassembler.pendingBytes})',
       );
       return false;
     }
@@ -626,15 +645,17 @@ class RingStorageSyncImpl implements RingStorageSync {
     }
 
     final file = File(filePath);
-    await file.writeAsBytes(data);
+    // The firmware advances its durable read watermark only after this transfer
+    // completes. Flush the file before registering it and sending that ACK so a
+    // process or OS crash cannot turn an acknowledged range into missing audio.
+    await file.writeAsBytes(data, flush: true);
     Logger.debug('RingStorageSync: wrote ${data.length}B (${frames.length} frames) to $filePath');
     return file;
   }
 
   Future<void> _registerWithLocalSync(Wal wal, File file, int timerStart, int frameCount) async {
     if (_localSync == null) {
-      Logger.debug('RingStorageSync: WARNING - LocalWalSync not available, chunk will not be uploaded');
-      return;
+      throw StateError('LocalWalSync is unavailable; refusing to acknowledge device records');
     }
     final fps = wal.codec.getFramesPerSecond();
     final seconds = fps > 0 ? frameCount ~/ fps : 0;
