@@ -7,8 +7,9 @@ publish = false
 
 [dependencies]
 btleplug = "0.11"
-crepuscularity-gpui = { path = "/Users/undivisible/projects/crepuscularity/crates/crepuscularity-gpui", features = ["macos"] }
+crepuscularity-gpui = { version = "0.5.8", features = ["macos"] }
 ctrlc = "3"
+futures = "0.3"
 gpui = { version = "=0.2.2", default-features = false, features = ["font-kit", "macos-blade"] }
 omi-firmware-core = { path = "firmware-core" }
 serde = { version = "1", features = ["derive"] }

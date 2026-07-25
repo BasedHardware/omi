@@ -4,12 +4,14 @@ use crepuscularity_gpui::{
 };
 use omi_product_emulator::core::{
     discover_bluetooth_targets, set_bluetooth_connection, BluetoothTarget, ButtonEvent,
-    FirmwareImage, FlashSession, Product,
+    FirmwareImage, FlashSession, PeripheralCatalog, Product,
 };
 use std::env;
 
 struct EmulatorView {
-    targets: Vec<BluetoothTarget>,
+    catalog: PeripheralCatalog,
+    scan_generation: u64,
+    scanning: bool,
     selected: Option<String>,
     dropdown_open: bool,
     status: String,
@@ -18,18 +20,21 @@ struct EmulatorView {
 }
 
 impl EmulatorView {
-    fn new(_cx: &mut Context<Self>) -> Self {
-        let targets = discover_bluetooth_targets().unwrap_or_default();
+    fn new(cx: &mut Context<Self>) -> Self {
         let image = env::var_os("OMI_EMULATOR_FIRMWARE")
             .and_then(|path| FirmwareImage::validate(path).ok());
-        Self {
-            selected: targets.first().map(|target| target.address.clone()),
+        let mut view = Self {
+            catalog: PeripheralCatalog::default(),
+            scan_generation: 0,
+            scanning: false,
+            selected: None,
             dropdown_open: false,
-            status: format!("{} Bluetooth targets discovered", targets.len()),
-            targets,
+            status: "Scanning for supported Bluetooth products".into(),
             image,
             flash: None,
-        }
+        };
+        view.start_scan(cx);
+        view
     }
 
     fn toggle_targets(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
@@ -37,32 +42,68 @@ impl EmulatorView {
         cx.notify();
     }
 
-    fn select_target(&mut self, index: usize, cx: &mut Context<Self>) {
-        self.selected = self.targets.get(index).map(|target| target.address.clone());
+    fn select_target(&mut self, address: String, cx: &mut Context<Self>) {
+        self.selected = self
+            .catalog
+            .available()
+            .find(|target| target.address == address)
+            .map(|target| target.address.clone());
         self.dropdown_open = false;
         self.status = self
-            .targets
-            .get(index)
+            .selected
+            .as_ref()
+            .and_then(|selected| self.catalog.find(selected))
             .map(|target| format!("Selected {}", target.name))
             .unwrap_or_else(|| "Selected target expired".into());
         cx.notify();
     }
 
     fn refresh_targets(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
-        match discover_bluetooth_targets() {
-            Ok(targets) => {
-                let selected_exists = self.selected.as_ref().is_some_and(|selected| {
-                    targets.iter().any(|target| &target.address == selected)
-                });
-                self.targets = targets;
-                if !selected_exists {
-                    self.selected = self.targets.first().map(|target| target.address.clone());
-                }
-                self.status = format!("Scan refreshed · {} targets available", self.targets.len());
-            }
-            Err(error) => self.status = error,
+        self.start_scan(cx);
+    }
+
+    fn start_scan(&mut self, cx: &mut Context<Self>) {
+        if self.scanning {
+            return;
         }
+        self.scanning = true;
+        self.status = "Scanning for current advertisements".into();
         cx.notify();
+        let scan = cx
+            .background_executor()
+            .spawn(async { discover_bluetooth_targets() });
+        cx.spawn(async move |this, cx| {
+            let result = scan.await;
+            this.update(cx, |view, cx| {
+                view.scanning = false;
+                match result {
+                    Ok(targets) => {
+                        view.scan_generation = view.scan_generation.wrapping_add(1);
+                        view.catalog.update(targets, view.scan_generation);
+                        let selected_exists = view.selected.as_ref().is_some_and(|selected| {
+                            view.catalog
+                                .available()
+                                .any(|target| &target.address == selected)
+                        });
+                        if !selected_exists {
+                            view.selected = view
+                                .catalog
+                                .available()
+                                .next()
+                                .map(|target| target.address.clone());
+                        }
+                        view.status = format!(
+                            "Scan complete · {} supported products available",
+                            view.catalog.available().count()
+                        );
+                    }
+                    Err(error) => view.status = error,
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
     }
 
     fn set_connection(&mut self, connect: bool, cx: &mut Context<Self>) {
@@ -71,20 +112,41 @@ impl EmulatorView {
             cx.notify();
             return;
         };
-        self.status = match set_bluetooth_connection(&id, connect) {
-            Ok(()) => {
-                if let Some(target) = self.targets.iter_mut().find(|target| target.address == id) {
-                    target.connected = connect;
-                }
-                if connect {
-                    "Peripheral connected".into()
-                } else {
-                    "Peripheral disconnected".into()
-                }
-            }
-            Err(error) => error,
+        self.status = if connect {
+            "Connecting".into()
+        } else {
+            "Disconnecting".into()
         };
         cx.notify();
+        let operation = cx.background_executor().spawn(async move {
+            let result = set_bluetooth_connection(&id, connect);
+            (id, result)
+        });
+        cx.spawn(async move |this, cx| {
+            let (id, result) = operation.await;
+            this.update(cx, |view, cx| {
+                view.status = match result {
+                    Ok(()) => {
+                        if let Some(target) = view
+                            .catalog
+                            .targets_mut()
+                            .find(|target| target.address == id)
+                        {
+                            target.connected = connect;
+                        }
+                        if connect {
+                            "Peripheral connected".into()
+                        } else {
+                            "Peripheral disconnected".into()
+                        }
+                    }
+                    Err(error) => error,
+                };
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
     }
 
     fn connect(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
@@ -148,9 +210,8 @@ impl EmulatorView {
 
     fn start_flash(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
         let product = self.selected.as_ref().and_then(|selected| {
-            self.targets
-                .iter()
-                .find(|target| &target.address == selected)
+            self.catalog
+                .find(selected)
                 .and_then(|target| target.product)
         });
         self.status = if product != Some(Product::OmiDevKit) {
@@ -204,11 +265,10 @@ impl EmulatorView {
 
 impl Render for EmulatorView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let selected = self.selected.as_ref().and_then(|selected| {
-            self.targets
-                .iter()
-                .find(|target| &target.address == selected)
-        });
+        let selected = self
+            .selected
+            .as_ref()
+            .and_then(|selected| self.catalog.find(selected));
         let product = selected.and_then(|target| target.product);
         let capabilities = product.map(Product::capabilities).unwrap_or_default();
         let product_name = product.map(Product::name).unwrap_or("Unknown product");
@@ -227,19 +287,23 @@ impl Render for EmulatorView {
         let target_options = div()
             .flex()
             .flex_col()
+            .max_h(px(220.))
             .border_1()
             .border_color(rgb(0x3f3f46))
             .rounded_md()
-            .children(self.targets.iter().enumerate().map(|(index, target)| {
+            .children(self.catalog.available().enumerate().map(|(index, target)| {
+                let address = target.address.clone();
                 div()
                     .id(("target", index))
                     .px_3()
-                    .py_2()
+                    .py_1()
                     .text_sm()
                     .bg(rgb(0x18181b))
                     .hover(|style| style.bg(rgb(0x27272a)))
                     .cursor_pointer()
-                    .on_click(cx.listener(move |this, _, _, cx| this.select_target(index, cx)))
+                    .on_click(
+                        cx.listener(move |this, _, _, cx| this.select_target(address.clone(), cx)),
+                    )
                     .child(target_label(target))
             }));
         let profile_reference =
@@ -269,7 +333,7 @@ impl Render for EmulatorView {
                     button flex-1 bg-zinc-900 border border-zinc-700 text-white font-medium px-3 py-2 rounded-md @click=toggle_targets
                         "{target}  ▾"
                     button bg-zinc-800 text-white font-medium px-3 py-2 rounded-md @click=refresh_targets
-                        "REFRESH SCAN"
+                        "SCAN"
                     button bg-zinc-100 text-zinc-950 font-medium px-3 py-2 rounded-md @click=connect
                         "CONNECT"
                     button bg-zinc-800 text-white font-medium px-3 py-2 rounded-md @click=disconnect
