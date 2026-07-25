@@ -79,10 +79,7 @@ struct MemoryPressureEpisodeTracker: Sendable {
     let next = nextLevel(for: memoryFootprintMB)
     level = next
 
-    // .extreme is more severe than .critical, so it must report and remediate
-    // too — matching only .critical here left the worst level silently emitting
-    // a low-severity path with no remediation.
-    guard next == .critical || next == .extreme else {
+    guard next == .critical else {
       if next == .nominal || next == .warning {
         lastCriticalReportAt = nil
         lastRemediationAt = nil
