@@ -204,6 +204,11 @@ checks:
     triggers: ["app/scripts/rayban_dat.sh", "app/ios/Podfile", "app/ios/rayban_dat_plugin_boundary.rb", "app/ios/test/rayban_dat_build_wrapper_test.rb", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Ray-Ban DAT builds must strip mcumgr before CocoaPods and restore the exact default graph even after interruption"
+  - id: ios-ble-gatt-operation-scheduler
+    command: ["bash", "app/ios/test/run_ble_gatt_scheduler_tests.sh"]
+    triggers: ["app/ios/Runner/Ble/**", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/BleGattOperationSchedulerTests.swift", "app/ios/test/BleManagerDependencyTypecheckStubs.swift", "app/ios/test/ble_gatt_project_graph_test.rb", "app/ios/test/run_ble_gatt_scheduler_tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PR #5796 shipped characteristic-keyed completions and PR #6085 shipped RSSI-as-keepalive; the tested native boundary keeps CV1 commands session-bound, serialized, and free of unconditional polling"
   - id: deferred-work-markers
     command: ["python3", ".github/scripts/deferred-work-marker-count.py", "--changed-files", "{changed_files}", "--base", "{base}", "--check-new"]
     triggers: ["all"]
