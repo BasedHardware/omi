@@ -9,6 +9,7 @@ publish = false
 btleplug = "0.11"
 crepuscularity-gpui = { path = "/Users/undivisible/projects/crepuscularity/crates/crepuscularity-gpui", features = ["macos"] }
 gpui = { version = "=0.2.2", default-features = false, features = ["font-kit", "macos-blade"] }
+omi-firmware-core = { path = "firmware-core" }
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 
 [dev-dependencies]

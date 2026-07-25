@@ -3643,12 +3643,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "omi-firmware-core"
+version = "0.1.0"
+
+[[package]]
 name = "omi-product-emulator"
 version = "0.1.0"
 dependencies = [
  "btleplug",
  "crepuscularity-gpui",
  "gpui",
+ "omi-firmware-core",
  "tempfile",
  "tokio",
 ]

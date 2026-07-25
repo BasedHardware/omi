@@ -2,6 +2,7 @@ use btleplug::{
     api::{Central, Manager as _, Peripheral as _, ScanFilter},
     platform::Manager,
 };
+pub use omi_firmware_core::ButtonEvent;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -127,24 +128,6 @@ impl Capabilities {
         .map(|(name, enabled)| format!("{name} {}", if enabled { "READY" } else { "N/A" }))
         .collect::<Vec<_>>()
         .join("  ·  ")
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(i32)]
-pub enum ButtonEvent {
-    Single = 1,
-    Double = 2,
-    Long = 3,
-    Press = 4,
-    Release = 5,
-}
-
-impl ButtonEvent {
-    pub fn packet(self) -> [u8; 8] {
-        let mut packet = [0; 8];
-        packet[..4].copy_from_slice(&(self as i32).to_le_bytes());
-        packet
     }
 }
 
