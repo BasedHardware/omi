@@ -150,14 +150,81 @@ the release-evidence layer (`#9523`) will consume.
 - **Numerator:** successful installs (`update_installed`). **Denominator:** started
   update attempts. **Window:** PT24H. **Minimum cohort:** 30 attempts per build.
 
-### Recording & memory (client inputs)
+### Recording (client input)
 
 - **Recording:** `recording_error` PostHog events carry `error_class` only (no audio).
   Numerator = errors; denominator = recording sessions. Below minimum → `unknown`.
-- **Memory:** memory-operations reliability is tracked via `memory_scope` fallback
-  outcomes (device-scope rejection) and memory-extract counts; no memory *content* is
-  emitted. Out of scope for a numeric spec until a backend denominator exists —
-  client supplies the `memory_scope` degradation signal only.
+
+### Memory metrics (product analytics — three distinct surfaces)
+
+The macOS "memory" surface is **three independent funnels**, not one. Recording
+users are **not** the proactive-memory denominator, and `Memory Created` is **not**
+an extracted-memory proxy — it tracks recording/conversation-session
+reconciliation with the backend. The three metrics below are the query contract for
+the events added to make each funnel measurable. All carry only bounded dimensions;
+no screen pixels, OCR/window/app names, memory content, prompts, Gemini responses,
+raw model material, conversation ids, transcript text, or exception strings are
+emitted (enforced by `MemoryAssistantTelemetryTests` and
+`test_conversation_memories_telemetry.py`).
+
+#### 1. Proactive memory-assistant activation — `Memory Assistant Setting Changed`
+
+- **Source event:** `Memory Assistant Setting Changed` (desktop, proactive
+  `MemoryAssistant`). Closed properties: `setting` ∈ {`enabled`,
+  `notifications_enabled`}, boolean `value`.
+- **Why it exists:** analysis is hard-gated on `enabled && notificationsEnabled`
+  and notifications default **off**, so the activation cliff at the notifications
+  toggle was previously invisible. This event makes the true denominator
+  measurable.
+- **Emission rule:** exactly one event per **user-initiated persisted change** to
+  either setting — never on app startup, default reads, or migrations (the setter
+  compares old vs new and skips no-ops).
+- **Activation metric:** proactive extraction users (`Memory Extracted`) ÷
+  monitoring users (`Monitoring Started`) with `notifications_enabled = true`,
+  scoped `$app_namespace='com.omi.computer-macos'` AND `$os='macOS'`. Stop
+  dividing extraction by recording users.
+
+#### 2. Proactive analysis-outcome distribution — `Memory Assistant Analysis Run`
+
+- **Source event:** `Memory Assistant Analysis Run` (desktop). Closed properties:
+  `outcome` ∈ {`synced`, `filtered_low_confidence`, `no_new_memory`,
+  `sync_failed`, `analysis_failed`}; optional `confidence_bucket` (closed decile
+  range, e.g. `70_80`) present only for outcomes where the model returned a
+  confidence.
+- **Emission rule:** exactly one event per **actual Gemini analysis attempt** —
+  not per captured frame, and not on disabled/gated paths. Every reachable
+  terminal maps to exactly one outcome. It **supplements** — does not replace or
+  alter — the existing `Memory Extracted` success terminal (which still fires only
+  on the local-persistence success leg, for both `synced` and `sync_failed`).
+- **Metric:** outcome distribution among analysis attempts. `synced` is the only
+  fully-successful terminal; `sync_failed` isolates backend-sync loss from
+  extraction failure; `filtered_low_confidence` shows the 0.70 threshold's effect.
+
+#### 3. Transcript conversation memory-extraction success — `Conversation Memories Extracted` (backend)
+
+- **Source event:** `Conversation Memories Extracted` (backend server-side
+  transcript-memory path; distinct identity = `distinct_id` = uid). Closed
+  properties: `memory_count_bucket` ∈ {`1`, `2`, `3`, `4_9`, `10_plus`},
+  `source` ∈ {`transcription`, `external_integration`}, `path` ∈ {`canonical`,
+  `legacy`}.
+- **Why it exists:** the "did this recording produce memories?" step ran
+  server-side and wrote memories to the DB but emitted **no** analytics event —
+  the root cause of the recording→memory observability gap.
+- **Emission rule:** exactly one event **after a durable successful persistence
+  result**, at the `extract_memories` public boundary. Zero extraction → no event
+  (no false success). Persistence exception → propagates, no event. Exactly one
+  per successful pass; the count reflects that pass only (never cached), so
+  re-finalization/retry re-emits the true count for that pass.
+- **Metric:** transcript memory-extraction success = users emitting
+  `Conversation Memories Extracted` ÷ finalized conversations (denominator:
+  `Memory Created`, the recording-reconciliation proxy). Join by uid + window.
+
+### Memory reliability (client input, unchanged)
+
+- Memory-operations reliability is still tracked via `memory_scope` fallback
+  outcomes (device-scope rejection); no memory *content* is emitted. The three
+  metrics above are the activation/funnel/value contract; `memory_scope` remains
+  the degradation signal.
 
 ### Feature path success — doctor metric `feature_path_success` · backend error rate — doctor metric `backend_error_rate`
 
