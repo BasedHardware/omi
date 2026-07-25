@@ -1,10 +1,4 @@
-"""Pre-recorded STT selection must cover every language a client can store.
-
-Selection raised when no capability map claimed the language. The literal Velma set
-covers 10 languages and Parakeet's batch model 26, while the clients offer 49 — so
-22 of them reached no provider. The raise surfaced as a retryable ``upstream_error``,
-which Cloud Tasks retried until sustained 5xx throttled the whole sync queue.
-"""
+"""Pre-recorded STT selection must cover every language a client can store."""
 
 import pytest
 
@@ -64,9 +58,8 @@ CLIENT_OFFERED_LANGUAGES = (
     'zh',
 )
 
-# Languages a capability map already claimed. These must keep their exact provider:
-# widening Velma's gate instead of adding a floor would pull them — and 'multi', the
-# default for most users — off self-hosted Parakeet onto metered Velma.
+# Must keep their exact provider: widening Velma's gate would pull these — including
+# 'multi', the default for most users — off self-hosted Parakeet onto metered Velma.
 ALREADY_ROUTED = {
     'multi': PrerecordedSTTService.PARAKEET,
     'ru': PrerecordedSTTService.PARAKEET,
@@ -80,7 +73,7 @@ ALREADY_ROUTED = {
     'zh': PrerecordedSTTService.MODULATE,
 }
 
-# In neither capability map. These raised before the floor existed.
+# In neither capability map.
 PREVIOUSLY_UNROUTABLE = (
     'ar',
     'be',
@@ -130,9 +123,6 @@ def test_a_language_a_capability_map_claims_keeps_its_provider(language, expecte
 
 @pytest.mark.parametrize('language', PREVIOUSLY_UNROUTABLE)
 def test_an_uncovered_language_reaches_velma_by_detection(language):
-    """Velma's batch API detects the language itself — we never send a code — so it
-    can serve what the capability maps omit. Ask for detection rather than assert a
-    language no map recognizes."""
     service, resolved_language, model = get_prerecorded_service(language)
 
     assert service == PrerecordedSTTService.MODULATE
@@ -142,10 +132,7 @@ def test_an_uncovered_language_reaches_velma_by_detection(language):
 
 @pytest.mark.parametrize('stored_language', ['japanese', 'russian', 'português', 'not-a-language'])
 def test_a_stored_language_name_falls_back_to_provider_detection(stored_language):
-    """Desktop onboarding saved language *names* before they were normalized to codes.
-
-    Those values are still in Firestore, and a name can never match a capability map.
-    """
+    """Desktop onboarding saved language names before they were normalized to codes."""
     service, resolved_language, model = get_prerecorded_service(stored_language)
 
     assert service == PrerecordedSTTService.MODULATE
@@ -159,7 +146,6 @@ def test_region_qualified_codes_resolve_on_their_base_language():
 
 
 def test_parakeet_only_deployment_still_reaches_velma_for_a_language_it_cannot_serve(monkeypatch):
-    """Parakeet's batch model has no Hindi. Falling through beats raising."""
     monkeypatch.setenv('STT_PRERECORDED_MODEL', 'parakeet')
 
     assert get_prerecorded_service('ru') == (PrerecordedSTTService.PARAKEET, 'ru', 'parakeet')
@@ -170,7 +156,6 @@ def test_parakeet_only_deployment_still_reaches_velma_for_a_language_it_cannot_s
 
 
 def test_no_enabled_provider_raises_a_non_retryable_config_failure(monkeypatch):
-    """The only remaining raise must not re-enter an at-least-once retry loop."""
     monkeypatch.setattr('utils.stt.pre_recorded.provider_is_enabled', lambda *_args, **_kwargs: False)
     monkeypatch.setattr('utils.stt.pre_recorded.default_models_for_surface', lambda *_args, **_kwargs: ())
 
