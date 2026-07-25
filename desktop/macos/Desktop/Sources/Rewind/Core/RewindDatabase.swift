@@ -1441,7 +1441,8 @@ actor RewindDatabase {
         t.column("language", .text).notNull().defaults(to: "en")
         t.column("timezone", .text).notNull().defaults(to: "UTC")
         t.column("inputDeviceName", .text)
-        t.column("status", .text).notNull().defaults(to: "recording")  // recording|pending_upload|uploading|completed|failed
+        // recording|pending_upload|uploading|completed|failed
+        t.column("status", .text).notNull().defaults(to: "recording")
         t.column("retryCount", .integer).notNull().defaults(to: 0)
         t.column("lastError", .text)
         t.column("backendId", .text)  // Server conversation ID
