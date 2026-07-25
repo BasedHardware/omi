@@ -253,7 +253,13 @@ private struct NativeMemoryNavigationMenuPresenter: NSViewRepresentable {
 
     @objc private func selectDestination(_ sender: NSMenuItem) {
       guard let destination = MemoryHubDestination(rawValue: sender.tag) else { return }
-      onSelect(destination)
+      // NSMenu.popUp runs synchronously inside updateNSView; firing onSelect
+      // now would mutate @AppStorage/binding state during the active SwiftUI
+      // view update (undefined behavior). Hop to the next run-loop turn so the
+      // representable update has fully returned before selection propagates.
+      DispatchQueue.main.async { [weak self] in
+        self?.onSelect(destination)
+      }
     }
   }
 }
