@@ -222,6 +222,7 @@ class SelectionTests(unittest.TestCase):
                 "architecture-guardrails",
                 "product-invariants",
                 "failure-class-protocol",
+                "failure-class-guard-artifact-ratchet",
                 "desktop-changelog-data",
                 "deferred-work-markers",
                 "lifecycle-headers",
