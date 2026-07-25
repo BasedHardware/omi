@@ -1758,11 +1758,8 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             failure = failure_from_exception(e, provider=latest_job.get('stt_provider'))
             sync_model = latest_job.get('stt_model')
             final_attempt = task_retry_count >= max_attempts - 1
-            # Segment-level outcomes already honor ``retryable``; the job boundary did
-            # not, so a permanently-unprocessable job consumed every attempt as a 500.
-            # Sustained 5xx makes Cloud Tasks throttle the whole queue's dispatch rate,
-            # which is how one such job slowed every other user's sync. Finalize a
-            # non-retryable failure on its first delivery instead.
+            # Sustained 5xx throttles the whole queue's dispatch rate, so a failure that
+            # no retry can resolve must not consume the retry budget.
             if not failure.retryable or final_attempt:
                 logger.error(
                     'event=sync_transcription_job outcome=%s status=%s lane=%s ' 'attempt=%d exception_type=%s',
