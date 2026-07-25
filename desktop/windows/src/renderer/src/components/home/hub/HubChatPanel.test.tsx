@@ -70,6 +70,33 @@ describe('HubChatPanel live-edge follow', () => {
     expect(el.scrollTop).toBe(200)
   })
 
+  // #10505: the reader dragged the scrollbar thumb / hit PageUp instead of using
+  // the wheel, and the next streamed chunk yanked them straight back down — the
+  // wheel-only release never fired, so the panel thought it was still following.
+  it('does NOT yank the reader back after a scroll up with no wheel (scrollbar drag, PageUp)', () => {
+    const el = renderPanel()
+    act(() => roCallback?.()) // following the stream at the live edge
+    // The reader drags up; the browser reports it as a plain scroll event.
+    el.scrollTop = 200
+    fireEvent.scroll(el)
+    act(() => roCallback?.())
+    expect(el.scrollTop).toBe(200)
+  })
+
+  it('keeps following when a shrinking thread clamps the viewport to the bottom', () => {
+    const el = renderPanel()
+    // Start pinned at the live edge, then the thread shrinks (switched/cleared
+    // chat): the browser clamps scrollTop DOWN, which must not read as the reader
+    // scrolling away — the viewport is still at the bottom.
+    act(() => roCallback?.())
+    Object.defineProperty(el, 'scrollHeight', { value: 400, configurable: true })
+    el.scrollTop = 100 // 400 - 100 - 300 = 0 -> still at the edge
+    fireEvent.scroll(el)
+    Object.defineProperty(el, 'scrollHeight', { value: 1000, configurable: true })
+    act(() => roCallback?.())
+    expect(el.scrollTop).toBe(1000)
+  })
+
   it('re-engages following once the reader returns to the live edge', () => {
     const el = renderPanel()
     fireEvent.wheel(el, { deltaY: -40 })
