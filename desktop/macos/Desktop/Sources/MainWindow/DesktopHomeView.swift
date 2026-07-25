@@ -1337,7 +1337,8 @@ private struct MemoryHubPage: View {
   private var brainMapPresentationMode: MemoryGraphPresentationMode {
     MemoryGraphPresentationMode.resolve(
       canonicalLifecycleExposed: memoriesViewModel.canonicalLifecycleExposed,
-      forceCanonicalAtlasForLocalQA: MemoryGraphPresentationMode.localQAOverrideEnabled
+      forceCanonicalAtlasForLocalQA: MemoryGraphPresentationMode.localQAOverrideEnabled,
+      capabilityEstablished: memoriesViewModel.canonicalLifecycleCapabilityEstablished
     )
   }
 
@@ -1377,6 +1378,16 @@ private struct MemoryHubPage: View {
       )
     case .legacyBrainMap:
       MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
+    case .undetermined:
+      // Neither surface may mount before the cohort is known. The legacy graph
+      // in particular latches the shared view model's in-flight guard and runs
+      // an empty-graph rebuild bootstrap, so a one-frame appearance left the
+      // atlas permanently blank and fired a destructive rebuild.
+      ZStack {
+        OmiColors.backgroundPrimary
+        ProgressView().tint(OmiColors.textTertiary)
+      }
+      .accessibilityIdentifier("brain_map_resolving_cohort")
     }
   }
 

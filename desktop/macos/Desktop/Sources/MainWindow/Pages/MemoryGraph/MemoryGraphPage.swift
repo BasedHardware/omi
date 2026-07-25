@@ -10,6 +10,12 @@ import SwiftUI
 enum MemoryGraphPresentationMode: Equatable {
   case canonicalAtlas
   case legacyBrainMap
+  /// The account's capability has not been established yet. Distinct from
+  /// `legacyBrainMap`: mounting either real surface here is a guess, and the
+  /// legacy graph is not an inert guess — it owns shared view-model state and
+  /// runs a rebuild bootstrap, both of which corrupt the surface that replaces
+  /// it a frame later.
+  case undetermined
 
   /// Local QA can exercise the canonical-only surface without changing the
   /// server-owned rollout state. Production bundles always remain gate-driven.
@@ -20,11 +26,12 @@ enum MemoryGraphPresentationMode: Equatable {
 
   static func resolve(
     canonicalLifecycleExposed: Bool,
-    forceCanonicalAtlasForLocalQA: Bool = false
+    forceCanonicalAtlasForLocalQA: Bool = false,
+    capabilityEstablished: Bool = true
   ) -> Self {
-    canonicalLifecycleExposed || forceCanonicalAtlasForLocalQA
-      ? .canonicalAtlas
-      : .legacyBrainMap
+    if forceCanonicalAtlasForLocalQA { return .canonicalAtlas }
+    guard capabilityEstablished else { return .undetermined }
+    return canonicalLifecycleExposed ? .canonicalAtlas : .legacyBrainMap
   }
 }
 
@@ -228,10 +235,14 @@ class MemoryGraphViewModel: ObservableObject {
       return
     }
 
-    await loadGraph(generation: generation)
+    let didLoadAuthoritatively = await loadGraph(generation: generation)
     guard generation == sessionGeneration else { return }
 
-    if isEmpty && !hasRunEmptyBootstrap {
+    // `isEmpty` starts true and only a successful load clears it, so a failed
+    // or cancelled fetch is indistinguishable from a genuinely empty graph.
+    // Bootstrapping on that difference asked the backend to DELETE and rebuild
+    // a healthy graph because the view was torn down mid-fetch.
+    if didLoadAuthoritatively && isEmpty && !hasRunEmptyBootstrap {
       // First-session bootstrap for sparse accounts: ask the backend to build
       // the graph, then poll for it. Run once per session — not per visit.
       guard await rebuildGraph(generation: generation) else { return }
@@ -299,7 +310,10 @@ class MemoryGraphViewModel: ObservableObject {
     await loadGraph(generation: sessionGeneration)
   }
 
-  private func loadGraph(generation: Int) async {
+  /// Returns whether the graph was authoritatively loaded in this generation.
+  /// Callers that act on emptiness must not treat a failure as an empty graph.
+  @discardableResult
+  private func loadGraph(generation: Int) async -> Bool {
     // Only surface the spinner while there's no scene to show — freshness
     // checks over a rendered graph stay invisible.
     let showSpinner = isEmpty
@@ -312,21 +326,21 @@ class MemoryGraphViewModel: ObservableObject {
 
     do {
       let response = try await fetchGraph()
-      guard generation == sessionGeneration else { return }
+      guard generation == sessionGeneration else { return false }
 
       log("Knowledge graph: \(response.nodes.count) nodes, \(response.edges.count) edges")
       graphResponse = response
       isEmpty = response.nodes.isEmpty
       lastLoadedAt = Date()
 
-      guard !isEmpty else { return }
+      guard !isEmpty else { return true }
 
       // Same graph as last time → keep the settled scene. Re-simulating and
       // recreating scene nodes for identical data is what made every page
       // visit visibly "reload" the brain map.
       let signature = Self.graphSignature(of: response)
       if signature == loadedGraphSignature {
-        return
+        return true
       }
       loadedGraphSignature = signature
 
@@ -359,14 +373,14 @@ class MemoryGraphViewModel: ObservableObject {
         await Task.detached(priority: .userInitiated) { [simulation] in
           simulation.runSync(ticks: 800)
         }.value
-        guard generation == sessionGeneration else { return }
+        guard generation == sessionGeneration else { return false }
         saveLayoutCache(signature: signature)
       }
       logPerf(
         "MemoryGraph: layout (restored=\(restoredLayout))",
         duration: CFAbsoluteTimeGetCurrent() - layoutStart)
 
-      guard generation == sessionGeneration else { return }
+      guard generation == sessionGeneration else { return false }
 
       // Create scene nodes
       let sceneStart = CFAbsoluteTimeGetCurrent()
@@ -383,8 +397,10 @@ class MemoryGraphViewModel: ObservableObject {
           await MainActor.run { isAnimating = false }
         }
       }
+      return true
     } catch {
       log("Failed to load knowledge graph: \(error.localizedDescription)")
+      return false
     }
   }
 

@@ -131,6 +131,15 @@ class MemoriesViewModel: ObservableObject {
     }
   }
 
+  /// Whether the lifecycle capability is known at all yet.
+  ///
+  /// `canonicalLifecycleExposed` is a Bool, so on its own it cannot tell
+  /// "this account is not canonical" apart from "no authoritative response has
+  /// arrived". Surfaces that pick a whole presentation from the capability
+  /// need the difference: guessing wrong for one frame means mounting the
+  /// surface they are about to discard.
+  @Published private(set) var canonicalLifecycleCapabilityEstablished = false
+
   @Published private(set) var canonicalLifecycleExposed = false {
     didSet {
       guard oldValue != canonicalLifecycleExposed else { return }
@@ -341,6 +350,7 @@ class MemoriesViewModel: ObservableObject {
       return false
     }
     canonicalLifecycleExposed = exposed
+    canonicalLifecycleCapabilityEstablished = true
     return true
   }
 
@@ -358,6 +368,7 @@ class MemoriesViewModel: ObservableObject {
     guard isCurrentScope(token) else { return false }
     if let expectedOffset, currentOffset != expectedOffset { return false }
     canonicalLifecycleExposed = page.canonicalLifecycleExposed
+    canonicalLifecycleCapabilityEstablished = true
     persistCanonicalLifecycleExposure(page.canonicalLifecycleExposed)
     if let deviceScopeCapability = deviceScopeSupportedOverride ?? page.deviceScopeSupported {
       deviceScopeSupported = deviceScopeCapability
@@ -508,6 +519,7 @@ class MemoriesViewModel: ObservableObject {
       guard isCurrentScope(token) else { return }
       if let fetchedLifecycleExposure {
         canonicalLifecycleExposed = fetchedLifecycleExposure
+        canonicalLifecycleCapabilityEstablished = true
         guard isCurrentScope(token) else { return }
       }
       memories = displayCacheMemories(mergedMemories, for: token)
@@ -533,6 +545,7 @@ class MemoriesViewModel: ObservableObject {
     isSearching = false
     searchResults = []
     canonicalLifecycleExposed = false
+    canonicalLifecycleCapabilityEstablished = false
     selectedLayerFilter = .defaultAccess
     selectedTags = []
     filteredFromDatabase = []

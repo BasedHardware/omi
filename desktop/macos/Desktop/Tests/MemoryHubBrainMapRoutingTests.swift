@@ -23,6 +23,81 @@ final class MemoryHubBrainMapRoutingTests: XCTestCase {
     )
   }
 
+  func testUnknownCohortMountsNeitherSurfaceInsteadOfGuessingLegacy() {
+    // Regression: the gate read a Bool, so "not canonical" and "not known yet"
+    // were the same answer, and the Brain Map mounted the legacy graph for the
+    // frames before the first authoritative memory response. That mount is not
+    // inert — it latches the shared view model's in-flight guard, so the atlas
+    // that replaced it found prepareCanonicalAtlas() already "in progress" and
+    // rendered permanently empty, and its empty-graph bootstrap fired a
+    // DELETE-then-rebuild against a healthy 26-entity graph.
+    XCTAssertEqual(
+      MemoryGraphPresentationMode.resolve(
+        canonicalLifecycleExposed: false,
+        capabilityEstablished: false
+      ),
+      .undetermined
+    )
+    XCTAssertEqual(
+      MemoryGraphPresentationMode.resolve(
+        canonicalLifecycleExposed: true,
+        capabilityEstablished: false
+      ),
+      .undetermined,
+      "An unestablished capability is unknown regardless of the stale Bool it carries."
+    )
+    // Once established, both cohorts resolve to a real surface as before.
+    XCTAssertEqual(
+      MemoryGraphPresentationMode.resolve(
+        canonicalLifecycleExposed: true, capabilityEstablished: true),
+      .canonicalAtlas
+    )
+    XCTAssertEqual(
+      MemoryGraphPresentationMode.resolve(
+        canonicalLifecycleExposed: false, capabilityEstablished: true),
+      .legacyBrainMap
+    )
+    // Local QA still short-circuits: it has no server capability to wait for.
+    XCTAssertEqual(
+      MemoryGraphPresentationMode.resolve(
+        canonicalLifecycleExposed: false,
+        forceCanonicalAtlasForLocalQA: true,
+        capabilityEstablished: false
+      ),
+      .canonicalAtlas
+    )
+  }
+
+  func testStaticCheckerEmptyGraphBootstrapRequiresAnAuthoritativeLoad() throws {
+    // STATIC CHECKER. The rebuild bootstrap is DELETE-then-regenerate against
+    // live account data, and `isEmpty` starts true, so gating it on emptiness
+    // alone made a cancelled fetch indistinguishable from an empty graph.
+    let source = try memoryGraphPageSource()
+    let prepare = source.components(separatedBy: "func prepareGraph() async {")
+    let body = String((prepare.count > 1 ? prepare[1] : "").prefix(1200))
+
+    XCTAssertTrue(
+      body.contains("didLoadAuthoritatively && isEmpty && !hasRunEmptyBootstrap"),
+      "The bootstrap must require a load that actually succeeded")
+    XCTAssertFalse(
+      body.contains("if isEmpty && !hasRunEmptyBootstrap"),
+      "Gating the destructive rebuild on isEmpty alone treats a failed fetch as an empty graph")
+  }
+
+  private func memoryGraphPageSource() throws -> String {
+    let testsDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    let packageDirectory = testsDirectory.deletingLastPathComponent()
+    let sourceURL =
+      packageDirectory
+      .appendingPathComponent("Sources")
+      .appendingPathComponent("MainWindow")
+      .appendingPathComponent("Pages")
+      .appendingPathComponent("MemoryGraph")
+      .appendingPathComponent("MemoryGraphPage.swift")
+    // omi-test-quality: source-inspection -- static contract: rebuildGraph issues a live DELETE-then-regenerate against the signed-in account, so the guard protecting it cannot be exercised behaviorally without a network seam; the gate decision it depends on is covered behaviorally above.
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
   func testLocalQAOverrideDoesNotLeakIntoProductionBundles() {
     // The override is the QA affordance for the hub tab as well; it must stay
     // gated on a non-production build so a production cohort is never widened
