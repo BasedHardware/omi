@@ -253,6 +253,50 @@ def test_unresolved_vm_ip_is_never_persisted_as_a_dialable_address(agent_proxy):
 
     with pytest.raises(ValueError):
         agent_proxy._update_firestore_vm("uid-1", agent_proxy.UNRESOLVED_VM_IP, "ready")
+    with pytest.raises(ValueError):
+        agent_proxy._update_firestore_vm("uid-1", None, "ready")
+
+
+@pytest.mark.asyncio
+async def test_running_vm_resolves_ip_without_starting_again(agent_proxy, monkeypatch):
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {
+                "status": "RUNNING",
+                "networkInterfaces": [{"accessConfigs": [{"natIP": "34.121.9.4"}]}],
+            }
+
+    class Client:
+        def __init__(self):
+            self.post_calls = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, _exc_type, _exc, _traceback):
+            return False
+
+        async def get(self, _url, *, headers):
+            assert headers == {"Authorization": "Bearer test-token"}
+            return Response()
+
+        async def post(self, *_args, **_kwargs):
+            self.post_calls += 1
+            return Response()
+
+    client = Client()
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(agent_proxy, "_get_gce_access_token", lambda: "test-token")
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy.httpx, "AsyncClient", lambda **_kwargs: client)
+
+    assert await agent_proxy._start_vm_and_wait("omi-agent-test", "us-central1-a") == "34.121.9.4"
+    assert client.post_calls == 0
 
 
 def test_agent_proxy_never_assigns_the_unresolved_ip_placeholder():
