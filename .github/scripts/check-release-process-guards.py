@@ -816,18 +816,18 @@ def check_desktop_qualification_runner() -> list[str]:
         "macos",
         "omi-desktop-qualification",
         "ref: ${{ inputs.release_tag }}",
-        "docker info",
         "check-desktop-auto-beta-candidate.py",
         "--automatic",
         "actions/create-github-app-token@v3",
-        "desktop-beta-qualification-${{ inputs.release_tag }}",
+        "group: desktop-beta-qualification-m1",
         "cancel-in-progress: false",
-        "safe without a second release-body claim state machine",
     ):
         if required_fragment not in text:
             errors.append(f"desktop qualification runner is missing required guard fragment: {required_fragment}")
     if "desktop_promote_beta.yml" in text:
         errors.append("desktop qualification runner must not promote beta inside its own run")
+    if "qualify-m4-mini" in text or "plan-fallbacks" in text:
+        errors.append("desktop qualification runner must use only the global M1 fallback lane")
 
     promotion = ROOT / ".github/workflows/desktop_promote_beta.yml"
     promotion_text = promotion.read_text(encoding="utf-8") if promotion.exists() else ""
