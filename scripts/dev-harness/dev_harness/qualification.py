@@ -9,13 +9,14 @@ import os
 import secrets
 import shutil
 import signal
+import subprocess
 import tempfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from . import safety
+from . import config, safety
 
 LEASE_SCHEMA_VERSION = 1
 LEASE_OWNER = "omi-desktop-qualification"
@@ -161,8 +162,54 @@ def _validated_owned_records(
     return validated, process_manifest, port_manifest
 
 
+def _is_exact_typesense_docker_proxy(record: dict[str, object], lease_id: str | None) -> bool:
+    """Prove Docker's external port proxy belongs to this exact lease container."""
+
+    if lease_id is None or str(record.get("service", "")) != "typesense":
+        return False
+    port = int(str(record["port"]))
+    container = f"omi-dev-harness-{lease_id}-typesense"
+    expected_prefix = [
+        "docker",
+        "run",
+        "--rm",
+        "--name",
+        container,
+        "-p",
+        f"127.0.0.1:{port}:{config.TYPESENSE_CONTAINER_PORT}",
+    ]
+    command = record.get("command")
+    if not isinstance(command, list) or command[: len(expected_prefix)] != expected_prefix:
+        return False
+    try:
+        inspected = subprocess.run(
+            ["docker", "inspect", "--format", "{{json .}}", container],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        payload = json.loads(inspected.stdout) if inspected.returncode == 0 else {}
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, dict) or payload.get("Name") != f"/{container}":
+        return False
+    if not isinstance(payload.get("State"), dict) or payload["State"].get("Running") is not True:
+        return False
+    network = payload.get("NetworkSettings")
+    ports = network.get("Ports") if isinstance(network, dict) else None
+    bindings = ports.get(f"{config.TYPESENSE_CONTAINER_PORT}/tcp") if isinstance(ports, dict) else None
+    return isinstance(bindings, list) and any(
+        isinstance(binding, dict)
+        and binding.get("HostIp") == "127.0.0.1"
+        and binding.get("HostPort") == str(port)
+        for binding in bindings
+    )
+
+
 def _validated_signal(
-    record: dict[str, object], process_manifest: Path, port_manifest: Path, sig: signal.Signals
+    record: dict[str, object], process_manifest: Path, port_manifest: Path, sig: signal.Signals, lease_id: str | None = None
 ) -> None:
     """Signal only a current supervisor whose listener children still prove lease lineage."""
 
@@ -176,9 +223,11 @@ def _validated_signal(
     safety.validate_port_owner(
         port, pid=pid, port_manifest=port_manifest, process_manifest=None, service=service
     )
-    for listener_pid in safety.listening_pids(port):
-        if os.getpgid(listener_pid) != process_group or not safety.is_descendant_of(listener_pid, pid):
-            raise QualificationLeaseError("Refusing to signal a qualification listener whose lease lineage is unproven")
+    listeners = safety.listening_pids(port)
+    if listeners and not _is_exact_typesense_docker_proxy(record, lease_id):
+        for listener_pid in listeners:
+            if os.getpgid(listener_pid) != process_group or not safety.is_descendant_of(listener_pid, pid):
+                raise QualificationLeaseError("Refusing to signal a qualification listener whose lease lineage is unproven")
     try:
         os.killpg(process_group, sig)
     except (ProcessLookupError, PermissionError) as exc:
@@ -206,12 +255,14 @@ def _wait_for_ports_to_close(records: list[dict[str, object]], seconds: float) -
     return open_ports
 
 
-def _stop_owned_records(records: list[dict[str, object]], process_manifest: Path, port_manifest: Path) -> None:
+def _stop_owned_records(
+    records: list[dict[str, object]], process_manifest: Path, port_manifest: Path, lease_id: str
+) -> None:
     for sig, wait_seconds in STOP_PHASES:
         for record in records:
             pid = int(record["pid"])
             if safety.process_exists(pid):
-                _validated_signal(record, process_manifest, port_manifest, sig)
+                _validated_signal(record, process_manifest, port_manifest, sig, lease_id)
         open_ports = _wait_for_ports_to_close(records, wait_seconds)
         if not open_ports:
             return
@@ -314,7 +365,7 @@ def acquire(
                     f"Qualification lease {old_id!r} is held by live PID {old_owner}; refusing concurrent stack use"
                 )
             records, process_manifest, port_manifest = _validated_owned_records(old_state, old_repo, old_id, old_token)
-            _stop_owned_records(records, process_manifest, port_manifest)
+            _stop_owned_records(records, process_manifest, port_manifest, old_id)
             _safe_remove_state(old_state, old_repo, old_id)
             old_logs = root / "logs" / old_id
             if old_logs.is_dir():
@@ -372,7 +423,7 @@ def release(
         records, process_manifest, port_manifest = _validated_owned_records(
             state_root, recorded_repo, recorded_id, recorded_token
         )
-        _stop_owned_records(records, process_manifest, port_manifest)
+        _stop_owned_records(records, process_manifest, port_manifest, recorded_id)
         path.unlink(missing_ok=True)
         _mark_completed(state_root, recorded_repo, recorded_id, recorded_token)
         _prune(
