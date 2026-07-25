@@ -26,6 +26,11 @@ config OMI_ENABLE_BUTTON
         "Enable the software button support."
     default n
 
+config OMI_ENABLE_BUTTON_INPUT
+    bool "Physical button input"
+    depends on OMI_ENABLE_BUTTON
+    default y
+
 config OMI_ENABLE_SPEAKER
     bool "Enable the speaker"
     help

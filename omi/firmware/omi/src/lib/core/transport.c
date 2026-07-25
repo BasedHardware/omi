@@ -1361,10 +1361,13 @@ int transport_start()
         register_accel_service(current_connection);
     }
 #endif
-    //  Enable button
 #ifdef CONFIG_OMI_ENABLE_BUTTON
-    button_init();
     register_button_service();
+#endif
+
+    //  Enable button
+#ifdef CONFIG_OMI_ENABLE_BUTTON_INPUT
+    button_init();
     activate_button_work();
 #endif
 

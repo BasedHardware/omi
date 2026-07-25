@@ -32,6 +32,14 @@ cargo run --release
 
 This checks portable firmware logic on a Cortex-M4 CPU. It does not emulate the nRF5340, its Bluetooth radio, GPIO timing, microphone, storage, power behavior, or flashing.
 
+The nRF5340 BabbleSim lane builds the production Zephyr transport, settings, and button GATT sources with NCS 2.9.0, runs an application core and network core together, and connects a simulated central over the modeled radio:
+
+```sh
+omi/firmware/scripts/ci/check-bsim.sh
+```
+
+The central verifies Omi advertising, connection, button reads, and persisted settings writes and reads. BabbleSim does not model the CV1 microphone, SD card, haptics, battery ADC, LEDs, or physical button GPIO, so those drivers are disabled while their Bluetooth contracts remain production-owned.
+
 Omi and Omi DevKit expose the firmware button wire values, audio, battery, device information, settings, and storage contracts. Omi Glass exposes only the contracts represented in the app. Other product profiles remain visible with unavailable capabilities instead of simulated success.
 
 Select and validate firmware in the test bench. DevKit flashing requires `adafruit-nrfutil` and a serial port supplied as `OMI_EMULATOR_SERIAL`. The test bench shows running, completed, failed, and cancelled states. Host flashing for other products is unavailable because this repository does not provide a compatible host-side protocol.
