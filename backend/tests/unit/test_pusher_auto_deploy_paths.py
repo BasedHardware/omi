@@ -19,7 +19,10 @@ def test_pusher_auto_deploy_tracks_its_shared_lifecycle_and_observability_import
         'backend/pusher/**',
         'backend/charts/pusher/**',
         'backend/database/conversation_finalization_jobs.py',
+        'backend/routers/pusher.py',
         'backend/services/conversation_finalization.py',
+        'backend/utils/conversations/lifecycle.py',
         'backend/utils/metrics.py',
+        'backend/utils/observability/journeys.py',
         '.github/workflows/gcp_backend_pusher_auto_deploy.yml',
     }
