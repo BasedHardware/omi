@@ -371,6 +371,7 @@ enum ViewExporter {
         VStack(spacing: 0) {
           DesktopTopBar(
             selectedIndex: .constant(entry.1),
+            memoryDestinationRawValue: .constant(MemoryHubDestination.memories.rawValue),
             appState: topBarAppState,
             memoriesViewModel: topBarMemories,
             tasksStore: topBarTasks,

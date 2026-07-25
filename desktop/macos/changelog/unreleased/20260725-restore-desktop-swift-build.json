@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a failure-diagnostics change that prevented new desktop builds from being produced"
+}

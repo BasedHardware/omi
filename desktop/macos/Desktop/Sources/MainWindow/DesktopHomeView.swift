@@ -1081,6 +1081,7 @@ struct DesktopHomeView: View {
         if showsTopBar {
           DesktopTopBar(
             selectedIndex: $selectedIndex,
+            memoryDestinationRawValue: $memoryDestinationRawValue,
             appState: appState,
             memoriesViewModel: viewModelContainer.memoriesViewModel,
             tasksStore: viewModelContainer.tasksStore,
@@ -1098,6 +1099,7 @@ struct DesktopHomeView: View {
           selectedIndex: selectedIndex,
           appState: appState,
           viewModelContainer: viewModelContainer,
+          memoryDestinationRawValue: $memoryDestinationRawValue,
           selectedSettingsSection: $selectedSettingsSection,
           highlightedSettingId: $highlightedSettingId,
           selectedTabIndex: $selectedIndex,
@@ -1323,8 +1325,8 @@ private struct MemoryHubPage: View {
   /// capability arrives with the first authoritative memory response, and the
   /// Brain Map destination must re-resolve its presentation when it flips.
   @ObservedObject var memoriesViewModel: MemoriesViewModel
-  @AppStorage(MemoryHubDestination.storageKey) private var destinationRawValue =
-    MemoryHubDestination.memories.rawValue
+  @ObservedObject private var conversationDetailState = ConversationDetailAutomationState.shared
+  @Binding var destinationRawValue: Int
 
   private var destination: MemoryHubDestination {
     MemoryHubDestination(rawValue: destinationRawValue) ?? .memories
@@ -1342,18 +1344,20 @@ private struct MemoryHubPage: View {
   var body: some View {
     switch destination {
     case .memories:
-      MemoriesPage(
-        viewModel: viewModelContainer.memoriesViewModel,
-        graphViewModel: viewModelContainer.memoryGraphViewModel,
-        onOpenAtlas: {
-          // The Hub's Memories destination has no local atlas presentation
-          // state of its own; route through the same request the automation
-          // bridge uses so DesktopHomeView opens the full atlas page.
-          NotificationCenter.default.post(
-            name: .desktopAutomationOpenMemoryAtlasRequested, object: nil)
-        }
+      adaptiveContent(
+        MemoriesPage(
+          viewModel: viewModelContainer.memoriesViewModel,
+          graphViewModel: viewModelContainer.memoryGraphViewModel,
+          onOpenAtlas: {
+            // The Hub's Memories destination has no local atlas presentation
+            // state of its own; route through the same request the automation
+            // bridge uses so DesktopHomeView opens the full atlas page.
+            NotificationCenter.default.post(
+              name: .desktopAutomationOpenMemoryAtlasRequested, object: nil)
+          }
+        ),
+        conversationID: viewModelContainer.memoriesViewModel.linkedConversation?.id
       )
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
     case .conversations:
       ConversationsPageHost(appState: appState)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1388,6 +1392,26 @@ private struct MemoryHubPage: View {
       MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
     }
   }
+
+  private func adaptiveContent<Content: View>(
+    _ content: Content,
+    conversationID: String?
+  ) -> some View {
+    let usesAvailableWidth = MemoryHubLayoutPolicy.usesAvailableWidth(
+      conversationID: conversationID,
+      presentedConversationID: conversationDetailState.openConversationId,
+      transcriptDrawerOpen: conversationDetailState.transcriptDrawerOpen
+    )
+
+    return
+      content
+      .frame(
+        maxWidth: usesAvailableWidth ? .infinity : MemoryHubLayoutPolicy.readableContentWidth,
+        maxHeight: .infinity
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .animation(.easeInOut(duration: 0.22), value: usesAvailableWidth)
+  }
 }
 
 /// "Focus" tab — Focus + Insights folded into one surface.
@@ -1414,6 +1438,7 @@ private struct PageContentView: View {
   let selectedIndex: Int
   let appState: AppState
   let viewModelContainer: ViewModelContainer
+  @Binding var memoryDestinationRawValue: Int
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingId: String?
   @Binding var selectedTabIndex: Int
@@ -1424,12 +1449,10 @@ private struct PageContentView: View {
   /// gutters instead of a full-bleed stretch — matching the Focus/Insights
   /// pages, which already self-constrain. Pages paint a clear background, so the
   /// gutters show the shell surface seamlessly.
-  private static let listPageContentWidth: CGFloat = 900
-
   @ViewBuilder
   private func constrainedListPage<V: View>(_ page: V) -> some View {
     page
-      .frame(maxWidth: Self.listPageContentWidth, maxHeight: .infinity)
+      .frame(maxWidth: MemoryHubLayoutPolicy.readableContentWidth, maxHeight: .infinity)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
@@ -1455,7 +1478,8 @@ private struct PageContentView: View {
         MemoryHubPage(
           appState: appState,
           viewModelContainer: viewModelContainer,
-          memoriesViewModel: viewModelContainer.memoriesViewModel
+          memoriesViewModel: viewModelContainer.memoriesViewModel,
+          destinationRawValue: $memoryDestinationRawValue
         )
       case 2:
         ChatPage(
@@ -1533,9 +1557,24 @@ private struct PageContentView: View {
 private struct ConversationsPageHost: View {
   let appState: AppState
   @State private var selectedConversation: ServerConversation? = nil
+  @ObservedObject private var conversationDetailState = ConversationDetailAutomationState.shared
+
+  private var usesAvailableWidth: Bool {
+    MemoryHubLayoutPolicy.usesAvailableWidth(
+      conversationID: selectedConversation?.id,
+      presentedConversationID: conversationDetailState.openConversationId,
+      transcriptDrawerOpen: conversationDetailState.transcriptDrawerOpen
+    )
+  }
 
   var body: some View {
     ConversationsPage(appState: appState, selectedConversation: $selectedConversation)
+      .frame(
+        maxWidth: usesAvailableWidth ? .infinity : MemoryHubLayoutPolicy.readableContentWidth,
+        maxHeight: .infinity
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .animation(.easeInOut(duration: 0.22), value: usesAvailableWidth)
       // Owner fencing: an open detail view must not keep showing the previous
       // account's conversation after an in-place account switch.
       .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
