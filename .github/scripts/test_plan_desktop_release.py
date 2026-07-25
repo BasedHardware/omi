@@ -167,6 +167,7 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
             "codemagic.yaml",
             ".github/scripts/plan-desktop-release.py",
             ".github/scripts/desktop-release-source-identity.py",
+            ".github/scripts/publish-desktop-candidate-tag.py",
             ".github/workflows/desktop_auto_release.yml",
             ".github/workflows/desktop-swift-ci.yml",
         ]
@@ -360,11 +361,16 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
         self.assertEqual(workflow.count("--source-check-wait-seconds 720"), 2)
         self.assertEqual(workflow.count("--source-check-poll-seconds 30"), 2)
-        self.assertLess(workflow.index("Create and regular-merge PR to sync changelog back to main"), workflow.index("Tag exact main source"))
+        self.assertLess(
+            workflow.index("Create and regular-merge PR to sync changelog back to main"),
+            workflow.index("Atomically tag exact live main source"),
+        )
         self.assertIn('git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main', workflow)
-        self.assertIn('test "$CANDIDATE_SHA" = "$MAIN_SHA"', workflow)
-        self.assertIn('test "$(git rev-parse "${CANDIDATE_SHA}^1")" = "$PLANNED_SOURCE_SHA"', workflow)
-        self.assertIn('git tag -a "$RELEASE_TAG" "$CANDIDATE_SHA" -F "$EVIDENCE_PATH"', workflow)
+        self.assertEqual(workflow.count('CANDIDATE_SHA="$MAIN_SHA"'), 2)
+        self.assertIn('BRANCH="changelog/v${VERSION}-${PLANNED_SOURCE_SHA:0:12}"', workflow)
+        self.assertIn('CHANGELOG_PARENT_SHA="$(git rev-parse "${CHANGELOG_COMMIT}^1")"', workflow)
+        self.assertIn('--changelog-parent-sha "$CHANGELOG_PARENT_SHA"', workflow)
+        self.assertIn('python3 .github/scripts/publish-desktop-candidate-tag.py', workflow)
         self.assertIn('test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$CANDIDATE_SHA"', workflow)
 
     def test_candidate_creation_has_no_selfhosted_pre_tag_gate(self) -> None:
