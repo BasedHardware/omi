@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -21,8 +22,18 @@ REPORT_FIXTURE = REPOSITORY_ROOT / "scripts" / "fixtures" / "failure_class" / "r
 SEED_IDS = {path.stem for path in SEED_DIRECTORY.glob("*.json")}
 
 
+# Disposable repositories must not inherit the caller's git context. Under a
+# pre-commit or pre-push hook, GIT_DIR and core.hooksPath point at the real
+# checkout, so an unisolated `git init`/`git config`/`git add .` in a temp
+# directory writes to the repository under test.
+GIT_ISOLATION = ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"]
+
+
 def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(command, cwd=cwd, check=False, text=True, capture_output=True)
+    if command and command[0] == "git":
+        command = [command[0], *GIT_ISOLATION, *command[1:]]
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    return subprocess.run(command, cwd=cwd, check=False, text=True, capture_output=True, env=environment)
 
 
 class FailureClassCliTests(unittest.TestCase):
