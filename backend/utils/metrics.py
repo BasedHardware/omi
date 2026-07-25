@@ -53,7 +53,7 @@ OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL = Counter(
 
 # Export zero-valued children from a healthy but idle process. This lets
 # Prometheus/Grafana distinguish no user traffic from an absent scrape target.
-for _journey in ('chat_response', 'pusher_session', 'live_transcription', 'capture_finalization'):
+for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
     OMI_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey)
     for _outcome in ('success', 'failure', 'cancelled', 'stale'):
         OMI_JOURNEY_TERMINAL_TOTAL.labels(journey=_journey, outcome=_outcome)
@@ -70,6 +70,12 @@ LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     'listen_finalization_jobs',
     'Current durable listen finalization job count by non-success status',
     ['status'],
+)
+
+LISTEN_FINALIZATION_DURABLE_JOBS = Gauge(
+    'listen_finalization_durable_jobs',
+    'Authoritative Firestore finalization jobs by closed durable lifecycle state',
+    ['state'],
 )
 
 LISTEN_FINALIZATION_RETRIES_TOTAL = Counter(
@@ -229,8 +235,28 @@ OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL = Counter(
 
 OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL = Counter(
     'omi_live_stt_terminal_failures_total',
-    'Terminal live-STT failures by bounded provider, outcome, client platform, revision, and phase',
-    ['provider', 'outcome', 'client_platform', 'deployment_version', 'phase'],
+    'Terminal live-STT failures by bounded provider, outcome, client platform, environment, and phase',
+    ['provider', 'outcome', 'client_platform', 'deployment_environment', 'phase'],
+)
+
+OMI_LIVE_STT_ACCEPTED_TOTAL = Counter(
+    'omi_live_stt_accepted_total',
+    'Accepted live-STT attempts by bounded provider, client platform, and deployment environment',
+    ['provider', 'client_platform', 'deployment_environment'],
+)
+
+# Whether misaligned frames actually occur in production is unmeasured; Velma rejects
+# them outright, so this counter is what tells a Velma canary if that was the cause.
+OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL = Counter(
+    'omi_live_stt_misaligned_frames_total',
+    'Live-STT frames that were not a whole number of 16-bit samples, by provider and pipeline stage',
+    ['provider', 'stage'],
+)
+
+OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
+    'omi_live_stt_terminal_total',
+    'Terminal live-STT outcomes for accepted attempts by bounded labels',
+    ['provider', 'outcome', 'client_platform', 'deployment_environment', 'phase'],
 )
 
 TASK_WORKSTREAM_ASSOCIATION_TOTAL = Counter(

@@ -19,6 +19,7 @@ from utils.cloud_tasks import (
 )
 from utils.metrics import (
     LISTEN_FINALIZATION_DEAD_LETTER_TOTAL,
+    LISTEN_FINALIZATION_DURABLE_JOBS,
     LISTEN_FINALIZATION_JOB_STATUS,
     LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS,
     LISTEN_FINALIZATION_RETRIES_TOTAL,
@@ -227,5 +228,7 @@ def _publish_job_metrics(*, firestore_client: Any = None) -> None:
         logger.exception('listen finalization metrics query failed')
         return
     LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS.set(float(summary['oldest_nonterminal_age_seconds']))
+    for state in ('accepted', 'success', 'failure', 'stale', 'nonterminal', 'blocked_byok', 'terminal_unknown'):
+        LISTEN_FINALIZATION_DURABLE_JOBS.labels(state=state).set(float(summary[state]))
     for status in ('queued', 'leased', 'blocked_byok', 'dead_letter'):
         LISTEN_FINALIZATION_JOB_STATUS.labels(status=status).set(float(summary[status]))

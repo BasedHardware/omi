@@ -170,6 +170,11 @@ const FRESH_PUBLIC_PHRASES: &[&str] = &[
     "who is the current",
     "today's news",
     "news today",
+    "recent news",
+    "released this week",
+    "released today",
+    "released recently",
+    "newly released",
 ];
 
 /// Weather lookups commonly place the location between "weather" and the
@@ -285,11 +290,25 @@ fn is_current_weather_lookup(text: &str) -> bool {
 }
 
 fn is_fresh_public_lookup(text: &str) -> bool {
-    contains_any(text, FRESH_PUBLIC_PHRASES)
+    contains_any_word(text, FRESH_PUBLIC_PHRASES)
         || is_current_weather_lookup(text)
         || (text.len() <= MAX_GENERIC_LOOKUP_CHARS
             && contains_any_word(text, FRESH_PUBLIC_TEMPORAL_QUALIFIERS)
             && contains_any_word(text, FRESH_PUBLIC_LOOKUP_TERMS))
+}
+
+fn strip_compatibility_retrieval_policy(text: &str) -> &str {
+    const OPEN: &str = "<omi_retrieval_policy>";
+    const CLOSE: &str = "</omi_retrieval_policy>";
+
+    let trimmed = text.trim_start();
+    if !trimmed.starts_with(OPEN) {
+        return text;
+    }
+    let Some((_, remainder)) = trimmed.split_once(CLOSE) else {
+        return text;
+    };
+    remainder.trim_start()
 }
 
 /// A lookup verb paired with an explicit online/web locus, on a short turn.
@@ -396,7 +415,9 @@ pub(crate) fn retrieval_policy(messages: &[ChatMessage]) -> RetrievalPolicy {
         return RetrievalPolicy::auto();
     };
     let rendered_prompt = extract_text_content(&latest_user.content);
-    let latest = normalized_lookup_text(current_user_instruction(&rendered_prompt));
+    let latest = normalized_lookup_text(strip_compatibility_retrieval_policy(
+        current_user_instruction(&rendered_prompt),
+    ));
     let explicit_web = contains_any(&latest, EXPLICIT_WEB_PHRASES);
     let explicitly_prohibits_web = explicit_web && explicitly_prohibits_public_web(&latest);
     let explicit_private = contains_any(&latest, EXPLICIT_PRIVATE_PHRASES);
@@ -496,6 +517,20 @@ pub(crate) fn prepend_latest_user_instruction(
 mod tests {
     use super::*;
 
+    #[derive(serde::Deserialize)]
+    struct PublicWebRoutingContractFixture {
+        version: u32,
+        cases: Vec<PublicWebRoutingContractCase>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct PublicWebRoutingContractCase {
+        name: String,
+        prompt: String,
+        #[serde(rename = "requiresPublicWeb")]
+        requires_public_web: bool,
+    }
+
     fn message(role: &str, text: &str) -> ChatMessage {
         ChatMessage {
             role: role.to_string(),
@@ -512,6 +547,25 @@ mod tests {
         assert!(policy.requires(RetrievalSource::PublicWeb));
         assert!(!policy.requires(RetrievalSource::OmiPrivate));
         assert_eq!(policy.reason, RetrievalReason::ExplicitWeb);
+    }
+
+    #[test]
+    fn matches_cross_runtime_public_web_routing_contract() {
+        let fixture: PublicWebRoutingContractFixture = serde_json::from_str(include_str!(
+            "../../fixtures/public-web-routing-contract.fixture.json"
+        ))
+        .expect("public-web routing contract fixture must decode");
+
+        assert_eq!(fixture.version, 1);
+        for test_case in fixture.cases {
+            let policy = retrieval_policy(&[message("user", &test_case.prompt)]);
+            assert_eq!(
+                policy.requires(RetrievalSource::PublicWeb),
+                test_case.requires_public_web,
+                "{}",
+                test_case.name
+            );
+        }
     }
 
     #[test]
@@ -667,6 +721,32 @@ mod tests {
         let policy = retrieval_policy(&[message("user", "look him up on the web")]);
         assert!(policy.requires(RetrievalSource::PublicWeb));
         assert!(!policy.web_requirement_is_explicit());
+    }
+
+    #[test]
+    fn compatibility_prompt_preserves_research_intent_provenance() {
+        let policy = retrieval_policy(&[message(
+            "user",
+            "<omi_retrieval_policy>Web search is required and available for this fresh public request. Use a live public-web or search tool before answering.</omi_retrieval_policy>\n\n\
+             Find out who David Zhang is and get the public information available on him online",
+        )]);
+
+        assert!(policy.requires(RetrievalSource::PublicWeb));
+        assert_eq!(policy.reason, RetrievalReason::ResearchIntent);
+        assert!(!policy.web_requirement_is_explicit());
+    }
+
+    #[test]
+    fn explicit_user_web_request_stays_strict_after_compatibility_prompt() {
+        let policy = retrieval_policy(&[message(
+            "user",
+            "<omi_retrieval_policy>Web search is required and available for this fresh public request.</omi_retrieval_policy>\n\n\
+             Search the web for HumanPost",
+        )]);
+
+        assert!(policy.requires(RetrievalSource::PublicWeb));
+        assert_eq!(policy.reason, RetrievalReason::ExplicitWeb);
+        assert!(policy.web_requirement_is_explicit());
     }
 
     #[test]

@@ -32,7 +32,7 @@ environments:
             value: dev
             category: runtime_identity
           STT_PRERECORDED_MODEL:
-            value: modulate-velma-2,parakeet
+            value: parakeet,modulate-velma-2
             category: stt_policy
           GOOGLE_CLIENT_ID:
             config_map:
@@ -225,7 +225,7 @@ environments:
             value: http://parakeet.omiapi.com
             category: service_discovery
           STT_PRERECORDED_MODEL:
-            value: modulate-velma-2,parakeet
+            value: parakeet,modulate-velma-2
             category: stt_policy
           STT_SERVICE_MODELS:
             value: modulate-velma-2,parakeet
@@ -317,7 +317,7 @@ environments:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             # Dev Cloud Run must stay within the dev Parakeet topology; never point this at
             # the production-only parakeet.omi.me endpoint.
@@ -454,7 +454,7 @@ environments:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omiapi.com
@@ -558,7 +558,7 @@ environments:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omiapi.com
@@ -780,7 +780,7 @@ environments:
             value: prod
             category: runtime_identity
           STT_PRERECORDED_MODEL:
-            value: modulate-velma-2,parakeet
+            value: parakeet,modulate-velma-2
             category: stt_policy
           GOOGLE_CLIENT_ID:
             config_map:
@@ -1013,7 +1013,7 @@ environments:
             STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID:
               value: price_1TuIap1F8wnoWYvwHWq0EvNU
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me
@@ -1177,7 +1177,7 @@ environments:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me
@@ -1278,7 +1278,7 @@ environments:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me

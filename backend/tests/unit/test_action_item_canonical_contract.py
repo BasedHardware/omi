@@ -137,6 +137,44 @@ def test_database_write_projection_defaults_canonical_fields_without_losing_comp
     assert partial == {'description': 'Edited'}
 
 
+def test_apple_sync_batch_preserves_omitted_canonical_fields(monkeypatch):
+    document_ref = MagicMock()
+    action_items = MagicMock()
+    action_items.document.return_value = document_ref
+    user_ref = MagicMock()
+    user_ref.collection.return_value = action_items
+    users = MagicMock()
+    users.document.return_value = user_ref
+    fake_db = MagicMock()
+    fake_db.collection.return_value = users
+    monkeypatch.setattr(action_items_db, 'db', fake_db)
+
+    result = action_items_db.batch_sync_update_action_items(
+        'user-1',
+        [
+            {
+                'id': 'task-1',
+                'data': {
+                    'exported': True,
+                    'export_platform': 'apple_reminders',
+                    'apple_reminder_id': 'reminder-1',
+                },
+            }
+        ],
+    )
+
+    document_ref.update.assert_called_once()
+    patch = document_ref.update.call_args.args[0]
+    assert isinstance(patch['updated_at'], datetime)
+    assert {key: value for key, value in patch.items() if key != 'updated_at'} == {
+        'exported': True,
+        'export_platform': 'apple_reminders',
+        'apple_reminder_id': 'reminder-1',
+        'sync_requested': False,
+    }, 'an Apple sync patch must not replace omitted canonical task fields with create defaults'
+    assert result.updated_ids == ['task-1']
+
+
 def test_write_mode_reprocessing_soft_retires_removed_tasks_and_preserves_receipt_targets(monkeypatch):
     active = MagicMock(id='task-active')
     removed = MagicMock(id='task-removed')
@@ -234,7 +272,7 @@ def test_action_item_router_writes_shared_contract_and_preserves_old_response(mo
     now = datetime(2026, 7, 9, tzinfo=timezone.utc)
     task_links.register_goal_existence_resolver(lambda uid, goal_id: goal_id == 'goal-1')
     monkeypatch.setattr(action_items_router, 'upsert_action_item_vector', lambda *args: None)
-    monkeypatch.setattr(action_items_router.db_executor, 'submit', lambda *args: None)
+    monkeypatch.setattr(action_items_router, 'submit_with_context', lambda *args: None)
     monkeypatch.setattr(action_items_router, 'send_action_item_data_message', lambda **kwargs: None)
     monkeypatch.setattr(
         action_items_router.action_items_db,
