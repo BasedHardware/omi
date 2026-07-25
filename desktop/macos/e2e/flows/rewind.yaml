@@ -1,38 +1,41 @@
 version: 2
 name: rewind
-tier: manual
-description: Rewind overlay — open via View menu (⌘⌥R), verify permission gate, search, date picker (v0.12.119+ redesign — Rewind is no longer in top nav)
-app: com.omi.computer-macos
+tier: 2
+description: Rewind — navigate via bridge, snapshot settings (v0.12.119+ redesign — Rewind is overlay via View menu but navigable via bridge)
+app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindViewModel.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindSearchBar.swift
 preconditions:
-  - auth_ready
+  - automation_bridge_ready
 
 steps:
   - id: S1
-    name: Open Rewind via View menu
-    do: "Open Rewind by pressing the View → Rewind menu item (agent-swift press on the Rewind menu item under View), or via keyboard shortcut ⌘⌥R. Verify the Rewind overlay appears over the current tab content."
-    expect:
-      text_visible:
-        - Rewind
+    name: Navigate to Rewind
+    bridge.navigate:
+      target: rewind
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 7
 
   - id: S2
-    name: Verify Rewind overlay controls
-    do: "Verify the Rewind overlay shows: search bar ('Search your screen history...'), date picker (showing today's date), settings gear icon, and a toggle. The keyboard shortcut badge (⌘⌥R) should be visible near the Rewind title."
+    name: Rewind settings snapshot
+    bridge.action:
+      name: rewind_settings_snapshot
     expect:
-      interactive_count: { min: 3 }
+      ok: true
 
   - id: S3
-    name: Verify permission gate or timeline
-    do: "Check the Rewind content area. If Screen Recording permission is not granted, verify 'Screen Recording Permission Required' message with 'Grant Permission' button (orange). If permission is granted, verify timeline content with screenshot thumbnails and time markers."
-    expect:
-      interactive_count: { min: 1 }
+    name: Return to Home
+    bridge.navigate:
+      target: dashboard
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 0
 
   - id: S4
-    name: Close Rewind and return
-    do: "Close the Rewind overlay (press Escape or click outside, or navigate to a tab). Verify the previous tab content is visible again with the top nav bar."
-    expect:
-      text_visible:
-        - Home
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
