@@ -17,6 +17,50 @@ import XCTest
       super.tearDown()
     }
 
+    func testStateAuthorityDedupePreservesObservationAndResultDistinctions() {
+      let diagnostics = DesktopDiagnosticsManager.shared
+
+      XCTAssertTrue(
+        diagnostics.recordStateAuthoritySignal(
+          seam: .connectorStatus,
+          from: "cached_or_derived",
+          to: "connected",
+          direction: "cloud_grant_status_inferred",
+          subject: "chatgpt"))
+      XCTAssertFalse(
+        diagnostics.recordStateAuthoritySignal(
+          seam: .connectorStatus,
+          from: "cached_or_derived",
+          to: "connected",
+          direction: "cloud_grant_status_inferred",
+          subject: "chatgpt"))
+      XCTAssertTrue(
+        diagnostics.recordStateAuthoritySignal(
+          seam: .connectorStatus,
+          from: "cached_after_check_failed",
+          to: "connected",
+          direction: "cloud_grant_status_inferred",
+          subject: "chatgpt"))
+      XCTAssertTrue(
+        diagnostics.recordStateAuthoritySignal(
+          seam: .connectorStatus,
+          from: "cached_or_derived",
+          to: "not_connected",
+          direction: "cloud_grant_status_inferred",
+          subject: "chatgpt"))
+
+      let signals = diagnostics.currentSnapshotsForSentry().filter {
+        $0["seam"] as? String == DesktopStateAuthoritySeam.connectorStatus.rawValue
+      }
+      XCTAssertEqual(signals.count, 3)
+      XCTAssertEqual(
+        Set(signals.compactMap { $0["from"] as? String }),
+        ["cached_or_derived", "cached_after_check_failed"])
+      XCTAssertEqual(
+        Set(signals.compactMap { $0["to"] as? String }),
+        ["connected", "not_connected"])
+    }
+
     func testDiagnosticsAttachmentUsesSafeOperationalFields() throws {
       DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
         source: "hub",

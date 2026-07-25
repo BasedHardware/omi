@@ -99,6 +99,59 @@ import XCTest
       XCTAssertTrue(signals.allSatisfy { $0["failure_class"] as? String == "FC-split-mutation-authority" })
     }
 
+    func testJournalProjectionSignalsChangedBlockPayloadWithStableBlockIdentity() throws {
+      let provider = ChatProvider()
+      let surface = provider.mainChatSurfaceReference()
+      let blockID = "tool-call-stable"
+      provider.messages = [
+        ChatMessage(
+          id: "assistant-block-update",
+          clientTurnId: "turn-block-update",
+          text: "",
+          createdAt: Date(timeIntervalSince1970: 1_700_000_000.001),
+          sender: .ai,
+          contentBlocks: [
+            .toolCall(
+              id: blockID,
+              name: "search",
+              status: .running,
+              output: nil)
+          ])
+      ]
+
+      provider.projectJournalTurn(
+        try turn(
+          surface: surface,
+          turnId: "assistant-block-update",
+          turnSeq: 1,
+          content: "",
+          blocks: [
+            .toolCall(
+              id: blockID,
+              name: "search",
+              status: .completed,
+              output: "journal result")
+          ],
+          metadata: #"{"continuityKey":"turn-block-update"}"#))
+
+      let projected = try XCTUnwrap(provider.messages.first)
+      guard case .toolCall(_, _, let status, _, _, let output) = try XCTUnwrap(projected.contentBlocks.first)
+      else {
+        return XCTFail("Expected projected tool-call block")
+      }
+      switch status {
+      case .completed:
+        break
+      case .running, .slow, .stalled, .failed:
+        XCTFail("Expected journal-owned completed status")
+      }
+      XCTAssertEqual(output, "journal result")
+      let directions = DesktopDiagnosticsManager.shared.currentSnapshotsForSentry().compactMap {
+        $0["direction"] as? String
+      }
+      XCTAssertTrue(directions.contains("projection_value_overridden"))
+    }
+
     func testRealtimeVoiceCompanionPreservesTheMainChatIdentity() {
       let main = AgentSurfaceReference.mainChat(chatId: "conversation-42")
       let surface = main.realtimeVoiceCompanion()

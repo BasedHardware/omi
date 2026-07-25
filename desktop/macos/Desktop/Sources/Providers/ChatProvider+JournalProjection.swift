@@ -115,8 +115,9 @@ extension ChatProvider {
       || projected.clientTurnId != existing.clientTurnId
       || projected.isStreaming != existing.isStreaming
       || projected.isSynced != existing.isSynced
-      || projected.contentBlocks.count != existing.contentBlocks.count
-      || projected.attachments.map(\.id) != existing.attachments.map(\.id)
-      || projected.resources.map(\.id) != existing.resources.map(\.id)
+      || ChatContentBlockCodec.comparisonData(projected.contentBlocks)
+        != ChatContentBlockCodec.comparisonData(existing.contentBlocks)
+      || projected.attachments != existing.attachments
+      || projected.resources != existing.resources
   }
 }

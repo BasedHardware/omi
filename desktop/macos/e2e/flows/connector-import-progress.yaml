@@ -6,7 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/Automation/DesktopAutomationPresentationCoordinator.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
-  - desktop/macos/Desktop/Sources/MemoryExportModels.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryExport/MemoryExportModels.swift
   - desktop/macos/Desktop/Sources/MemoryExportService.swift
   - desktop/macos/Desktop/Sources/MemoryExportExecutor.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryExportDestinationSheet.swift

@@ -641,9 +641,12 @@ final class DesktopDiagnosticsManager {
     direction: String,
     subject: String? = nil
   ) -> Bool {
+    let safeFrom = safeFallbackLabel(from, default: "none")
+    let safeTo = safeFallbackLabel(to, default: "none")
     let safeDirection = safeFallbackLabel(direction, default: "other")
     let safeSubject = subject.map { safeFallbackLabel($0, default: "other") }
-    let dedupeKey = [seam.rawValue, safeDirection, safeSubject ?? "none"].joined(separator: "|")
+    let dedupeKey = [seam.rawValue, safeFrom, safeTo, safeDirection, safeSubject ?? "none"]
+      .joined(separator: "|")
 
     lock.lock()
     let inserted = reportedStateAuthoritySignals.insert(dedupeKey).inserted
