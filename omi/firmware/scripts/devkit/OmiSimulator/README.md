@@ -9,6 +9,15 @@ cargo run
 cargo test
 ```
 
+The same Rust button wire values and portable state transitions run on QEMU's Arm MPS2-AN386, a board also supported by Zephyr:
+
+```sh
+cd qemu
+cargo run --release
+```
+
+This checks portable firmware logic on a Cortex-M4 CPU. It does not emulate the nRF5340, its Bluetooth radio, GPIO timing, microphone, storage, power behavior, or flashing.
+
 Omi and Omi DevKit expose the firmware button wire values, audio, battery, device information, settings, and storage contracts. Omi Glass exposes only the contracts represented in the app. Other product profiles remain visible with unavailable capabilities instead of simulated success.
 
 Select and validate firmware in the test bench. DevKit flashing requires `adafruit-nrfutil` and a serial port supplied as `OMI_EMULATOR_SERIAL`. The test bench shows running, completed, failed, and cancelled states. Host flashing for other products is unavailable because this repository does not provide a compatible host-side protocol.

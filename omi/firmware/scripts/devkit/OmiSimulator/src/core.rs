@@ -2,6 +2,7 @@ use btleplug::{
     api::{Central, Manager as _, Peripheral as _, ScanFilter},
     platform::Manager,
 };
+pub use omi_firmware_core::ButtonEvent;
 use serde::Serialize;
 use std::{
     fs,
@@ -129,41 +130,6 @@ impl Capabilities {
         .map(|(name, enabled)| format!("{name} {}", if enabled { "READY" } else { "N/A" }))
         .collect::<Vec<_>>()
         .join("  ·  ")
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[repr(i32)]
-pub enum ButtonEvent {
-    Single = 1,
-    Double = 2,
-    Long = 3,
-    Press = 4,
-    Release = 5,
-}
-
-impl ButtonEvent {
-    pub fn packet(self) -> [u8; 8] {
-        let mut packet = [0; 8];
-        packet[..4].copy_from_slice(&(self as i32).to_le_bytes());
-        packet
-    }
-
-    pub fn decode(packet: &[u8]) -> Result<Self, String> {
-        let bytes: [u8; 4] = packet
-            .get(..4)
-            .ok_or("button value is shorter than four bytes")?
-            .try_into()
-            .map_err(|error| format!("invalid button value: {error}"))?;
-        match i32::from_le_bytes(bytes) {
-            1 => Ok(Self::Single),
-            2 => Ok(Self::Double),
-            3 => Ok(Self::Long),
-            4 => Ok(Self::Press),
-            5 => Ok(Self::Release),
-            value => Err(format!("unknown button event {value}")),
-        }
     }
 }
 
@@ -303,7 +269,7 @@ pub fn read_button_event(id: &str) -> Result<ButtonEvent, String> {
             .read(&characteristic)
             .await
             .map_err(|error| error.to_string())?;
-        ButtonEvent::decode(&value)
+        ButtonEvent::decode(&value).map_err(str::to_owned)
     })
 }
 
