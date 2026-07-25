@@ -23,6 +23,14 @@ BOARD=omi/nrf5340/cpuapp
 # container runs as root, so tell git the checkout is trusted.
 git config --global --add safe.directory '*'
 
+# Run the host-native durability contract before spending time on the full
+# sysbuild. This exercises the same packer and transfer-integrity sources linked
+# into production firmware.
+PACKER_TEST_BUILD=$(mktemp -d /tmp/omi-audio-storage-packer-tests.XXXXXX)
+cmake -S "$FW/omi/tests/audio_storage_packer" -B "$PACKER_TEST_BUILD"
+cmake --build "$PACKER_TEST_BUILD"
+ctest --test-dir "$PACKER_TEST_BUILD" --output-on-failure
+
 # MCUboot image signing needs the `ecdsa` python package (per BUILD.md).
 pip3 install --quiet ecdsa 2>/dev/null || pip3 install --quiet --break-system-packages ecdsa
 
