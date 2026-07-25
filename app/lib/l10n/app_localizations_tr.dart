@@ -1796,20 +1796,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get lovingOmi => 'Omi\'yi Beğeniyor musunuz?';
 
   @override
-  String get leaveReviewIos =>
-      'App Store\'da bir yorum bırakarak daha fazla insana ulaşmamıza yardımcı olun. Geri bildiriminiz bizim için çok değerli!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Google Play Store\'da bir yorum bırakarak daha fazla insana ulaşmamıza yardımcı olun. Geri bildiriminiz bizim için çok değerli!';
-
-  @override
-  String get rateOnAppStore => 'App Store\'da Değerlendir';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play\'de Değerlendir';
-
-  @override
   String get maybeLater => 'Belki sonra';
 
   @override
@@ -2145,6 +2131,18 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Hafızayı düzenle';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Dondurma yemeyi severim...';

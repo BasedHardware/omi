@@ -64,185 +64,187 @@ private actor AgentSyncDelayedTokenGate {
   }
 }
 
-private final class AgentSyncManualClock: @unchecked Sendable {
-  private let lock = NSLock()
-  private var value: Date
+#if DEBUG
+  private final class AgentSyncManualClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Date
 
-  init(_ value: Date = Date(timeIntervalSince1970: 1_700_000_000)) {
-    self.value = value
+    init(_ value: Date = Date(timeIntervalSince1970: 1_700_000_000)) {
+      self.value = value
+    }
+
+    func now() -> Date {
+      lock.withLock { value }
+    }
+
+    func advance(_ interval: TimeInterval) {
+      lock.withLock { value.addTimeInterval(interval) }
+    }
   }
 
-  func now() -> Date {
-    lock.withLock { value }
-  }
+  private actor AgentSyncReplacementCallbackGate {
+    enum Endpoint: Hashable {
+      case sync
+      case health
+      case upload
+    }
 
-  func advance(_ interval: TimeInterval) {
-    lock.withLock { value.addTimeInterval(interval) }
-  }
-}
+    private let suspended: Set<Endpoint>
+    private var started: Set<Endpoint> = []
+    private var startWaiters: [Endpoint: [CheckedContinuation<Void, Never>]] = [:]
+    private var releaseContinuations: [Endpoint: CheckedContinuation<Void, Never>] = [:]
+    private var reuploadVMs: [String] = []
 
-private actor AgentSyncReplacementCallbackGate {
-  enum Endpoint: Hashable {
-    case sync
-    case health
-    case upload
-  }
+    init(suspending endpoint: Endpoint) {
+      suspended = [endpoint]
+    }
 
-  private let suspended: Set<Endpoint>
-  private var started: Set<Endpoint> = []
-  private var startWaiters: [Endpoint: [CheckedContinuation<Void, Never>]] = [:]
-  private var releaseContinuations: [Endpoint: CheckedContinuation<Void, Never>] = [:]
-  private var reuploadVMs: [String] = []
+    func respond(to request: URLRequest) async throws -> (Data, URLResponse) {
+      let url = try XCTUnwrap(request.url)
+      let endpoint: Endpoint? =
+        switch url.path {
+        case "/sync": .sync
+        case "/health": .health
+        default: nil
+        }
+      if url.host == "old-vm", let endpoint, suspended.contains(endpoint) {
+        await suspend(endpoint)
+      }
 
-  init(suspending endpoint: Endpoint) {
-    suspended = [endpoint]
-  }
-
-  func respond(to request: URLRequest) async throws -> (Data, URLResponse) {
-    let url = try XCTUnwrap(request.url)
-    let endpoint: Endpoint? =
       switch url.path {
-      case "/sync": .sync
-      case "/health": .health
-      default: nil
-      }
-    if url.host == "old-vm", let endpoint, suspended.contains(endpoint) {
-      await suspend(endpoint)
-    }
-
-    switch url.path {
-    case "/auth":
-      return (Data(), response(url, status: 200))
-    case "/sync":
-      let payload = try XCTUnwrap(request.httpBody)
-      let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: payload) as? [String: Any])
-      let table = try XCTUnwrap(json["table"] as? String)
-      if table == "transcription_sessions" {
-        return (Data("SQLite error: no such table: \(table)".utf8), response(url, status: 500))
-      }
-      return (Data(), response(url, status: 200))
-    case "/health":
-      return (try JSONSerialization.data(withJSONObject: ["databaseReady": true]), response(url, status: 200))
-    default:
-      return (Data(), response(url, status: 404))
-    }
-  }
-
-  func reupload(vmIP: String) async -> Bool {
-    reuploadVMs.append(vmIP)
-    if vmIP == "old-vm", suspended.contains(.upload) {
-      await suspend(.upload)
-    }
-    return true
-  }
-
-  func waitUntilStarted(_ endpoint: Endpoint) async {
-    guard !started.contains(endpoint) else { return }
-    await withCheckedContinuation { continuation in
-      startWaiters[endpoint, default: []].append(continuation)
-    }
-  }
-
-  func release(_ endpoint: Endpoint) {
-    releaseContinuations.removeValue(forKey: endpoint)?.resume()
-  }
-
-  func uploadVMs() -> [String] {
-    reuploadVMs
-  }
-
-  private func suspend(_ endpoint: Endpoint) async {
-    started.insert(endpoint)
-    let waiters = startWaiters.removeValue(forKey: endpoint) ?? []
-    waiters.forEach { $0.resume() }
-    await withCheckedContinuation { continuation in
-      releaseContinuations[endpoint] = continuation
-    }
-  }
-
-  private func response(_ url: URL, status: Int) -> URLResponse {
-    HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)
-      ?? URLResponse(url: url, mimeType: nil, expectedContentLength: 0, textEncodingName: nil)
-  }
-}
-
-private actor AgentSyncRecoveryProbe {
-  enum HealthResponse {
-    case ready
-    case malformed
-    case status(Int)
-  }
-
-  private var missingTables: Set<String>
-  private var healthResponse: HealthResponse = .ready
-  private var uploadResults: [Bool] = [true]
-  private var healthChecks = 0
-  private var uploads = 0
-  private var syncedTables: [String] = []
-
-  init(missingTable: String? = "transcription_sessions") {
-    missingTables = missingTable.map { [$0] } ?? []
-  }
-
-  func respond(to request: URLRequest) throws -> (Data, URLResponse) {
-    let url = try XCTUnwrap(request.url)
-    switch url.path {
-    case "/auth":
-      return (Data(), response(url, status: 200))
-    case "/sync":
-      let payload = try XCTUnwrap(request.httpBody)
-      let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: payload) as? [String: Any])
-      let table = try XCTUnwrap(json["table"] as? String)
-      syncedTables.append(table)
-      if missingTables.contains(table) {
-        return (Data("SQLite error: no such table: \(table)".utf8), response(url, status: 500))
-      }
-      return (Data(), response(url, status: 200))
-    case "/health":
-      healthChecks += 1
-      switch healthResponse {
-      case .ready:
+      case "/auth":
+        return (Data(), response(url, status: 200))
+      case "/sync":
+        let payload = try XCTUnwrap(request.httpBody)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: payload) as? [String: Any])
+        let table = try XCTUnwrap(json["table"] as? String)
+        if table == "transcription_sessions" {
+          return (Data("SQLite error: no such table: \(table)".utf8), response(url, status: 500))
+        }
+        return (Data(), response(url, status: 200))
+      case "/health":
         return (try JSONSerialization.data(withJSONObject: ["databaseReady": true]), response(url, status: 200))
-      case .malformed:
-        return (Data("not-json".utf8), response(url, status: 200))
-      case .status(let status):
-        return (Data(), response(url, status: status))
+      default:
+        return (Data(), response(url, status: 404))
       }
-    default:
-      return (Data(), response(url, status: 404))
+    }
+
+    func reupload(vmIP: String) async -> Bool {
+      reuploadVMs.append(vmIP)
+      if vmIP == "old-vm", suspended.contains(.upload) {
+        await suspend(.upload)
+      }
+      return true
+    }
+
+    func waitUntilStarted(_ endpoint: Endpoint) async {
+      guard !started.contains(endpoint) else { return }
+      await withCheckedContinuation { continuation in
+        startWaiters[endpoint, default: []].append(continuation)
+      }
+    }
+
+    func release(_ endpoint: Endpoint) {
+      releaseContinuations.removeValue(forKey: endpoint)?.resume()
+    }
+
+    func uploadVMs() -> [String] {
+      reuploadVMs
+    }
+
+    private func suspend(_ endpoint: Endpoint) async {
+      started.insert(endpoint)
+      let waiters = startWaiters.removeValue(forKey: endpoint) ?? []
+      waiters.forEach { $0.resume() }
+      await withCheckedContinuation { continuation in
+        releaseContinuations[endpoint] = continuation
+      }
+    }
+
+    private func response(_ url: URL, status: Int) -> URLResponse {
+      HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)
+        ?? URLResponse(url: url, mimeType: nil, expectedContentLength: 0, textEncodingName: nil)
     }
   }
 
-  func reupload() -> Bool {
-    uploads += 1
-    return uploadResults.isEmpty ? false : uploadResults.removeFirst()
-  }
+  private actor AgentSyncRecoveryProbe {
+    enum HealthResponse {
+      case ready
+      case malformed
+      case status(Int)
+    }
 
-  func setMissingTable(_ table: String?) {
-    missingTables = table.map { [$0] } ?? []
-  }
+    private var missingTables: Set<String>
+    private var healthResponse: HealthResponse = .ready
+    private var uploadResults: [Bool] = [true]
+    private var healthChecks = 0
+    private var uploads = 0
+    private var syncedTables: [String] = []
 
-  func setMissingTables(_ tables: Set<String>) {
-    missingTables = tables
-  }
+    init(missingTable: String? = "transcription_sessions") {
+      missingTables = missingTable.map { [$0] } ?? []
+    }
 
-  func setHealthResponse(_ response: HealthResponse) {
-    healthResponse = response
-  }
+    func respond(to request: URLRequest) throws -> (Data, URLResponse) {
+      let url = try XCTUnwrap(request.url)
+      switch url.path {
+      case "/auth":
+        return (Data(), response(url, status: 200))
+      case "/sync":
+        let payload = try XCTUnwrap(request.httpBody)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: payload) as? [String: Any])
+        let table = try XCTUnwrap(json["table"] as? String)
+        syncedTables.append(table)
+        if missingTables.contains(table) {
+          return (Data("SQLite error: no such table: \(table)".utf8), response(url, status: 500))
+        }
+        return (Data(), response(url, status: 200))
+      case "/health":
+        healthChecks += 1
+        switch healthResponse {
+        case .ready:
+          return (try JSONSerialization.data(withJSONObject: ["databaseReady": true]), response(url, status: 200))
+        case .malformed:
+          return (Data("not-json".utf8), response(url, status: 200))
+        case .status(let status):
+          return (Data(), response(url, status: status))
+        }
+      default:
+        return (Data(), response(url, status: 404))
+      }
+    }
 
-  func setUploadResults(_ results: [Bool]) {
-    uploadResults = results
-  }
+    func reupload() -> Bool {
+      uploads += 1
+      return uploadResults.isEmpty ? false : uploadResults.removeFirst()
+    }
 
-  func counts() -> (healthChecks: Int, uploads: Int, syncedTables: [String]) {
-    (healthChecks, uploads, syncedTables)
-  }
+    func setMissingTable(_ table: String?) {
+      missingTables = table.map { [$0] } ?? []
+    }
 
-  private func response(_ url: URL, status: Int) -> URLResponse {
-    HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)
-      ?? URLResponse(url: url, mimeType: nil, expectedContentLength: 0, textEncodingName: nil)
+    func setMissingTables(_ tables: Set<String>) {
+      missingTables = tables
+    }
+
+    func setHealthResponse(_ response: HealthResponse) {
+      healthResponse = response
+    }
+
+    func setUploadResults(_ results: [Bool]) {
+      uploadResults = results
+    }
+
+    func counts() -> (healthChecks: Int, uploads: Int, syncedTables: [String]) {
+      (healthChecks, uploads, syncedTables)
+    }
+
+    private func response(_ url: URL, status: Int) -> URLResponse {
+      HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)
+        ?? URLResponse(url: url, mimeType: nil, expectedContentLength: 0, textEncodingName: nil)
+    }
   }
-}
+#endif
 
 /// Regression test for the AgentSync mutable-table pagination skip: paging with a
 /// strict `updatedAt > ?` cursor drops every row past the first batch when more
@@ -356,9 +358,12 @@ final class AgentSyncBatchQueryTests: XCTestCase {
   /// These tests drive `syncTick` through the same table reads and HTTP paths as
   /// the loop. The DEBUG-only clock/hook seam avoids a scheduler or bridge fault
   /// protocol while preserving production ownership and recovery behavior.
+  /// Release CI (`swift test -c release`) must skip this suite because
+  /// `startForTesting` / `syncOnceForTesting` are DEBUG-only.
   final class AgentSyncRecoveryTests: XCTestCase {
     private var storageFixture: RewindStorageTestIsolation.Fixture?
     private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot?
+
 
     override func setUp() async throws {
       try await super.setUp()

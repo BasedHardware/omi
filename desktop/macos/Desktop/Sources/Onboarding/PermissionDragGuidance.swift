@@ -11,7 +11,7 @@ enum PermissionDragGuidance {
     CloudConnectorGuidanceOverlay.shared.dismiss()
   }
 
-  static func presentDragToGrantHelper() async {
+  static func presentDragToGrantHelper(settingsPID: pid_t? = nil) async {
     if let lastPresentedAt, Date().timeIntervalSince(lastPresentedAt) < 2 { return }
     lastPresentedAt = Date()
 
@@ -29,11 +29,15 @@ enum PermissionDragGuidance {
     // pointing straight up" bug). Mirrors the screen-recording instruction overlay.
     var anchor: CGRect?
     for _ in 0..<12 {  // ~2.4s
-      if let frame = CloudConnectorFormAutomation.systemSettingsWindowAppKitFrame() {
+      if let frame = CloudConnectorFormAutomation.systemSettingsWindowAppKitFrame(pid: settingsPID) {
         anchor = frame
         break
       }
       try? await Task.sleep(nanoseconds: 200_000_000)
+    }
+    guard let anchor else {
+      lastPresentedAt = nil
+      return
     }
 
     // The overlay owns the System Settings lifecycle from here: it re-anchors over

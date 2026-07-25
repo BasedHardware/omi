@@ -572,6 +572,59 @@ import XCTest
         contains: ["expected": false, "lifecycle_class": "error"])
     }
 
+    func testRealtimeProviderCloseResolutionPairsBoundedDecisionWithCloseAttempt() throws {
+      let closeAttemptID = DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
+        provider: "gemini",
+        category: RealtimeHubCloseCategory.transportReceive.rawValue,
+        aliveFor: 4,
+        activeTurn: true,
+        authMode: .managed,
+        failureClass: .providerTransient(provider: .gemini))
+
+      try assertLatestHealthSnapshot(
+        event: .realtimeProviderSessionError,
+        contains: [
+          "close_attempt_id": closeAttemptID,
+          "active_turn": true,
+          "lifecycle_class": "error",
+        ])
+
+      DesktopDiagnosticsManager.shared.recordRealtimeProviderCloseResolution(
+        closeAttemptID: closeAttemptID,
+        provider: "gemini",
+        activeTurn: true,
+        turnOutcome: .failed,
+        recoveryAction: .sessionRewarm,
+        recoveryResult: .started)
+
+      try assertLatestHealthSnapshot(
+        event: .realtimeProviderCloseResolution,
+        contains: [
+          "close_attempt_id": closeAttemptID,
+          "active_turn": true,
+          "turn_outcome": "failed",
+          "recovery_action": "session_rewarm",
+          "recovery_result": "started",
+        ])
+
+      let url = try XCTUnwrap(
+        DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
+          area: "realtime_hub",
+          failureClass: "provider_transient",
+          phase: "session",
+          includeBetaDiagnostics: false))
+      defer { try? FileManager.default.removeItem(at: url) }
+
+      let data = try Data(contentsOf: url)
+      let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+      let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+      let resolution = try XCTUnwrap(
+        snapshots.first(where: { $0["event"] as? String == "realtime_provider_close_resolution" }))
+      XCTAssertEqual(resolution["close_attempt_id"] as? Int, closeAttemptID)
+      XCTAssertEqual(resolution["turn_outcome"] as? String, "failed")
+      XCTAssertEqual(resolution["recovery_result"] as? String, "started")
+    }
+
     func testFallbackNamedAreasAreNotCollapsedToOther() throws {
       for area in ["screen_capture", "memory_scope", "desktop_update", "tts_fallback", "task_workflow", "auth_storage"]
       {

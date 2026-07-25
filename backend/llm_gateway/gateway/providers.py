@@ -24,7 +24,7 @@ from llm_gateway.gateway.accounting import (
     vertex_usage_from_response,
 )
 from llm_gateway.gateway.credentials import CredentialContext
-from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef
+from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, ProviderRejection
 from llm_gateway.gateway.sse import SSEEventDecoder
 from utils.executors import critical_executor, run_blocking
 from utils.log_sanitizer import sanitize
@@ -59,6 +59,7 @@ class ChatCompletionProvider(Protocol):
 class ProviderFailure(Exception):
     failure_class: FailureClass
     safe_message: str = GENERIC_PROVIDER_FAILURE_MESSAGE
+    provider_rejection: ProviderRejection = ProviderRejection.NONE
 
     def __str__(self) -> str:
         return self.safe_message
@@ -874,7 +875,66 @@ def _raise_for_status(
             FailureClass.PROVIDER_5XX_OMI_PAID, safe_message=_provider_error_message(status_code, body)
         )
     if status_code >= 400:
-        raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH, safe_message=_provider_error_message(status_code, body))
+        provider_rejection = _provider_rejection(body)
+        failure_class = (
+            FailureClass.CAPABILITY_MISMATCH
+            if provider_rejection.value.startswith('unsupported_')
+            else FailureClass.PROVIDER_INVALID_REQUEST
+        )
+        raise ProviderFailure(
+            failure_class,
+            safe_message=_provider_error_message(status_code, body),
+            provider_rejection=provider_rejection,
+        )
+
+
+_PROVIDER_REJECTION_PARAMS = {
+    'model': 'model',
+    'messages': 'messages',
+    'response_format': 'response_format',
+    'reasoning_effort': 'reasoning_effort',
+    'temperature': 'temperature',
+    'max_tokens': 'output_limit',
+    'max_completion_tokens': 'output_limit',
+    'prompt_cache_key': 'prompt_cache',
+    'prompt_cache_options': 'prompt_cache',
+    'tools': 'tools',
+    'tool_choice': 'tools',
+    'stream': 'stream',
+    'stream_options': 'stream',
+}
+
+
+def _provider_rejection(body: bytes) -> ProviderRejection:
+    """Extract only allowlisted provider error semantics from a bounded body preview."""
+    try:
+        parsed = json.loads(body)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return ProviderRejection.OTHER_4XX
+    if not isinstance(parsed, Mapping):
+        return ProviderRejection.OTHER_4XX
+    error = parsed.get('error')
+    if not isinstance(error, Mapping):
+        return ProviderRejection.OTHER_4XX
+
+    code = error.get('code')
+    if code == 'context_length_exceeded':
+        return ProviderRejection.CONTEXT_LENGTH_EXCEEDED
+    if code == 'model_not_found':
+        return ProviderRejection.MODEL_NOT_FOUND
+
+    prefix = 'unsupported' if code == 'unsupported_parameter' else None
+    if code in {'invalid_parameter', 'invalid_value', 'invalid_type'}:
+        prefix = 'invalid'
+    if prefix is not None:
+        raw_param = error.get('param')
+        root_param = raw_param.split('[', 1)[0].split('.', 1)[0] if isinstance(raw_param, str) else ''
+        bounded_param = _PROVIDER_REJECTION_PARAMS.get(root_param, 'other')
+        return ProviderRejection(f'{prefix}_{bounded_param}')
+
+    if error.get('type') == 'invalid_request_error':
+        return ProviderRejection.INVALID_REQUEST
+    return ProviderRejection.OTHER_4XX
 
 
 def _provider_error_message(status_code: int, body: bytes) -> str:

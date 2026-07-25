@@ -31,7 +31,10 @@ run_hermetic() {
       exit 1
     fi
   fi
-  python3 -m pip install -q pyyaml pytest
+  if ! python3 -c 'import pytest, yaml'; then
+    echo "ERROR: missing pinned backend test dependencies; run uv pip sync pylock.toml first" >&2
+    exit 1
+  fi
   python3 scripts/validate-backend-runtime-env.py --env dev --check-workflows --check-rendered-cloud-run
   python3 scripts/validate-backend-runtime-env.py --env prod --check-workflows --check-rendered-cloud-run
   python3 ../.github/scripts/check_backend_deploy_source_admission.py

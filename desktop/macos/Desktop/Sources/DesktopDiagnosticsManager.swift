@@ -21,6 +21,7 @@ enum DesktopHealthEventName: String {
   case realtimeProviderExpectedSessionRotation = "realtime_provider_expected_session_rotation"
   case realtimeProviderPolicyClose = "realtime_provider_policy_close"
   case realtimeProviderSessionError = "realtime_provider_session_error"
+  case realtimeProviderCloseResolution = "realtime_provider_close_resolution"
   case userVisibleIssue = "user_visible_issue"
   case betaDiagnosticTrail = "beta_diagnostic_trail"
   case fallbackTriggered = "fallback_triggered"
@@ -29,6 +30,29 @@ enum DesktopHealthEventName: String {
 enum DesktopFallbackOutcome: String {
   case recovered
   case degraded
+  case exhausted
+}
+
+/// The immediate customer-turn/recovery decision made after a realtime transport
+/// closes. This is deliberately separate from the raw close event: the close is
+/// captured before the controller chooses a replacement, failover, or terminal
+/// path, while this closed set records that decision without provider payloads.
+enum RealtimeProviderCloseTurnOutcome: String {
+  case notInterrupted = "not_interrupted"
+  case failed
+  case pendingReplacement = "pending_replacement"
+}
+
+enum RealtimeProviderCloseRecoveryAction: String {
+  case none
+  case sessionRewarm = "session_rewarm"
+  case providerFailover = "provider_failover"
+  case cascade
+}
+
+enum RealtimeProviderCloseRecoveryResult: String {
+  case notNeeded = "not_needed"
+  case started
   case exhausted
 }
 
@@ -70,6 +94,7 @@ final class DesktopDiagnosticsManager {
   /// hub's transport key. A start/stop timer for `voice_tool_latency`; cleared
   /// on turn reset so it can't grow unbounded.
   private var voiceToolStarts: [String: Date] = [:]
+  private var realtimeProviderCloseAttemptID = 0
   private let betaTrailSnapshotLimit = 50
   private var consecutiveNearZeroPTTTurns = 0
   private var lastPTTWatchdogIncidentAt: Date?
@@ -645,6 +670,7 @@ final class DesktopDiagnosticsManager {
       properties: properties)
   }
 
+  @discardableResult
   func recordRealtimeProviderClose(
     provider: String,
     category: String?,
@@ -652,7 +678,11 @@ final class DesktopDiagnosticsManager {
     activeTurn: Bool,
     authMode: CredentialAuthMode?,
     failureClass: CredentialFailureClass?
-  ) {
+  ) -> Int {
+    lock.lock()
+    realtimeProviderCloseAttemptID += 1
+    let closeAttemptID = realtimeProviderCloseAttemptID
+    lock.unlock()
     let normalizedCategory = category ?? failureClass?.logValue ?? "unclassified"
     let event: DesktopHealthEventName
     switch normalizedCategory {
@@ -678,6 +708,7 @@ final class DesktopDiagnosticsManager {
       "category": normalizedCategory,
       "alive_for_seconds": Int(aliveFor),
       "active_turn": activeTurn,
+      "close_attempt_id": closeAttemptID,
       "expected": expectedLifecycle,
       "lifecycle_class": expectedLifecycle ? "expected" : "error",
     ]
@@ -697,6 +728,31 @@ final class DesktopDiagnosticsManager {
     record(
       event,
       properties: properties)
+    return closeAttemptID
+  }
+
+  /// Pair a provider-close event with the controller's immediate lifecycle
+  /// decision. `closeAttemptID` is a process-local monotonic counter, useful
+  /// only to join bounded events from one analytics session; it is not a user,
+  /// device, turn, or provider-session identifier.
+  func recordRealtimeProviderCloseResolution(
+    closeAttemptID: Int,
+    provider: String,
+    activeTurn: Bool,
+    turnOutcome: RealtimeProviderCloseTurnOutcome,
+    recoveryAction: RealtimeProviderCloseRecoveryAction,
+    recoveryResult: RealtimeProviderCloseRecoveryResult
+  ) {
+    record(
+      .realtimeProviderCloseResolution,
+      properties: [
+        "close_attempt_id": closeAttemptID,
+        "provider": safeProvider(provider),
+        "active_turn": activeTurn,
+        "turn_outcome": turnOutcome.rawValue,
+        "recovery_action": recoveryAction.rawValue,
+        "recovery_result": recoveryResult.rawValue,
+      ])
   }
 
   func currentSnapshotsForSentry() -> [[String: Any]] {
@@ -738,6 +794,8 @@ final class DesktopDiagnosticsManager {
       snapshot.event == .userVisibleIssue
       || snapshot.event == .pttAudioCaptureWatchdogTriggered
       || snapshot.event == .pttAudioCaptureLifecycle
+      || snapshot.event == .realtimeProviderSessionError
+      || snapshot.event == .realtimeProviderCloseResolution
       || (includeBetaDiagnostics && snapshot.event == .betaDiagnosticTrail)
     guard includesTypedIncidentContext else {
       return result
@@ -755,7 +813,8 @@ final class DesktopDiagnosticsManager {
     "area", "failure_class", "phase", "build", "build_number", "os_version", "device_model",
     "source", "mode", "hub_active", "turn_audio_seconds", "voiced_audio_seconds", "peak", "rms",
     "is_near_zero", "watchdog_eligible", "consecutive_silent_turns", "tcc_microphone_granted",
-    "input_device_class", "recovery_action", "recovery_result", "threshold",
+    "input_device_class", "close_attempt_id", "turn_outcome", "recovery_action", "recovery_result",
+    "threshold",
     "component", "operation", "outcome", "error_domain", "error_code",
     "osstatus", "keycode", "modifiers",
     // PTT attempt lifecycle correlation (PTTAttemptLifecycleRecorder).
@@ -980,6 +1039,7 @@ final class DesktopDiagnosticsManager {
       lock.lock()
       snapshots.removeAll()
       betaTrailSnapshots.removeAll()
+      realtimeProviderCloseAttemptID = 0
       consecutiveNearZeroPTTTurns = 0
       lastPTTWatchdogIncidentAt = nil
       lastUserVisibleSentryIncidentAt.removeAll()

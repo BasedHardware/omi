@@ -1777,20 +1777,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get lovingOmi => 'تحب Omi؟';
 
   @override
-  String get leaveReviewIos =>
-      'ساعدنا في الوصول إلى المزيد من الأشخاص من خلال ترك تقييم في App Store. ملاحظاتك تعني لنا الكثير!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'ساعدنا في الوصول إلى المزيد من الأشخاص من خلال ترك تقييم في Google Play Store. ملاحظاتك تعني لنا الكثير!';
-
-  @override
-  String get rateOnAppStore => 'التقييم على App Store';
-
-  @override
-  String get rateOnGooglePlay => 'التقييم على Google Play';
-
-  @override
   String get maybeLater => 'ربما لاحقاً';
 
   @override
@@ -2123,6 +2109,18 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ تعديل الذاكرة';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'أحب تناول الآيس كريم...';

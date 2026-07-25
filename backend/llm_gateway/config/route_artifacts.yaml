@@ -1,6 +1,6 @@
 route_artifacts:
   - route_artifact_id: route.public_shared_conversation_chat.2026_07_19.001
-    artifact_digest: sha256:2b001db329d1ade5f0ce65a11271e4fbe29b2acf815cb32e5a2a13302b793b31
+    artifact_digest: sha256:f9900baf225db6fc1386b668d008d9fe9de391f1ea8c1b1b3de15e6486800df4
     lane_id: omi:auto:public-shared-conversation-chat
     surface: openai.chat_completions
     primary:
@@ -40,6 +40,7 @@ route_artifacts:
         - byok_unsupported_provider
         - missing_byok_key
         - capability_mismatch
+        - provider_invalid_request
         - invalid_config
     fallback_policy:
       fallback_on: []
@@ -50,10 +51,11 @@ route_artifacts:
         - byok_unsupported_provider
         - missing_byok_key
         - capability_mismatch
+        - provider_invalid_request
         - invalid_config
 
   - route_artifact_id: route.chat_structured.2026_06_27.001
-    artifact_digest: sha256:d9ab75d4eb53c029028c7a2ebccee8d273d043d6d7553a8e8c9f9897d28bfb6a
+    artifact_digest: sha256:707331066d53439c5abd3a3614c5a5f3972880713e53b68fe470b0bf2a930104
     lane_id: omi:auto:chat-structured
     surface: openai.chat_completions
     primary:
@@ -95,6 +97,7 @@ route_artifacts:
         - byok_unsupported_provider
         - missing_byok_key
         - capability_mismatch
+        - provider_invalid_request
         - invalid_config
     fallback_policy:
       fallback_on:
@@ -108,10 +111,11 @@ route_artifacts:
         - byok_unsupported_provider
         - missing_byok_key
         - capability_mismatch
+        - provider_invalid_request
         - invalid_config
 
   - route_artifact_id: route.chat_structured.2026_06_20.001
-    artifact_digest: sha256:70f61658ab9f0283514d86ce3438bdcd89ed3f15dd8d42533648384840894e67
+    artifact_digest: sha256:7a8c23fbb2bae7e005b69844c84191f4852e97f56cb99dd3bca75360c430a273
     lane_id: omi:auto:chat-structured
     surface: openai.chat_completions
     # The gateway LKG mirrors the active model so shadow serving and fallback use
@@ -153,6 +157,7 @@ route_artifacts:
         - byok_unsupported_provider
         - missing_byok_key
         - capability_mismatch
+        - provider_invalid_request
         - invalid_config
     fallback_policy:
       fallback_on:
@@ -166,4 +171,5 @@ route_artifacts:
         - byok_unsupported_provider
         - missing_byok_key
         - capability_mismatch
+        - provider_invalid_request
         - invalid_config

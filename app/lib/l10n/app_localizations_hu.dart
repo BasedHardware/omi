@@ -1802,20 +1802,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get lovingOmi => 'Tetszik az Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Segíts elérni több embert azzal, hogy értékelést hagysz az App Store-ban. A visszajelzésed sokat jelent nekünk!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Segíts elérni több embert azzal, hogy értékelést hagysz a Google Play Áruházban. A visszajelzésed sokat jelent nekünk!';
-
-  @override
-  String get rateOnAppStore => 'Értékelés az App Store-ban';
-
-  @override
-  String get rateOnGooglePlay => 'Értékelés a Google Play-en';
-
-  @override
   String get maybeLater => 'Talán később';
 
   @override
@@ -2153,6 +2139,18 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Emlékezet szerkesztése';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Szeretek fagyit enni...';

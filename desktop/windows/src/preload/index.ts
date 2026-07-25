@@ -344,6 +344,11 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('rewind:framesSampled', from, to),
   rewindDayBounds: () => ipcRenderer.invoke('rewind:dayBounds'),
   rewindFrameCount: () => ipcRenderer.invoke('rewind:frameCount'),
+  onRewindCaptured: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('rewind:captured', listener)
+    return () => ipcRenderer.removeListener('rewind:captured', listener)
+  },
   rewindSearch: (query: string) => ipcRenderer.invoke('rewind:search', query),
   // --- Track 4 (Rewind semantic search) --- Phase 2 of a search: the same results
   // with semantic hits merged in, pushed if/when the embedding round-trip lands.

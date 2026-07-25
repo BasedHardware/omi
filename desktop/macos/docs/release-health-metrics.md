@@ -1,6 +1,6 @@
 # macOS Release-Health Metric Specification
 
-**Status:** active · **Schema version:** 1 · **Owner:** desktop/macos · **Tracking:** [#10425](https://github.com/BasedHardware/omi/issues/10425)
+**Status:** active · **Schema version:** 2 · **Owner:** desktop/macos · **Tracking:** [#10425](https://github.com/BasedHardware/omi/issues/10425)
 
 This is the **authoritative query contract** for macOS release-health telemetry. It
 defines, per signal, the exact numerator, denominator, time window, minimum cohort,
@@ -77,14 +77,17 @@ the release-evidence layer (`#9523`) will consume.
 - **Phase (warm vs active):** `phase` is a closed set — `warm` (background pre-warm)
   vs `barge_in_replacement` (socket replacement during an active turn); any other
   value is bucketed to `other`. This is the warm-vs-active dimension.
-- **Outcome (recovered/degraded/exhausted):** a mint failure is point-in-time; its
-  terminal fate is the correlated `fallback_triggered`{`area = realtime_hub`} event
-  (`outcome` = `recovered`/`degraded`/`exhausted`). Join on `mint_attempt_id` (present
-  on both when a mint triggered the failover), then `provider` + bounded time window.
-- **Numerator (mint-exhausted, user-impacting):** mint failures joined to a
-  `realtime_hub` fallback with `outcome = exhausted` (fell through to the cascade
-  with no acceptable path). `degraded` (failed over to the alternate provider) is
-  recoverable and is **not** a terminal failure numerator.
+- **Immediate outcome (degraded/exhausted):** the mint-failure event itself records
+  whether the controller started an alternate-provider fallback (`degraded`) or
+  had no remaining managed path (`exhausted`). Its later fallback outcome remains
+  on the correlated `fallback_triggered`{`area = realtime_hub`} event. Join on
+  `mint_attempt_id` (present on both when a mint triggered failover), then provider
+  plus a bounded time window.
+- **Numerator (mint-exhausted, user-impacting):** `outcome = exhausted` on the
+  mint-failure event (no remaining managed path). Use the correlated
+  `realtime_hub` fallback event for the detailed replacement path. `degraded`
+  (alternate-provider fallback started) is recoverable and is **not** a terminal
+  failure numerator.
 - **Window:** PT24H. **Minimum cohort:** 30 mint-attempting users per build.
   **Missing data:** `unknown` if no mint events.
 
@@ -93,10 +96,17 @@ the release-evidence layer (`#9523`) will consume.
 - **Source events:** `realtime_provider_expected_idle_teardown`,
   `realtime_provider_expected_session_rotation` (both `expected = true`),
   `realtime_provider_policy_close`, `realtime_provider_session_error`
-  (both `expected = false`).
-- **Error rate numerator:** `realtime_provider_session_error` +
-  `realtime_provider_policy_close` (`expected = false`). **Denominator:** active
-  realtime sessions (proxy: distinct sessions emitting any `realtime_provider_*`).
+  (both `expected = false`), and `realtime_provider_close_resolution`.
+- **Customer-turn decision:** every provider-close event carries a process-local
+  `close_attempt_id`; its paired `realtime_provider_close_resolution` carries the
+  closed-set `turn_outcome` and the immediate `recovery_action`/`recovery_result`.
+  The id is only valid within the same analytics session and is never a user, device,
+  turn, or provider-session identifier.
+- **Error rate numerator:** active-turn `realtime_provider_session_error` +
+  `realtime_provider_policy_close` (`expected = false`) whose paired resolution has
+  `turn_outcome = failed`. `pending_replacement` is an intermediate recovery state,
+  not a terminal customer-failure numerator. **Denominator:** active realtime
+  sessions (proxy: distinct sessions emitting any `realtime_provider_*`).
 - **Excluded:** the two `expected_*` events (`expected = true`) — normal idle teardown
   and planned 60-min OpenAI session rotation. They remain separately inspectable but
   MUST NOT inflate the realtime error or release-regression rate.
@@ -160,5 +170,6 @@ intermediate event.
 
 Bump `Schema version` and call out the change here when any numerator/denominator
 definition, closed enum, or field name changes. `telemetry_schema_version` on the
-PTT lifecycle snapshot and the `expected`/`outcome`/`mint_attempt_id`/`phase` fields
-are the machine-readable companions to this document.
+PTT lifecycle snapshot and the `expected`/`outcome`/`mint_attempt_id`/`phase`/
+`close_attempt_id`/`turn_outcome` fields are the machine-readable companions to this
+document.

@@ -218,7 +218,7 @@ final class CloudConnectorGuidanceOverlay {
   }
 
   /// Screen Recording helper whose app icon can be dropped into System Settings.
-  func presentDragToGrantCard(appIcon: NSImage, appName: String, appURL: URL, near anchor: CGRect?) {
+  func presentDragToGrantCard(appIcon: NSImage, appName: String, appURL: URL, near anchor: CGRect) {
     dismissTask?.cancel()
     settingsWatchTask?.cancel()
     window?.close()
@@ -319,39 +319,29 @@ final class CloudConnectorGuidanceOverlay {
   }
 
   /// Drag-card placement: horizontally centered on the anchor (Settings window)
-  /// and pinned directly beneath it, so the card follows the window and never
-  /// covers the drop target. If there's no room below (Settings sits near the
-  /// screen bottom), flip to just above the window instead. With no anchor yet,
-  /// fall back to the bottom quarter of the screen.
-  static func dragCardFrame(anchor: CGRect?, cardSize: CGSize, visibleFrame: CGRect) -> CGRect {
+  /// and pinned directly beneath it. If Settings fills the screen and leaves no
+  /// room below, keep the card in the screen's bottom quarter where it remains
+  /// close to the permission list instead of jumping to the top.
+  static func dragCardFrame(anchor: CGRect, cardSize: CGSize, visibleFrame: CGRect) -> CGRect {
     let gap: CGFloat = 12
     let padding: CGFloat = 12
-    let x = (anchor ?? visibleFrame).midX - cardSize.width / 2
+    let x = anchor.midX - cardSize.width / 2
     let y: CGFloat
-    if let anchor {
-      // AppKit is bottom-left origin: the window's bottom edge is `minY`, so
-      // "under" the window is a smaller y.
-      let below = anchor.minY - gap - cardSize.height
-      y = below >= visibleFrame.minY + padding ? below : anchor.maxY + gap
-    } else {
-      y = visibleFrame.minY + (visibleFrame.height / 4 - cardSize.height) / 2
-    }
+    // AppKit is bottom-left origin: the window's bottom edge is `minY`, so
+    // "under" the window is a smaller y.
+    let below = anchor.minY - gap - cardSize.height
+    y =
+      below >= visibleFrame.minY + padding
+      ? below
+      : visibleFrame.minY + (visibleFrame.height / 4 - cardSize.height) / 2
     let proposed = CGRect(x: x, y: y, width: cardSize.width, height: cardSize.height)
     return SpatialOverlayGeometry.clamped(proposed, to: visibleFrame, padding: padding)
   }
 
-  /// Whether the drag card's arrow should point DOWN toward the anchor. The card
-  /// normally sits below the Settings window (arrow up), but `dragCardFrame` flips
-  /// it above the window when there's no room below — in which case the drop target
-  /// (the list) is beneath the card and the arrow must point down. Mirrors the exact
-  /// placement decision in `dragCardFrame` so the arrow always points at the list.
-  static func dragCardArrowPointsDown(anchor: CGRect?, cardSize: CGSize, visibleFrame: CGRect) -> Bool {
-    guard let anchor else { return false }  // no anchor → bottom-of-screen fallback, arrow up
-    let gap: CGFloat = 12
-    let padding: CGFloat = 12
-    let below = anchor.minY - gap - cardSize.height
-    let fitsBelow = below >= visibleFrame.minY + padding
-    return !fitsBelow
+  /// The card always stays below the permission target, including its bottom-quarter
+  /// fallback, so its arrow points up.
+  static func dragCardArrowPointsDown(anchor: CGRect, cardSize: CGSize, visibleFrame: CGRect) -> Bool {
+    false
   }
 
   /// A named development bundle can have a much longer display name than the

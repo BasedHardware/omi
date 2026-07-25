@@ -88,18 +88,21 @@ jobs:
         working-directory: backend
         run: uv pip sync pylock.toml --system
 
-      - name: Prewarm tokenizer cache
-        working-directory: backend
-        run: |
-          python - <<'PY'
-          import tiktoken
+      - name: Restore tokenizer cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/tiktoken-cache
+          key: tiktoken-${{ runner.os }}-${{ hashFiles('backend/pylock.toml') }}
 
-          tiktoken.encoding_for_model('gpt-4')
-          PY
+      - name: Prewarm tokenizer cache
+        env:
+          TIKTOKEN_CACHE_DIR: ${{ runner.temp }}/tiktoken-cache
+        run: python backend/scripts/prewarm_tiktoken_cache.py
 
       - name: Run hermetic backend e2e harness
         env:
           E2E_PYTEST_TIMEOUT: 120s
+          TIKTOKEN_CACHE_DIR: ${{ runner.temp }}/tiktoken-cache
         run: bash backend/testing/e2e/run.sh -q --tb=short
 
   listen-pusher-stack-gauntlet:
@@ -138,7 +141,20 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install pinned Firebase CLI dependencies
-        run: npm ci --ignore-scripts
+        run: |
+          for attempt in 1 2 3; do
+            if npm ci --ignore-scripts --prefer-offline --no-audit --fund=false; then
+              exit 0
+            fi
+            if [[ "$attempt" == 3 ]]; then
+              echo "Pinned Firebase CLI dependency install failed after 3 attempts." >&2
+              npm cache verify || true
+              exit 1
+            fi
+            echo "npm ci failed on attempt $attempt/3; verifying cache before bounded retry." >&2
+            npm cache verify
+            sleep "$attempt"
+          done
 
       - name: Set up Java for the Firestore emulator
         uses: actions/setup-java@v5
@@ -154,12 +170,12 @@ jobs:
       - name: Run listen to pusher stack gauntlet
         run: npm run test:listen-pusher-stack:emulator -- --state-dir "$RUNNER_TEMP/listen-pusher-stack"
 
-      - name: Show listen gauntlet backend logs on failure
+      - name: Show listen gauntlet process diagnostics on failure
         if: failure()
         run: |
           state_dir="$RUNNER_TEMP/listen-pusher-stack"
           if [[ -d "$state_dir" ]]; then
-            find "$state_dir" -type f -name backend.log -print -exec tail -n 160 {} \;
+            find "$state_dir" -type f \( -name '*.log' -o -name '*.jsonl' \) -print -exec tail -n 160 {} \;
           else
             echo "Listen gauntlet state directory was not retained."
           fi
@@ -200,7 +216,20 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install pinned Firebase CLI dependencies
-        run: npm ci --ignore-scripts
+        run: |
+          for attempt in 1 2 3; do
+            if npm ci --ignore-scripts --prefer-offline --no-audit --fund=false; then
+              exit 0
+            fi
+            if [[ "$attempt" == 3 ]]; then
+              echo "Pinned Firebase CLI dependency install failed after 3 attempts." >&2
+              npm cache verify || true
+              exit 1
+            fi
+            echo "npm ci failed on attempt $attempt/3; verifying cache before bounded retry." >&2
+            npm cache verify
+            sleep "$attempt"
+          done
 
       - name: Set up Java for the Firestore emulator
         uses: actions/setup-java@v5

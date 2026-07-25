@@ -1794,20 +1794,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get lovingOmi => 'Patīk Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Palīdziet mums sasniegt vairāk cilvēku, atstājot atsauksmi App Store. Jūsu atsauksmes mums nozīmē visu!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Palīdziet mums sasniegt vairāk cilvēku, atstājot atsauksmi Google Play Store. Jūsu atsauksmes mums nozīmē visu!';
-
-  @override
-  String get rateOnAppStore => 'Novērtēt App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Novērtēt Google Play';
-
-  @override
   String get maybeLater => 'Varbūt vēlāk';
 
   @override
@@ -2144,6 +2130,18 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Rediģēt atmiņu';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Man patīk ēst saldējumu...';

@@ -407,14 +407,15 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
 def persist_processing_result_with_lifecycle(
     uid: str,
     conversation_data: dict,
-    *,
-    expected_statuses: set[str],
 ) -> bool:
-    """Persist a processor result only while its lifecycle generation remains current.
+    """Merge a processor result into its conversation.
 
-    A processor works from an in-memory snapshot.  This transaction fences that
-    snapshot against a concurrent discard, delete, or terminal transition before
-    merging generated content back into the conversation document.
+    Only deletion is refused.  Lifecycle state is not: a discard is the system's
+    own verdict that a conversation held nothing, and a status is bookkeeping
+    about which generation ran, and every processor re-derives what it writes
+    from the content in front of it.  Fencing on either stranded conversations a
+    later sync had filled with speech — transcribed, untitled, and invisible to
+    their owner — to prevent races that had never been observed.
     """
     conversation_data.pop('updated_at', None)
     if 'audio_base64_url' in conversation_data:
@@ -432,13 +433,12 @@ def persist_processing_result_with_lifecycle(
         existing_snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(existing_snapshot, 'exists', False):
             # A processor is never an authority to recreate a conversation.
-            # Treat deletion as the same terminal fence as a discard so a
-            # finalizer cannot resurrect it and emit derived side effects.
+            # Deleting one is a decision its owner made, and a merge write to a
+            # missing document would create it, so a late processor could bring
+            # back what they removed and emit derived side effects from it.
             return False
 
         existing = existing_snapshot.to_dict() or {}
-        if existing.get('discarded') or existing.get('status') not in expected_statuses:
-            return False
 
         # Generated processing content never owns user-managed fields.
         for field in ('starred', 'folder_id', 'visibility', 'user_title'):

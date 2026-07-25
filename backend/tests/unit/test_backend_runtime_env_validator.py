@@ -97,6 +97,15 @@ def with_sync_ledger_fence_mode(payload: str) -> str:
     )
 
 
+def with_listen_finalization_orphan_env(payload: str) -> str:
+    """Keep offline Cloud Run state fixtures aligned with the reliability recovery setting."""
+    return payload.replace(
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS", "value": "900"},',
+    )
+
+
 GOOGLE_OAUTH_SECRETS = '''\
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
@@ -104,7 +113,9 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
-        with_backend_pusher_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+        with_backend_pusher_env(
+            with_listen_finalization_orphan_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+        )
     )
     return re.sub(
         r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
@@ -1580,6 +1591,53 @@ def test_repo_rendered_cloud_run_matches_manifest():
 
     assert validator.validate_runtime_env(env='dev', check_rendered_cloud_run=True) == []
     assert validator.validate_runtime_env(env='prod', check_rendered_cloud_run=True) == []
+
+
+# Every service that deploys the backend image (`uvicorn main:app`) runs the
+# stale-processing reconciliation scheduler registered in main.py startup, so it
+# reads LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS. A scheduler surface that omits
+# it silently falls back to the code default, breaking the source-controlled
+# reliability contract. When a new main.py surface is added, extend this list.
+_MAIN_APP_SCHEDULER_SURFACES: dict[str, list[tuple[str, str]]] = {
+    'dev': [
+        ('gke', 'backend-listen'),
+        ('cloud_run', 'backend'),
+        ('cloud_run', 'backend-sync'),
+        ('cloud_run', 'backend-sync-backfill'),
+        ('cloud_run', 'backend-integration'),
+    ],
+    'prod': [
+        ('gke', 'backend-listen'),
+        ('cloud_run', 'backend'),
+        ('cloud_run', 'backend-sync'),
+        ('cloud_run', 'backend-sync-backfill'),
+        ('cloud_run', 'backend-integration'),
+    ],
+}
+
+
+def _scheduler_surface_env_block(env_config: dict, section: str, service: str) -> dict:
+    if section == 'gke':
+        return ((env_config.get('gke') or {}).get(service) or {}).get('env') or {}
+    services = (env_config.get('cloud_run') or {}).get('services') or {}
+    return (services.get(service) or {}).get('env') or {}
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_scheduler_runtime_surfaces_declare_orphan_stale_setting(env):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    env_config = manifest['environments'][env]
+    for section, service in _MAIN_APP_SCHEDULER_SURFACES[env]:
+        env_block = _scheduler_surface_env_block(env_config, section, service)
+        entry = env_block.get('LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS')
+        assert entry is not None, (
+            f'{env}/{section}/{service} runs the stale-processing scheduler but '
+            f'omits LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS'
+        )
+        assert (
+            entry.get('category') == 'reliability'
+        ), f'{env}/{section}/{service} must classify the recovery setting as reliability'
 
 
 def test_parakeet_selected_without_endpoint_is_rejected_for_all_cloud_run_validation_modes(tmp_path):
