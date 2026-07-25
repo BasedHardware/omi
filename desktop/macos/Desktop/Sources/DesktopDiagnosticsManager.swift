@@ -873,6 +873,7 @@ final class DesktopDiagnosticsManager {
     "input_device_class", "close_attempt_id", "turn_outcome", "recovery_action", "recovery_result",
     "threshold",
     "component", "operation", "outcome", "error_domain", "error_code",
+    "path_class", "database_file_size_bytes", "volume_free_bytes", "volume_total_bytes",
     "osstatus", "keycode", "modifiers",
     // PTT attempt lifecycle correlation (PTTAttemptLifecycleRecorder).
     "attempt_id", "capture_start_outcome", "capture_start_status_class",
