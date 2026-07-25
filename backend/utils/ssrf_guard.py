@@ -26,9 +26,23 @@ PRIVATE_NETWORKS = [
 def is_private_ip(ip_str: str) -> bool:
     try:
         ip = ipaddress.ip_address(ip_str)
-        return any(ip in net for net in PRIVATE_NETWORKS)
     except ValueError:
         return True  # unparseable -> treat as blocked
+
+    # Unwrap IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1, which ipaddress parses as
+    # the IPv6 address ::ffff:7f00:1) to the IPv4 address they represent before
+    # classifying. Without this, a mapped loopback/private address is a valid IPv6
+    # literal that matches none of PRIVATE_NETWORKS' IPv4 entries and isn't covered by
+    # the IPv6 entries either - a real bypass for the private-IP check below.
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+
+    if any(ip in net for net in PRIVATE_NETWORKS):
+        return True
+
+    # Backstop via Python's own classification, which covers ranges PRIVATE_NETWORKS
+    # doesn't explicitly enumerate (multicast, IANA "reserved", unspecified 0.0.0.0/::).
+    return bool(ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified)
 
 
 async def hostname_is_public(hostname: str) -> bool:

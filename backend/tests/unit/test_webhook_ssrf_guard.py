@@ -22,6 +22,16 @@ def test_is_private_ip_blocks_known_ranges():
         assert is_private_ip(ip), f"{ip} must be classified private"
 
 
+def test_is_private_ip_blocks_ipv4_mapped_ipv6_addresses():
+    """Regression: ipaddress.ip_address('::ffff:127.0.0.1') parses as the IPv6 address
+    ::ffff:7f00:1, which matches none of PRIVATE_NETWORKS' IPv4 entries and isn't in any
+    IPv6 entry either - a real bypass letting an IPv4-mapped IPv6 literal reach loopback/
+    internal addresses past the guard. Must unwrap .ipv4_mapped before classifying.
+    """
+    for ip in ("::ffff:127.0.0.1", "::ffff:10.0.0.5", "::ffff:169.254.169.254"):
+        assert is_private_ip(ip), f"{ip} (IPv4-mapped) must be classified private"
+
+
 def test_is_private_ip_allows_public_addresses():
     for ip in ("8.8.8.8", "1.1.1.1"):
         assert not is_private_ip(ip), f"{ip} must be classified public"
