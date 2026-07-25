@@ -46,9 +46,7 @@ static bool storage_full_warned = false;
 #endif
 
 extern bool is_connected;
-#ifdef CONFIG_OMI_ENABLE_BATTERY
 extern bool is_charging;
-#endif
 static atomic_t pusher_stop_flag;
 
 struct bt_conn *current_connection = NULL;
