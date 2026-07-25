@@ -64,7 +64,7 @@ never audio or transcript text.
 
 Scenarios:
 
-1. audio → streaming segment → stale live-session lifecycle → persisted content → completed inline job;
+1. audio → one bounded live-STT accepted attempt → streaming segment → one matching successful terminal (including after teardown replay) → stale live-session lifecycle → persisted content → completed inline job;
 2. completed native UUID reconnect replays the terminal binding without a new job;
 3. a stale empty desktop recording is removed by the next-session lifecycle path and creates no job;
 4. a pusher process loses the first 104 before claim, is restarted, and the
@@ -82,8 +82,8 @@ Scenarios:
    recovery path from #9960 enqueues one opaque Cloud Tasks task, then a real
    worker retry preserves `processing` until it completes the same job;
 8. a worker exhausting its two-attempt test budget atomically dead-letters the
-   job and marks the still-current conversation `failed`/`discarded`, while a
-   later duplicate delivery is fenced;
+   job with `terminal_outcome=failure` and marks the still-current conversation
+   `failed`/`discarded`, while a later duplicate delivery is fenced;
 9. an integration failure after processing retries only durable fanout, never
    re-runs completed conversation processing.
 

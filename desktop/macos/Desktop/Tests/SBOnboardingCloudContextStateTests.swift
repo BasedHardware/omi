@@ -8,6 +8,48 @@ import XCTest
 /// context rows must use the same importer as Apps > Imports, while Google
 /// functional-probe failures retain sanitized, actionable copy.
 final class SBOnboardingCloudContextStateTests: XCTestCase {
+  private let resumeStepKey = "sbOnboardingResumeStep"
+
+  override func setUp() {
+    super.setUp()
+    DesktopDiagnosticsManager.shared.resetForTests()
+    UserDefaults.standard.removeObject(forKey: resumeStepKey)
+    UserDefaults.standard.removeObject(forKey: DefaultsKey.hasCompletedOnboarding.rawValue)
+  }
+
+  override func tearDown() {
+    UserDefaults.standard.removeObject(forKey: resumeStepKey)
+    UserDefaults.standard.removeObject(forKey: DefaultsKey.hasCompletedOnboarding.rawValue)
+    super.tearDown()
+  }
+
+  @MainActor
+  func testBeginSignalsCompletedFlagDisagreeingWithStageResumeAndSetupJournal() {
+    let appState = AppState()
+    appState.hasCompletedOnboarding = true
+    UserDefaults.standard.set(
+      SBOnboardingModel.Step.context.rawValue,
+      forKey: SBOnboardingModel.resumeStepKey)
+    let model = SBOnboardingModel(
+      appState: appState,
+      chatProvider: ChatProvider(),
+      onComplete: nil)
+
+    model.begin()
+
+    let signals = DesktopDiagnosticsManager.shared.currentSnapshotsForSentry().filter {
+      $0["seam"] as? String == DesktopStateAuthoritySeam.onboardingSetupState.rawValue
+    }
+    XCTAssertEqual(
+      Set(signals.compactMap { $0["direction"] as? String }),
+      [
+        "completed_flag_with_active_stage",
+        "completed_flag_with_resume_state",
+        "completed_flag_with_active_journal",
+      ])
+    XCTAssertTrue(appState.hasCompletedOnboarding)
+    XCTAssertTrue(model.chatProvider.isOnboarding)
+  }
 
   func testMemoryContextRowsRouteToCanonicalImportConnectors() {
     XCTAssertEqual(SBOnboardingModel.contextConnectionRoute(for: "chatgpt"), .importConnector("chatgpt"))

@@ -47,6 +47,17 @@ def test_real_check_lists_provider_credentials(monkeypatch: pytest.MonkeyPatch, 
     assert any("DEEPGRAM_API_KEY" in item for item in missing)
 
 
+def test_firebase_command_writes_the_configured_emulator_ports(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setenv("OMI_HARNESS_PORT_OFFSET", "321")
+    cfg = config.load_config(REPO_ROOT, create_layout=True)
+    command = cli._firebase_command(cfg)
+    config_path = Path(command[command.index("--config") + 1])
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    assert payload["emulators"]["firestore"]["port"] == 8406
+    assert payload["emulators"]["auth"]["port"] == 9420
+
+
 def test_reset_command_is_idempotent_with_temp_state(tmp_path: Path) -> None:
     env = os.environ.copy()
     env["PROVIDER_MODE"] = "offline"

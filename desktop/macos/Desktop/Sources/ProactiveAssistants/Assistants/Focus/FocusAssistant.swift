@@ -1,4 +1,5 @@
 import Foundation
+import OmiSupport
 
 /// Focus monitoring assistant that detects when users are distracted
 actor FocusAssistant: ProactiveAssistant {
@@ -686,7 +687,15 @@ actor FocusAssistant: ProactiveAssistant {
         sections.append(lines.joined(separator: "\n"))
       }
     } catch {
-      logError("Focus: Failed to load goals for context", error: error)
+      logError(
+        "Focus: Failed to load goals for context",
+        error: error,
+        context: StorageFailureDiagnostics.context(
+          pathClass: "goals-db",
+          containingURL: DesktopLocalProfile.applicationSupportURL(),
+          databaseURL: nil,
+          error: error,
+          appIsTerminating: RewindDatabase.isTerminationInProgress))
     }
 
     // Top tasks by importance

@@ -28,6 +28,7 @@ from config.stt_provider_policy import (
 )
 from utils.async_tasks import create_named_task
 from utils.executors import sync_executor, run_blocking
+from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from utils.stt.socket import STTSocket
@@ -693,6 +694,11 @@ class SafeModulateSocket(STTSocket):
         self._prev_partial_text: str = ''
         self._prev_partial_start_ms: int = 0
         self._prev_partial_word_count: int = 0
+        # Velma rejects any s16le frame that is not a whole number of samples with
+        # {"type":"error","error":"Invalid input audio"} and then closes the socket, so a
+        # single odd-length frame ends the session even after valid audio. Nothing upstream
+        # guarantees even-length buffers, so carry a trailing odd byte to the next frame.
+        self._pending_odd_byte: bytes = b''
         self._recv_task: asyncio.Task[None] = asyncio.ensure_future(self._recv_loop(), loop=loop)
         self._send_task: asyncio.Task[None] = asyncio.ensure_future(self._send_loop(), loop=loop)
 
@@ -731,8 +737,22 @@ class SafeModulateSocket(STTSocket):
                 # later frame would be queued and never sent. The Parakeet sockets guard the same
                 # way. The header stays pending because _header_sent is only set once it is queued.
                 return True
+            aligned = self._pending_odd_byte + data
+            self._pending_odd_byte = aligned[-1:] if len(aligned) % 2 else b''
+            if self._pending_odd_byte:
+                aligned = aligned[:-1]
+                misaligned = True
+            else:
+                misaligned = False
+            if misaligned:
+                OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL.labels(
+                    provider=STTService.modulate.value, stage='provider_send'
+                ).inc()
+            if not aligned:
+                # One carried byte and nothing else yet: it is buffered, not dropped.
+                return True
             prepend_header = not self._header_sent and self._wav_header is not None
-            queued_data = (self._wav_header or b'') + data if prepend_header else data
+            queued_data = (self._wav_header or b'') + aligned if prepend_header else aligned
 
         try:
             current_loop = asyncio.get_running_loop()

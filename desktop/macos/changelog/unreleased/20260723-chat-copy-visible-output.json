@@ -1,3 +1,0 @@
-{
-  "change": "Fixed chat copying so it excludes hidden reasoning, avoids hangs in selectable messages, and adds one-click copy buttons to code blocks"
-}

@@ -52,6 +52,8 @@ struct DesktopHomeView: View {
   @AppStorage("onboardingFurthestStep") private var onboardingFurthestStep = 0
   @AppStorage("onboardingJustCompleted") private var onboardingJustCompleted = false
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
+  @AppStorage(MemoryHubDestination.storageKey) private var memoryDestinationRawValue =
+    MemoryHubDestination.memories.rawValue
   /// Reference instant for the top bar's "new since you were last here" counts —
   /// updated to now whenever Omi resigns front (see the didResignActive handler).
   @AppStorage("topBarNewSince") private var topBarNewSinceRaw: Double = 0
@@ -118,7 +120,7 @@ struct DesktopHomeView: View {
           .onAppear {
             log("DesktopHomeView: Showing SignInView (not signed in)")
           }
-      } else if !appState.hasCompletedOnboarding {
+      } else if !hasCompletedOnboardingAtAuthorityRead {
         // State 2: Signed in but onboarding not complete
         if shouldSkipOnboarding() {
           Color.clear.onAppear {
@@ -635,6 +637,32 @@ struct DesktopHomeView: View {
     return "main"
   }
 
+  /// Preserve the existing AppStorage winner while observing disagreement at
+  /// the actual product/onboarding gate. This read still runs when the completed
+  /// flag prevents SBOnboardingModel from mounting.
+  private var hasCompletedOnboardingAtAuthorityRead: Bool {
+    let completed = appState.hasCompletedOnboarding
+    guard completed else { return false }
+    let savedRaw = UserDefaults.standard.integer(forKey: SBOnboardingModel.resumeStepKey)
+    if savedRaw > SBOnboardingModel.Step.promise.rawValue,
+      SBOnboardingModel.Step(rawValue: savedRaw) != nil
+    {
+      DesktopDiagnosticsManager.shared.recordStateAuthoritySignal(
+        seam: .onboardingSetupState,
+        from: "completed_flag",
+        to: "persisted_resume",
+        direction: "completed_flag_with_resume_state")
+    }
+    if viewModelContainer.chatProvider.isOnboarding {
+      DesktopDiagnosticsManager.shared.recordStateAuthoritySignal(
+        seam: .onboardingSetupState,
+        from: "completed_flag",
+        to: "setup_journal",
+        direction: "completed_flag_with_active_journal")
+    }
+    return true
+  }
+
   private func reportAutomationState() {
     guard DesktopAutomationLaunchOptions.isEnabled else { return }
 
@@ -968,7 +996,7 @@ struct DesktopHomeView: View {
     viewModelContainer.tasksStore.isActive =
       index == SidebarNavItem.dashboard.rawValue || index == SidebarNavItem.tasks.rawValue
     viewModelContainer.memoriesViewModel.isActive =
-      index == SidebarNavItem.memories.rawValue
+      index == SidebarNavItem.conversations.rawValue || index == SidebarNavItem.memories.rawValue
   }
 
   private var mainContent: some View {
@@ -1145,8 +1173,18 @@ struct DesktopHomeView: View {
       if let rawValue = notification.userInfo?["rawValue"] as? Int,
         let item = SidebarNavItem(rawValue: rawValue)
       {
+        if let destination = MemoryHubDestination.destination(for: item) {
+          memoryDestinationRawValue = destination.rawValue
+        }
         selectedIndex = item.rawValue
       }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenConversationRequested)) { _ in
+      // Conversations now live behind the Memory menu. Route at
+      // the owning shell before the detail page mounts; its retained request is
+      // then consumed by ConversationsPage on appearance.
+      memoryDestinationRawValue = MemoryHubDestination.conversations.rawValue
+      selectedIndex = SidebarNavItem.conversations.rawValue
     }
     .onChange(of: selectedIndex) { oldValue, newValue in
       // Track the previous index when navigating to settings
@@ -1220,61 +1258,31 @@ private struct HubSegmentedControl: View {
   }
 }
 
-/// "Memory" tab — Conversations + Memories folded into one surface.
 private struct MemoryHubPage: View {
   let appState: AppState
   let viewModelContainer: ViewModelContainer
-  @State private var segment = 0
+  @AppStorage(MemoryHubDestination.storageKey) private var destinationRawValue =
+    MemoryHubDestination.memories.rawValue
 
-  /// Memories and conversations stay easy to scan in a calm, readable column;
-  /// the spatial Brain Map needs the full content surface so users can pan and
-  /// zoom without hitting an artificial canvas boundary.
-  private static let listContentWidth: CGFloat = 900
+  private var destination: MemoryHubDestination {
+    MemoryHubDestination(rawValue: destinationRawValue) ?? .memories
+  }
 
   var body: some View {
-    Group {
-      if segment == 2 {
-        ZStack(alignment: .top) {
-          // Keep the graph's camera framing intact while removing the list-page
-          // width cap. The map only occupies more of the visual field when the
-          // user deliberately pans or zooms into it.
-          MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-          hubSegmentedControl
-        }
-      } else {
-        VStack(spacing: 0) {
-          hubSegmentedControl
-
-          if segment == 0 {
-            constrainedListContent(
-              MemoriesPage(
-                viewModel: viewModelContainer.memoriesViewModel,
-                graphViewModel: viewModelContainer.memoryGraphViewModel))
-          } else {
-            constrainedListContent(ConversationsPageHost(appState: appState))
-          }
-        }
-      }
-    }
-  }
-
-  private var hubSegmentedControl: some View {
-    // The "Memory" rail item lands here, so Memories is the default segment;
-    // Conversations (with its live transcript) is second, and the Brain Map
-    // graph is its own tab.
-    HubSegmentedControl(segments: ["Memories", "Conversations", "Brain Map"], selection: $segment)
-      .frame(maxWidth: Self.listContentWidth)
-      .padding(.top, 22)
-      .padding(.horizontal, 28)
-      .padding(.bottom, 4)
-  }
-
-  private func constrainedListContent<V: View>(_ content: V) -> some View {
-    content
-      .frame(maxWidth: Self.listContentWidth, maxHeight: .infinity)
+    switch destination {
+    case .memories:
+      MemoriesPage(
+        viewModel: viewModelContainer.memoriesViewModel,
+        graphViewModel: viewModelContainer.memoryGraphViewModel
+      )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
+    case .conversations:
+      ConversationsPageHost(appState: appState)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    case .brainMap:
+      MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
   }
 }
 
@@ -1339,7 +1347,10 @@ private struct PageContentView: View {
           taskChatCoordinator: viewModelContainer.taskChatCoordinator,
           selectedIndex: $selectedTabIndex)
       case 1:
-        MemoryHubPage(appState: appState, viewModelContainer: viewModelContainer)
+        MemoryHubPage(
+          appState: appState,
+          viewModelContainer: viewModelContainer
+        )
       case 2:
         ChatPage(
           appProvider: viewModelContainer.appProvider,

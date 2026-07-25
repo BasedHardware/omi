@@ -18,19 +18,9 @@ import urllib.request
 from pathlib import Path
 from typing import Iterable
 
-from . import config, providers, safety, memory_scenarios
+from . import config, providers, qualification, safety, memory_scenarios
 
 OWNERSHIP_PREFIX = "omi-dev-harness"
-SERVICE_PORTS = {
-    "firestore": config.FIRESTORE_PORT,
-    "auth": config.AUTH_PORT,
-    "redis": config.REDIS_PORT,
-    "typesense": config.TYPESENSE_PORT,
-    "backend": config.BACKEND_PORT,
-    "desktop-backend": config.DESKTOP_BACKEND_PORT,
-}
-
-
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -40,7 +30,8 @@ def _repo_root() -> Path:
 
 
 def _marker(cfg: config.HarnessConfig, service: str) -> str:
-    return f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}"
+    token = os.environ.get("OMI_HARNESS_OWNERSHIP_TOKEN", "").strip()
+    return f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}:{token}" if token else f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}"
 
 
 def _load_json(path: Path, default: dict[str, object]) -> dict[str, object]:
@@ -178,7 +169,7 @@ def _service_health(cfg: config.HarnessConfig, service: str) -> tuple[bool, str]
     if service == "auth":
         return _http_ok(f"http://{cfg.auth_host}/")
     if service == "typesense":
-        url = f"http://127.0.0.1:{config.TYPESENSE_PORT}/collections"
+        url = f"http://127.0.0.1:{cfg.typesense_port}/collections"
         headers = {"X-TYPESENSE-API-KEY": config.LOCAL_TYPESENSE_API_KEY}
         ok, detail = _http_ok(url, headers=headers)
         if ok:
@@ -320,7 +311,7 @@ def print_config(cfg: config.HarnessConfig) -> None:
     print(f"firestore_emulator: {cfg.firestore_host}")
     print(f"firebase_auth_emulator: {cfg.auth_host}")
     print(f"redis: {cfg.redis_host}:{cfg.redis_port}")
-    print(f"typesense: 127.0.0.1:{config.TYPESENSE_PORT}")
+    print(f"typesense: 127.0.0.1:{cfg.typesense_port}")
     print(f"backend: {cfg.backend_url}")
     print(f"desktop_backend: {cfg.desktop_backend_url}")
 
@@ -396,7 +387,7 @@ def build_session_summary(cfg: config.HarnessConfig, provider_report: providers.
         "firestore": cfg.firestore_host,
         "firebase_auth": cfg.auth_host,
         "redis": f"{cfg.redis_host}:{cfg.redis_port}",
-        "typesense": f"127.0.0.1:{config.TYPESENSE_PORT}",
+        "typesense": f"127.0.0.1:{cfg.typesense_port}",
         "backend": cfg.backend_url,
         "desktop_backend": cfg.desktop_backend_url,
     }
@@ -528,6 +519,7 @@ def _start_process(
         {
             "service": service,
             "pid": proc.pid,
+            "process_group": proc.pid,
             "port": port,
             "endpoint": f"127.0.0.1:{port}",
             "log": str(log_path),
@@ -578,10 +570,27 @@ def _ensure_desktop_backend_binary(cfg: config.HarnessConfig) -> Path:
 
 
 def _firebase_command(cfg: config.HarnessConfig) -> list[str]:
+    config_path = cfg.layout.services_dir / "firebase" / "firebase.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        payload = json.loads((cfg.repo_root / "firebase.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Cannot load firebase.json for harness: {exc}") from exc
+    emulators = payload.setdefault("emulators", {})
+    for name, port in (("firestore", cfg.firestore_port), ("auth", cfg.auth_port)):
+        emulator = emulators.setdefault(name, {})
+        emulator["host"] = "127.0.0.1"
+        emulator["port"] = port
+    firestore = payload.setdefault("firestore", {})
+    firestore["rules"] = str(cfg.repo_root / "firestore.rules")
+    firestore["indexes"] = str(cfg.repo_root / "firestore.indexes.json")
+    _write_json(config_path, payload)
     base = ["firebase"] if _which("firebase") else ["npx", "firebase-tools"]
     return [
         *base,
         "emulators:start",
+        "--config",
+        str(config_path),
         "--only",
         "firestore,auth",
         "--project",
@@ -626,7 +635,7 @@ def _typesense_command(cfg: config.HarnessConfig) -> list[str]:
             "--api-address",
             "127.0.0.1",
             "--api-port",
-            str(config.TYPESENSE_PORT),
+            str(cfg.typesense_port),
             "--api-key",
             config.LOCAL_TYPESENSE_API_KEY,
             "--enable-cors",
@@ -638,7 +647,7 @@ def _typesense_command(cfg: config.HarnessConfig) -> list[str]:
         "--name",
         _typesense_container_name(cfg),
         "-p",
-        f"127.0.0.1:{config.TYPESENSE_PORT}:{config.TYPESENSE_PORT}",
+        f"127.0.0.1:{cfg.typesense_port}:{cfg.typesense_port}",
         "-v",
         f"{typesense_dir}:/data",
         f"typesense/typesense:{config.TYPESENSE_PINNED_VERSION}",
@@ -658,7 +667,7 @@ def _start_services(cfg: config.HarnessConfig) -> None:
         _firebase_command(cfg),
         cwd=cfg.repo_root,
         log_name="firebase-emulators.log",
-        port=config.FIRESTORE_PORT,
+        port=cfg.firestore_port,
     )
     redis_dir = cfg.layout.services_dir / "redis"
     redis_dir.mkdir(parents=True, exist_ok=True)
@@ -690,15 +699,15 @@ def _start_services(cfg: config.HarnessConfig) -> None:
         _typesense_command(cfg),
         cwd=cfg.repo_root,
         log_name="typesense.log",
-        port=config.TYPESENSE_PORT,
+        port=cfg.typesense_port,
     )
     _start_process(
         cfg,
         "backend",
-        [sys.executable, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", str(config.BACKEND_PORT)],
+        [sys.executable, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", str(cfg.backend_port)],
         cwd=cfg.repo_root / "backend",
         log_name="backend.log",
-        port=config.BACKEND_PORT,
+        port=cfg.backend_port,
     )
     desktop_binary = _ensure_desktop_backend_binary(cfg)
     _start_process(
@@ -707,7 +716,7 @@ def _start_services(cfg: config.HarnessConfig) -> None:
         [str(desktop_binary)],
         cwd=_desktop_backend_dir(cfg),
         log_name="desktop-backend.log",
-        port=config.DESKTOP_BACKEND_PORT,
+        port=cfg.desktop_backend_port,
         env=config.desktop_backend_child_env_for(cfg),
     )
 
@@ -717,7 +726,7 @@ def _wait_health(cfg: config.HarnessConfig, *, timeout: float = 45.0) -> list[st
     checks = {
         "firestore": (f"http://{cfg.firestore_host}/", None),
         "auth": (f"http://{cfg.auth_host}/", None),
-        "typesense": (f"http://127.0.0.1:{config.TYPESENSE_PORT}/collections", typesense_headers),
+        "typesense": (f"http://127.0.0.1:{cfg.typesense_port}/collections", typesense_headers),
         "backend": (f"{cfg.backend_url}/docs", None),
         "desktop-backend": (f"{cfg.desktop_backend_url}/health", None),
     }
@@ -777,7 +786,7 @@ def cmd_up(args: argparse.Namespace) -> int:
                 "firestore": cfg.firestore_host,
                 "auth": cfg.auth_host,
                 "redis": f"{cfg.redis_host}:{cfg.redis_port}",
-                "typesense": f"127.0.0.1:{config.TYPESENSE_PORT}",
+                "typesense": f"127.0.0.1:{cfg.typesense_port}",
                 "backend": cfg.backend_url,
                 "desktop_backend": cfg.desktop_backend_url,
             },
@@ -954,6 +963,31 @@ def cmd_logs(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_qualification_lease(args: argparse.Namespace) -> int:
+    repo_root = _repo_root()
+    if args.lease_action == "acquire":
+        lease = qualification.acquire(
+            repo_root=repo_root,
+            lease_id=args.lease_id,
+            owner_pid=args.owner_pid,
+            port_offset=args.port_offset,
+            retained_runs=args.retained_runs,
+            retention_age_seconds=args.retention_age_seconds,
+        )
+        print(json.dumps(lease, sort_keys=True))
+        return 0
+    if args.lease_action == "release":
+        qualification.release(
+            repo_root=repo_root,
+            lease_id=args.lease_id,
+            token=args.token,
+            retained_runs=args.retained_runs,
+            retention_age_seconds=args.retention_age_seconds,
+        )
+        return 0
+    raise AssertionError(f"Unexpected qualification lease action {args.lease_action!r}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="dev-harness")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -970,6 +1004,21 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "status":
             command.add_argument("--write-summary", action="store_true", default=False)
         command.set_defaults(func=func)
+    lease = sub.add_parser("qualification-lease", help="Acquire or safely release a local qualification stack lease")
+    lease_sub = lease.add_subparsers(dest="lease_action", required=True)
+    acquire = lease_sub.add_parser("acquire")
+    acquire.add_argument("--lease-id", required=True)
+    acquire.add_argument("--owner-pid", required=True, type=int)
+    acquire.add_argument("--port-offset", required=True, type=int)
+    acquire.add_argument("--retained-runs", type=int, default=qualification.DEFAULT_RETAINED_RUNS)
+    acquire.add_argument("--retention-age-seconds", type=int, default=qualification.DEFAULT_RETENTION_MAX_AGE_SECONDS)
+    acquire.set_defaults(func=cmd_qualification_lease)
+    release = lease_sub.add_parser("release")
+    release.add_argument("--lease-id", required=True)
+    release.add_argument("--token", required=True)
+    release.add_argument("--retained-runs", type=int, default=qualification.DEFAULT_RETAINED_RUNS)
+    release.add_argument("--retention-age-seconds", type=int, default=qualification.DEFAULT_RETENTION_MAX_AGE_SECONDS)
+    release.set_defaults(func=cmd_qualification_lease)
     return parser
 
 
@@ -977,7 +1026,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     args = build_parser().parse_args(list(argv) if argv is not None else None)
     try:
         return int(args.func(args))
-    except safety.SafetyError as exc:
+    except (safety.SafetyError, qualification.QualificationLeaseError) as exc:
         print(f"Safety check failed: {exc}")
         return 2
 

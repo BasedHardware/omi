@@ -149,7 +149,7 @@ import {
   destroyTray,
   isTrayCreated
 } from './tray'
-import { initAutoUpdater, getPendingUpdate, checkForUpdatesNow } from './updater'
+import { initAutoUpdater, getPendingUpdate, checkForUpdatesNow, installUpdateNow } from './updater'
 import {
   registerRecordShortcut,
   setRecordAcceleratorForced,
@@ -1360,6 +1360,9 @@ app.whenReady().then(async () => {
   // Query the staged update on demand (the update:ready event fires once,
   // usually while Settings isn't mounted — see updater.getPendingUpdate).
   ipcMain.handle('update:get-pending', () => getPendingUpdate())
+  // Install the staged update and relaunch (About → "Restart to update"). False
+  // means nothing was staged, so the UI must not pretend it restarted into it.
+  ipcMain.handle('update:install-now', () => installUpdateNow())
   // App identity for Settings → About.
   ipcMain.handle('app:get-version', () => ({ name: app.getName(), version: app.getVersion() }))
   // Manual update check (About). Inert in unpackaged dev (returns `unsupported`).

@@ -184,13 +184,19 @@ struct ConversationDetailView: View {
     .opacity(hasAppeared ? 1 : 0)
     .offset(y: hasAppeared ? 0 : 20)
     .onAppear {
-      ConversationDetailAutomationState.shared.setOpen(
+      showTranscriptDrawer = ConversationDetailAutomationState.shared.syncPresentedDetail(
         conversationId: conversation.id,
         transcriptDrawerOpen: showTranscriptDrawer
       )
       OmiMotion.withGated(.easeOut(duration: 0.5)) {
         hasAppeared = true
       }
+    }
+    .onChange(of: conversation.id) { _, conversationId in
+      showTranscriptDrawer = ConversationDetailAutomationState.shared.syncPresentedDetail(
+        conversationId: conversationId,
+        transcriptDrawerOpen: showTranscriptDrawer
+      )
     }
     .onDisappear {
       ConversationDetailAutomationState.shared.clear(conversationId: conversation.id)

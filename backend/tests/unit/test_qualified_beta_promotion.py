@@ -213,8 +213,6 @@ def _digest(value):
 def _candidate():
     zip_url = f"https://github.com/BasedHardware/omi/releases/download/{TAG}/Omi.zip"
     dmg_url = f"https://github.com/BasedHardware/omi/releases/download/{TAG}/omi.dmg"
-    evidence_name = f"qualification-evidence-{TAG}.json"
-    evidence_url = f"https://github.com/BasedHardware/omi/releases/download/{TAG}/{evidence_name}"
     evidence = {
         "schema_version": 1,
         "release_id": TAG,
@@ -228,6 +226,8 @@ def _candidate():
         },
     }
     evidence_bytes = json.dumps(evidence).encode()
+    evidence_name = f"qualification-evidence-{SHA}-{hashlib.sha256(evidence_bytes).hexdigest()}.json"
+    evidence_url = f"https://github.com/BasedHardware/omi/releases/download/{TAG}/{evidence_name}"
     release = {
         "tag_name": TAG,
         "draft": False,
@@ -261,7 +261,6 @@ def _candidate_with_beta():
     release, _evidence_bytes, run = _candidate()
     beta_zip_url = f"https://github.com/BasedHardware/omi/releases/download/{TAG}/Omi.Beta.zip"
     beta_dmg_url = f"https://github.com/BasedHardware/omi/releases/download/{TAG}/omi-beta.dmg"
-    evidence_name = f"qualification-evidence-{TAG}.json"
     evidence = {
         "schema_version": 1,
         "release_id": TAG,
@@ -288,6 +287,7 @@ def _candidate_with_beta():
         },
     }
     evidence_bytes = json.dumps(evidence).encode()
+    evidence_name = f"qualification-evidence-{SHA}-{hashlib.sha256(evidence_bytes).hexdigest()}.json"
     # rebuild release body + assets with the beta pair and the refreshed evidence
     release["body"] = (
         "<!-- KEY_VALUE_START\nedSignature: sparkle\nbetaEdSignature: beta-sparkle\n"
@@ -306,7 +306,7 @@ def _candidate_with_beta():
         },
         {
             "name": evidence_name,
-            "browser_download_url": release["assets"][2]["browser_download_url"],
+            "browser_download_url": f"https://github.com/BasedHardware/omi/releases/download/{TAG}/{evidence_name}",
             "digest": _digest(evidence_bytes),
         },
         {"name": "Omi.Beta.zip", "browser_download_url": beta_zip_url, "digest": _digest(b"beta zip bytes")},
@@ -326,6 +326,15 @@ def _replace_trusted_evidence(reader, evidence):
     """Keep the immutable release copy and trusted artifact copy in sync for a probe."""
     evidence_bytes = json.dumps(evidence).encode()
     evidence_asset = reader.release_payload["assets"][2]
+    evidence_name = f"qualification-evidence-{SHA}-{hashlib.sha256(evidence_bytes).hexdigest()}.json"
+    evidence_asset["name"] = evidence_name
+    evidence_asset["browser_download_url"] = (
+        f"https://github.com/BasedHardware/omi/releases/download/{TAG}/{evidence_name}"
+    )
+    reader.downloaded = {
+        evidence_asset["browser_download_url"] if url == evidence_asset.get("browser_download_url") else url: content
+        for url, content in reader.downloaded.items()
+    }
     reader.downloaded[evidence_asset["browser_download_url"]] = evidence_bytes
     evidence_asset["digest"] = _digest(evidence_bytes)
     artifact = _artifact_archive(evidence_bytes)
@@ -649,6 +658,37 @@ async def test_server_builds_the_canonical_manifest_from_qualified_immutable_ass
     assert manifest["zip_url"].endswith("/Omi.zip")
     assert manifest["dmg_url"].endswith("/omi.dmg")
     assert manifest["qualification_evidence_sha256"] == _digest(evidence)
+    assert (
+        manifest["qualification_evidence_asset"]
+        == f"qualification-evidence-{SHA}-{hashlib.sha256(evidence).hexdigest()}.json"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda reader: reader.release_payload["assets"].append(dict(reader.release_payload["assets"][2])),
+        lambda reader: reader.release_payload["assets"][2].update(
+            {"name": f"qualification-evidence-{'b' * 40}-{hashlib.sha256(b'wrong').hexdigest()}.json"}
+        ),
+        lambda reader: reader.release_payload["assets"][2].update(
+            {"name": f"qualification-evidence-{SHA}-{'0' * 64}.json"}
+        ),
+    ],
+    ids=["multiple", "wrong-source-sha", "name-digest-mismatch"],
+)
+async def test_release_evidence_selection_is_content_addressed_and_fails_closed(mutate):
+    release, evidence, run = _candidate()
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+    mutate(reader)
+
+    with pytest.raises(QualifiedBetaAdmissionError):
+        await build_qualified_beta_manifest(
+            TAG,
+            reader=reader,
+            now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+        )
 
 
 @pytest.mark.asyncio
@@ -1015,6 +1055,13 @@ async def test_release_asset_replacement_with_self_consistent_release_evidence_i
     release["assets"][0]["digest"] = _digest(replacement_zip)
     release["assets"][1]["digest"] = _digest(replacement_dmg)
     release["assets"][2]["digest"] = _digest(replacement_evidence_bytes)
+    replacement_evidence_name = (
+        f"qualification-evidence-{SHA}-{hashlib.sha256(replacement_evidence_bytes).hexdigest()}.json"
+    )
+    release["assets"][2]["name"] = replacement_evidence_name
+    release["assets"][2][
+        "browser_download_url"
+    ] = f"https://github.com/BasedHardware/omi/releases/download/{TAG}/{replacement_evidence_name}"
 
     reader = FakeQualifiedBetaReader(release, replacement_evidence_bytes, run)
     reader.downloaded[release["assets"][0]["browser_download_url"]] = replacement_zip

@@ -16,6 +16,7 @@ from pydub import AudioSegment  # pydub is untyped
 from config.prerecorded_stt import (
     PrerecordedSTTConfigurationError as _PrerecordedSTTConfigurationError,
     PrerecordedSTTService,
+    TranscriptionOutcome,
     get_prerecorded_models,
     require_provider_environment,
 )
@@ -31,6 +32,7 @@ from config.stt_provider_policy import (
 from models.transcript_segment import TranscriptSegment
 from utils.byok import get_byok_key
 from utils.other.endpoints import timeit
+from utils.stt.outcomes import TranscriptionFailure
 from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD, compare_embeddings, extract_embedding_from_bytes
 
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
@@ -80,7 +82,8 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
     Iterates comma-separated models (same pattern as STT_SERVICE_MODELS for streaming).
     First model allowed by the central serving policy that supports the language
     wins. Disabled-provider tokens are ignored, then policy-owned defaults provide
-    the serving fallback.
+    the serving fallback. A language no capability map claims falls through to Velma
+    rather than failing selection.
     """
     base_lang = normalized_stt_language(language) or 'en'
 
@@ -106,7 +109,13 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
     if selected is not None:
         return selected
 
-    raise RuntimeError(f'No configured pre-recorded STT provider supports language {language!r}')
+    # Velma's batch API detects the language itself — we never send a code — so it can
+    # serve languages the capability maps omit, and values that are not codes at all.
+    if provider_is_enabled(MODULATE_PROVIDER, STTServingSurface.PRERECORDED):
+        return PrerecordedSTTService.MODULATE, 'multi', 'velma-2'
+
+    # Only reachable with every pre-recorded provider disabled, which no retry resolves.
+    raise TranscriptionFailure(TranscriptionOutcome.CONFIG_ERROR, retryable=False)
 
 
 # Lazily initialized because constructing the SDK client at import makes every

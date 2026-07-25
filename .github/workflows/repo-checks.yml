@@ -116,15 +116,6 @@ jobs:
           scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
 
-      - name: Test package architecture map guardrail
-        run: python3 .github/scripts/test_check_package_architecture_maps.py
-
-      - name: Test product invariant PR-body checker
-        run: python3 .github/scripts/test_check_product_invariants.py
-
-      - name: Test PR preflight contracts
-        run: python3 .github/scripts/test_pr_preflight.py
-
       - name: Run shared PR contract preflight
         if: github.event_name == 'pull_request'
         env:
@@ -140,17 +131,8 @@ jobs:
         if: github.event_name != 'pull_request'
         run: python3 .github/scripts/run_checks.py --lane ci --base "${{ needs.changes.outputs.diff_base }}" --skip-pr-body-checks
 
-      - name: Test brand UI ratchet helper
-        run: python3 .github/scripts/test_check_brand_ui.py
-
       - name: Check typed error flow-control ratchet
         run: python3 .github/scripts/check_isinstance_return_ratchet.py
-
-      - name: Test lifecycle header checker
-        run: python3 .github/scripts/test_check_lifecycle_headers.py
-
-      - name: Test version-prefixed filename lint
-        run: python3 .github/scripts/test_check_version_prefixed_filenames.py
 
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
@@ -163,9 +145,6 @@ jobs:
 
       - name: Test desktop qualification metadata writer
         run: python3 desktop/macos/scripts/release-keyvalue.py self-test
-
-      - name: Test automatic desktop beta candidate gate
-        run: python3 .github/scripts/test_check_desktop_auto_beta_candidate.py
 
       - name: Check release process guards
         run: |

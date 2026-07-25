@@ -238,7 +238,10 @@ def test_qualification_workflow_binds_immutable_controls_and_candidate_identity(
     qualification = QUALIFY_BETA_WORKFLOW.read_text(encoding="utf-8")
     assert '-f release_tag="$CM_TAG" --ref "$CM_TAG"' in codemagic
     assert "ref: ${{ inputs.release_tag }}" in qualification
-    assert "qualification-evidence-${RELEASE_TAG}.json" in qualification
+    # The release attachment is content-addressed from the exact checked-out
+    # candidate SHA and evidence digest, not a mutable tag-only filename.
+    assert 'asset="qualification-evidence-${TARGET_SHA}-${digest}.json"' in qualification
+    assert 'digest=$(shasum -a 256 "$QUALIFICATION_STAGE/qualification-evidence.json"' in qualification
     assert "gh release upload" in qualification
 
 
@@ -578,7 +581,9 @@ def test_qualification_is_serialized_by_tag_and_retried_without_release_body_sta
 
     assert "duplicate dispatches" in dispatch
     assert 'gh release edit "$CM_TAG"' not in dispatch
-    assert "group: desktop-beta-qualification-${{ inputs.release_tag }}" in qualification
+    # The sole M1 Studio is the serialized resource; a tag-scoped group would
+    # permit competing qualifications to use that same runner concurrently.
+    assert "group: desktop-beta-qualification-m1" in qualification
     assert "cancel-in-progress: false" in qualification
     assert "for attempt in 1 2 3" in dispatch
     assert "ERROR: qualification dispatch was not confirmed after bounded retry" in dispatch
@@ -586,7 +591,9 @@ def test_qualification_is_serialized_by_tag_and_retried_without_release_body_sta
         "exit 1"
     )
     assert "desktop_qualification_dispatch.py" not in qualification
-    assert "steps.candidate.outcome == 'success' && steps.qualify.outcome == 'success'" in qualification
+    # The verdict accepts a qualification only through the sole M1 job output.
+    assert "M1_QUALIFIED: ${{ needs.qualify-m1-studio.outputs.qualified }}" in qualification
+    assert 'test "$M1_QUALIFIED" = true' in qualification
 
 
 def test_qualification_publishes_the_single_artifact_pair_and_immutable_evidence_for_server_readback():
@@ -597,7 +604,8 @@ def test_qualification_publishes_the_single_artifact_pair_and_immutable_evidence
     assert "actions/upload-artifact@v7" in qualification
     assert "--qualification-run-id \"$GITHUB_RUN_ID\"" in qualification
     assert "gh release upload" in qualification
-    assert "qualification-evidence-${RELEASE_TAG}.json" in qualification
+    assert 'asset="qualification-evidence-${TARGET_SHA}-${digest}.json"' in qualification
+    assert '"$QUALIFICATION_STAGE/qualification-evidence.json#$asset"' in qualification
     assert "git tag -l 'v*-macos' --sort=-v:refname | head -1" not in qualification
 
 

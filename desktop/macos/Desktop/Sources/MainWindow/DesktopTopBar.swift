@@ -14,6 +14,8 @@ struct DesktopTopBar: View {
   /// last resigned front (see DesktopHomeView).
   let sinceDate: Date
   let onRewind: () -> Void
+  @AppStorage(MemoryHubDestination.storageKey) private var memoryDestinationRawValue =
+    MemoryHubDestination.memories.rawValue
 
   private struct NavItem: Identifiable {
     let index: Int
@@ -78,38 +80,67 @@ struct DesktopTopBar: View {
     // items are muted text; the selected item gets a subtle highlight only.
     HStack(spacing: OmiSpacing.xs) {
       ForEach(navItems) { item in
-        Button {
-          OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = item.index }
-        } label: {
-          HStack(spacing: 6) {
-            Image(systemName: item.icon)
-              .scaledFont(size: OmiType.caption, weight: .semibold)
-            Text(item.title)
-              .scaledFont(size: OmiType.caption, weight: .semibold)
-            // New-item badge lives on the button it belongs to (Memory =
-            // memories + conversations, Tasks = tasks) since Omi was last front.
-            if newCount(for: item) > 0 {
-              Text("+\(newCount(for: item))")
-                .scaledFont(size: OmiType.micro, weight: .bold)
-                .foregroundColor(OmiColors.textPrimary)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(Capsule(style: .continuous).fill(OmiColors.textPrimary.opacity(0.16)))
+        if item.index == SidebarNavItem.conversations.rawValue {
+          Menu {
+            ForEach(MemoryHubDestination.allCases) { destination in
+              Button {
+                memoryDestinationRawValue = destination.rawValue
+                OmiMotion.withGated(.easeOut(duration: 0.08)) {
+                  selectedIndex = SidebarNavItem.conversations.rawValue
+                }
+              } label: {
+                Label(destination.title, systemImage: destination.icon)
+              }
             }
+          } label: {
+            navLabel(for: item, showsDisclosure: true)
           }
-          .foregroundColor(selectedIndex == item.index ? OmiColors.textPrimary : OmiColors.textTertiary)
-          .padding(.horizontal, OmiSpacing.md)
-          .padding(.vertical, 6)
-          .background(
-            Capsule(style: .continuous)
-              .fill(selectedIndex == item.index ? OmiColors.textPrimary.opacity(0.08) : Color.clear)
-          )
-          .contentShape(Capsule())
+          .menuStyle(.borderlessButton)
+          .fixedSize()
+          .help("Choose a Memory view")
+        } else {
+          Button {
+            OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = item.index }
+          } label: {
+            navLabel(for: item)
+          }
+          .buttonStyle(.plain)
+          .help(item.title)
         }
-        .buttonStyle(.plain)
-        .help(item.title)
       }
     }
+  }
+
+  private func navLabel(for item: NavItem, showsDisclosure: Bool = false) -> some View {
+    HStack(spacing: 6) {
+      Image(systemName: item.icon)
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+      Text(item.title)
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+      if showsDisclosure {
+        Image(systemName: "chevron.down")
+          .scaledFont(size: 8, weight: .bold)
+          .foregroundStyle(OmiColors.textQuaternary)
+      }
+      // New-item badge lives on the button it belongs to (Memory =
+      // memories + conversations, Tasks = tasks) since Omi was last front.
+      if newCount(for: item) > 0 {
+        Text("+\(newCount(for: item))")
+          .scaledFont(size: OmiType.micro, weight: .bold)
+          .foregroundColor(OmiColors.textPrimary)
+          .padding(.horizontal, 5)
+          .padding(.vertical, 1)
+          .background(Capsule(style: .continuous).fill(OmiColors.textPrimary.opacity(0.16)))
+      }
+    }
+    .foregroundColor(selectedIndex == item.index ? OmiColors.textPrimary : OmiColors.textTertiary)
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, 6)
+    .background(
+      Capsule(style: .continuous)
+        .fill(selectedIndex == item.index ? OmiColors.textPrimary.opacity(0.08) : Color.clear)
+    )
+    .contentShape(Capsule())
   }
 
   /// New-item count to badge on a nav button (since Omi was last in front).

@@ -1593,7 +1593,8 @@ class ChatProvider: ObservableObject {
     authoritativeGeneration: Int? = nil
   ) async -> Bool {
     guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
-      presentBridgeStartupFailure(BridgeError.authMissing, authoritativeGeneration: authoritativeGeneration)
+      await presentBridgeStartupFailure(
+        BridgeError.authMissing, authoritativeGeneration: authoritativeGeneration)
       return false
     }
     do {
@@ -1602,7 +1603,7 @@ class ChatProvider: ObservableObject {
         return try await self.performBridgeReadinessStartup()
       }
     } catch {
-      presentBridgeStartupFailure(error, authoritativeGeneration: authoritativeGeneration)
+      await presentBridgeStartupFailure(error, authoritativeGeneration: authoritativeGeneration)
       return false
     }
   }
@@ -1662,8 +1663,9 @@ class ChatProvider: ObservableObject {
   private func presentBridgeStartupFailure(
     _ error: Error,
     authoritativeGeneration: Int?
-  ) {
-    logError("Failed to start agent bridge", error: error)
+  ) async {
+    let context = await AgentRuntimeProcess.shared.consumePendingStartFailureDiagnostics()
+    logError("Failed to start agent bridge", error: error, context: context)
     let mayMutateSendState = authoritativeGeneration.map { sendGeneration == $0 } ?? true
     guard mayMutateSendState else { return }
     if let bridgeError = error as? BridgeError, let card = ChatErrorState.from(bridgeError) {

@@ -1,0 +1,80 @@
+name: Repo Hygiene
+
+# Weekly advisory maintenance. Nothing here gates a merge or a release: each job
+# turns a registry the repository already maintains into a reviewable diff, so
+# retirement stops depending on someone remembering to look.
+#
+# Monday 09:00 UTC, clear of the release cadence (desktop_auto_release polls
+# every 15 min; desktop_retry_beta_qualification runs twice hourly).
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "Quiet period before a failure class may be retired (e.g. 14d)"
+        required: false
+        default: "14d"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repo-hygiene
+  cancel-in-progress: false
+
+jobs:
+  failure-class-retirement:
+    name: Failure-class retirement
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Author the retirement diff
+        id: retire
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SINCE: ${{ inputs.since || '14d' }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/failure_class_retirement.py \
+            --since "$SINCE" \
+            --apply \
+            --feed-out "$RUNNER_TEMP/failure-class-events.json" \
+            --evidence-file "$RUNNER_TEMP/retirement-evidence.md" \
+            | tee "$RUNNER_TEMP/summary.json"
+          {
+            echo "## Failure-class retirement"
+            echo
+            cat "$RUNNER_TEMP/retirement-evidence.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+          retired=$(python3 -c "import json,os;print(len(json.load(open(os.environ['RUNNER_TEMP']+'/summary.json'))['retired']))")
+          echo "retired=$retired" >> "$GITHUB_OUTPUT"
+
+      # A GITHUB_TOKEN-authored PR does not trigger pull_request workflows, so it
+      # would arrive with zero checks run. The app token exists so the diff is
+      # verified by the same lanes as any human PR.
+      - name: Mint Omi Bot token
+        if: steps.retire.outputs.retired != '0'
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Open or update the retirement PR
+        if: steps.retire.outputs.retired != '0'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          branch: chore/failure-class-retire
+          base: main
+          add-paths: .github/failure-classes/*.json
+          title: "chore(failure-class): retire dormant failure classes"
+          commit-message: "chore(failure-class): retire dormant failure classes"
+          body-path: ${{ runner.temp }}/retirement-evidence.md
+          delete-branch: false

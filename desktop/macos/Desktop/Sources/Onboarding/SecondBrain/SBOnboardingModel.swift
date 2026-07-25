@@ -219,6 +219,7 @@ final class SBOnboardingModel: ObservableObject {
     // step; each permission step re-checks its grant on appear, so a permission
     // granted before the quit shows ✓ rather than prompting again.
     let savedRaw = UserDefaults.standard.integer(forKey: Self.resumeStepKey)
+    recordSetupStateDisagreementAtRead(savedRaw: savedRaw)
     if savedRaw > Step.promise.rawValue, let resumed = Step(rawValue: savedRaw) {
       // Skip a resumed permission step the user granted while away.
       let target = firstUnaskedStep(from: resumed)
@@ -227,6 +228,32 @@ final class SBOnboardingModel: ObservableObject {
       return
     }
     streamMessage(for: .promise)
+  }
+
+  /// Detection only: the existing completion flag remains the UI gate. These
+  /// bounded signals reveal when that gate says setup is complete while the SB
+  /// stage, persisted resume state, or setup journal still says it is active.
+  private func recordSetupStateDisagreementAtRead(savedRaw: Int) {
+    guard appState.hasCompletedOnboarding else { return }
+    DesktopDiagnosticsManager.shared.recordStateAuthoritySignal(
+      seam: .onboardingSetupState,
+      from: "completed_flag",
+      to: "sb_stage",
+      direction: "completed_flag_with_active_stage")
+    if savedRaw > Step.promise.rawValue, Step(rawValue: savedRaw) != nil {
+      DesktopDiagnosticsManager.shared.recordStateAuthoritySignal(
+        seam: .onboardingSetupState,
+        from: "completed_flag",
+        to: "persisted_resume",
+        direction: "completed_flag_with_resume_state")
+    }
+    if chatProvider.isOnboarding {
+      DesktopDiagnosticsManager.shared.recordStateAuthoritySignal(
+        seam: .onboardingSetupState,
+        from: "completed_flag",
+        to: "setup_journal",
+        direction: "completed_flag_with_active_journal")
+    }
   }
 
   func streamMessage(for step: Step) {

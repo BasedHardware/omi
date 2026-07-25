@@ -3,7 +3,7 @@ import hashlib
 import logging
 import uuid
 
-from utils.executors import db_executor
+from utils.executors import postprocess_executor, submit_with_context
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List
@@ -231,7 +231,7 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
                 update_data['completed_at'] = datetime.now(timezone.utc)
             else:
                 update_data['completed_at'] = None
-        if item.due_at is not None:
+        if 'due_at' in item.model_fields_set:
             update_data['due_at'] = item.due_at
         if item.exported is not None:
             update_data['exported'] = item.exported
@@ -318,7 +318,7 @@ def create_action_item(request: ActionItemCreateRequest, uid: str = Depends(auth
     def _run_auto_sync():
         asyncio.run(auto_sync_action_item(uid, {"id": action_item_id, **action_item_data}, skip_apple_reminders=True))
 
-    db_executor.submit(_run_auto_sync)
+    submit_with_context(postprocess_executor, _run_auto_sync)
 
     return ActionItemResponse(**action_item)
 
