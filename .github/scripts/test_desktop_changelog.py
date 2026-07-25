@@ -74,6 +74,10 @@ class ChangelogRequirementTests(unittest.TestCase):
             "desktop/macos/scripts/qualify-desktop-beta.sh",
             # Sibling qualification-runner helper (EXEMPT_DESKTOP_PATHS).
             "desktop/macos/scripts/qualification-swift-cache.sh",
+            # CI-only flow validation and its shared source inventory do not
+            # alter the desktop application users receive.
+            "desktop/macos/scripts/desktop-flow-lint.py",
+            "desktop/macos/scripts/desktop_flow_contract.py",
             # Test files are never user-facing app changes (EXEMPT_DESKTOP_PATH_PREFIXES).
             # #10374's timeout bump touched this file; without the exemption the
             # post-merge push run of the changelog gate reddened main (#10387).

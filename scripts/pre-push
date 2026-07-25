@@ -162,7 +162,7 @@ changed_matches() {
   return 1
 }
 
-CI_PREDICTION_SELECTION=$(python3 scripts/pre_push_ci_prediction.py --changed-files "$CHANGED_FILES_LIST")
+CI_PREDICTION_SELECTION=$(python3 scripts/pre_push_ci_prediction.py --changed-files "$CHANGED_FILES_LIST" --base "$BASE_REF")
 if ci_prediction_selected "app-ci-only"; then
   ci_prediction_note_deferred "full Flutter analyzer/tests and platform compiles"
 fi

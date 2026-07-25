@@ -21,7 +21,7 @@ checks:
     reason: "pre-push check selection must use the final PR diff rather than a stale remote feature tip"
   - id: pre-push-ci-prediction-tests
     command: ["python3", ".github/scripts/test_pre_push_ci_prediction.py"]
-    triggers: ["scripts/pre-push", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_pre_push_ci_prediction.py", ".github/checks-manifest.yaml"]
+    triggers: ["scripts/pre-push", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_pre_push_ci_prediction.py", "desktop/macos/scripts/desktop-flow-lint.py", "desktop/macos/scripts/desktop_flow_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9440: local CI prediction must select only bounded Flutter generator, desktop-flow, and Windows KG-worker checks for the final PR diff"
   - id: setup-pre-push-prerequisites
@@ -316,7 +316,7 @@ checks:
     reason: "conversation lifecycle has one mutation owner"
   - id: desktop-swift-ci-contract
     command: ["python3", ".github/scripts/test_desktop_swift_ci_contract.py"]
-    triggers: [".github/workflows/desktop-swift-ci.yml", ".github/scripts/test_desktop_swift_ci_contract.py"]
+    triggers: [".github/workflows/desktop-swift-ci.yml", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_swift_ci_contract.py"]
     lanes: ["local", "ci"]
     reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved"
   - id: desktop-candidate-source-gate
@@ -326,7 +326,7 @@ checks:
     reason: "candidate tags require successful Release Eligibility and both Desktop Swift checks for the exact newest queued releasable desktop SHA"
   - id: desktop-manifest-routes
     command: ["python3", ".github/scripts/test_desktop_manifest_routes.py"]
-    triggers: [".github/workflows/desktop-swift-ci.yml", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", ".github/scripts/test_desktop_manifest_routes.py"]
+    triggers: [".github/workflows/desktop-swift-ci.yml", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_manifest_routes.py"]
     lanes: ["local", "ci"]
     reason: "#9843 Ticket 02: macOS-only manifest checks must have an executable CI route"
   - id: desktop-swift-format-wrapper
