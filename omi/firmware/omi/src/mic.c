@@ -6,6 +6,7 @@
 
 #include "lib/core/mic.h"
 
+#include <errno.h>
 #include <nrfx_pdm.h>
 #include <zephyr/audio/dmic.h>
 #include <zephyr/kernel.h>
@@ -83,10 +84,14 @@ static atomic_t aad_wake_pending = ATOMIC_INIT(0); /* WAKE edge seen by ISR */
 static atomic_t aad_woke = ATOMIC_INIT(0);         /* tell mic ctx it just woke */
 static atomic_t aad_in_sleep = ATOMIC_INIT(0);     /* mic is in hardware AAD sleep */
 static atomic_t aad_req_sleep = ATOMIC_INIT(0);    /* silence timer asked to sleep */
+static atomic_t aad_shutdown_quiesced = ATOMIC_INIT(0);
+static K_MUTEX_DEFINE(aad_transition_mutex);
+static bool shutdown_was_in_aad_sleep;
 static int64_t aad_last_voice_ms;
 
 static void aad_track_silence(const int16_t *buf, size_t n);
 static int aad_hw_start(void);
+static void aad_wake_irq(bool enable);
 #endif
 
 static inline void
@@ -153,7 +158,12 @@ static void mic_thread_function(void *p1, void *p2, void *p3)
          * STOP never interrupts an in-flight dmic_read. */
         if (atomic_get(&mic_stop_req)) {
             if (ret == 0 && buffer) {
-                k_mem_slab_free(&mem_slab, buffer);
+                /*
+                 * Preserve the final completed capture block. The shutdown
+                 * caller waits for this callback before draining the codec, so
+                 * freeing it here would create a deterministic tail gap.
+                 */
+                process_audio_buffer(buffer, size);
             }
             (void) dmic_trigger(dmic_dev, DMIC_TRIGGER_STOP);
             mic_running = false;
@@ -174,15 +184,26 @@ static void mic_thread_function(void *p1, void *p2, void *p3)
 
 #define MIC_THREAD_STACK_SIZE 2048
 #define MIC_THREAD_PRIORITY 5
-K_THREAD_DEFINE(mic_thread_id,
-                MIC_THREAD_STACK_SIZE,
-                mic_thread_function,
-                NULL,
-                NULL,
-                NULL,
-                MIC_THREAD_PRIORITY,
-                0,
-                -1);
+static K_THREAD_STACK_DEFINE(mic_thread_stack, MIC_THREAD_STACK_SIZE);
+static struct k_thread mic_thread_data;
+static k_tid_t mic_thread_id;
+static bool mic_thread_started;
+
+static void start_mic_thread(void)
+{
+    mic_thread_id = k_thread_create(&mic_thread_data,
+                                    mic_thread_stack,
+                                    K_THREAD_STACK_SIZEOF(mic_thread_stack),
+                                    mic_thread_function,
+                                    NULL,
+                                    NULL,
+                                    NULL,
+                                    MIC_THREAD_PRIORITY,
+                                    0,
+                                    K_NO_WAIT);
+    k_thread_name_set(mic_thread_id, "mic");
+    mic_thread_started = true;
+}
 
 int mic_start()
 {
@@ -253,7 +274,7 @@ int mic_start()
     }
 
     mic_running = true;
-    k_thread_start(mic_thread_id);
+    start_mic_thread();
 
 #ifdef CONFIG_OMI_ENABLE_T5838_AAD
     ret = aad_hw_start(); /* WAKE pin ISR + hardware-AAD thread */
@@ -273,10 +294,10 @@ void set_mic_callback(mix_handler callback)
     callback_func = callback;
 }
 
-void mic_pause()
+int mic_pause()
 {
     if (!mic_running) {
-        return;
+        return 0;
     }
     LOG_INF("Pausing microphone");
 
@@ -286,15 +307,30 @@ void mic_pause()
     atomic_set(&mic_stop_req, 1);
     if (k_sem_take(&mic_stopped_sem, K_MSEC(READ_TIMEOUT + 200)) != 0) {
         LOG_WRN("mic pause timed out; forcing stop");
-        atomic_clear(&mic_stop_req);
         (void) dmic_trigger(dmic_dev, DMIC_TRIGGER_STOP);
-        mic_running = false;
+        if (k_sem_take(&mic_stopped_sem, K_MSEC(500)) != 0) {
+            /*
+             * The peripheral has been stopped, but the worker did not
+             * acknowledge it. Recreate the worker on resume rather than
+             * reporting active capture while the hardware remains stopped.
+             */
+            if (mic_thread_started) {
+                k_thread_abort(mic_thread_id);
+                mic_thread_started = false;
+            }
+            mic_running = false;
+            atomic_clear(&mic_stop_req);
+            LOG_ERR("mic thread did not quiesce after forced stop; worker reset");
+            return -ETIMEDOUT;
+        }
     }
+    return 0;
 }
 
 void mic_resume()
 {
     LOG_INF("Resuming microphone");
+    atomic_clear(&mic_stop_req);
     if (!mic_running) {
         int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_START);
         if (ret < 0) {
@@ -302,7 +338,61 @@ void mic_resume()
             return;
         }
         mic_running = true;
+        if (!mic_thread_started) {
+            start_mic_thread();
+        }
     }
+}
+
+int mic_prepare_shutdown(void)
+{
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+    /*
+     * Serialize with AAD sleep/wake transitions before pausing capture. Once
+     * quiesced, neither the silence detector nor WAKE worker can restart PDM
+     * while the codec and transport tails are being committed.
+     */
+    k_mutex_lock(&aad_transition_mutex, K_FOREVER);
+    atomic_set(&aad_shutdown_quiesced, 1);
+    shutdown_was_in_aad_sleep = atomic_get(&aad_in_sleep) != 0;
+    aad_wake_irq(false);
+    atomic_clear(&aad_req_sleep);
+    atomic_clear(&aad_wake_pending);
+    k_sem_reset(&aad_sem);
+    k_mutex_unlock(&aad_transition_mutex);
+
+    if (shutdown_was_in_aad_sleep) {
+        return 0;
+    }
+#endif
+
+    return mic_pause();
+}
+
+void mic_cancel_shutdown(void)
+{
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+    k_mutex_lock(&aad_transition_mutex, K_FOREVER);
+    bool restore_aad_sleep = shutdown_was_in_aad_sleep && atomic_get(&aad_in_sleep);
+    shutdown_was_in_aad_sleep = false;
+    atomic_clear(&aad_shutdown_quiesced);
+
+    if (restore_aad_sleep) {
+        atomic_clear(&aad_wake_pending);
+        aad_wake_irq(true);
+        if (gpio_pin_get_dt(&aad_wake)) {
+            atomic_set(&aad_wake_pending, 1);
+            k_sem_give(&aad_sem);
+        }
+    }
+    k_mutex_unlock(&aad_transition_mutex);
+
+    if (restore_aad_sleep) {
+        return;
+    }
+#endif
+
+    mic_resume();
 }
 
 bool mic_is_running()
@@ -360,10 +450,22 @@ static void aad_wake_isr(const struct device *dev, struct gpio_callback *cb, uin
 }
 
 /* Drop the mic into T5838 hardware AAD sleep (aad thread context). */
-static void enter_hw_aad(void)
+static int enter_hw_aad(void)
 {
-    aad_wake_irq(false); /* mask WAKE during config bit-bang */
-    mic_pause();         /* stop PDM peripheral */
+    aad_wake_irq(false);   /* mask WAKE during config bit-bang */
+    int ret = mic_pause(); /* stop PDM peripheral */
+    if (ret < 0) {
+        /*
+         * Never touch PDM registers or bit-bang CLK while a read may still be
+         * in flight. Restore active-capture state and defer the sleep attempt.
+         */
+        atomic_clear(&aad_in_sleep);
+        atomic_clear(&aad_req_sleep);
+        aad_last_voice_ms = k_uptime_get();
+        mic_resume();
+        LOG_ERR("AAD: refusing sleep because microphone did not pause (%d)", ret);
+        return ret;
+    }
     k_msleep(AAD_PDM_SETTLE_MS);
     pdm_hw_disable();                   /* fully release the CLK pin for bit-banging */
     t5838_aad_enter();                  /* program AAD mode-A + clock into sleep */
@@ -390,6 +492,7 @@ static void enter_hw_aad(void)
         k_sem_give(&aad_sem);
     }
     LOG_INF("AAD: hardware sleep (mic off)");
+    return 0;
 }
 
 /* Bring the mic back online (aad thread context). */
@@ -416,8 +519,16 @@ static void aad_thread_fn(void *p1, void *p2, void *p3)
          * stays asleep and adds no idle CPU wakeups. */
         k_sem_take(&aad_sem, K_FOREVER);
 
+        k_mutex_lock(&aad_transition_mutex, K_FOREVER);
+        if (atomic_get(&aad_shutdown_quiesced)) {
+            atomic_clear(&aad_req_sleep);
+            atomic_clear(&aad_wake_pending);
+            k_mutex_unlock(&aad_transition_mutex);
+            continue;
+        }
+
         if (atomic_cas(&aad_req_sleep, 1, 0) && !atomic_get(&aad_in_sleep)) {
-            enter_hw_aad();
+            (void) enter_hw_aad();
         }
 
         if (atomic_cas(&aad_wake_pending, 1, 0)) {
@@ -425,6 +536,7 @@ static void aad_thread_fn(void *p1, void *p2, void *p3)
                 exit_hw_aad();
             }
         }
+        k_mutex_unlock(&aad_transition_mutex);
     }
 }
 
@@ -443,7 +555,7 @@ static void aad_track_silence(const int16_t *buf, size_t n)
      * BLE link stays up (only the mic + PDM sleep); sound resumes streaming.
      * BUT never sleep while a BLE sync transfer is running: the AAD entry +
      * conn-param low-power would stall the sync. Defer sleep until it finishes. */
-    if (!atomic_get(&aad_in_sleep) && !storage_transfer_active() &&
+    if (!atomic_get(&aad_shutdown_quiesced) && !atomic_get(&aad_in_sleep) && !storage_transfer_active() &&
         (now - aad_last_voice_ms) >= CONFIG_OMI_VAD_HOLD_MS) {
         atomic_set(&aad_req_sleep, 1);
         k_sem_give(&aad_sem);
@@ -497,10 +609,25 @@ static int aad_hw_start(void)
 
 void mic_off()
 {
-    if (mic_running) {
-        mic_running = false;
-        k_thread_abort(mic_thread_id);
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+    /*
+     * Exclude an in-progress AAD transition before stopping the mic thread.
+     * Aborting that thread while enter_hw_aad() is waiting for its cooperative
+     * pause would strand the AAD worker in the pause timeout path.
+     */
+    atomic_set(&aad_shutdown_quiesced, 1);
+    aad_wake_irq(false);
+    k_mutex_lock(&aad_transition_mutex, K_FOREVER);
+#endif
 
+    bool was_running = mic_running;
+    mic_running = false;
+    atomic_clear(&mic_stop_req);
+    if (mic_thread_started) {
+        k_thread_abort(mic_thread_id);
+        mic_thread_started = false;
+    }
+    if (was_running) {
         int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_STOP);
         if (ret < 0) {
             LOG_ERR("STOP trigger failed: %d", ret);
@@ -514,12 +641,12 @@ void mic_off()
      * pins or the rail) after we cut power. Mask WAKE, then drop PDM_EN so the
      * T5838 + TXS0104 level-shifter lose power (otherwise the shifter's pull-ups
      * keep leaking ~1 mA through system-off). mic_off is the power-down path. */
-    aad_wake_irq(false);
     if (aad_thread_started) {
         k_thread_abort(&aad_thread_data);
         aad_thread_started = false;
     }
     t5838_aad_power(false);
+    k_mutex_unlock(&aad_transition_mutex);
 #endif
 }
 
@@ -539,7 +666,9 @@ void mic_on()
         }
 
         mic_running = true;
-        k_thread_start(mic_thread_id);
+        if (!mic_thread_started) {
+            start_mic_thread();
+        }
 
         LOG_INF("Microphone restarted");
     }

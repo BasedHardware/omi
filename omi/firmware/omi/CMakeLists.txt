@@ -24,8 +24,10 @@ if(CONFIG_OMI_ENABLE_T5838_AAD)
     list(APPEND app_sources src/t5838_aad.c)
 endif()
 file(GLOB core_sources
+    src/lib/core/audio_storage_packer.c
     src/lib/core/config.h
     src/lib/core/codec.c
+    src/lib/core/ring_transfer_integrity.c
     src/lib/core/transport.c
     src/lib/core/button_service.c
     src/lib/core/monitor.c

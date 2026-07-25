@@ -12,6 +12,13 @@ Firmware releases are manual via `.github/workflows/firmware_release.yml`:
 
 Build logic lives in `omi/firmware/scripts/ci/`.
 
+## Testing
+
+The CV1 build gate runs the host-native audio durability contracts before the
+NCS sysbuild. Run them directly with the commands in
+`omi/tests/audio_storage_packer/README.md`; run the complete pinned gate through
+`scripts/ci/build-cv1.sh` in the release Docker image.
+
 ## Formatting
 
 C/C++ files: `clang-format -i <files>` (the repo pre-commit hook covers this).
