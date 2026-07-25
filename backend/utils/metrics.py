@@ -245,6 +245,14 @@ OMI_LIVE_STT_ACCEPTED_TOTAL = Counter(
     ['provider', 'client_platform', 'deployment_environment'],
 )
 
+# Whether misaligned frames actually occur in production is unmeasured; Velma rejects
+# them outright, so this counter is what tells a Velma canary if that was the cause.
+OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL = Counter(
+    'omi_live_stt_misaligned_frames_total',
+    'Live-STT frames that were not a whole number of 16-bit samples, by bounded provider',
+    ['provider'],
+)
+
 OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
     'omi_live_stt_terminal_total',
     'Terminal live-STT outcomes for accepted attempts by bounded labels',
