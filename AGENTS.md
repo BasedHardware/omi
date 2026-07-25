@@ -45,7 +45,7 @@ A deterministic diff-scoped check failing for the first time in CI is a manifest
 The unit of work is the violated contract, not only the line where the symptom appeared. The declaration is the PR record for an ordinary instance fix; before fixing, inspect recent fixes in the same subsystem. Registry lifecycle transitions are separate PRs: dormant classes record `dormant_since`, and recurrence reopens them by setting `status: open` and removing it.
 
 - Identify the authoritative owner, identity, state transition, or boundary contract that failed — don't add another observer, fallback boolean, or call-site exception when ownership is the real problem.
-- If two or more recent fixes share the cause, add a reusable guard surface in the same PR: a typed state/policy model, behavioral contract test, fault harness, or narrow static checker.
+- If two or more recent fixes share the cause, add a reusable guard surface in the same PR: a typed state/policy model, behavioral contract test, fault harness, or narrow static checker. Record its path in the class's `canonical_prevention_artifact`; a class that keeps recurring without one fails the guard-artifact ratchet (`docs/product/failure-classes.md`).
 - A regression test must execute production behavior through a controllable seam. Asserting that source strings occur in a certain order is a static tripwire, not behavioral coverage; label static checkers as such.
 - Do not broaden a safe bug-fix PR into an unreviewable migration; land the enforceable guard now and track high-blast-radius follow-up explicitly.
 
