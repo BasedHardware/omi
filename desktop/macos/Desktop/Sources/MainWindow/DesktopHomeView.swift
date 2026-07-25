@@ -59,6 +59,7 @@ struct DesktopHomeView: View {
   // Settings sidebar state
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
   @State private var highlightedSettingId: String? = nil
+  @State private var memoryHubSegment = 0
   @State private var showTryAskingPopup = false
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
@@ -1087,6 +1088,7 @@ struct DesktopHomeView: View {
             viewModelContainer: viewModelContainer,
             selectedSettingsSection: $selectedSettingsSection,
             highlightedSettingId: $highlightedSettingId,
+            memoryHubSegment: $memoryHubSegment,
             selectedTabIndex: $selectedIndex
           )
         }
@@ -1174,6 +1176,13 @@ struct DesktopHomeView: View {
         selectedIndex = item.rawValue
       }
     }
+    .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenConversationRequested)) { _ in
+      // Conversations now live behind the Memory hub's second segment. Route at
+      // the owning shell before the detail page mounts; its retained request is
+      // then consumed by ConversationsPage on appearance.
+      memoryHubSegment = 1
+      selectedIndex = SidebarNavItem.conversations.rawValue
+    }
     .onChange(of: selectedIndex) { oldValue, newValue in
       // Track the previous index when navigating to settings
       if newValue == SidebarNavItem.settings.rawValue
@@ -1250,7 +1259,7 @@ private struct HubSegmentedControl: View {
 private struct MemoryHubPage: View {
   let appState: AppState
   let viewModelContainer: ViewModelContainer
-  @State private var segment = 0
+  @Binding var segment: Int
 
   /// Memories and conversations stay easy to scan in a calm, readable column;
   /// the spatial Brain Map needs the full content surface so users can pan and
@@ -1330,6 +1339,7 @@ private struct PageContentView: View {
   let viewModelContainer: ViewModelContainer
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingId: String?
+  @Binding var memoryHubSegment: Int
   @Binding var selectedTabIndex: Int
 
   /// The list/detail pages (Conversations, Memories, Tasks, Apps) render their
@@ -1365,7 +1375,11 @@ private struct PageContentView: View {
           taskChatCoordinator: viewModelContainer.taskChatCoordinator,
           selectedIndex: $selectedTabIndex)
       case 1:
-        MemoryHubPage(appState: appState, viewModelContainer: viewModelContainer)
+        MemoryHubPage(
+          appState: appState,
+          viewModelContainer: viewModelContainer,
+          segment: $memoryHubSegment
+        )
       case 2:
         ChatPage(
           appProvider: viewModelContainer.appProvider,
