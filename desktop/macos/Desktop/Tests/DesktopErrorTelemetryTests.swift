@@ -70,13 +70,29 @@ final class DesktopErrorTelemetryTests: XCTestCase {
       elapsedMs: 30_000,
       exitCode: nil,
       binaryPresent: true,
+      binaryPresentChecked: true,
       permissionGrantedChecked: true,
       permissionGranted: false)
 
     XCTAssertEqual(context.values["startup_stage"] as? String, "handshake_timed_out")
     XCTAssertEqual(context.values["configured_timeout_ms"] as? Int, 30_000)
+    XCTAssertEqual(context.values["binary_present_checked"] as? Bool, true)
     XCTAssertEqual(context.values["binary_present"] as? Bool, true)
     XCTAssertEqual(context.values["permission_granted"] as? Bool, false)
     XCTAssertEqual(context.values["port_bound_checked"] as? Bool, false)
+  }
+
+  func testBridgeStartDiagnosticsDoesNotClaimBinaryProbeBeforeItRuns() {
+    let context = AgentRuntimeProcess.startFailureDiagnostics(
+      failure: .launchFailed,
+      elapsedMs: 12,
+      exitCode: nil,
+      binaryPresent: false,
+      binaryPresentChecked: false,
+      permissionGrantedChecked: false,
+      permissionGranted: false)
+
+    XCTAssertEqual(context.values["binary_present_checked"] as? Bool, false)
+    XCTAssertEqual(context.values["binary_present"] as? Bool, false)
   }
 }

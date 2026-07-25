@@ -544,7 +544,9 @@ actor AgentRuntimeProcess {
   private var lastExitWasOOM = false
   private var startupBeganAt: Date?
   private var startupBinaryPresent = false
+  private var startupBinaryPresentChecked = false
   private var startupPermissionGrantedChecked = false
+  private var pendingStartFailureDiagnostics: DesktopErrorDiagnosticContext?
   private var startupPermissionGranted = false
   private var startupExitCode: Int32?
   private var clients: [String: ClientRegistration] = [:]
@@ -2491,6 +2493,7 @@ actor AgentRuntimeProcess {
   ) async throws -> StartupReceipt {
     startupBeganAt = Date()
     startupBinaryPresent = false
+    startupBinaryPresentChecked = false
     startupPermissionGrantedChecked = false
     startupPermissionGranted = false
     startupExitCode = nil
@@ -2541,6 +2544,7 @@ actor AgentRuntimeProcess {
 
     let nodeExists = FileManager.default.isExecutableFile(atPath: nodePath)
     let bridgeExists = FileManager.default.fileExists(atPath: bridgePath)
+    startupBinaryPresentChecked = true
     startupBinaryPresent = nodeExists && bridgeExists
     let bridgeDir = (bridgePath as NSString).deletingLastPathComponent
     let pkgJsonPath = ((bridgeDir as NSString).deletingLastPathComponent as NSString)
@@ -2938,9 +2942,12 @@ actor AgentRuntimeProcess {
         "recovery_action": "retry_start",
         "recovery_result": "exhausted",
       ])
-    logError(
-      "Agent runtime bridge failed to start",
-      context: bridgeStartFailureContext(failure))
+    pendingStartFailureDiagnostics = bridgeStartFailureContext(failure)
+  }
+
+  func consumePendingStartFailureDiagnostics() -> DesktopErrorDiagnosticContext? {
+    defer { pendingStartFailureDiagnostics = nil }
+    return pendingStartFailureDiagnostics
   }
 
   private func bridgeStartFailureContext(
@@ -2952,6 +2959,7 @@ actor AgentRuntimeProcess {
       elapsedMs: elapsedMs,
       exitCode: startupExitCode,
       binaryPresent: startupBinaryPresent,
+      binaryPresentChecked: startupBinaryPresentChecked,
       permissionGrantedChecked: startupPermissionGrantedChecked,
       permissionGranted: startupPermissionGranted)
   }
@@ -2961,6 +2969,7 @@ actor AgentRuntimeProcess {
     elapsedMs: Int,
     exitCode: Int32?,
     binaryPresent: Bool,
+    binaryPresentChecked: Bool,
     permissionGrantedChecked: Bool,
     permissionGranted: Bool
   ) -> DesktopErrorDiagnosticContext {
@@ -2969,7 +2978,7 @@ actor AgentRuntimeProcess {
       "exit_code": exitCode.map(Int.init) ?? -1,
       "elapsed_ms": elapsedMs,
       "configured_timeout_ms": 30_000,
-      "binary_present_checked": true,
+      "binary_present_checked": binaryPresentChecked,
       "binary_present": binaryPresent,
       // The JSONL bridge has no TCP listener; report that the port precondition was not checked.
       "port_bound_checked": false,

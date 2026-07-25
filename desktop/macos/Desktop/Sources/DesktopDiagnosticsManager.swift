@@ -493,23 +493,28 @@ final class DesktopDiagnosticsManager {
   func recordBetaLogError(
     message: String,
     error: Error?,
+    failureDiagnostics: [String: Any]? = nil,
     enabled: Bool = BetaEnhancedDiagnosticsConfiguration.isEnabled
   ) {
     guard enabled else { return }
     let nsError = error as NSError?
+    var trailProperties: [String: Any] = [
+      "component": betaComponent(for: message),
+      "operation": "error",
+      "phase": "handling",
+      "outcome": "failed",
+      "failure_class": betaFailureClass(for: nsError),
+      "error_domain": betaErrorDomain(nsError?.domain),
+      "error_code": betaErrorCode(nsError?.code),
+    ]
+    if let failureDiagnostics {
+      trailProperties.merge(sanitizedDiagnosticValues(failureDiagnostics)) { _, new in new }
+    }
     let snapshot = DesktopHealthSnapshot(
       timestamp: Date(),
       event: .betaDiagnosticTrail,
       properties: commonProperties().merging(
-        sanitized([
-          "component": betaComponent(for: message),
-          "operation": "error",
-          "phase": "handling",
-          "outcome": "failed",
-          "failure_class": betaFailureClass(for: nsError),
-          "error_domain": betaErrorDomain(nsError?.domain),
-          "error_code": betaErrorCode(nsError?.code),
-        ])
+        sanitized(trailProperties)
       ) { _, new in new })
     lock.lock()
     betaTrailSnapshots.append(snapshot)
@@ -1260,6 +1265,8 @@ final class DesktopDiagnosticsManager {
         safe[key] = String(string.prefix(96))
       case let int as Int:
         safe[key] = int
+      case let int64 as Int64:
+        safe[key] = Int(clamping: int64)
       case let double as Double:
         safe[key] = rounded(double)
       case let bool as Bool:
@@ -1269,6 +1276,10 @@ final class DesktopDiagnosticsManager {
       }
     }
     return safe
+  }
+
+  private func sanitizedDiagnosticValues(_ properties: [String: Any]) -> [String: Any] {
+    sanitized(properties)
   }
 
   private func rounded(_ value: Double) -> Double {

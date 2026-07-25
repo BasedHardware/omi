@@ -608,6 +608,7 @@ func logError(
   DesktopDiagnosticsManager.shared.recordBetaLogError(
     message: message,
     error: error,
+    failureDiagnostics: context?.values,
     enabled: enhancedBetaDiagnostics)
 
   // Transient network/IO errors (offline, timeouts, cancellations, socket resets)
