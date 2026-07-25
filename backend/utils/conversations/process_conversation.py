@@ -517,12 +517,12 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     """
     with track_usage(uid, Features.MEMORIES):
         result = _extract_memories_inner(uid, conversation)
-    # Product-analytics telemetry (Conversation Memories Extracted): exactly one
-    # event per durable successful persistence pass. Zero-extraction returns
-    # before persistence (count == 0) and a persistence exception propagates, so
-    # no false success is emitted; the count always reflects this pass only.
+    # Product-analytics telemetry (Conversation Memories Extracted): at most one
+    # analytics success per (uid, conversation) across retries — zero-extraction
+    # (count == 0) and persistence exceptions emit nothing; the durable
+    # per-conversation dedup (Redis SET NX EX) is inside emit_*_memories_extracted.
     if result is not None and result.count > 0:
-        emit_conversation_memories_extracted(uid, result)
+        emit_conversation_memories_extracted(uid, conversation.id, result)
 
 
 def _extract_memories(uid: str, conversation: Conversation) -> None:

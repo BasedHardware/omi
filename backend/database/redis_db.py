@@ -1104,3 +1104,24 @@ def try_acquire_conversation_goal_lock(uid: str, conversation_id: str, ttl: int 
     """Idempotency lock: one goal extraction per conversation. Returns True if acquired."""
     result = r.set(f'users:{uid}:conv_goal_lock:{conversation_id}', '1', ex=ttl, nx=True)
     return result is not None
+
+
+def try_acquire_conversation_memory_analytics_lock(
+    uid: str, conversation_id: str, ttl: int = 60 * 60 * 24 * 30
+) -> bool:
+    """Durable idempotency for the ``Conversation Memories Extracted`` analytics
+    event: at most one analytics success per ``(uid, conversation_id)`` across
+    re-finalization/retries. Atomic ``SET NX EX`` (matches
+    ``try_acquire_conversation_goal_lock``). Returns True if this caller is the
+    first (should emit), False if a prior pass already captured the success.
+
+    Fail-open on Redis error: a rare duplicate during a Redis outage is preferred
+    over silently losing a legitimate extraction signal. The TTL bounds storage
+    and covers any reasonable re-finalization window; ``conversation_id`` is part
+    of the Redis key only (backend-internal) and never reaches PostHog.
+    """
+    try:
+        result = r.set(f'users:{uid}:conv_memory_analytics:{conversation_id}', '1', ex=ttl, nx=True)
+        return result is not None
+    except Exception:
+        return True
