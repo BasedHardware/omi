@@ -23,10 +23,16 @@ The contract the backend requires (do not break these):
 The firmware version is read from `CONFIG_BT_DIS_FW_REV_STR` in
 [`omi/firmware/omi/omi.conf`](../../omi/omi.conf) (the build copies `omi.conf`
 → `prj.conf`, so this string is also baked into the binary's BLE DIS).
+`CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION` in the same file must carry the same base
+version; the build rejects drift so a dual-core OTA cannot silently skip a
+changed app-core image. A normal release preserves its reviewed `+N` build
+number; an explicit workflow version override starts that version at `+0`.
 
 ## Releasing a new CV1 version
 
-1. Bump `CONFIG_BT_DIS_FW_REV_STR` in `omi/firmware/omi/omi.conf` and merge it.
+1. Bump `CONFIG_BT_DIS_FW_REV_STR` and
+   `CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION` in `omi/firmware/omi/omi.conf`, keeping
+   their base versions equal, and merge them.
 2. Dry run (build only, artifacts attached to the Actions run, **no** release):
    ```bash
    gh workflow run firmware_release.yml
@@ -53,6 +59,13 @@ from any branch). The publish step also refuses to overwrite an existing
   at `/omi/firmware`): west init/update of NCS v2.9.0, `cp omi.conf prj.conf`, and
   `west build … --sysbuild` (MCUboot-signed). Mirrors [`omi/firmware/omi/BUILD.md`](../../omi/BUILD.md).
   Outputs `dfu_application.zip`, `merged.hex`, `merged_CPUNET.hex`.
+- `check-cv1-version-sync.sh` / `set-cv1-version.sh` — validate or atomically update
+  the DIS and MCUboot versions as one release identity.
+- `sync-cv1-release-version.sh` — production workflow boundary that preserves a
+  reviewed `+N` build number unless the release operator supplied an explicit
+  base-version override.
+- `test-check-cv1-version-sync.sh` — hermetic coverage for matching, drift,
+  malformed, normal-release preservation, and explicit-override paths.
 - `make-release-body.sh` — renders the GitHub Release body + `KEY_VALUE` block.
 
 ## Notes
