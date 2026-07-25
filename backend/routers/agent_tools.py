@@ -33,6 +33,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 GCE_PROJECT = "based-hardware"
+# Legacy placeholder that earlier builds persisted as agentVm.ip when the GCE
+# IP poll timed out. Never written any more; still read so already-poisoned
+# records are re-provisioned instead of being reported ready.
+UNRESOLVED_VM_IP = "unknown"
 
 
 class AgentVmInfo(BaseModel):
@@ -136,17 +140,34 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
         if not ip:
             t_fail = time.monotonic() - t0
             logger.error(f"[vm-start] {vm_name} failed to get IP after 6 attempts: {t_fail:.1f}s")
-            ip = "unknown"
+            raise RuntimeError(f"VM {vm_name} started but never reported an external IP")
 
         return ip
 
 
+def _is_usable_vm_ip(ip) -> bool:
+    """True when `ip` is an address a caller can actually dial.
+
+    `UNRESOLVED_VM_IP` is truthy, so a stored placeholder satisfies every
+    `if ip:` reader while resolving to nothing.
+    """
+    return isinstance(ip, str) and bool(ip) and ip != UNRESOLVED_VM_IP
+
+
 def _update_firestore_vm(uid: str, ip: str | None, status: str):
-    """Update the user's agentVm fields in Firestore."""
+    """Update the user's agentVm fields in Firestore.
+
+    `agentVm.ip` is the address every later connect dials, so this writer
+    decides what may become that address. A placeholder must never be
+    persisted: it is truthy, so it passes each `if ip:` reader, fails every
+    health probe, and leaves the record permanently unrepairable.
+    """
     from database.users import db as firestore_db
 
     update = {"agentVm.status": status}
     if ip:
+        if not _is_usable_vm_ip(ip):
+            raise ValueError(f"refusing to persist unusable agentVm.ip for uid={uid}")
         update["agentVm.ip"] = ip
     firestore_db.collection('users').document(uid).update(update)
 
@@ -208,6 +229,14 @@ async def ensure_vm(background_tasks: BackgroundTasks, uid: str = Depends(get_cu
             return {"has_vm": True, "status": "provisioning"}
 
         if gce_status == "RUNNING" and fs_status != "ready":
+            # A record still holding the legacy placeholder has no dialable
+            # address, so reporting it ready would strand the caller. Restart
+            # instead: that is the only path that resolves a real IP.
+            if not _is_usable_vm_ip(vm.get("ip")):
+                logger.info(f"[vm-ensure] VM {vm_name} is RUNNING but has no usable IP, restarting...")
+                await run_blocking(db_executor, _update_firestore_vm, uid, None, "provisioning")
+                background_tasks.add_task(_restart_vm_background, uid, vm_name, zone)
+                return {"has_vm": True, "status": "provisioning"}
             await run_blocking(db_executor, _update_firestore_vm, uid, vm.get("ip"), "ready")
             return {"has_vm": True, "status": "ready"}
 
