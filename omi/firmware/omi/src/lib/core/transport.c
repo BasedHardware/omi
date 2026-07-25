@@ -693,7 +693,9 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
         current_connection = NULL;
     }
     current_mtu = 0;
+#ifdef CONFIG_OMI_ENABLE_BATTERY
     charging_status_last_notified = -1;
+#endif
 
     // Reset the audio TX throttle semaphore so the pusher thread is not
     // left blocked forever if it was waiting for a slot when the connection dropped.
