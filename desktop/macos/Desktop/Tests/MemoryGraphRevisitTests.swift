@@ -16,10 +16,9 @@ final class MemoryGraphRevisitTests: XCTestCase {
     // The Brain Map moved from an inline Memories card to its own hub tab, still
     // driven by the persistent, container-owned view model.
     XCTAssertTrue(home.contains("MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)"))
-    // Static wiring tripwire: the Memory menu routes each destination into the
-    // same full-width surface while the graph keeps the shared background.
+    // Static wiring tripwire: the Memory menu keeps the shared destination
+    // owner while the graph remains a dedicated spatial surface.
     XCTAssertFalse(home.contains("constrainedListPage(MemoryHubPage"))
-    XCTAssertFalse(home.contains("listContentWidth"))
     XCTAssertTrue(home.contains("switch destination"))
     XCTAssertTrue(home.contains("MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)"))
     XCTAssertTrue(graph.contains("scnView.backgroundColor = NSColor(OmiColors.backgroundPrimary)"))
@@ -46,6 +45,50 @@ final class MemoryGraphRevisitTests: XCTestCase {
       .brainMap
     )
     XCTAssertNil(MemoryHubDestination.destination(for: .tasks))
+  }
+
+  func testMemoryMenuHoverIntentRejectsStaleHoverAndSupportsImmediateOpen() throws {
+    var intent = MemoryMenuHoverIntent()
+
+    let staleGeneration = try XCTUnwrap(intent.hoverChanged(true))
+    XCTAssertNil(intent.hoverChanged(false))
+    XCTAssertFalse(intent.openAfterHoverDelay(generation: staleGeneration))
+    XCTAssertEqual(intent.presentationRequest, 0)
+
+    let activeGeneration = try XCTUnwrap(intent.hoverChanged(true))
+    XCTAssertTrue(intent.openAfterHoverDelay(generation: activeGeneration))
+    XCTAssertEqual(intent.presentationRequest, 1)
+
+    intent.openImmediately()
+    XCTAssertEqual(intent.presentationRequest, 2)
+  }
+
+  func testMemoryHubUsesReadableWidthUntilTheActiveTranscriptOpens() {
+    XCTAssertEqual(MemoryHubLayoutPolicy.readableContentWidth, 900)
+    XCTAssertFalse(
+      MemoryHubLayoutPolicy.usesAvailableWidth(
+        conversationID: nil,
+        presentedConversationID: nil,
+        transcriptDrawerOpen: false
+      ))
+    XCTAssertFalse(
+      MemoryHubLayoutPolicy.usesAvailableWidth(
+        conversationID: "conversation-1",
+        presentedConversationID: "conversation-1",
+        transcriptDrawerOpen: false
+      ))
+    XCTAssertFalse(
+      MemoryHubLayoutPolicy.usesAvailableWidth(
+        conversationID: "conversation-1",
+        presentedConversationID: "conversation-2",
+        transcriptDrawerOpen: true
+      ))
+    XCTAssertTrue(
+      MemoryHubLayoutPolicy.usesAvailableWidth(
+        conversationID: "conversation-1",
+        presentedConversationID: "conversation-1",
+        transcriptDrawerOpen: true
+      ))
   }
 
   @MainActor
