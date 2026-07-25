@@ -4,4 +4,13 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
-exec python3 .github/scripts/pr_preflight.py "$@"
+
+PYTHON_EXECUTABLE="${OMI_PYTHON_EXECUTABLE:-}"
+if [[ -z "$PYTHON_EXECUTABLE" || ! -x "$PYTHON_EXECUTABLE" ]]; then
+  PYTHON_EXECUTABLE="$(command -v python3 || command -v python || true)"
+fi
+if [[ -z "$PYTHON_EXECUTABLE" || ! -x "$PYTHON_EXECUTABLE" ]]; then
+  echo "FAIL: PR preflight requires Python 3, but no executable was found." >&2
+  exit 1
+fi
+exec "$PYTHON_EXECUTABLE" .github/scripts/pr_preflight.py "$@"

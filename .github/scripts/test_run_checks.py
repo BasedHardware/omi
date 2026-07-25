@@ -22,11 +22,14 @@ from run_checks import (
     VALID_PLATFORMS,
     Check,
     Manifest,
+    bash_executable,
+    command_for_check,
     detect_platform,
     execute_checks,
     load_manifest,
     resolve_check_selections,
     resolve_checks,
+    resolve_explicit_checks,
     skipped_platform_checks,
     validate_manifest,
 )
@@ -36,6 +39,21 @@ REPO_ROOT = SCRIPT_DIR.parents[1]
 MANIFEST_PATH = REPO_ROOT / ".github/checks-manifest.yaml"
 WORKFLOWS_DIR = REPO_ROOT / ".github/workflows"
 SCRIPT_REFERENCE_RE = re.compile(r"(?P<path>(?:\.github|backend|desktop/macos)/scripts/[A-Za-z0-9_.-]+\.py)")
+
+
+def shell_path(path: Path, bash: str) -> str:
+    if os.name != "nt":
+        return str(path)
+    result = subprocess.run(
+        [bash, "-c", 'cygpath -u "$1"', "bash", str(path)],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if result.returncode:
+        raise RuntimeError(result.stderr)
+    return result.stdout.strip()
 
 
 def load_deferred_marker_module():
@@ -283,6 +301,7 @@ class RunnerBehaviorTests(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "requires a POSIX shell")
     def test_firestore_contention_runner_uses_uv_without_backend_venv(self) -> None:
         source = REPO_ROOT / "backend/testing/desktop_beta_admission/run.sh"
+        bash = bash_executable()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             runner = root / "backend/testing/desktop_beta_admission/run.sh"
@@ -308,8 +327,15 @@ esac
                 path.chmod(0o755)
 
             env = os.environ.copy()
-            env["PATH"] = f"{fake_bin}:/usr/bin:/bin"
-            result = subprocess.run(["bash", str(runner)], text=True, capture_output=True, env=env, check=False)
+            env["PATH"] = f"{shell_path(fake_bin, bash)}:/usr/bin:/bin"
+            result = subprocess.run(
+                [bash, str(runner)],
+                text=True,
+                capture_output=True,
+                encoding="utf-8",
+                env=env,
+                check=False,
+            )
 
             self.assertEqual(result.returncode, 0, result.stderr)
             captured = capture.read_text(encoding="utf-8")
@@ -476,7 +502,7 @@ class PlatformTests(unittest.TestCase):
         manifest = Manifest(
             checks=(Check(id="portable", command=("true",), triggers=("all",), lanes=("ci",), reason="t"),), exempt=()
         )
-        for plat in ("macos", "linux"):
+        for plat in ("macos", "linux", "windows"):
             selected = resolve_checks(manifest, ["any/file"], "ci", platform=plat)
             self.assertEqual([c.id for c in selected], ["portable"])
 
@@ -563,6 +589,73 @@ class PlatformTests(unittest.TestCase):
     def test_detect_platform_returns_known_value(self):
         plat = detect_platform()
         self.assertIn(plat, VALID_PLATFORMS - {"all"})
+
+    def test_interpreter_commands_use_resolved_executables(self):
+        python_check = Check(
+            id="python-interpreter",
+            command=("python3", "check.py", "bash"),
+            triggers=("all",),
+            lanes=("local", "ci"),
+            reason="test",
+        )
+        python_command = command_for_check(
+            python_check,
+            changed_files_path=Path("changed.txt"),
+            base="base",
+            head="head",
+            pr_body_file=Path("body.md"),
+            skip_changelog=False,
+        )
+        bash_check = Check(
+            id="bash-interpreter",
+            command=("bash", "check.sh", "python3"),
+            triggers=("all",),
+            lanes=("local", "ci"),
+            reason="test",
+        )
+        bash_command = command_for_check(
+            bash_check,
+            changed_files_path=Path("changed.txt"),
+            base="base",
+            head="head",
+            pr_body_file=Path("body.md"),
+            skip_changelog=False,
+        )
+
+        self.assertEqual(python_command, [sys.executable, "check.py", "bash"])
+        self.assertEqual(bash_command, [bash_executable(), "check.sh", "python3"])
+
+    def test_explicit_check_ids_preserve_manifest_commands(self):
+        manifest = Manifest(
+            checks=(
+                Check(
+                    id="portable",
+                    command=("python3", "check.py"),
+                    triggers=("never/**",),
+                    lanes=("ci",),
+                    reason="test",
+                ),
+            ),
+            exempt=(),
+        )
+
+        selections = resolve_explicit_checks(
+            manifest,
+            ["portable"],
+            "ci",
+            include_pr_body_checks=True,
+            platform="windows",
+        )
+
+        self.assertEqual([selection.check.id for selection in selections], ["portable"])
+        with self.assertRaisesRegex(ValueError, "unknown check id"):
+            resolve_explicit_checks(
+                manifest,
+                ["missing"],
+                "ci",
+                include_pr_body_checks=True,
+                platform="windows",
+            )
 
 
 class DeferredMarkerTests(unittest.TestCase):

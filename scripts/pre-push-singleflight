@@ -4,4 +4,37 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
-exec python3 .github/scripts/preflight_runner.py --name pre-push -- scripts/pre-push "$@"
+
+BASH_EXECUTABLE="${BASH:-}"
+if [[ -z "$BASH_EXECUTABLE" || ! -x "$BASH_EXECUTABLE" ]]; then
+  BASH_EXECUTABLE="$(command -v bash || true)"
+fi
+if [[ -z "$BASH_EXECUTABLE" || ! -x "$BASH_EXECUTABLE" ]]; then
+  echo "FAIL: pre-push requires Bash, but no executable was found." >&2
+  exit 1
+fi
+
+PREFLIGHT_PYTHON="${BACKEND_PYTHON:-}"
+if [[ -z "$PREFLIGHT_PYTHON" || ! -x "$PREFLIGHT_PYTHON" ]]; then
+  for candidate in "$ROOT/backend/.venv/bin/python" "$ROOT/backend/.venv/Scripts/python.exe"; do
+    if [[ -x "$candidate" ]]; then
+      PREFLIGHT_PYTHON="$candidate"
+      export BACKEND_PYTHON="$candidate"
+      break
+    fi
+  done
+fi
+if [[ -z "$PREFLIGHT_PYTHON" || ! -x "$PREFLIGHT_PYTHON" ]]; then
+  PREFLIGHT_PYTHON="$(command -v python3 || command -v python || true)"
+fi
+if [[ -z "$PREFLIGHT_PYTHON" || ! -x "$PREFLIGHT_PYTHON" ]]; then
+  echo "FAIL: pre-push requires Python 3, but no executable was found." >&2
+  exit 1
+fi
+
+export PYTHONUTF8=1
+export OMI_BASH_EXECUTABLE="$BASH_EXECUTABLE"
+export OMI_PYTHON_EXECUTABLE="$PREFLIGHT_PYTHON"
+export PATH="$(dirname "$PREFLIGHT_PYTHON"):$(dirname "$BASH_EXECUTABLE"):$PATH"
+exec "$PREFLIGHT_PYTHON" .github/scripts/preflight_runner.py \
+  --name pre-push -- "$BASH_EXECUTABLE" scripts/pre-push "$@"
