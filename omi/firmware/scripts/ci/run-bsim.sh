@@ -22,7 +22,7 @@ west zephyr-export
 make -C "$BSIM_OUT_PATH" everything -j"$(nproc)"
 
 west build -b nrf5340bsim/nrf5340/cpuapp "$FW/bsim" --sysbuild -d build-bsim-omi --pristine always
-west build -b nrf52_bsim "$FW/bsim/client" -d build-bsim-client --pristine always
+west build -b nrf52_bsim "$FW/bsim/client" -d build-bsim-client --pristine always -S bt-ll-sw-split
 
 OMI_EXE="$WORKSPACE/build-bsim-omi/zephyr/zephyr.exe"
 if [ ! -x "$OMI_EXE" ]; then
