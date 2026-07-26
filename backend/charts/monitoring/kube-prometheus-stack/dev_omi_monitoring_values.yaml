@@ -117,7 +117,18 @@ prometheus:
           credentials_file: /etc/prometheus/secrets/metrics-scrape-token/token
         kubernetes_sd_configs:
         - role: pod
+          namespaces:
+            names:
+              - dev-omi-backend
         relabel_configs:
+          # Scope the development Prometheus instance to development targets
+          # even if a future discovery change widens its Kubernetes RBAC.
+          - source_labels: [__meta_kubernetes_namespace]
+            action: keep
+            regex: dev-omi-backend
+          - source_labels: [__meta_kubernetes_pod_label_env]
+            action: keep
+            regex: dev
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
             action: keep
             regex: "true"
@@ -135,6 +146,8 @@ prometheus:
             target_label: __address__
           - source_labels: [__meta_kubernetes_namespace]
             target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_label_env]
+            target_label: environment
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
       - job_name: pusher-metrics
@@ -146,7 +159,19 @@ prometheus:
           credentials_file: /etc/prometheus/secrets/metrics-scrape-token/token
         kubernetes_sd_configs:
         - role: pod
+          namespaces:
+            names:
+              - dev-omi-backend
         relabel_configs:
+          # The development job must never discover a production Pusher pod.
+          # Namespace and immutable dev workload-label checks are deliberately
+          # both retained as independent isolation boundaries.
+          - source_labels: [__meta_kubernetes_namespace]
+            action: keep
+            regex: dev-omi-backend
+          - source_labels: [__meta_kubernetes_pod_label_env]
+            action: keep
+            regex: dev
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
             action: keep
             regex: "true"
@@ -164,6 +189,8 @@ prometheus:
             target_label: __address__
           - source_labels: [__meta_kubernetes_namespace]
             target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_label_env]
+            target_label: environment
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
       - job_name: llm-gateway-metrics

@@ -223,9 +223,36 @@ tolerations. This is capacity evidence, not a claim that the rollout has product
 traffic or user-success proof.
 
 The dev Pusher dashboard is backed by the isolated dev Prometheus scrape. It
-shows existing connection, readiness/drain, and backend-listen reconnect-circuit
-signals without creating traffic. Pod health alone is not product-success
-evidence.
+shows existing connection, readiness/drain, reconnect/recovery and
+backend-listen circuit-breaker aggregates, plus target health, without creating
+traffic. Pod health alone is not product-success evidence.
+
+#### Read-only development evidence boundary
+
+The development Prometheus jobs discover only `dev-omi-backend` pods carrying
+the `env=dev` workload label. They retain the existing bearer-token file
+reference; do not fetch `/metrics` directly, inspect the token, copy headers, or
+weaken authentication. The dashboard contains only low-cardinality aggregates
+and target labels (`job`, `namespace`, and `pod`), never connection IDs, user
+data, or request payloads.
+
+For a passive development-bake check in the permitted read-only operator plane,
+use the Pusher dashboard or these equivalent PromQL expressions:
+
+- active Pusher WebSockets: `sum(pusher_active_ws_connections{job="pusher-metrics"})`
+- sessions currently reconnecting or degraded:
+  `sum(pusher_sessions_degraded{job="backend-listen-metrics"})`
+- reconnect circuit state and rejected attempts:
+  `pusher_circuit_breaker_state{job="backend-listen-metrics"}` and
+  `sum(rate(pusher_circuit_breaker_rejections_total{job="backend-listen-metrics"}[5m]))`
+- authenticated scrape target health:
+  `up{job=~"pusher-metrics|backend-listen-metrics"}`
+
+`up == 1` proves only that Prometheus authenticated and scraped a target; it is
+not connection, drain, or recovery proof. A recovery aggregate can move only
+when a real client reconnects. If no real connection exists during the passive
+window, record reconnect/recovery as **unproven**—do not generate synthetic
+traffic to turn the signal non-zero.
 
 ### 4. Shared ConfigMap/Secret migration guard (required on key changes)
 
