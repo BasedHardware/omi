@@ -5,7 +5,13 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 /// Firmware generations reuse the same BLE characteristics with incompatible
 /// payloads, so probing more than one implementation is unsafe: a ring ACK can
 /// otherwise be mistaken for a legacy SD packet.
-enum DeviceStorageProtocol { none, legacySdCard, multiFile, ringBuffer, limitlessFlash }
+enum DeviceStorageProtocol {
+  none,
+  legacySdCard,
+  multiFile,
+  ringBuffer,
+  limitlessFlash,
+}
 
 class DeviceStorageProtocolPolicy {
   static String? resolveFirmware(String? enriched, String? raw) {
@@ -14,12 +20,17 @@ class DeviceStorageProtocolPolicy {
     return null;
   }
 
-  static DeviceStorageProtocol classify(BtDevice? device, {String? firmwareVersion}) {
+  static DeviceStorageProtocol classify(
+    BtDevice? device, {
+    String? firmwareVersion,
+  }) {
     if (device == null) return DeviceStorageProtocol.none;
     if (device.type == DeviceType.limitless) return DeviceStorageProtocol.limitlessFlash;
     if (device.type != DeviceType.omi) return DeviceStorageProtocol.none;
 
-    final version = _parseVersion(resolveFirmware(firmwareVersion, device.firmwareRevision));
+    final version = _parseVersion(
+      resolveFirmware(firmwareVersion, device.firmwareRevision),
+    );
     if (version == null) return DeviceStorageProtocol.none;
     if (_atLeast(version, const (3, 0, 20))) return DeviceStorageProtocol.ringBuffer;
     if (_atLeast(version, const (3, 0, 17))) return DeviceStorageProtocol.multiFile;
@@ -29,6 +40,15 @@ class DeviceStorageProtocolPolicy {
   static bool isRingBufferFirmware(String? version) {
     final parsed = _parseVersion(version);
     return parsed != null && _atLeast(parsed, const (3, 0, 20));
+  }
+
+  /// Firmware 3.0.29 is the storage-authoritative CV1 test line: audio is read
+  /// from the sequenced SD ring even while connected. Keep this exact until the
+  /// protocol exposes a capability bit; treating every later version as this
+  /// mode would silently disable the legacy live characteristic if a release
+  /// changes direction.
+  static bool usesStorageAuthoritativeAudio(String? version) {
+    return _parseVersion(version) == const (3, 0, 29);
   }
 
   static bool supportsModernStorage(String? version) {
@@ -80,11 +100,20 @@ class DeviceStorageRouter {
   DeviceStorageProtocol protocol = DeviceStorageProtocol.none;
 
   void bind(BtDevice? device, {String? firmwareVersion}) {
-    protocol = DeviceStorageProtocolPolicy.classify(device, firmwareVersion: firmwareVersion);
+    protocol = DeviceStorageProtocolPolicy.classify(
+      device,
+      firmwareVersion: firmwareVersion,
+    );
 
-    _bindLegacySdCard(protocol == DeviceStorageProtocol.legacySdCard ? device : null);
+    _bindLegacySdCard(
+      protocol == DeviceStorageProtocol.legacySdCard ? device : null,
+    );
     _bindMultiFile(protocol == DeviceStorageProtocol.multiFile ? device : null);
-    _bindRingBuffer(protocol == DeviceStorageProtocol.ringBuffer ? device : null);
-    _bindLimitlessFlash(protocol == DeviceStorageProtocol.limitlessFlash ? device : null);
+    _bindRingBuffer(
+      protocol == DeviceStorageProtocol.ringBuffer ? device : null,
+    );
+    _bindLimitlessFlash(
+      protocol == DeviceStorageProtocol.limitlessFlash ? device : null,
+    );
   }
 }

@@ -63,6 +63,16 @@ final class OmiBleManager: NSObject {
     /// Queued scan request if Bluetooth wasn't ready when startScan was called.
     private var pendingScan: (timeout: Int, serviceUuids: [String])?
 
+    /// CCCD disables already requested for restored legacy audio subscriptions
+    /// that have no current Dart/native owner.
+    private var orphanedLegacyAudioDisableRequests: Set<String> = []
+
+    /// Parsed native stream ownership. The raw preference is compared on each
+    /// legacy audio callback, while JSON parsing only repeats when Dart changes it.
+    private var nativeBleConfigCacheInitialized = false
+    private var cachedNativeBleConfigRaw: String?
+    private var cachedLegacyAudioOwner: BleLegacyAudioOwner?
+
     // MARK: - Initialization
 
     private override init() {
@@ -283,6 +293,58 @@ final class OmiBleManager: NSObject {
 
     private func peripheralUuidString(_ peripheral: CBPeripheral) -> String {
         return peripheral.identifier.uuidString
+    }
+
+    private func characteristicKey(
+        peripheralUuid: String,
+        serviceUuid: String,
+        characteristicUuid: String
+    ) -> String {
+        return "\(peripheralUuid):\(serviceUuid):\(characteristicUuid)".lowercased()
+    }
+
+    private func configuredLegacyAudioOwner() -> BleLegacyAudioOwner? {
+        let raw = UserDefaults.standard.string(forKey: "flutter.nativeBleStreamConfig")
+        if !nativeBleConfigCacheInitialized || raw != cachedNativeBleConfigRaw {
+            nativeBleConfigCacheInitialized = true
+            cachedNativeBleConfigRaw = raw
+            cachedLegacyAudioOwner = BleLegacyAudioOwnershipPolicy.owner(from: raw)
+        }
+        return cachedLegacyAudioOwner
+    }
+
+    /// Returns true when the notification is orphaned and must not be forwarded.
+    ///
+    /// iOS restores notification subscriptions independently of Flutter. When
+    /// Dart intentionally omits its native stream config (the 3.0.29 ring owner),
+    /// release a restored legacy audio CCCD and drop packets until CoreBluetooth
+    /// confirms the transition.
+    private func rejectOrphanedLegacyAudioNotification(
+        peripheral: CBPeripheral,
+        characteristic: CBCharacteristic
+    ) -> Bool {
+        guard let service = characteristic.service else { return false }
+        let uuid = peripheralUuidString(peripheral)
+        let serviceUuid = fullUuidString(service.uuid)
+        let characteristicUuid = fullUuidString(characteristic.uuid)
+        let decision = BleLegacyAudioOwnershipPolicy.decision(
+            peripheralUuid: uuid,
+            serviceUuid: serviceUuid,
+            characteristicUuid: characteristicUuid,
+            configuredOwner: configuredLegacyAudioOwner()
+        )
+        guard decision == .orphanedLegacyAudio else { return false }
+
+        let key = characteristicKey(
+            peripheralUuid: uuid,
+            serviceUuid: serviceUuid,
+            characteristicUuid: characteristicUuid
+        )
+        if characteristic.isNotifying, orphanedLegacyAudioDisableRequests.insert(key).inserted {
+            NSLog("[OmiBle] Releasing orphaned legacy audio notification for \(uuid)")
+            peripheral.setNotifyValue(false, for: characteristic)
+        }
+        return true
     }
 
     /// Normalize a CBUUID to its full 128-bit string representation.
@@ -521,6 +583,9 @@ final class OmiBleManager: NSObject {
     private func cleanupPeripheral(_ peripheralUuid: String) {
         stopRssiKeepAlive()
         discoveredServices.removeValue(forKey: peripheralUuid)
+        orphanedLegacyAudioDisableRequests = orphanedLegacyAudioDisableRequests.filter {
+            !$0.hasPrefix(peripheralUuid.lowercased())
+        }
 
         // Clean up pending completions
         let completionKeys = readCompletions.keys.filter { $0.hasPrefix(peripheralUuid.lowercased()) }
@@ -703,6 +768,18 @@ extension OmiBleManager: CBPeripheralDelegate {
         let allDiscovered = services.allSatisfy { $0.characteristics != nil }
 
         if allDiscovered {
+            // State restoration can bring back a legacy audio CCCD before Dart
+            // selects the storage-authoritative ring owner. Release it before
+            // publishing device readiness so only the selected audio lane runs.
+            for discoveredService in services {
+                for characteristic in discoveredService.characteristics ?? [] {
+                    _ = rejectOrphanedLegacyAudioNotification(
+                        peripheral: peripheral,
+                        characteristic: characteristic
+                    )
+                }
+            }
+
             let bleServices = services.map { svc in
                 BleService(
                     uuid: self.fullUuidString(svc.uuid),
@@ -762,6 +839,13 @@ extension OmiBleManager: CBPeripheralDelegate {
         // Handle notification
         guard let data = characteristic.value, !data.isEmpty else { return }
 
+        if rejectOrphanedLegacyAudioNotification(
+            peripheral: peripheral,
+            characteristic: characteristic
+        ) {
+            return
+        }
+
         if characteristic.uuid == OmiBleManager.batteryLevelCharUuid, let firstByte = data.first {
             persistBatteryReading(uuid: uuid, level: Int(firstByte))
         }
@@ -817,6 +901,15 @@ extension OmiBleManager: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
         let uuid = peripheralUuidString(peripheral)
         let charUuid = fullUuidString(characteristic.uuid)
+        if let service = characteristic.service {
+            orphanedLegacyAudioDisableRequests.remove(
+                characteristicKey(
+                    peripheralUuid: uuid,
+                    serviceUuid: fullUuidString(service.uuid),
+                    characteristicUuid: charUuid
+                )
+            )
+        }
         if let error = error {
             NSLog("[OmiBle] Failed to update notification state for \(charUuid): \(error.localizedDescription)")
         } else {

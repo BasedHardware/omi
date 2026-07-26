@@ -170,6 +170,7 @@ class OmiBleForegroundService : Service() {
     private val readySessionGuard by lazy {
         GattReadySessionGuard(bleManager::activeGattSessionId)
     }
+    private val nativeAudioSubscriptionOwnership = NativeAudioSubscriptionOwnership()
     private val backgroundAudioStreamer by lazy { OmiBackgroundAudioStreamer(applicationContext) }
     private val batchAudioWriter by lazy { OmiBatchAudioWriter(applicationContext) }
     private val limitlessBatchWriter by lazy { LimitlessBatchAudioWriter(applicationContext) }
@@ -274,20 +275,39 @@ class OmiBleForegroundService : Service() {
     }
 
     private fun ensureBackgroundAudioSubscription(address: String, services: List<BleService>) {
-        if (OmiBleManager.isFlutterAlive) return
-        // Subscribe for background streaming OR batch capture (whichever is configured)
-        // so native keeps receiving audio after the Flutter engine is gone.
-        val target = backgroundAudioStreamer.configuredAudioTargetFor(address)
-            ?: batchAudioWriter.configuredAudioTargetFor(address)
-            ?: return
-        val hasTarget = services.any { service ->
-            service.uuid.equals(target.first, ignoreCase = true) &&
-                service.characteristicUuids.any { it.equals(target.second, ignoreCase = true) }
-        }
-        if (!hasTarget) return
+        val addr = address.uppercase()
+        val sessionToken = managedDevices[addr]?.currentGattHash ?: return
+        // Native may own legacy audio only while Flutter is dead and a complete
+        // config names a characteristic exposed by this GATT session. In
+        // particular, a storage-authoritative app omits that config because its
+        // ring tail owns the audio path.
+        val configuredTarget =
+            if (OmiBleManager.isFlutterAlive) {
+                null
+            } else {
+                backgroundAudioStreamer.configuredAudioTargetFor(addr)
+                    ?: batchAudioWriter.configuredAudioTargetFor(addr)
+            }
+        val desiredTarget = configuredTarget?.takeIf { target ->
+            services.any { service ->
+                service.uuid.equals(target.first, ignoreCase = true) &&
+                    service.characteristicUuids.any { it.equals(target.second, ignoreCase = true) }
+            }
+        }?.let { NativeAudioSubscriptionTarget(it.first, it.second) }
 
-        Log.i(TAG, "Ensuring BLE audio subscription for background transcription on $address")
-        bleManager.subscribeCharacteristic(address, target.first, target.second)
+        val transition = nativeAudioSubscriptionOwnership.reconcile(
+            address = addr,
+            sessionToken = sessionToken,
+            desired = desiredTarget,
+        )
+        transition.unsubscribe?.let { target ->
+            Log.i(TAG, "Releasing native-owned BLE audio subscription for $addr")
+            bleManager.unsubscribeCharacteristic(addr, target.serviceUuid, target.characteristicUuid)
+        }
+        transition.subscribe?.let { target ->
+            Log.i(TAG, "Claiming BLE audio subscription for native background capture on $addr")
+            bleManager.subscribeCharacteristic(addr, target.serviceUuid, target.characteristicUuid)
+        }
     }
 
     private fun mapGattServices(services: List<BluetoothGattService>): List<BleService> =

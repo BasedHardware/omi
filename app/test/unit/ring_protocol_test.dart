@@ -107,6 +107,42 @@ void main() {
     });
   });
 
+  group('RingSequenceCoverage', () {
+    test('merges fetched live head with backlog only after the gap closes', () {
+      final coverage = RingSequenceCoverage();
+
+      coverage.add(980, 1000);
+      expect(coverage.contiguousEndFrom(0), 0);
+      expect(coverage.firstRangeAtOrAfter(0), (start: 980, end: 1000));
+
+      coverage.add(0, 500);
+      expect(coverage.contiguousEndFrom(0), 500);
+
+      coverage.add(500, 980);
+      expect(coverage.contiguousEndFrom(0), 1000);
+      expect(coverage.ranges, [(start: 0, end: 1000)]);
+    });
+
+    test('sequence identity skips an already durable head without content matching', () {
+      final coverage = RingSequenceCoverage([
+        (start: 100, end: 120),
+        (start: 140, end: 160),
+      ]);
+
+      expect(coverage.firstUncovered(100, 160), 120);
+      coverage.add(120, 140);
+      expect(coverage.firstUncovered(100, 160), 160);
+      expect(coverage.covers(100, 160), isTrue);
+    });
+
+    test('parses only valid immutable ring source identities', () {
+      expect(RingProtocol.parseSourceRange('ring_42_84'), (start: 42, end: 84));
+      expect(RingProtocol.parseSourceRange('ring_84_42'), isNull);
+      expect(RingProtocol.parseSourceRange('legacy_42_84'), isNull);
+      expect(RingProtocol.parseSourceRange(null), isNull);
+    });
+  });
+
   group('RingProtocol.parseReadBeginNotification', () {
     test('decodes start_seq + count', () {
       final bd = ByteData(13)

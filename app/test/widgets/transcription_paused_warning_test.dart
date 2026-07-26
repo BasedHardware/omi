@@ -87,7 +87,7 @@ void main() {
   }
 
   group('simplified status indicators (#6672)', () {
-    testWidgets('shows terminal live STT failure until the backend is ready again', (tester) async {
+    testWidgets('distinguishes retryable STT recovery from terminal unavailability', (tester) async {
       final captureProvider = CaptureProvider();
       addTearDown(captureProvider.dispose);
       captureProvider.updateRecordingState(RecordingState.record);
@@ -108,6 +108,21 @@ void main() {
       expect(captureProvider.recordingState, RecordingState.record);
       expect(captureProvider.terminalTranscriptionFailure?.status, 'stt_failed');
       final context = tester.element(find.byType(ConversationCaptureWidget));
+      expect(find.text(AppLocalizations.of(context).transcriptionReconnecting), findsWidgets);
+      expect(find.text(AppLocalizations.of(context).transcriptionUnavailable), findsNothing);
+
+      captureProvider.onMessageEventReceived(
+        MessageServiceStatusEvent(
+          status: 'stt_failed',
+          outcome: 'upstream_error',
+          provider: 'deepgram',
+          retryable: false,
+          reason: 'unsupported_codec',
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text(AppLocalizations.of(context).transcriptionReconnecting), findsNothing);
       expect(find.text(AppLocalizations.of(context).transcriptionUnavailable), findsWidgets);
 
       captureProvider.onMessageEventReceived(MessageServiceStatusEvent(status: 'ready'));

@@ -280,11 +280,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     } else if (!isHavingRecordingDevice && !isUsingPhoneMic) {
       stateText = "";
     } else if (isUsingPhoneMic || isHavingRecordingDevice) {
-      if (captureProvider.terminalTranscriptionFailure != null) {
-        // Audio remains in the WAL while reconnecting, but the server has
-        // explicitly said live STT is unavailable. Do not claim "Listening".
-        stateText = context.l10n.transcriptionUnavailable;
-        statusIndicator = const PausedStatusIndicator();
+      final transcriptionFailure = captureProvider.terminalTranscriptionFailure;
+      if (transcriptionFailure != null) {
+        // Audio remains in the WAL while reconnecting. Distinguish a retryable
+        // upstream interruption from a terminal outage so a short recovery
+        // does not flash the stronger "unavailable" state.
+        final isRetrying = transcriptionFailure.retryable == true;
+        stateText = isRetrying ? context.l10n.transcriptionReconnecting : context.l10n.transcriptionUnavailable;
+        statusIndicator = isRetrying ? const RecordingStatusIndicator() : const PausedStatusIndicator();
       } else {
         // Show "Listening" for all active recording states — WAL ensures audio is
         // saved locally regardless of transcription connection status.
@@ -362,7 +365,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     } else if (isPhoneRecording) {
       isPaused = _isPhoneMicPaused || provider.isPaused || isCallInterrupted;
     }
-    final hasTerminalTranscriptionFailure = provider.terminalTranscriptionFailure != null;
+    final transcriptionFailure = provider.terminalTranscriptionFailure;
 
     // Determine if this is an OmiGlass-type device (captures photos)
     bool hasPhotos = provider.photos.isNotEmpty;
@@ -372,8 +375,10 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         ? context.l10n.paused
         : isPaused
             ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
-            : hasTerminalTranscriptionFailure
-                ? context.l10n.transcriptionUnavailable
+            : transcriptionFailure != null
+                ? transcriptionFailure.retryable == true
+                    ? context.l10n.transcriptionReconnecting
+                    : context.l10n.transcriptionUnavailable
                 : hasPhotos
                     ? 'Capturing'
                     : context.l10n.listening;

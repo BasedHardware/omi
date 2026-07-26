@@ -129,7 +129,10 @@ class RingProtocol {
   /// Record timestamps survive a reboot where the device's current RTC-valid
   /// flag may be false. Trust plausible embedded capture time rather than
   /// collapsing old audio onto the retry time.
-  static bool isPlausibleRecordTimestamp(int timestamp, {required int nowSeconds}) {
+  static bool isPlausibleRecordTimestamp(
+    int timestamp, {
+    required int nowSeconds,
+  }) {
     const earliestSupportedTimestamp = 1704067200;
     const maximumFutureSkewSeconds = 24 * 60 * 60;
     return timestamp >= earliestSupportedTimestamp && timestamp <= nowSeconds + maximumFutureSkewSeconds;
@@ -199,6 +202,85 @@ class RingProtocol {
     }
     return frames;
   }
+
+  /// Parse the immutable source identity written by the ring recovery path.
+  /// The half-open range is `[start, end)`.
+  static ({int start, int end})? parseSourceRange(String? sourceId) {
+    if (sourceId == null) return null;
+    final match = RegExp(r'^ring_(\d+)_(\d+)$').firstMatch(sourceId);
+    if (match == null) return null;
+    final start = int.parse(match.group(1)!);
+    final end = int.parse(match.group(2)!);
+    if (end <= start) return null;
+    return (start: start, end: end);
+  }
+}
+
+/// In-memory index of ring ranges already durably represented on the phone.
+///
+/// This is sequence identity, not audio-content deduplication. It lets the app
+/// fetch the live head before an old backlog, then advance the pendant only
+/// when the historical gap closes.
+class RingSequenceCoverage {
+  final List<({int start, int end})> _ranges = [];
+
+  RingSequenceCoverage([Iterable<({int start, int end})> ranges = const []]) {
+    for (final range in ranges) {
+      add(range.start, range.end);
+    }
+  }
+
+  void add(int start, int end) {
+    if (end <= start) return;
+    var mergedStart = start;
+    var mergedEnd = end;
+    var index = 0;
+    while (index < _ranges.length && _ranges[index].end < mergedStart) {
+      index += 1;
+    }
+    while (index < _ranges.length && _ranges[index].start <= mergedEnd) {
+      final range = _ranges.removeAt(index);
+      if (range.start < mergedStart) mergedStart = range.start;
+      if (range.end > mergedEnd) mergedEnd = range.end;
+    }
+    _ranges.insert(index, (start: mergedStart, end: mergedEnd));
+  }
+
+  /// Highest sequence covered without a gap beginning at [start].
+  int contiguousEndFrom(int start) {
+    var end = start;
+    for (final range in _ranges) {
+      if (range.end <= end) continue;
+      if (range.start > end) break;
+      end = range.end;
+    }
+    return end;
+  }
+
+  /// First covered range beginning at or after [start].
+  ({int start, int end})? firstRangeAtOrAfter(int start) {
+    for (final range in _ranges) {
+      if (range.end <= start) continue;
+      return range;
+    }
+    return null;
+  }
+
+  /// First uncovered sequence in `[start, end)`, or [end] if fully covered.
+  int firstUncovered(int start, int end) {
+    var cursor = start;
+    for (final range in _ranges) {
+      if (range.end <= cursor) continue;
+      if (range.start > cursor) return cursor;
+      if (range.end > cursor) cursor = range.end;
+      if (cursor >= end) return end;
+    }
+    return cursor;
+  }
+
+  bool covers(int start, int end) => end <= contiguousEndFrom(start);
+
+  List<({int start, int end})> get ranges => List.unmodifiable(_ranges);
 }
 
 class RingStorageException implements Exception {
@@ -211,12 +293,16 @@ class RingStorageException implements Exception {
 }
 
 class RingCommandRejectedException extends RingStorageException {
-  const RingCommandRejectedException({required this.command, required this.status})
-      : super(status == RingProtocol.statusStorageNotReady
-            ? 'Device storage is not ready'
-            : status == RingProtocol.statusStorageFailed
-                ? 'Device storage needs attention'
-                : 'Device rejected $command (status $status)');
+  const RingCommandRejectedException({
+    required this.command,
+    required this.status,
+  }) : super(
+          status == RingProtocol.statusStorageNotReady
+              ? 'Device storage is not ready'
+              : status == RingProtocol.statusStorageFailed
+                  ? 'Device storage needs attention'
+                  : 'Device rejected $command (status $status)',
+        );
 
   final String command;
   final int status;
@@ -275,7 +361,11 @@ class DoneNotification {
   final int nextSeq;
   final int? transferCrc32;
 
-  const DoneNotification({required this.status, required this.nextSeq, this.transferCrc32});
+  const DoneNotification({
+    required this.status,
+    required this.nextSeq,
+    this.transferCrc32,
+  });
 
   bool get isOk => status == 0;
 }
@@ -304,7 +394,10 @@ class ReadBeginNotification {
   final int transferStartSeq;
   final int packetCount;
 
-  const ReadBeginNotification({required this.transferStartSeq, required this.packetCount});
+  const ReadBeginNotification({
+    required this.transferStartSeq,
+    required this.packetCount,
+  });
 }
 
 /// Reassembles unaligned NOTIFY_DATA byte chunks into 444-byte ring records.

@@ -24,6 +24,44 @@ flutter test \
 scripts/analyze_ratchet.sh
 ```
 
+### Authenticated Android physical-device builds
+
+The hermetic `test.sh` bootstrap intentionally writes an empty `.dev.env` and
+placeholder development Firebase files. Those inputs are valid for unit tests
+only. Building an APK from them produces a sign-in screen whose OAuth URL is
+relative and whose Firebase identity cannot authenticate the real test
+account.
+
+Before every authenticated Android CV1 run, seed these ignored files from the
+primary maintainer checkout that already has the working prod-backed dev
+configuration:
+
+```bash
+M=/absolute/path/to/maintainer-checkout/app
+W=/absolute/path/to/test-worktree/app
+
+cp "$M/.dev.env" "$W/.dev.env"
+cp "$M/lib/firebase_options_dev.dart" "$W/lib/firebase_options_dev.dart"
+cp "$M/android/app/src/dev/google-services.json" \
+  "$W/android/app/src/dev/google-services.json"
+
+cd "$W"
+dart run build_runner clean
+dart run build_runner build --delete-conflicting-outputs
+bash scripts/verify_android_physical_test_auth_config.sh
+flutter build apk --debug --flavor dev --target-platform android-arm64
+```
+
+The clean is required because build_runner's cached asset graph may not notice
+an ignored `.dev.env` change and can report "wrote 0 outputs" while retaining
+the empty test URL. The preflight decrypts the generated
+`lib/env/dev_env.g.dart`; it must report generated prod API + prod Firebase with
+the dev package before the APK is installed. Re-run it after every `test.sh`,
+`flutter pub get`, setup script, branch switch, or rebase that may regenerate
+ignored configuration.
+An auth failure from an APK that did not pass this preflight is a build-fixture
+failure, not BLE evidence.
+
 If native Android BLE code changed, also run its focused Gradle test target
 named in `app/AGENTS.md`. These tests must pass without a phone, network, sleep,
 or plugin callbacks.

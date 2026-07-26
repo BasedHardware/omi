@@ -41,7 +41,10 @@ abstract class IWalSync {
   Future<List<Wal>> getMissingWals();
   Future deleteWal(Wal wal);
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress});
-  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress});
+  Future<SyncLocalFilesResponse?> syncWal({
+    required Wal wal,
+    IWalSyncProgressListener? progress,
+  });
   void cancelSync();
 
   void start();
@@ -66,11 +69,15 @@ enum ExternalWalRegistration { added, alreadyRegistered }
 
 // Forward declarations for sync types
 abstract class LocalWalSync implements IWalSync {
-  Future<ExternalWalRegistration> addExternalWal(Wal wal);
+  Future<ExternalWalRegistration> addExternalWal(
+    Wal wal, {
+    bool scheduleUpload = true,
+  });
   Future<List<Wal>> getAllWals();
   Future<void> deleteAllSyncedWals();
   Future<void> deleteAllPendingWals();
   Future<void> deleteAllCorruptedWals();
+  Future<void> markExternalWalSynced(Wal wal);
 
   /// Ingest a pre-processed audio frame from an AudioSource.
   /// The frame contains headerless payload and a source-specific sync key.

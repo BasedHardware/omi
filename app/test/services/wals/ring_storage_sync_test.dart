@@ -84,6 +84,101 @@ void main() {
     expect(wal.status, WalStatus.synced);
   });
 
+  test('storage-authoritative scheduler persists the live head before draining backlog', () async {
+    final timestamps = {for (var seq = 0; seq < 1000; seq++) seq: _FakeRingConnection.baseTimestamp + 1000};
+    final connection = _FakeRingConnection(
+      readSeq: 0,
+      writeSeq: 1000,
+      timestamps: timestamps,
+    );
+    final local = localSync();
+    final sync = ringSync(
+      connection,
+      local,
+      nowSeconds: _FakeRingConnection.baseTimestamp + 1000,
+    );
+    final liveDelivered = Completer<void>();
+
+    final session = await sync.startAudioTail(
+      onLiveFrames: (frames) {
+        if (!liveDelivered.isCompleted) liveDelivered.complete();
+        return true;
+      },
+    );
+
+    expect(session, isNotNull);
+    await liveDelivered.future.timeout(const Duration(seconds: 1));
+    expect(connection.reads.first, (start: 980, count: 20));
+    expect(connection.advanceAttempts, isEmpty);
+
+    await connection.firstAdvance.future.timeout(const Duration(seconds: 3));
+    expect(connection.reads[1], (start: 0, count: 96));
+    expect(connection.successfulAdvances.first, 96);
+    expect(connection.successfulAdvances, isNot(contains(1000)));
+
+    await session!.cancel();
+    expect(session.isActive, isFalse);
+    expect(local.testWals.any((wal) => wal.sourceId == 'ring_980_1000'), isTrue);
+  });
+
+  test('interrupted live-head read leaves backlog cursor untouched', () async {
+    final timestamps = {for (var seq = 0; seq < 1000; seq++) seq: _FakeRingConnection.baseTimestamp + 1000};
+    final connection = _FakeRingConnection(
+      readSeq: 0,
+      writeSeq: 1000,
+      truncateStartSeq: 980,
+      timestamps: timestamps,
+    );
+    final local = localSync();
+    final sync = ringSync(
+      connection,
+      local,
+      nowSeconds: _FakeRingConnection.baseTimestamp + 1000,
+    );
+
+    final session = await sync.startAudioTail(onLiveFrames: (_) => true);
+
+    expect(session, isNotNull);
+    await expectLater(session!.done, throwsA(isA<RingStorageException>()));
+    expect(session.isActive, isFalse);
+    await expectLater(session.cancel(), completes);
+    expect(connection.reads, [(start: 980, count: 20)]);
+    expect(connection.advanceAttempts, isEmpty);
+    expect(local.testWals, isEmpty);
+  });
+
+  test('storage-authoritative scheduler preserves chronology when the pendant RTC is invalid', () async {
+    final connection = _FakeRingConnection(
+      readSeq: 0,
+      writeSeq: 1000,
+      framesPerRecord: 5,
+      timestamps: {for (var seq = 0; seq < 1000; seq++) seq: 0},
+    );
+    final local = localSync();
+    final sync = ringSync(
+      connection,
+      local,
+      nowSeconds: _FakeRingConnection.baseTimestamp + 1000,
+    );
+    final liveDelivered = Completer<void>();
+
+    final session = await sync.startAudioTail(
+      onLiveFrames: (_) {
+        if (!liveDelivered.isCompleted) liveDelivered.complete();
+        return true;
+      },
+    );
+
+    await liveDelivered.future.timeout(const Duration(seconds: 1));
+    await connection.firstAdvance.future.timeout(const Duration(seconds: 3));
+    await session!.cancel();
+
+    final liveWal = local.testWals.singleWhere((wal) => wal.sourceId == 'ring_980_1000');
+    final firstBacklogWal = local.testWals.singleWhere((wal) => wal.sourceId == 'ring_0_96');
+    expect(firstBacklogWal.timerStart, _FakeRingConnection.baseTimestamp + 950);
+    expect(liveWal.timerStart, _FakeRingConnection.baseTimestamp + 999);
+  });
+
   test('durable ring WAL uses exact little-endian length-prefixed frame bytes', () async {
     const startSeq = 0x1234;
     final connection = _FakeRingConnection(readSeq: startSeq, writeSeq: startSeq + 2, framesPerRecord: 2);
@@ -361,6 +456,7 @@ class _FakeRingConnection implements DeviceConnection {
   final reads = <({int start, int count})>[];
   final advanceAttempts = <int>[];
   final successfulAdvances = <int>[];
+  final Completer<void> firstAdvance = Completer<void>();
   final StreamController<List<int>> _notifications = StreamController<List<int>>.broadcast(sync: true);
 
   _FakeRingConnection({
@@ -416,8 +512,12 @@ class _FakeRingConnection implements DeviceConnection {
     if (failAdvance) return false;
     readSeq = newReadSeq;
     successfulAdvances.add(newReadSeq);
+    if (!firstAdvance.isCompleted) firstAdvance.complete();
     return true;
   }
+
+  @override
+  Future<BleAudioCodec> getAudioCodec() async => BleAudioCodec.opus;
 
   @override
   Future<bool> stopStorageSync() async => true;

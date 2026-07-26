@@ -28,6 +28,10 @@ All results below were extracted from redacted Flutter/Android logs.
 
 ## Safety and preflight
 
+- Before installing an authenticated dev APK, the ignored build inputs must
+  pass `bash scripts/verify_android_physical_test_auth_config.sh`. A build made
+  after `test.sh` without reseeding prod-backed dev auth configuration is
+  invalid for physical BLE acceptance.
 - Verified the exact paired pendant before any GATT management or DFU action.
 - Captured the durable ring read/write cursors and dropped-record count before
   every destructive transfer.

@@ -7,6 +7,14 @@ BtDevice _device(DeviceType type, {String firmware = 'Unknown'}) =>
 
 void main() {
   group('DeviceStorageProtocolPolicy', () {
+    test('storage-authoritative audio is exact to the 3.0.29 test line', () {
+      expect(DeviceStorageProtocolPolicy.usesStorageAuthoritativeAudio('3.0.28'), isFalse);
+      expect(DeviceStorageProtocolPolicy.usesStorageAuthoritativeAudio('3.0.29'), isTrue);
+      expect(DeviceStorageProtocolPolicy.usesStorageAuthoritativeAudio('3.0.29+7'), isTrue);
+      expect(DeviceStorageProtocolPolicy.usesStorageAuthoritativeAudio('3.0.30'), isFalse);
+      expect(DeviceStorageProtocolPolicy.usesStorageAuthoritativeAudio('Unknown'), isFalse);
+    });
+
     test('enriched firmware wins over a raw Unknown connect object', () {
       expect(DeviceStorageProtocolPolicy.resolveFirmware('3.0.20', 'Unknown'), '3.0.20');
       expect(

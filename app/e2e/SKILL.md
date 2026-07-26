@@ -39,6 +39,13 @@ agent-flutter snapshot -i --json    # see what's on screen
 - **App must be authenticated and connected to the correct backend** (local, dev, or prod — depends on the task)
 - Marionette already integrated: `marionette_flutter: ^0.3.0` in pubspec.yaml
 
+For an authenticated physical Android run, do not build immediately after
+`test.sh`: its ignored local configuration is intentionally hermetic. Follow
+[`BLE_RELIABILITY_ACCEPTANCE.md`](./BLE_RELIABILITY_ACCEPTANCE.md) →
+"Authenticated Android physical-device builds" and require
+`scripts/verify_android_physical_test_auth_config.sh` to pass before installing
+the dev APK.
+
 ### Setup (iOS physical device)
 
 Full iOS physical-device playbook (setup, driving, verification, troubleshooting): [`IOS_DEVICE_TESTING.md`](./IOS_DEVICE_TESTING.md).

@@ -88,8 +88,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Map<String, dynamic> get latestOmiGlassFirmwareDetails => _latestOmiGlassFirmwareDetails;
 
   Timer? _discoveryTimer;
-  final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
-  final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
+  final Debouncer _disconnectDebouncer = Debouncer(
+    delay: const Duration(milliseconds: 500),
+  );
+  final Debouncer _connectDebouncer = Debouncer(
+    delay: const Duration(milliseconds: 100),
+  );
   final DeviceService _deviceService;
 
   void Function(BtDevice device)? onDeviceConnected;
@@ -123,10 +127,32 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     ).whenComplete(() => _pairingLostDialogShowing = false);
   }
 
-  void setProviders(CaptureProvider provider, LocalRecordingsProvider recordingsProvider) {
+  void setProviders(
+    CaptureProvider provider,
+    LocalRecordingsProvider recordingsProvider,
+  ) {
+    if (!identical(captureProvider, provider)) {
+      captureProvider?.removeListener(_onCaptureReadinessChanged);
+      provider.addListener(_onCaptureReadinessChanged);
+    }
     captureProvider = provider;
     localRecordingsProvider = recordingsProvider;
     notifyListeners();
+  }
+
+  void _onCaptureReadinessChanged() {
+    final capture = captureProvider;
+    if (capture == null || connectedDevice == null || capture.isPaused) return;
+    if (!DeviceStorageProtocolPolicy.usesStorageAuthoritativeAudio(currentFirmwareVersion)) return;
+
+    final audioReady = capture.hasActiveDeviceAudioStream;
+    if (isConnected == audioReady) return;
+    setIsConnected(audioReady);
+    if (!audioReady) {
+      Logger.warning(
+        'DeviceProvider: storage-authoritative BLE session is connected without a healthy audio path',
+      );
+    }
   }
 
   Future<void> setConnectedDevice(BtDevice? device) async {
@@ -209,7 +235,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         SharedPreferencesUtil().btDevice = pairedDevice!;
         return;
       }
-      var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
+      var connection = await ServiceManager.instance().device.ensureConnection(
+            connectedDevice!.id,
+          );
       pairedDevice = await connectedDevice?.getDeviceInfo(connection);
       SharedPreferencesUtil().btDevice = pairedDevice!;
     } else {
@@ -223,7 +251,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   Future<int> _retrieveBatteryLevel(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    var connection = await ServiceManager.instance().device.ensureConnection(
+          deviceId,
+        );
     if (connection == null) {
       return -1;
     }
@@ -235,16 +265,22 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     void Function(int)? onBatteryLevelChange,
   }) async {
     {
-      var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      var connection = await ServiceManager.instance().device.ensureConnection(
+            deviceId,
+          );
       if (connection == null) {
         return Future.value(null);
       }
-      return connection.getBleBatteryLevelListener(onBatteryLevelChange: onBatteryLevelChange);
+      return connection.getBleBatteryLevelListener(
+        onBatteryLevelChange: onBatteryLevelChange,
+      );
     }
   }
 
   Future<List<int>> _getStorageList(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    var connection = await ServiceManager.instance().device.ensureConnection(
+          deviceId,
+        );
     if (connection == null) {
       return [];
     }
@@ -310,7 +346,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (connectedDevice == null) return;
     _bleChargingStatusListener?.cancel();
 
-    var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
+    var connection = await ServiceManager.instance().device.ensureConnection(
+          connectedDevice!.id,
+        );
     if (connection == null) return;
     if (connection is! OmiDeviceConnection) return;
 
@@ -373,7 +411,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   /// Kicks off a single connection attempt. Native handles auto-reconnect after this.
-  Future<void> initiateConnection(String caller, {bool boundDeviceOnly = false}) async {
+  Future<void> initiateConnection(
+    String caller, {
+    bool boundDeviceOnly = false,
+  }) async {
     final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
 
     // Already connected — nothing to do
@@ -391,7 +432,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // then connects natively. If native is already connected, it just re-notifies Dart.
     // force: true ensures we retry even if a previous attempt left a stale connection.
     try {
-      await ServiceManager.instance().device.ensureConnection(pairedDeviceId, force: true);
+      await ServiceManager.instance().device.ensureConnection(
+            pairedDeviceId,
+            force: true,
+          );
     } catch (e) {
       // Timeout or transport failure — native keeps trying in the background.
       // NativeBleTransport's BleBridge registration persists, so auto-reconnect still works.
@@ -402,7 +446,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void _startDiscoveryScanning() {
     _discoveryTimer?.cancel();
     _runDiscoveryScan();
-    _discoveryTimer = Timer.periodic(const Duration(seconds: 10), (_) => _runDiscoveryScan());
+    _discoveryTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _runDiscoveryScan(),
+    );
   }
 
   Future<void> _runDiscoveryScan() async {
@@ -434,7 +481,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
 
     try {
-      var connection = await ServiceManager.instance().device.ensureConnection(pairedDeviceId, force: true);
+      var connection = await ServiceManager.instance().device.ensureConnection(
+            pairedDeviceId,
+            force: true,
+          );
       if (connection != null) {
         await setConnectedDevice(connection.device);
         setisDeviceStorageSupport();
@@ -468,6 +518,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (BleBridge.instance.pairingLostCallback == _showPairingLostDialog) {
       BleBridge.instance.pairingLostCallback = null;
     }
+    captureProvider?.removeListener(_onCaptureReadinessChanged);
     _bleBatteryLevelListener?.cancel();
     _bleChargingStatusListener?.cancel();
     _discoveryTimer?.cancel();
@@ -555,7 +606,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
 
     setisDeviceStorageSupport();
-    setIsConnected(true);
 
     // Read initial battery level
     int currentLevel = await _retrieveBatteryLevel(device.id);
@@ -575,22 +625,31 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (batteryLevel != -1 && batteryLevel < 20) {
       _hasLowBatteryAlerted = false;
     }
-    updateConnectingStatus(false);
-    await captureProvider?.streamDeviceRecording(device: device);
-
-    await getDeviceInfo();
     SharedPreferencesUtil().deviceName = device.name;
 
-    // Wals — pass the firmware resolved by getDeviceInfo() above so background
-    // discovery routes ring-buffer devices correctly; `device` here is the raw
-    // connect object whose firmwareRevision is often still 'Unknown'.
+    // Bind the enriched firmware route before capture starts. Storage-
+    // authoritative firmware gets its audio from the ring owner, so starting
+    // capture against the raw "Unknown" connect object would subscribe to a
+    // deliberately silent legacy audio characteristic.
     final syncs = ServiceManager.instance().wal.getSyncs();
-    syncs.setDevice(device, firmwareVersion: currentFirmwareVersion);
+    syncs.setDevice(pairedDevice ?? device, firmwareVersion: currentFirmwareVersion);
+    await captureProvider?.streamDeviceRecording(device: device);
+
+    final audioReady = captureProvider == null || captureProvider!.hasActiveDeviceAudioStream;
+    setIsConnected(audioReady);
+    updateConnectingStatus(false);
+    if (!audioReady) {
+      Logger.warning(
+        'DeviceProvider: BLE connected but the audio path failed readiness',
+      );
+    }
 
     // Device connection and inventory are a recovery wake, even when the
     // home page is not mounted. The coordinator serializes it with every
     // other foreground trigger and applies the auto-sync preference itself.
-    unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.deviceConnected));
+    unawaited(
+      RecordingTransferCoordinator.instance.wake(WakeTrigger.deviceConnected),
+    );
 
     // Auto-sync: check if device has offline files
     _checkAndStartAutoSync(device);
@@ -616,13 +675,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       // Use firmware version as the reliable signal for multi-file support
       // Read from pairedDevice which has firmwareRevision populated by getDeviceInfo()
       final fwVersion = pairedDevice?.firmwareRevision ?? device.firmwareRevision;
-      supportsMultiFileSync = DeviceStorageProtocolPolicy.supportsModernStorage(fwVersion);
+      supportsMultiFileSync = DeviceStorageProtocolPolicy.supportsModernStorage(
+        fwVersion,
+      );
       SharedPreferencesUtil().deviceSupportsMultiFileSync = supportsMultiFileSync;
       notifyListeners();
 
       if (!supportsMultiFileSync) return;
 
-      var connection = await ServiceManager.instance().device.ensureConnection(device.id);
+      var connection = await ServiceManager.instance().device.ensureConnection(
+            device.id,
+          );
       if (connection == null) return;
 
       // fw >= 3.0.20 speaks the ring-buffer protocol; auto-detect via the 16-byte
@@ -638,15 +701,25 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         Logger.debug(
           'DeviceProvider: Ring auto-sync detected ${ringStatus.unreadPackets} unread packets (${ringStatus.usedBytes} bytes)',
         );
-        onOfflineDataDetected?.call(device, ringStatus.unreadPackets, ringStatus.usedBytes);
+        onOfflineDataDetected?.call(
+          device,
+          ringStatus.unreadPackets,
+          ringStatus.usedBytes,
+        );
         return;
       }
 
       final status = await connection.getStorageFileStats();
       if (status == null || status.fileCount == 0) return;
 
-      Logger.debug('DeviceProvider: Auto-sync detected ${status.fileCount} files (${status.totalUsedBytes} bytes)');
-      onOfflineDataDetected?.call(device, status.fileCount, status.totalUsedBytes);
+      Logger.debug(
+        'DeviceProvider: Auto-sync detected ${status.fileCount} files (${status.totalUsedBytes} bytes)',
+      );
+      onOfflineDataDetected?.call(
+        device,
+        status.fileCount,
+        status.totalUsedBytes,
+      );
     } catch (e) {
       Logger.debug('DeviceProvider: Auto-sync check failed: $e');
     }
@@ -688,7 +761,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text(context.l10n.improveConnectionAction, style: const TextStyle(color: Colors.white)),
+              child: Text(
+                context.l10n.improveConnectionAction,
+                style: const TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),
@@ -699,7 +775,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void _handleDeviceConnected(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    var connection = await ServiceManager.instance().device.ensureConnection(
+          deviceId,
+        );
     if (connection == null) {
       return;
     }
@@ -848,7 +926,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           return false;
         }
         retryCount++;
-        Logger.debug('Error checking firmware update (attempt $retryCount): $e');
+        Logger.debug(
+          'Error checking firmware update (attempt $retryCount): $e',
+        );
 
         if (retryCount == maxRetries) {
           Logger.debug('Max retries reached, giving up');
@@ -948,8 +1028,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   @override
-  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) async {
-    Logger.debug("provider > device connection state changed...$deviceId...$state...${connectedDevice?.id}");
+  void onDeviceConnectionStateChanged(
+    String deviceId,
+    DeviceConnectionState state,
+  ) async {
+    Logger.debug(
+      "provider > device connection state changed...$deviceId...$state...${connectedDevice?.id}",
+    );
     switch (state) {
       case DeviceConnectionState.connected:
         _disconnectDebouncer.cancel();
@@ -990,7 +1075,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       try {
         await _deviceService.resumeConnectionAfterDfu();
       } catch (rollbackError) {
-        Logger.debug('Failed to roll back device connection after DFU suspend error: $rollbackError');
+        Logger.debug(
+          'Failed to roll back device connection after DFU suspend error: $rollbackError',
+        );
       } finally {
         resetFirmwareUpdateState();
       }

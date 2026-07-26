@@ -38,6 +38,8 @@ outputs:
     value: ${{ steps.changed.outputs.has_app_compile_smoke }}
   has_app_dart:
     value: ${{ steps.changed.outputs.has_app_dart }}
+  has_app_ios_native:
+    value: ${{ steps.changed.outputs.has_app_ios_native }}
   has_desktop_auth_session_ratchet:
     value: ${{ steps.changed.outputs.has_desktop_auth_session_ratchet }}
   has_format:
@@ -73,6 +75,7 @@ runs:
         has_dart=$(echo "$FILES" | grep -q '\.dart$' && echo true || echo false)
         has_python=$(echo "$FILES" | grep -q 'backend/.*\.py$' && echo true || echo false)
         has_arb=$(echo "$FILES" | grep -q '\.arb$' && echo true || echo false)
+        has_app_ios_native=$(echo "$FILES" | grep -qE '^app/ios/' && echo true || echo false)
         has_firmware=$(echo "$FILES" | grep -qE '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' && echo true || echo false)
         has_frontend=$(echo "$FILES" | grep -qE '^web/frontend/|^\.github/workflows/web-checks\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_web_app=$(echo "$FILES" | grep -qE '^web/app/|^\.github/workflows/web-checks\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
@@ -97,6 +100,7 @@ runs:
           echo "has_dart=$has_dart"
           echo "has_python=$has_python"
           echo "has_arb=$has_arb"
+          echo "has_app_ios_native=$has_app_ios_native"
           echo "has_firmware=$has_firmware"
           echo "has_frontend=$has_frontend"
           echo "has_web_app=$has_web_app"
