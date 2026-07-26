@@ -18,7 +18,7 @@ from models.conversation_enums import ConversationStatus, PostProcessingModel, P
 from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
-from ._client import db, get_firestore_client
+from ._client import db, delete_collection_recursive, get_firestore_client
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.storage import list_audio_chunks
 
@@ -979,18 +979,18 @@ def delete_conversation_photos(uid: str, conversation_id: str) -> int:
 
 
 def delete_conversation(uid, conversation_id):
-    """
-    Delete a conversation and its photos subcollection.
+    """Delete a conversation and every subcollection underneath it.
 
-    Args:
-        uid: User ID
-        conversation_id: Conversation ID
+    Firestore does not cascade, and a conversation owns more than ``photos``: the per-provider
+    post-processing transcripts (verbatim segment text), the Hume emotion predictions, and the
+    analytics marker. Purging only photos left those behind as data no query can reach — not even
+    the account-deletion wipe, which walks *existing* documents and never sees a deleted parent.
+    Children are enumerated live, so a subcollection added later is purged too.
     """
-    # Delete photos subcollection first
-    delete_conversation_photos(uid, conversation_id)
-
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    for sub in conversation_ref.collections():
+        delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
 
 
