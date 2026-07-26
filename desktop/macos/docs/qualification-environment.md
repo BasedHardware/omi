@@ -23,6 +23,58 @@ The offset applies to Firestore, Firebase Auth, backend, desktop backend,
 Redis, and Typesense. The script also derives `OMI_AUTOMATION_PORT`; invalid
 ports fail before launch.
 
+## Gate phases
+
+The qualification timing report classifies every in-script gate without changing
+its authority:
+
+| Phase | Classification | Failure meaning |
+|---|---|---|
+| Candidate/release evidence, tag binding, lease acquisition, static self-check | Immutable artifact/security | The exact signed candidate, source identity, or trusted evidence cannot be established |
+| Automation bridge, Tier-2 user flows, fault user flow and both manifests | User-visible behavioral/fault coverage | The desktop UX or its required failure behavior did not pass |
+| Capacity, fault-listener preflight, desktop preparation/provenance, final cleanup | Runner hygiene/cleanup | The controlled M1 host cannot safely start or reclaim this run |
+
+All three classes remain fail-closed. The classification only makes a
+non-product host prerequisite precise and early; it does not convert it to
+passing evidence.
+
+## Local M1 lifecycle proof
+
+From the canonical repository on an Apple Silicon Mac, install the backend
+virtual environment once and check out the exact local release tag:
+
+```bash
+make setup-backend
+git checkout --detach refs/tags/vX.Y.Z+BUILD-macos
+desktop/macos/scripts/qualification-local-proof.sh \
+  --offline \
+  --fast \
+  --result "$PWD/.local/qualification-proof.json" \
+  vX.Y.Z+BUILD-macos
+```
+
+Prerequisites are `git`, Python 3, `nc`, `lsof`, `ps`, and the backend virtual
+environment created by `make setup-backend`. Fetch the tag before entering
+offline mode if it is not already local. The proof itself does not use GitHub
+Actions or Codemagic credentials, production credentials, release APIs, channel
+pointers, publication, Beta/Stable bundles, or `/Applications/Omi.app`.
+
+A successful `0600` result has `status: "passed"`, `mode: "offline-fast"`,
+the tag's exact `source_sha`, `cleanup_status: "released"`, and these completed
+boundaries in order: release-tag validation, lease/provenance acquisition,
+disposable fault-listener start, runner-hygiene preflight, and cleanup
+finalization. The adjacent
+`.local/qualification-proof-fault-listener.json` is the redacted provenance
+cleanup report. Missing or foreign listener provenance, an unreclaimable stale
+owned process, or incomplete cleanup fails closed before any long UI flow and
+retains the unknown process.
+
+The workflow runs this exact entry point as a separate fast M1 job. Only a
+passing proof dispatches the canonical qualification job; the result and
+fault-listener report are retained as an artifact even on failure. This proof
+does not run or replace signed-identity, Tier-2, behavioral fault, manifest, or
+evidence gates.
+
 ## Runner capacity preflight
 
 Before expanding the candidate checkout, the M1-only workflow loads the reclaim
@@ -73,6 +125,16 @@ retains both authorities. A terminally interrupted lease is treated as stale
 only when its recorded owner PID is dead; the harness worktree pointer remains a
 separate preservation authority.
 
+Automatic qualification now exercises that same ownership boundary immediately
+after lease acquisition: it starts a disposable listener on the exact future
+fault-suite port, then asks the lease authority to re-prove and reclaim it. A
+known-owned listener produces `fault-listener-preflight.json` with `status:
+passed`. A missing, replaced, foreign, or unreclaimable listener produces a
+specific failed host-prerequisite result and stops before desktop preparation,
+Tier-2, or the fault flow. Unknown listeners are retained and never signaled.
+The real fault suite still runs later and its failing manifest still rejects
+qualification evidence.
+
 The main qualification app receives a separate run-unique launch token. `run.sh`
 writes an owner-only launch signal, which the qualifier verifies against exactly
 one token-bearing app process before writing a `0600` launch record. Cleanup
@@ -82,3 +144,12 @@ quits by bundle ID or name. After the owned app exits, the qualifier requires it
 automation port to be unbound. Missing provenance, changed process identity, an
 unreleased port, or lease-release failure retains the lease and fails before any
 success evidence is published.
+
+## Phase timing
+
+The automatic workflow uploads owner-only `phase-timings.json` with each phase's
+classification, status, and duration in milliseconds, plus an explicit
+`target_seconds: 1200`. Failed active phases and cleanup are recorded by the
+exit trap, so the report distinguishes time spent in artifact/security,
+user-visible behavior, and runner hygiene. The 20-minute target is measured from
+this report; no Tier-2 or fault UX gate is skipped to meet it.

@@ -43,6 +43,12 @@ case "${QUALIFICATION_LEASE_FIXTURE_MODE:-}" in
     printf '%s\n' 'Safety check failed: Qualification lease token test-release-token does not match the active lease'
     exit 2
     ;;
+  preflight-failure)
+    printf '%s\n' 'Safety check failed: Qualification fault listener test-preflight-token lineage is unproven'
+    exit 2
+    ;;
+  preflight-success)
+    ;;
   acquire-success)
     printf '%s\n' '{"log_dir":"/tmp/qualification-log","token":"test-token"}'
     ;;
@@ -73,6 +79,16 @@ grep -Fq 'qualification failed: lease release exited 2: Safety check failed: Qua
 if grep -Fq 'test-release-token' "$TMP_ROOT/release.err"; then
   fail "lease release diagnostic leaked its capability token"
 fi
+
+if QUALIFICATION_LEASE_EXPECTED_WORKTREE="$FIXTURE_WORKTREE" QUALIFICATION_LEASE_FIXTURE_MODE=preflight-failure "$LEASE_COMMAND" preflight-fault-cleanup "$FIXTURE_WORKTREE" qualification-test test-preflight-token "$TMP_ROOT/preflight.json" >"$TMP_ROOT/preflight.out" 2>"$TMP_ROOT/preflight.err"; then
+  fail "fault-listener preflight unexpectedly succeeded"
+fi
+grep -Fq 'qualification failed: lease preflight-fault-cleanup exited 2: Safety check failed: Qualification fault listener [redacted] lineage is unproven' "$TMP_ROOT/preflight.err" \
+  || fail "fault-listener preflight failure was not relayed precisely"
+if grep -Fq 'test-preflight-token' "$TMP_ROOT/preflight.err"; then
+  fail "fault-listener preflight diagnostic leaked its capability token"
+fi
+QUALIFICATION_LEASE_EXPECTED_WORKTREE="$FIXTURE_WORKTREE" QUALIFICATION_LEASE_FIXTURE_MODE=preflight-success "$LEASE_COMMAND" preflight-fault-cleanup "$FIXTURE_WORKTREE" qualification-test test-preflight-token "$TMP_ROOT/preflight.json"
 
 QUALIFICATION_LEASE_EXPECTED_WORKTREE="$FIXTURE_WORKTREE" QUALIFICATION_LEASE_FIXTURE_MODE=acquire-success "$LEASE_COMMAND" acquire "$FIXTURE_WORKTREE" qualification-test $$ 1000 3 >"$TMP_ROOT/success.out"
 grep -Fxq '{"log_dir":"/tmp/qualification-log","token":"test-token"}' "$TMP_ROOT/success.out" \

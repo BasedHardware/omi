@@ -8,6 +8,7 @@ usage() {
   cat >&2 <<'USAGE'
 Usage:
   qualification-lease-command.sh acquire <worktree> <lease-id> <owner-pid> <port-offset> <retained-runs>
+  qualification-lease-command.sh preflight-fault-cleanup <worktree> <lease-id> <token> <result-path>
   qualification-lease-command.sh release <worktree> <lease-id> <token> <retained-runs> <retention-age-seconds>
 USAGE
   exit 2
@@ -70,6 +71,12 @@ case "$action" in
     [[ $# -eq 5 ]] || usage
     worktree="$1"
     run_lease_command "$worktree" --lease-id "$2" --owner-pid "$3" --port-offset "$4" --retained-runs "$5"
+    ;;
+  preflight-fault-cleanup)
+    [[ $# -eq 4 ]] || usage
+    worktree="$1"
+    lease_token="$3"
+    run_lease_command "$worktree" --lease-id "$2" --token "$3" --result "$4"
     ;;
   release)
     [[ $# -eq 5 ]] || usage

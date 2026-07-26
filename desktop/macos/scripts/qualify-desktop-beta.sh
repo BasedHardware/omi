@@ -139,6 +139,11 @@ QUALIFICATION_RETENTION_AGE_SECONDS="${OMI_QUALIFICATION_RETENTION_AGE_SECONDS:-
 QUALIFICATION_CLEANUP_CONTEXT="${OMI_QUALIFICATION_CLEANUP_CONTEXT:-}"
 QUALIFICATION_LOG_DIR=""
 QUALIFICATION_STAGE=""
+QUALIFICATION_TIMINGS_FILE="${OMI_QUALIFICATION_TIMINGS_FILE:-}"
+FAULT_PREFLIGHT_REPORT="${OMI_QUALIFICATION_FAULT_PREFLIGHT_REPORT:-}"
+ACTIVE_PHASE=""
+ACTIVE_PHASE_CLASS=""
+ACTIVE_PHASE_STARTED_NS=""
 # Cold, from-scratch rebuild of the exact tag compiles ~1190 SwiftPM modules
 # (FluidAudio, MarkdownUI, Firebase, ONNX, …) before the named bundle is even
 # packaged/signed/launched. On a self-hosted M1 that first cold build alone runs
@@ -154,6 +159,72 @@ BRIDGE_WAIT_SECS=900
 
 QUALIFICATION_STAGE="$(qualification_stage_create)"
 trap 'qualification_stage_remove "$QUALIFICATION_STAGE"' EXIT
+QUALIFICATION_TIMINGS_FILE="${QUALIFICATION_TIMINGS_FILE:-$QUALIFICATION_STAGE/phase-timings.json}"
+FAULT_PREFLIGHT_REPORT="${FAULT_PREFLIGHT_REPORT:-$QUALIFICATION_STAGE/fault-listener-preflight.json}"
+
+timing_now_ns() {
+  python3 -c 'import time; print(time.time_ns())'
+}
+
+initialize_phase_timings() {
+  umask 077
+  python3 - "$QUALIFICATION_TIMINGS_FILE" "$RELEASE_TAG" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path, release_tag = sys.argv[1:]
+target = Path(path)
+target.parent.mkdir(parents=True, exist_ok=True)
+target.write_text(json.dumps({
+    "schema_version": 1,
+    "target_seconds": 1200,
+    "release_tag": release_tag,
+    "phases": [],
+}, sort_keys=True) + "\n", encoding="utf-8")
+target.chmod(0o600)
+PY
+}
+
+phase_begin() {
+  [[ -z "$ACTIVE_PHASE" ]] || { echo "qualification timing phase already active: $ACTIVE_PHASE" >&2; return 1; }
+  ACTIVE_PHASE="$1"
+  ACTIVE_PHASE_CLASS="$2"
+  ACTIVE_PHASE_STARTED_NS="$(timing_now_ns)"
+}
+
+phase_end() {
+  local status="${1:-passed}" ended_ns duration_ms
+  [[ -n "$ACTIVE_PHASE" && -n "$ACTIVE_PHASE_STARTED_NS" ]] || return 0
+  ended_ns="$(timing_now_ns)"
+  duration_ms=$(( (ended_ns - ACTIVE_PHASE_STARTED_NS) / 1000000 ))
+  python3 - "$QUALIFICATION_TIMINGS_FILE" "$ACTIVE_PHASE" "$ACTIVE_PHASE_CLASS" "$status" "$ACTIVE_PHASE_STARTED_NS" "$ended_ns" "$duration_ms" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path, name, classification, status, started_ns, ended_ns, duration_ms = sys.argv[1:]
+target = Path(path)
+payload = json.loads(target.read_text(encoding="utf-8"))
+payload["phases"].append({
+    "name": name,
+    "classification": classification,
+    "status": status,
+    "started_unix_ns": int(started_ns),
+    "ended_unix_ns": int(ended_ns),
+    "duration_ms": int(duration_ms),
+})
+payload["elapsed_ms"] = sum(int(phase["duration_ms"]) for phase in payload["phases"])
+target.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+  echo "qualification phase: $ACTIVE_PHASE classification=$ACTIVE_PHASE_CLASS status=$status duration_ms=$duration_ms"
+  ACTIVE_PHASE=""
+  ACTIVE_PHASE_CLASS=""
+  ACTIVE_PHASE_STARTED_NS=""
+}
+
+initialize_phase_timings
+phase_begin "candidate-and-lease-preflight" "immutable-artifact-security"
 RELEASE_FILE="$QUALIFICATION_STAGE/release.json"
 gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,isPrerelease,publishedAt,assets,body \
   > "$RELEASE_FILE"
@@ -325,6 +396,7 @@ target.chmod(0o600)
 PY
 fi
 LAUNCH_LOG="$QUALIFICATION_LOG_DIR/desktop-launch.log"
+phase_end passed
 
 resolve_automation_port() {
   (
@@ -615,9 +687,18 @@ run_qualification_cleanup() {
 
 cleanup() {
   local exit_code=$?
-  if ! run_qualification_cleanup; then
-    echo "qualification cleanup failed; preserving qualification lease and preventing success evidence" >&2
-    [[ "$exit_code" -ne 0 ]] || exit_code=1
+  if [[ -n "$ACTIVE_PHASE" ]]; then
+    phase_end failed
+  fi
+  if [[ "$QUALIFICATION_CLEANUP_DONE" -eq 0 ]]; then
+    phase_begin "final-cleanup" "runner-hygiene-cleanup"
+    if ! run_qualification_cleanup; then
+      phase_end failed
+      echo "qualification cleanup failed; preserving qualification lease and preventing success evidence" >&2
+      [[ "$exit_code" -ne 0 ]] || exit_code=1
+    else
+      phase_end passed
+    fi
   fi
   if [[ -n "$QUALIFICATION_LOG_DIR" ]]; then
     python3 - "$QUALIFICATION_LOG_DIR/cleanup.json" "$QUALIFICATION_LEASE_ID" "$QUALIFICATION_CLEANUP_STATUS" "$exit_code" <<'PY'
@@ -636,6 +717,49 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
 
+if [[ "$AUTOMATIC" -eq 1 ]]; then
+  FAULT_PREFLIGHT_PORT="$((AUTOMATION_PORT + 2))"
+  if (( FAULT_PREFLIGHT_PORT > 65535 )); then
+    echo "qualification failed: fault-listener preflight port is invalid: $FAULT_PREFLIGHT_PORT" >&2
+    exit 2
+  fi
+  phase_begin "fault-listener-preflight" "runner-hygiene-cleanup"
+  if ! OMI_FAULT_STATE_DIR="$QUALIFICATION_LEASE_ROOT/state/$QUALIFICATION_LEASE_ID/fault" \
+    OMI_FAULT_OWNERSHIP_TOKEN="$QUALIFICATION_LEASE_TOKEN" \
+    "$WORKTREE/desktop/macos/scripts/omi-fault-inject.sh" start error --port "$FAULT_PREFLIGHT_PORT" >/dev/null; then
+    python3 - "$FAULT_PREFLIGHT_REPORT" "$QUALIFICATION_LEASE_ID" "$FAULT_PREFLIGHT_PORT" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path, lease_id, port = sys.argv[1:]
+target = Path(path)
+target.parent.mkdir(parents=True, exist_ok=True)
+target.write_text(json.dumps({
+    "schema_version": 1,
+    "gate": "fault-listener-provenance-cleanup",
+    "classification": "runner-hygiene-cleanup",
+    "lease_id": lease_id,
+    "status": "failed",
+    "port": int(port),
+    "failure_reason": "listener-start-prerequisite-unmet",
+}, sort_keys=True) + "\n", encoding="utf-8")
+target.chmod(0o600)
+PY
+    phase_end failed
+    echo "qualification failed: host prerequisite could not start the disposable fault listener on port $FAULT_PREFLIGHT_PORT" >&2
+    exit 1
+  fi
+  if ! "$LEASE_COMMAND" preflight-fault-cleanup "$WORKTREE" "$QUALIFICATION_LEASE_ID" "$QUALIFICATION_LEASE_TOKEN" "$FAULT_PREFLIGHT_REPORT"; then
+    phase_end failed
+    failure_reason="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("failure_reason", "host-prerequisite-unmet"))' "$FAULT_PREFLIGHT_REPORT")"
+    echo "qualification failed: fault-listener host prerequisite was not established ($failure_reason); listener retained" >&2
+    exit 1
+  fi
+  phase_end passed
+fi
+
+phase_begin "desktop-preparation" "runner-hygiene-cleanup"
 "$SCRIPT_DIR/prepare-qualification-profile.sh" "$BUNDLE"
 rm -f "$LAUNCH_SIGNAL_FILE"
 
@@ -651,75 +775,103 @@ DESKTOP_LAUNCH_REQUESTED=1
 DESKTOP_LAUNCH_PID=$!
 
 if ! wait_for_desktop_launch "$LAUNCH_SIGNAL_FILE"; then
+  phase_end failed
   echo "--- last 80 lines of $LAUNCH_LOG ---" >&2
   tail -n 80 "$LAUNCH_LOG" >&2 || true
   exit 1
 fi
+phase_end passed
 
 # The bridge gets its complete post-launch readiness allowance; cold Rust,
 # agent-runtime, SwiftPM, packaging, and signing work consumed only the separate
 # bounded preparation phase above.
 SECONDS=0
 
+phase_begin "automation-bridge-readiness" "user-visible-behavioral-fault"
 if ! wait_for_bridge "$AUTOMATION_PORT"; then
+  phase_end failed
   echo "--- last 80 lines of $LAUNCH_LOG ---" >&2
   tail -n 80 "$LAUNCH_LOG" >&2 || true
   exit 1
 fi
 if ! record_owned_qualification_desktop; then
+  phase_end failed
   echo "qualification failed: could not establish owner-only desktop launch provenance" >&2
   exit 1
 fi
+phase_end passed
 
-(
-  cd "$WORKTREE/desktop/macos"
-  if [[ "$AUTOMATIC" -eq 1 ]]; then
+if [[ "$AUTOMATIC" -eq 1 ]]; then
+  phase_begin "static-self-check" "immutable-artifact-security"
+  if ! (
+    cd "$WORKTREE/desktop/macos"
     ./scripts/desktop-core-harness.sh --self-check --skip-backend-contracts
+  ); then
+    phase_end failed
+    exit 1
   fi
+  phase_end passed
+fi
+
+phase_begin "tier-2-user-flows" "user-visible-behavioral-fault"
+if ! (
+  cd "$WORKTREE/desktop/macos"
   ./scripts/desktop-core-harness.sh --tier 2 --bundle "$BUNDLE" --port "$AUTOMATION_PORT" --keep-stack
-)
+); then
+  phase_end failed
+  exit 1
+fi
 
 EVIDENCE=$(ls -td "$WORKTREE/desktop/macos/.harness/desktop-core"/* 2>/dev/null | head -1)
 if [[ -z "$EVIDENCE" || ! -f "$EVIDENCE/manifest.json" ]]; then
+  phase_end failed
   echo "qualification failed: missing harness evidence" >&2
   exit 1
 fi
 
 if ! python3 "$KEYVALUE_PY" check-manifest "$EVIDENCE/manifest.json"; then
+  phase_end failed
   echo "qualification failed: tier 2 harness did not pass; evidence: $EVIDENCE" >&2
   exit 1
 fi
+phase_end passed
 
 FAULT_EVIDENCE=""
 if [[ "$AUTOMATIC" -eq 1 ]]; then
-  (
+  phase_begin "fault-user-flow" "user-visible-behavioral-fault"
+  if ! (
     cd "$WORKTREE/desktop/macos"
     OMI_FAULT_PORT="$((AUTOMATION_PORT + 2))" \
       OMI_FAULT_STATE_DIR="$QUALIFICATION_LEASE_ROOT/state/$QUALIFICATION_LEASE_ID/fault" \
       OMI_FAULT_OWNERSHIP_TOKEN="$QUALIFICATION_LEASE_TOKEN" \
       ./scripts/desktop-core-harness.sh --fault-suite --port "$((AUTOMATION_PORT + 1))"
-  )
+  ); then
+    phase_end failed
+    exit 1
+  fi
   FAULT_EVIDENCE=$(ls -td "$WORKTREE/desktop/macos/.harness/desktop-core"/*-fault 2>/dev/null | head -1)
   if [[ -z "$FAULT_EVIDENCE" || ! -f "$FAULT_EVIDENCE/manifest.json" ]]; then
+    phase_end failed
     echo "automatic qualification failed: missing fault-suite evidence" >&2
     exit 1
   fi
-  python3 - "$FAULT_EVIDENCE/manifest.json" <<'PY'
-import json
-import sys
-
-manifest = json.load(open(sys.argv[1], encoding="utf-8"))
-if manifest.get("passed") is not True or manifest.get("tier") != "fault":
-    raise SystemExit("automatic qualification failed: fault-suite manifest did not pass")
-PY
+  if ! python3 "$KEYVALUE_PY" check-fault-manifest "$FAULT_EVIDENCE/manifest.json"; then
+    phase_end failed
+    echo "automatic qualification failed: fault-suite manifest did not pass" >&2
+    exit 1
+  fi
+  phase_end passed
 fi
 
 # Cleanup is a qualification gate, not best-effort EXIT housekeeping. Do this
 # before any trusted workflow artifact or release evidence can claim success.
+phase_begin "final-cleanup" "runner-hygiene-cleanup"
 if ! run_qualification_cleanup; then
+  phase_end failed
   echo "qualification cleanup failed; preserving qualification lease and preventing success evidence" >&2
   exit 1
 fi
+phase_end passed
 
 if [[ "$GITHUB_ACTIONS_ARTIFACT" -eq 1 ]]; then
   QUALIFICATION_SUCCESS=1
