@@ -245,6 +245,14 @@ OMI_LIVE_STT_ACCEPTED_TOTAL = Counter(
     ['provider', 'client_platform', 'deployment_environment'],
 )
 
+# Whether misaligned frames actually occur in production is unmeasured; Velma rejects
+# them outright, so this counter is what tells a Velma canary if that was the cause.
+OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL = Counter(
+    'omi_live_stt_misaligned_frames_total',
+    'Live-STT frames that were not a whole number of 16-bit samples, by provider and pipeline stage',
+    ['provider', 'stage'],
+)
+
 OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
     'omi_live_stt_terminal_total',
     'Terminal live-STT outcomes for accepted attempts by bounded labels',
@@ -274,6 +282,23 @@ AUTH_FLOW_DURATION_SECONDS = Histogram(
     'Auth flow duration in seconds by provider and terminal state',
     ['provider', 'terminal_state'],
 )
+
+
+# Pusher readiness / drain gauges. Label-free (low cardinality) so they scrape
+# cheaply. Initialized to serving below so an idle healthy pod reads
+# pusher_ready=1 / pusher_drain_in_progress=0 and is distinguishable from a
+# missing scrape target (a labelless Gauge defaults to 0, which would wrongly
+# read as "draining"). utils.readiness.ReadinessGate flips these on drain.
+PUSHER_READY = Gauge(
+    'pusher_ready',
+    '1 = serving new traffic, 0 = draining',
+)
+PUSHER_DRAIN_IN_PROGRESS = Gauge(
+    'pusher_drain_in_progress',
+    '1 = drain initiated, readiness closed',
+)
+PUSHER_READY.set(1)
+PUSHER_DRAIN_IN_PROGRESS.set(0)
 
 
 def metrics_response() -> Response:

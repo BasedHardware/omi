@@ -177,7 +177,19 @@ check_pr_preflight() {
   local has_supplied_pr_body=0
 
   if [ "${PRE_PUSH_SKIP_PR_PREFLIGHT:-}" = "1" ]; then
+    # The broad preflight hatch is useful when local PR metadata discovery is
+    # unavailable, but it must not let a recurring failure class bypass the
+    # guard-artifact ratchet that CI enforces. That check is deterministic and
+    # needs only the already-required local PR body, so keep it mandatory.
+    if [ -z "${OMI_PR_BODY_FILE:-}" ] || [ ! -f "${OMI_PR_BODY_FILE}" ]; then
+      echo "FAIL: PRE_PUSH_SKIP_PR_PREFLIGHT=1 requires OMI_PR_BODY_FILE so the failure-class guard-artifact ratchet still runs." >&2
+      return 1
+    fi
     echo "Skipping shared PR preflight because PRE_PUSH_SKIP_PR_PREFLIGHT=1."
+    echo "==> failure-class guard-artifact ratchet (mandatory under preflight hatch)"
+    python3 .github/scripts/check_failure_class_guard_ratchet.py \
+      --pr-body-file "$OMI_PR_BODY_FILE"
+    ci_prediction_note_verified "failure-class guard-artifact ratchet (mandatory under PRE_PUSH_SKIP_PR_PREFLIGHT=1)"
     ci_prediction_note_skipped "shared PR contract and hygiene (PRE_PUSH_SKIP_PR_PREFLIGHT=1)"
     return
   fi
@@ -306,6 +318,10 @@ require_flutter_generated_prerequisites() {
   if [ ! -f app/.dart_tool/package_config.json ]; then
     echo "FAIL: Flutter generated-output checks need resolved app dependencies." >&2
     echo "      Run: cd app && flutter pub get" >&2
+    # make setup provisions the backend venv only, so a contributor who never
+    # touches app/ can reach this with no Flutter toolchain at all -- and the
+    # selector wakes this lane for any ROUTING_INPUTS edit. CI still runs it.
+    echo "      Deliberate hatch: PRE_PUSH_SKIP_FLUTTER_GENERATED=1 git push" >&2
     return 1
   fi
 }
@@ -335,9 +351,9 @@ check_flutter_generated_if_needed() {
     echo "==> Flutter build_runner generated-output check"
     (
       cd app
-      dart run build_runner build --delete-conflicting-outputs
+      flutter pub run build_runner build --delete-conflicting-outputs
       git diff --exit-code -- lib || {
-        echo "FAIL: generated Dart files are stale. Run: cd app && dart run build_runner build --delete-conflicting-outputs" >&2
+        echo "FAIL: generated Dart files are stale. Run: cd app && flutter pub run build_runner build --delete-conflicting-outputs" >&2
         exit 1
       }
       untracked=$(git ls-files --others --exclude-standard -- lib)
@@ -664,6 +680,7 @@ check_workflows_if_needed() {
     actionlint_cmd=(go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12)
   else
     echo "FAIL: actionlint or go is required to validate changed workflow files." >&2
+    echo "      Deliberate hatch: PRE_PUSH_SKIP_ACTIONLINT=1 git push" >&2
     return 1
   fi
 

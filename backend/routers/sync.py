@@ -1757,7 +1757,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                     return JSONResponse(status_code=200, content={'status': 'done', 'reconciled': True})
             failure = failure_from_exception(e, provider=latest_job.get('stt_provider'))
             sync_model = latest_job.get('stt_model')
-            if task_retry_count >= max_attempts - 1:
+            if not failure.retryable or task_retry_count >= max_attempts - 1:
                 logger.error(
                     'event=sync_transcription_job outcome=%s status=failed_final lane=%s '
                     'attempt=%d exception_type=%s',

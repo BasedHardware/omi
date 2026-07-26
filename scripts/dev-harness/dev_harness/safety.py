@@ -377,6 +377,57 @@ def command_line_for_pid(pid: int) -> str:
         return ""
 
 
+def listening_pids(port: int) -> tuple[int, ...]:
+    """Return the current loopback listener PIDs or fail closed when discovery is unavailable."""
+
+    if not 1 <= int(port) <= 65535:
+        raise SafetyError(f"Invalid port {port}")
+    try:
+        result = subprocess.run(
+            ["lsof", "-nP", f"-iTCP:{int(port)}", "-sTCP:LISTEN", "-t"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise SafetyError(f"Cannot inspect listener ownership for port {port}") from exc
+    if result.returncode not in {0, 1}:
+        raise SafetyError(f"Cannot inspect listener ownership for port {port}")
+    try:
+        pids = tuple(sorted({int(line) for line in result.stdout.splitlines() if line.strip()}))
+    except ValueError as exc:
+        raise SafetyError(f"Invalid listener PID output for port {port}") from exc
+    if any(pid <= 0 for pid in pids):
+        raise SafetyError(f"Invalid listener PID output for port {port}")
+    return pids
+
+
+def is_descendant_of(pid: int, ancestor_pid: int) -> bool:
+    """Prove a live child belongs to a recorded supervisor without command matching."""
+
+    current = int(pid)
+    ancestor = int(ancestor_pid)
+    seen: set[int] = set()
+    while current > 1 and current not in seen:
+        if current == ancestor:
+            return True
+        seen.add(current)
+        try:
+            result = subprocess.run(
+                ["ps", "-p", str(current), "-o", "ppid="],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                check=False,
+            )
+            parent = int(result.stdout.strip()) if result.returncode == 0 else -1
+        except (OSError, ValueError):
+            return False
+        current = parent
+    return current == ancestor
+
+
 def validate_owned_pid(pid: int, *, process_manifest: Path, service: str | None = None) -> dict[str, object]:
     manifest = load_json_file(process_manifest)
     records = manifest.get("processes") if isinstance(manifest, dict) else None

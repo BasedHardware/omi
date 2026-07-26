@@ -712,6 +712,36 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict):
     doc_ref.update(prepared_data)
 
 
+def try_claim_conversation_memory_analytics(uid: str, conversation_id: str, firestore_client: Any = None) -> bool:
+    """Atomically claim the one analytics success slot for a conversation.
+
+    The marker lives in Firestore under the authoritative conversation document,
+    rather than in a best-effort cache. ``create`` is atomic: the caller that
+    creates the marker is the only caller allowed to capture the optional
+    analytics event; an existing marker means a retry/re-finalization must not
+    emit again. It deliberately has no TTL, so Redis loss, cache eviction, and
+    arbitrary retry windows cannot re-open the slot.
+
+    Callers must treat storage errors as *not acquired*. This is telemetry-only:
+    failing closed avoids a possible duplicate and must never interrupt the
+    underlying conversation extraction.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    marker_ref = (
+        client.collection('users')
+        .document(uid)
+        .collection(conversations_collection)
+        .document(conversation_id)
+        .collection('analytics_markers')
+        .document('conversation_memories_extracted')
+    )
+    try:
+        marker_ref.create({'created_at': firestore.SERVER_TIMESTAMP})
+        return True
+    except AlreadyExists:
+        return False
+
+
 def create_audio_files_from_chunks(
     uid: str,
     conversation_id: str,

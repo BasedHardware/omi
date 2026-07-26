@@ -41,13 +41,13 @@ def with_memory_env(payload: str) -> str:
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "OMI_LLM_GATEWAY_FEATURE_MODE", "value": "gateway"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "off"},
-        {"name": "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION", "value": "true"},
+        {"name": "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE", "value": "1.0"},
         {"name": "POSTHOG_HOST", "value": "https://app.posthog.com"},
-        {"name": "STT_PRERECORDED_MODEL", "value": "modulate-velma-2,parakeet"},
+        {"name": "STT_PRERECORDED_MODEL", "value": "parakeet,modulate-velma-2"},
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_ID", "value": "fake-public-client-id"},
@@ -848,11 +848,11 @@ def test_retired_deepgram_model_requires_non_deepgram_defaults():
     assert validator._validate_prerecorded_stt_contract('prod', env_config) == [
         validator.ValidationError(
             'prod/gke/backend-listen',
-            'STT_PRERECORDED_MODEL requires non-empty MODULATE_API_KEY',
+            'STT_PRERECORDED_MODEL requires non-empty HOSTED_PARAKEET_API_URL',
         ),
         validator.ValidationError(
             'prod/gke/backend-listen',
-            'STT_PRERECORDED_MODEL requires non-empty HOSTED_PARAKEET_API_URL',
+            'STT_PRERECORDED_MODEL requires non-empty MODULATE_API_KEY',
         ),
     ]
 
@@ -874,7 +874,7 @@ def test_deployment_stt_models_must_match_the_central_serving_policy():
     assert validator._validate_stt_serving_model_policy('prod', env_config) == [
         validator.ValidationError(
             'prod/gke/backend-listen',
-            "STT_PRERECORDED_MODEL must match stt_provider_policy: expected 'modulate-velma-2,parakeet', got 'dg-nova-3'",
+            "STT_PRERECORDED_MODEL must match stt_provider_policy: expected 'parakeet,modulate-velma-2', got 'dg-nova-3'",
         ),
         validator.ValidationError(
             'prod/gke/backend-listen',
@@ -883,7 +883,7 @@ def test_deployment_stt_models_must_match_the_central_serving_policy():
     ]
 
 
-def test_repo_prod_manifest_rejects_any_parakeet_first_route(tmp_path):
+def test_repo_prod_manifest_rejects_noncanonical_model_order_for_every_surface(tmp_path):
     validator = load_validator()
     manifest = copy.deepcopy(validator._load_yaml(ROOT / 'deploy/runtime_env.yaml'))
     prod = manifest['environments']['prod']
@@ -894,7 +894,9 @@ def test_repo_prod_manifest_rejects_any_parakeet_first_route(tmp_path):
             for key in ('STT_SERVICE_MODELS', 'STT_PRERECORDED_MODEL'):
                 entry = (service.get('env') or {}).get(key)
                 if isinstance(entry, dict) and 'value' in entry:
-                    entry['value'] = 'parakeet,modulate-velma-2'
+                    entry['value'] = (
+                        'parakeet,modulate-velma-2' if key == 'STT_SERVICE_MODELS' else 'modulate-velma-2,parakeet'
+                    )
                     changed_scopes.append((f'prod/{platform}/{service_name}', key))
 
     path = tmp_path / 'runtime_env.yaml'
@@ -1282,7 +1284,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                     'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED': {'value': 'false'},
                                     'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE': {'value': '1.0'},
                                     'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'},
-                                    'STT_PRERECORDED_MODEL': {'value': 'modulate-velma-2,parakeet'},
+                                    'STT_PRERECORDED_MODEL': {'value': 'parakeet,modulate-velma-2'},
                                     'CUSTOM_MANIFEST_ONLY_MARKER': {'value': 'present'},
                                 },
                                 'secrets': {

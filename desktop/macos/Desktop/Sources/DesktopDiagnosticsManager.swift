@@ -873,6 +873,7 @@ final class DesktopDiagnosticsManager {
     "input_device_class", "close_attempt_id", "turn_outcome", "recovery_action", "recovery_result",
     "threshold",
     "component", "operation", "outcome", "error_domain", "error_code",
+    "path_class", "database_file_size_bytes", "volume_free_bytes", "volume_total_bytes",
     "osstatus", "keycode", "modifiers",
     // PTT attempt lifecycle correlation (PTTAttemptLifecycleRecorder).
     "attempt_id", "capture_start_outcome", "capture_start_status_class",
@@ -1091,19 +1092,17 @@ final class DesktopDiagnosticsManager {
     return result
   }
 
-  #if DEBUG
-    func resetForTests() {
-      lock.lock()
-      snapshots.removeAll()
-      betaTrailSnapshots.removeAll()
-      reportedStateAuthoritySignals.removeAll()
-      realtimeProviderCloseAttemptID = 0
-      consecutiveNearZeroPTTTurns = 0
-      lastPTTWatchdogIncidentAt = nil
-      lastUserVisibleSentryIncidentAt.removeAll()
-      lock.unlock()
-    }
-  #endif
+  func resetForTests() {
+    lock.lock()
+    snapshots.removeAll()
+    betaTrailSnapshots.removeAll()
+    reportedStateAuthoritySignals.removeAll()
+    realtimeProviderCloseAttemptID = 0
+    consecutiveNearZeroPTTTurns = 0
+    lastPTTWatchdogIncidentAt = nil
+    lastUserVisibleSentryIncidentAt.removeAll()
+    lock.unlock()
+  }
 
   private func shouldCaptureIncident(area: String, failureClass: String) -> Bool {
     let key = "\(area):\(failureClass)"
