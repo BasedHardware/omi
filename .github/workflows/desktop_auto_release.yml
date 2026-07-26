@@ -270,12 +270,57 @@ jobs:
             echo "merged_main_sha=$MERGED_MAIN_SHA"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Bind immutable planner evidence to fresh main
+      - name: Replan release source after changelog sync
+        # A newer releasable desktop change may merge while the changelog branch
+        # is being prepared. The regular changelog merge must remain intact, but
+        # its original planner source is then intentionally stale. Replan from
+        # fresh main before binding evidence so this run either tags the newly
+        # qualified source or defers cleanly without a stale-source failure.
+        if: steps.recheck.outputs.should_release == 'true' && steps.changelog.outputs.changed == 'true'
+        id: replan
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "Omi Bot token not available; cannot replan after changelog sync."
+            exit 1
+          fi
+
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          git checkout --detach origin/main
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+
+          python3 .github/scripts/plan-desktop-release.py \
+            --repository "${{ github.repository }}" \
+            --source-check-wait-seconds 1200 \
+            --source-check-poll-seconds 30
+
+      - name: Select final release plan
         if: steps.recheck.outputs.should_release == 'true'
+        id: final-plan
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.changelog.outputs.changed }}" = "true" ]; then
+            # The merge above can advance main. Always use the post-merge plan,
+            # even when it defers, so a stale initial plan cannot reach tagging.
+            SHOULD_RELEASE="${{ steps.replan.outputs.should_release }}"
+            SOURCE_SHA="${{ steps.replan.outputs.source_sha }}"
+          else
+            SHOULD_RELEASE="${{ steps.recheck.outputs.should_release }}"
+            SOURCE_SHA="${{ steps.recheck.outputs.source_sha }}"
+          fi
+          {
+            echo "should_release=$SHOULD_RELEASE"
+            echo "source_sha=$SOURCE_SHA"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Bind immutable planner evidence to fresh main
+        if: steps.final-plan.outputs.should_release == 'true'
         id: identity
         run: |
           set -euo pipefail
-          PLANNED_SOURCE_SHA="${{ steps.recheck.outputs.source_sha }}"
+          PLANNED_SOURCE_SHA="${{ steps.final-plan.outputs.source_sha }}"
           CHANGELOG_CHANGED="${{ steps.changelog.outputs.changed }}"
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           MAIN_SHA="$(git rev-parse 'origin/main^{commit}')"
@@ -308,7 +353,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Retain immutable planner source evidence
-        if: steps.recheck.outputs.should_release == 'true'
+        if: steps.final-plan.outputs.should_release == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: desktop-release-planner-source-identity-${{ steps.version.outputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -317,7 +362,7 @@ jobs:
           overwrite: false
 
       - name: Publish immutable tag from exact live main source
-        if: steps.recheck.outputs.should_release == 'true'
+        if: steps.final-plan.outputs.should_release == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
