@@ -26,8 +26,9 @@ ports fail before launch.
 Before the candidate checkout, the M1-only workflow writes
 `runner-capacity.json` in its run-isolated stage and requires at least 32 GiB
 of free filesystem blocks plus 65,536 free inodes. This is intentionally ahead
-of the checkout because an `ENOSPC` while the Actions worker writes its own
-diagnostic trace can terminate that worker before later `always()` steps run.
+of the checkout because a terminal runner loss can prevent later `always()`
+steps from producing cleanup evidence. The report records only capacity observed
+by this guard; it does not attribute a prior incident to a runner or host cause.
 On a controlled capacity failure, the workflow fails closed before fetching
 candidate assets, then its normal finalizer writes cleanup evidence and uploads
 both evidence files. The guard only observes capacity; it never deletes shared
