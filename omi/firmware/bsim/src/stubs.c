@@ -28,6 +28,13 @@ void sd_notify_time_synced(uint32_t utc_time) {}
 
 void register_button_service(void) {}
 
+int button_init(void)
+{
+    return 0;
+}
+
+void activate_button_work(void) {}
+
 void turnoff_all(void)
 {
     printk("OMI_BSIM_SLEEP\n");
