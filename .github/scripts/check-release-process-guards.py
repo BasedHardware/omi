@@ -865,7 +865,7 @@ def check_desktop_qualification_runner() -> list[str]:
         "self-hosted",
         "macos",
         "omi-desktop-qualification",
-        'git -C "$source_dir" checkout --quiet --detach "refs/tags/$RELEASE_TAG"',
+        'checkout --quiet --detach "refs/tags/$RELEASE_TAG"',
         "check-desktop-auto-beta-candidate.py",
         "--automatic",
         "actions/create-github-app-token@v3",
