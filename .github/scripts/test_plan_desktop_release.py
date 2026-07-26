@@ -28,6 +28,8 @@ SOURCE_SHA = "a" * 40
 LATER_NON_DESKTOP_SHA = "b" * 40
 LATEST_TAG = "v0.0.1+1-macos"
 RELEASABLE_PATH = "desktop/macos/Desktop/Sources/AppDelegate.swift"
+QUALIFICATION_LIFECYCLE_PATH = "scripts/dev-harness/dev_harness/qualification.py"
+UNRELATED_DEV_HARNESS_PATH = "scripts/dev-harness/dev_harness/config.py"
 
 
 def _parse_push_filter(workflow_text: str) -> tuple[list[str], set[str]]:
@@ -165,6 +167,7 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
             "--",
             "desktop/macos",
             "codemagic.yaml",
+            QUALIFICATION_LIFECYCLE_PATH,
             ".github/scripts/plan-desktop-release.py",
             ".github/scripts/desktop-release-source-identity.py",
             ".github/scripts/publish-desktop-candidate-tag.py",
@@ -177,6 +180,84 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
 
         git.assert_called_once_with(expected_args)
         self.assertEqual(changes, ["codemagic.yaml"])
+
+    def test_qualification_lifecycle_change_after_latest_tag_creates_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "github-output"
+            with (
+                patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
+                patch.object(planner, "git", return_value=QUALIFICATION_LIFECYCLE_PATH) as git,
+                patch.object(planner, "latest_releasable_desktop_sha", return_value=SOURCE_SHA),
+                patch.object(planner, "latest_change_age_seconds", return_value=601),
+                patch.object(planner, "existing_source_candidate_reason", return_value=None),
+                patch.object(planner, "wait_for_required_source_checks", return_value=planner.SourceCheckGate("ready")) as wait,
+                patch.object(planner, "active_release_reason", return_value=None),
+                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY]),
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
+            ):
+                self.assertEqual(planner.main(), 0)
+            outputs = output_path.read_text(encoding="utf-8")
+
+        git.assert_called_once_with(
+            [
+                "diff",
+                "--name-only",
+                "--diff-filter=ACDMR",
+                f"{LATEST_TAG}..HEAD",
+                "--",
+                *planner.DESKTOP_RELEASE_PATHS,
+            ]
+        )
+        wait.assert_called_once_with(
+            REPOSITORY,
+            SOURCE_SHA,
+            wait_seconds=planner.SOURCE_CHECK_WAIT_SECONDS,
+            poll_seconds=planner.SOURCE_CHECK_POLL_SECONDS,
+        )
+        self.assertIn(f"source_sha={SOURCE_SHA}", outputs)
+        self.assertIn("should_release=true", outputs)
+
+    def test_unrelated_dev_harness_change_after_latest_tag_does_not_create_candidate(self) -> None:
+        git_calls: list[list[str]] = []
+
+        def scoped_git(args: list[str], *, check: bool = True) -> str:
+            git_calls.append(args)
+            if args[0] == "diff":
+                # Model Git's pathspec filtering: config.py changed, but it is
+                # absent from the planner's release scope and therefore cannot
+                # appear in the diff result.
+                return UNRELATED_DEV_HARNESS_PATH if UNRELATED_DEV_HARNESS_PATH in args else ""
+            self.fail(f"unexpected git invocation: {args}")
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "github-output"
+            with (
+                patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
+                patch.object(planner, "git", side_effect=scoped_git),
+                patch.object(planner, "wait_for_required_source_checks") as wait,
+                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY]),
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
+            ):
+                self.assertEqual(planner.main(), 0)
+            outputs = output_path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            git_calls,
+            [
+                [
+                    "diff",
+                    "--name-only",
+                    "--diff-filter=ACDMR",
+                    f"{LATEST_TAG}..HEAD",
+                    "--",
+                    *planner.DESKTOP_RELEASE_PATHS,
+                ]
+            ],
+        )
+        wait.assert_not_called()
+        self.assertIn("source_sha=", outputs)
+        self.assertIn("should_release=false", outputs)
+        self.assertIn("No releasable desktop app changes", outputs)
 
     def test_exact_source_sha_success_for_every_required_check_passes_the_gate(self) -> None:
         checked: list[tuple[str, str]] = []
