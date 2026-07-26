@@ -75,7 +75,11 @@ final class NotchCardVoiceDelivery {
   // MARK: - Delivery
 
   private func scheduleDelivery() {
-    guard pendingCard != nil, !isDelivering, isVoiceSessionLive() else { return }
+    guard let pending = pendingCard, !isDelivering else { return }
+    guard isVoiceSessionLive() else {
+      log("NotchCardVoiceDelivery: no live voice session — card \(pending.id) stays pending")
+      return
+    }
     isDelivering = true
     scheduleWork { [weak self] in
       await self?.deliverPending()
@@ -87,7 +91,12 @@ final class NotchCardVoiceDelivery {
     guard let card = pendingCard else { return }
 
     let delivered = await injectContext(Self.contextBlock(for: card.text))
-    guard delivered else { return }  // stays pending; retried on the next capability signal
+    guard delivered else {
+      // Stays pending; retried on the next capability signal.
+      log("NotchCardVoiceDelivery: session refused card \(card.id) — will retry on connect/input-window")
+      return
+    }
+    log("NotchCardVoiceDelivery: delivered card \(card.id) into the live voice session")
 
     // Only clear if this is still the card we sent — a newer one may have arrived mid-flight.
     if pendingCard?.id == card.id {
