@@ -49,7 +49,6 @@ final class NotchCardVoiceDeliveryTests: XCTestCase {
   }
 
   override func setUp() async throws {
-    try await super.setUp()
     harness = Harness()
     subjectStorage = harness.makeSubject()
   }
