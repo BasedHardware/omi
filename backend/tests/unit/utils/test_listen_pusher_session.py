@@ -282,6 +282,25 @@ async def test_failed_audio_send_retains_buffer_for_retry():
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("flush", ["transcript", "audio"])
+async def test_cancelled_send_retains_buffer(flush):
+    ws = FakePusherWebSocket(send_errors=[asyncio.CancelledError()])
+    session = make_session(ws=ws, current_conversation_id=None)
+    await session.connect()
+    if flush == "transcript":
+        session.transcript_send([{"id": "seg-1"}])
+        with pytest.raises(asyncio.CancelledError):
+            await session._transcript_flush()
+        assert list(session.segment_buffers) == [{"id": "seg-1"}]
+    else:
+        session.audio_bytes_send(b"abcd", received_at=100.0)
+        with pytest.raises(asyncio.CancelledError):
+            await session._audio_bytes_flush()
+        assert b"".join(session.audio_chunks) == b"abcd"
+        assert session.audio_total_size == 4
+
+
+@pytest.mark.anyio
 async def test_incoming_201_invokes_callback_and_removes_pending_request():
     active_ref = {"active": True}
     ws = FakePusherWebSocket(incoming=[response_201("conv-1")])

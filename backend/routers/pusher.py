@@ -3,7 +3,7 @@ import asyncio
 import json
 import time
 from collections import deque
-from typing import Any, Dict, List, Optional, TypedDict, cast
+from typing import Any, Awaitable, Deque, Dict, List, Optional, TypedDict, TypeVar, cast
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -39,7 +39,7 @@ from utils.webhooks import (
 )
 from utils.cloud_tasks import get_listen_finalization_tasks_max_attempts, is_audio_merge_dispatch_enabled
 from utils.other.storage import maybe_invalidate_conversation_playback, upload_audio_chunks_batch
-from utils.metrics import PUSHER_ACTIVE_WS_CONNECTIONS
+from utils.metrics import PUSHER_ACTIVE_WS_CONNECTIONS, PUSHER_QUEUE_DROPS
 from utils.readiness import ReadinessGate
 from utils.observability.journeys import JourneyAttempt, JourneyOutcome, record_capture_finalization_terminal
 from utils.speaker_identification import extract_speaker_samples
@@ -80,6 +80,30 @@ WS_RECEIVE_TIMEOUT = 300.0  # seconds
 # before being force-cancelled.  Prevents hung GCS uploads or webhook calls from
 # blocking cleanup indefinitely.
 BG_DRAIN_TIMEOUT = 30.0  # seconds
+MIN_SAMPLE_RATE = 8000
+MAX_SAMPLE_RATE = 48000
+
+_QueueItem = TypeVar('_QueueItem')
+
+
+def _append_bounded(queue: Deque[_QueueItem], item: _QueueItem, queue_name: str) -> bool:
+    dropped = len(queue) == queue.maxlen
+    if dropped:
+        queue.popleft()
+        PUSHER_QUEUE_DROPS.labels(queue=queue_name).inc()
+    queue.append(item)
+    return dropped
+
+
+def _frame_header(data: bytes) -> int:
+    if len(data) < 4:
+        raise ValueError('frame header is incomplete')
+    header_type = struct.unpack('<I', data[:4])[0]
+    if header_type not in {100, 101, 102, 103, 104, 105}:
+        raise ValueError('unknown frame type')
+    if header_type == 101 and len(data) < 12:
+        raise ValueError('audio frame is incomplete')
+    return header_type
 
 
 def pusher_session_outcome(close_code: int, *, application_failed: bool = False) -> JourneyOutcome:
@@ -117,14 +141,16 @@ class _PrivateCloudChunk(TypedDict):
 
 
 async def _dispatch_transcript_item(uid: str, segments: List[Dict[str, Any]], memory_id: Optional[str]) -> None:
-    try:
-        await trigger_realtime_integrations(uid, segments, memory_id)
-    except Exception as e:
-        logger.error(f"Error processing transcript integrations: {e} {uid}")
-    try:
-        await realtime_transcript_webhook(uid, segments)
-    except Exception as e:
-        logger.error(f"Error processing transcript webhook: {e} {uid}")
+    async def run(sink: str, call: Awaitable[Any]) -> None:
+        try:
+            await call
+        except Exception as e:
+            logger.error('Error processing transcript %s type=%s uid=%s', sink, type(e).__name__, uid)
+
+    await asyncio.gather(
+        run('integrations', trigger_realtime_integrations(uid, segments, memory_id)),
+        run('webhook', realtime_transcript_webhook(uid, segments)),
+    )
 
 
 async def _process_conversation_task(
@@ -334,6 +360,10 @@ async def _websocket_util_trigger(
         await websocket.close(code=1011, reason="Dirty state")
         return
 
+    if not MIN_SAMPLE_RATE <= sample_rate <= MAX_SAMPLE_RATE:
+        await websocket.close(code=1008, reason='Invalid sample rate')
+        return
+
     # Defense-in-depth: during drain the LB should already have removed us from
     # the NEG, but reject straggler NEW connections.  We accept the handshake
     # FIRST so the client sees a clean WS close frame (1001 Going Away) rather
@@ -462,7 +492,7 @@ async def _websocket_util_trigger(
                 if retries < PRIVATE_CLOUD_SYNC_MAX_RETRIES:
                     batch['retries'] = retries + 1
                     batch['data'] = bytearray(chunk_data)
-                    batch['queued_at'] = time.monotonic()  # reset age so next retry waits ~60s
+                    batch['queued_at'] = 0.0 if not websocket_active else time.monotonic()
                     pending[conv_id] = batch
                     logger.error(f"Private cloud batch upload failed (retry {retries + 1}): {e} {uid} {conv_id}")
                 else:
@@ -619,7 +649,7 @@ async def _websocket_util_trigger(
                     websocket_close_code = 1011
                     application_failed = True
                     break
-                header_type = struct.unpack('<I', data[:4])[0]
+                header_type = _frame_header(data)
 
                 # Heartbeat (data-frame keepalive from backend to reset GKE ILB idle timer)
                 if header_type == 100:
@@ -640,13 +670,15 @@ async def _websocket_util_trigger(
                                 f"private_cloud_queue full ({len(private_cloud_queue)}/{PRIVATE_CLOUD_QUEUE_MAX_SIZE}), "
                                 f"dropping oldest chunk to prevent OOM {uid}"
                             )
-                        private_cloud_queue.append(
+                        _append_bounded(
+                            private_cloud_queue,
                             {
                                 'data': bytes(private_cloud_sync_buffer),
                                 'conversation_id': current_conversation_id,
                                 'timestamp': private_cloud_chunk_start_time or time.time(),
                                 'retries': 0,
-                            }
+                            },
+                            'private_cloud',
                         )
                         logger.info(
                             f"Flushed private cloud buffer on conversation switch: {len(private_cloud_sync_buffer)} bytes {uid}"
@@ -671,7 +703,11 @@ async def _websocket_util_trigger(
                     # Route this transcript by its own memory_id when present, falling back to the
                     # session's conversation id. This does not mutate session-scoped state.
                     conversation_or_memory_id = memory_id or current_conversation_id
-                    transcript_queue.append({'segments': segments, 'memory_id': conversation_or_memory_id})
+                    _append_bounded(
+                        transcript_queue,
+                        {'segments': segments, 'memory_id': conversation_or_memory_id},
+                        'transcript',
+                    )
                     continue
 
                 # Process conversation request
@@ -714,13 +750,15 @@ async def _websocket_util_trigger(
                         logger.info(
                             f"Queued speaker sample request: person={person_id}, {len(segment_ids)} segments {uid}"
                         )
-                        speaker_sample_queue.append(
+                        _append_bounded(
+                            speaker_sample_queue,
                             {
                                 'person_id': person_id,
                                 'conversation_id': conv_id,
                                 'segment_ids': segment_ids,
                                 'queued_at': time.time(),
-                            }
+                            },
+                            'speaker_sample',
                         )
                     continue
 
@@ -751,13 +789,15 @@ async def _websocket_util_trigger(
                                     f"private_cloud_queue full ({len(private_cloud_queue)}/{PRIVATE_CLOUD_QUEUE_MAX_SIZE}), "
                                     f"dropping oldest chunk to prevent OOM {uid}"
                                 )
-                            private_cloud_queue.append(
+                            _append_bounded(
+                                private_cloud_queue,
                                 {
                                     'data': bytes(private_cloud_sync_buffer),
                                     'conversation_id': current_conversation_id,
                                     'timestamp': cast(float, private_cloud_chunk_start_time),
                                     'retries': 0,
-                                }
+                                },
+                                'private_cloud',
                             )
                             private_cloud_sync_buffer = bytearray()
                             private_cloud_chunk_start_time = None
@@ -769,12 +809,14 @@ async def _websocket_util_trigger(
                     ):
                         if len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
                             logger.warning(f"Warning: audio_bytes_queue size {len(audio_bytes_queue)} {uid}")
-                        audio_bytes_queue.append(
+                        _append_bounded(
+                            audio_bytes_queue,
                             {
                                 'type': 'app',
                                 'sample_rate': sample_rate,
                                 'data': trigger_audiobuffer.copy(),
-                            }
+                            },
+                            'audio_bytes',
                         )
                         audio_bytes_event.set()  # Wake consumer immediately
                         trigger_audiobuffer = bytearray()
@@ -784,17 +826,22 @@ async def _websocket_util_trigger(
                     ):
                         if len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
                             logger.warning(f"Warning: audio_bytes_queue size {len(audio_bytes_queue)} {uid}")
-                        audio_bytes_queue.append(
+                        _append_bounded(
+                            audio_bytes_queue,
                             {
                                 'type': 'webhook',
                                 'sample_rate': sample_rate,
                                 'data': audiobuffer.copy(),
-                            }
+                            },
+                            'audio_bytes',
                         )
                         audio_bytes_event.set()  # Wake consumer immediately
                         audiobuffer = bytearray()
                     continue
 
+        except (ValueError, struct.error, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            websocket_close_code = 1003
+            logger.warning(f'Invalid pusher frame: {type(exc).__name__} {uid}')
         except WebSocketDisconnect as exc:
             websocket_close_code = exc.code or 1006
             logger.info("WebSocket disconnected")
@@ -810,16 +857,19 @@ async def _websocket_util_trigger(
                         f"private_cloud_queue full ({len(private_cloud_queue)}/{PRIVATE_CLOUD_QUEUE_MAX_SIZE}), "
                         f"dropping oldest chunk to prevent OOM {uid}"
                     )
-                private_cloud_queue.append(
+                _append_bounded(
+                    private_cloud_queue,
                     {
                         'data': bytes(private_cloud_sync_buffer),
                         'conversation_id': current_conversation_id,
                         'timestamp': private_cloud_chunk_start_time or time.time(),
                         'retries': 0,
-                    }
+                    },
+                    'private_cloud',
                 )
                 logger.info(f"Flushed final private cloud buffer: {len(private_cloud_sync_buffer)} bytes {uid}")
             websocket_active = False
+            audio_bytes_event.set()
 
     bg_main_tasks: List[asyncio.Task[Any]] = []
     try:

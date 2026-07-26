@@ -59,7 +59,6 @@ class PusherCircuitBreaker:
         self._state: CircuitState = CircuitState.CLOSED
         self._failures: List[float] = []  # timestamps of recent failures
         self._opened_at: float = 0.0
-        self._probe_lock = asyncio.Lock()
         self._probe_in_progress = False
 
     @property

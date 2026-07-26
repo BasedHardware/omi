@@ -173,7 +173,7 @@ class ListenPusherSession:
             logger.error(f"Failed to send process_conversation request: {e} {self.uid} {self.session_id}")
             return False
 
-    async def _transcript_flush(self, auto_reconnect: bool = True):
+    async def _transcript_flush(self):
         if self.pusher_connected and self.pusher_ws and len(self.segment_buffers) > 0:
             pending_segments = self.segment_buffers
             self.segment_buffers = deque(maxlen=self.config.max_segment_buffer_size)
@@ -192,11 +192,13 @@ class ListenPusherSession:
                     )
                 )
                 await self.pusher_ws.send(cast(bytes, data))
-            except Exception as e:
+            except (asyncio.CancelledError, Exception) as e:
                 self.segment_buffers = deque(
                     (*pending_segments, *self.segment_buffers), maxlen=self.config.max_segment_buffer_size
                 )
-                if isinstance(e, ConnectionClosed):
+                if isinstance(e, asyncio.CancelledError):
+                    raise
+                elif isinstance(e, ConnectionClosed):
                     logger.error(f"Pusher transcripts Connection closed: {e} {self.uid} {self.session_id}")
                     self._mark_disconnected()
                 else:
@@ -206,7 +208,7 @@ class ListenPusherSession:
         while self.deps.is_active():
             await self.deps.sleep(1)
             if len(self.segment_buffers) > 0:
-                await self._transcript_flush(auto_reconnect=True)
+                await self._transcript_flush()
 
     def audio_bytes_send(self, audio_bytes: bytes, received_at: float):
         chunk = audio_bytes
@@ -219,7 +221,7 @@ class ListenPusherSession:
         self.audio_total_size += len(chunk)
         self.audio_buffer_last_received = received_at
 
-    async def _audio_bytes_flush(self, auto_reconnect: bool = True):
+    async def _audio_bytes_flush(self):
         current_conversation_id = self.deps.get_current_conversation_id()
         if (
             self.pusher_ws
@@ -256,12 +258,14 @@ class ListenPusherSession:
                 data.extend(audio_data)
                 del audio_data
                 await self.pusher_ws.send(cast(bytes, data))
-            except Exception as e:
+            except (asyncio.CancelledError, Exception) as e:
                 self.audio_chunks.extendleft(reversed(pending_chunks))
                 self.audio_total_size += pending_total_size
                 while self.audio_total_size > self.config.max_audio_buffer_size:
                     self.audio_total_size -= len(self.audio_chunks.popleft())
-                if isinstance(e, ConnectionClosed):
+                if isinstance(e, asyncio.CancelledError):
+                    raise
+                elif isinstance(e, ConnectionClosed):
                     logger.error(f"Pusher audio_bytes Connection closed: {e} {self.uid} {self.session_id}")
                     self._mark_disconnected()
                 else:
@@ -271,7 +275,7 @@ class ListenPusherSession:
         while self.deps.is_active():
             await self.deps.sleep(1)
             if self.audio_total_size > 0:
-                await self._audio_bytes_flush(auto_reconnect=True)
+                await self._audio_bytes_flush()
 
     async def pusher_receive(self):
         """Receive and handle messages from pusher, with timeout-based retry for pending requests."""
@@ -375,8 +379,8 @@ class ListenPusherSession:
                 )
 
     async def _flush(self):
-        await self._audio_bytes_flush(auto_reconnect=False)
-        await self._transcript_flush(auto_reconnect=False)
+        await self._audio_bytes_flush()
+        await self._transcript_flush()
 
     def _mark_disconnected(self):
         """Signal pusher disconnection and ensure one reconnect loop is running."""

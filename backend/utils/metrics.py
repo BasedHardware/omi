@@ -11,6 +11,12 @@ PUSHER_ACTIVE_WS_CONNECTIONS = Gauge(
     'Number of currently active WebSocket connections in pusher',
 )
 
+PUSHER_QUEUE_DROPS = Counter(
+    'pusher_queue_drops_total',
+    'Pusher queue items dropped by bounded queue name',
+    ['queue'],
+)
+
 PUSHER_CIRCUIT_BREAKER_STATE = Gauge(
     'pusher_circuit_breaker_state',
     'Pusher circuit breaker state (0=closed, 1=open, 2=half_open)',
