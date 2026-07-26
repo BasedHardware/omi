@@ -115,9 +115,11 @@ enum MemoryAtlasForceLayout {
 
   /// Relationships the extractor actually drew.
   ///
-  /// Weight blends how many distinct relationship kinds connect the pair with
-  /// how many memories assert them: two entities the extractor linked from
-  /// eleven separate memories are more related than two it linked once.
+  /// Weight comes from how many memories assert the relationship: two entities
+  /// linked from eleven separate memories are more related than two linked
+  /// once. Deliberately not the number of distinct verbs between them — the
+  /// server mints a separate edge per verb, so counting verbs would score
+  /// "includes" plus "with" as twice the relationship they jointly describe.
   static func explicitLinks(
     edges: [(sourceID: String, targetID: String, memoryCount: Int)]
   ) -> [Link] {
@@ -155,7 +157,12 @@ enum MemoryAtlasForceLayout {
     var weights: [String: Double] = [:]
     var endpoints: [String: (String, String)] = [:]
     for memoryID in nodeIDsByMemoryID.keys.sorted() {
-      let participants = (nodeIDsByMemoryID[memoryID] ?? []).sorted()
+      // Deduplicated: an entity can cite the same memory twice — most easily
+      // when a self-node is folded into the anchor and brings its memories
+      // with it. Counting it twice both mis-scales the 1/(k-1) share and can
+      // push a legitimate memory past the noise cap, which would silently
+      // discard every relationship it implies.
+      let participants = Set(nodeIDsByMemoryID[memoryID] ?? []).sorted()
       guard participants.count >= 2, participants.count <= maximumEntitiesPerMemory else { continue }
       let share = 1 / Double(participants.count - 1)
       for i in 0..<participants.count {
@@ -237,7 +244,12 @@ enum MemoryAtlasForceLayout {
     guard !identifiers.isEmpty else { return Result(positions: [:], roles: [:]) }
 
     let known = Set(identifiers)
+    // Sorted, not merely merged. Spring forces are summed in this order, and
+    // floating-point addition is not associative, so leaving the server's
+    // encounter order in place would let the same graph delivered in a
+    // different order drift into a visibly different map over 90 steps.
     let merged = merge(links.filter { known.contains($0.a) && known.contains($0.b) })
+      .sorted { $0.key < $1.key }
 
     var neighbors: [String: [(id: String, weight: Double)]] = [:]
     for link in merged {
@@ -658,7 +670,7 @@ enum MemoryAtlasForceLayout {
     // 0.74 to 0.52.
     let crowding = min(max((Double(count) - 60) / 340, 0), 1)
     let evenSpacing = sqrt(Double(area.width) * Double(area.height) / Double(count))
-    let minimum = evenSpacing * (0.72 - 0.47 * crowding)
+    let minimum = evenSpacing * (0.82 - 0.57 * crowding)
     guard minimum > 0 else { return }
 
     var points = coreIDs.map { positions[$0] ?? CGPoint(x: area.midX, y: area.midY) }
@@ -687,10 +699,11 @@ enum MemoryAtlasForceLayout {
                 Double(points[j].x - points[i].x), Double(points[j].y - points[i].y))
               var distance = simd_length(delta)
               if distance < 1e-9 {
-                // Exactly coincident: separate along a deterministic axis
-                // rather than leaving them stacked forever.
-                delta = SIMD2<Double>(minimum, 0)
-                distance = minimum
+                // Exactly coincident: nudge along a deterministic axis. The
+                // separation has to stay *below* the minimum or the guard
+                // below rejects it and the pair stays stacked forever.
+                delta = SIMD2<Double>(minimum / 2, 0)
+                distance = minimum / 2
               }
               guard distance < minimum else { continue }
               let push = (delta / distance) * ((minimum - distance) / 2)
@@ -816,6 +829,11 @@ private struct Quadtree {
     var bodyPoint: SIMD2<Double> = .zero
     var children: SIMD4<Int32> = SIMD4<Int32>(repeating: -1)
     var isLeaf: Bool { children[0] < 0 && children[1] < 0 && children[2] < 0 && children[3] < 0 }
+
+    func contains(_ point: SIMD2<Double>) -> Bool {
+      point.x >= origin.x && point.x <= origin.x + size
+        && point.y >= origin.y && point.y <= origin.y + size
+    }
   }
 
   private var cells: [Cell] = []
@@ -899,6 +917,20 @@ private struct Quadtree {
     while let cellIndex = stack.popLast() {
       let cell = cells[cellIndex]
       guard cell.mass > 0 else { continue }
+
+      // A cell holding the query point holds the query point's own mass, and
+      // approximating it would have a node repel itself — with `theta` this
+      // loose, that happens on the root cell for any node out near a corner.
+      // Such a cell is always opened instead, down to the leaf the node lives
+      // in, which is skipped outright.
+      if cell.contains(point) {
+        guard !cell.isLeaf else { continue }
+        for quadrant in 0..<4 where cell.children[quadrant] >= 0 {
+          stack.append(Int(cell.children[quadrant]))
+        }
+        continue
+      }
+
       let centerOfMass = cell.centerOfMass / cell.mass
       let delta = point - centerOfMass
       let distance = simd_length(delta)

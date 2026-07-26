@@ -54,6 +54,37 @@ final class MemoryAtlasForceLayoutTests: XCTestCase {
     XCTAssertTrue(Layout.coOccurrenceLinks(memoryIDsByNodeID: wall).isEmpty)
   }
 
+  /// An entity can cite the same memory twice — the anchor does, whenever a
+  /// generic "Me" node is folded into it and brings its memories along. Counted
+  /// naively, the duplicate inflates the participant count past the noise cap
+  /// and the memory is discarded, taking every relationship it implied with it.
+  func testAnEntityCitingTheSameMemoryTwiceDoesNotDiscardThatMemory() {
+    var citations: [String: [String]] = [:]
+    for index in 0..<Layout.maximumEntitiesPerMemory { citations["e\(index)"] = ["shared"] }
+    citations["e0"] = ["shared", "shared"]
+
+    let links = Layout.coOccurrenceLinks(memoryIDsByNodeID: citations)
+
+    XCTAssertFalse(links.isEmpty, "A duplicated citation must not push the memory past the cap")
+    XCTAssertNil(links.first { $0.a == $0.b }, "An entity is not related to itself")
+  }
+
+  /// Two marks landing on exactly the same point is the one case the separation
+  /// pass most obviously exists for, and the easiest to get wrong: a nudge
+  /// equal to the minimum reads as "already far enough apart".
+  func testExactlyCoincidentMarksAreSeparated() throws {
+    var positions = [
+      "a": CGPoint(x: 0.5, y: 0.5),
+      "b": CGPoint(x: 0.5, y: 0.5),
+    ]
+
+    Layout.separateCrowdedMarks(&positions, coreIDs: ["a", "b"], anchorID: nil, area: area)
+
+    let a = try XCTUnwrap(positions["a"])
+    let b = try XCTUnwrap(positions["b"])
+    XCTAssertGreaterThan(distance(a, b), 0.01, "Stacked marks hide each other entirely")
+  }
+
   /// Sparsification keeps each node's strongest partners, but a small entity
   /// whose single relationship is with a busy hub must not be orphaned just
   /// because the hub has better options.
@@ -184,11 +215,15 @@ final class MemoryAtlasForceLayoutTests: XCTestCase {
       nodeIDs: ids.reversed(), links: links.reversed(), anchorID: "n1",
       typeTargets: [:], area: area)
 
+    // Exact equality, not a tolerance. Spring forces are summed in link order
+    // and floating-point addition is not associative, so anything short of
+    // bit-identical means the order still reaches the coordinates — a drift
+    // too small to see in one step compounds over ninety.
     for id in ids {
       let a = try XCTUnwrap(forward.positions[id])
       let b = try XCTUnwrap(reversed.positions[id])
-      XCTAssertEqual(a.x, b.x, accuracy: 1e-9, "\(id) x drifted with input order")
-      XCTAssertEqual(a.y, b.y, accuracy: 1e-9, "\(id) y drifted with input order")
+      XCTAssertEqual(a.x, b.x, "\(id) x drifted with input order")
+      XCTAssertEqual(a.y, b.y, "\(id) y drifted with input order")
     }
   }
 
@@ -242,6 +277,16 @@ final class MemoryAtlasForceLayoutTests: XCTestCase {
         (0...1).contains(point.x) && (0...1).contains(point.y),
         "\(id) escaped the canvas at \(point)")
     }
+
+    // Bounds alone would be satisfied by returning the centre for every node,
+    // so this also demands the map actually occupy the canvas and keep its
+    // entities apart.
+    let xs = ids.compactMap { result.positions[$0]?.x }
+    let ys = ids.compactMap { result.positions[$0]?.y }
+    XCTAssertGreaterThan((xs.max() ?? 0) - (xs.min() ?? 0), 0.35)
+    XCTAssertGreaterThan((ys.max() ?? 0) - (ys.min() ?? 0), 0.25)
+    let distinct = Set(ids.compactMap { result.positions[$0].map { "\($0.x)|\($0.y)" } })
+    XCTAssertEqual(distinct.count, ids.count, "No two entities may share a position")
   }
 
   /// A hub with nothing but single-relationship entities hanging off it has no

@@ -75,25 +75,36 @@ final class MemoryAtlasSnapshotCache: @unchecked Sendable {
     return snapshot
   }
 
-  /// Content digest over everything the layout reads. Hashing ~2,600 short
-  /// strings costs well under a millisecond, against tens of milliseconds for
-  /// the relaxation it protects.
+  /// Content digest over everything the snapshot reads.
+  ///
+  /// The memory ids are hashed individually rather than counted. Co-occurrence
+  /// is derived from *which* memories two entities share, so a node swapping
+  /// one memory for another changes the whole layout while leaving every count
+  /// identical — a digest over counts would serve the previous map back and
+  /// look like the rebuild had silently done nothing.
+  ///
+  /// Hashing a few thousand short strings costs well under a millisecond,
+  /// against tens of milliseconds for the relaxation it protects.
   static func makeKey(for graph: KnowledgeGraphResponse, userName: String?) -> Key {
     var hasher = Hasher()
     for node in graph.nodes {
       hasher.combine(node.id)
       hasher.combine(node.label)
       hasher.combine(node.nodeType)
-      // Co-occurrence is derived from these, so a node gaining a memory has to
-      // invalidate the layout even though nothing else about it moved.
-      hasher.combine(node.memoryIds.count)
+      hasher.combine(node.aliases)
+      hasher.combine(node.memoryIds)
+      // The replay timeline is built from these, so they are part of the
+      // snapshot even though they never move a node.
+      hasher.combine(node.createdAt)
       hasher.combine(node.updatedAt)
     }
     for edge in graph.edges {
       hasher.combine(edge.id)
       hasher.combine(edge.sourceId)
       hasher.combine(edge.targetId)
-      hasher.combine(edge.memoryIds.count)
+      hasher.combine(edge.label)
+      hasher.combine(edge.memoryIds)
+      hasher.combine(edge.createdAt)
     }
     return Key(
       userName: userName,
