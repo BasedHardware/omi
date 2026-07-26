@@ -390,3 +390,26 @@ jobs:
 
           git fetch --no-tags origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
           test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$CANDIDATE_SHA"
+
+      - name: Assert native Codemagic tag intake
+        if: steps.final-plan.outputs.should_release == 'true'
+        env:
+          CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
+        run: |
+          python3 .github/scripts/check-codemagic-tag-intake.py \
+            --app-id "66c95e6ec76853c447b8bcbb" \
+            --workflow-id "omi-desktop-swift-release" \
+            --release-tag "${{ steps.version.outputs.release_tag }}" \
+            --source-sha "${{ steps.identity.outputs.candidate_sha }}" \
+            --timeout-seconds 600 \
+            --poll-seconds 15 \
+            --evidence "$RUNNER_TEMP/codemagic-native-tag-intake.json"
+
+      - name: Retain native Codemagic tag intake evidence
+        if: always() && steps.final-plan.outputs.should_release == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: codemagic-native-tag-intake-${{ steps.version.outputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/codemagic-native-tag-intake.json
+          if-no-files-found: error
+          overwrite: false
