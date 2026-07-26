@@ -615,12 +615,17 @@ final class MemoryAtlasLayoutTests: XCTestCase {
 
   // MARK: - Neighbourhoods the map can name
 
-  /// A region is described by the entities actually in it, and by nothing else.
+  /// A region is described by an entity actually in it, and by nothing else.
   ///
   /// The alternative — asking a model to title the group — produces "Career" or
   /// "Family": confident, unfalsifiable, and wrong in a way the user has no way
-  /// to check. Naming its strongest members states exactly what the algorithm
+  /// to check. Naming its strongest member states exactly what the algorithm
   /// did, and is wrong visibly or not at all.
+  ///
+  /// One name rather than three. A place on a map is a landmark you either
+  /// recognise or zoom into; a list took longer to read than the dots it sat
+  /// over, and truncated into things like "ORACLE ACCESS · CONSULT-ORACLE ·
+  /// DAVI…" that named nothing at all.
   func testARegionIsNamedAfterItsMostConnectedMembers() throws {
     let members = ["codex", "github", "omi", "swift", "xcode", "pr", "ci", "linter"]
     var nodes = members.map { KnowledgeGraphNode(id: $0, label: $0.capitalized, nodeType: .thing) }
@@ -640,9 +645,8 @@ final class MemoryAtlasLayoutTests: XCTestCase {
       graph: KnowledgeGraphResponse(nodes: nodes, edges: edges), userName: "David")
     let region = try XCTUnwrap(snapshot.neighbourhoods.first)
 
-    XCTAssertTrue(region.caption.hasPrefix("Codex · Github"), "Got: \(region.caption)")
+    XCTAssertEqual(region.caption, "Codex", "Got: \(region.caption)")
     XCTAssertFalse(region.caption.contains("David"), "A region must not be named after you")
-    XCTAssertEqual(region.caption.components(separatedBy: " · ").count, 3, "Three names, not eight")
   }
 
   /// The extractor does not only mint names. It also mints entities whose
@@ -706,16 +710,23 @@ final class MemoryAtlasLayoutTests: XCTestCase {
       "Twenty-four entities in pairs have no neighbourhoods, and saying otherwise is noise")
   }
 
-  /// Region names are the map's coarsest layer. Once the camera is inside one,
-  /// or once the user has picked something specific, they are in the way of the
-  /// thing that replaced them.
+  /// Territories survive zooming in, and give way only to a more specific
+  /// question.
+  ///
+  /// They used to stop at neighbourhood zoom, on the theory that close up the
+  /// entities speak for themselves. What that actually did was delete the
+  /// island a person had just decided to look at, at the moment they looked at
+  /// it — and take its name with it, so there was no longer anything on screen
+  /// saying where they were. Only picking one entity, or reading every label at
+  /// inspect zoom, replaces the question territories answer.
   func testRegionNamesGiveWayToWhateverTheUserIsActuallyLookingAt() {
     let visible = MemoryAtlasNeighbourhoodLabels.areVisible
 
     XCTAssertTrue(visible(.overview, false))
     XCTAssertTrue(visible(.neighborhood, false))
-    XCTAssertFalse(visible(.detail, false), "Zoomed in, the entities speak for themselves")
-    XCTAssertFalse(visible(.inspect, false))
+    XCTAssertTrue(visible(.detail, false), "Zooming into a place must not delete the place")
+    XCTAssertTrue(visible(.focus, false))
+    XCTAssertFalse(visible(.inspect, false), "Every entity is named here; a region name is noise")
     XCTAssertFalse(visible(.overview, true), "A selection is a more specific question")
   }
 
@@ -784,25 +795,40 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     }
   }
 
+  /// A square of coast around a point, in normalized map coordinates.
+  private func territory(at center: CGPoint, half: CGFloat = 0.08) -> [CGPoint] {
+    [
+      CGPoint(x: center.x - half, y: center.y - half),
+      CGPoint(x: center.x + half, y: center.y - half),
+      CGPoint(x: center.x + half, y: center.y + half),
+      CGPoint(x: center.x - half, y: center.y + half),
+    ]
+  }
+
+  private func region(_ id: Int, _ caption: String, _ coastline: [[CGPoint]])
+    -> MemoryAtlasNeighbourhood
+  {
+    MemoryAtlasNeighbourhood(
+      id: id, memberIDs: ["m"], caption: caption, center: CGPoint(x: 0.5, y: 0.5), radius: 0.1,
+      coastline: coastline, purity: 1)
+  }
+
   func testRegionNamesNeverOverlapAndNeverLeaveTheCanvas() {
     let size = CGSize(width: 800, height: 600)
-    let stacked = (0..<3).map {
-      MemoryAtlasNeighbourhood(
-        id: $0, memberIDs: ["m"], caption: "Region \($0)",
-        center: CGPoint(x: 0.5, y: 0.5), radius: 0.1, coastline: [], purity: 1)
-    }
-    let offscreen = MemoryAtlasNeighbourhood(
-      id: 9, memberIDs: ["m"], caption: "Far away", center: CGPoint(x: 14, y: 14), radius: 0.1,
-      coastline: [], purity: 1)
+    let project = { (point: CGPoint) in CGPoint(x: point.x * size.width, y: point.y * size.height) }
+    let regions =
+      (0..<3).map { region($0, "Region \($0)", [territory(at: CGPoint(x: 0.5, y: 0.5))]) }
+      + [region(9, "Far away", [territory(at: CGPoint(x: 14, y: 14))])]
     let taken = CGRect(x: 340, y: 380, width: 120, height: 20)
 
     let placed = MemoryAtlasNeighbourhoodLabels.place(
-      stacked + [offscreen], in: size,
-      project: { CGPoint(x: $0.x * size.width, y: $0.y * size.height) },
-      scale: size,
+      MemoryAtlasNeighbourhoodLabels.islands(regions, in: size, project: project),
+      captions: Dictionary(lastWriteWins: regions.map { ($0.id, $0.caption) }),
+      in: size,
       avoiding: [taken])
 
-    XCTAssertFalse(placed.contains { $0.id == 9 }, "A region off the canvas has nothing to name")
+    XCTAssertFalse(
+      placed.contains { $0.regionID == 9 }, "A region off the canvas has nothing to name")
     for rect in placed.map(\.rect) {
       XCTAssertTrue(CGRect(origin: .zero, size: size).contains(rect))
       XCTAssertFalse(rect.intersects(taken), "An entity's own name is not negotiable")
@@ -817,19 +843,99 @@ final class MemoryAtlasLayoutTests: XCTestCase {
   /// Eight territories is already more than anyone holds at a glance, and the
   /// budget has to hold whatever the modularity pass emits.
   func testTheMapNamesAtMostAHandfulOfRegions() {
+    let size = CGSize(width: 4000, height: 600)
     let many = (0..<40).map { index in
-      MemoryAtlasNeighbourhood(
-        id: index, memberIDs: ["m"], caption: "R\(index)",
-        center: CGPoint(x: 0.1 + 0.02 * CGFloat(index), y: 0.5), radius: 0.005, coastline: [],
-        purity: 1)
+      region(index, "R\(index)", [territory(at: CGPoint(x: 0.02 + 0.024 * CGFloat(index), y: 0.5))])
     }
 
     let placed = MemoryAtlasNeighbourhoodLabels.place(
-      many, in: CGSize(width: 4000, height: 600),
-      project: { CGPoint(x: $0.x * 4000, y: $0.y * 600) },
-      scale: CGSize(width: 4000, height: 600))
+      MemoryAtlasNeighbourhoodLabels.islands(
+        many, in: size, project: { CGPoint(x: $0.x * size.width, y: $0.y * size.height) }),
+      captions: Dictionary(lastWriteWins: many.map { ($0.id, $0.caption) }),
+      in: size)
 
     XCTAssertEqual(placed.count, MemoryAtlasNeighbourhoodLabels.limit)
+  }
+
+  /// The map draws exactly the islands it can name, so an island it fails to
+  /// name is one it does not draw.
+  ///
+  /// The failure this replaces was visible on a real account: a group holding
+  /// two pieces of ground got one caption, and the other piece was outlined,
+  /// filled, and anonymous — a shape with nothing anywhere near it saying what
+  /// it was.
+  func testAnIslandTheMapCannotNameIsNotAnIslandTheMapDraws() {
+    let size = CGSize(width: 900, height: 700)
+    let project = { (point: CGPoint) in CGPoint(x: point.x * size.width, y: point.y * size.height) }
+    // One region, two separate pieces of ground.
+    let split = region(
+      3, "Split",
+      [territory(at: CGPoint(x: 0.25, y: 0.5)), territory(at: CGPoint(x: 0.75, y: 0.5))])
+
+    let islands = MemoryAtlasNeighbourhoodLabels.islands([split], in: size, project: project)
+    XCTAssertEqual(islands.count, 2, "Both pieces are on screen")
+
+    let named = MemoryAtlasNeighbourhoodLabels.place(
+      islands, captions: [3: "Split"], in: size)
+    XCTAssertEqual(named.count, 2, "So both get named")
+    XCTAssertEqual(Set(named.map(\.index)), [0, 1], "One caption each, not one for the pair")
+
+    // And with no caption to give, neither is drawn.
+    XCTAssertTrue(MemoryAtlasNeighbourhoodLabels.place(islands, captions: [:], in: size).isEmpty)
+  }
+
+  /// Going into a place always leaves you looking at that place, named.
+  ///
+  /// At overview the map is choosing which territories to show, and skipping
+  /// one whose caption will not fit is right. Once the user has picked one it
+  /// is not: the island they asked for was dropped because its name collided
+  /// with an entity label, leaving them zoomed into a blank canvas.
+  func testThePlaceYouWentIntoIsAlwaysDrawnAndAlwaysNamed() {
+    let size = CGSize(width: 900, height: 700)
+    let project = { (point: CGPoint) in CGPoint(x: point.x * size.width, y: point.y * size.height) }
+    let one = region(4, "Somewhere", [territory(at: CGPoint(x: 0.5, y: 0.5), half: 0.05)])
+    let islands = MemoryAtlasNeighbourhoodLabels.islands([one], in: size, project: project)
+    // Every candidate spot buried under entity names.
+    let blanketed = (0..<24).flatMap { row in
+      (0..<24).map { column in
+        CGRect(x: CGFloat(column) * 40, y: CGFloat(row) * 30, width: 40, height: 30)
+      }
+    }
+
+    XCTAssertTrue(
+      MemoryAtlasNeighbourhoodLabels.place(
+        islands, captions: [4: "Somewhere"], in: size, avoiding: blanketed
+      ).isEmpty,
+      "At overview a name that cannot be placed means the island is not drawn")
+
+    let insisted = MemoryAtlasNeighbourhoodLabels.place(
+      islands, captions: [4: "Somewhere"], in: size, avoiding: blanketed, insisting: true)
+    XCTAssertEqual(insisted.count, 1, "Inside a place, it is drawn regardless")
+    XCTAssertTrue(CGRect(origin: .zero, size: size).contains(insisted[0].rect))
+  }
+
+  /// Zooming into an island must not make it nameless.
+  ///
+  /// Once the camera is inside a territory its true centre is off the canvas,
+  /// and a caption anchored there lands outside the viewport and is dropped —
+  /// which took the island down with it, so zooming in on a place made the
+  /// place disappear.
+  func testAnIslandTheCameraIsInsideIsStillNamed() {
+    let size = CGSize(width: 900, height: 700)
+    // Projected so the island spans far beyond the viewport in every direction.
+    let huge = region(1, "Everything", [territory(at: CGPoint(x: 0.5, y: 0.5), half: 0.4)])
+    let zoomed = { (point: CGPoint) in
+      CGPoint(
+        x: (point.x - 0.5) * 8 * size.width + size.width / 2,
+        y: (point.y - 0.5) * 8 * size.height + size.height / 2)
+    }
+
+    let islands = MemoryAtlasNeighbourhoodLabels.islands([huge], in: size, project: zoomed)
+    XCTAssertEqual(islands.count, 1, "The island still overlaps the viewport")
+
+    let named = MemoryAtlasNeighbourhoodLabels.place(islands, captions: [1: "Everything"], in: size)
+    XCTAssertEqual(named.count, 1, "So it is still named")
+    XCTAssertTrue(CGRect(origin: .zero, size: size).contains(named[0].rect))
   }
 
   /// Only a few dozen lines fit on the map at overview zoom, and they used to

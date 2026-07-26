@@ -25,6 +25,13 @@ extension Notification.Name {
   static let desktopAutomationMemoryAtlasSelectRequested = Notification.Name(
     "desktopAutomationMemoryAtlasSelectRequested"
   )
+  /// Going into a neighbourhood is otherwise only reachable by clicking its
+  /// caption, which is a small target computed from the live camera — so the
+  /// one interaction the territory layer exists for was the one no check could
+  /// reach.
+  static let desktopAutomationMemoryAtlasRegionRequested = Notification.Name(
+    "desktopAutomationMemoryAtlasRegionRequested"
+  )
 }
 
 // MARK: - Atlas Layout
@@ -392,29 +399,105 @@ private struct MemoryAtlasNeighbourhoodCaption: View {
 /// or press somewhere it is not — is the classic failure of hit-testing a
 /// canvas twice.
 enum MemoryAtlasNeighbourhoodLabels {
+  /// One island of one neighbourhood, on screen.
+  ///
+  /// The unit is the island rather than the neighbourhood because the island
+  /// is the thing a person sees. A group that holds two separate pieces of
+  /// ground used to get a single caption over one of them, which left the
+  /// other drawn, outlined, and anonymous — an unexplained shape on the map.
+  struct Island: Equatable {
+    let regionID: Int
+    let index: Int
+    /// The coast, in normalized map coordinates. Projected at draw time rather
+    /// than here, so the same ring survives a camera move.
+    let ring: [CGPoint]
+    /// Where it is on screen right now. The projected ring is kept so the
+    /// caption placer can ask whether a point on the canvas is ashore without
+    /// projecting all of it again for every candidate.
+    let projected: [CGPoint]
+    let bounds: CGRect
+    let center: CGPoint
+  }
+
   struct Placed: Equatable, Identifiable {
-    let id: Int
+    let regionID: Int
+    let index: Int
     let caption: String
     /// The painted and tappable box, in view coordinates.
     let rect: CGRect
-    /// The region's centre and extent on screen, for placing the caption.
-    let center: CGPoint
-    let radii: CGSize
-    /// The territory to paint, in normalized map coordinates. Projected at
-    /// draw time rather than here, so the same rings survive a camera move.
-    let coastline: [[CGPoint]]
+    /// The one island this caption names.
+    let ring: [CGPoint]
+
+    var id: String { "\(regionID)-\(index)" }
   }
 
   /// Past this the captions are the map. Eight territories is already more
   /// than anyone holds in their head at a glance.
   static let limit = 8
 
-  /// Regions stop being the subject once the camera is inside one: at that
-  /// point the entities themselves are readable and a caption for a
-  /// neighbourhood mostly offscreen is just a floating word.
+  /// The smallest an island may look on screen and still be worth naming.
+  ///
+  /// Islands are drawn only when they are named, so this is also the smallest
+  /// one the map draws — which is the point. A speck of territory the size of
+  /// a couple of dots says nothing that the dots do not already say, and eight
+  /// of them around the edge of a region read as noise around it.
+  static let smallestNamed: CGFloat = 26
+
+  /// Whether territories are the subject at this camera.
+  ///
+  /// Selecting an entity hands the map over to that entity's own
+  /// neighbourhood, and a search filter is asking a different question
+  /// entirely. Otherwise they stay: an earlier version dropped them past
+  /// neighbourhood zoom, so zooming in on an island made it vanish — the one
+  /// thing a person does after seeing a place they want to look at.
   static func areVisible(detailLevel: MemoryAtlasDetailLevel, hasSelection: Bool) -> Bool {
     guard !hasSelection else { return false }
-    return detailLevel == .overview || detailLevel == .neighborhood
+    return detailLevel != .inspect
+  }
+
+  /// The islands on screen, largest first, before anything is named.
+  ///
+  /// Separate from `place` so the map can decide which entity labels to
+  /// suppress before it decides where captions go — otherwise a caption avoids
+  /// an entity name that is about to be hidden, and gets pushed off its own
+  /// island for nothing.
+  static func islands(
+    _ regions: [MemoryAtlasNeighbourhood],
+    in size: CGSize,
+    project: (CGPoint) -> CGPoint,
+    focused: Int? = nil
+  ) -> [Island] {
+    let visible = CGRect(origin: .zero, size: size)
+    var found: [Island] = []
+    for region in regions where focused == nil || region.id == focused {
+      for (index, ring) in region.coastline.enumerated() where ring.count >= 3 {
+        let points = ring.map(project)
+        var minimum = points[0]
+        var maximum = points[0]
+        for point in points {
+          minimum = CGPoint(x: min(minimum.x, point.x), y: min(minimum.y, point.y))
+          maximum = CGPoint(x: max(maximum.x, point.x), y: max(maximum.y, point.y))
+        }
+        let bounds = CGRect(
+          x: minimum.x, y: minimum.y, width: maximum.x - minimum.x, height: maximum.y - minimum.y)
+        guard bounds.intersects(visible) else { continue }
+        guard max(bounds.width, bounds.height) >= smallestNamed || focused != nil else { continue }
+        found.append(
+          Island(
+            regionID: region.id, index: index, ring: ring, projected: points, bounds: bounds,
+            center: CGPoint(
+              x: points.map(\.x).reduce(0, +) / CGFloat(points.count),
+              y: points.map(\.y).reduce(0, +) / CGFloat(points.count))))
+      }
+    }
+    // Biggest first, so a crowded viewport spends its captions on the places
+    // that dominate it rather than on whichever region the detector numbered
+    // lowest.
+    return found.sorted {
+      let mine = $0.bounds.width * $0.bounds.height
+      let theirs = $1.bounds.width * $1.bounds.height
+      return mine == theirs ? ($0.regionID, $0.index) < ($1.regionID, $1.index) : mine > theirs
+    }
   }
 
   /// How far to zoom, and where to point, when the user enters a region.
@@ -443,55 +526,146 @@ enum MemoryAtlasNeighbourhoodLabels {
     )
   }
 
+  /// Places on the island where its whole name would sit on land, nearest the
+  /// middle first.
+  ///
+  /// The centroid is only a starting guess: a crescent or a two-lobed island
+  /// has its centroid in the water, and a name centred there straddles the bay.
+  /// So the candidates are ranked by distance from the centroid and each is
+  /// checked properly — both ends of the label have to be ashore, or a long
+  /// name hangs off a narrow island with most of itself over the sea.
+  private static func interior(of island: Island, within reachable: CGRect, width: CGFloat)
+    -> [CGPoint]
+  {
+    guard reachable.width > 8, reachable.height > 8 else { return [] }
+    let half = width / 2
+    var candidates: [(point: CGPoint, distance: CGFloat)] = []
+    let steps = 6
+    for row in 0...steps {
+      for column in 0...steps {
+        let point = CGPoint(
+          x: reachable.minX + reachable.width * CGFloat(column) / CGFloat(steps),
+          y: reachable.minY + reachable.height * CGFloat(row) / CGFloat(steps))
+        candidates.append(
+          (point, hypot(point.x - island.center.x, point.y - island.center.y)))
+      }
+    }
+    candidates.sort { $0.distance < $1.distance }
+
+    // The ring is in map coordinates and these points are on screen, so the
+    // test runs the other way round: walk the projected ring once and reuse it.
+    func ashore(_ point: CGPoint) -> Bool {
+      var inside = false
+      var previous = island.projected[island.projected.count - 1]
+      for current in island.projected {
+        if (current.y > point.y) != (previous.y > point.y) {
+          let t = (point.y - current.y) / (previous.y - current.y)
+          if point.x < current.x + t * (previous.x - current.x) { inside.toggle() }
+        }
+        previous = current
+      }
+      return inside
+    }
+
+    // Two tiers, and the second matters more than it looks. Requiring the whole
+    // label to be ashore reads best but almost never fires: territories are
+    // long and narrow far more often than they are round, so on a real account
+    // only the two widest islands qualified and every other name went back to
+    // floating above its coast. A name centred on its island, with the ends of
+    // its capsule over water, still unmistakably belongs to it.
+    let wholeLabelFits =
+      candidates
+      .filter {
+        ashore($0.point) && ashore(CGPoint(x: $0.point.x - half, y: $0.point.y))
+          && ashore(CGPoint(x: $0.point.x + half, y: $0.point.y))
+      }
+      .prefix(3).map(\.point)
+    let centreIsAshore = candidates.filter { ashore($0.point) }.prefix(3).map(\.point)
+    return wholeLabelFits + centreIsAshore
+  }
+
+  /// Names the islands, and reports only the ones it could name.
+  ///
+  /// The map draws exactly what comes back from here, so an island that cannot
+  /// be given a caption is not drawn at all. That is the contract: a shape on
+  /// this map always says what it is. The alternative — drawing the territory
+  /// and dropping the caption when it does not fit — is what produced outlined
+  /// regions with no explanation anywhere near them.
   static func place(
-    _ regions: [MemoryAtlasNeighbourhood],
+    _ islands: [Island],
+    captions: [Int: String],
     in size: CGSize,
-    project: (CGPoint) -> CGPoint,
-    scale: CGSize,
-    /// Boxes already spoken for — the entity names the map is drawing. A region
+    /// Boxes already spoken for — the entity names the map is still drawing. A
     /// caption laid over one of those replaces a fact with a summary.
     avoiding taken: [CGRect] = [],
-    limit: Int = limit
+    limit: Int = limit,
+    /// Whether every island passed in must come back named.
+    ///
+    /// Off for the overview, where the map is choosing which places to show and
+    /// declining to draw one it cannot label is the right answer. On once the
+    /// user has gone into a place: they asked for that island specifically, and
+    /// leaving them on an empty canvas because its name collided with an entity
+    /// label answers a question nobody asked.
+    insisting: Bool = false
   ) -> [Placed] {
     var placed: [Placed] = []
     var occupied = taken
-    for region in regions.prefix(limit * 4) where placed.count < limit {
-      let center = project(region.center)
-      let radii = CGSize(
-        width: region.radius * scale.width, height: region.radius * scale.height)
+    let visible = CGRect(origin: .zero, size: size)
+
+    for island in islands where placed.count < limit {
+      guard let caption = captions[island.regionID], !caption.isEmpty else { continue }
       // Upper case at 9pt with tracking, plus room for the hover glyph.
-      let width = min(268, max(64, CGFloat(region.caption.count) * 6.6 + 30))
+      let width = min(268, max(64, CGFloat(caption.count) * 6.6 + 30))
 
-      // Above the region first, because a name over the top of a group reads as
-      // a heading for it. The rest are fallbacks: on a real account most
-      // regions overlap near the middle of the map, and taking only the first
-      // choice left two thirds of them unnamed while the left half of the
-      // canvas had no captions at all. Every candidate still touches its own
-      // territory, so a name never drifts onto someone else's ground.
-      let candidates = [
-        CGPoint(x: center.x, y: center.y - radii.height - 22),
-        CGPoint(x: center.x, y: center.y + radii.height + 22),
-        CGPoint(x: center.x - radii.width * 0.6, y: center.y - radii.height * 0.55),
-        CGPoint(x: center.x + radii.width * 0.6, y: center.y + radii.height * 0.55),
-      ]
+      // Clamped to the part of the island that is actually on screen, so an
+      // island the camera has zoomed inside of — its true centre far off the
+      // canvas — still gets named somewhere the user is looking.
+      let reachable = island.bounds.intersection(visible)
+      let outside = CGPoint(
+        x: min(max(island.center.x, reachable.minX), reachable.maxX),
+        y: min(max(island.center.y, reachable.minY), reachable.maxY))
+      let lift = min(island.bounds.height / 2 + 14, reachable.height / 2 + 14)
 
-      // A caption whose region has drifted offscreen names nothing the user can
-      // see, and two captions on top of each other name nothing at all.
-      let visible = CGRect(origin: .zero, size: size)
-      guard
-        let rect = candidates.lazy
-          .map({ CGRect(x: $0.x - width / 2, y: $0.y - 9, width: width, height: 18) })
-          .first(where: { candidate in
-            visible.contains(candidate)
-              && !occupied.contains(where: { $0.intersects(candidate.insetBy(dx: -8, dy: -7)) })
-          })
-      else { continue }
+      // On the island first, and as near its middle as there is room for.
+      //
+      // A name sitting on the ground it names needs nothing else to connect the
+      // two. Floated above the coast it becomes one more label among the entity
+      // labels — the reader has to work out which shape below it, if any, it
+      // belongs to, and on a crowded map the honest answer was often the wrong
+      // island. Outside is kept only as the fallback for territories too narrow
+      // to hold their own name.
+      let inland = interior(of: island, within: reachable, width: width)
+      let candidates =
+        inland + [
+          CGPoint(x: outside.x, y: outside.y - lift),
+          CGPoint(x: outside.x, y: outside.y + lift),
+        ]
+
+      let boxes = candidates.map {
+        CGRect(x: $0.x - width / 2, y: $0.y - 9, width: width, height: 18)
+      }
+      let fitted = boxes.first { candidate in
+        visible.contains(candidate)
+          && !occupied.contains(where: { $0.intersects(candidate.insetBy(dx: -8, dy: -7)) })
+      }
+      // Last resort when the caller insists: the middle of whatever part of the
+      // island is on screen, shoved inside the canvas. It may sit on an entity
+      // name, which is the lesser of the two wrongs — a territory with no name
+      // at all is the one the user reported.
+      let rescued =
+        insisting
+        ? CGRect(
+          x: min(max(outside.x - width / 2, 4), max(size.width - width - 4, 4)),
+          y: min(max(outside.y - 9, 4), max(size.height - 22, 4)),
+          width: width, height: 18)
+        : nil
+      guard let rect = fitted ?? rescued else { continue }
 
       occupied.append(rect)
       placed.append(
         Placed(
-          id: region.id, caption: region.caption, rect: rect, center: center, radii: radii,
-          coastline: region.coastline))
+          regionID: island.regionID, index: island.index, caption: caption, rect: rect,
+          ring: island.ring))
     }
     return placed
   }
@@ -674,6 +848,11 @@ enum MemoryAtlasZoomPolicy {
   /// start being the reason the page looks empty.
   static let smallAtlasCeiling = 60
   static let minimumZoom: CGFloat = 0.75
+  /// Where reading the map as a whole ends and reading one part of it begins.
+  /// Named because four places were deciding it independently with the same
+  /// literal, and one of them now also decides whether the user is still
+  /// inside a neighbourhood.
+  static let neighborhoodZoom: CGFloat = 1.35
   static let compactMaximumZoom: CGFloat = 1.35
   static let focusModeZoom: CGFloat = 3.2
   static let inspectModeZoom: CGFloat = 7.5
@@ -799,7 +978,7 @@ enum MemoryAtlasRenderPlanner {
           nodeCount: snapshot.nodes.count
         )
     let detailLevel: MemoryAtlasDetailLevel =
-      if zoom < 1.35 {
+      if zoom < MemoryAtlasZoomPolicy.neighborhoodZoom {
         .overview
       } else if zoom < 1.9 {
         .neighborhood
@@ -1441,7 +1620,7 @@ enum MemoryAtlasLayoutEngine {
   static func neighbourhoods(
     communities: [String: Int],
     placements: [MemoryAtlasNodePlacement],
-    captionMembers: Int = 3
+    captionMembers: Int = captionNames
   ) -> [MemoryAtlasNeighbourhood] {
     guard !communities.isEmpty else { return [] }
     let placementByID = Dictionary(lastWriteWins: placements.map { ($0.id, $0) })
@@ -1529,6 +1708,16 @@ enum MemoryAtlasLayoutEngine {
   /// name. Roughly a long proper noun — "Ho Chi Minh City", "Omi Desktop App".
   static let captionNameCeiling = 26
 
+  /// The most a region's name may be and still be read at a glance.
+  ///
+  /// A place on a map is one word you recognise, not a list. Three names joined
+  /// by separators ran to the width of a paragraph, truncated mid-word into
+  /// things like "ORACLE ACCESS · CONSULT-ORACLE · DAVI…", and took longer to
+  /// parse than the dots underneath it — so the map read as a wall of log lines
+  /// laid over a graph. One name is a landmark: you either know it or you zoom
+  /// in, and both are faster than reading three.
+  static let captionNames = 1
+
   /// Picks the few names that describe a region.
   ///
   /// Connectedness alone is not enough, because the extractor does not only
@@ -1540,10 +1729,27 @@ enum MemoryAtlasLayoutEngine {
   ///
   /// So the caption prefers members whose labels read as names, and only falls
   /// back to truncating a sentence when a region has nothing shorter to offer.
+  /// Reading like a name means short *and* few words: "Omi Desktop App" is a
+  /// landmark and "explicit request by David" is a sentence that happens to fit.
   static func caption(
     from ranked: [MemoryAtlasNodePlacement], count: Int, ceiling: Int = captionNameCeiling
   ) -> String {
-    var chosen = ranked.filter { $0.node.label.count <= ceiling }.prefix(count).map(\.node.label)
+    func words(_ label: String) -> Int {
+      label.split(whereSeparator: \.isWhitespace).count
+    }
+    var chosen =
+      ranked
+      .filter { $0.node.label.count <= ceiling && words($0.node.label) <= 3 }
+      .prefix(count).map(\.node.label)
+    if chosen.count < count {
+      let already = Set(chosen)
+      for placement in ranked
+      where chosen.count < count && !already.contains(placement.node.label)
+        && placement.node.label.count <= ceiling
+      {
+        chosen.append(placement.node.label)
+      }
+    }
     if chosen.count < count {
       let already = Set(chosen)
       for placement in ranked where chosen.count < count {
@@ -2317,6 +2523,14 @@ private struct CanonicalMemoryAtlasSurface: View {
   /// The ids the current evidence answers, so "how many are missing" compares
   /// against what was actually asked for rather than the live selection.
   @State private var requestedEvidenceIDs: [String] = []
+  /// The neighbourhood the user went into, if any.
+  ///
+  /// Entering a place is a mode, not just a camera move. Inside one, the map
+  /// stops drawing everyone else's coastline and gives the entities their names
+  /// back — which is the trade the territory layer makes in the first place:
+  /// names are hidden under a caption while you are reading the map as a whole,
+  /// and handed back the moment you pick somewhere to look.
+  @State private var enteredRegionID: Int?
   @State private var zoom: CGFloat = 1
   @State private var settledZoom: CGFloat = 1
   @State private var pan: CGSize = .zero
@@ -2545,12 +2759,12 @@ private struct CanonicalMemoryAtlasSurface: View {
         // One placement pass per frame, shared by the tint the canvas paints
         // and the buttons laid over it, so the two cannot disagree about where
         // a region's name is.
-        let regions = placedNeighbourhoods(in: proxy.size, plan: plan)
+        let (regions, quietened) = territory(in: proxy.size, plan: plan)
 
         ZStack {
           OmiColors.backgroundPrimary
 
-          atlasCanvas(size: proxy.size, plan: plan, regions: regions)
+          atlasCanvas(size: proxy.size, plan: plan, regions: regions, quietened: quietened)
             // Camera gestures belong to the painted atlas only. Keeping them
             // off the enclosing ZStack prevents a click on zoom, playback, or
             // the selection strip from also selecting a node behind the control.
@@ -2569,7 +2783,8 @@ private struct CanonicalMemoryAtlasSurface: View {
                 placement,
                 size: proxy.size,
                 relatedNodeIDs: plan.relatedNodeIDs,
-                showLabel: plan.labelNodeIDs.contains(placement.id),
+                showLabel: plan.labelNodeIDs.contains(placement.id)
+                  && !quietened.contains(placement.id),
                 labelAbove: plan.labelAboveNodeIDs.contains(placement.id)
               )
             }
@@ -2605,6 +2820,17 @@ private struct CanonicalMemoryAtlasSurface: View {
         }
         .onAppear { viewportSize = proxy.size }
         .onChange(of: proxy.size) { _, newSize in viewportSize = newSize }
+        // Zooming back out to the whole map is leaving the place you were in,
+        // whether or not you pressed its name to do it. Without this the map
+        // keeps hiding every other coastline long after the user has stopped
+        // looking at one region, and the only way back is a control they have
+        // no reason to know about.
+        .onChange(of: zoom) { _, level in
+          guard enteredRegionID != nil, level < MemoryAtlasZoomPolicy.neighborhoodZoom else {
+            return
+          }
+          enteredRegionID = nil
+        }
         .clipped()
       }
 
@@ -2648,6 +2874,27 @@ private struct CanonicalMemoryAtlasSurface: View {
         )
         settledPan = pan
       }
+    }
+    .onReceive(
+      NotificationCenter.default.publisher(for: .desktopAutomationMemoryAtlasRegionRequested)
+    ) { notification in
+      let target = notification.userInfo?["target"] as? String ?? "page"
+      guard (target == "inline") == compact else { return }
+      if notification.userInfo?["leave"] as? Bool == true { return leaveNeighbourhood() }
+      guard let wanted = notification.userInfo?["caption"] as? String,
+        let match = snapshot.neighbourhoods.first(where: {
+          $0.caption.localizedCaseInsensitiveContains(wanted)
+        })
+      else { return }
+      // Its biggest island, which is the one a person would have pressed.
+      let biggest =
+        match.coastline
+        .enumerated()
+        .max { frame(of: $0.element)?.1 ?? 0 < frame(of: $1.element)?.1 ?? 0 }
+      enter(
+        MemoryAtlasNeighbourhoodLabels.Placed(
+          regionID: match.id, index: biggest?.offset ?? 0, caption: match.caption, rect: .zero,
+          ring: biggest?.element ?? []))
     }
     .onReceive(
       NotificationCenter.default.publisher(for: .desktopAutomationMemoryAtlasSelectRequested)
@@ -2804,46 +3051,114 @@ private struct CanonicalMemoryAtlasSurface: View {
 
   private func atlasCanvas(
     size: CGSize, plan: MemoryAtlasRenderPlan,
-    regions: [MemoryAtlasNeighbourhoodLabels.Placed]
+    regions: [MemoryAtlasNeighbourhoodLabels.Placed],
+    quietened: Set<String>
   ) -> some View {
     Canvas(opaque: false, colorMode: .linear) { context, _ in
       drawTerritories(context: &context, size: size, regions: regions)
       drawEdges(context: &context, size: size, plan: plan)
       drawNodes(context: &context, size: size, plan: plan)
-      drawCanvasLabels(context: &context, size: size, plan: plan)
+      drawCanvasLabels(context: &context, size: size, plan: plan, quietened: quietened)
     }
     .accessibilityHidden(true)
   }
 
-  /// The regions to name at the current camera, or nothing when the map is not
-  /// being read as a whole.
-  private func placedNeighbourhoods(
+  /// What the map draws as territory right now, and whose names it hides to do
+  /// it.
+  ///
+  /// One function because the two answers depend on each other. An entity
+  /// standing on a named island loses its label to that island's caption, so
+  /// the caption must not be pushed off its own ground avoiding a name that is
+  /// about to disappear — which is what left most territories unnamed, and
+  /// therefore undrawn, when the two were computed separately.
+  private func territory(
     in size: CGSize, plan: MemoryAtlasRenderPlan
-  ) -> [MemoryAtlasNeighbourhoodLabels.Placed] {
+  ) -> (islands: [MemoryAtlasNeighbourhoodLabels.Placed], quietened: Set<String>) {
     guard !compact, matchingNodeIDs == nil,
       MemoryAtlasNeighbourhoodLabels.areVisible(
         detailLevel: plan.detailLevel, hasSelection: selectedNodeID != nil)
-    else { return [] }
-    // The entity names already on the canvas, as boxes to stay out of. They
-    // hang below their mark, and their width tracks the same estimate the
-    // canvas labeller uses.
-    let entityNames = plan.visibleNodes.filter { plan.labelNodeIDs.contains($0.id) }.map {
-      placement -> CGRect in
-      let mark = point(for: placement.normalizedPosition, in: size)
-      let width = min(160, max(48, CGFloat(placement.node.label.count) * 6.4 + 16))
-      let above = plan.labelAboveNodeIDs.contains(placement.id)
-      return CGRect(x: mark.x - width / 2, y: mark.y + (above ? -30 : 8), width: width, height: 20)
-    }
+    else { return ([], []) }
 
-    return MemoryAtlasNeighbourhoodLabels.place(
+    let found = MemoryAtlasNeighbourhoodLabels.islands(
       snapshot.neighbourhoods,
       in: size,
       project: { point(for: $0, in: size) },
-      scale: CGSize(
-        width: MemoryAtlasLayoutEngine.projectionSpan(of: size) * zoom,
-        height: MemoryAtlasLayoutEngine.projectionSpan(of: size) * zoom),
-      avoiding: entityNames
-    )
+      focused: enteredRegionID)
+
+    let captions = Dictionary(lastWriteWins: snapshot.neighbourhoods.map { ($0.id, $0.caption) })
+    let budget = enteredRegionID == nil ? MemoryAtlasNeighbourhoodLabels.limit : Int.max
+
+    // The entity names on the canvas, as boxes to stay out of. They hang below
+    // their mark, and their width tracks the same estimate the canvas labeller
+    // uses.
+    func nameBoxes(hiding hidden: Set<String>) -> [CGRect] {
+      plan.visibleNodes
+        .filter { plan.labelNodeIDs.contains($0.id) && !hidden.contains($0.id) }
+        .map { placement in
+          let mark = point(for: placement.normalizedPosition, in: size)
+          let width = min(160, max(48, CGFloat(placement.node.label.count) * 6.4 + 16))
+          let above = plan.labelAboveNodeIDs.contains(placement.id)
+          return CGRect(
+            x: mark.x - width / 2, y: mark.y + (above ? -30 : 8), width: width, height: 20)
+        }
+    }
+
+    /// Entities standing on ground the map has named. Inside a place, its own
+    /// entities are the subject and they keep their names.
+    ///
+    /// Every visible entity against every island's outline is a hundred
+    /// thousand edge crossings a frame, and this runs twice. The bounding box
+    /// settles almost all of it in four comparisons: a territory covers a small
+    /// part of the map, so nearly every entity is nowhere near nearly every
+    /// island.
+    func standingOn(_ islands: [MemoryAtlasNeighbourhoodLabels.Placed]) -> Set<String> {
+      guard enteredRegionID == nil else { return [] }
+      let bounded = islands.compactMap { island -> (CGRect, [CGPoint])? in
+        guard let first = island.ring.first else { return nil }
+        var minimum = first
+        var maximum = first
+        for vertex in island.ring {
+          minimum = CGPoint(x: min(minimum.x, vertex.x), y: min(minimum.y, vertex.y))
+          maximum = CGPoint(x: max(maximum.x, vertex.x), y: max(maximum.y, vertex.y))
+        }
+        return (
+          CGRect(
+            x: minimum.x, y: minimum.y, width: maximum.x - minimum.x,
+            height: maximum.y - minimum.y), island.ring
+        )
+      }
+
+      var hidden: Set<String> = []
+      for placement in plan.visibleNodes
+      where placement.id != snapshot.anchorNodeID && placement.id != selectedNodeID {
+        let position = placement.normalizedPosition
+        if bounded.contains(where: {
+          $0.0.contains(position) && memoryAtlasCoastlineContains([$0.1], position)
+        }) {
+          hidden.insert(placement.id)
+        }
+      }
+      return hidden
+    }
+
+    // Placed twice, because the two answers define each other: which names to
+    // hide depends on which islands are drawn, and which islands can be drawn
+    // depends on which names are in the way. The first pass finds the islands
+    // by dodging every name; the second re-places them now that the names
+    // standing on them are gone.
+    //
+    // One pass either way is wrong, and both ways were tried. Dodging every
+    // name pushes captions off their own island for labels that are about to
+    // disappear. Dodging none of them puts a caption on top of an entity that
+    // then keeps its label, which is how "X (TWITTER)" ended up printed across
+    // "Ho Chi Minh City".
+    let candidates = MemoryAtlasNeighbourhoodLabels.place(
+      found, captions: captions, in: size, avoiding: nameBoxes(hiding: []), limit: budget)
+    let placed = MemoryAtlasNeighbourhoodLabels.place(
+      found, captions: captions, in: size,
+      avoiding: nameBoxes(hiding: standingOn(candidates)), limit: budget,
+      insisting: enteredRegionID != nil)
+    return (placed, standingOn(placed))
   }
 
   /// The land each neighbourhood holds, drawn under everything.
@@ -2864,13 +3179,11 @@ private struct CanonicalMemoryAtlasSurface: View {
     regions: [MemoryAtlasNeighbourhoodLabels.Placed]
   ) {
     for region in regions {
+      guard region.ring.count >= 3 else { continue }
       var shape = Path()
-      for ring in region.coastline where ring.count >= 3 {
-        shape.move(to: point(for: ring[0], in: size))
-        for vertex in ring.dropFirst() { shape.addLine(to: point(for: vertex, in: size)) }
-        shape.closeSubpath()
-      }
-      guard !shape.isEmpty else { continue }
+      shape.move(to: point(for: region.ring[0], in: size))
+      for vertex in region.ring.dropFirst() { shape.addLine(to: point(for: vertex, in: size)) }
+      shape.closeSubpath()
       // Even-odd, so an enclave inside a territory is drawn as the hole it is
       // rather than being filled over.
       context.fill(
@@ -2896,30 +3209,72 @@ private struct CanonicalMemoryAtlasSurface: View {
         enter: { enter(region) }
       )
       .position(x: region.rect.midX, y: region.rect.midY)
-      .help("Zoom into this neighbourhood")
+      .help(enteredRegionID == region.regionID ? "Leave this neighbourhood" : "Go to \(region.caption)")
       .accessibilityLabel("Neighbourhood around \(region.caption)")
-      .accessibilityHint("Zooms the map into this neighbourhood")
-      .accessibilityIdentifier("memory_atlas_neighbourhood_\(region.id)")
+      .accessibilityHint(
+        enteredRegionID == region.regionID
+          ? "Returns to the whole map" : "Goes to this neighbourhood and names its entities"
+      )
+      .accessibilityIdentifier("memory_atlas_neighbourhood_\(region.regionID)")
     }
   }
 
   /// Takes the camera into a region: close enough that its entities are named,
   /// far enough that you can still see its edges.
   private func enter(_ region: MemoryAtlasNeighbourhoodLabels.Placed) {
+    // Pressing the place you are already in is the way back out, because it is
+    // the control the user's attention is already on. Without it, leaving means
+    // guessing that the zoom-out button also drops the mode.
+    guard enteredRegionID != region.regionID else { return leaveNeighbourhood() }
     guard viewportSize.width > 0, viewportSize.height > 0,
-      let neighbourhood = snapshot.neighbourhoods.first(where: { $0.id == region.id })
+      let neighbourhood = snapshot.neighbourhoods.first(where: { $0.id == region.regionID })
     else { return }
+
+    // Framed on the island that was pressed, not on the average of the group's
+    // members. For a neighbourhood spread over two pieces of ground the average
+    // is the water between them: entering one sent the camera to open sea, with
+    // the island itself off the side of the canvas and nothing on screen to say
+    // where the user had just arrived.
+    let framed = frame(of: region.ring) ?? (neighbourhood.center, neighbourhood.radius)
     let camera = MemoryAtlasNeighbourhoodLabels.entering(
-      center: neighbourhood.center,
-      radius: neighbourhood.radius,
+      center: framed.0,
+      radius: framed.1,
       viewport: viewportSize,
       zoomRange: MemoryAtlasZoomPolicy.minimumZoom...maximumZoom)
     withAnimation(OmiMotion.gated(.easeOut(duration: 0.26))) {
+      enteredRegionID = region.regionID
       zoom = camera.zoom
       settledZoom = camera.zoom
       pan = camera.pan
       settledPan = camera.pan
     }
+  }
+
+  /// The middle of an island and how far it reaches, in normalized map
+  /// coordinates. Half the diagonal rather than half a side, so a long thin
+  /// island is framed by its length and not cropped to its width.
+  private func frame(of ring: [CGPoint]) -> (CGPoint, CGFloat)? {
+    guard let first = ring.first else { return nil }
+    var minimum = first
+    var maximum = first
+    for vertex in ring {
+      minimum = CGPoint(x: min(minimum.x, vertex.x), y: min(minimum.y, vertex.y))
+      maximum = CGPoint(x: max(maximum.x, vertex.x), y: max(maximum.y, vertex.y))
+    }
+    return (
+      CGPoint(x: (minimum.x + maximum.x) / 2, y: (minimum.y + maximum.y) / 2),
+      hypot(maximum.x - minimum.x, maximum.y - minimum.y) / 2
+    )
+  }
+
+  /// Back out to the whole map, without moving the camera.
+  ///
+  /// Deliberately not a zoom-out. The user came in to look at something and is
+  /// probably still looking at it; snapping the camera away would undo the
+  /// thing they asked for. Only the mode ends — every coastline comes back and
+  /// the captions take their entities' names again.
+  private func leaveNeighbourhood() {
+    withAnimation(OmiMotion.gated(.easeOut(duration: 0.2))) { enteredRegionID = nil }
   }
 
   private func drawEdges(
@@ -3112,7 +3467,10 @@ private struct CanonicalMemoryAtlasSurface: View {
   private func drawCanvasLabels(
     context: inout GraphicsContext,
     size: CGSize,
-    plan: MemoryAtlasRenderPlan
+    plan: MemoryAtlasRenderPlan,
+    /// Entities standing on a named territory, whose name the caption is
+    /// currently speaking for.
+    quietened: Set<String>
   ) {
     guard plan.usesCanvasLabels else { return }
 
@@ -3121,7 +3479,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     // resolving Text, which makes a 10k-node graph cost proportional to the
     // current viewport rather than the total graph size.
     let visibleBounds = CGRect(origin: .zero, size: size)
-    for placement in plan.canvasLabelNodes {
+    for placement in plan.canvasLabelNodes where !quietened.contains(placement.id) {
       let center = point(for: placement.normalizedPosition, in: size)
       guard visibleBounds.contains(center) else { continue }
 
@@ -3815,7 +4173,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     if isFullyLabelledMode { return "All labelled" }
     if isInspectMode { return "Inspect" }
     if isFocusMode { return "Focus" }
-    if zoom < 1.35 { return "Overview" }
+    if zoom < MemoryAtlasZoomPolicy.neighborhoodZoom { return "Overview" }
     if zoom < 1.9 { return "Neighborhood" }
     return "Detail"
   }

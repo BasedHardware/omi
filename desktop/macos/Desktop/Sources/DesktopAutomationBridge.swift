@@ -3221,6 +3221,28 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "memory_atlas_enter_region",
+      summary: "Go into a Brain Map neighbourhood by caption, or leave the one you are in",
+      params: ["target", "caption", "leave"]
+    ) { params in
+      let target = params["target"] == "inline" ? "inline" : "page"
+      var userInfo: [String: Any] = ["target": target]
+      if let caption = params["caption"] { userInfo["caption"] = caption }
+      if let leave = params["leave"] { userInfo["leave"] = leave == "true" }
+      await MainActor.run {
+        NotificationCenter.default.post(
+          name: .desktopAutomationMemoryAtlasRegionRequested,
+          object: nil,
+          userInfo: userInfo
+        )
+      }
+      return [
+        "posted": "true", "target": target,
+        "caption": params["caption"] ?? "", "leave": params["leave"] ?? "false",
+      ]
+    }
+
+    register(
       name: "memory_atlas_set_time",
       summary: "Scrub or play the memory atlas time axis for deterministic non-production checks",
       params: ["target", "fraction", "play", "reset_to_start", "reset"]

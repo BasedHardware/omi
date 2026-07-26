@@ -136,7 +136,7 @@ final class MemoryAtlasRenderPlanCache {
   }
 
   private func detailLevel(for zoom: CGFloat) -> Int {
-    if zoom < 1.35 { return 0 }
+    if zoom < MemoryAtlasZoomPolicy.neighborhoodZoom { return 0 }
     if zoom < 1.9 { return 1 }
     if zoom < MemoryAtlasZoomPolicy.focusModeZoom { return 2 }
     if zoom < MemoryAtlasZoomPolicy.inspectModeZoom { return 3 }
