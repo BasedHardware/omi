@@ -1,3 +1,0 @@
-{
-  "change": "Fixed chat failures so backend status codes are clearly identified as HTTP errors"
-}
