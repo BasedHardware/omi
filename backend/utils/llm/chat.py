@@ -1,6 +1,7 @@
 import json
 import re
 from datetime import datetime, timezone
+from html import escape
 from typing import Any, List, Optional, cast
 from zoneinfo import ZoneInfo
 
@@ -497,7 +498,7 @@ def get_current_datetime_block(uid: str, tz: Optional[str] = None, location: Opt
         tz = "UTC"
     current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
     current_datetime_iso = current_datetime_user.isoformat()
-    location_line = f"Current city-level location: {location}\n" if location else ""
+    location_line = f"Recent city-level location: {escape(location, quote=False)}\n" if location else ""
     return (
         "<current_datetime>\n"
         f"Current date time in {tz}: {current_datetime_str}\n"

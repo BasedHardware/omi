@@ -23,7 +23,7 @@ import os
 import threading
 from contextlib import ExitStack, nullcontext
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 # Hermetic config so importing the chat modules (which construct Typesense / OpenAI clients
 # and require the encryption key) succeeds without network. Matches conftest defaults.
@@ -97,8 +97,48 @@ async def test_mobile_city_context_uses_only_mobile_platforms():
     with patch.object(agentic, 'run_blocking', fake_run_blocking), patch(
         'utils.conversations.location.async_get_google_maps_city', fake_city
     ):
-        assert await agentic._get_mobile_city('uid1', 'ios') == 'New York, New York, United States'
-        assert await agentic._get_mobile_city('uid1', 'macos') is None
+        assert await agentic.get_mobile_city('uid1', 'ios') == 'New York, New York, United States'
+        assert await agentic.get_mobile_city('uid1', 'macos') is None
+
+
+async def test_chat_router_passes_metadata_to_every_interactive_path():
+    message = SimpleNamespace(sender='human', text='What should I do?', files_id=['file1'])
+    session = SimpleNamespace(id='session1', file_ids=['file1'])
+    metadata = '<current_datetime>now</current_datetime>'
+    seen = []
+
+    async def stream(*_args, **kwargs):
+        seen.append(kwargs['current_datetime_block'])
+        yield None
+
+    with patch.object(graph, '_current_prompt_metadata', AsyncMock(return_value=(metadata, 'UTC'))):
+        persona = SimpleNamespace(id='persona1', is_a_persona=lambda: True)
+        with patch.object(graph, 'execute_persona_chat_stream', stream):
+            assert [chunk async for chunk in graph.execute_chat_stream('uid1', [message], app=persona)] == [None]
+        with patch.object(graph, '_has_file_context', AsyncMock(return_value=True)), patch.object(
+            graph, '_execute_file_chat_stream', stream
+        ):
+            assert [chunk async for chunk in graph.execute_chat_stream('uid1', [message], chat_session=session)] == [
+                None
+            ]
+        with patch.object(graph, 'execute_agentic_chat_stream', stream):
+            assert [chunk async for chunk in graph.execute_chat_stream('uid1', [message])] == [None]
+
+    assert seen == [metadata, metadata, metadata]
+
+
+def test_prompt_metadata_is_prepended_to_the_live_user_turn():
+    assert graph._with_prompt_metadata('question', '<current_datetime>now</current_datetime>') == (
+        '<current_datetime>now</current_datetime>\n\nquestion'
+    )
+
+
+async def test_prompt_metadata_falls_back_to_utc_when_context_lookup_fails():
+    with patch.object(graph, 'run_blocking', AsyncMock(side_effect=RuntimeError('offline'))):
+        metadata, tz = await graph._current_prompt_metadata('uid1', 'ios')
+
+    assert tz == 'UTC'
+    assert 'Current date time in UTC:' in metadata
 
 
 def _file_chat_tool_for_stream_test():

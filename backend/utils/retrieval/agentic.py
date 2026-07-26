@@ -425,7 +425,7 @@ def _inject_current_datetime(anthropic_messages: list, datetime_block: str) -> l
     return anthropic_messages
 
 
-async def _get_mobile_city(uid: str, platform: Optional[str]) -> Optional[str]:
+async def get_mobile_city(uid: str, platform: Optional[str]) -> Optional[str]:
     if platform is None or platform.strip().lower() not in {'ios', 'android'}:
         return None
     try:
@@ -690,6 +690,8 @@ async def execute_agentic_chat_stream(
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
     platform: Optional[str] = None,
+    current_datetime_block: Optional[str] = None,
+    tz: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """Execute an agentic chat interaction with streaming.
 
@@ -702,8 +704,8 @@ async def execute_agentic_chat_stream(
         # These helpers perform Firestore and LangSmith I/O before the producer task exists,
         # so they share the first-event deadline instead of leaving the SSE body silent.
         async with asyncio.timeout(AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS):
-            tz = await run_blocking(db_executor, get_user_timezone, uid)
-            city = await _get_mobile_city(uid, platform)
+            tz = tz or await run_blocking(db_executor, get_user_timezone, uid)
+            city = await get_mobile_city(uid, platform) if current_datetime_block is None else None
             system_prompt = await run_blocking(
                 db_executor, _get_agentic_qa_prompt, uid, app, messages, context=context, tz=tz, platform=platform
             )
@@ -775,7 +777,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # turn (not the system prompt) so the cache_control system prefix stays byte-stable.
     anthropic_messages = _messages_to_anthropic(messages)
     anthropic_messages = _inject_current_datetime(
-        anthropic_messages, get_current_datetime_block(uid, tz=tz, location=city)
+        anthropic_messages, current_datetime_block or get_current_datetime_block(uid, tz=tz, location=city)
     )
 
     callback = AsyncStreamingCallback()
