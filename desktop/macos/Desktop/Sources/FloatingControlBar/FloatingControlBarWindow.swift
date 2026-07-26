@@ -4114,6 +4114,32 @@ class FloatingControlBarManager {
     return openNotificationConversation(notificationID: key.notificationID, in: window)
   }
 
+  /// Provenance for the most recent notch card, for a voice turn that did not come from
+  /// tapping it.
+  ///
+  /// Speaking right after a card appears is a follow-up about that card — "what did you
+  /// mean by that?" — but the voice path never armed `pendingNotificationContext` because
+  /// that is only set by an explicit tap. This reads the same owner-scoped, TTL-bounded
+  /// store without consuming it, so a later tap still behaves normally.
+  ///
+  /// Whether the utterance is actually about the card is the model's call, not ours —
+  /// deciding that in Swift would be a second classifier.
+  func recentNotchCardVoiceContext() -> String? {
+    purgeExpiredNotificationMessages()
+
+    guard let key = mostRecentNotificationKey,
+      let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
+      key.ownerID == ownerID,
+      let stored = storedNotificationMessages[key],
+      stored.ownerID == ownerID,
+      Date().timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval,
+      let provider = historyChatProvider,
+      let message = provider.messages.last(where: { $0.clientTurnId == stored.messageClientTurnId })
+    else { return nil }
+
+    return notificationContextSuffix(message: message, context: stored.context)
+  }
+
   @discardableResult
   private func openNotificationConversation(notificationID: UUID, in window: FloatingControlBarWindow) -> Bool {
     purgeExpiredNotificationMessages()
@@ -4583,6 +4609,11 @@ class FloatingControlBarManager {
 
     AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
 
+    // Speaking shortly after a notch card is usually a follow-up about it. Tapping the
+    // card arms this context; speaking never did, so the model had no idea what "that"
+    // referred to.
+    let voiceNotchCardContext = recentNotchCardVoiceContext()
+
     let clientTurnId = UUID().uuidString
     chatCancellable?.cancel()
     chatCancellable = provider.$messages
@@ -4611,6 +4642,7 @@ class FloatingControlBarManager {
         await provider.sendMessage(
           message,
           model: selectedFloatingModel,
+          systemPromptSuffix: voiceNotchCardContext,
           systemPromptStyle: .floating,
           surfaceRef: provider.mainChatSurfaceReference(),
           imageData: screenshotData,
@@ -4657,8 +4689,20 @@ class FloatingControlBarManager {
     let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedMessage.isEmpty else { return nil }
 
+    return notificationContextSuffix(
+      message: pendingNotificationContext.message,
+      context: pendingNotificationContext.context
+    )
+  }
+
+  /// Renders the card, plus whatever provenance it carried, as the model-facing block.
+  /// Shared by the tap path and the voice path so both describe a card identically.
+  private func notificationContextSuffix(
+    message: ChatMessage,
+    context: FloatingBarNotificationContext?
+  ) -> String {
     var provenanceLines: [String] = []
-    if let context = pendingNotificationContext.context {
+    if let context {
       provenanceLines.append(
         "If the user asks why they received the notification or what it was based on, start from this exact notification provenance instead of guessing:"
       )
@@ -4692,7 +4736,7 @@ class FloatingControlBarManager {
       Treat it as your immediately previous turn in the same conversation and answer as a continuation.
 
       Assistant message:
-      \(pendingNotificationContext.message.text)\(provenanceBlock)
+      \(message.text)\(provenanceBlock)
       </floating_bar_notification_context>
       """
   }
