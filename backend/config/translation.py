@@ -15,7 +15,7 @@ class TranslationProvider(str, Enum):
     @staticmethod
     def get_display_name(value: 'TranslationProvider') -> str:
         if value == TranslationProvider.google:
-            return 'Google Cloud Translation V3'
+            return 'Gemini 3.1 Flash-Lite'
         if value == TranslationProvider.nllb:
             return 'NLLB-200 (self-hosted)'
         return str(value)
@@ -28,7 +28,6 @@ class TranslationProfile:
     providers: tuple[TranslationProvider, ...]
     nllb_url: str
     nllb_timeout_seconds: float
-    google_project_id: str | None
     cache_ttl_seconds: int
     negative_cache_ttl_seconds: int
     configured_providers: tuple[TranslationProvider, ...] = ()
@@ -91,7 +90,6 @@ def resolve_translation_profile(env: Mapping[str, str] | None = None) -> Transla
         providers=providers,
         nllb_url=nllb_url,
         nllb_timeout_seconds=timeout,
-        google_project_id=values.get('GOOGLE_CLOUD_PROJECT') or None,
         cache_ttl_seconds=cache_ttl,
         negative_cache_ttl_seconds=negative_ttl,
         configured_providers=tuple(configured_providers),
