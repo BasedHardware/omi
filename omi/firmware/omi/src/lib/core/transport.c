@@ -202,6 +202,18 @@ static int validate_single_write(uint16_t len, uint16_t offset, uint8_t flags)
 
 #ifdef CONFIG_OMI_ENABLE_DEVICE_NAME_RW
 static int update_advertising_name(const char *name, size_t len);
+
+static void advertising_name_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+    const char *name = bt_get_name();
+    int err = update_advertising_name(name, strlen(name));
+    if (err) {
+        LOG_ERR("Failed to update advertising name (err %d)", err);
+    }
+}
+
+static K_WORK_DEFINE(advertising_name_work, advertising_name_work_handler);
 #endif
 
 #ifdef CONFIG_OMI_ENABLE_BLE_SLEEP_CMD
@@ -316,18 +328,12 @@ static ssize_t settings_device_name_write_handler(struct bt_conn *conn,
         return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
     }
 
-    err = update_advertising_name(new_name, len);
-    if (err) {
-        (void) bt_set_name(old_name);
-        return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
-    }
-
     err = app_settings_save_device_name(new_name, len);
     if (err) {
-        (void) update_advertising_name(old_name, strlen(old_name));
         (void) bt_set_name(old_name);
         return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
     }
+    k_work_submit(&advertising_name_work);
     LOG_INF("Device name set to: %s", new_name);
     return len;
 }
