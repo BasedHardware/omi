@@ -101,7 +101,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                       _buildConversationsCard(syncProvider),
                     ],
                     if (syncState.hasError) ...[const SizedBox(height: 16), _buildErrorCard(syncState, syncProvider)],
-                    if (WalSyncs.isRingBufferFirmware(deviceProvider.currentFirmwareVersion) &&
+                    if (DeviceStorageProtocolPolicy.isRingBufferFirmware(deviceProvider.currentFirmwareVersion) &&
                         deviceProvider.ringStatus != null) ...[
                       const SizedBox(height: 32),
                       DeviceStorageCard(status: deviceProvider.ringStatus!),

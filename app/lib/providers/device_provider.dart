@@ -21,7 +21,7 @@ import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/battery_widget_service.dart';
-import 'package:omi/services/wals/wal_syncs.dart';
+import 'package:omi/services/wals/device_storage_routing.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
@@ -498,8 +498,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     });
 
     // Wals
-    ServiceManager.instance().wal.getSyncs().sdcard.setDevice(null);
-    ServiceManager.instance().wal.getSyncs().flashPage.setDevice(null);
+    ServiceManager.instance().wal.getSyncs().setDevice(null);
 
     PlatformManager.instance.crashReporter.logInfo('Omi Device Disconnected');
 
@@ -587,10 +586,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // connect object whose firmwareRevision is often still 'Unknown'.
     final syncs = ServiceManager.instance().wal.getSyncs();
     syncs.setDevice(device, firmwareVersion: currentFirmwareVersion);
-    syncs.sdcard.setDevice(device);
-    syncs.flashPage.setDevice(device);
-    syncs.storage.setDevice(device);
-    syncs.ring.setDevice(device);
 
     // Device connection and inventory are a recovery wake, even when the
     // home page is not mounted. The coordinator serializes it with every
@@ -616,25 +611,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   /// Check firmware version to determine multi-file sync support.
-  /// Firmware >= 3.0.17 supports the new LittleFS multi-file protocol.
-  static bool _isFirmwareVersionSupported(String? version) {
-    if (version == null || version.isEmpty || version == 'Unknown') return false;
-    final parts = version.split('.').map((p) => int.tryParse(p) ?? 0).toList();
-    if (parts.length < 3) return false;
-    // Compare against 3.0.17
-    if (parts[0] > 3) return true;
-    if (parts[0] < 3) return false;
-    if (parts[1] > 0) return true;
-    if (parts[1] < 0) return false;
-    return parts[2] >= 17;
-  }
-
   Future<void> _checkAndStartAutoSync(BtDevice device) async {
     try {
       // Use firmware version as the reliable signal for multi-file support
       // Read from pairedDevice which has firmwareRevision populated by getDeviceInfo()
       final fwVersion = pairedDevice?.firmwareRevision ?? device.firmwareRevision;
-      supportsMultiFileSync = _isFirmwareVersionSupported(fwVersion);
+      supportsMultiFileSync = DeviceStorageProtocolPolicy.supportsModernStorage(fwVersion);
       SharedPreferencesUtil().deviceSupportsMultiFileSync = supportsMultiFileSync;
       notifyListeners();
 
@@ -646,7 +628,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       // fw >= 3.0.20 speaks the ring-buffer protocol; auto-detect via the 16-byte
       // ring status read instead of the multi-file file-list endpoint (which the
       // ring firmware no longer serves).
-      if (WalSyncs.isRingBufferFirmware(fwVersion)) {
+      if (DeviceStorageProtocolPolicy.isRingBufferFirmware(fwVersion)) {
         final ringStatus = await connection.getRingStatus();
         if (ringStatus != null) {
           _ringStatus = ringStatus;
@@ -676,7 +658,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Future<void> refreshRingStorageStatus() async {
     try {
       final fwVersion = pairedDevice?.firmwareRevision ?? connectedDevice?.firmwareRevision;
-      if (!WalSyncs.isRingBufferFirmware(fwVersion)) return;
+      if (!DeviceStorageProtocolPolicy.isRingBufferFirmware(fwVersion)) return;
       final deviceId = pairedDevice?.id ?? connectedDevice?.id;
       if (deviceId == null) return;
       final connection = await ServiceManager.instance().device.ensureConnection(deviceId);

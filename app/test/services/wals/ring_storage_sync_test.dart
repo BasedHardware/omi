@@ -131,7 +131,10 @@ void main() {
     final firstConnection = _FakeRingConnection(readSeq: 200, writeSeq: 205, truncateStartSeq: 202);
     final wal = virtualWal(5);
 
-    await ringSync(firstConnection, local).syncWal(wal: wal);
+    await expectLater(
+      ringSync(firstConnection, local).syncWal(wal: wal),
+      throwsA(isA<RingStorageException>()),
+    );
 
     expect(firstConnection.successfulAdvances, [202]);
     expect(local.testWals.map((wal) => wal.sourceId), ['ring_200_202']);
@@ -155,7 +158,10 @@ void main() {
     final local = localSync(persister: (_) async => false);
     final wal = virtualWal(1);
 
-    await ringSync(connection, local).syncWal(wal: wal);
+    await expectLater(
+      ringSync(connection, local).syncWal(wal: wal),
+      throwsA(isA<RingStorageException>()),
+    );
 
     expect(connection.advanceAttempts, isEmpty);
     expect(local.testWals, isEmpty);
@@ -167,7 +173,10 @@ void main() {
     final local = localSync();
     final wal = virtualWal(2);
 
-    await ringSync(connection, local).syncWal(wal: wal);
+    await expectLater(
+      ringSync(connection, local).syncWal(wal: wal),
+      throwsA(isA<RingStorageException>()),
+    );
 
     expect(connection.advanceAttempts, isEmpty);
     expect(local.testWals, isEmpty);
@@ -205,7 +214,10 @@ void main() {
     final firstConnection = _FakeRingConnection(readSeq: 600, writeSeq: 602, failAdvance: true);
     final wal = virtualWal(2);
 
-    await ringSync(firstConnection, local).syncWal(wal: wal);
+    await expectLater(
+      ringSync(firstConnection, local).syncWal(wal: wal),
+      throwsA(isA<RingStorageException>()),
+    );
 
     expect(firstConnection.advanceAttempts, [602]);
     expect(firstConnection.successfulAdvances, isEmpty);
@@ -234,7 +246,10 @@ void main() {
       ..totalFrames = 400
       ..timerStart = 1799999996;
 
-    await ringSync(firstConnection, local, nowSeconds: 1800000000).syncWal(wal: wal);
+    await expectLater(
+      ringSync(firstConnection, local, nowSeconds: 1800000000).syncWal(wal: wal),
+      throwsA(isA<RingStorageException>()),
+    );
 
     expect(local.testWals.single.sourceId, 'ring_700_702');
     expect(local.testWals.single.timerStart, 1799999996);

@@ -487,6 +487,11 @@ class OmiDeviceConnection extends DeviceConnection {
 
       sub = stream.listen((value) {
         if (completer.isCompleted) return;
+        final ackStatus = RingProtocol.parseAckStatus(value);
+        if (ackStatus != null && ackStatus != RingProtocol.statusOk) {
+          completer.completeError(RingCommandRejectedException(command: 'ring info', status: ackStatus));
+          return;
+        }
         final info = RingProtocol.parseInfoNotification(value);
         if (info == null) return;
         Logger.debug('OmiDeviceConnection: $info');
@@ -503,6 +508,9 @@ class OmiDeviceConnection extends DeviceConnection {
         Logger.debug('OmiDeviceConnection: getRingInfo timeout');
         return null;
       });
+    } on RingCommandRejectedException catch (e) {
+      Logger.debug('OmiDeviceConnection: Ring info rejected: $e');
+      rethrow;
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error getting ring info: $e');
       return null;

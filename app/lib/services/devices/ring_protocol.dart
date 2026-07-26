@@ -39,6 +39,17 @@ class RingProtocol {
   static const int cmdClear = 0x13;
   static const int cmdStop = 0x03;
 
+  static const int statusOk = 0;
+  static const int statusStorageNotReady = 9;
+  static const int statusSequenceOutOfRange = 10;
+  static const int statusStorageFailed = 11;
+
+  /// Parse a two-byte ACK notification. Returns null for every other frame.
+  static int? parseAckStatus(List<int> value) {
+    if (value.length < 2 || value[0] != notifyAck) return null;
+    return value[1];
+  }
+
   /// Parse the 16-byte status read into a RingStatus. Returns null if the
   /// payload is too short.
   static RingStatus? parseStatus(List<int> value) {
@@ -187,6 +198,74 @@ class RingProtocol {
       offset += size + 1;
     }
     return frames;
+  }
+}
+
+class RingStorageException implements Exception {
+  const RingStorageException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+class RingCommandRejectedException extends RingStorageException {
+  const RingCommandRejectedException({required this.command, required this.status})
+      : super(status == RingProtocol.statusStorageNotReady
+            ? 'Device storage is not ready'
+            : status == RingProtocol.statusStorageFailed
+                ? 'Device storage needs attention'
+                : 'Device rejected $command (status $status)');
+
+  final String command;
+  final int status;
+
+  bool get isRetryable => status == RingProtocol.statusStorageNotReady;
+}
+
+class RingInfoUnavailableException extends RingStorageException {
+  const RingInfoUnavailableException() : super('Device storage did not provide ring information');
+}
+
+/// Bounded retry for the ring snapshot handshake.
+///
+/// Firmware waits for its SD remount before replying, but a remount can finish
+/// immediately after that deadline. Retry only the explicit retryable status
+/// (or a missing response), and always stop after [maxAttempts].
+class RingInfoRetryPolicy {
+  const RingInfoRetryPolicy({
+    this.maxAttempts = 3,
+    this.backoff = const [Duration(milliseconds: 500), Duration(seconds: 1)],
+  }) : assert(maxAttempts > 0);
+
+  final int maxAttempts;
+  final List<Duration> backoff;
+
+  Future<RingInfo> run(
+    Future<RingInfo?> Function() request, {
+    Future<void> Function(Duration delay)? wait,
+  }) async {
+    final waitFor = wait ?? Future<void>.delayed;
+    RingStorageException lastError = const RingInfoUnavailableException();
+
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        final info = await request();
+        if (info != null) return info;
+        lastError = const RingInfoUnavailableException();
+      } on RingCommandRejectedException catch (error) {
+        if (!error.isRetryable) rethrow;
+        lastError = error;
+      }
+
+      if (attempt + 1 < maxAttempts) {
+        final delay = backoff.isEmpty ? Duration.zero : backoff[attempt.clamp(0, backoff.length - 1)];
+        await waitFor(delay);
+      }
+    }
+
+    throw lastError;
   }
 }
 

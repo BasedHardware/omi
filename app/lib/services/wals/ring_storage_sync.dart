@@ -40,6 +40,8 @@ typedef RingConnectionResolver = Future<DeviceConnection?> Function(String devic
 typedef RingDocumentsDirectoryProvider = Future<Directory> Function();
 
 class RingStorageSyncImpl implements RingStorageSync {
+  static const RingInfoRetryPolicy _ringInfoRetryPolicy = RingInfoRetryPolicy();
+
   static const int defaultPacketsPerRead = 1800;
   static const Duration defaultInactivityTimeout = Duration(seconds: 15);
 
@@ -100,6 +102,10 @@ class RingStorageSyncImpl implements RingStorageSync {
   @override
   void setDevice(BtDevice? device) {
     _device = device;
+    if (device == null) {
+      _wals = [];
+      listener.onWalUpdated();
+    }
   }
 
   @override
@@ -335,6 +341,9 @@ class RingStorageSyncImpl implements RingStorageSync {
           // with the no-advance-on-failure invariant in _syncRing.
           Logger.debug('RingStorageSync: Ring transfer incomplete; ring untouched, will resume next sync');
           listener.onWalUpdated();
+          if (!_isCancelled) {
+            throw const RingStorageException('Device storage transfer did not complete');
+          }
           break;
         }
         wal.status = WalStatus.synced;
@@ -343,11 +352,14 @@ class RingStorageSyncImpl implements RingStorageSync {
     } catch (e) {
       Logger.debug('RingStorageSync.syncAll: error: $e');
       DebugLogManager.logError(e, null, 'RingStorageSync failed', {'device': _device?.id});
+      rethrow;
     } finally {
       _isSyncing = false;
     }
 
-    progress?.onWalSyncedProgress(1.0, speedKBps: _currentSpeedKBps);
+    if (!_isCancelled) {
+      progress?.onWalSyncedProgress(1.0, speedKBps: _currentSpeedKBps);
+    }
     return resp;
   }
 
@@ -360,11 +372,14 @@ class RingStorageSyncImpl implements RingStorageSync {
       final complete = await _syncRing(wal, progress: progress);
       if (complete) {
         wal.status = WalStatus.synced;
+        progress?.onWalSyncedProgress(1.0, speedKBps: _currentSpeedKBps);
+      } else if (!_isCancelled) {
+        throw const RingStorageException('Device storage transfer did not complete');
       }
-      progress?.onWalSyncedProgress(1.0, speedKBps: _currentSpeedKBps);
       listener.onWalUpdated();
     } catch (e) {
       Logger.debug('RingStorageSync.syncWal: error: $e');
+      rethrow;
     } finally {
       _isSyncing = false;
     }
@@ -386,11 +401,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     _downloadStartTime = DateTime.now();
     _totalBytesDownloaded = 0;
 
-    final ringInfo = await connection.getRingInfo();
-    if (ringInfo == null) {
-      Logger.debug('RingStorageSync._syncRing: getRingInfo returned null');
-      return false;
-    }
+    final ringInfo = await _ringInfoRetryPolicy.run(connection.getRingInfo);
     if (ringInfo.unreadPackets <= 0) {
       Logger.debug('RingStorageSync._syncRing: nothing to read');
       return true;

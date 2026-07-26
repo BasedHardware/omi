@@ -1,36 +1,101 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:omi/services/wals/wal_syncs.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/services/wals/device_storage_routing.dart';
 
-// Regression: background/auto-sync discovery read firmware off the raw connect
-// object, which is frequently 'Unknown'. isRingBufferFirmware('Unknown') is
-// false, so ring-buffer devices (fw >= 3.0.20 — current firmware) were routed
-// to the multi-file enumerator and their offline recordings were never
-// enumerated, uploaded, or turned into conversations (#10033). The fix resolves
-// the enriched firmware first; only the Auto Sync page used to pass it.
+BtDevice _device(DeviceType type, {String firmware = 'Unknown'}) =>
+    BtDevice(name: type.name, id: 'device-id', type: type, rssi: -40, firmwareRevision: firmware);
+
 void main() {
-  group('resolveDiscoveryFirmware', () {
-    test('enriched value wins over a raw Unknown connect object', () {
-      expect(WalSyncs.resolveDiscoveryFirmware('3.0.20', 'Unknown'), '3.0.20');
+  group('DeviceStorageProtocolPolicy', () {
+    test('enriched firmware wins over a raw Unknown connect object', () {
+      expect(DeviceStorageProtocolPolicy.resolveFirmware('3.0.20', 'Unknown'), '3.0.20');
+      expect(
+        DeviceStorageProtocolPolicy.classify(_device(DeviceType.omi), firmwareVersion: '3.0.20'),
+        DeviceStorageProtocol.ringBuffer,
+      );
     });
 
-    test('falls back to raw when enriched is Unknown/empty/null', () {
-      expect(WalSyncs.resolveDiscoveryFirmware('Unknown', '3.0.20'), '3.0.20');
-      expect(WalSyncs.resolveDiscoveryFirmware('', '3.0.20'), '3.0.20');
-      expect(WalSyncs.resolveDiscoveryFirmware(null, '3.0.17'), '3.0.17');
+    test('routes each supported Omi firmware generation to exactly one protocol', () {
+      expect(
+        DeviceStorageProtocolPolicy.classify(_device(DeviceType.omi, firmware: '3.0.16')),
+        DeviceStorageProtocol.legacySdCard,
+      );
+      expect(
+        DeviceStorageProtocolPolicy.classify(_device(DeviceType.omi, firmware: '3.0.19')),
+        DeviceStorageProtocol.multiFile,
+      );
+      expect(
+        DeviceStorageProtocolPolicy.classify(_device(DeviceType.omi, firmware: '3.0.20')),
+        DeviceStorageProtocol.ringBuffer,
+      );
+      expect(
+        DeviceStorageProtocolPolicy.classify(_device(DeviceType.omi, firmware: '3.0.28+4')),
+        DeviceStorageProtocol.ringBuffer,
+      );
+    });
+
+    test('unknown firmware fails closed instead of probing the legacy protocol', () {
+      expect(
+        DeviceStorageProtocolPolicy.classify(_device(DeviceType.omi)),
+        DeviceStorageProtocol.none,
+      );
     });
   });
 
-  group('end-to-end routing decision', () {
-    test('a ring-buffer device with a raw Unknown object now routes to ring', () {
-      // Before the fix this classified false (raw 'Unknown') -> multi-file
-      // enumerator -> recordings never discovered.
-      final resolved = WalSyncs.resolveDiscoveryFirmware('3.0.20', 'Unknown');
-      expect(WalSyncs.isRingBufferFirmware(resolved), isTrue);
+  group('DeviceStorageRouter ownership', () {
+    late List<BtDevice?> legacyBindings;
+    late List<BtDevice?> multiFileBindings;
+    late List<BtDevice?> ringBindings;
+    late List<BtDevice?> limitlessBindings;
+    late DeviceStorageRouter router;
+
+    setUp(() {
+      legacyBindings = [];
+      multiFileBindings = [];
+      ringBindings = [];
+      limitlessBindings = [];
+      router = DeviceStorageRouter(
+        bindLegacySdCard: legacyBindings.add,
+        bindMultiFile: multiFileBindings.add,
+        bindRingBuffer: ringBindings.add,
+        bindLimitlessFlash: limitlessBindings.add,
+      );
     });
 
-    test('older multi-file firmware still routes to storage', () {
-      final resolved = WalSyncs.resolveDiscoveryFirmware('3.0.18', 'Unknown');
-      expect(WalSyncs.isRingBufferFirmware(resolved), isFalse);
+    test('ring firmware disconnects every incompatible parser', () {
+      final device = _device(DeviceType.omi, firmware: '3.0.28');
+
+      router.bind(device);
+
+      expect(router.protocol, DeviceStorageProtocol.ringBuffer);
+      expect(legacyBindings, [null]);
+      expect(multiFileBindings, [null]);
+      expect(ringBindings, [same(device)]);
+      expect(limitlessBindings, [null]);
+    });
+
+    test('switching devices clears the previous owner before binding the new owner', () {
+      final ring = _device(DeviceType.omi, firmware: '3.0.28');
+      final limitless = _device(DeviceType.limitless);
+
+      router.bind(ring);
+      router.bind(limitless);
+
+      expect(ringBindings, [same(ring), null]);
+      expect(limitlessBindings, [null, same(limitless)]);
+      expect(legacyBindings, [null, null]);
+      expect(multiFileBindings, [null, null]);
+    });
+
+    test('disconnect clears every protocol owner', () {
+      router.bind(_device(DeviceType.omi, firmware: '3.0.16'));
+      router.bind(null);
+
+      expect(router.protocol, DeviceStorageProtocol.none);
+      expect(legacyBindings.last, isNull);
+      expect(multiFileBindings.last, isNull);
+      expect(ringBindings.last, isNull);
+      expect(limitlessBindings.last, isNull);
     });
   });
 }

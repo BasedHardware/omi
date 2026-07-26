@@ -51,6 +51,10 @@ class StorageSyncImpl implements StorageSync {
   @override
   void setDevice(BtDevice? device) {
     _device = device;
+    if (device == null) {
+      _wals = [];
+      listener.onWalUpdated();
+    }
   }
 
   @override
