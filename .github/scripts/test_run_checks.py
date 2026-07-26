@@ -293,13 +293,13 @@ class RunnerBehaviorTests(unittest.TestCase):
             capture = root / "node-args.txt"
             for name, body in {
                 "uv": "#!/bin/sh\nexit 99\n",
-                "node": f'''#!/bin/sh
+                "node": f"""#!/bin/sh
 case "$1" in
   -p) echo 22 ;;
   *emulator_config.mjs) printf '45678 45679\\n' ;;
   *supervise.mjs) printf '%s\\n' "$@" > "{capture}" ;;
 esac
-''',
+""",
                 "java": "#!/bin/sh\necho '    java.version = 21.0.1' >&2\n",
             }.items():
                 path = fake_bin / name
