@@ -74,6 +74,8 @@ async def test_gemini_proxy_rejects_paywalled_desktop_user(monkeypatch):
 async def test_server_gemini_meter_downgrades_pro_after_the_soft_limit(monkeypatch):
     async def run_blocking(_, function, *args, **kwargs):
         if function is desktop_proxy.redis_db.check_rate_limit:
+            if args[1] == "desktop_gemini_daily":
+                return True, 31, 86_400
             return True, 1, 60
         return 31, 86_400
 

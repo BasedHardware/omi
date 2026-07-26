@@ -161,7 +161,7 @@ async def mint_session(request: MintRequest, uid: str = Depends(get_current_user
             return _error(
                 502, "provider_mint_transport_error", "openai mint: no client secret in response", retryable=True
             )
-        expires_at = json.dumps(data["expires_at"], separators=(",", ":")) if "expires_at" in data else None
+        expires_at = json.dumps(data["expires_at"], separators=(",", ":")) if data and "expires_at" in data else None
         await _persist_session(uid, token, "openai", _OPENAI_REALTIME_MODEL, expires_at or "")
         return JSONResponse(
             {"provider": "openai", "token": token, **({"expires_at": expires_at} if expires_at is not None else {})}

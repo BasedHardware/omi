@@ -249,13 +249,13 @@ async def _recover_background(uid: str, vm: dict[str, Any], ip: str) -> None:
 
 def _response(vm: dict[str, Any]) -> AgentVmResponse:
     return AgentVmResponse(
-        vm_name=str(vm["vmName"]),
+        vmName=str(vm["vmName"]),
         zone=str(vm.get("zone") or _ZONE),
         ip=vm.get("ip"),
         status=str(vm.get("status") or "provisioning"),
-        auth_token=str(vm.get("authToken") or ""),
-        created_at=str(vm.get("createdAt") or ""),
-        last_query_at=vm.get("lastQueryAt"),
+        authToken=str(vm.get("authToken") or ""),
+        createdAt=str(vm.get("createdAt") or ""),
+        lastQueryAt=vm.get("lastQueryAt"),
     )
 
 
@@ -269,10 +269,10 @@ async def provision_agent_vm(
     if vm:
         return ProvisionAgentResponse(
             status="exists",
-            vm_name=str(vm["vmName"]),
+            vmName=str(vm["vmName"]),
             ip=vm.get("ip"),
-            auth_token=str(vm.get("authToken") or ""),
-            agent_status=str(vm.get("status") or "provisioning"),
+            authToken=str(vm.get("authToken") or ""),
+            agentStatus=str(vm.get("status") or "provisioning"),
         )
     try:
         project = _project()
@@ -286,7 +286,7 @@ async def provision_agent_vm(
     await run_blocking(db_executor, _set_vm, uid, vm_name, "provisioning", auth_token, created_at)
     background_tasks.add_task(_provision_background, uid, project, source_image, bucket, vm_name, auth_token)
     return ProvisionAgentResponse(
-        status="provisioning", vm_name=vm_name, auth_token=auth_token, agent_status="provisioning"
+        status="provisioning", vmName=vm_name, authToken=auth_token, agentStatus="provisioning"
     )
 
 
