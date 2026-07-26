@@ -49,6 +49,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
+cd "$BSIM_OUT_PATH/bin"
 "$OMI_EXE" -s="$SIMULATION" -d=0 >"$RUN_DIR/omi.log" 2>&1 &
 PIDS+=("$!")
 "$CLIENT_EXE" -s="$SIMULATION" -d=1 >"$RUN_DIR/client.log" 2>&1 &
