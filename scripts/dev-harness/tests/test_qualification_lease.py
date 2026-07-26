@@ -81,6 +81,33 @@ def test_stale_owned_stack_is_reclaimed_without_touching_foreign_listener(
                 proc.wait(timeout=10)
 
 
+def test_dead_lease_with_missing_sentinel_is_quarantined_before_a_fresh_lease_acquires(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = tmp_path / "qualification"
+    monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
+    stale_id = "qualification-missing-sentinel"
+    qualification.acquire(repo_root=REPO_ROOT, lease_id=stale_id, owner_pid=os.getpid(), port_offset=1000)
+    stale_pointer = json.loads((root / "qualification-lease.json").read_text(encoding="utf-8"))
+    stale_state = root / "state" / stale_id
+    (stale_state / safety.HARNESS_SENTINEL_FILENAME).unlink()
+    stale_pointer["owner_pid"] = 999999
+    (root / "qualification-lease.json").write_text(json.dumps(stale_pointer), encoding="utf-8")
+
+    replacement = qualification.acquire(
+        repo_root=REPO_ROOT, lease_id="qualification-replacement", owner_pid=os.getpid(), port_offset=1001
+    )
+
+    quarantined = list((root / qualification.QUARANTINE_DIRNAME).glob("*.json"))
+    assert len(quarantined) == 1
+    assert json.loads(quarantined[0].read_text(encoding="utf-8")) == stale_pointer
+    assert stale_state.exists()
+    assert not (stale_state / safety.HARNESS_SENTINEL_FILENAME).exists()
+    assert json.loads((root / "qualification-lease.json").read_text(encoding="utf-8"))["lease_id"] == "qualification-replacement"
+
+    qualification.release(repo_root=REPO_ROOT, lease_id="qualification-replacement", token=str(replacement["token"]))
+
+
 def test_retention_prunes_only_completed_sentinel_proven_qualification_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     root = tmp_path / "qualification"
     monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))

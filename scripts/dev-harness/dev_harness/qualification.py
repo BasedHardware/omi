@@ -23,6 +23,7 @@ LEASE_OWNER = "omi-desktop-qualification"
 DEFAULT_RETAINED_RUNS = 3
 DEFAULT_RETENTION_MAX_AGE_SECONDS = 14 * 24 * 60 * 60
 COMPLETION_FILENAME = "qualification-completed.json"
+QUARANTINE_DIRNAME = "quarantined-lease-pointers"
 STOP_PHASES: tuple[tuple[signal.Signals, float], ...] = (
     (signal.SIGINT, 8),
     (signal.SIGTERM, 5),
@@ -84,6 +85,26 @@ def _write_lease(path: Path, payload: dict[str, object]) -> None:
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     temporary.replace(path)
+
+
+def _quarantine_stale_lease_pointer(path: Path, root: Path, lease: dict[str, object]) -> Path:
+    """Retire only a dead lease pointer when its state cannot prove safe cleanup.
+
+    The active pointer is moved under the root lock to preserve its exact diagnostic
+    contents. The associated state and logs remain untouched: without a valid
+    ownership sentinel, neither deletion nor process signalling is authorized.
+    """
+
+    lease_id = safety.validate_instance_name(str(lease["lease_id"]))
+    token_digest = hashlib.sha256(str(lease["token"]).encode("utf-8")).hexdigest()
+    quarantine = root / QUARANTINE_DIRNAME
+    quarantine.mkdir(mode=0o700, parents=True, exist_ok=True)
+    destination = quarantine / f"{lease_id}-{int(time.time_ns())}-{token_digest}.json"
+    if destination.exists():
+        raise QualificationLeaseError(f"Refusing to overwrite quarantined qualification lease evidence: {destination}")
+    path.replace(destination)
+    destination.chmod(0o400)
+    return destination
 
 
 def _lease_provenance(lease: dict[str, object], root: Path) -> tuple[str, Path, Path, int, str]:
@@ -364,13 +385,17 @@ def acquire(
                 raise QualificationLeaseError(
                     f"Qualification lease {old_id!r} is held by live PID {old_owner}; refusing concurrent stack use"
                 )
-            records, process_manifest, port_manifest = _validated_owned_records(old_state, old_repo, old_id, old_token)
-            _stop_owned_records(records, process_manifest, port_manifest, old_id)
-            _safe_remove_state(old_state, old_repo, old_id)
-            old_logs = root / "logs" / old_id
-            if old_logs.is_dir():
-                shutil.rmtree(old_logs)
-            path.unlink(missing_ok=True)
+            try:
+                records, process_manifest, port_manifest = _validated_owned_records(old_state, old_repo, old_id, old_token)
+            except safety.SafetyError:
+                _quarantine_stale_lease_pointer(path, root, existing)
+            else:
+                _stop_owned_records(records, process_manifest, port_manifest, old_id)
+                _safe_remove_state(old_state, old_repo, old_id)
+                old_logs = root / "logs" / old_id
+                if old_logs.is_dir():
+                    shutil.rmtree(old_logs)
+                path.unlink(missing_ok=True)
 
         state_root = _real(root / "state" / lease_id)
         if state_root.exists():
