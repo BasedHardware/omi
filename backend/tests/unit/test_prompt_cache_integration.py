@@ -991,6 +991,19 @@ def test_current_datetime_block_carries_live_time():
     assert "2024-01-19" in block, "Datetime block should contain the live date"
 
 
+def test_current_datetime_block_includes_city_without_coordinates():
+    chat_mod = _get_chat_module()
+    _set_user(chat_mod, "Alice", "America/New_York")
+
+    block = chat_mod.get_current_datetime_block(
+        "uid_alice", tz="America/New_York", location="New York, New York, United States"
+    )
+
+    assert "Current city-level location: New York, New York, United States" in block
+    assert "latitude" not in block.lower()
+    assert "longitude" not in block.lower()
+
+
 def test_datetime_injected_into_user_turn_not_system():
     """
     _inject_current_datetime must attach the datetime block to the latest user turn so the

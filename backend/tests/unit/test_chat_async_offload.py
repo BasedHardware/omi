@@ -49,7 +49,9 @@ async def _collect_agentic_chunks(producer, callback_data=None):
         stack.enter_context(patch.object(agentic, 'get_user_timezone', lambda _uid: 'UTC'))
         stack.enter_context(patch.object(agentic, '_get_agentic_qa_prompt', lambda *_args, **_kwargs: 'SYSTEM'))
         stack.enter_context(patch.object(agentic, 'load_app_tools', lambda _uid: []))
-        stack.enter_context(patch.object(agentic, 'get_current_datetime_block', lambda _uid, tz=None: ''))
+        stack.enter_context(
+            patch.object(agentic, 'get_current_datetime_block', lambda _uid, tz=None, location=None: '')
+        )
         stack.enter_context(patch.object(agentic, '_convert_tools', lambda _core, _app: ([], {})))
         stack.enter_context(patch.object(agentic, '_messages_to_anthropic', lambda _messages: []))
         stack.enter_context(patch.object(agentic, '_inject_current_datetime', lambda messages, _block: messages))
@@ -82,6 +84,21 @@ async def test_has_file_context_offloads_llm_call_off_loop():
     assert result is True
     assert 'thread' in ran_on, "retrieve_is_file_question was not called"
     assert ran_on['thread'] is not loop_thread, "retrieve_is_file_question must run off the event-loop thread"
+
+
+async def test_mobile_city_context_uses_only_mobile_platforms():
+    async def fake_run_blocking(_executor, _function, _uid):
+        return {'latitude': 40.7128, 'longitude': -74.006}
+
+    async def fake_city(latitude, longitude):
+        assert (latitude, longitude) == (40.7128, -74.006)
+        return 'New York, New York, United States'
+
+    with patch.object(agentic, 'run_blocking', fake_run_blocking), patch(
+        'utils.conversations.location.async_get_google_maps_city', fake_city
+    ):
+        assert await agentic._get_mobile_city('uid1', 'ios') == 'New York, New York, United States'
+        assert await agentic._get_mobile_city('uid1', 'macos') is None
 
 
 def _file_chat_tool_for_stream_test():
@@ -226,7 +243,7 @@ async def test_agentic_setup_reads_run_off_loop():
     with patch.object(agentic, 'get_user_timezone', rec('tz', 'UTC')), patch.object(
         agentic, '_get_agentic_qa_prompt', rec('prompt', 'SYSTEM')
     ), patch.object(agentic, 'load_app_tools', rec('app_tools', [])), patch.object(
-        agentic, 'get_current_datetime_block', lambda uid, tz=None: ''
+        agentic, 'get_current_datetime_block', lambda uid, tz=None, location=None: ''
     ), patch.object(
         agentic, '_convert_tools', lambda core, app: ([], {})
     ), patch.object(

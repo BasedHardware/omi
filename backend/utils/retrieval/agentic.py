@@ -425,6 +425,24 @@ def _inject_current_datetime(anthropic_messages: list, datetime_block: str) -> l
     return anthropic_messages
 
 
+async def _get_mobile_city(uid: str, platform: Optional[str]) -> Optional[str]:
+    if platform is None or platform.strip().lower() not in {'ios', 'android'}:
+        return None
+    try:
+        from database.redis_db import get_cached_user_geolocation
+        from utils.conversations.location import async_get_google_maps_city
+
+        geolocation = await run_blocking(db_executor, get_cached_user_geolocation, uid)
+        if not geolocation:
+            return None
+        return await async_get_google_maps_city(float(geolocation['latitude']), float(geolocation['longitude']))
+    except (KeyError, TypeError, ValueError):
+        return None
+    except Exception as error:
+        logger.warning('Mobile city context unavailable error_type=%s', type(error).__name__)
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Core Anthropic agent streaming loop
 # ---------------------------------------------------------------------------
@@ -685,6 +703,7 @@ async def execute_agentic_chat_stream(
         # so they share the first-event deadline instead of leaving the SSE body silent.
         async with asyncio.timeout(AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS):
             tz = await run_blocking(db_executor, get_user_timezone, uid)
+            city = await _get_mobile_city(uid, platform)
             system_prompt = await run_blocking(
                 db_executor, _get_agentic_qa_prompt, uid, app, messages, context=context, tz=tz, platform=platform
             )
@@ -755,7 +774,9 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # Convert messages to Anthropic format. The current datetime is injected into the user
     # turn (not the system prompt) so the cache_control system prefix stays byte-stable.
     anthropic_messages = _messages_to_anthropic(messages)
-    anthropic_messages = _inject_current_datetime(anthropic_messages, get_current_datetime_block(uid, tz=tz))
+    anthropic_messages = _inject_current_datetime(
+        anthropic_messages, get_current_datetime_block(uid, tz=tz, location=city)
+    )
 
     callback = AsyncStreamingCallback()
 
