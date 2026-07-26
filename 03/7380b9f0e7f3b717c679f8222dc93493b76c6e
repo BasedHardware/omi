@@ -1,0 +1,23 @@
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-floatingcontrolbar.json
+  s_7918275f8e3531::t_dbe173a62b6fed 4-5,12-13
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-rewind.json
+  s_7918275f8e3531::t_d7c287164685fd 4,9
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-root.json
+  s_7918275f8e3531::t_763a8bf0c93f27 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "037380b9f0e7f3b717c679f8222dc93493b76c6e",
+  "prompts": {},
+  "sessions": {
+    "s_7918275f8e3531": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "739fdbb2-b061-4a85-8520-85d2527f5698",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
