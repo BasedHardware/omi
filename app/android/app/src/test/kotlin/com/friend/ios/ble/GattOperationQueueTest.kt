@@ -29,7 +29,8 @@ class GattOperationQueueTest {
         kind: GattOperationKind,
         target: String = "",
         address: String = "aa:bb:cc:dd:ee:ff",
-    ) = GattOperationKey(address, kind, target)
+        sessionId: Long = 0L,
+    ) = GattOperationKey(address, kind, target, sessionId)
 
     @Test
     fun writeWithResponseWinsWhenCharacteristicAdvertisesBothModes() {
@@ -225,6 +226,51 @@ class GattOperationQueueTest {
             failures,
         )
         assertTrue(queue.complete(other))
+    }
+
+    @Test
+    fun retiredSessionCleanupCannotCancelOrReleaseReplacementSessionOperation() {
+        val scheduler = FakeScheduler()
+        val failures = mutableListOf<String>()
+        val starts = mutableListOf<String>()
+        val oldRead =
+            key(
+                GattOperationKind.READ_CHARACTERISTIC,
+                target = "battery:7",
+                sessionId = 41,
+            )
+        val replacementRead =
+            key(
+                GattOperationKind.READ_CHARACTERISTIC,
+                target = "battery:7",
+                sessionId = 42,
+            )
+        val queue =
+            GattOperationQueue(
+                dispatch = { it() },
+                schedule = scheduler::schedule,
+                timeoutMillis = 30_000,
+            )
+
+        queue.enqueue(
+            oldRead,
+            start = { starts.add("old"); true },
+            onFailure = { failures.add("old:$it") },
+        )
+        queue.enqueue(
+            replacementRead,
+            start = { starts.add("replacement"); true },
+            onFailure = { failures.add("replacement:$it") },
+        )
+
+        queue.cancelSession(oldRead.address, oldRead.sessionId)
+
+        assertEquals(listOf("old", "replacement"), starts)
+        assertEquals(listOf("old:${GattOperationFailure.CANCELLED}"), failures)
+        assertFalse(queue.complete(oldRead))
+        assertEquals(1, queue.pendingCount())
+        assertTrue(queue.complete(replacementRead))
+        assertEquals(0, queue.pendingCount())
     }
 
     @Test

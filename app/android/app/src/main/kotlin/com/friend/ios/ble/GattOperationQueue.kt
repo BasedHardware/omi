@@ -13,6 +13,7 @@ internal data class GattOperationKey(
     val address: String,
     val kind: GattOperationKind,
     val target: String = "",
+    val sessionId: Long = 0L,
 ) {
     fun normalized(): GattOperationKey = copy(
         address = address.uppercase(),
@@ -126,10 +127,24 @@ internal class GattOperationQueue(
 
     fun cancelAddress(address: String) {
         val normalizedAddress = address.uppercase()
+        cancelMatching { it.key.address == normalizedAddress }
+    }
+
+    fun cancelSession(
+        address: String,
+        sessionId: Long,
+    ) {
+        val normalizedAddress = address.uppercase()
+        cancelMatching {
+            it.key.address == normalizedAddress && it.key.sessionId == sessionId
+        }
+    }
+
+    private fun cancelMatching(matches: (Entry) -> Boolean) {
         val cancelled = mutableListOf<Entry>()
 
         synchronized(this) {
-            current?.takeIf { it.key.address == normalizedAddress }?.let {
+            current?.takeIf(matches)?.let {
                 current = null
                 cancelled.add(it)
             }
@@ -137,7 +152,7 @@ internal class GattOperationQueue(
             val iterator = queued.iterator()
             while (iterator.hasNext()) {
                 val entry = iterator.next()
-                if (entry.key.address == normalizedAddress) {
+                if (matches(entry)) {
                     iterator.remove()
                     cancelled.add(entry)
                 }

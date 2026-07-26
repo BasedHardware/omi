@@ -167,6 +167,9 @@ class OmiBleForegroundService : Service() {
     private var isBluetoothEnabled = true
     private val syncLock = Any()
     private val bleManager get() = OmiBleManager.instance
+    private val readySessionGuard by lazy {
+        GattReadySessionGuard(bleManager::activeGattSessionId)
+    }
     private val backgroundAudioStreamer by lazy { OmiBackgroundAudioStreamer(applicationContext) }
     private val batchAudioWriter by lazy { OmiBatchAudioWriter(applicationContext) }
     private val limitlessBatchWriter by lazy { LimitlessBatchAudioWriter(applicationContext) }
@@ -204,7 +207,11 @@ class OmiBleForegroundService : Service() {
             handleDisconnection(addr, gattHash, status)
         }
 
-        override fun onGattServicesDiscovered(address: String, services: List<BleService>) {
+        override fun onGattServicesDiscovered(
+            address: String,
+            services: List<BleService>,
+            sessionId: Long,
+        ) {
             val addr = address.uppercase()
             val managed = managedDevices[addr] ?: return
 
@@ -219,10 +226,10 @@ class OmiBleForegroundService : Service() {
                     val bonded = result.getOrDefault(false)
                     Log.i(TAG, "Bond result for $addr: $bonded")
                     if (bonded) managed.requiresBond = false
-                    requestMtuThenNotifyReady(addr, services)
+                    requestMtuThenNotifyReady(addr, services, sessionId)
                 }
             } else {
-                requestMtuThenNotifyReady(addr, services)
+                requestMtuThenNotifyReady(addr, services, sessionId)
             }
         }
 
@@ -230,14 +237,27 @@ class OmiBleForegroundService : Service() {
 
     // ── Post-discovery pipeline ──
 
-    private fun requestMtuThenNotifyReady(address: String, services: List<BleService>) {
+    private fun requestMtuThenNotifyReady(
+        address: String,
+        services: List<BleService>,
+        expectedSessionId: Long,
+    ) {
         val addr = address.uppercase()
-        if (!bleManager.connectedGatts.containsKey(addr)) return
 
         handler.postDelayed({
-            bleManager.requestMtu(addr, MTU_SIZE) { mtu, status ->
-                Log.i(TAG, "MTU done for $addr (mtu=$mtu, status=$status)")
-                fireDeviceReady(addr, services)
+            val started = readySessionGuard.runIfCurrent(addr, expectedSessionId) {
+                bleManager.requestMtu(addr, MTU_SIZE, expectedSessionId) { mtu, status ->
+                    val published = readySessionGuard.runIfCurrent(addr, expectedSessionId) {
+                        Log.i(TAG, "MTU done for $addr (mtu=$mtu, status=$status, session=$expectedSessionId)")
+                        fireDeviceReady(addr, services)
+                    }
+                    if (!published) {
+                        Log.i(TAG, "Ignoring MTU completion from retired GATT session $expectedSessionId for $addr")
+                    }
+                }
+            }
+            if (!started) {
+                Log.i(TAG, "Skipping delayed MTU from retired GATT session $expectedSessionId for $addr")
             }
         }, MTU_REQUEST_DELAY_MS)
     }

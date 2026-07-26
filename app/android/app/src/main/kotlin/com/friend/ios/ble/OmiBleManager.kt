@@ -21,8 +21,10 @@ import android.os.Looper
 import android.os.ParcelUuid
 import android.util.Log
 import androidx.core.content.ContextCompat
+import java.util.IdentityHashMap
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Pure GATT wrapper — scanning, characteristic ops, and command queue.
@@ -83,7 +85,7 @@ class OmiBleManager private constructor(private val application: Application) {
     interface BleConnectionListener {
         fun onGattConnected(address: String, gatt: BluetoothGatt)
         fun onGattDisconnected(address: String, gattHash: Int, status: Int)
-        fun onGattServicesDiscovered(address: String, services: List<BleService>)
+        fun onGattServicesDiscovered(address: String, services: List<BleService>, sessionId: Long)
     }
 
     @Volatile
@@ -104,14 +106,22 @@ class OmiBleManager private constructor(private val application: Application) {
     val mainHandler = Handler(Looper.getMainLooper())
 
     val connectedGatts = ConcurrentHashMap<String, BluetoothGatt>()
-    private val readCompletions = ConcurrentHashMap<String, (Result<ByteArray>) -> Unit>()
-    private val writeCompletions = ConcurrentHashMap<String, (Result<Unit>) -> Unit>()
-    private val mtuCompletions = ConcurrentHashMap<String, (Int, Int) -> Unit>()
+    private val readCompletions = GattCompletionRegistry<ByteArray>()
+    private val writeCompletions = GattCompletionRegistry<Unit>()
+    private data class MtuCompletionKey(
+        val address: String,
+        val sessionId: Long,
+    )
+
+    private val mtuCompletions = ConcurrentHashMap<MtuCompletionKey, (Int, Int) -> Unit>()
+    private val nextGattSessionId = AtomicLong(1L)
+    private val gattSessionIds = IdentityHashMap<BluetoothGatt, Long>()
 
     private val servicesDiscoveredFor = ConcurrentHashMap.newKeySet<String>()
 
     private data class NotificationStateKey(
         val address: String,
+        val sessionId: Long,
         val gattIdentity: Int,
         val serviceUuid: String,
         val characteristicUuid: String,
@@ -289,7 +299,20 @@ class OmiBleManager private constructor(private val application: Application) {
         val callback = createGattCallback()
         val gatt = device.connectGatt(application, autoConnect, callback, BluetoothDevice.TRANSPORT_LE)
         if (gatt != null) {
-            connectedGatts[addr] = gatt
+            synchronized(gattSessionIds) {
+                gattSessionIds[gatt] = nextGattSessionId.getAndIncrement()
+            }
+            connectedGatts.put(addr, gatt)?.let { retiredGatt ->
+                retireGattSession(addr, retiredGatt, "replaced by a new GATT session")
+                try {
+                    retiredGatt.disconnect()
+                } catch (_: Exception) {
+                }
+                try {
+                    retiredGatt.close()
+                } catch (_: Exception) {
+                }
+            }
         } else {
             Log.e(TAG, "connectGatt returned null for $addr")
         }
@@ -303,7 +326,9 @@ class OmiBleManager private constructor(private val application: Application) {
     fun closeGatt(address: String) {
         val addr = address.uppercase()
         val gatt = connectedGatts.remove(addr)
-        cleanupPeripheral(addr)
+        if (gatt != null) {
+            cleanupPeripheral(addr, gatt, "GATT session closed")
+        }
         gatt?.close()
     }
 
@@ -365,21 +390,24 @@ class OmiBleManager private constructor(private val application: Application) {
             return
         }
 
-        val key = "$addr:$serviceUuid:$characteristicUuid".lowercase()
-        val operationKey = characteristicOperationKey(
-            addr,
-            GattOperationKind.READ_CHARACTERISTIC,
-            serviceUuid,
-            characteristicUuid,
-        )
+        val operationKey =
+            characteristicOperationKey(gatt, GattOperationKind.READ_CHARACTERISTIC, characteristic)
+        val completionKey = characteristicCompletionKey(gatt, characteristic)
+        if (operationKey == null || completionKey == null) {
+            completion(Result.failure(Exception("GATT session is no longer active")))
+            return
+        }
+        val finish = onceGattCompletion(completion)
         enqueueGattOperation(
             key = operationKey,
             start = {
-                readCompletions[key] = completion
+                readCompletions
+                    .register(completionKey, gatt, characteristic, finish)
+                    ?.invoke(Result.failure(Exception("GATT read completion was superseded")))
                 gatt.readCharacteristic(characteristic)
             },
             onFailure = { reason ->
-                (readCompletions.remove(key) ?: completion).invoke(
+                (readCompletions.takeMatching(completionKey, gatt, characteristic) ?: finish).invoke(
                     Result.failure(Exception("GATT read failed before callback: $reason")),
                 )
             }
@@ -407,29 +435,35 @@ class OmiBleManager private constructor(private val application: Application) {
             return
         }
 
-        val key = "$addr:$serviceUuid:$characteristicUuid".lowercase()
         val operationKey = characteristicOperationKey(
-            addr,
+            gatt,
             if (writeType == BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) {
                 GattOperationKind.WRITE_CHARACTERISTIC
             } else {
                 GattOperationKind.WRITE_WITHOUT_RESPONSE
             },
-            serviceUuid,
-            characteristicUuid,
+            characteristic,
         )
+        val completionKey = characteristicCompletionKey(gatt, characteristic)
+        if (operationKey == null || completionKey == null) {
+            completion(Result.failure(Exception("GATT session is no longer active")))
+            return
+        }
+        val finish = onceGattCompletion(completion)
         enqueueGattOperation(
             key = operationKey,
             start = {
                 if (writeType == BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) {
-                    writeCompletions[key] = completion
+                    writeCompletions
+                        .register(completionKey, gatt, characteristic, finish)
+                        ?.invoke(Result.failure(Exception("GATT write completion was superseded")))
                 }
 
                 @Suppress("deprecation")
                 val success = if (Build.VERSION.SDK_INT >= 33) {
                     val result = gatt.writeCharacteristic(characteristic, data, writeType)
                     if (result != BluetoothStatusCodes.SUCCESS) {
-                        Log.e(TAG, "writeCharacteristic returned $result for $key")
+                        Log.e(TAG, "writeCharacteristic returned $result for $completionKey")
                     }
                     result == BluetoothStatusCodes.SUCCESS
                 } else {
@@ -440,14 +474,19 @@ class OmiBleManager private constructor(private val application: Application) {
 
                 if (success && writeType == BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE) {
                     gattOperations.complete(operationKey) {
-                        completion(Result.success(Unit))
+                        finish(Result.success(Unit))
                     }
                 }
                 success
             },
             onFailure = { reason ->
-                writeCompletions.remove(key)
-                completion(Result.failure(Exception("GATT write failed before callback: $reason")))
+                val retained =
+                    if (writeType == BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) {
+                        writeCompletions.takeMatching(completionKey, gatt, characteristic)
+                    } else {
+                        null
+                    }
+                (retained ?: finish).invoke(Result.failure(Exception("GATT write failed before callback: $reason")))
             },
         )
     }
@@ -504,7 +543,11 @@ class OmiBleManager private constructor(private val application: Application) {
             override fun run() {
                 val gatt = connectedGatts[addr]
                 if (gatt != null && rssiDiagnosticsPolicy.shouldPoll(addr, isConnected = true)) {
-                    val operationKey = GattOperationKey(addr, GattOperationKind.READ_RSSI)
+                    val operationKey = gattOperationKey(gatt, GattOperationKind.READ_RSSI)
+                    if (operationKey == null) {
+                        mainHandler.postDelayed(this, rssiDiagnosticsInterval)
+                        return
+                    }
                     if (!gattOperations.contains(operationKey)) {
                         enqueueGattOperation(
                             key = operationKey,
@@ -562,28 +605,72 @@ class OmiBleManager private constructor(private val application: Application) {
         )
     }
 
-    private fun characteristicOperationKey(
-        address: String,
+    private fun gattSessionId(gatt: BluetoothGatt): Long? =
+        synchronized(gattSessionIds) {
+            gattSessionIds[gatt]
+        }
+
+    internal fun activeGattSessionId(address: String): Long? {
+        val gatt = connectedGatts[address.uppercase()] ?: return null
+        return gattSessionId(gatt)
+    }
+
+    private fun gattOperationKey(
+        gatt: BluetoothGatt,
         kind: GattOperationKind,
-        serviceUuid: String,
-        characteristicUuid: String,
-    ) = GattOperationKey(
-        address = address,
-        kind = kind,
-        target = "${serviceUuid.lowercase()}:${characteristicUuid.lowercase()}",
-    )
+    ): GattOperationKey? {
+        val sessionId = gattSessionId(gatt) ?: return null
+        return GattOperationKey(
+            address = gatt.device.address,
+            kind = kind,
+            sessionId = sessionId,
+        )
+    }
+
+    private fun characteristicOperationKey(
+        gatt: BluetoothGatt,
+        kind: GattOperationKind,
+        characteristic: BluetoothGattCharacteristic,
+    ): GattOperationKey? {
+        val sessionId = gattSessionId(gatt) ?: return null
+        return GattOperationKey(
+            address = gatt.device.address,
+            kind = kind,
+            target =
+                "${characteristic.service.uuid}:${characteristic.uuid}:${characteristic.instanceId}".lowercase(),
+            sessionId = sessionId,
+        )
+    }
+
+    private fun characteristicCompletionKey(
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+    ): GattCompletionKey? {
+        val sessionId = gattSessionId(gatt) ?: return null
+        return GattCompletionKey(
+            address = gatt.device.address,
+            sessionId = sessionId,
+            serviceUuid = characteristic.service.uuid.toString(),
+            characteristicUuid = characteristic.uuid.toString(),
+            characteristicInstanceId = characteristic.instanceId,
+        )
+    }
 
     private fun notificationStateKey(
         gatt: BluetoothGatt,
         characteristic: BluetoothGattCharacteristic,
         descriptor: BluetoothGattDescriptor?,
-    ) = NotificationStateKey(
-        address = gatt.device.address.uppercase(),
-        gattIdentity = System.identityHashCode(gatt),
-        serviceUuid = characteristic.service.uuid.toString().lowercase(),
-        characteristicUuid = characteristic.uuid.toString().lowercase(),
-        descriptorUuid = descriptor?.uuid?.toString()?.lowercase().orEmpty(),
-    )
+    ): NotificationStateKey? {
+        val sessionId = gattSessionId(gatt) ?: return null
+        return NotificationStateKey(
+            address = gatt.device.address.uppercase(),
+            sessionId = sessionId,
+            gattIdentity = System.identityHashCode(gatt),
+            serviceUuid = characteristic.service.uuid.toString().lowercase(),
+            characteristicUuid = characteristic.uuid.toString().lowercase(),
+            descriptorUuid = descriptor?.uuid?.toString()?.lowercase().orEmpty(),
+        )
+    }
 
     private fun notificationOperationKey(key: NotificationStateKey, enabled: Boolean) =
         GattOperationKey(
@@ -591,6 +678,7 @@ class OmiBleManager private constructor(private val application: Application) {
             kind = GattOperationKind.WRITE_DESCRIPTOR,
             target =
                 "${key.gattIdentity}:${key.serviceUuid}:${key.characteristicUuid}:${key.descriptorUuid}:${if (enabled) "enable" else "disable"}",
+            sessionId = key.sessionId,
         )
 
     private fun enqueueNotificationChange(
@@ -600,7 +688,7 @@ class OmiBleManager private constructor(private val application: Application) {
         descriptor: BluetoothGattDescriptor?,
         enabled: Boolean,
     ) {
-        val stateKey = notificationStateKey(gatt, characteristic, descriptor)
+        val stateKey = notificationStateKey(gatt, characteristic, descriptor) ?: return
         val state = notificationTransitions.computeIfAbsent(stateKey) { NotificationTransitionState() }
         val transition = state.request(enabled) ?: return
         startNotificationTransition(address, gatt, characteristic, descriptor, stateKey, transition)
@@ -726,7 +814,7 @@ class OmiBleManager private constructor(private val application: Application) {
     fun discoverServices(address: String) {
         val addr = address.uppercase()
         val gatt = connectedGatts[addr] ?: return
-        val operationKey = GattOperationKey(addr, GattOperationKind.DISCOVER_SERVICES)
+        val operationKey = gattOperationKey(gatt, GattOperationKind.DISCOVER_SERVICES) ?: return
         enqueueGattOperation(
             key = operationKey,
             start = { gatt.discoverServices() },
@@ -747,22 +835,35 @@ class OmiBleManager private constructor(private val application: Application) {
      * Immediate rejection falls back to the default ATT MTU; a missing callback
      * is treated as an unresponsive GATT and recovered by reconnecting.
      */
-    fun requestMtu(address: String, mtu: Int, completion: (mtu: Int, status: Int) -> Unit) {
+    fun requestMtu(
+        address: String,
+        mtu: Int,
+        expectedSessionId: Long,
+        completion: (mtu: Int, status: Int) -> Unit,
+    ) {
         val addr = address.uppercase()
         val gatt = connectedGatts[addr]
         if (gatt == null) {
             completion(23, BluetoothGatt.GATT_FAILURE)
             return
         }
-        val operationKey = GattOperationKey(addr, GattOperationKind.REQUEST_MTU)
+        val operationKey = gattOperationKey(gatt, GattOperationKind.REQUEST_MTU)
+        if (operationKey == null || operationKey.sessionId != expectedSessionId) {
+            completion(23, BluetoothGatt.GATT_FAILURE)
+            return
+        }
+        val completionKey = MtuCompletionKey(addr, expectedSessionId)
         enqueueGattOperation(
             key = operationKey,
             start = {
-                mtuCompletions[addr] = completion
+                if (!isActiveGatt(gatt) || gattSessionId(gatt) != expectedSessionId) {
+                    return@enqueueGattOperation false
+                }
+                mtuCompletions[completionKey] = completion
                 gatt.requestMtu(mtu)
             },
             onFailure = { reason ->
-                mtuCompletions.remove(addr)
+                mtuCompletions.remove(completionKey)
                 if (reason == GattOperationFailure.REJECTED || reason == GattOperationFailure.EXCEPTION) {
                     completion(23, BluetoothGatt.GATT_FAILURE)
                 }
@@ -770,8 +871,19 @@ class OmiBleManager private constructor(private val application: Application) {
         )
     }
 
-    fun cleanupPeripheral(address: String) {
+    private fun cleanupPeripheral(
+        address: String,
+        gatt: BluetoothGatt,
+        reason: String,
+    ) {
         val addr = address.uppercase()
+        if (gattSessionId(gatt) == null) return
+        if (connectedGatts[addr]?.let { it !== gatt } == true) {
+            // This session lost a race with a replacement after its callback
+            // passed isActiveGatt(). Retire only its session-owned work.
+            retireGattSession(addr, gatt, reason)
+            return
+        }
         servicesDiscoveredFor.remove(addr)
         pauseRssiDiagnostics(addr)
         bondingAddress = null
@@ -780,30 +892,57 @@ class OmiBleManager private constructor(private val application: Application) {
         bondCompletionCallback?.invoke(false)
         bondCompletionCallback = null
 
-        gattOperations.cancelAddress(addr)
+        retireGattSession(addr, gatt, reason)
+    }
+
+    private fun retireGattSession(
+        address: String,
+        gatt: BluetoothGatt,
+        reason: String,
+    ) {
+        val addr = address.uppercase()
+        val sessionId = gattSessionId(gatt) ?: return
+        gattOperations.cancelSession(addr, sessionId)
+        readCompletions.failSession(sessionId) {
+            Exception("GATT read failed because the session was retired: $reason")
+        }
+        writeCompletions.failSession(sessionId) {
+            Exception("GATT write failed because the session was retired: $reason")
+        }
+        mtuCompletions.remove(MtuCompletionKey(addr, sessionId))
         notificationTransitions.keys
-            .filter { it.address == addr }
+            .filter { it.address == addr && it.sessionId == sessionId }
             .forEach { notificationTransitions.remove(it) }
-        mtuCompletions.remove(addr)
+        synchronized(gattSessionIds) {
+            gattSessionIds.remove(gatt)
+        }
     }
 
     private fun recoverRejectedGatt(key: GattOperationKey, reason: GattOperationFailure) {
         // Rejection of discovery/CCCD setup leaves a connected-but-unusable
         // session. Reconnect instead of advertising a false ready state.
         Log.e(TAG, "Recovering unusable GATT after ${key.kind} $reason for ${key.address}")
-        recoverGatt(key.address, BluetoothGatt.GATT_FAILURE)
+        recoverGatt(key.address, key.sessionId, BluetoothGatt.GATT_FAILURE)
     }
 
     private fun recoverTimedOutGatt(key: GattOperationKey) {
         Log.e(TAG, "GATT operation timed out: ${key.kind} for ${key.address}")
-        recoverGatt(key.address, GATT_OPERATION_TIMEOUT_STATUS)
+        recoverGatt(key.address, key.sessionId, GATT_OPERATION_TIMEOUT_STATUS)
     }
 
-    private fun recoverGatt(address: String, status: Int) {
+    private fun recoverGatt(
+        address: String,
+        expectedSessionId: Long,
+        status: Int,
+    ) {
         val addr = address.uppercase()
-        val gatt = connectedGatts.remove(addr) ?: return
+        val gatt = connectedGatts[addr] ?: return
+        if (gattSessionId(gatt) != expectedSessionId || !connectedGatts.remove(addr, gatt)) {
+            Log.w(TAG, "Ignoring recovery from retired GATT session $expectedSessionId for $addr")
+            return
+        }
         val gattHash = gatt.hashCode()
-        cleanupPeripheral(addr)
+        cleanupPeripheral(addr, gatt, "GATT recovery status $status")
         try {
             gatt.disconnect()
         } catch (_: Exception) {
@@ -816,7 +955,7 @@ class OmiBleManager private constructor(private val application: Application) {
     }
 
     private fun isActiveGatt(gatt: BluetoothGatt): Boolean =
-        connectedGatts[gatt.device.address.uppercase()] === gatt
+        connectedGatts[gatt.device.address.uppercase()] === gatt && gattSessionId(gatt) != null
 
     // ── Battery history ──
 
@@ -896,7 +1035,7 @@ class OmiBleManager private constructor(private val application: Application) {
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Log.i(TAG, "Disconnected from $address (status=$status, gattHash=${gatt.hashCode()})")
                     connectedGatts.remove(address, gatt)
-                    cleanupPeripheral(address)
+                    cleanupPeripheral(address, gatt, "GATT disconnected with status $status")
                     try {
                         gatt.close()
                     } catch (_: Exception) {
@@ -916,9 +1055,10 @@ class OmiBleManager private constructor(private val application: Application) {
             } else {
                 Log.i(TAG, "MTU changed to $mtu for $address")
             }
-            val operationKey = GattOperationKey(address, GattOperationKind.REQUEST_MTU)
+            val operationKey = gattOperationKey(gatt, GattOperationKind.REQUEST_MTU) ?: return
+            val completionKey = MtuCompletionKey(address, operationKey.sessionId)
             if (!gattOperations.complete(operationKey) {
-                    mtuCompletions.remove(address)?.invoke(mtu, status)
+                    mtuCompletions.remove(completionKey)?.invoke(mtu, status)
                 }
             ) {
                 Log.w(TAG, "Ignoring MTU callback with no matching request for $address")
@@ -928,7 +1068,7 @@ class OmiBleManager private constructor(private val application: Application) {
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             val address = gatt.device.address.uppercase()
             if (!isActiveGatt(gatt)) return
-            val operationKey = GattOperationKey(address, GattOperationKind.DISCOVER_SERVICES)
+            val operationKey = gattOperationKey(gatt, GattOperationKind.DISCOVER_SERVICES) ?: return
 
             // CoreBluetooth stacks can emit duplicate callbacks, but an
             // explicit rediscovery for an already-connected GATT is valid
@@ -978,7 +1118,7 @@ class OmiBleManager private constructor(private val application: Application) {
                 return
             }
 
-            connectionListener?.onGattServicesDiscovered(address, bleServices)
+            connectionListener?.onGattServicesDiscovered(address, bleServices, operationKey.sessionId)
         }
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
@@ -1006,20 +1146,13 @@ class OmiBleManager private constructor(private val application: Application) {
         }
 
         override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
-            val address = gatt.device.address.uppercase()
             if (!isActiveGatt(gatt)) return
-            val serviceUuid = characteristic.service.uuid.toString().lowercase()
-            val charUuid = characteristic.uuid.toString().lowercase()
-            val key = "$address:$serviceUuid:$charUuid".lowercase()
-            val operationKey = characteristicOperationKey(
-                address,
-                GattOperationKind.READ_CHARACTERISTIC,
-                serviceUuid,
-                charUuid,
-            )
+            val completionKey = characteristicCompletionKey(gatt, characteristic) ?: return
+            val operationKey =
+                characteristicOperationKey(gatt, GattOperationKind.READ_CHARACTERISTIC, characteristic) ?: return
 
             if (!gattOperations.complete(operationKey) {
-                    val completion = readCompletions.remove(key)
+                    val completion = readCompletions.takeMatching(completionKey, gatt, characteristic)
                     if (status == BluetoothGatt.GATT_SUCCESS) {
                         completion?.invoke(Result.success(value))
                     } else {
@@ -1027,7 +1160,7 @@ class OmiBleManager private constructor(private val application: Application) {
                     }
                 }
             ) {
-                Log.w(TAG, "Ignoring characteristic read callback with no matching operation: $key")
+                Log.w(TAG, "Ignoring characteristic read callback with no matching operation: $completionKey")
             }
         }
 
@@ -1038,27 +1171,20 @@ class OmiBleManager private constructor(private val application: Application) {
         }
 
         override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
-            val address = gatt.device.address.uppercase()
             if (!isActiveGatt(gatt)) return
-            val serviceUuid = characteristic.service.uuid.toString().lowercase()
-            val charUuid = characteristic.uuid.toString().lowercase()
-            val key = "$address:$serviceUuid:$charUuid".lowercase()
+            val completionKey = characteristicCompletionKey(gatt, characteristic) ?: return
             if (preferredWriteType(characteristic) == BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE) {
                 // Some Android stacks emit this optional callback after the
                 // accepted WNR operation was completed synchronously. Never
                 // let it release a later operation for the same target.
-                Log.d(TAG, "Ignoring optional write-without-response callback: $key")
+                Log.d(TAG, "Ignoring optional write-without-response callback: $completionKey")
                 return
             }
-            val operationKey = characteristicOperationKey(
-                address,
-                GattOperationKind.WRITE_CHARACTERISTIC,
-                serviceUuid,
-                charUuid,
-            )
+            val operationKey =
+                characteristicOperationKey(gatt, GattOperationKind.WRITE_CHARACTERISTIC, characteristic) ?: return
 
             if (!gattOperations.complete(operationKey) {
-                    val completion = writeCompletions.remove(key)
+                    val completion = writeCompletions.takeMatching(completionKey, gatt, characteristic)
                     if (status == BluetoothGatt.GATT_SUCCESS) {
                         completion?.invoke(Result.success(Unit))
                     } else {
@@ -1066,7 +1192,7 @@ class OmiBleManager private constructor(private val application: Application) {
                     }
                 }
             ) {
-                Log.d(TAG, "Ignoring characteristic write callback with no matching operation: $key")
+                Log.d(TAG, "Ignoring characteristic write callback with no matching operation: $completionKey")
             }
         }
 
@@ -1075,7 +1201,7 @@ class OmiBleManager private constructor(private val application: Application) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.e(TAG, "Descriptor write failed (status=$status) for ${descriptor.characteristic.uuid}")
             }
-            val stateKey = notificationStateKey(gatt, descriptor.characteristic, descriptor)
+            val stateKey = notificationStateKey(gatt, descriptor.characteristic, descriptor) ?: return
             val enabled = notificationTransitions[stateKey]?.currentInFlight()
             if (enabled == null) {
                 Log.w(TAG, "Ignoring descriptor callback with no notification transition for ${descriptor.uuid}")
@@ -1119,7 +1245,7 @@ class OmiBleManager private constructor(private val application: Application) {
         override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
             if (!isActiveGatt(gatt)) return
             val address = gatt.device.address.uppercase()
-            val operationKey = GattOperationKey(address, GattOperationKind.READ_RSSI)
+            val operationKey = gattOperationKey(gatt, GattOperationKind.READ_RSSI) ?: return
             if (!gattOperations.complete(operationKey)) {
                 Log.d(TAG, "Ignoring RSSI callback with no matching operation for $address")
                 return
