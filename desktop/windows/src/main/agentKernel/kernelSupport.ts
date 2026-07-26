@@ -280,6 +280,8 @@ export function canonicalAdapterEventType(event: AdapterStreamEvent): string | u
       return 'tool.updated'
     case 'tool_result_display':
       return 'tool.completed'
+    case 'hosted_request_started':
+      return 'hosted.request_started'
     default:
       return undefined
   }

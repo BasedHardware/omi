@@ -249,14 +249,16 @@ describe('PiMonoAdapter prompt correlation', () => {
     })
     seedSessions(adapter, 'session-1')
     const runtime = new PiMonoRuntimeAdapter(adapter)
+    const sinkEvents: AdapterStreamEvent[] = []
 
     await expect(
       runtime.executeAttempt(
         makeAttemptContext({ attemptId: 'att_error' }),
-        () => {},
+        (event) => sinkEvents.push(event),
         new AbortController().signal
       )
     ).rejects.toThrow('adapter send failed')
+    expect(sinkEvents).toEqual([])
     expect(existsSync(internals(adapter).contextFilePath)).toBe(false)
   })
 
@@ -1045,6 +1047,7 @@ describe('PiMonoRuntimeAdapter sink event forwarding', () => {
     await expect(execution).resolves.toMatchObject({ terminalStatus: 'succeeded' })
 
     const types = sinkEvents.map((e) => e.type)
+    expect(types[0]).toBe('hosted_request_started')
     expect(types).toContain('tool_activity')
     expect(types).toContain('text_delta')
     expect(types).not.toContain('tool_use')
