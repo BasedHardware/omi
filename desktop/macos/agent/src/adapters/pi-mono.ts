@@ -109,6 +109,13 @@ interface PiUsage {
   };
 }
 
+function normalizeProviderHTTPErrorMessage(message: string): string {
+  const trimmed = message.trim();
+  // Provider SDK wording is not our downstream contract: retain its detail,
+  // but make a leading HTTP failure status explicit and stable for Swift.
+  return /^[45]\d{2}(?=$|[\s:])/.test(trimmed) ? `HTTP ${trimmed}` : trimmed;
+}
+
 const REQUIRED_AGENT_CONTROL_TOOLS = new Set([
   "send_agent_message",
   "spawn_background_agent",
@@ -983,7 +990,9 @@ export class PiMonoAdapter implements HarnessAdapter {
     // Log key events for diagnostic visibility
     if (event.type === 'turn_end') {
       const msg = (event as any).message;
-      const errMsg = msg?.errorMessage;
+      const errMsg = typeof msg?.errorMessage === "string"
+        ? normalizeProviderHTTPErrorMessage(msg.errorMessage)
+        : undefined;
       if (errMsg) {
         process.stderr.write(`[pi-mono] turn_end ERROR: ${errMsg}\n`);
       }
@@ -1201,7 +1210,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     const message = event.message as PiAssistantMessage | undefined;
     const errorMessage = typeof message?.errorMessage === "string" && message.errorMessage.trim()
-      ? message.errorMessage.trim()
+      ? normalizeProviderHTTPErrorMessage(message.errorMessage)
       : undefined;
     if (errorMessage) {
       this.finishPublicWebProgress(this.activePublicWebTurn, "failed");
