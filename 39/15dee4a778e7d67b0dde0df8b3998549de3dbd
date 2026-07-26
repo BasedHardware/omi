@@ -1,0 +1,23 @@
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionAssistant.swift
+  s_7918275f8e3531::t_7b2b25175c2233 231-232,234-235
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionModels.swift
+  s_7918275f8e3531::t_3b30b4195fdc07 138-158
+desktop/macos/Desktop/Tests/SuggestionAssistantTests.swift
+  s_7918275f8e3531::t_721e6166c96feb 138-172
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "3915dee4a778e7d67b0dde0df8b3998549de3dbd",
+  "prompts": {},
+  "sessions": {
+    "s_7918275f8e3531": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "739fdbb2-b061-4a85-8520-85d2527f5698",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
