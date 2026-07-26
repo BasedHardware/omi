@@ -2059,10 +2059,6 @@ private struct CanonicalMemoryAtlasSurface: View {
               }
             )
 
-          if zoom < 1.9 && !isCameraMoving {
-            clusterTitles(size: proxy.size)
-          }
-
           if !isCameraMoving {
             ForEach(plan.interactiveNodes) { placement in
               nodeButton(
@@ -2237,6 +2233,10 @@ private struct CanonicalMemoryAtlasSurface: View {
 
       Spacer()
 
+      if !compact {
+        typeKey
+      }
+
       if recentConnectionCount > 0 {
         HStack(spacing: 6) {
           Circle()
@@ -2269,6 +2269,28 @@ private struct CanonicalMemoryAtlasSurface: View {
     .frame(height: compact ? 40 : 44)
     .background(OmiColors.backgroundPrimary)
     .accessibilityHint("Press Command-F to search. Press Return to select the first visible result.")
+  }
+
+  /// Which colour means which kind of entity.
+  ///
+  /// This used to be printed on the canvas at each type's centre. That made
+  /// sense when a type owned a region; now that entities are placed by what
+  /// they relate to, a type's mean position is often somewhere none of its
+  /// entities actually are — and on a real account the "Places" caption landed
+  /// on top of the Singapore node's own name. A key states the same thing
+  /// without claiming a location for it.
+  private var typeKey: some View {
+    HStack(spacing: 11) {
+      ForEach(snapshot.activeClusters) { cluster in
+        HStack(spacing: 5) {
+          Circle().fill(cluster.color).frame(width: 5, height: 5)
+          Text(cluster.title)
+            .scaledFont(size: 10)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+      }
+    }
+    .accessibilityIdentifier("memory_atlas_type_key")
   }
 
   private func atlasCanvas(size: CGSize, plan: MemoryAtlasRenderPlan) -> some View {
@@ -2487,35 +2509,6 @@ private struct CanonicalMemoryAtlasSurface: View {
       isInspect: isInspectMode,
       isFocus: isFocusMode,
       isSmallAtlas: isSmallAtlas
-    )
-  }
-
-  @ViewBuilder
-  private func clusterTitles(size: CGSize) -> some View {
-    // A lone constellation sits on the star center, which is where the anchor
-    // already is — the title would print straight through "you". It also names
-    // nothing the user can contrast it against, so it is simply dropped.
-    ForEach(snapshot.activeClusters.count > 1 ? snapshot.activeClusters : []) { cluster in
-      let titlePosition = clusterTitlePosition(for: cluster)
-      Text(cluster.title)
-        .scaledFont(size: compact ? 10 : 12, weight: .medium)
-        .foregroundColor(cluster.color.opacity(0.82))
-        .position(
-          x: point(for: titlePosition, in: size).x,
-          y: max(18, point(for: titlePosition, in: size).y)
-        )
-    }
-  }
-
-  private func clusterTitlePosition(for cluster: MemoryAtlasCluster) -> CGPoint {
-    let center = snapshot.center(for: cluster)
-    let deltaX = center.x - MemoryAtlasCluster.starCenter.x
-    let deltaY = center.y - MemoryAtlasCluster.starCenter.y
-    let distance = max(hypot(deltaX, deltaY), 0.001)
-    let titleOffset: CGFloat = 0.13
-    return CGPoint(
-      x: min(max(center.x + deltaX / distance * titleOffset, 0.08), 0.92),
-      y: min(max(center.y + deltaY / distance * titleOffset, 0.1), 0.88)
     )
   }
 
@@ -2791,15 +2784,6 @@ private struct CanonicalMemoryAtlasSurface: View {
         .foregroundColor(OmiColors.textSecondary)
 
       Spacer()
-
-      ForEach(snapshot.activeClusters) { cluster in
-        HStack(spacing: 5) {
-          Circle().fill(cluster.color).frame(width: 6, height: 6)
-          Text(cluster.title)
-        }
-        .scaledFont(size: 10)
-        .foregroundColor(OmiColors.textTertiary)
-      }
     }
     .padding(.horizontal, 18)
     .frame(height: 36)

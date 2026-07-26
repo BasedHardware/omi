@@ -260,7 +260,17 @@ enum MemoryAtlasForceLayout {
       neighbors[key]?.sort { $0.weight == $1.weight ? $0.id < $1.id : $0.weight > $1.weight }
     }
 
-    let roles = classify(identifiers: identifiers, neighbors: neighbors, anchorID: anchorID)
+    // Small islands are kept out of the relaxation entirely.
+    //
+    // A real account carries dozens of two- and three-entity fragments with no
+    // path to anything else. Relaxed alongside the main graph they are simply
+    // repelled outward until they ring the canvas, and because they then define
+    // its extent, the structure worth looking at gets fitted into a fifth of
+    // the width. They belong with the isolates, at the edge.
+    let islands = outlyingIslands(
+      identifiers: identifiers, neighbors: neighbors, anchorID: anchorID)
+    let roles = classify(
+      identifiers: identifiers, neighbors: neighbors, anchorID: anchorID, outlying: islands.parked)
     let coreIDs = identifiers.filter { roles[$0] == .core }
 
     guard !coreIDs.isEmpty else {
@@ -268,7 +278,7 @@ enum MemoryAtlasForceLayout {
       // node goes to the halo rather than to a fake constellation. An anchor
       // that exists is always core, so reaching here means there is no anchor.
       return Result(
-        positions: haloPositions(for: identifiers, area: area), roles: roles)
+        positions: haloPositions(groups: identifiers.map { [$0] }, area: area), roles: roles)
     }
 
     var indexOf: [String: Int] = [:]
@@ -307,8 +317,12 @@ enum MemoryAtlasForceLayout {
     separateCrowdedMarks(&positions, coreIDs: coreIDs, anchorID: anchorID, area: area)
     placeLeaves(into: &positions, identifiers: identifiers, roles: roles, area: area)
 
-    let isolates = identifiers.filter { roles[$0] == .isolate }
-    for (id, point) in haloPositions(for: isolates, area: area) { positions[id] = point }
+    // Islands first and kept together, so a three-entity fragment reads as one
+    // small group on the rim rather than three unrelated specks; then the
+    // genuinely unconnected, in a stable order.
+    var groups = islands.groups.map { $0.filter { roles[$0] == .isolate } }.filter { !$0.isEmpty }
+    groups += identifiers.filter { roles[$0] == .isolate && !islands.parked.contains($0) }.map { [$0] }
+    for (id, point) in haloPositions(groups: groups, area: area) { positions[id] = point }
 
     return Result(positions: positions, roles: roles)
   }
@@ -325,22 +339,76 @@ enum MemoryAtlasForceLayout {
   static func classify(
     identifiers: [String],
     neighbors: [String: [(id: String, weight: Double)]],
-    anchorID: String?
+    anchorID: String?,
+    outlying: Set<String> = []
   ) -> [String: Role] {
     var roles: [String: Role] = [:]
     for id in identifiers {
       let adjacent = neighbors[id] ?? []
       if id == anchorID {
         roles[id] = .core
-      } else if adjacent.isEmpty {
+      } else if adjacent.isEmpty || outlying.contains(id) {
         roles[id] = .isolate
-      } else if adjacent.count == 1, (neighbors[adjacent[0].id] ?? []).count > 1 {
+      } else if adjacent.count == 1, (neighbors[adjacent[0].id] ?? []).count > 1,
+        !outlying.contains(adjacent[0].id)
+      {
         roles[id] = .leaf(parentID: adjacent[0].id)
       } else {
         roles[id] = .core
       }
     }
     return roles
+  }
+
+  /// An island small enough that relaxing it alongside the main graph costs
+  /// more than it is worth. Returns the members to park, ordered so that an
+  /// island's own entities stay adjacent when they reach the halo.
+  static func outlyingIslands(
+    identifiers: [String],
+    neighbors: [String: [(id: String, weight: Double)]],
+    anchorID: String?,
+    minimumRelaxedSize: Int = 6
+  ) -> (parked: Set<String>, groups: [[String]]) {
+    var componentOf: [String: Int] = [:]
+    var components: [[String]] = []
+
+    for id in identifiers where componentOf[id] == nil {
+      var members: [String] = []
+      var stack = [id]
+      componentOf[id] = components.count
+      while let current = stack.popLast() {
+        members.append(current)
+        for neighbor in neighbors[current] ?? [] where componentOf[neighbor.id] == nil {
+          componentOf[neighbor.id] = components.count
+          stack.append(neighbor.id)
+        }
+      }
+      components.append(members.sorted())
+    }
+
+    // The account holder's own island is the map, whatever its size. Failing
+    // an anchor, the biggest island is.
+    let mainIndex =
+      anchorID.flatMap { componentOf[$0] }
+      ?? components.indices.max { components[$0].count < components[$1].count }
+
+    var parked: Set<String> = []
+    var groups: [[String]] = []
+    let outlying = components.indices
+      .filter { $0 != mainIndex && components[$0].count < minimumRelaxedSize }
+      .sorted {
+        components[$0].count == components[$1].count
+          ? components[$0][0] < components[$1][0]
+          : components[$0].count > components[$1].count
+      }
+    for index in outlying {
+      // Single entities already read as unconnected; leave them to the plain
+      // isolate ordering rather than claiming they form an island.
+      guard components[index].count > 1 else { continue }
+      parked.formUnion(components[index])
+      groups.append(components[index])
+    }
+    return (parked, groups)
   }
 
   // MARK: - Initial positions
@@ -592,9 +660,13 @@ enum MemoryAtlasForceLayout {
         return (minimum + maximum) / 2
       }()
 
-    // Scale to the bulk, not to the bounding box. A couple of loosely attached
-    // components drift a long way out, and letting them set the scale squashes
-    // the entire readable map into the middle third of the canvas.
+    // Scale to the bulk, not to the bounding box.
+    //
+    // Even with detached islands parked, the main component keeps a handful of
+    // loosely attached stragglers that drift a long way out, and letting them
+    // set the scale squashes everything readable into the middle quarter of the
+    // canvas. Fitting the full extent instead was tried on a real 1,097-entity
+    // account and did exactly that.
     let radiiX = points.map { abs($0.x - center.x) }.sorted()
     let radiiY = points.map { abs($0.y - center.y) }.sorted()
     let cut = min(max(Int(Double(points.count) * 0.98) - 1, 0), points.count - 1)
@@ -617,9 +689,13 @@ enum MemoryAtlasForceLayout {
     var positions: [String: CGPoint] = [:]
     for (index, id) in coreIDs.enumerated() {
       let delta = points[index] - center
+      let folded = softFold(
+        SIMD2<Double>(
+          delta.x * scaleX / (Double(area.width) / 2),
+          delta.y * scaleY / (Double(area.height) / 2)))
       positions[id] = CGPoint(
-        x: area.midX + CGFloat(softFold(delta.x * scaleX, limit: Double(area.width) / 2)),
-        y: area.midY + CGFloat(softFold(delta.y * scaleY, limit: Double(area.height) / 2)))
+        x: area.midX + CGFloat(folded.x * Double(area.width) / 2),
+        y: area.midY + CGFloat(folded.y * Double(area.height) / 2))
     }
     return positions
   }
@@ -627,17 +703,26 @@ enum MemoryAtlasForceLayout {
   /// Keeps the far tail on the canvas without touching the bulk.
   ///
   /// Fitting to the 98th percentile means the last 2% would otherwise land off
-  /// the edge. A hard clamp would pile them on the frame in a straight line,
-  /// which reads as a UI bug; this is the identity below `knee` — so almost
-  /// every node is placed exactly where the simulation put it — and folds
-  /// smoothly into the remaining margin beyond it.
-  private static func softFold(_ value: Double, limit: Double) -> Double {
-    let knee = limit * 0.82
-    let magnitude = abs(value)
-    guard magnitude > knee else { return value }
-    let overshoot = magnitude - knee
-    let headroom = limit - knee
-    return (value < 0 ? -1 : 1) * (knee + headroom * tanh(overshoot / headroom))
+  /// the edge. Below `knee` this is exactly the identity, so almost every node
+  /// sits precisely where the simulation put it; beyond it, the distance from
+  /// the centre is compressed into the remaining margin.
+  ///
+  /// The compression is radial, not per-axis. Folding each axis on its own
+  /// pushed every far node onto the same boundary x — and the separation pass
+  /// then spaced that pile evenly, drawing a perfectly straight column of dots
+  /// down the edge of the canvas that looked exactly like a rendering bug.
+  /// Folding the radius preserves each node's direction, so the tail lands
+  /// spread around the rim instead of stacked on one line.
+  private static func softFold(_ offset: SIMD2<Double>) -> SIMD2<Double> {
+    // Starting the compression well inside the rim spreads the tail over a
+    // wide band instead of stacking it against the boundary, which is what
+    // made the folded nodes read as a ridge rather than as a scatter.
+    let knee = 0.72
+    let radius = simd_length(offset)
+    guard radius > knee, radius > 1e-12 else { return offset }
+    let headroom = 1 - knee
+    let folded = knee + headroom * tanh((radius - knee) / headroom)
+    return offset * (folded / radius)
   }
 
   /// Pushes apart marks that landed close enough to hide each other's name.
@@ -771,33 +856,69 @@ enum MemoryAtlasForceLayout {
   /// so scattering them through the middle would have the map assert structure
   /// that is not there. A faint outer halo says what is true: present, not
   /// connected to anything yet.
-  static func haloPositions(for identifiers: [String], area: CGRect) -> [String: CGPoint] {
-    let ordered = identifiers.sorted()
-    guard !ordered.isEmpty else { return [:] }
+  /// Each group takes one place on the rim and its members cluster there.
+  ///
+  /// Stringing every entity along the perimeter one slot at a time produced
+  /// visibly even rows and columns of dots down the edges of the canvas, which
+  /// read as a rendering artefact rather than as content. Placing a
+  /// three-entity island as one small clump says what is true — these three
+  /// know each other and nothing else — and looks deliberate.
+  static func haloPositions(groups: [[String]], area: CGRect) -> [String: CGPoint] {
+    guard !groups.isEmpty else { return [:] }
 
     var positions: [String: CGPoint] = [:]
-    let perRing = 96
-    for (offset, id) in ordered.enumerated() {
+    let perRing = 44
+    for (offset, group) in groups.enumerated() {
       let ring = offset / perRing
       let indexInRing = offset % perRing
-      let occupancy = min(ordered.count - ring * perRing, perRing)
-      let angle = 2 * Double.pi * Double(indexInRing) / Double(max(occupancy, 1))
+      let occupancy = min(groups.count - ring * perRing, perRing)
+      // Deterministic per-slot jitter, so the rim reads as scattered rather
+      // than as a dotted rule drawn around the map.
+      let wobble = (stableFraction("halo-\(group.first ?? "")") - 0.5) * 0.9
+      let angle = 2 * Double.pi * (Double(indexInRing) + 0.5 + wobble) / Double(max(occupancy, 1))
 
       // Traced on a rectangle rather than an ellipse. An ellipse wide enough
       // to clear the map's sides still cuts *inside* it near the diagonals,
       // which would drop unconnected entities into the middle of the
       // structure — exactly the claim the halo exists to avoid making.
-      let halfWidth = Double(area.width) / 2 * (1.08 + 0.06 * Double(ring))
-      let halfHeight = Double(area.height) / 2 * (1.08 + 0.06 * Double(ring))
+      // Depth, not just angle. The rim follows a rectangle, so every seat along
+      // one edge shares an identical x (or y) — a run of singletons then draws
+      // an exactly straight, evenly spaced column of dots down the side of the
+      // canvas, which reads as a rendering artefact. Varying each seat's
+      // distance turns the rim into a scattered band instead of a ruled line.
+      let depth = 0.98 + 0.16 * stableFraction("depth-\(group.first ?? "")")
+      let spread = (1.07 + 0.05 * Double(ring)) * depth
+      let halfWidth = Double(area.width) / 2 * spread
+      let halfHeight = Double(area.height) / 2 * spread
       let reach = 1 / max(abs(cos(angle)) / halfWidth, abs(sin(angle)) / halfHeight)
+      let seat = CGPoint(
+        x: area.midX + CGFloat(cos(angle) * reach),
+        y: area.midY + CGFloat(sin(angle) * reach))
 
-      positions[id] = clamp(
-        CGPoint(
-          x: area.midX + CGFloat(cos(angle) * reach),
-          y: area.midY + CGFloat(sin(angle) * reach)),
-        to: CGRect(x: 0.02, y: 0.04, width: 0.96, height: 0.92))
+      let clump = Double(min(area.width, area.height)) * 0.016
+      for (memberIndex, id) in group.sorted().enumerated() {
+        let memberAngle =
+          stableFraction(id) * 2 * .pi + Double(memberIndex) * 2.399_963_229_728_653
+        let radius = group.count == 1 ? 0 : clump * (0.6 + 0.4 * stableFraction("r-\(id)"))
+        positions[id] = clamp(
+          CGPoint(
+            x: seat.x + CGFloat(cos(memberAngle) * radius),
+            y: seat.y + CGFloat(sin(memberAngle) * radius)),
+          to: CGRect(x: 0.02, y: 0.04, width: 0.96, height: 0.92))
+      }
     }
     return positions
+  }
+
+  /// Deterministic 0..<1 from a string — the layout's only source of jitter,
+  /// and hash-seeded `hashValue` would vary per launch.
+  static func stableFraction(_ value: String) -> Double {
+    var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+    for byte in value.utf8 {
+      hash ^= UInt64(byte)
+      hash = hash &* 0x0000_0100_0000_01b3
+    }
+    return Double(hash % 10_000) / 10_000
   }
 
   private static func clamp(_ point: CGPoint, to rect: CGRect) -> CGPoint {

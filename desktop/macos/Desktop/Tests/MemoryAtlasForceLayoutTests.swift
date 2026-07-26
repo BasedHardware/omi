@@ -123,9 +123,12 @@ final class MemoryAtlasForceLayoutTests: XCTestCase {
     XCTAssertEqual(result.roles["leaf"], .leaf(parentID: "hub"))
     XCTAssertEqual(result.roles["alone"], .isolate, "No relationships means no position worth asserting")
     XCTAssertEqual(result.roles["hub"], .core)
-    // Two nodes that only know each other have nothing to hang off of.
-    XCTAssertEqual(result.roles["pairA"], .core)
-    XCTAssertEqual(result.roles["pairB"], .core)
+    // A two-entity island with no path to the rest of the map is parked at the
+    // edge with the isolates. Relaxed in the middle it would only be pushed
+    // outward anyway, and on a real account dozens of these end up defining the
+    // canvas extent and squashing the structure worth looking at.
+    XCTAssertEqual(result.roles["pairA"], .isolate)
+    XCTAssertEqual(result.roles["pairB"], .isolate)
   }
 
   func testTheAnchorIsNeverDemotedToALeaf() {
