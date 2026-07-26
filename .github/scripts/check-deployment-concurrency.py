@@ -458,7 +458,9 @@ def validate_pusher_config_preflight(name: str, text: str) -> list[str]:
         return [f"{name}: pusher deploy must verify the backend runtime ConfigMap before Helm"]
 
     chart_indexes = [
-        index for index, line in enumerate(block) if PUSHER_CHART_MARKER in line and not line.lstrip().startswith("#")
+        index
+        for index, line in enumerate(block)
+        if PUSHER_CHART_MARKER in line and "helm" in line and not line.lstrip().startswith("#")
     ]
     if not chart_indexes:
         return []
@@ -869,6 +871,13 @@ jobs:
 """
     if validate_pusher_config_preflight("fixture.yml", reference_preflight):
         raise PolicyError("valid pusher reference preflight was rejected")
+    qualification_source_diff = reference_preflight.replace(
+        "      - run: helm upgrade ./backend/charts/pusher\n",
+        "      - run: git diff --quiet qualified current -- backend/pusher backend/charts/pusher\n"
+        "      - run: helm upgrade ./backend/charts/pusher\n",
+    )
+    if validate_pusher_config_preflight("fixture.yml", qualification_source_diff):
+        raise PolicyError("a non-Helm Pusher source comparison was treated as a deploy mutation")
     missing_preflight = pusher_deploy.replace(
         "kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null\n",
         "",

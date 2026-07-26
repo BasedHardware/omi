@@ -505,6 +505,7 @@ def check_codemagic_release_publishers() -> list[str]:
 def main() -> int:
     errors: list[str] = []
     errors.extend(check_desktop_codemagic_release())
+    errors.extend(check_desktop_candidate_trigger_authority())
     errors.extend(check_codemagic_release_publishers())
     errors.extend(check_desktop_preview_publishing())
     errors.extend(check_desktop_qualification_runner())
@@ -690,6 +691,48 @@ def check_desktop_codemagic_release() -> list[str]:
     return errors
 
 
+def check_desktop_candidate_trigger_authority() -> list[str]:
+    """Keep the normal candidate lane on Codemagic's native immutable-tag trigger."""
+    errors: list[str] = []
+    codemagic = ROOT / "codemagic.yaml"
+    candidate_workflow = ROOT / ".github/workflows/desktop_auto_release.yml"
+    preview_workflow = ROOT / ".github/workflows/desktop_publish_preview.yml"
+    if not codemagic.exists() or not candidate_workflow.exists() or not preview_workflow.exists():
+        return ["desktop candidate trigger guard is missing its checked-in release surfaces"]
+
+    codemagic_text = codemagic.read_text(encoding="utf-8")
+    match = re.search(
+        r"\n  omi-desktop-swift-release:\n(?P<body>.*?)(?=\n  [A-Za-z0-9_-]+:\n|\Z)",
+        codemagic_text,
+        flags=re.DOTALL,
+    )
+    required_trigger = (
+        "    triggering:\n"
+        "      events:\n"
+        "        - tag\n"
+        "      tag_patterns:\n"
+        '        - pattern: "v*-macos"\n'
+        "          include: true"
+    )
+    if match is None or required_trigger not in match.group("body"):
+        errors.append("normal omi-desktop-swift-release candidate lane must natively trigger on v*-macos tags")
+
+    direct_build_endpoint = "https://api.codemagic.io/builds"
+    for workflow in sorted((ROOT / ".github/workflows").glob("*.yml")):
+        if direct_build_endpoint not in workflow.read_text(encoding="utf-8"):
+            continue
+        if workflow != preview_workflow:
+            errors.append(
+                f"normal desktop candidate lane must not start Codemagic with a direct builds API POST: "
+                f"{workflow.relative_to(ROOT)}"
+            )
+
+    preview_text = preview_workflow.read_text(encoding="utf-8")
+    if direct_build_endpoint not in preview_text or 'workflowId: "omi-desktop-swift-preview"' not in preview_text:
+        errors.append("the only checked-in direct Codemagic build API caller must remain the isolated preview lane")
+    return errors
+
+
 def check_desktop_preview_publishing() -> list[str]:
     """Keep the preview lane isolated from normal release authority and state."""
     errors: list[str] = []
@@ -815,7 +858,7 @@ def check_desktop_qualification_runner() -> list[str]:
         "self-hosted",
         "macos",
         "omi-desktop-qualification",
-        "ref: ${{ inputs.release_tag }}",
+        'checkout --quiet --detach "refs/tags/$RELEASE_TAG"',
         "check-desktop-auto-beta-candidate.py",
         "--automatic",
         "actions/create-github-app-token@v3",
