@@ -10,6 +10,7 @@ ExternalZephyrProject_Add(
 
 set_config_bool(hci_ipc CONFIG_BT_LL_SOFTDEVICE n)
 set_config_bool(hci_ipc CONFIG_BT_LL_SW_SPLIT y)
+set_config_bool(hci_ipc CONFIG_BT_CTLR y)
 
 native_simulator_set_child_images(${DEFAULT_IMAGE} hci_ipc)
 native_simulator_set_final_executable(${DEFAULT_IMAGE})
