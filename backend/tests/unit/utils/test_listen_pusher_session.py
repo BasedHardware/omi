@@ -13,13 +13,18 @@ from utils.listen_pusher_session import (
 
 
 class FakePusherWebSocket:
-    def __init__(self, incoming=None):
+    def __init__(self, incoming=None, send_errors=None):
         self.sent = []
         self.incoming = list(incoming or [])
+        self.send_errors = list(send_errors or [])
         self.closed_codes = []
         self.on_recv = None
 
     async def send(self, data):
+        if self.send_errors:
+            error = self.send_errors.pop(0)
+            if error:
+                raise error
         self.sent.append(bytes(data))
 
     async def recv(self):
@@ -242,6 +247,38 @@ def test_bounded_audio_and_transcript_buffers():
     session.audio_bytes_send(b"123456789", received_at=3.0)
     assert b"".join(session.audio_chunks) == b"56789"
     assert session.audio_total_size == 5
+
+
+@pytest.mark.anyio
+async def test_failed_transcript_send_retains_buffer_for_retry():
+    ws = FakePusherWebSocket(send_errors=[RuntimeError("send failed"), None])
+    session = make_session(ws=ws)
+    await session.connect()
+    session.transcript_send([{"id": "seg-1"}])
+
+    await session._transcript_flush()
+    assert list(session.segment_buffers) == [{"id": "seg-1"}]
+
+    await session._transcript_flush()
+    assert list(session.segment_buffers) == []
+    assert frame_json(ws.sent[0])["segments"] == [{"id": "seg-1"}]
+
+
+@pytest.mark.anyio
+async def test_failed_audio_send_retains_buffer_for_retry():
+    ws = FakePusherWebSocket(send_errors=[None, RuntimeError("send failed"), None])
+    session = make_session(ws=ws)
+    await session.connect()
+    session.audio_bytes_send(b"abcd", received_at=100.0)
+
+    await session._audio_bytes_flush()
+    assert b"".join(session.audio_chunks) == b"abcd"
+    assert session.audio_total_size == 4
+
+    await session._audio_bytes_flush()
+    assert list(session.audio_chunks) == []
+    assert session.audio_total_size == 0
+    assert ws.sent[-1][12:] == b"abcd"
 
 
 @pytest.mark.anyio

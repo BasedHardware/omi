@@ -175,6 +175,8 @@ class ListenPusherSession:
 
     async def _transcript_flush(self, auto_reconnect: bool = True):
         if self.pusher_connected and self.pusher_ws and len(self.segment_buffers) > 0:
+            pending_segments = self.segment_buffers
+            self.segment_buffers = deque(maxlen=self.config.max_segment_buffer_size)
             try:
                 data = bytearray()
                 data.extend(struct.pack("I", 102))
@@ -182,20 +184,23 @@ class ListenPusherSession:
                     bytes(
                         json.dumps(
                             {
-                                "segments": list(self.segment_buffers),
+                                "segments": list(pending_segments),
                                 "memory_id": self.deps.get_current_conversation_id(),
                             }
                         ),
                         "utf-8",
                     )
                 )
-                self.segment_buffers.clear()
                 await self.pusher_ws.send(cast(bytes, data))
-            except ConnectionClosed as e:
-                logger.error(f"Pusher transcripts Connection closed: {e} {self.uid} {self.session_id}")
-                self._mark_disconnected()
             except Exception as e:
-                logger.error(f"Pusher transcripts failed: {e} {self.uid} {self.session_id}")
+                self.segment_buffers = deque(
+                    (*pending_segments, *self.segment_buffers), maxlen=self.config.max_segment_buffer_size
+                )
+                if isinstance(e, ConnectionClosed):
+                    logger.error(f"Pusher transcripts Connection closed: {e} {self.uid} {self.session_id}")
+                    self._mark_disconnected()
+                else:
+                    logger.error(f"Pusher transcripts failed: {e} {self.uid} {self.session_id}")
 
     async def transcript_consume(self):
         while self.deps.is_active():
@@ -236,24 +241,31 @@ class ListenPusherSession:
                 logger.error(f"Failed to send conversation_id to pusher: {e} {self.uid} {self.session_id}")
 
         if self.pusher_connected and self.pusher_ws and self.audio_total_size > 0:
+            pending_chunks = self.audio_chunks
+            pending_total_size = self.audio_total_size
+            self.audio_chunks = deque()
+            self.audio_total_size = 0
             try:
                 effective_rate = TARGET_SAMPLE_RATE if self.config.is_multi_channel else self.config.sample_rate
-                buffer_duration_seconds = self.audio_total_size / (effective_rate * 2)
+                buffer_duration_seconds = pending_total_size / (effective_rate * 2)
                 buffer_start_time = (self.audio_buffer_last_received or self.deps.now()) - buffer_duration_seconds
-                audio_data = b''.join(self.audio_chunks)
+                audio_data = b''.join(pending_chunks)
                 data = bytearray()
                 data.extend(struct.pack("I", 101))
                 data.extend(struct.pack("d", buffer_start_time))
                 data.extend(audio_data)
-                self.audio_chunks.clear()
-                self.audio_total_size = 0
                 del audio_data
                 await self.pusher_ws.send(cast(bytes, data))
-            except ConnectionClosed as e:
-                logger.error(f"Pusher audio_bytes Connection closed: {e} {self.uid} {self.session_id}")
-                self._mark_disconnected()
             except Exception as e:
-                logger.error(f"Pusher audio_bytes failed: {e} {self.uid} {self.session_id}")
+                self.audio_chunks.extendleft(reversed(pending_chunks))
+                self.audio_total_size += pending_total_size
+                while self.audio_total_size > self.config.max_audio_buffer_size:
+                    self.audio_total_size -= len(self.audio_chunks.popleft())
+                if isinstance(e, ConnectionClosed):
+                    logger.error(f"Pusher audio_bytes Connection closed: {e} {self.uid} {self.session_id}")
+                    self._mark_disconnected()
+                else:
+                    logger.error(f"Pusher audio_bytes failed: {e} {self.uid} {self.session_id}")
 
     async def audio_bytes_consume(self):
         while self.deps.is_active():

@@ -296,6 +296,33 @@ async def test_concurrent_probes_only_one_succeeds():
     assert results.count(False) == 2
 
 
+@pytest.mark.asyncio
+async def test_cancelled_half_open_probe_reopens_breaker():
+    cb = PusherCircuitBreaker(failure_threshold=1, cooldown=0.01)
+    cb.record_failure()
+    await asyncio.sleep(0.02)
+    assert cb.state == CircuitState.HALF_OPEN
+
+    started = asyncio.Event()
+
+    async def hang(*args):
+        started.set()
+        await asyncio.Future()
+
+    with patch('utils.pusher.get_circuit_breaker', return_value=cb), patch(
+        'utils.pusher._connect_to_trigger_pusher', side_effect=hang
+    ):
+        task = asyncio.create_task(connect_to_trigger_pusher(uid="test", sample_rate=8000))
+        await started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    assert cb.state == CircuitState.OPEN
+    await asyncio.sleep(0.02)
+    assert cb.acquire_probe() is True
+
+
 # ---------------------------------------------------------------------------
 # Metrics integration
 # ---------------------------------------------------------------------------

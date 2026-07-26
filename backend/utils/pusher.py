@@ -154,6 +154,10 @@ async def connect_to_trigger_pusher(
             result = await _connect_to_trigger_pusher(uid, sample_rate)
             breaker.record_success()
             return result
+        except asyncio.CancelledError:
+            if is_probe:
+                breaker.record_failure()
+            raise
         except Exception as error:
             breaker.record_failure()
             logger.error(f'An error occurred: {error} {uid}')

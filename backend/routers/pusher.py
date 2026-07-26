@@ -116,6 +116,17 @@ class _PrivateCloudChunk(TypedDict):
     retries: int
 
 
+async def _dispatch_transcript_item(uid: str, segments: List[Dict[str, Any]], memory_id: Optional[str]) -> None:
+    try:
+        await trigger_realtime_integrations(uid, segments, memory_id)
+    except Exception as e:
+        logger.error(f"Error processing transcript integrations: {e} {uid}")
+    try:
+        await realtime_transcript_webhook(uid, segments)
+    except Exception as e:
+        logger.error(f"Error processing transcript webhook: {e} {uid}")
+
+
 async def _process_conversation_task(
     uid: str,
     conversation_id: str,
@@ -550,13 +561,7 @@ async def _websocket_util_trigger(
             transcript_queue.clear()
 
             for item in batch:
-                segments = item['segments']
-                memory_id = item['memory_id']
-                try:
-                    await trigger_realtime_integrations(uid, segments, memory_id)
-                    await realtime_transcript_webhook(uid, segments)
-                except Exception as e:
-                    logger.error(f"Error processing transcript batch: {e} {uid}")
+                await _dispatch_transcript_item(uid, item['segments'], item['memory_id'])
 
     async def process_audio_bytes_queue() -> None:
         """Event-driven consumer for audio bytes triggers (app integrations + webhooks)."""
