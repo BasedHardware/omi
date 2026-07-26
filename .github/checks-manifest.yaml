@@ -5,10 +5,15 @@
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
   - id: firmware-product-emulator
-    command: ["cargo", "test", "--manifest-path", "omi/firmware/scripts/devkit/OmiSimulator/Cargo.toml", "--all-targets"]
+    command: ["cargo", "test", "--manifest-path", "omi/firmware/scripts/devkit/OmiSimulator/Cargo.toml", "--lib", "--bin", "omi-product-cli"]
     triggers: ["omi/firmware/scripts/devkit/OmiSimulator/**"]
     lanes: ["local", "ci"]
-    reason: "the cross-platform Rust emulator must keep its host Bluetooth, firmware validation, and UI contracts buildable and tested"
+    reason: "the cross-platform Rust emulator must keep its host Bluetooth and firmware contracts tested without requiring a display server"
+  - id: firmware-product-emulator-gui
+    command: ["cargo", "check", "--manifest-path", "omi/firmware/scripts/devkit/OmiSimulator/Cargo.toml", "--bin", "omi-product-emulator"]
+    triggers: ["omi/firmware/scripts/devkit/OmiSimulator/**"]
+    lanes: ["local", "ci"]
+    reason: "the Crepuscularity GUI must compile on the CI host without linking to a display server"
   - id: firmware-nrf5340-babblesim
     command: ["bash", "omi/firmware/scripts/ci/check-bsim.sh"]
     triggers: ["omi/firmware/bsim/**", "omi/firmware/omi/src/lib/core/button.c", "omi/firmware/omi/src/lib/core/button.h", "omi/firmware/omi/src/lib/core/button_service.c", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/src/settings.c", "omi/firmware/omi/CMakeLists.txt", "omi/firmware/omi/Kconfig", "omi/firmware/scripts/ci/check-bsim.sh", "omi/firmware/scripts/ci/run-bsim.sh"]
