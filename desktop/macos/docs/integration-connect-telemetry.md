@@ -65,7 +65,7 @@ content-key denylist in `DesktopDiagnosticsManager`.
 - **attempts** = `count(Integration Connect Attempted)`
 - **initial-sync successes** = `count(Integration Connect Succeeded where surface=apps)`
 - **verified connections** = `count(Integration Connect Succeeded where surface=onboarding, stage=verify)`
-- **terminal failures** = `count(Integration Connect Failed)`
+- **terminal failures** = `count(Integration Connect Failed where error_class not in {no_content})` — exclude `no_content` (a memory-log parse that produced nothing durable is a successful no-op, not a connect failure; surfaced as Failed only to carry UI guidance)
 - **reconnect-required users** = `countDistinct(Integration Connect Failed where reconnect_required=true)`
 - **degraded (transient) failures** = `count(Integration Connect Failed where error_class in {network, unknown})`
 - **configuration failures** = `count(Integration Connect Failed where error_class=configuration)` (Calendar API key missing/invalid — previously silent)

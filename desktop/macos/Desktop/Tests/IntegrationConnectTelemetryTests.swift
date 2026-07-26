@@ -170,6 +170,51 @@ final class IntegrationConnectTelemetryTests: XCTestCase {
       ["apps", "onboarding"])
   }
 
+  func testNoContentFailureClassIsNotReconnectRequired() {
+    // A memory-log parse that produced nothing durable is NOT a connect
+    // failure: it must carry the distinct `no_content` class and never read as
+    // reconnect-required, so analysts can exclude it from the failure rate.
+    XCTAssertFalse(IntegrationConnectTelemetry.failureRequiresReconnect(.noContent))
+    let payload = IntegrationConnectTelemetry.failedPayload(
+      integrationName: "ChatGPT", connectorID: "chatgpt", surface: .apps, stage: "import",
+      errorClass: .noContent)
+    XCTAssertEqual(payload["error_class"] as? String, "no_content")
+    XCTAssertEqual(payload["reconnect_required"] as? Bool, false)
+  }
+
+  func testMemoryLogNoDurableMemoriesCarriesNoContentClass() {
+    // Drives the real production mapping: a memory-log import that parsed but
+    // found nothing durable surfaces UI guidance as a failure but threads the
+    // bounded `no_content` class (not the generic `unknown` fallback the runner
+    // would otherwise derive from the message). Combined with
+    // testRunnerEmitsFailedWithThreadedNativeFailureClass this proves the
+    // end-to-end Failed/no_content/no-reconnect telemetry for memory-logs.
+    let outcome = ConnectorImportOperations.memoryLogOutcome(.noDurableMemories, source: .chatgpt)
+    guard case .failure(_, let failureClass) = outcome else {
+      return XCTFail("expected failure for no-durable-memories, got \(outcome)")
+    }
+    XCTAssertEqual(failureClass, .noContent)
+  }
+  func testProductionConnectorIDsMapToCleanBoundedNames() {
+    // The privacy boundary for `integration_name` VALUES is call-site
+    // discipline: production connectorIDs come from a closed set and map to a
+    // closed set of display names. No id may map to a value carrying a
+    // sensitive token.
+    let productionIDs = [
+      "calendar", "email", "gmail", "apple-notes", "applenotes",
+      "local-files", "files", "x", "chatgpt", "claude",
+    ]
+    let forbidden = ["token", "cookie", "account", "secret", "password", "url", "path"]
+    for id in productionIDs {
+      let name = IntegrationConnectTelemetry.integrationName(forConnectorID: id)
+      for term in forbidden {
+        XCTAssertFalse(
+          name.lowercased().contains(term),
+          "integration name for '\(id)' carries forbidden term '\(term)': \(name)")
+      }
+    }
+  }
+
   // MARK: - Behavioral: the real ConnectorImportRunner boundary
 
   func testRunnerEmitsAttemptedThenSucceededThroughTheFacade() async {

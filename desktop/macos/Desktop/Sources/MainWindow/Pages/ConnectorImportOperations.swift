@@ -47,9 +47,13 @@ enum ConnectorImportOperations {
         message: "Imported \(memories.formatted()) memories from \(source.displayName)."
       )
     case .noDurableMemories:
+      // Not a connect failure — the parse succeeded but produced nothing
+      // durable. Surfaces UI guidance as a failure but carries a distinct
+      // bounded class so analytics can exclude it from the connect-failure rate.
       return .failure(
         message: "No durable memories found in that text. "
-          + "Make sure you pasted \(source.displayName)'s full response, then import again."
+          + "Make sure you pasted \(source.displayName)'s full response, then import again.",
+        failureClass: .noContent
       )
     case .failed:
       return .failure(message: "The import couldn't run. Try again.")

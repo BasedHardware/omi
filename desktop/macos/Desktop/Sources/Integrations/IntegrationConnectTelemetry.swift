@@ -65,6 +65,11 @@ enum IntegrationConnectTelemetry {
     case network = "network"
     case timeout = "timeout"
     case cancelled = "cancelled"
+    /// Memory-log connector parsed successfully but produced no durable output
+    /// (e.g. user pasted a partial ChatGPT/Claude response). NOT a connect
+    /// failure — a no-op result the UI still surfaces guidance for. Carries a
+    /// distinct class so analysts can exclude it from the connect-failure rate.
+    case noContent = "no_content"
     case rateLimit = "rate_limit"
     case permission = "permission"
     case authentication = "authentication"
@@ -130,7 +135,7 @@ enum IntegrationConnectTelemetry {
     case .notSignedIn, .sessionExpired, .noBrowser, .decryptFailed, .authentication:
       return true
     case .configuration, .storeNotFound, .authorizationDenied, .network, .timeout,
-      .cancelled, .rateLimit, .permission, .conflict, .invalidResponse,
+      .cancelled, .noContent, .rateLimit, .permission, .conflict, .invalidResponse,
       .resourceExhausted, .unknown:
       return false
     }
