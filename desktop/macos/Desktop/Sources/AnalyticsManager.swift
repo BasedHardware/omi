@@ -713,11 +713,16 @@ class AnalyticsManager {
     String(value.trimmingCharacters(in: .whitespacesAndNewlines).prefix(128))
   }
 
-  /// Track individual tool calls made by the Claude agent
-  func chatToolCallCompleted(toolName: String, durationMs: Int) {
+  /// Track individual tool calls made by the Claude agent.
+  ///
+  /// Fires for every terminal status, not only success — a failed tool call
+  /// previously emitted nothing, so tool reliability was unmeasurable. Filter
+  /// on `outcome == "completed"` for the pre-existing success-only meaning.
+  func chatToolCallCompleted(toolName: String, durationMs: Int, outcome: String) {
     let props: [String: Any] = [
       "tool_name": ChatTelemetryDimension.toolName(toolName),
       "duration_ms": durationMs,
+      "outcome": ChatTelemetryDimension.toolOutcome(outcome),
     ]
     PostHogManager.shared.track("chat_tool_call_completed", properties: props)
   }

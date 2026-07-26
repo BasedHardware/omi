@@ -4272,10 +4272,9 @@ class ChatProvider: ObservableObject {
           } else if toolStatus != .running,
             let startTime = toolTiming.toolStartTimes.removeValue(forKey: trackedId)
           {
-            if toolStatus == .completed {
-              let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
-              AnalyticsManager.shared.chatToolCallCompleted(toolName: name, durationMs: durationMs)
-            }
+            let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            AnalyticsManager.shared.chatToolCallCompleted(
+              toolName: name, durationMs: durationMs, outcome: status)
           }
           let transitions = await stallDetector.step(kind: detectorKind, atMs: nowMs)
           self.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
