@@ -7,15 +7,25 @@ publish = false
 
 [dependencies]
 btleplug = "0.11"
-crepuscularity-gpui = { version = "0.5.8", features = ["macos"] }
 ctrlc = "3"
 futures = "0.3"
-gpui = { version = "=0.2.2", default-features = false, features = ["font-kit", "macos-blade"] }
 omi-firmware-core = { path = "firmware-core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 zip = { version = "4", default-features = false, features = ["deflate"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+crepuscularity-gpui = { version = "0.5.8", features = ["macos"] }
+gpui = { version = "=0.2.2", default-features = false, features = ["font-kit", "macos-blade"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+crepuscularity-gpui = { version = "0.5.8", features = ["x11"] }
+gpui = { version = "=0.2.2", default-features = false, features = ["font-kit", "x11"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+crepuscularity-gpui = { version = "0.5.8", features = ["windows"] }
+gpui = { version = "=0.2.2", default-features = false, features = ["font-kit", "windows-manifest"] }
 
 [dev-dependencies]
 tempfile = "3"

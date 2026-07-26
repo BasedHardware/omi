@@ -204,26 +204,17 @@ impl EmulatorView {
     }
 
     fn select_firmware(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
-        let output = std::process::Command::new("osascript")
-            .args([
-                "-e",
-                "POSIX path of (choose file with prompt \"Select an Omi firmware ZIP\")",
-            ])
-            .output();
-        self.status = match output {
-            Ok(output) if output.status.success() => {
-                let path = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-                match FirmwareImage::validate(path) {
-                    Ok(image) => {
-                        let status = format!("Validated firmware {}", image.version);
-                        self.image = Some(image);
-                        status
-                    }
-                    Err(error) => error,
+        self.status = match select_firmware_path() {
+            Ok(Some(path)) => match FirmwareImage::validate(&path) {
+                Ok(image) => {
+                    let status = format!("Validated firmware {}", image.version);
+                    self.image = Some(image);
+                    status
                 }
-            }
-            Ok(_) => "Firmware selection cancelled".into(),
-            Err(error) => error.to_string(),
+                Err(error) => error,
+            },
+            Ok(None) => "Firmware selection cancelled".into(),
+            Err(error) => error,
         };
         cx.notify();
     }
@@ -421,6 +412,56 @@ impl Render for EmulatorView {
     }
 }
 
+fn selected_path(success: bool, stdout: Vec<u8>) -> Result<Option<String>, String> {
+    if !success {
+        return Ok(None);
+    }
+    let path = String::from_utf8(stdout)
+        .map_err(|error| error.to_string())?
+        .trim()
+        .trim_matches('"')
+        .to_owned();
+    Ok((!path.is_empty()).then_some(path))
+}
+
+#[cfg(target_os = "macos")]
+fn select_firmware_path() -> Result<Option<String>, String> {
+    std::process::Command::new("osascript")
+        .args([
+            "-e",
+            "POSIX path of (choose file with prompt \"Select an Omi firmware ZIP\")",
+        ])
+        .output()
+        .map_err(|error| error.to_string())
+        .and_then(|output| selected_path(output.status.success(), output.stdout))
+}
+
+#[cfg(target_os = "linux")]
+fn select_firmware_path() -> Result<Option<String>, String> {
+    std::process::Command::new("zenity")
+        .args([
+            "--file-selection",
+            "--title=Select an Omi firmware ZIP",
+            "--file-filter=Firmware ZIP | *.zip",
+        ])
+        .output()
+        .map_err(|error| format!("could not open zenity: {error}"))
+        .and_then(|output| selected_path(output.status.success(), output.stdout))
+}
+
+#[cfg(target_os = "windows")]
+fn select_firmware_path() -> Result<Option<String>, String> {
+    std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            "Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Firmware ZIP (*.zip)|*.zip'; if($d.ShowDialog() -eq 'OK'){$d.FileName}",
+        ])
+        .output()
+        .map_err(|error| format!("could not open Windows file picker: {error}"))
+        .and_then(|output| selected_path(output.status.success(), output.stdout))
+}
+
 fn target_label(target: &BluetoothTarget) -> String {
     let product = target.product.map(Product::name).unwrap_or("Unknown");
     let rssi = target
@@ -454,4 +495,19 @@ fn main() {
         cx.open_window(options, |_window, cx| cx.new(EmulatorView::new))
             .unwrap();
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::selected_path;
+
+    #[test]
+    fn normalizes_native_file_picker_output() {
+        assert_eq!(
+            selected_path(true, b"\"C:\\firmware\\omi.zip\"\r\n".to_vec()).unwrap(),
+            Some("C:\\firmware\\omi.zip".into())
+        );
+        assert_eq!(selected_path(true, b"\n".to_vec()).unwrap(), None);
+        assert_eq!(selected_path(false, b"ignored.zip".to_vec()).unwrap(), None);
+    }
 }

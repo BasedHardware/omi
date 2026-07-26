@@ -2,9 +2,9 @@
 
 Simulator of BasedHardware Omi device.
 
-The primary emulator is a Rust-owned Crepuscularity/GPUI macOS test bench. It discovers the Bluetooth targets known to macOS, exposes every product type supported by the app, and marks capabilities unavailable unless a matching contract exists in this repository.
+The primary emulator is a Rust-owned Crepuscularity/GPUI test bench for macOS, Linux X11, and Windows. It discovers live Bluetooth targets through the host Bluetooth stack, exposes every product type supported by the app, and marks capabilities unavailable unless a matching contract exists in this repository.
 
-The CLI can also advertise an app-connectable Omi peripheral through macOS CoreBluetooth. Rust owns the profile, state, and packets; the Swift process only publishes the configured GATT database and notifications.
+The CLI can also advertise an app-connectable Omi peripheral through macOS CoreBluetooth. Rust owns the profile, state, and packets; the Swift process only publishes the configured GATT database and notifications. Linux uses the nRF5340 BabbleSim lane for simulated BLE; Windows supports real BLE central testing but not host peripheral advertising.
 
 ```bash
 cargo run --bin omi-product-cli -- simulate
@@ -22,6 +22,8 @@ The process advertises the production Omi audio and button services and exposes 
 cargo run
 cargo test
 ```
+
+Linux requires X11 and `zenity` for the native firmware picker. Windows uses the system PowerShell file picker. Scanning, connecting, probing, button monitoring, firmware validation, and host flashing share the same Rust implementation on all three platforms.
 
 The same Rust button wire values and portable state transitions run on QEMU's Arm MPS2-AN386, a board also supported by Zephyr:
 
