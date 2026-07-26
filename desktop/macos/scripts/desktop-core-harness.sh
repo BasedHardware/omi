@@ -876,8 +876,17 @@ start_fault_stack() {
   FAULT_RUN_STARTED=1
   FAULT_APP_LAUNCH_REQUESTED=1
   local expected_bundle="com.omi.${FAULT_BUNDLE}"
+  # A cold qualification cache can spend several minutes creating the named
+  # fault bundle before the bridge exists. Do not turn that bounded build time
+  # into a false fault-suite failure; an explicit override keeps local probes
+  # fast while the qualification default covers a clean SwiftPM build.
+  local bridge_ready_attempts="${OMI_FAULT_BRIDGE_READY_ATTEMPTS:-210}"
+  [[ "$bridge_ready_attempts" =~ ^[1-9][0-9]*$ ]] || {
+    echo "desktop-core-harness: OMI_FAULT_BRIDGE_READY_ATTEMPTS must be a positive integer" >&2
+    return 1
+  }
   local attempt
-  for attempt in $(seq 1 90); do
+  for attempt in $(seq 1 "$bridge_ready_attempts"); do
     if verify_fault_bundle_health "$PORT" "$expected_bundle" 2>/dev/null; then
       OMI_AUTOMATION_PORT="$PORT" "$SCRIPT_DIR/omi-ctl" wait-ready 90
       record_owned_fault_app
