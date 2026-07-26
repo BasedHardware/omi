@@ -1431,6 +1431,25 @@ actor AgentBridge {
     )
   }
 
+  func repairJournalTurns(
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    turnIDs: [String],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> [KernelJournalTurn] {
+    let authorization = try resolveAuthorization(
+      authorizationSnapshot,
+      expectedOwnerID: ownerID)
+    try await start(authorizationSnapshot: authorization)
+    return try await runtime.repairJournalTurns(
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      turnIDs: turnIDs,
+      authorizationSnapshot: authorization
+    )
+  }
+
   func listJournalTurns(
     surface: AgentSurfaceReference,
     ownerID: String? = nil,

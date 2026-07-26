@@ -1875,6 +1875,26 @@ actor AgentRuntimeProcess {
     return turn
   }
 
+  func repairJournalTurns(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    turnIDs: [String],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> [KernelJournalTurn] {
+    let result = try await journalOperation(
+      type: "journal_repair_turns",
+      operation: "repair",
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      payload: ["turnIds": Array(Set(turnIDs)).sorted()],
+      authorizationSnapshot: authorizationSnapshot
+    )
+    result.turns.forEach(recordLifecycleJournalMutation)
+    return result.turns
+  }
+
   func listJournalTurns(
     clientId: String,
     surface: AgentSurfaceReference,

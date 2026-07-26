@@ -25,6 +25,7 @@ import {
   OUTBOX_CANONICAL_HASH_MISMATCH_CODE,
   recordJournalExchange,
   recordJournalTurn,
+  repairOrphanedJournalTurns,
   settleClearedBackendTurnClaim,
   assertPublicJournalUpdatePolicy,
   terminalizeJournalTurn,
@@ -41,6 +42,81 @@ afterEach(() => {
 });
 
 describe("kernel conversation journal", () => {
+  it("repairs an orphaned turn in its canonical conversation after the UI rebinds", () => {
+    const producingSurface = newSurface("main_chat", "chat", "repair-source");
+    const currentSurface = insertSurface(producingSurface.store, "main_chat", "chat", "repair-current");
+    recordJournalTurn(producingSurface.store, {
+      ownerId: producingSurface.ownerId,
+      conversationId: producingSurface.conversationId,
+      turnId: "turn-orphaned-after-rebind",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "streaming",
+      content: "partial",
+      contentBlocks: [{ type: "text", id: "partial", text: "partial" }],
+      createdAtMs: 2,
+    });
+    const activeRun = producingSurface.store.insertRun({
+      sessionId: producingSurface.sessionId,
+      runId: "run-active-during-repair",
+      clientId: "main-chat",
+      requestId: "active-during-repair",
+      status: "running",
+      mode: "act",
+    });
+    const activeAttempt = producingSurface.store.insertAttempt({
+      attemptId: "attempt-active-during-repair",
+      runId: activeRun.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "fake",
+      adapterInstanceId: "fake:repair",
+    });
+    recordJournalTurn(producingSurface.store, {
+      ownerId: producingSurface.ownerId,
+      conversationId: producingSurface.conversationId,
+      turnId: "turn-still-active",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "streaming",
+      content: "still running",
+      contentBlocks: [{ type: "text", id: "active", text: "still running" }],
+      producingRunId: activeRun.runId,
+      producingAttemptId: activeAttempt.attemptId,
+      createdAtMs: 2,
+    });
+
+    const repaired = repairOrphanedJournalTurns(producingSurface.store, {
+      ownerId: producingSurface.ownerId,
+      turnIds: [
+        "turn-orphaned-after-rebind",
+        "turn-orphaned-after-rebind",
+        "turn-still-active",
+        "missing",
+      ],
+      nowMs: 3,
+    });
+
+    expect(repaired).toMatchObject([{
+      conversationId: producingSurface.conversationId,
+      turnId: "turn-orphaned-after-rebind",
+      status: "failed",
+    }]);
+    expect(listJournalTurns(producingSurface.store, {
+      ownerId: producingSurface.ownerId,
+      conversationId: producingSurface.conversationId,
+    }).turns.find((turn) => turn.turnId === "turn-still-active")).toMatchObject({
+      status: "streaming",
+    });
+    expect(listJournalTurns(producingSurface.store, {
+      ownerId: producingSurface.ownerId,
+      conversationId: currentSurface.conversationId,
+    }).turns).toEqual([]);
+    producingSurface.store.close();
+  });
+
   it("projects shared chat revisions through the requesting binding with owner-fenced wakes", () => {
     const fixture = newSurface("main_chat", "chat", "default");
     const realtimeSession = fixture.store.insertSession({

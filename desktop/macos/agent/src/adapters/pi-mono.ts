@@ -350,6 +350,7 @@ function utf8ByteLength(text: string): number {
 
 type PublicWebTurnState = {
   bufferedText: string;
+  emittedText: string;
   /**
    * The Rust gateway resolves Anthropic's server-side web tool internally, so
    * Pi never receives a local tool lifecycle. This synthetic, query-scoped
@@ -447,8 +448,8 @@ export class PiMonoAdapter implements HarnessAdapter {
   private requiredAgentControlFailures = new Map<string, string>();
   private requiredControlInputs = new Map<string, Record<string, unknown>>();
   private currentAbortController: AbortController | null = null;
-  /** A public-web response is buffered until its gateway-routed terminal result,
-   * so false availability boilerplate never escapes before the search completes. */
+  /** State for projecting gateway-owned public-web progress without waiting for
+   * the terminal turn before forwarding model text. */
   private activePublicWebTurn: PublicWebTurnState | null = null;
   private piPath: string;
   private extensionPath: string;
@@ -713,7 +714,11 @@ export class PiMonoAdapter implements HarnessAdapter {
     const message = routePromptForPublicWeb(rawMessage);
     this.activePublicWebTurn = message === rawMessage
       ? null
-      : { bufferedText: "", progressToolUseId: `gateway-public-web-${generation}` };
+      : {
+          bufferedText: "",
+          emittedText: "",
+          progressToolUseId: `gateway-public-web-${generation}`,
+        };
     if (this.activePublicWebTurn) {
       this.eventHandler?.({
         type: "tool_activity",
@@ -1049,11 +1054,9 @@ export class PiMonoAdapter implements HarnessAdapter {
         if (msgEvent.delta) {
           if (this.activePublicWebTurn) {
             this.activePublicWebTurn.bufferedText += msgEvent.delta;
+            this.emitPublicWebText(this.activePublicWebTurn);
           } else {
-            this.eventHandler?.({
-              type: "text_delta",
-              text: msgEvent.delta,
-            });
+            this.eventHandler?.({ type: "text_delta", text: msgEvent.delta });
           }
         }
         break;
@@ -1267,10 +1270,8 @@ export class PiMonoAdapter implements HarnessAdapter {
       // provider interaction. Do not make this depend on local Pi tool events:
       // Anthropic's server-side web_search intentionally never exposes one.
       text = stripFalsePublicWebAvailabilityDisclaimers(text);
+      this.emitPublicWebText(publicWebTurn, true);
       this.finishPublicWebProgress(publicWebTurn, "completed");
-      if (text) {
-        this.eventHandler?.({ type: "text_delta", text });
-      }
     }
 
     // Extract usage
@@ -1307,6 +1308,41 @@ export class PiMonoAdapter implements HarnessAdapter {
       status,
       toolUseId: publicWebTurn.progressToolUseId,
     });
+  }
+
+  private emitPublicWebText(publicWebTurn: PublicWebTurnState, terminal = false): void {
+    const raw = publicWebTurn.bufferedText;
+    const normalized = raw.trimStart().toLowerCase();
+    const possibleDenialPrefixes = [
+      "i don't",
+      "i do not",
+      "i cannot",
+      "i can't",
+      "i can not",
+      "don't",
+      "do not",
+      "cannot",
+      "can't",
+      "can not",
+    ];
+    const mayBecomeAvailabilityDenial = possibleDenialPrefixes.some(
+      (prefix) => prefix.startsWith(normalized) || normalized.startsWith(prefix),
+    );
+    if (
+      !terminal
+      && publicWebTurn.emittedText.length === 0
+      && mayBecomeAvailabilityDenial
+      && !/[.!?]/.test(raw)
+      && !/\b(?:but|however)\b/i.test(raw)
+    ) {
+      return;
+    }
+
+    const sanitized = stripFalsePublicWebAvailabilityDisclaimers(raw);
+    if (!sanitized.startsWith(publicWebTurn.emittedText)) return;
+    const delta = sanitized.slice(publicWebTurn.emittedText.length);
+    publicWebTurn.emittedText = sanitized;
+    if (delta) this.eventHandler?.({ type: "text_delta", text: delta });
   }
 }
 

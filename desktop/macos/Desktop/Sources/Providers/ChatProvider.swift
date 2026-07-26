@@ -5140,8 +5140,28 @@ class ChatProvider: ObservableObject {
       &messages,
       hasActiveSendLock: sendLockOwnership.isHeld
     )
+    var repairGroups: [String: [String]] = [:]
     for messageID in terminalizedMessageIDs {
-      scheduleJournalUpdate(messageId: messageID)
+      if let ownerID = journalOwnerByMessageID[messageID] ?? runtimeOwnerId {
+        repairGroups[ownerID, default: []].append(messageID)
+      }
+    }
+    let repairSurface = mainChatSurfaceReference()
+    for (ownerID, messageIDs) in repairGroups {
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        let repaired = await self.kernelTurnProjection.repairNonterminalTurns(
+          surface: repairSurface,
+          turnIDs: messageIDs,
+          ownerID: ownerID
+        )
+        if repaired < messageIDs.count {
+          log(
+            "ChatProvider: canonical orphan repair deferred "
+              + "(requested=\(messageIDs.count), repaired=\(repaired))"
+          )
+        }
+      }
     }
     if !terminalizedMessageIDs.isEmpty {
       log("ChatProvider: terminalized \(terminalizedMessageIDs.count) orphaned streaming message(s) after send release")
