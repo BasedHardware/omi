@@ -1007,28 +1007,65 @@ enum MemoryAtlasLayoutEngine {
       neighborIDs[merged.edge.targetId, default: []].insert(merged.edge.sourceId)
     }
 
+    // Relatedness, from both signals the client already holds: the edges the
+    // extractor drew, and the memories two entities were extracted from
+    // together. The second matters more than it sounds — it finds
+    // relationships nobody wrote down, which is most of them.
+    var memoryIDsByNodeID: [String: [String]] = [:]
+    if let anchor { memoryIDsByNodeID[anchor.id] = anchor.memoryIds }
+    for groupNodes in grouped.values {
+      for node in groupNodes { memoryIDsByNodeID[node.id] = node.memoryIds }
+    }
+    // A self-node folded into the anchor brings its memories with it, or the
+    // anchor loses the co-occurrence its own entity earned.
+    if let anchorID = anchor?.id {
+      for node in nodes where collapsedIDs.contains(node.id) {
+        memoryIDsByNodeID[anchorID, default: []].append(contentsOf: node.memoryIds)
+      }
+    }
+
+    let relatedness =
+      MemoryAtlasForceLayout.explicitLinks(
+        edges: mergedEdges.map {
+          (
+            sourceID: $0.edge.sourceId, targetID: $0.edge.targetId,
+            memoryCount: $0.edge.memoryIds.count
+          )
+        })
+      + MemoryAtlasForceLayout.coOccurrenceLinks(memoryIDsByNodeID: memoryIDsByNodeID)
+
+    // Type stops deciding where a node goes and becomes a weak field it can
+    // overrule: the constellation centres are now only somewhere a node drifts
+    // toward when nothing it is related to pulls harder.
+    var typeTargets: [String: CGPoint] = [:]
+    for cluster in activeClusters {
+      guard let center = clusterCenters[cluster] else { continue }
+      for node in grouped[cluster] ?? [] { typeTargets[node.id] = center }
+    }
+
+    let layout = MemoryAtlasForceLayout.layout(
+      nodeIDs: Array(placeableNodeIDs),
+      links: relatedness,
+      anchorID: anchor?.id,
+      typeTargets: typeTargets,
+      area: Self.layoutArea)
+
     var placements: [MemoryAtlasNodePlacement] = []
     if let anchor {
       placements.append(
         MemoryAtlasNodePlacement(
           node: anchor,
           cluster: nil,
-          normalizedPosition: MemoryAtlasCluster.starCenter,
+          normalizedPosition: layout.positions[anchor.id] ?? MemoryAtlasCluster.starCenter,
           degree: neighborIDs[anchor.id]?.count ?? 0,
           clusterRank: 0
         )
       )
     }
 
-    // First pass: the phyllotaxis-spiral position for every non-anchor node,
-    // exactly as before leaf/isolate treatment existed. This remains the
-    // final position for a "hub" node (two or more distinct neighbors), and
-    // is also the fallback below for a leaf whose neighbor cannot itself be
-    // resolved to a stable position.
-    var drafts: [PositionedDraft] = []
-    var basePositionByID: [String: CGPoint] = [:]
-    if let anchor { basePositionByID[anchor.id] = MemoryAtlasCluster.starCenter }
-
+    // Salience order no longer decides position, but it still decides which
+    // names win a crowded viewport, so the rank the render planner reads is
+    // computed exactly as before.
     for cluster in activeClusters {
       let sorted = (grouped[cluster] ?? []).sorted {
         let lhsScore = salience(node: $0, degree: degree[$0.id] ?? 0)
@@ -1038,55 +1075,16 @@ enum MemoryAtlasLayoutEngine {
       }
 
       for (index, node) in sorted.enumerated() {
-        let basePosition = position(
-          center: clusterCenters[cluster] ?? MemoryAtlasCluster.starCenter,
-          index: index,
-          count: sorted.count,
-          activeClusterCount: activeClusters.count,
-          nodeID: node.id
+        placements.append(
+          MemoryAtlasNodePlacement(
+            node: node,
+            cluster: cluster,
+            normalizedPosition: layout.positions[node.id] ?? MemoryAtlasCluster.starCenter,
+            degree: neighborIDs[node.id]?.count ?? 0,
+            clusterRank: index
+          )
         )
-        basePositionByID[node.id] = basePosition
-        drafts.append(PositionedDraft(node: node, cluster: cluster, basePosition: basePosition, clusterRank: index))
       }
-    }
-
-    // Second pass: leaves and isolates override the spiral position. A leaf's
-    // only spatial information is who its single neighbor is, so it lands as
-    // a short stub off that neighbor instead of at a position derived only
-    // from its own type and id hash. An isolate carries no relational
-    // information at all, so it is parked in a deliberate canvas margin
-    // instead of implying membership in a type constellation it has no edge
-    // into. Both keep their type's `cluster` (it drives color); only their
-    // position leaves the type petal.
-    for draft in drafts {
-      let neighborCount = neighborIDs[draft.node.id]?.count ?? 0
-      let finalPosition: CGPoint
-      if neighborCount == 0 {
-        finalPosition = isolatePosition(nodeID: draft.node.id)
-      } else if neighborCount == 1, let parentID = neighborIDs[draft.node.id]?.first {
-        let parentIsAnchor = parentID == anchor?.id
-        let parentIsHub = (neighborIDs[parentID]?.count ?? 0) >= 2
-        if parentIsAnchor || parentIsHub, let parentPosition = basePositionByID[parentID] {
-          finalPosition = leafStubPosition(parentPosition: parentPosition, nodeID: draft.node.id)
-        } else {
-          // A mutual pair of leaves (each other's only neighbor) has no
-          // stable hub to stub off of — fall back to the ordinary spiral
-          // position rather than chase an undefined parent.
-          finalPosition = draft.basePosition
-        }
-      } else {
-        finalPosition = draft.basePosition
-      }
-
-      placements.append(
-        MemoryAtlasNodePlacement(
-          node: draft.node,
-          cluster: draft.cluster,
-          normalizedPosition: finalPosition,
-          degree: neighborCount,
-          clusterRank: draft.clusterRank
-        )
-      )
     }
 
     let positions = Dictionary(lastWriteWins: placements.map { ($0.id, $0.normalizedPosition) })
@@ -1113,17 +1111,43 @@ enum MemoryAtlasLayoutEngine {
       nodes: placements,
       edges: edgePlacements,
       anchorNodeID: anchor?.id,
-      clusterCenters: clusterCenters
+      clusterCenters: centroids(of: placements, activeClusters: activeClusters)
     )
   }
 
-  /// A node's phyllotaxis-spiral candidate position before leaf/isolate
-  /// treatment is applied.
-  private struct PositionedDraft {
-    let node: KnowledgeGraphNode
-    let cluster: MemoryAtlasCluster
-    let basePosition: CGPoint
-    let clusterRank: Int
+  /// The region the relaxed map may occupy. Isolates are parked in the margin
+  /// outside it, so it stops short of the canvas edge.
+  static let layoutArea = CGRect(x: 0.12, y: 0.16, width: 0.76, height: 0.68)
+
+  /// Where each type actually ended up, rather than where it was assigned.
+  ///
+  /// A type no longer owns a region of the canvas, so labelling a fixed petal
+  /// "People" would point at empty space. The caption instead sits at the mean
+  /// position of that type's entities — which is honest, and lands somewhere
+  /// useful precisely because the weak type field keeps each type loosely
+  /// gathered.
+  static func centroids(
+    of placements: [MemoryAtlasNodePlacement],
+    activeClusters: [MemoryAtlasCluster]
+  ) -> [MemoryAtlasCluster: CGPoint] {
+    var totals: [MemoryAtlasCluster: (x: CGFloat, y: CGFloat, count: Int)] = [:]
+    for placement in placements {
+      guard let cluster = placement.cluster else { continue }
+      var running = totals[cluster] ?? (0, 0, 0)
+      running.x += placement.normalizedPosition.x
+      running.y += placement.normalizedPosition.y
+      running.count += 1
+      totals[cluster] = running
+    }
+
+    var result: [MemoryAtlasCluster: CGPoint] = [:]
+    for cluster in activeClusters {
+      guard let running = totals[cluster], running.count > 0 else { continue }
+      result[cluster] = CGPoint(
+        x: running.x / CGFloat(running.count),
+        y: running.y / CGFloat(running.count))
+    }
+    return result
   }
 
   /// One placement's worth of collapsed parallel edges: the representative
@@ -1260,94 +1284,6 @@ enum MemoryAtlasLayoutEngine {
     "app", "apps", "user", "calendar event", "document", "documents", "download", "downloads",
   ]
 
-  private static func position(
-    center: CGPoint,
-    index: Int,
-    count: Int,
-    activeClusterCount: Int,
-    nodeID: String
-  ) -> CGPoint {
-    guard count > 0 else { return center }
-    if index == 0 { return center }
-
-    let ringIndex = index - 1
-    let jitter = stableFraction(nodeID)
-    let angle = Double(ringIndex) * 2.399_963_229_728_653 + (jitter - 0.5) * 0.7
-    let normalizedIndex = Double(ringIndex + 1) / Double(max(count, 1))
-    let radialJitter = 0.9 + jitter * 0.2
-    // Keep a stable, circular-looking local spread in the same screen space as
-    // the star. More active groups should get slightly denser, but never
-    // collapse into a single point at overview scale.
-    let densityScale = 1 - 0.05 * Double(max(activeClusterCount - 1, 0))
-    // Few active types leave most of the canvas unused, because the ring that
-    // separates constellations is what normally fills it. Spread those orbits
-    // out so a one- or two-type atlas reads at the same scale as a full one
-    // instead of as a small knot in the middle.
-    let spreadScale = Self.orbitSpreadScale(activeClusterCount: activeClusterCount)
-    let radiusY = (0.04 + 0.11 * sqrt(normalizedIndex)) * densityScale * radialJitter * spreadScale
-    let radiusX = radiusY * 0.58
-    let x = center.x + cos(angle) * radiusX
-    let y = center.y + sin(angle) * radiusY
-    return CGPoint(
-      x: min(max(x, 0.04), 0.96),
-      y: min(max(y, 0.08), 0.92)
-    )
-  }
-
-  /// A degree-1 node's only spatial information is who its single neighbor
-  /// is. Fanning it a short, fixed distance off that neighbor at a
-  /// deterministic per-node angle reads as a burr on a hub — the intended
-  /// effect for an entity whose one relationship is the whole story — rather
-  /// than as an independent constellation member plotted by hash alone.
-  private static func leafStubPosition(parentPosition: CGPoint, nodeID: String) -> CGPoint {
-    let angle = stableFraction(nodeID) * 2 * .pi
-    // Short relative to a typical orbit radius (~0.05–0.15, up to ~0.4 for a
-    // sparse single-cluster atlas) so a leaf reads as attached to its parent
-    // rather than as a peer node next to it.
-    let stubLength = 0.024
-    let x = parentPosition.x + cos(angle) * stubLength
-    let y = parentPosition.y + sin(angle) * stubLength * 0.75
-    return CGPoint(
-      x: min(max(x, 0.04), 0.96),
-      y: min(max(y, 0.08), 0.92)
-    )
-  }
-
-  /// A degree-0 node has no relationship to place it by, so scattering it
-  /// among the type spirals would imply structure it does not have. Two
-  /// independent hashes of the same id scatter every isolate inside a fixed
-  /// bottom-margin band instead — a deliberate "unconnected" gutter, distinct
-  /// from the constellations, rather than noise mixed into them.
-  private static func isolatePosition(nodeID: String) -> CGPoint {
-    let xFraction = stableFraction(nodeID)
-    let yFraction = stableFraction(nodeID + "#isolate-gutter")
-    let x = 0.06 + xFraction * 0.88
-    let y = 0.86 + yFraction * 0.06
-    return CGPoint(
-      x: min(max(x, 0.04), 0.96),
-      y: min(max(y, 0.08), 0.92)
-    )
-  }
-
-  /// Orbit expansion for sparse atlases. Three or more types already spread
-  /// across the ring, so they keep the tuned density the viewport budgets and
-  /// performance harness were measured against.
-  static func orbitSpreadScale(activeClusterCount: Int) -> Double {
-    switch activeClusterCount {
-    case ...1: return 2.6
-    case 2: return 1.6
-    default: return 1
-    }
-  }
-
-  private static func stableFraction(_ value: String) -> Double {
-    var hash: UInt64 = 0xcbf2_9ce4_8422_2325
-    for byte in value.utf8 {
-      hash ^= UInt64(byte)
-      hash = hash &* 0x0000_0100_0000_01b3
-    }
-    return Double(hash % 10_000) / 10_000
-  }
 }
 
 // MARK: - Node Inspector
@@ -1935,8 +1871,11 @@ private struct CanonicalMemoryAtlasSurface: View {
     _evidence = State(initialValue: previewEvidence)
     _requestedEvidenceIDs = State(initialValue: previewEvidence.map(\.id))
     let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
-    let atlasSnapshot = MemoryAtlasLayoutEngine.makeSnapshot(
-      graph: graph,
+    // Memoized: SwiftUI re-runs this initializer on every parent re-render, and
+    // the layout now relaxes the whole graph rather than evaluating a formula
+    // per node.
+    let atlasSnapshot = MemoryAtlasSnapshotCache.shared.snapshot(
+      for: graph,
       userName: givenName.isEmpty ? nil : givenName
     )
     snapshot = atlasSnapshot
@@ -2334,37 +2273,11 @@ private struct CanonicalMemoryAtlasSurface: View {
 
   private func atlasCanvas(size: CGSize, plan: MemoryAtlasRenderPlan) -> some View {
     Canvas(opaque: false, colorMode: .linear) { context, _ in
-      drawClusterContours(context: &context, size: size)
       drawEdges(context: &context, size: size, plan: plan)
       drawNodes(context: &context, size: size, plan: plan)
       drawCanvasLabels(context: &context, size: size, plan: plan)
     }
     .accessibilityHidden(true)
-  }
-
-  private func drawClusterContours(context: inout GraphicsContext, size: CGSize) {
-    let diameter =
-      min(
-        size.width * (snapshot.activeClusters.count >= 4 ? 0.22 : 0.27),
-        size.height * (compact ? 0.36 : 0.44)
-      ) * zoom
-    for cluster in snapshot.activeClusters {
-      let center = point(for: snapshot.center(for: cluster), in: size)
-      for inset in 0..<3 {
-        let amount = CGFloat(inset) * 10
-        let rect = CGRect(
-          x: center.x - diameter / 2 + amount,
-          y: center.y - diameter / 2 + amount,
-          width: diameter - amount * 2,
-          height: diameter - amount * 2
-        )
-        context.stroke(
-          Path(ellipseIn: rect),
-          with: .color(cluster.color.opacity(0.08 - Double(inset) * 0.018)),
-          lineWidth: 1
-        )
-      }
-    }
   }
 
   private func drawEdges(

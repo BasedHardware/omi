@@ -15,10 +15,15 @@ final class MemoryAtlasLayoutTests: XCTestCase {
       first.nodes.map(\.normalizedPosition),
       second.nodes.map(\.normalizedPosition)
     )
-    XCTAssertEqual(first.nodeByID["david"]?.normalizedPosition, MemoryAtlasCluster.starCenter)
+    let anchor = try XCTUnwrap(first.nodeByID["david"]?.normalizedPosition)
+    XCTAssertEqual(Double(anchor.x), 0.5, accuracy: 1e-9, "You are the centre of your own map")
+    XCTAssertEqual(Double(anchor.y), 0.5, accuracy: 1e-9)
   }
 
-  func testNodeTypesDriveStarAtlasConstellations() throws {
+  /// Type still decides a node's colour and which constellation it counts
+  /// toward. It no longer decides where the node goes — relatedness does — so
+  /// the caption follows the entities instead of marking a fixed petal.
+  func testNodeTypesStillGroupEntitiesButNoLongerFixTheirPositions() throws {
     let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: fiveTypeGraph(), userName: "David")
 
     XCTAssertEqual(snapshot.nodeByID["casey"]?.cluster, .person)
@@ -28,55 +33,43 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertEqual(snapshot.nodeByID["strategy"]?.cluster, .concept)
     XCTAssertEqual(snapshot.activeClusters, [.person, .organization, .place, .thing, .concept])
 
-    let centers = snapshot.activeClusters.map(snapshot.center(for:))
-    XCTAssertEqual(centers[0], CGPoint(x: 0.5, y: 0.25))
-    XCTAssertEqual(centers[1].x, 0.642_658, accuracy: 0.000_001)
-    XCTAssertEqual(centers[1].y, 0.422_746, accuracy: 0.000_001)
-    XCTAssertEqual(centers[2].x, 0.588_168, accuracy: 0.000_001)
-    XCTAssertEqual(centers[2].y, 0.702_254, accuracy: 0.000_001)
-    XCTAssertEqual(centers[3].x, 0.411_832, accuracy: 0.000_001)
-    XCTAssertEqual(centers[3].y, 0.702_254, accuracy: 0.000_001)
-    XCTAssertEqual(centers[4].x, 0.357_342, accuracy: 0.000_001)
-    XCTAssertEqual(centers[4].y, 0.422_746, accuracy: 0.000_001)
-    XCTAssertTrue(
-      centers.allSatisfy { center in
-        abs(hypot((center.x - 0.5) / 0.15, (center.y - 0.5) / 0.25) - 1) < 0.000_001
-      })
+    for cluster in snapshot.activeClusters {
+      let members = snapshot.nodes.filter { $0.cluster == cluster }
+      XCTAssertFalse(members.isEmpty)
+      let mean = CGPoint(
+        x: members.map(\.normalizedPosition.x).reduce(0, +) / CGFloat(members.count),
+        y: members.map(\.normalizedPosition.y).reduce(0, +) / CGFloat(members.count))
+      let caption = snapshot.center(for: cluster)
+      XCTAssertEqual(Double(caption.x), Double(mean.x), accuracy: 1e-6)
+      XCTAssertEqual(Double(caption.y), Double(mean.y), accuracy: 1e-6)
+    }
+
+    // A caption that still sat exactly on its old fixed petal would mean the
+    // constellation had not moved with its content.
+    let fixedPetals = MemoryAtlasCluster.centers(for: snapshot.activeClusters)
+    let moved = snapshot.activeClusters.contains { cluster in
+      guard let petal = fixedPetals[cluster] else { return false }
+      let caption = snapshot.center(for: cluster)
+      return hypot(caption.x - petal.x, caption.y - petal.y) > 0.01
+    }
+    XCTAssertTrue(moved, "Constellation captions must follow their entities, not a fixed ring")
   }
 
-  func testSingleActiveTypeTakesTheStarCenterInsteadOfTheRing() {
-    // Regression: a one-type atlas placed its only constellation at the top of
-    // the ring (0.5, 0.25), stranding every node in the upper-middle of the
-    // canvas with the rest of the viewport empty.
+  /// `MemoryAtlasCluster.centers` survives as the weak type *field* — where a
+  /// node drifts when nothing it is related to pulls harder — rather than as
+  /// the position it is assigned.
+  func testSingleActiveTypeFieldPullsTowardTheCentreInsteadOfTheRing() {
     let centers = MemoryAtlasCluster.centers(for: [.concept])
 
     XCTAssertEqual(centers.count, 1)
     XCTAssertEqual(centers[.concept], MemoryAtlasCluster.starCenter)
   }
 
-  func testTwoOrMoreActiveTypesStillFormTheRing() {
+  func testTwoOrMoreActiveTypeFieldsStillFormTheRing() {
     let centers = MemoryAtlasCluster.centers(for: [.organization, .thing])
 
     XCTAssertEqual(centers[.organization], CGPoint(x: 0.5, y: 0.25))
     XCTAssertEqual(centers[.thing], CGPoint(x: 0.5, y: 0.75))
-  }
-
-  func testSparseAtlasesExpandOrbitsAndDenseOnesKeepTunedDensity() {
-    // The ring is what fills the canvas when several types are active. With
-    // one or two, the orbits have to do that work instead.
-    XCTAssertGreaterThan(
-      MemoryAtlasLayoutEngine.orbitSpreadScale(activeClusterCount: 1),
-      MemoryAtlasLayoutEngine.orbitSpreadScale(activeClusterCount: 2)
-    )
-    XCTAssertGreaterThan(
-      MemoryAtlasLayoutEngine.orbitSpreadScale(activeClusterCount: 2),
-      MemoryAtlasLayoutEngine.orbitSpreadScale(activeClusterCount: 3)
-    )
-    // Three or more keeps the density the viewport budgets and the performance
-    // harness were measured against — do not let this drift.
-    for count in 3...5 {
-      XCTAssertEqual(MemoryAtlasLayoutEngine.orbitSpreadScale(activeClusterCount: count), 1)
-    }
   }
 
   func testSingleTypeAtlasActuallySpreadsAcrossTheCanvas() throws {
@@ -111,12 +104,17 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertLessThanOrEqual(ys.max() ?? 1, 0.92)
   }
 
-  func testEmptyTypesRedistributeAroundTheStar() {
+  func testOnlyTypesWithEntitiesGetAConstellation() {
     let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: sampleGraph(), userName: "David")
 
     XCTAssertEqual(snapshot.activeClusters, [.organization, .thing])
-    XCTAssertEqual(snapshot.center(for: .organization), CGPoint(x: 0.5, y: 0.25))
-    XCTAssertEqual(snapshot.center(for: .thing), CGPoint(x: 0.5, y: 0.75))
+    // Captions are wherever those entities settled, so the only thing that can
+    // be asserted about them without restating the layout is that they are on
+    // the canvas near their own kind.
+    for cluster in snapshot.activeClusters {
+      let caption = snapshot.center(for: cluster)
+      XCTAssertTrue((0...1).contains(caption.x) && (0...1).contains(caption.y))
+    }
   }
 
   func testEveryRenderedEdgeHasPlacedEndpoints() {
@@ -313,18 +311,25 @@ final class MemoryAtlasLayoutTests: XCTestCase {
 
     let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
     let server = try XCTUnwrap(snapshot.nodeByID["server"])
-    let conceptCenter = snapshot.center(for: .concept)
+    let david = try XCTUnwrap(snapshot.nodeByID["david"])
     XCTAssertEqual(server.degree, 6, "the anchor plus five leaves")
 
     func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat { hypot(a.x - b.x, a.y - b.y) }
 
+    // Compared against the other placed entity rather than against the concept
+    // constellation's centre: that centre is now the mean of these very leaves,
+    // so measuring against it would be measuring against themselves.
     for leafID in ["leaf1", "leaf2", "leaf3", "leaf4", "leaf5"] {
       let leaf = try XCTUnwrap(snapshot.nodeByID[leafID])
       XCTAssertEqual(leaf.degree, 1)
       XCTAssertLessThan(
         distance(leaf.normalizedPosition, server.normalizedPosition),
-        distance(leaf.normalizedPosition, conceptCenter),
-        "\(leafID) should read as a burr on its hub, not a member of the concept constellation"
+        distance(leaf.normalizedPosition, david.normalizedPosition),
+        "\(leafID) should read as a burr on its hub, not a peer of the anchor"
+      )
+      XCTAssertLessThan(
+        distance(leaf.normalizedPosition, server.normalizedPosition), 0.1,
+        "\(leafID) must sit against its hub, not merely nearer to it"
       )
     }
     // Fanned deterministically, not stacked on one point.
@@ -350,14 +355,14 @@ final class MemoryAtlasLayoutTests: XCTestCase {
 
     let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
     let orphan = try XCTUnwrap(snapshot.nodeByID["orphan"])
-    let conceptSpiralCenter = snapshot.center(for: .concept)
 
     XCTAssertEqual(orphan.degree, 0)
-    // The isolate gutter is a fixed bottom margin band; the phyllotaxis spiral
-    // for a lone concept node would instead sit exactly at its cluster
-    // center (index 0 of the spiral).
-    XCTAssertNotEqual(orphan.normalizedPosition, conceptSpiralCenter)
-    XCTAssertGreaterThanOrEqual(orphan.normalizedPosition.y, 0.8)
+    // An entity with no relationships was positioned by nothing, so it belongs
+    // outside the region the relaxed map occupies rather than among entities
+    // whose positions do mean something.
+    XCTAssertFalse(
+      MemoryAtlasLayoutEngine.layoutArea.contains(orphan.normalizedPosition),
+      "An unconnected entity must not sit inside the structure")
     // Still inside the existing clamp bounds.
     XCTAssertGreaterThanOrEqual(orphan.normalizedPosition.x, 0.04)
     XCTAssertLessThanOrEqual(orphan.normalizedPosition.x, 0.96)
@@ -645,9 +650,12 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     // readable than none — so this asserts the anonymous tail is gone, not
     // that collision handling became perfect.
     XCTAssertGreaterThanOrEqual(plan.labelNodeIDs.count, 24)
-    XCTAssertFalse(
-      plan.labelAboveNodeIDs.isEmpty,
-      "This layout collides below the mark, so the flip is what admits the last names")
+    // The flip-above affordance used to be load-bearing here: the old layout
+    // placed marks close enough that names collided below them, and flipping
+    // was the only way the last few were admitted. Marks in a small atlas are
+    // now spaced for legibility before the planner ever sees them, so this
+    // fixture no longer collides and no longer needs the flip. It is still an
+    // invariant that anything flipped is also labelled.
     XCTAssertTrue(plan.labelAboveNodeIDs.isSubset(of: plan.labelNodeIDs))
   }
 

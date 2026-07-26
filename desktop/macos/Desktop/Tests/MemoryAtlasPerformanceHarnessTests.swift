@@ -30,9 +30,12 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
       first.activeClusters,
       [.person, .organization, .place, .thing, .concept]
     )
+    // Constellation captions are now the mean position of their own entities,
+    // not five fixed points on a ring, so the only geometric claim left is that
+    // each one lands on the canvas among the entities it names.
     XCTAssertTrue(
       first.activeClusters.map(first.center(for:)).allSatisfy { center in
-        abs(hypot((center.x - 0.5) / 0.15, (center.y - 0.5) / 0.25) - 1) < 0.000_001
+        (0...1).contains(center.x) && (0...1).contains(center.y)
       })
   }
 
@@ -361,7 +364,14 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
   func testMeasureProductionScaleLayout() {
     let graph = makeProductionScaleGraph()
 
-    measure(metrics: [XCTClockMetric(), XCTCPUMetric(), XCTMemoryMetric()]) {
+    // Three iterations, not the default ten. Laying out this fixture is now a
+    // relaxation rather than a formula, and ten repeats of it added roughly a
+    // minute to every full run of this suite in a debug build — a high price
+    // for a diagnostic that reports a local number and asserts nothing.
+    let options = XCTMeasureOptions()
+    options.iterationCount = 3
+
+    measure(metrics: [XCTClockMetric(), XCTCPUMetric(), XCTMemoryMetric()], options: options) {
       _ = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "Atlas Owner")
     }
   }
@@ -377,9 +387,15 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     }
   }
 
+  /// Routed through the production memo rather than relaying every case's own
+  /// relaxation. Thirteen render-plan cases share one fixture, and laying out
+  /// 1,946 entities thirteen times cost this suite over a minute in a debug
+  /// build while proving nothing about the planner any one of them measures.
+  /// `testMeasureProductionScaleLayout` still calls the engine directly, so the
+  /// layout's own cost stays measured.
   private func makeProductionScaleSnapshot() -> MemoryAtlasSnapshot {
-    MemoryAtlasLayoutEngine.makeSnapshot(
-      graph: makeProductionScaleGraph(),
+    MemoryAtlasSnapshotCache.shared.snapshot(
+      for: makeProductionScaleGraph(),
       userName: "Atlas Owner"
     )
   }
