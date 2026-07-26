@@ -1,6 +1,7 @@
 use omi_product_emulator::core::{
     discover_bluetooth_targets, mcumgr_image, monitor_button_events, nrfutil_devices,
-    nrfutil_program, probe_device, read_button_event, set_bluetooth_connection, ButtonEvent,
+    nrfutil_program, probe_device, read_button_event, read_capture_state, read_device_name,
+    set_bluetooth_connection, set_capture_state, set_device_name, sleep_device, ButtonEvent,
     FirmwareImage, FlashSession, PeripheralSimulator,
 };
 use serde::Serialize;
@@ -139,6 +140,44 @@ fn run(args: &[String]) -> Result<Value, String> {
             }
             _ => Err("button command must be read or event".into()),
         },
+        "settings" => match required(args, 2, "settings command")? {
+            "name" => match required(args, 3, "name command")? {
+                "set" => {
+                    let name = required(args, 4, "device name")?;
+                    let id = required(args, 5, "device id")?;
+                    set_device_name(id, name)?;
+                    Ok(json!({"device_id": id, "name": name}))
+                }
+                "get" => {
+                    let id = required(args, 4, "device id")?;
+                    Ok(json!({"device_id": id, "name": read_device_name(id)?}))
+                }
+                _ => Err("name command must be get DEVICE_ID or set NAME DEVICE_ID".into()),
+            },
+            "capture" => match required(args, 3, "capture command")? {
+                "get" => {
+                    let id = required(args, 4, "device id")?;
+                    Ok(json!({"device_id": id, "capturing": read_capture_state(id)?}))
+                }
+                "set" => {
+                    let capturing = match required(args, 4, "capture state")? {
+                        "on" => true,
+                        "off" => false,
+                        _ => return Err("capture state must be on or off".into()),
+                    };
+                    let id = required(args, 5, "device id")?;
+                    set_capture_state(id, capturing)?;
+                    Ok(json!({"device_id": id, "capturing": capturing}))
+                }
+                _ => Err("capture command must be get DEVICE_ID or set on|off DEVICE_ID".into()),
+            },
+            "sleep" => {
+                let id = required(args, 3, "device id")?;
+                sleep_device(id)?;
+                Ok(json!({"device_id": id, "sleeping": true}))
+            }
+            _ => Err("settings command must be name, capture, or sleep".into()),
+        },
         "nrfutil" => match required(args, 2, "nrfutil command")? {
             "list" => nrfutil_devices(args.get(3).map(String::as_str)),
             "program" => {
@@ -184,7 +223,7 @@ fn run(args: &[String]) -> Result<Value, String> {
         }
         "simulate" => simulate(),
         _ => Err(
-            "command must be scan, connect, disconnect, status, probe, button, firmware, flash, nrfutil, mcumgr, or simulate"
+            "command must be scan, connect, disconnect, status, probe, button, settings, firmware, flash, nrfutil, mcumgr, or simulate"
                 .into(),
         ),
     }
@@ -239,5 +278,20 @@ mod tests {
         assert!(hex_packet("").is_err());
         assert!(hex_packet("0").is_err());
         assert!(hex_packet("zz").is_err());
+    }
+
+    #[test]
+    fn rejects_invalid_setting_arguments_without_hardware() {
+        assert!(run(&[
+            "omi-product-cli".into(),
+            "settings".into(),
+            "capture".into(),
+            "set".into(),
+            "invalid".into(),
+            "device".into(),
+        ])
+        .is_err());
+        assert!(set_device_name("device", "").is_err());
+        assert!(set_device_name("device", &"x".repeat(33)).is_err());
     }
 }

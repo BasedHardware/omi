@@ -1,5 +1,7 @@
 use btleplug::{
-    api::{Central, CentralEvent, CharPropFlags, Manager as _, Peripheral as _, ScanFilter},
+    api::{
+        Central, CentralEvent, CharPropFlags, Manager as _, Peripheral as _, ScanFilter, WriteType,
+    },
     platform::{Manager, Peripheral},
 };
 use futures::StreamExt;
@@ -257,56 +259,30 @@ pub fn discover_bluetooth_targets_with(
 pub fn set_bluetooth_connection(id: &str, connect: bool) -> Result<(), String> {
     let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;
     runtime.block_on(async {
-        let manager = Manager::new().await.map_err(|error| error.to_string())?;
-        let adapter = manager
-            .adapters()
-            .await
-            .map_err(|error| error.to_string())?
-            .into_iter()
-            .next()
-            .ok_or("no Bluetooth adapter available")?;
-        let peripheral = adapter
-            .peripherals()
-            .await
-            .map_err(|error| error.to_string())?
-            .into_iter()
-            .find(|peripheral| peripheral.id().to_string() == id)
-            .ok_or("selected peripheral is no longer available")?;
-        if connect {
-            peripheral.connect().await
+        let peripheral = resolve_peripheral(id).await?;
+        let result = if connect {
+            tokio::time::timeout(Duration::from_secs(10), peripheral.connect()).await
         } else {
-            peripheral.disconnect().await
-        }
-        .map_err(|error| error.to_string())
+            tokio::time::timeout(Duration::from_secs(10), peripheral.disconnect()).await
+        };
+        result
+            .map_err(|_| "Bluetooth connection operation timed out".to_owned())?
+            .map_err(|error| error.to_string())
     })
 }
 
 pub fn read_button_event(id: &str) -> Result<ButtonEvent, String> {
     let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;
     runtime.block_on(async {
-        let manager = Manager::new().await.map_err(|error| error.to_string())?;
-        let adapter = manager
-            .adapters()
-            .await
-            .map_err(|error| error.to_string())?
-            .into_iter()
-            .next()
-            .ok_or("no Bluetooth adapter available")?;
-        let peripheral = adapter
-            .peripherals()
-            .await
-            .map_err(|error| error.to_string())?
-            .into_iter()
-            .find(|peripheral| peripheral.id().to_string() == id)
-            .ok_or("selected peripheral is no longer available")?;
+        let peripheral = resolve_peripheral(id).await?;
         if !peripheral
             .is_connected()
             .await
             .map_err(|error| error.to_string())?
         {
-            peripheral
-                .connect()
+            tokio::time::timeout(Duration::from_secs(10), peripheral.connect())
                 .await
+                .map_err(|_| "Bluetooth connection timed out".to_owned())?
                 .map_err(|error| error.to_string())?;
         }
         peripheral
@@ -339,10 +315,13 @@ const AUDIO_CODEC_UUID: &str = "19b10002-e8f2-537e-4f6c-d104768a1214";
 const DIM_RATIO_UUID: &str = "19b10011-e8f2-537e-4f6c-d104768a1214";
 const MIC_GAIN_UUID: &str = "19b10012-e8f2-537e-4f6c-d104768a1214";
 const CHARGING_UUID: &str = "19b10013-e8f2-537e-4f6c-d104768a1214";
+const SLEEP_UUID: &str = "19b10014-e8f2-537e-4f6c-d104768a1214";
+const CAPTURE_UUID: &str = "19b10015-e8f2-537e-4f6c-d104768a1214";
+const DEVICE_NAME_UUID: &str = "19b10016-e8f2-537e-4f6c-d104768a1214";
 const STORAGE_CONTROL_UUID: &str = "30295782-4301-eabd-2904-2849adfeae43";
 const SMP_SERVICE_UUID: &str = "8d53dc1d-1db7-4cd3-868b-8a527460aa84";
 
-async fn selected_peripheral(id: &str) -> Result<Peripheral, String> {
+async fn resolve_peripheral(id: &str) -> Result<Peripheral, String> {
     let manager = Manager::new().await.map_err(|error| error.to_string())?;
     let adapter = manager
         .adapters()
@@ -351,21 +330,43 @@ async fn selected_peripheral(id: &str) -> Result<Peripheral, String> {
         .into_iter()
         .next()
         .ok_or("no Bluetooth adapter available")?;
-    let peripheral = adapter
-        .peripherals()
+    adapter
+        .start_scan(ScanFilter::default())
         .await
-        .map_err(|error| error.to_string())?
-        .into_iter()
-        .find(|peripheral| peripheral.id().to_string() == id)
-        .ok_or("selected peripheral is no longer available")?;
+        .map_err(|error| error.to_string())?;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(4);
+    let peripheral = loop {
+        if let Some(peripheral) = adapter
+            .peripherals()
+            .await
+            .map_err(|error| error.to_string())?
+            .into_iter()
+            .find(|peripheral| peripheral.id().to_string() == id)
+        {
+            break peripheral;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return Err("selected peripheral is no longer available".into());
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+    adapter
+        .stop_scan()
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(peripheral)
+}
+
+async fn selected_peripheral(id: &str) -> Result<Peripheral, String> {
+    let peripheral = resolve_peripheral(id).await?;
     if !peripheral
         .is_connected()
         .await
         .map_err(|error| error.to_string())?
     {
-        peripheral
-            .connect()
+        tokio::time::timeout(Duration::from_secs(10), peripheral.connect())
             .await
+            .map_err(|_| "Bluetooth connection timed out".to_owned())?
             .map_err(|error| error.to_string())?;
     }
     peripheral
@@ -373,6 +374,66 @@ async fn selected_peripheral(id: &str) -> Result<Peripheral, String> {
         .await
         .map_err(|error| error.to_string())?;
     Ok(peripheral)
+}
+
+async fn read_setting(id: &str, uuid: &str) -> Result<Vec<u8>, String> {
+    let peripheral = selected_peripheral(id).await?;
+    let characteristic = peripheral
+        .characteristics()
+        .into_iter()
+        .find(|characteristic| characteristic.uuid.to_string() == uuid)
+        .ok_or_else(|| format!("selected firmware does not expose {uuid}"))?;
+    peripheral
+        .read(&characteristic)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn write_setting(id: &str, uuid: &str, value: &[u8]) -> Result<(), String> {
+    let peripheral = selected_peripheral(id).await?;
+    let characteristic = peripheral
+        .characteristics()
+        .into_iter()
+        .find(|characteristic| characteristic.uuid.to_string() == uuid)
+        .ok_or_else(|| format!("selected firmware does not expose {uuid}"))?;
+    peripheral
+        .write(&characteristic, value, WriteType::WithResponse)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+pub fn read_device_name(id: &str) -> Result<String, String> {
+    let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;
+    String::from_utf8(runtime.block_on(read_setting(id, DEVICE_NAME_UUID))?)
+        .map_err(|error| error.to_string())
+}
+
+pub fn set_device_name(id: &str, name: &str) -> Result<(), String> {
+    if name.is_empty() || name.len() > 32 {
+        return Err("device name must contain 1 to 32 UTF-8 bytes".into());
+    }
+    let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;
+    runtime.block_on(write_setting(id, DEVICE_NAME_UUID, name.as_bytes()))
+}
+
+pub fn read_capture_state(id: &str) -> Result<bool, String> {
+    let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;
+    let value = runtime.block_on(read_setting(id, CAPTURE_UUID))?;
+    match value.as_slice() {
+        [0] => Ok(false),
+        [1] => Ok(true),
+        _ => Err("capture state response is invalid".into()),
+    }
+}
+
+pub fn set_capture_state(id: &str, capturing: bool) -> Result<(), String> {
+    let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;
+    runtime.block_on(write_setting(id, CAPTURE_UUID, &[u8::from(capturing)]))
+}
+
+pub fn sleep_device(id: &str) -> Result<(), String> {
+    let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;
+    runtime.block_on(write_setting(id, SLEEP_UUID, &[1]))
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
