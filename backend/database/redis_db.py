@@ -357,6 +357,10 @@ def get_cached_user_geolocation(uid: str) -> Optional[Dict[str, Any]]:
     return cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else None
 
 
+def delete_cached_user_geolocation(uid: str) -> None:
+    r.delete(f'users:{uid}:geolocation')
+
+
 # DAILY SUMMARY UID LOOKUP
 def store_daily_summary_to_uid(summary_id: str, uid: str) -> None:
     r.set(f'daily-summary:{summary_id}', uid)

@@ -10,7 +10,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).with_name("desktop-release-source-identity.py")
 SPEC = importlib.util.spec_from_file_location("desktop_release_source_identity", SCRIPT)
 assert SPEC and SPEC.loader

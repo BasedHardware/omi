@@ -22,6 +22,7 @@ import asyncio
 import os
 import threading
 from contextlib import ExitStack, nullcontext
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -39,6 +40,12 @@ os.environ.setdefault('TYPESENSE_PROTOCOL', 'http')
 import utils.retrieval.graph as graph  # noqa: E402
 import utils.retrieval.agentic as agentic  # noqa: E402
 import utils.other.chat_file as chat_file  # noqa: E402
+from models.users import (  # noqa: E402
+    LOCATION_CONTEXT_DISCLOSED_PROVIDERS,
+    LOCATION_CONTEXT_PURPOSE,
+    LocationContextConsent,
+    LocationContextConsentStatus,
+)
 
 
 async def _collect_agentic_chunks(producer, callback_data=None):
@@ -86,19 +93,111 @@ async def test_has_file_context_offloads_llm_call_off_loop():
     assert ran_on['thread'] is not loop_thread, "retrieve_is_file_question must run off the event-loop thread"
 
 
-async def test_mobile_city_context_uses_only_mobile_platforms():
-    async def fake_run_blocking(_executor, _function, _uid):
-        return {'latitude': 40.7128, 'longitude': -74.006}
+def _location_context_consent(*, status=LocationContextConsentStatus.granted, expires_at=None):
+    now = datetime.now(timezone.utc)
+    return LocationContextConsent(
+        status=status,
+        purpose=LOCATION_CONTEXT_PURPOSE,
+        disclosed_providers=LOCATION_CONTEXT_DISCLOSED_PROVIDERS,
+        granted_at=now,
+        expires_at=expires_at or now + timedelta(days=1),
+        revoked_at=now if status is LocationContextConsentStatus.revoked else None,
+    )
 
-    async def fake_city(latitude, longitude):
-        assert (latitude, longitude) == (40.7128, -74.006)
-        return 'New York, New York, United States'
 
-    with patch.object(agentic, 'run_blocking', fake_run_blocking), patch(
-        'utils.conversations.location.async_get_google_maps_city', fake_city
+async def test_mobile_header_alone_never_reads_coordinates_or_discloses_location():
+    """A caller-controlled mobile header is not consent for location disclosure."""
+    cached_coordinates = AsyncMock()
+    maps_city = AsyncMock()
+
+    async def fake_run_blocking(_executor, function, _uid):
+        assert function is agentic.get_user_location_context_consent
+        return None
+
+    with patch.object(agentic, 'run_blocking', fake_run_blocking), patch.object(
+        agentic, 'get_cached_user_geolocation', cached_coordinates
+    ), patch.object(agentic, 'async_get_google_maps_city', maps_city):
+        assert await agentic.get_mobile_city('uid1', 'ios') is None
+
+    cached_coordinates.assert_not_awaited()
+    maps_city.assert_not_awaited()
+
+
+async def test_valid_location_context_opt_in_allows_city_only_prompt_metadata():
+    """A valid server-owned disclosure permits a city label, never precise coordinates."""
+    consent = _location_context_consent()
+
+    async def fake_run_blocking(_executor, function, _uid):
+        if function is agentic.get_user_location_context_consent:
+            return consent
+        if function is agentic.get_cached_user_geolocation:
+            return {'latitude': 40.7128, 'longitude': -74.006}
+        raise AssertionError(f'unexpected blocking call: {function}')
+
+    maps_city = AsyncMock(return_value='New York, New York, United States')
+    with patch.object(agentic, 'run_blocking', fake_run_blocking), patch.object(
+        agentic, 'async_get_google_maps_city', maps_city
     ):
-        assert await agentic.get_mobile_city('uid1', 'ios') == 'New York, New York, United States'
+        city = await agentic.get_mobile_city('uid1', 'android')
+
+    assert city == 'New York, New York, United States'
+    maps_city.assert_awaited_once_with(40.7128, -74.006)
+    provider_messages = agentic._inject_current_datetime(
+        [{'role': 'user', 'content': 'What should I do nearby?'}],
+        agentic.get_current_datetime_block('uid1', tz='UTC', location=city),
+    )
+    provider_payload = str(provider_messages)
+    assert 'New York, New York, United States' in provider_payload
+    assert '40.7128' not in provider_payload
+    assert '-74.006' not in provider_payload
+
+
+async def test_revoked_or_expired_location_context_never_reads_coordinates_or_calls_maps():
+    for consent in (
+        _location_context_consent(status=LocationContextConsentStatus.revoked),
+        _location_context_consent(expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)),
+    ):
+        cached_coordinates = AsyncMock()
+        maps_city = AsyncMock()
+
+        async def fake_run_blocking(_executor, function, _uid):
+            assert function is agentic.get_user_location_context_consent
+            return consent
+
+        with patch.object(agentic, 'run_blocking', fake_run_blocking), patch.object(
+            agentic, 'get_cached_user_geolocation', cached_coordinates
+        ), patch.object(agentic, 'async_get_google_maps_city', maps_city):
+            assert await agentic.get_mobile_city('uid1', 'ios') is None
+
+        cached_coordinates.assert_not_awaited()
+        maps_city.assert_not_awaited()
+
+
+async def test_invalid_cached_coordinates_never_reach_maps_after_opt_in():
+    consent = _location_context_consent()
+    maps_city = AsyncMock()
+
+    async def fake_run_blocking(_executor, function, _uid):
+        if function is agentic.get_user_location_context_consent:
+            return consent
+        if function is agentic.get_cached_user_geolocation:
+            return {'latitude': 90.1, 'longitude': 0}
+        raise AssertionError(f'unexpected blocking call: {function}')
+
+    with patch.object(agentic, 'run_blocking', fake_run_blocking), patch.object(
+        agentic, 'async_get_google_maps_city', maps_city
+    ):
+        assert await agentic.get_mobile_city('uid1', 'ios') is None
+
+    maps_city.assert_not_awaited()
+
+
+async def test_mobile_city_context_rejects_non_mobile_platform_before_cache_read():
+    cached_coordinates = AsyncMock()
+    with patch.object(agentic, 'get_cached_user_geolocation', cached_coordinates):
         assert await agentic.get_mobile_city('uid1', 'macos') is None
+
+    cached_coordinates.assert_not_awaited()
 
 
 async def test_chat_router_passes_metadata_to_every_interactive_path():

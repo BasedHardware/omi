@@ -55,6 +55,10 @@ from utils.llm.byok_errors import handle_llm_error_async
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
 from utils.executors import run_blocking, db_executor
+from database.redis_db import get_cached_user_geolocation
+from database.users import get_user_location_context_consent
+from models.geolocation import Geolocation
+from utils.conversations.location import async_get_google_maps_city
 from utils.other.endpoints import timeit
 from utils.observability.langsmith import is_langsmith_enabled
 import logging
@@ -429,13 +433,14 @@ async def get_mobile_city(uid: str, platform: Optional[str]) -> Optional[str]:
     if platform is None or platform.strip().lower() not in {'ios', 'android'}:
         return None
     try:
-        from database.redis_db import get_cached_user_geolocation
-        from utils.conversations.location import async_get_google_maps_city
-
+        consent = await run_blocking(db_executor, get_user_location_context_consent, uid)
+        if consent is None or not consent.is_active():
+            return None
         geolocation = await run_blocking(db_executor, get_cached_user_geolocation, uid)
         if not geolocation:
             return None
-        return await async_get_google_maps_city(float(geolocation['latitude']), float(geolocation['longitude']))
+        validated_geolocation = Geolocation.model_validate(geolocation)
+        return await async_get_google_maps_city(validated_geolocation.latitude, validated_geolocation.longitude)
     except (KeyError, TypeError, ValueError):
         return None
     except Exception as error:

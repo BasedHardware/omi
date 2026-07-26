@@ -7249,7 +7249,7 @@
           "geolocation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Geolocation"
+                "$ref": "#/components/schemas/GeolocationInput"
               },
               {
                 "type": "null"
@@ -7330,7 +7330,7 @@
           "geolocation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Geolocation"
+                "$ref": "#/components/schemas/GeolocationInput"
               },
               {
                 "type": "null"
@@ -11092,6 +11092,62 @@
             "title": "Google Place Id"
           },
           "latitude": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Latitude",
+            "type": "number"
+          },
+          "location_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Type"
+          },
+          "longitude": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Longitude",
+            "type": "number"
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "title": "Geolocation",
+        "type": "object"
+      },
+      "GeolocationInput": {
+        "description": "Released wire contract for coordinates accepted at legacy API boundaries.\n\nBounds are enforced before any value is cached, geocoded, or persisted. Keeping\nthis transport shape broad preserves clients released before the bound contract\nexisted, while ``Geolocation`` remains the only usable server-side value.",
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "google_place_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Place Id"
+          },
+          "latitude": {
             "title": "Latitude",
             "type": "number"
           },
@@ -11115,7 +11171,7 @@
           "latitude",
           "longitude"
         ],
-        "title": "Geolocation",
+        "title": "GeolocationInput",
         "type": "object"
       },
       "GoalCreate": {
@@ -12505,6 +12561,73 @@
           "period_days"
         ],
         "title": "LlmUsageResponse",
+        "type": "object"
+      },
+      "LocationContextConsentResponse": {
+        "properties": {
+          "disclosed_providers": {
+            "default": [
+              "Google Maps",
+              "the configured AI chat provider"
+            ],
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Disclosed Providers",
+            "type": "array"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "purpose": {
+            "default": "chat_city_context",
+            "title": "Purpose",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "LocationContextConsentResponse",
+        "type": "object"
+      },
+      "LocationContextConsentUpdate": {
+        "properties": {
+          "disclosure_accepted": {
+            "default": false,
+            "description": "Required to enable city context: Google Maps reverse-geocodes the device location and the configured AI chat provider receives city, region, and country only.",
+            "title": "Disclosure Accepted",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "LocationContextConsentUpdate",
         "type": "object"
       },
       "McpAddServerResponse": {
@@ -47558,7 +47681,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Geolocation"
+                "$ref": "#/components/schemas/GeolocationInput"
               }
             }
           },
@@ -47759,6 +47882,170 @@
           }
         ],
         "summary": "Set User Language",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/location-context-consent": {
+      "get": {
+        "description": "Return the current city-context disclosure and active server-side consent state.",
+        "operationId": "get_location_context_consent_v1_users_location_context_consent_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationContextConsentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Location Context Consent",
+        "tags": [
+          "v1"
+        ]
+      },
+      "put": {
+        "description": "Grant, renew, or revoke city-only location context for interactive chat.",
+        "operationId": "set_location_context_consent_v1_users_location_context_consent_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocationContextConsentUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationContextConsentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Set Location Context Consent",
         "tags": [
           "v1"
         ]

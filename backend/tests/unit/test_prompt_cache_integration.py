@@ -80,6 +80,8 @@ sys.modules["database.goals"].get_user_goals = MagicMock(return_value=[])
 sys.modules["database.redis_db"].get_enabled_apps = MagicMock(return_value=[])
 sys.modules["database.redis_db"].get_filter_category_items = MagicMock(return_value=[])
 sys.modules["database.redis_db"].add_filter_category_item = MagicMock()
+sys.modules["database.redis_db"].get_cached_user_geolocation = MagicMock(return_value=None)
+sys.modules["database.users"].get_user_location_context_consent = MagicMock(return_value=None)
 sys.modules["database.conversations"].get_conversations = MagicMock(return_value=[])
 sys.modules["database.memories"].get_memories = MagicMock(return_value=[])
 sys.modules["database.vector_db"].query_vectors_enhanced = MagicMock(return_value=[])
@@ -176,6 +178,12 @@ def _passthrough_timeit(fn):
 
 
 endpoints_mod.timeit = _passthrough_timeit
+
+conversations_mod = _stub_module("utils.conversations")
+if not hasattr(conversations_mod, "__path__"):
+    conversations_mod.__path__ = []
+location_mod = _stub_module("utils.conversations.location")
+location_mod.async_get_google_maps_city = AsyncMock(return_value=None)
 
 retrieval_mod = _stub_module("utils.retrieval")
 if not hasattr(retrieval_mod, "__path__"):
