@@ -10,6 +10,7 @@
 #include "../../src/lib/core/sd_ring_durability.h"
 #include "../../src/lib/core/sd_ring_recovery.h"
 #include "../../src/lib/core/sd_write_recovery.h"
+#include "../../src/lib/core/storage_readiness.h"
 
 #define MAX_CAPTURED_RECORDS 4U
 
@@ -117,6 +118,21 @@ static void assert_cursor_eq(const sd_ring_cursor_t *actual, const sd_ring_curso
     assert(actual->write_seq == expected->write_seq);
     assert(actual->dropped_packets == expected->dropped_packets);
     assert(actual->capacity_packets == expected->capacity_packets);
+}
+
+static void test_storage_command_readiness_is_bounded_and_terminal_aware(void)
+{
+    assert(storage_readiness_decide(false, false, false, false, false) == STORAGE_READINESS_WAKE_AND_WAIT);
+    assert(storage_readiness_decide(false, false, false, true, false) == STORAGE_READINESS_WAIT);
+    assert(storage_readiness_decide(false, false, false, true, true) == STORAGE_READINESS_RETRYABLE_TIMEOUT);
+
+    /* A mounted card must still wait until the pusher commits its partial tail. */
+    assert(storage_readiness_decide(true, false, false, true, false) == STORAGE_READINESS_WAIT);
+    assert(storage_readiness_decide(true, true, false, true, false) == STORAGE_READINESS_SERVE);
+
+    /* Permanent media failure is explicit; it never enters the retry loop. */
+    assert(storage_readiness_decide(false, false, true, false, false) == STORAGE_READINESS_TERMINAL);
+    assert(storage_readiness_decide(true, false, true, false, false) == STORAGE_READINESS_SERVE);
 }
 
 static void assert_stages(const fake_durable_disk_t *disk, const uint8_t *expected, size_t count)
@@ -1418,6 +1434,7 @@ static void test_bulk_link_policy_avoids_range_boundary_parameter_churn(void)
 
 int main(void)
 {
+    test_storage_command_readiness_is_bounded_and_terminal_aware();
     test_overflow_flushes_complete_record_and_zero_pads_tail();
     test_rejected_overflow_does_not_consume_or_reorder_new_frame();
     test_exact_fit_flushes_legacy_terminated_record_before_new_frame();

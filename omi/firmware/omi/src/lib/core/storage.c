@@ -15,6 +15,7 @@
 #include "ring_transfer_integrity.h"
 #include "rtc.h"
 #include "sd_card.h"
+#include "storage_readiness.h"
 #include "transport.h"
 #include "utils.h"
 
@@ -31,6 +32,7 @@ LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
 #define INVALID_COMMAND 6
 #define STORAGE_NOT_READY 9
 #define SEQ_OUT_OF_RANGE 10
+#define STORAGE_FAILED 11
 
 #define NOTIFY_ACK 0x01
 #define NOTIFY_INFO 0x02
@@ -352,8 +354,9 @@ static uint8_t storage_status_from_error(int err, uint8_t fallback_status)
     case -EBUSY:
     case -ECANCELED:
     case -EAGAIN:
-    case -EROFS:
         return STORAGE_NOT_READY;
+    case -EROFS:
+        return STORAGE_FAILED;
     default:
         return fallback_status;
     }
@@ -699,19 +702,30 @@ static void storage_write(void)
             if (!conn) {
                 info_requested = 0;
                 info_deadline = 0;
-            } else if (sd_is_ready() &&
-                       (transport_storage_snapshot_ready() || sd_storage_health() == SD_STORAGE_TERMINAL)) {
-                int ret = send_ring_info_response(conn);
-                if (ret == 0) {
-                    info_requested = 0;
-                    info_deadline = 0;
-                }
             } else {
-                /* SD still remounting after connect: wait for it, up to timeout. */
-                if (info_deadline == 0) {
-                    info_deadline = k_uptime_get() + STORAGE_SD_READY_TIMEOUT_MS;
-                } else if (k_uptime_get() >= info_deadline) {
+                int64_t now = k_uptime_get();
+                storage_readiness_action_t action =
+                    storage_readiness_decide(sd_is_ready(),
+                                             transport_storage_snapshot_ready(),
+                                             sd_storage_health() == SD_STORAGE_TERMINAL,
+                                             info_deadline != 0,
+                                             info_deadline != 0 && now >= info_deadline);
+                if (action == STORAGE_READINESS_WAKE_AND_WAIT) {
+                    (void) sd_request_power(true);
+                    info_deadline = now + STORAGE_SD_READY_TIMEOUT_MS;
+                } else if (action == STORAGE_READINESS_TERMINAL) {
+                    if (send_ack(conn, STORAGE_FAILED) == 0) {
+                        info_requested = 0;
+                        info_deadline = 0;
+                    }
+                } else if (action == STORAGE_READINESS_RETRYABLE_TIMEOUT) {
                     if (send_ack(conn, STORAGE_NOT_READY) == 0) {
+                        info_requested = 0;
+                        info_deadline = 0;
+                    }
+                } else if (action == STORAGE_READINESS_SERVE) {
+                    int ret = send_ring_info_response(conn);
+                    if (ret == 0) {
                         info_requested = 0;
                         info_deadline = 0;
                     }
@@ -755,18 +769,30 @@ static void storage_write(void)
             if (!conn) {
                 read_request_pending = 0;
                 read_deadline = 0;
-            } else if (sd_is_ready() &&
-                       (transport_storage_snapshot_ready() || sd_storage_health() == SD_STORAGE_TERMINAL)) {
-                int ret = start_pending_read(conn);
-                if (ret == 0 || send_ack(conn, storage_status_from_error(ret, STORAGE_NOT_READY)) == 0) {
-                    read_request_pending = 0;
-                    read_deadline = 0;
-                }
             } else {
-                if (read_deadline == 0) {
-                    read_deadline = k_uptime_get() + STORAGE_SD_READY_TIMEOUT_MS;
-                } else if (k_uptime_get() >= read_deadline) {
+                int64_t now = k_uptime_get();
+                storage_readiness_action_t action =
+                    storage_readiness_decide(sd_is_ready(),
+                                             transport_storage_snapshot_ready(),
+                                             sd_storage_health() == SD_STORAGE_TERMINAL,
+                                             read_deadline != 0,
+                                             read_deadline != 0 && now >= read_deadline);
+                if (action == STORAGE_READINESS_WAKE_AND_WAIT) {
+                    (void) sd_request_power(true);
+                    read_deadline = now + STORAGE_SD_READY_TIMEOUT_MS;
+                } else if (action == STORAGE_READINESS_TERMINAL) {
+                    if (send_ack(conn, STORAGE_FAILED) == 0) {
+                        read_request_pending = 0;
+                        read_deadline = 0;
+                    }
+                } else if (action == STORAGE_READINESS_RETRYABLE_TIMEOUT) {
                     if (send_ack(conn, STORAGE_NOT_READY) == 0) {
+                        read_request_pending = 0;
+                        read_deadline = 0;
+                    }
+                } else if (action == STORAGE_READINESS_SERVE) {
+                    int ret = start_pending_read(conn);
+                    if (ret == 0 || send_ack(conn, storage_status_from_error(ret, STORAGE_NOT_READY)) == 0) {
                         read_request_pending = 0;
                         read_deadline = 0;
                     }
