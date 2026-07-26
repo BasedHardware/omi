@@ -553,9 +553,50 @@ struct FloatingControlBarView: View {
       notchReceiptCard(notification)
     } else if notification.assistantId == NotchMoment.endAssistantId {
       notchEndCard(notification)
+    } else if notification.assistantId == "suggestion" {
+      suggestionCard(notification)
     } else {
       notificationView(notification)
     }
+  }
+
+  /// Live proactive suggestion. Monochrome and quiet by design — this card interrupts
+  /// unprompted, so it earns attention with the sentence, not with chrome.
+  private func suggestionCard(_ notification: FloatingBarNotification) -> some View {
+    Button {
+      FloatingControlBarManager.shared.openNotificationAsChat(notification)
+    } label: {
+      HStack(spacing: OmiSpacing.sm) {
+        Image(systemName: "lightbulb")
+          .scaledFont(size: 13, weight: .medium)
+          .foregroundColor(.white.opacity(0.75))
+
+        Text(notification.message)
+          .scaledFont(size: 13, weight: .medium)
+          .foregroundColor(.white)
+          .lineLimit(2)
+          .multilineTextAlignment(.leading)
+          .fixedSize(horizontal: false, vertical: true)
+
+        Spacer(minLength: OmiSpacing.xs)
+
+        Button {
+          FloatingControlBarManager.shared.dismissCurrentNotification()
+        } label: {
+          Image(systemName: "xmark")
+            .scaledFont(size: 10, weight: .semibold)
+            .foregroundColor(.white.opacity(0.45))
+            .padding(OmiSpacing.xxs)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Dismiss suggestion")
+      }
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.md)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
   }
 
   /// Conversation ends — the USP moment. "N follow-ups ready" + Review / Later.
