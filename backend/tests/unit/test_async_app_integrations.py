@@ -299,7 +299,7 @@ class TestDurableExternalIntegrationFanout:
 
         with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
             app_integrations, 'get_webhook_client', return_value=client
-        ):
+        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}):
             await app_integrations.trigger_external_integrations(
                 'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
             )
@@ -317,7 +317,9 @@ class TestDurableExternalIntegrationFanout:
 
         with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
             app_integrations, 'get_webhook_client', return_value=client
-        ), pytest.raises(app_integrations.ExternalIntegrationFanoutError):
+        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}), pytest.raises(
+            app_integrations.ExternalIntegrationFanoutError
+        ):
             await app_integrations.trigger_external_integrations(
                 'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
             )
@@ -335,7 +337,7 @@ class TestDurableExternalIntegrationFanout:
 
         with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
             app_integrations, 'get_webhook_client', return_value=client
-        ):
+        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}):
             messages = await app_integrations.trigger_external_integrations(
                 'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
             )
