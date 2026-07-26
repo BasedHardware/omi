@@ -62,9 +62,7 @@ def proof_repo(tmp_path: Path) -> Path:
     for name in SCRIPT_NAMES:
         shutil.copy2(REPO_ROOT / "desktop" / "macos" / "scripts" / name, scripts / name)
     shutil.copytree(REPO_ROOT / "scripts" / "dev-harness" / "dev_harness", repo / "scripts" / "dev-harness" / "dev_harness")
-    backend = repo / "backend"
-    backend.mkdir()
-    (backend / ".venv").symlink_to(REPO_ROOT / "backend" / ".venv", target_is_directory=True)
+    (repo / "backend").mkdir()
 
     commands = (
         ("git", "init", "--quiet"),
@@ -85,6 +83,7 @@ def _proof_env(tmp_path: Path) -> dict[str, str]:
     temporary.mkdir(exist_ok=True)
     return {
         **os.environ,
+        "OMI_QUALIFICATION_PYTHON": sys.executable,
         "OMI_QUALIFICATION_LEASE_ROOT": str(tmp_path / "qualification"),
         "TMPDIR": str(temporary),
     }
@@ -140,6 +139,7 @@ def _wait_until(predicate: Callable[[], bool], timeout: float = 5) -> None:
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="the local proof is an M1/macOS lifecycle command")
 def test_local_qualification_proof_completes_every_offline_boundary(proof_repo: Path, tmp_path: Path) -> None:
+    assert not (proof_repo / "backend" / ".venv").exists()
     completed, result_path = _run_proof(proof_repo, tmp_path)
 
     assert completed.returncode == 0, completed.stderr
@@ -157,6 +157,38 @@ def test_local_qualification_proof_completes_every_offline_boundary(proof_repo: 
     ]
     assert result["fault_listener_result"]["status"] == "passed"
     assert stat.S_IMODE(result_path.stat().st_mode) == 0o600
+    assert not (tmp_path / "qualification" / "qualification-lease.json").exists()
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="the local proof is an M1/macOS lifecycle command")
+def test_local_qualification_proof_rejects_invalid_interpreter_override_before_lease(
+    proof_repo: Path, tmp_path: Path
+) -> None:
+    invalid_python = tmp_path / "not-executable-python"
+    invalid_python.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
+    env = _proof_env(tmp_path)
+    env["OMI_QUALIFICATION_PYTHON"] = str(invalid_python)
+    result_path = tmp_path / "evidence" / "invalid-interpreter-proof.json"
+
+    completed = _run(
+        proof_repo / "desktop" / "macos" / "scripts" / "qualification-local-proof.sh",
+        "--offline",
+        "--fast",
+        "--result",
+        result_path,
+        RELEASE_TAG,
+        cwd=proof_repo,
+        env=env,
+    )
+
+    assert completed.returncode != 0
+    assert "OMI_QUALIFICATION_PYTHON is not an executable file" in completed.stderr
+    assert f"OMI_QUALIFICATION_PYTHON={invalid_python}" in completed.stderr
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    assert result["status"] == "failed"
+    assert result["failure_reason"] == "lease-acquisition-failed"
+    assert result["cleanup_status"] == "not-acquired"
+    assert result["completed_boundaries"] == ["release-tag-validation"]
     assert not (tmp_path / "qualification" / "qualification-lease.json").exists()
 
 

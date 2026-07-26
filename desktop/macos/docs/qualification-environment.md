@@ -40,12 +40,16 @@ passing evidence.
 
 ## Local M1 lifecycle proof
 
-From the canonical repository on an Apple Silicon Mac, install the backend
-virtual environment once and check out the exact local release tag:
+On the Apple Silicon M1 qualification host, install the backend virtual
+environment once in the canonical repository at
+`~/workspace/omi/backend/.venv`, then create or enter a source-only checkout of
+the exact local release tag:
 
 ```bash
+cd ~/workspace/omi
 make setup-backend
-git checkout --detach refs/tags/vX.Y.Z+BUILD-macos
+git worktree add --detach /private/tmp/omi-qualification-proof refs/tags/vX.Y.Z+BUILD-macos
+cd /private/tmp/omi-qualification-proof
 desktop/macos/scripts/qualification-local-proof.sh \
   --offline \
   --fast \
@@ -53,11 +57,30 @@ desktop/macos/scripts/qualification-local-proof.sh \
   vX.Y.Z+BUILD-macos
 ```
 
-Prerequisites are `git`, Python 3, `nc`, `lsof`, `ps`, and the backend virtual
-environment created by `make setup-backend`. Fetch the tag before entering
-offline mode if it is not already local. The proof itself does not use GitHub
-Actions or Codemagic credentials, production credentials, release APIs, channel
-pointers, publication, Beta/Stable bundles, or `/Applications/Omi.app`.
+Prerequisites are `git`, Python 3, `nc`, `lsof`, `ps`, and the canonical shared
+backend virtual environment created by `make setup-backend`. The dependency
+interpreter is resolved in this fail-closed order: an executable path explicitly
+set with `OMI_QUALIFICATION_PYTHON`, the exact candidate worktree's
+`backend/.venv/bin/python`, then the executable canonical M1 path
+`~/workspace/omi/backend/.venv/bin/python`. An invalid explicit override aborts
+without falling back, and a missing interpreter reports every safe path it
+attempted before any lease or listener activity. The selected interpreter runs
+with the tag-pinned checkout as both its working directory and Python source
+owner; no virtual environment is copied into that immutable candidate.
+
+Fetch the tag and provision the canonical venv before entering offline mode if
+either is missing. The exact repeatable command for a source-only candidate is:
+
+```bash
+OMI_QUALIFICATION_PYTHON="$HOME/workspace/omi/backend/.venv/bin/python" \
+  desktop/macos/scripts/qualification-local-proof.sh --offline --fast \
+  --result /private/tmp/omi-local-qualification-proof.json \
+  vX.Y.Z+BUILD-macos
+```
+
+The proof itself does not use GitHub Actions or Codemagic credentials,
+production credentials, release APIs, channel pointers, publication,
+Beta/Stable bundles, or `/Applications/Omi.app`.
 
 A successful `0600` result has `status: "passed"`, `mode: "offline-fast"`,
 the tag's exact `source_sha`, `cleanup_status: "released"`, and these completed
