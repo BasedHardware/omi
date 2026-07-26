@@ -1,0 +1,19 @@
+docs/superpowers/specs/2026-07-25-proactive-live-suggestions-design.md
+  s_7918275f8e3531::t_ea4d8f6dbfd7de 1-182
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "819c48893f0a0ac947820d1eacf01c46e2668954",
+  "prompts": {},
+  "sessions": {
+    "s_7918275f8e3531": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "739fdbb2-b061-4a85-8520-85d2527f5698",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
