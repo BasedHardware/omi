@@ -43,7 +43,11 @@ podAnnotations:
   prometheus.io/path: "/metrics"
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
+podLabels:
+  env: dev
+  # Reconnect and circuit-breaker aggregates are emitted by backend-listen.
+  # Keep those scrape targets in the same development-only evidence plane as
+  # the Pusher targets.
 
 podSecurityContext: {}
   # fsGroup: 2000

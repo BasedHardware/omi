@@ -49,7 +49,10 @@ podAnnotations:
   prometheus.io/path: "/metrics"
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
+podLabels:
+  env: dev
+  # The development Prometheus job keeps this target in the development
+  # evidence plane as a second boundary alongside its namespace selector.
 
 podSecurityContext: {}
   # fsGroup: 2000

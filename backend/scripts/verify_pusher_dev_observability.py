@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Keep Pusher dev-bake telemetry visible without treating health as success.
 
-This source-only gate proves the development Prometheus instance has an
-environment-isolated Pusher scrape and that its dashboard exposes connection,
-drain, and backend-listen reconnect-circuit signals.  It deliberately does not
-query a live Prometheus API or generate traffic.
+This source-only gate proves the development Prometheus instance has
+namespace- and environment-isolated Pusher and backend-listen scrapes.  Its
+dashboard must expose connection, drain, reconnect/recovery, circuit-breaker,
+and scrape-target health aggregates. It deliberately does not query a live
+Prometheus API or generate traffic.
 """
 
 from __future__ import annotations
@@ -24,11 +25,22 @@ EXPECTED_METRICS = (
     "pusher_drain_in_progress",
     "pusher_circuit_breaker_state",
     "pusher_circuit_breaker_rejections_total",
+    "pusher_sessions_degraded",
 )
+DEV_NAMESPACE = "dev-omi-backend"
+DEV_ENVIRONMENT = "dev"
+SCRAPE_JOBS = {
+    "pusher-metrics": "pusher",
+    "backend-listen-metrics": "backend-listen",
+}
+DEV_WORKLOAD_VALUES = {
+    PUSHER_VALUES: "pusher",
+    ROOT / "backend/charts/backend-listen/dev_omi_backend_listen_values.yaml": "backend-listen",
+}
 
 
-def pusher_scrape_block(values: str) -> str | None:
-    match = re.search(r"(?ms)^\s*- job_name: pusher-metrics\n(?P<block>.*?)(?=^\s*- job_name:|\Z)", values)
+def scrape_block(values: str, job_name: str) -> str | None:
+    match = re.search(rf"(?ms)^\s*- job_name: {re.escape(job_name)}\n(?P<block>.*?)(?=^\s*- job_name:|\Z)", values)
     return match.group(0) if match else None
 
 
@@ -45,22 +57,36 @@ def dashboard_expressions(payload: dict) -> set[str]:
 
 def validate(root: Path = ROOT) -> list[str]:
     errors: list[str] = []
-    pusher_values = (root / PUSHER_VALUES.relative_to(ROOT)).read_text(encoding="utf-8")
-    for annotation in ('prometheus.io/scrape: "true"', 'prometheus.io/port: "8080"', 'prometheus.io/path: "/metrics"'):
-        if annotation not in pusher_values:
-            errors.append(f"dev Pusher chart must keep {annotation} for the isolated development scrape")
+    for values_path, workload in DEV_WORKLOAD_VALUES.items():
+        workload_values = (root / values_path.relative_to(ROOT)).read_text(encoding="utf-8")
+        for annotation in (
+            'prometheus.io/scrape: "true"',
+            'prometheus.io/port: "8080"',
+            'prometheus.io/path: "/metrics"',
+        ):
+            if annotation not in workload_values:
+                errors.append(f"dev {workload} chart must keep {annotation} for the isolated development scrape")
+        if f"podLabels:\n  env: {DEV_ENVIRONMENT}" not in workload_values:
+            errors.append(f"dev {workload} chart must label its scrape target env: {DEV_ENVIRONMENT}")
 
-    scrape = pusher_scrape_block((root / DEV_VALUES.relative_to(ROOT)).read_text(encoding="utf-8"))
-    if scrape is None:
-        errors.append("development Prometheus must define the pusher-metrics scrape job")
-    else:
+    monitoring_values = (root / DEV_VALUES.relative_to(ROOT)).read_text(encoding="utf-8")
+    for job_name, workload in SCRAPE_JOBS.items():
+        scrape = scrape_block(monitoring_values, job_name)
+        if scrape is None:
+            errors.append(f"development Prometheus must define the {job_name} scrape job")
+            continue
         for fragment in (
             "credentials_file: /etc/prometheus/secrets/metrics-scrape-token/token",
-            "__meta_kubernetes_pod_annotation_prometheus_io_scrape",
-            "regex: pusher",
+            f"names:\n              - {DEV_NAMESPACE}",
+            "__meta_kubernetes_namespace",
+            f"regex: {DEV_NAMESPACE}",
+            "__meta_kubernetes_pod_label_env",
+            f"regex: {DEV_ENVIRONMENT}",
+            "target_label: environment",
+            f"regex: {workload}",
         ):
             if fragment not in scrape:
-                errors.append(f"development pusher-metrics scrape must include {fragment!r}")
+                errors.append(f"development {job_name} scrape must include {fragment!r}")
 
     metric_text = (root / METRICS.relative_to(ROOT)).read_text(encoding="utf-8")
     for metric in EXPECTED_METRICS:
@@ -76,6 +102,8 @@ def validate(root: Path = ROOT) -> list[str]:
         for metric in EXPECTED_METRICS:
             if metric not in expressions:
                 errors.append(f"Pusher dashboard must expose development-visible {metric!r}")
+        if 'up{job=~"pusher-metrics|backend-listen-metrics"}' not in expressions:
+            errors.append("Pusher dashboard must expose the isolated scrape target health aggregate")
     return errors
 
 
