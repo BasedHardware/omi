@@ -21,6 +21,7 @@ DESKTOP_PIN = "https://api.omi.me"
 DESKTOP_BACKEND_PIN = "https://desktop-backend-hhibjajaja-uc.a.run.app/"
 RETIRED_GKE_DESKTOP_BACKEND_CHART_ROOTS = (
     "backend/charts",
+    "desktop/macos/charts",
 )
 RETIRED_GKE_DESKTOP_BACKEND_WORKFLOW_ROOT = ".github/workflows"
 RETIRED_GKE_DESKTOP_BACKEND_MANIFEST_SUFFIXES = {".tpl", ".yaml", ".yml"}
