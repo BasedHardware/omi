@@ -2152,3 +2152,62 @@ class TestGatedSTTSocketPassthroughMode:
 
         mock_conn.send.assert_called_once_with(audio)
         mock_conn.finalize.assert_called_once()
+
+
+class TestMisalignedChunks:
+    """A chunk that ends mid-frame must not disable the gate (prod: 11 sessions/24h)."""
+
+    def _make_gate(self, channels=1):
+        return VADStreamingGate(
+            sample_rate=16000,
+            channels=channels,
+            mode='active',
+            uid='test',
+            session_id='test',
+        )
+
+    def test_odd_length_chunk_keeps_gate_active(self):
+        """np.frombuffer used to raise on a partial sample, failing the session open."""
+        mock_conn = MagicMock()
+        mock_conn.is_connection_dead = False
+        gate = self._make_gate()
+        gated = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        gated.send(_make_pcm(30) + b'\x00', wall_time=1.0)
+
+        assert gated.is_gated
+        assert gate.mode == 'active'
+
+    def test_split_frame_keeps_sample_alignment(self):
+        """A frame split across two chunks must reach VAD as the same samples."""
+        pcm = struct.pack('<1600h', *[(i % 2000) - 1000 for i in range(1600)])
+        windows_whole: list[np.ndarray] = []
+        windows_split: list[np.ndarray] = []
+
+        def _record(into):
+            def _run(window, state, context):
+                into.append(np.array(window))
+                return 0.1, state, context
+
+            return _run
+
+        with patch('utils.stt.vad_gate.run_vad_window', side_effect=_record(windows_whole)):
+            self._make_gate().process_audio(pcm, 1.0)
+        with patch('utils.stt.vad_gate.run_vad_window', side_effect=_record(windows_split)):
+            gate = self._make_gate()
+            gate.process_audio(pcm[:513], 1.0)
+            gate.process_audio(pcm[513:], 1.03)
+
+        assert len(windows_split) == len(windows_whole) > 0
+        for split, whole in zip(windows_split, windows_whole):
+            assert np.array_equal(split, whole)
+
+    def test_stereo_partial_frame_is_carried(self):
+        """Stereo frames are 4 bytes; a 2-byte tail must not reach audioop.tomono."""
+        gate = self._make_gate(channels=2)
+        pcm = _make_pcm(30, channels=2)
+
+        gate.process_audio(pcm[:-2], 1.0)
+        out = gate.process_audio(pcm[-2:], 1.03)
+
+        assert out is not None
