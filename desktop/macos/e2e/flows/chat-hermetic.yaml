@@ -11,8 +11,13 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+JournalProjection.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+OrphanRepair.swift
   - desktop/macos/Desktop/Sources/Chat/AgentBridge.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentClient.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentContextRevision.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelTurnProjection.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeJournalContracts.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
 preconditions:

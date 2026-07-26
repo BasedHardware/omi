@@ -259,6 +259,18 @@ enum AgentClient {
       )
     }
 
+    func repairJournalTurns(
+      surface: AgentSurfaceReference,
+      ownerID: String,
+      turnIDs: [String]
+    ) async throws -> [KernelJournalTurn] {
+      try await bridge.repairJournalTurns(
+        surface: surface,
+        ownerID: ownerID,
+        turnIDs: turnIDs
+      )
+    }
+
     func listJournalTurns(
       surface: AgentSurfaceReference,
       ownerID: String? = nil,

@@ -18,6 +18,7 @@ covers:
   - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniService.swift
   - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniTestHarness.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+EventAdmission.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+PushToTalk.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionDelegate.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionLifecycle.swift

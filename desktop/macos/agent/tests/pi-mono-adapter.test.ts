@@ -286,11 +286,21 @@ describe("PiMonoAdapter prompt correlation", () => {
     );
 
     (adapter as any).handleMessageUpdate({
-      assistantMessageEvent: { type: "text_delta", delta: response },
+      assistantMessageEvent: { type: "text_delta", delta: "I don't have direct internet/" },
     });
+    expect(events.filter((event) => event.type === "text_delta")).toEqual([]);
+    (adapter as any).handleMessageUpdate({
+      assistantMessageEvent: {
+        type: "text_delta",
+        delta: "web access, but I can get you real weather data via the terminal!\n\nCurrent weather: Sunny, 73 F.",
+      },
+    });
+    const expected = "I can get you real weather data via the terminal!\n\nCurrent weather: Sunny, 73 F.";
+    expect(events.filter((event) => event.type === "text_delta")).toEqual([
+      { type: "text_delta", text: expected },
+    ]);
     (adapter as any).handleTurnEnd(makeTurnEndEvent(response));
 
-    const expected = "I can get you real weather data via the terminal!\n\nCurrent weather: Sunny, 73 F.";
     await expect(prompt).resolves.toMatchObject({ text: expected });
     expect(events.filter((event) => event.type === "text_delta")).toEqual([
       { type: "text_delta", text: expected },

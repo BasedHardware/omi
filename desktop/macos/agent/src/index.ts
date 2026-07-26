@@ -56,6 +56,7 @@ import type {
   JournalImportRemoteTurnMessage,
   JournalUpdateTurnMessage,
   JournalTerminalizeTurnMessage,
+  JournalRepairTurnsMessage,
   JournalListTurnsMessage,
   JournalClearTurnsMessage,
   EnsureAgentSpawnJournalMessage,
@@ -136,6 +137,7 @@ import {
   listJournalTurns,
   recordJournalExchange,
   recordJournalTurn,
+  repairOrphanedJournalTurns,
   settleClearedBackendTurnClaim,
   assertPublicJournalUpdatePolicy,
   terminalizeJournalTurn,
@@ -2432,6 +2434,55 @@ async function main(): Promise<void> {
               externalRefId: request.externalRefId,
               turn: journalTurnProjection(turn),
             });
+          }
+          pumpJournalOutbox();
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "journal_repair_turns": {
+        const request = msg as JournalRepairTurnsMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          const turns = repairOrphanedJournalTurns(store, {
+            ownerId,
+            turnIds: Array.isArray(request.turnIds)
+              ? request.turnIds.filter((turnId): turnId is string => typeof turnId === "string")
+              : [],
+          });
+          send({
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "repair",
+            conversationId: turns[0]?.conversationId ?? "",
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+            turns: turns.map(journalTurnProjection),
+            clearedCount: 0,
+            highWaterTurnSeq: 0,
+            generationBaseTurnSeq: 0,
+            conversationGeneration: 1,
+          });
+          for (const turn of turns) {
+            for (const wake of journalTurnChangedWakes(store, ownerId, turn)) {
+              send({
+                type: "journal_turn_changed",
+                ...wake,
+              });
+            }
           }
           pumpJournalOutbox();
         } catch (error) {
