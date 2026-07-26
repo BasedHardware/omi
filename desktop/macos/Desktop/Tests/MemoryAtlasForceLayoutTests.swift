@@ -349,6 +349,108 @@ final class MemoryAtlasForceLayoutTests: XCTestCase {
     XCTAssertEqual(forwards, backwards)
   }
 
+  /// The layout finds neighbourhoods in order to draw them apart; the caller
+  /// needs them in order to *name* them. Reporting them is what lets the map
+  /// say where you are, so it has to survive the passes that run afterwards.
+  func testTheLayoutReportsTheNeighbourhoodsItFound() throws {
+    let left = (0..<6).map { "left\($0)" }
+    let right = (0..<6).map { "right\($0)" }
+    var links: [Link] = []
+    for group in [left, right] {
+      for i in 0..<group.count {
+        for j in (i + 1)..<group.count { links.append(Link(a: group[i], b: group[j], weight: 5)) }
+      }
+    }
+    links.append(Link(a: "left0", b: "right0", weight: 1))
+
+    let result = Layout.layout(
+      nodeIDs: left + right, links: links, anchorID: nil, typeTargets: [:], area: area)
+
+    XCTAssertEqual(Set(left.map { result.communities[$0] }).count, 1)
+    XCTAssertEqual(Set(right.map { result.communities[$0] }).count, 1)
+    XCTAssertNotEqual(result.communities["left1"], result.communities["right1"])
+  }
+
+  /// An entity related to nothing is in no neighbourhood, and the map must not
+  /// invent one for it — that is the same claim the outer halo exists to avoid
+  /// making about where it sits.
+  func testEntitiesWithNoRelationshipsJoinNoNeighbourhood() throws {
+    let result = Layout.layout(
+      nodeIDs: ["a", "b", "c", "alone"],
+      links: [Link(a: "a", b: "b", weight: 4), Link(a: "b", b: "c", weight: 4)],
+      anchorID: nil,
+      typeTargets: [:],
+      area: area)
+
+    XCTAssertNil(result.communities["alone"])
+    XCTAssertNotNil(result.communities["b"])
+  }
+
+  /// The account holder joins no neighbourhood, for the same reason they earn
+  /// no co-occurrence: they are in everything. A neighbourhood is described by
+  /// its strongest members, and letting them in would name every region on the
+  /// map after the person reading it.
+  func testTheAccountHolderJoinsNoNeighbourhood() throws {
+    var links: [Link] = []
+    let members = (0..<8).map { "n\($0)" }
+    for i in 0..<members.count {
+      for j in (i + 1)..<members.count { links.append(Link(a: members[i], b: members[j], weight: 3)) }
+    }
+    for member in members { links.append(Link(a: "me", b: member, weight: 9)) }
+
+    let result = Layout.layout(
+      nodeIDs: members + ["me"], links: links, anchorID: "me", typeTargets: [:], area: area)
+
+    XCTAssertEqual(result.roles["me"], .core, "They are still on the map")
+    XCTAssertNil(result.communities["me"], "They are just not part of any one region of it")
+  }
+
+  /// A leaf is pinned beside its parent rather than relaxed, so it has no
+  /// grouping of its own. Leaving it ungrouped would drop a hub's entire burr
+  /// out of the region its hub defines — on a real account, most of the region.
+  func testALeafBelongsWhereItsParentBelongs() throws {
+    var links: [Link] = []
+    let members = (0..<6).map { "n\($0)" }
+    for i in 0..<members.count {
+      for j in (i + 1)..<members.count { links.append(Link(a: members[i], b: members[j], weight: 3)) }
+    }
+    links.append(Link(a: "n0", b: "leaf", weight: 2))
+
+    let result = Layout.layout(
+      nodeIDs: members + ["leaf"], links: links, anchorID: nil, typeTargets: [:], area: area)
+
+    XCTAssertEqual(result.roles["leaf"], .leaf(parentID: "n0"))
+    XCTAssertEqual(result.communities["leaf"], result.communities["n0"])
+  }
+
+  /// Evenly spaced on a fixed radius, a hub's leaves drew a flawless arc of
+  /// dots — a shape no data produces, which read as a rendering fault on the
+  /// real account rather than as a hub with thirty single-relationship
+  /// entities hanging off it.
+  func testAHubsLeavesDoNotDrawAPerfectArc() throws {
+    let leaves = (0..<24).map { "leaf\($0)" }
+    let result = Layout.layout(
+      nodeIDs: ["hub", "other"] + leaves,
+      links: [Link(a: "hub", b: "other", weight: 5)]
+        + leaves.map { Link(a: "hub", b: $0, weight: 2) },
+      anchorID: nil,
+      typeTargets: [:],
+      area: area)
+
+    let hub = try XCTUnwrap(result.positions["hub"])
+    let radii = try leaves.map { try distance(XCTUnwrap(result.positions[$0]), hub) }
+
+    // What made it look drawn was not the spread of radii — the old fan already
+    // used two rings — but that every leaf sat on one of them exactly. Counting
+    // distinct distances is what separates "an arc" from "a scatter": the old
+    // fan produced 2 for these 24 leaves.
+    let distinct = Set(radii.map { (($0 / max(radii.max() ?? 1, 1e-9)) * 200).rounded() }).count
+
+    XCTAssertGreaterThan(
+      distinct, leaves.count / 2,
+      "Leaves sharing a handful of exact radii trace circles, which is what read as a rendering fault")
+  }
+
   // MARK: - Determinism
 
   /// Swift seeds string hashing per process, so a layout that walks a

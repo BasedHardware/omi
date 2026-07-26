@@ -63,6 +63,24 @@ enum MemoryAtlasForceLayout {
     /// Normalized canvas coordinates, 0...1 on both axes.
     let positions: [String: CGPoint]
     let roles: [String: Role]
+    /// Which neighbourhood each entity was placed in, by opaque group number.
+    ///
+    /// The layout already has to find these to draw them apart; returning them
+    /// is what lets the map say *where* you are rather than only arranging the
+    /// dots so that a where exists. Entities with no relationships are absent:
+    /// they belong to no neighbourhood, and inventing one for them would be
+    /// the same lie the halo exists to avoid.
+    let communities: [String: Int]
+
+    init(
+      positions: [String: CGPoint],
+      roles: [String: Role],
+      communities: [String: Int] = [:]
+    ) {
+      self.positions = positions
+      self.roles = roles
+      self.communities = communities
+    }
   }
 
   // MARK: - Tunables
@@ -132,10 +150,10 @@ enum MemoryAtlasForceLayout {
   /// spreading the rest of the simulation does.
   ///
   /// Measured on the account-shaped fixture, as the mean distance within a
-  /// neighbourhood over the mean distance across the whole map: 0.27 with no
-  /// cohesion, 0.20 here, 0.17 at twice this. Community precision peaks here
-  /// too (0.79), and doubling it again buys 0.002 while pulling groups into
-  /// balls tight enough to read as decoration rather than structure.
+  /// neighbourhood over the mean distance across the whole map: 0.266 with no
+  /// cohesion, 0.234 here, 0.202 at twice this. Community precision peaks here
+  /// too — 0.756 / 0.773 / 0.762 across those three — so tighter groups past
+  /// this point are bought by putting the wrong entities in them.
   static let communityCohesion = 1.0
 
   // MARK: - Deriving relatedness
@@ -399,7 +417,23 @@ enum MemoryAtlasForceLayout {
     groups += identifiers.filter { roles[$0] == .isolate && !islands.parked.contains($0) }.map { [$0] }
     for (id, point) in haloPositions(groups: groups, area: area) { positions[id] = point }
 
-    return Result(positions: positions, roles: roles)
+    // A leaf was never relaxed — it is pinned beside its parent — so it has no
+    // community of its own. It reads as part of whatever its parent belongs to,
+    // which is also the only honest thing to say about an entity whose single
+    // relationship is to that parent.
+    // The anchor is excluded here for the same reason it is excluded from the
+    // cohesion force, and for one more: a neighbourhood is described by its
+    // strongest members, and the account holder outranks everyone everywhere.
+    // Let them join a group and every group is named after them.
+    var membership = communityOf
+    if let anchorID { membership[anchorID] = nil }
+    for id in identifiers {
+      if case .leaf(let parentID) = roles[id], let group = membership[parentID] {
+        membership[id] = group
+      }
+    }
+
+    return Result(positions: positions, roles: roles, communities: membership)
   }
 
   // MARK: - Classification
@@ -1094,10 +1128,19 @@ enum MemoryAtlasForceLayout {
       let spread = min(Double.pi * 1.4, 0.5 * Double(leaves.count))
       for (offset, id) in leaves.enumerated() {
         let fraction = leaves.count == 1 ? 0.5 : Double(offset) / Double(leaves.count - 1)
-        let angle = outward - spread / 2 + spread * fraction
+        // Deterministic scatter within each leaf's slot. Evenly spaced on a
+        // fixed radius, a hub with thirty leaves drew a flawless arc of dots
+        // across the map — the one shape in nature that is obviously a machine,
+        // and on a real account it read as a rendering fault rather than as
+        // thirty things that only relate to Singapore. The jitter stays inside
+        // the slot, so the burr keeps its size and its parent.
+        let slot = leaves.count == 1 ? spread : spread / Double(leaves.count - 1)
+        let angle =
+          outward - spread / 2 + spread * fraction
+          + (stableFraction("leaf-angle-\(id)") - 0.5) * slot * 0.9
         // A second, shorter ring once a hub has more leaves than one ring can
         // hold without them touching.
-        let ring = 1 + Double(offset / 12) * 0.55
+        let ring = (1 + Double(offset / 12) * 0.55) * (0.78 + 0.44 * stableFraction("leaf-reach-\(id)"))
         positions[id] = clamp(
           CGPoint(
             x: parent.x + CGFloat(cos(angle) * stub * ring),

@@ -258,10 +258,141 @@ struct MemoryAtlasEdgePlacement: Identifiable {
   var id: String { edge.id }
 }
 
+/// A region of the map the layout found by structure rather than by type.
+///
+/// The relaxation already has to detect these to draw them apart. Naming them
+/// is what turns "the dots are arranged meaningfully" into something a person
+/// can act on: a place they can see from across the map and decide to enter.
+struct MemoryAtlasNeighbourhood: Identifiable, Equatable {
+  /// Opaque. Group numbers come out of a modularity pass and carry no meaning
+  /// across rebuilds, so nothing user-facing may be derived from this.
+  let id: Int
+  let memberIDs: [String]
+  /// Its most-connected few members, named.
+  ///
+  /// Deliberately not a generated title. A model asked to name this group
+  /// would happily answer "Career" or "Family", and be confidently wrong in a
+  /// way the user cannot check. Listing who is actually in it says exactly what
+  /// the algorithm did and nothing more, and is falsifiable at a glance.
+  let caption: String
+  /// Normalized centre of its members.
+  let center: CGPoint
+  /// Normalized radius covering most of them. Strays are meant to fall outside
+  /// it — a region is where a neighbourhood mostly is, not a claim of a border.
+  let radius: CGFloat
+
+  var memberCount: Int { memberIDs.count }
+}
+
+/// Where a region's name goes, and whether it goes anywhere at all.
+///
+/// Separate from the drawing so the tap target and the painted caption are
+/// computed once from the same geometry. A label you can see but not press —
+/// or press somewhere it is not — is the classic failure of hit-testing a
+/// canvas twice.
+enum MemoryAtlasNeighbourhoodLabels {
+  struct Placed: Equatable, Identifiable {
+    let id: Int
+    let caption: String
+    /// The painted and tappable box, in view coordinates.
+    let rect: CGRect
+    /// The region's centre and extent on screen, for the tint behind it.
+    let center: CGPoint
+    let radii: CGSize
+  }
+
+  /// Past this the captions are the map. Eight territories is already more
+  /// than anyone holds in their head at a glance.
+  static let limit = 8
+
+  /// Regions stop being the subject once the camera is inside one: at that
+  /// point the entities themselves are readable and a caption for a
+  /// neighbourhood mostly offscreen is just a floating word.
+  static func areVisible(detailLevel: MemoryAtlasDetailLevel, hasSelection: Bool) -> Bool {
+    guard !hasSelection else { return false }
+    return detailLevel == .overview || detailLevel == .neighborhood
+  }
+
+  /// How far to zoom, and where to point, when the user enters a region.
+  ///
+  /// Framed so the region fills most of the viewport but not all of it — a
+  /// neighbourhood you cannot see the edges of is indistinguishable from the
+  /// whole map, which is what the user just left.
+  static let enteredCoverage: CGFloat = 0.62
+
+  static func entering(
+    center: CGPoint,
+    radius: CGFloat,
+    viewport: CGSize,
+    zoomRange: ClosedRange<CGFloat>
+  ) -> (zoom: CGFloat, pan: CGSize) {
+    let span = max(radius * 2, 0.02)
+    let zoom = min(max(enteredCoverage / span, zoomRange.lowerBound), zoomRange.upperBound)
+    return (
+      zoom,
+      CGSize(
+        width: (0.5 - center.x) * viewport.width * zoom,
+        height: (0.5 - center.y) * viewport.height * zoom)
+    )
+  }
+
+  static func place(
+    _ regions: [MemoryAtlasNeighbourhood],
+    in size: CGSize,
+    project: (CGPoint) -> CGPoint,
+    scale: CGSize,
+    /// Boxes already spoken for — the entity names the map is drawing. A region
+    /// caption laid over one of those replaces a fact with a summary.
+    avoiding taken: [CGRect] = [],
+    limit: Int = limit
+  ) -> [Placed] {
+    var placed: [Placed] = []
+    var occupied = taken
+    for region in regions.prefix(limit * 4) where placed.count < limit {
+      let center = project(region.center)
+      let radii = CGSize(
+        width: region.radius * scale.width, height: region.radius * scale.height)
+      let width = min(260, max(64, CGFloat(region.caption.count) * 6.1 + 20))
+
+      // Above the region first, because a name over the top of a group reads as
+      // a heading for it. The rest are fallbacks: on a real account most
+      // regions overlap near the middle of the map, and taking only the first
+      // choice left two thirds of them unnamed while the left half of the
+      // canvas had no captions at all. Every candidate still touches its own
+      // territory, so a name never drifts onto someone else's ground.
+      let candidates = [
+        CGPoint(x: center.x, y: center.y - radii.height - 22),
+        CGPoint(x: center.x, y: center.y + radii.height + 22),
+        CGPoint(x: center.x - radii.width * 0.6, y: center.y - radii.height * 0.55),
+        CGPoint(x: center.x + radii.width * 0.6, y: center.y + radii.height * 0.55),
+      ]
+
+      // A caption whose region has drifted offscreen names nothing the user can
+      // see, and two captions on top of each other name nothing at all.
+      let visible = CGRect(origin: .zero, size: size)
+      guard
+        let rect = candidates.lazy
+          .map({ CGRect(x: $0.x - width / 2, y: $0.y - 9, width: width, height: 18) })
+          .first(where: { candidate in
+            visible.contains(candidate)
+              && !occupied.contains(where: { $0.intersects(candidate.insetBy(dx: -8, dy: -7)) })
+          })
+      else { continue }
+
+      occupied.append(rect)
+      placed.append(
+        Placed(id: region.id, caption: region.caption, rect: rect, center: center, radii: radii))
+    }
+    return placed
+  }
+}
+
 struct MemoryAtlasSnapshot {
   let nodes: [MemoryAtlasNodePlacement]
   let edges: [MemoryAtlasEdgePlacement]
   let anchorNodeID: String?
+  /// Largest first. Empty on maps too small or too sparse to have regions.
+  let neighbourhoods: [MemoryAtlasNeighbourhood]
   let activeClusters: [MemoryAtlasCluster]
   let clusterCenters: [MemoryAtlasCluster: CGPoint]
   let nodeByID: [String: MemoryAtlasNodePlacement]
@@ -280,11 +411,13 @@ struct MemoryAtlasSnapshot {
     nodes: [MemoryAtlasNodePlacement],
     edges: [MemoryAtlasEdgePlacement],
     anchorNodeID: String?,
-    clusterCenters: [MemoryAtlasCluster: CGPoint]
+    clusterCenters: [MemoryAtlasCluster: CGPoint],
+    neighbourhoods: [MemoryAtlasNeighbourhood] = []
   ) {
     self.nodes = nodes
     self.edges = edges
     self.anchorNodeID = anchorNodeID
+    self.neighbourhoods = neighbourhoods
     self.activeClusters = MemoryAtlasCluster.allCases.filter { clusterCenters[$0] != nil }
     self.clusterCenters = clusterCenters
     self.timeline = MemoryAtlasTimeline.make(from: nodes.map(\.node))
@@ -292,8 +425,8 @@ struct MemoryAtlasSnapshot {
     nodeByID = indexedNodes
 
     let sortedEdges = edges.sorted { lhs, rhs in
-      let lhsRank = MemoryAtlasSnapshot.edgeRank(lhs, nodes: indexedNodes)
-      let rhsRank = MemoryAtlasSnapshot.edgeRank(rhs, nodes: indexedNodes)
+      let lhsRank = MemoryAtlasSnapshot.edgeRank(lhs, nodes: indexedNodes, anchorID: anchorNodeID)
+      let rhsRank = MemoryAtlasSnapshot.edgeRank(rhs, nodes: indexedNodes, anchorID: anchorNodeID)
       return lhsRank < rhsRank
     }
     rankedEdges = sortedEdges
@@ -336,13 +469,26 @@ struct MemoryAtlasSnapshot {
     clusterCenters[cluster] ?? MemoryAtlasCluster.starCenter
   }
 
-  private static func edgeRank(
+  /// What gets drawn first when there is only room for a few dozen lines.
+  ///
+  /// The account holder's own connections sort last, however prominent their
+  /// endpoints are. They used to sort *first* — the anchor's rank is zero, so
+  /// every edge touching it led the order — and the budget is small enough
+  /// (36 lines at overview) that on a real account it was spent entirely on
+  /// them. The map reported 1,377 connections and drew a hundred copies of the
+  /// one fact the user already knows: that everything here is theirs. The
+  /// relationships between two other entities, which are the only ones that
+  /// can tell them something, never made the cut.
+  static func edgeRank(
     _ placement: MemoryAtlasEdgePlacement,
-    nodes: [String: MemoryAtlasNodePlacement]
-  ) -> (Int, Int, String) {
+    nodes: [String: MemoryAtlasNodePlacement],
+    anchorID: String?
+  ) -> (Int, Int, Int, String) {
     let sourceRank = nodes[placement.edge.sourceId]?.clusterRank ?? .max
     let targetRank = nodes[placement.edge.targetId]?.clusterRank ?? .max
-    return (min(sourceRank, targetRank), max(sourceRank, targetRank), placement.id)
+    let touchesAnchor =
+      anchorID != nil && (placement.edge.sourceId == anchorID || placement.edge.targetId == anchorID)
+    return (touchesAnchor ? 1 : 0, min(sourceRank, targetRank), max(sourceRank, targetRank), placement.id)
   }
 
   private static func maximumEndpointRank(
@@ -1110,13 +1256,118 @@ enum MemoryAtlasLayoutEngine {
       nodes: placements,
       edges: edgePlacements,
       anchorNodeID: anchor?.id,
-      clusterCenters: centroids(of: placements, activeClusters: activeClusters)
+      clusterCenters: centroids(of: placements, activeClusters: activeClusters),
+      neighbourhoods: neighbourhoods(communities: layout.communities, placements: placements)
     )
+  }
+
+  /// Turns the layout's group numbers into regions the map can name.
+  ///
+  /// Two rules keep this from labelling noise. A region must be big enough to
+  /// be a place — a modularity pass on a real account emits a long tail of
+  /// three-entity groups, and captioning those would bury the handful that
+  /// matter. And its extent is the distance covering most of its members, not
+  /// all of them, so one entity that drifted across the map does not inflate a
+  /// tight neighbourhood into a claim over half the canvas.
+  static func neighbourhoods(
+    communities: [String: Int],
+    placements: [MemoryAtlasNodePlacement],
+    captionMembers: Int = 3
+  ) -> [MemoryAtlasNeighbourhood] {
+    guard !communities.isEmpty else { return [] }
+    let placementByID = Dictionary(lastWriteWins: placements.map { ($0.id, $0) })
+
+    var membersByGroup: [Int: [String]] = [:]
+    for id in communities.keys.sorted() {
+      guard let group = communities[id], placementByID[id] != nil else { continue }
+      membersByGroup[group, default: []].append(id)
+    }
+
+    // Scaled to the map: six entities is a neighbourhood on a small account and
+    // rounding error on a large one.
+    let floor = max(6, Int(Double(placementByID.count) * 0.015))
+
+    var regions: [MemoryAtlasNeighbourhood] = []
+    for group in membersByGroup.keys.sorted() {
+      let members = membersByGroup[group] ?? []
+      guard members.count >= floor else { continue }
+      let points = members.compactMap { placementByID[$0]?.normalizedPosition }
+      guard !points.isEmpty else { continue }
+
+      let center = CGPoint(
+        x: points.map(\.x).reduce(0, +) / CGFloat(points.count),
+        y: points.map(\.y).reduce(0, +) / CGFloat(points.count)
+      )
+      let distances = points.map { hypot($0.x - center.x, $0.y - center.y) }.sorted()
+      let radius = distances[min(distances.count - 1, Int(Double(distances.count) * 0.8))]
+
+      // Most connected first, so the caption names the entities a person would
+      // actually recognise the region by.
+      let ranked =
+        members
+        .compactMap { placementByID[$0] }
+        .sorted {
+          if $0.degree == $1.degree {
+            return $0.node.label.localizedCaseInsensitiveCompare($1.node.label) == .orderedAscending
+          }
+          return $0.degree > $1.degree
+        }
+
+      regions.append(
+        MemoryAtlasNeighbourhood(
+          id: group,
+          memberIDs: members,
+          caption: caption(from: ranked, count: captionMembers),
+          center: center,
+          radius: max(radius, 0.01)
+        )
+      )
+    }
+
+    return regions.sorted {
+      $0.memberCount == $1.memberCount ? $0.id < $1.id : $0.memberCount > $1.memberCount
+    }
+  }
+
+  /// The longest a member's label may be and still work as part of a region's
+  /// name. Roughly a long proper noun — "Ho Chi Minh City", "Omi Desktop App".
+  static let captionNameCeiling = 26
+
+  /// Picks the few names that describe a region.
+  ///
+  /// Connectedness alone is not enough, because the extractor does not only
+  /// mint names. It also mints entities whose label is an entire sentence — a
+  /// calendar invite's full subject line, a GitHub issue title with its quotes
+  /// intact — and those are frequently a region's best-connected members. Taken
+  /// literally, one of them produced a region caption 1,200 points wide that
+  /// covered a quarter of the map and named nothing.
+  ///
+  /// So the caption prefers members whose labels read as names, and only falls
+  /// back to truncating a sentence when a region has nothing shorter to offer.
+  static func caption(
+    from ranked: [MemoryAtlasNodePlacement], count: Int, ceiling: Int = captionNameCeiling
+  ) -> String {
+    var chosen = ranked.filter { $0.node.label.count <= ceiling }.prefix(count).map(\.node.label)
+    if chosen.count < count {
+      let already = Set(chosen)
+      for placement in ranked where chosen.count < count {
+        let label = placement.node.label
+        guard !already.contains(label), label.count > ceiling else { continue }
+        chosen.append(String(label.prefix(ceiling - 1)).trimmingCharacters(in: .whitespaces) + "…")
+      }
+    }
+    return chosen.joined(separator: " · ")
   }
 
   /// The region the relaxed map may occupy. Isolates are parked in the margin
   /// outside it, so it stops short of the canvas edge.
   static let layoutArea = CGRect(x: 0.12, y: 0.16, width: 0.76, height: 0.68)
+
+  /// One phrasing for "how big is this map", so the header and the timeline
+  /// footer cannot describe the same thing in two different ways.
+  static func countLabel(entities: Int, connections: Int) -> String {
+    "\(entities) entit\(entities == 1 ? "y" : "ies") · \(connections) connection\(connections == 1 ? "" : "s")"
+  }
 
   /// Whether the account holder's own connections should recede into the
   /// background rather than being drawn like every other relationship.
@@ -1701,6 +1952,17 @@ struct CanonicalMemoryAtlasPage: View {
   /// Opens a cited memory on the Memories surface this page came from.
   let onOpenMemory: (String) -> Void
 
+  /// Reads the same memoized snapshot the surface below is drawing, so the two
+  /// cannot drift. Free after the first build — the cache is keyed on graph
+  /// content and the surface has already paid for it.
+  private var headerCountLabel: String {
+    let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let snapshot = MemoryAtlasSnapshotCache.shared.snapshot(
+      for: viewModel.graphResponse, userName: givenName.isEmpty ? nil : givenName)
+    return MemoryAtlasLayoutEngine.countLabel(
+      entities: snapshot.nodes.count, connections: snapshot.edges.count)
+  }
+
   var body: some View {
     VStack(spacing: 0) {
       HStack(spacing: 12) {
@@ -1725,9 +1987,20 @@ struct CanonicalMemoryAtlasPage: View {
 
         Spacer()
 
-        Text("\(viewModel.graphResponse.nodes.count) entities · \(viewModel.graphResponse.edges.count) connections")
+        // The map's own counts, not the server response's.
+        //
+        // The header used to report `graphResponse`, which counts things this
+        // page does not draw: a duplicate id, a "The User" node folded into
+        // you, and every extra edge the server emitted for one relationship
+        // ("includes" and "with" between the same two entities). On a real
+        // account that read "1,097 entities · 1,544 connections" directly above
+        // a timeline saying 1,096 and 1,377 — the same map, described twice,
+        // disagreeing. A count nobody can reconcile costs more trust than it
+        // buys completeness, and the drawn map is the one the user can check.
+        Text(headerCountLabel)
           .scaledFont(size: 12)
           .foregroundColor(OmiColors.textTertiary)
+          .accessibilityIdentifier("memory_atlas_header_counts")
       }
       .padding(.horizontal, 18)
       .frame(height: 44)
@@ -2056,10 +2329,15 @@ private struct CanonicalMemoryAtlasSurface: View {
           isCameraMoving: isCameraMoving
         )
 
+        // One placement pass per frame, shared by the tint the canvas paints
+        // and the buttons laid over it, so the two cannot disagree about where
+        // a region's name is.
+        let regions = placedNeighbourhoods(in: proxy.size, plan: plan)
+
         ZStack {
           OmiColors.backgroundPrimary
 
-          atlasCanvas(size: proxy.size, plan: plan)
+          atlasCanvas(size: proxy.size, plan: plan, regions: regions)
             // Camera gestures belong to the painted atlas only. Keeping them
             // off the enclosing ZStack prevents a click on zoom, playback, or
             // the selection strip from also selecting a node behind the control.
@@ -2082,6 +2360,11 @@ private struct CanonicalMemoryAtlasSurface: View {
                 labelAbove: plan.labelAboveNodeIDs.contains(placement.id)
               )
             }
+
+            // Above the entities: a region name that an entity's own label
+            // could cover would be the one label on the map with nothing
+            // underneath it to explain itself.
+            neighbourhoodCaptions(regions: regions)
           }
 
           zoomControls
@@ -2306,13 +2589,135 @@ private struct CanonicalMemoryAtlasSurface: View {
     .accessibilityIdentifier("memory_atlas_type_key")
   }
 
-  private func atlasCanvas(size: CGSize, plan: MemoryAtlasRenderPlan) -> some View {
+  private func atlasCanvas(
+    size: CGSize, plan: MemoryAtlasRenderPlan,
+    regions: [MemoryAtlasNeighbourhoodLabels.Placed]
+  ) -> some View {
     Canvas(opaque: false, colorMode: .linear) { context, _ in
+      drawNeighbourhoodTints(context: &context, regions: regions)
       drawEdges(context: &context, size: size, plan: plan)
       drawNodes(context: &context, size: size, plan: plan)
       drawCanvasLabels(context: &context, size: size, plan: plan)
     }
     .accessibilityHidden(true)
+  }
+
+  /// The regions to name at the current camera, or nothing when the map is not
+  /// being read as a whole.
+  private func placedNeighbourhoods(
+    in size: CGSize, plan: MemoryAtlasRenderPlan
+  ) -> [MemoryAtlasNeighbourhoodLabels.Placed] {
+    guard !compact, matchingNodeIDs == nil,
+      MemoryAtlasNeighbourhoodLabels.areVisible(
+        detailLevel: plan.detailLevel, hasSelection: selectedNodeID != nil)
+    else { return [] }
+    // The entity names already on the canvas, as boxes to stay out of. They
+    // hang below their mark, and their width tracks the same estimate the
+    // canvas labeller uses.
+    let entityNames = plan.visibleNodes.filter { plan.labelNodeIDs.contains($0.id) }.map {
+      placement -> CGRect in
+      let mark = point(for: placement.normalizedPosition, in: size)
+      let width = min(160, max(48, CGFloat(placement.node.label.count) * 6.4 + 16))
+      let above = plan.labelAboveNodeIDs.contains(placement.id)
+      return CGRect(x: mark.x - width / 2, y: mark.y + (above ? -30 : 8), width: width, height: 20)
+    }
+
+    return MemoryAtlasNeighbourhoodLabels.place(
+      snapshot.neighbourhoods,
+      in: size,
+      project: { point(for: $0, in: size) },
+      scale: CGSize(width: size.width * zoom, height: size.height * zoom),
+      avoiding: entityNames
+    )
+  }
+
+  /// A breath of light where a neighbourhood is, drawn under everything.
+  ///
+  /// Deliberately colourless. Type already owns hue on this canvas, and a
+  /// second colour scale over the top of it would leave the user decoding two
+  /// palettes at once — with thirty-odd regions to distinguish, one of them
+  /// unwinnable. A region reads as a lit patch of ground, not as a category.
+  private func drawNeighbourhoodTints(
+    context: inout GraphicsContext,
+    regions: [MemoryAtlasNeighbourhoodLabels.Placed]
+  ) {
+    for region in regions {
+      let bounds = CGRect(
+        x: region.center.x - region.radii.width,
+        y: region.center.y - region.radii.height,
+        width: region.radii.width * 2,
+        height: region.radii.height * 2
+      )
+      context.fill(
+        Path(ellipseIn: bounds),
+        with: .radialGradient(
+          Gradient(colors: [
+            OmiColors.textPrimary.opacity(0.038), OmiColors.textPrimary.opacity(0),
+          ]),
+          center: region.center,
+          startRadius: 0,
+          endRadius: max(region.radii.width, region.radii.height)
+        )
+      )
+    }
+  }
+
+  /// Region names as real controls rather than painted text.
+  ///
+  /// There are at most eight, so the cost of a view each is nothing, and it
+  /// buys the two things a canvas cannot: a press that lands exactly where the
+  /// caption is drawn, and a name VoiceOver can read. A territory you can see
+  /// but not enter would be a worse map than one with no territories on it.
+  @ViewBuilder
+  private func neighbourhoodCaptions(
+    regions: [MemoryAtlasNeighbourhoodLabels.Placed]
+  ) -> some View {
+    ForEach(regions) { region in
+      Button {
+        enter(region)
+      } label: {
+        Text(region.caption)
+          .scaledFont(size: 10, weight: .medium)
+          .foregroundColor(OmiColors.textSecondary)
+          .lineLimit(1)
+          .truncationMode(.tail)
+          .padding(.horizontal, 9)
+          // Sized to the box the placement pass reserved. Left to size itself,
+          // a caption grows past the width its collision test assumed and
+          // starts covering the neighbouring regions it was measured against.
+          .frame(width: region.rect.width, height: region.rect.height)
+          // A scrim, because the caption sits over the map rather than beside
+          // it and the dots underneath would read through the letters.
+          .omiControlSurface(
+            fill: OmiColors.backgroundPrimary.opacity(0.72), radius: 9,
+            stroke: OmiColors.border.opacity(0.22))
+      }
+      .buttonStyle(.plain)
+      .position(x: region.rect.midX, y: region.rect.midY)
+      .help("Zoom into this neighbourhood")
+      .accessibilityLabel("Neighbourhood around \(region.caption)")
+      .accessibilityHint("Zooms the map into this neighbourhood")
+      .accessibilityIdentifier("memory_atlas_neighbourhood_\(region.id)")
+    }
+  }
+
+  /// Takes the camera into a region: close enough that its entities are named,
+  /// far enough that you can still see its edges.
+  private func enter(_ region: MemoryAtlasNeighbourhoodLabels.Placed) {
+    guard viewportSize.width > 0, viewportSize.height > 0,
+      let neighbourhood = snapshot.neighbourhoods.first(where: { $0.id == region.id })
+    else { return }
+    let camera = MemoryAtlasNeighbourhoodLabels.entering(
+      center: neighbourhood.center,
+      radius: neighbourhood.radius,
+      viewport: viewportSize,
+      zoomRange: MemoryAtlasZoomPolicy.minimumZoom...maximumZoom)
+    withAnimation(OmiMotion.gated(.easeOut(duration: 0.26))) {
+      zoom = camera.zoom
+      settledZoom = camera.zoom
+      pan = camera.pan
+      settledPan = camera.pan
+    }
   }
 
   private func drawEdges(
@@ -2850,11 +3255,14 @@ private struct CanonicalMemoryAtlasSurface: View {
           .foregroundColor(OmiColors.textPrimary)
           .lineLimit(1)
 
-        Text("\(visibleEntityCount) entities · \(visibleConnectionCount) connections")
-          .scaledFont(size: 10)
-          .foregroundColor(OmiColors.textTertiary)
-          .monospacedDigit()
-          .lineLimit(1)
+        Text(
+          MemoryAtlasLayoutEngine.countLabel(
+            entities: visibleEntityCount, connections: visibleConnectionCount)
+        )
+        .scaledFont(size: 10)
+        .foregroundColor(OmiColors.textTertiary)
+        .monospacedDigit()
+        .lineLimit(1)
 
         Spacer(minLength: 8)
 

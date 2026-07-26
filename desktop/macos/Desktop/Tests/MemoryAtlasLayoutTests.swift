@@ -613,6 +613,270 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertFalse(recede(nil, "singapore"), "No account holder, no spokes to hold back")
   }
 
+  // MARK: - Neighbourhoods the map can name
+
+  /// A region is described by the entities actually in it, and by nothing else.
+  ///
+  /// The alternative — asking a model to title the group — produces "Career" or
+  /// "Family": confident, unfalsifiable, and wrong in a way the user has no way
+  /// to check. Naming its strongest members states exactly what the algorithm
+  /// did, and is wrong visibly or not at all.
+  func testARegionIsNamedAfterItsMostConnectedMembers() throws {
+    let members = ["codex", "github", "omi", "swift", "xcode", "pr", "ci", "linter"]
+    var nodes = members.map { KnowledgeGraphNode(id: $0, label: $0.capitalized, nodeType: .thing) }
+    nodes.append(KnowledgeGraphNode(id: "david", label: "David", nodeType: .person))
+    // Codex and GitHub touch everything in the group; Linter touches one thing.
+    var edges: [KnowledgeGraphEdge] = []
+    for (index, member) in members.enumerated() where member != "codex" {
+      edges.append(
+        KnowledgeGraphEdge(id: "c\(index)", sourceId: "codex", targetId: member, label: "uses"))
+    }
+    for (index, member) in members.enumerated() where !["codex", "github"].contains(member) {
+      edges.append(
+        KnowledgeGraphEdge(id: "g\(index)", sourceId: "github", targetId: member, label: "hosts"))
+    }
+
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(
+      graph: KnowledgeGraphResponse(nodes: nodes, edges: edges), userName: "David")
+    let region = try XCTUnwrap(snapshot.neighbourhoods.first)
+
+    XCTAssertTrue(region.caption.hasPrefix("Codex · Github"), "Got: \(region.caption)")
+    XCTAssertFalse(region.caption.contains("David"), "A region must not be named after you")
+    XCTAssertEqual(region.caption.components(separatedBy: " · ").count, 3, "Three names, not eight")
+  }
+
+  /// The extractor does not only mint names. It also mints entities whose
+  /// label is a whole sentence — a calendar invite's subject line, a GitHub
+  /// issue title with its quotes intact — and on the real account those were
+  /// frequently a region's best-connected members. Taken literally, one of them
+  /// produced a caption 1,200 points wide that lay across a quarter of the map
+  /// and named nothing.
+  func testARegionPrefersNamesOverSentencesWhenDescribingItself() {
+    let sentence =
+      "Calendar event — Immunefi Alpha Night with FailSafe, Sigma Prime, ChainPatrol and Halborn"
+    let ranked = [
+      placement(label: sentence, degree: 40),
+      placement(label: "Singapore", degree: 20),
+      placement(label: "TOKEN2049", degree: 18),
+      placement(label: "Immunefi", degree: 4),
+    ]
+
+    let caption = MemoryAtlasLayoutEngine.caption(from: ranked, count: 3)
+
+    XCTAssertEqual(caption, "Singapore · TOKEN2049 · Immunefi")
+    XCTAssertFalse(caption.contains(sentence))
+  }
+
+  /// A region can be made entirely of sentences, and it still has to be
+  /// nameable — dropping it would silently remove the region rather than
+  /// describe it badly.
+  func testARegionWithOnlySentencesIsStillNamedShortly() {
+    let ranked = (0..<3).map {
+      placement(label: "GitHub issue titled “Windows desktop crash \($0)”", degree: 10 - $0)
+    }
+
+    let caption = MemoryAtlasLayoutEngine.caption(from: ranked, count: 3)
+
+    XCTAssertEqual(caption.components(separatedBy: " · ").count, 3)
+    for part in caption.components(separatedBy: " · ") {
+      XCTAssertLessThanOrEqual(part.count, MemoryAtlasLayoutEngine.captionNameCeiling)
+      XCTAssertTrue(part.hasSuffix("…"), "A cut sentence must show that it was cut")
+    }
+  }
+
+  /// A modularity pass on a real account emits a long tail of two- and
+  /// three-entity groups. Captioning those buries the handful of regions that
+  /// mean something under a field of labels for nothing.
+  func testTinyGroupsAreNotDrawnAsRegions() {
+    // Twelve unrelated pairs: twelve groups, none of them a place.
+    var nodes: [KnowledgeGraphNode] = []
+    var edges: [KnowledgeGraphEdge] = []
+    for index in 0..<12 {
+      nodes.append(KnowledgeGraphNode(id: "a\(index)", label: "A\(index)", nodeType: .concept))
+      nodes.append(KnowledgeGraphNode(id: "b\(index)", label: "B\(index)", nodeType: .concept))
+      edges.append(
+        KnowledgeGraphEdge(id: "e\(index)", sourceId: "a\(index)", targetId: "b\(index)", label: "with"))
+    }
+
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(
+      graph: KnowledgeGraphResponse(nodes: nodes, edges: edges), userName: nil)
+
+    XCTAssertTrue(
+      snapshot.neighbourhoods.isEmpty,
+      "Twenty-four entities in pairs have no neighbourhoods, and saying otherwise is noise")
+  }
+
+  /// Region names are the map's coarsest layer. Once the camera is inside one,
+  /// or once the user has picked something specific, they are in the way of the
+  /// thing that replaced them.
+  func testRegionNamesGiveWayToWhateverTheUserIsActuallyLookingAt() {
+    let visible = MemoryAtlasNeighbourhoodLabels.areVisible
+
+    XCTAssertTrue(visible(.overview, false))
+    XCTAssertTrue(visible(.neighborhood, false))
+    XCTAssertFalse(visible(.detail, false), "Zoomed in, the entities speak for themselves")
+    XCTAssertFalse(visible(.inspect, false))
+    XCTAssertFalse(visible(.overview, true), "A selection is a more specific question")
+  }
+
+  /// Two region names on top of each other name nothing, and a name for a
+  /// region that has been panned off the map names nothing the user can see.
+  ///
+  /// Regions on a real account mostly overlap near the middle, so a caption
+  /// that cannot have its first choice takes another spot on its own territory
+  /// rather than going unnamed — but never one that is already spoken for.
+  func testRegionNamesNeverOverlapAndNeverLeaveTheCanvas() {
+    let size = CGSize(width: 800, height: 600)
+    let stacked = (0..<3).map {
+      MemoryAtlasNeighbourhood(
+        id: $0, memberIDs: ["m"], caption: "Region \($0)",
+        center: CGPoint(x: 0.5, y: 0.5), radius: 0.1)
+    }
+    let offscreen = MemoryAtlasNeighbourhood(
+      id: 9, memberIDs: ["m"], caption: "Far away", center: CGPoint(x: 14, y: 14), radius: 0.1)
+    let taken = CGRect(x: 340, y: 380, width: 120, height: 20)
+
+    let placed = MemoryAtlasNeighbourhoodLabels.place(
+      stacked + [offscreen], in: size,
+      project: { CGPoint(x: $0.x * size.width, y: $0.y * size.height) },
+      scale: size,
+      avoiding: [taken])
+
+    XCTAssertFalse(placed.contains { $0.id == 9 }, "A region off the canvas has nothing to name")
+    for rect in placed.map(\.rect) {
+      XCTAssertTrue(CGRect(origin: .zero, size: size).contains(rect))
+      XCTAssertFalse(rect.intersects(taken), "An entity's own name is not negotiable")
+    }
+    for (index, one) in placed.enumerated() {
+      for other in placed.dropFirst(index + 1) {
+        XCTAssertFalse(one.rect.intersects(other.rect), "\(one.caption) over \(other.caption)")
+      }
+    }
+  }
+
+  /// Eight territories is already more than anyone holds at a glance, and the
+  /// budget has to hold whatever the modularity pass emits.
+  func testTheMapNamesAtMostAHandfulOfRegions() {
+    let many = (0..<40).map { index in
+      MemoryAtlasNeighbourhood(
+        id: index, memberIDs: ["m"], caption: "R\(index)",
+        center: CGPoint(x: 0.1 + 0.02 * CGFloat(index), y: 0.5), radius: 0.005)
+    }
+
+    let placed = MemoryAtlasNeighbourhoodLabels.place(
+      many, in: CGSize(width: 4000, height: 600),
+      project: { CGPoint(x: $0.x * 4000, y: $0.y * 600) },
+      scale: CGSize(width: 4000, height: 600))
+
+    XCTAssertEqual(placed.count, MemoryAtlasNeighbourhoodLabels.limit)
+  }
+
+  /// Only a few dozen lines fit on the map at overview zoom, and they used to
+  /// all be the account holder's.
+  ///
+  /// The anchor's rank is zero, so every edge touching it led the draw order.
+  /// On the real account that meant the entire budget went to "David is
+  /// connected to this" — a hundred copies of the one fact the user already
+  /// knows — while the map reported 1,377 connections and drew no relationship
+  /// between any two other entities. Those are the only ones that can tell them
+  /// something they did not already know.
+  func testTheDrawnConnectionsAreNotAllYourOwn() throws {
+    var nodes = [KnowledgeGraphNode(id: "david", label: "David", nodeType: .person)]
+    var edges: [KnowledgeGraphEdge] = []
+    for index in 0..<12 {
+      nodes.append(KnowledgeGraphNode(id: "e\(index)", label: "E\(index)", nodeType: .thing))
+      edges.append(
+        KnowledgeGraphEdge(id: "me\(index)", sourceId: "david", targetId: "e\(index)", label: "uses"))
+    }
+    // Two entities related to each other, and to nothing prominent.
+    edges.append(KnowledgeGraphEdge(id: "pair", sourceId: "e0", targetId: "e1", label: "with"))
+
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(
+      graph: KnowledgeGraphResponse(nodes: nodes, edges: edges), userName: "David")
+    let first = try XCTUnwrap(snapshot.rankedEdges.first)
+
+    XCTAssertEqual(first.id, "pair", "A relationship between two other entities is drawn first")
+    XCTAssertTrue(
+      snapshot.rankedEdges.dropFirst().allSatisfy {
+        $0.edge.sourceId == "david" || $0.edge.targetId == "david"
+      },
+      "Your own connections come last, however prominent their other end is")
+  }
+
+  /// Entering a region has to actually arrive somewhere: close enough that its
+  /// entities are named, framed so you can still see where it ends. A camera
+  /// that lands on the whole map again has taken the user back where they were.
+  func testEnteringARegionFramesItRatherThanTheWholeMap() {
+    let viewport = CGSize(width: 1200, height: 650)
+    let range = MemoryAtlasZoomPolicy.minimumZoom...20
+
+    let tight = MemoryAtlasNeighbourhoodLabels.entering(
+      center: CGPoint(x: 0.3, y: 0.4), radius: 0.05, viewport: viewport, zoomRange: range)
+    let sprawling = MemoryAtlasNeighbourhoodLabels.entering(
+      center: CGPoint(x: 0.5, y: 0.5), radius: 0.4, viewport: viewport, zoomRange: range)
+
+    XCTAssertGreaterThan(tight.zoom, 1, "A small region has to be zoomed into to be read")
+    XCTAssertGreaterThan(tight.zoom, sprawling.zoom, "A tighter region needs more magnification")
+    XCTAssertEqual(sprawling.pan.width, 0, accuracy: 1e-9, "A centred region needs no pan")
+
+    // The region's centre must land in the middle of the viewport, which is the
+    // same projection the canvas draws with.
+    let projected =
+      (0.3 * viewport.width - viewport.width / 2) * tight.zoom
+      + viewport.width / 2 + tight.pan.width
+    XCTAssertEqual(projected, viewport.width / 2, accuracy: 1e-6)
+  }
+
+  /// A region wider than the map cannot be zoomed *out* to fit — the camera has
+  /// a floor, and asking for less than it must not invert the gesture.
+  func testEnteringAHugeRegionStopsAtTheZoomFloor() {
+    let camera = MemoryAtlasNeighbourhoodLabels.entering(
+      center: CGPoint(x: 0.5, y: 0.5), radius: 3,
+      viewport: CGSize(width: 1200, height: 650),
+      zoomRange: MemoryAtlasZoomPolicy.minimumZoom...20)
+
+    XCTAssertEqual(camera.zoom, MemoryAtlasZoomPolicy.minimumZoom)
+  }
+
+  /// The header used to count the server's response while the timeline counted
+  /// the drawn map, so a real account read "1,097 entities · 1,544 connections"
+  /// directly above "1,096 entities · 1,377 connections" — the same map,
+  /// described twice, disagreeing.
+  func testTheHeaderCountsTheMapThatIsActuallyDrawn() {
+    let graph = KnowledgeGraphResponse(
+      nodes: [
+        KnowledgeGraphNode(id: "david", label: "David", nodeType: .person),
+        KnowledgeGraphNode(id: "user", label: "User", nodeType: .person),
+        KnowledgeGraphNode(id: "omi", label: "Omi", nodeType: .thing),
+      ],
+      edges: [
+        KnowledgeGraphEdge(id: "a", sourceId: "david", targetId: "omi", label: "works_on"),
+        // The same relationship, emitted twice under two verbs.
+        KnowledgeGraphEdge(id: "b", sourceId: "omi", targetId: "david", label: "with"),
+        // An edge naming an entity the response never sent.
+        KnowledgeGraphEdge(id: "c", sourceId: "omi", targetId: "ghost", label: "uses"),
+      ]
+    )
+
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+
+    XCTAssertEqual(
+      MemoryAtlasLayoutEngine.countLabel(
+        entities: snapshot.nodes.count, connections: snapshot.edges.count),
+      "2 entities · 1 connection",
+      "Three nodes and three edges arrived; two entities and one connection are drawn")
+  }
+
+  private func placement(label: String, degree: Int) -> MemoryAtlasNodePlacement {
+    MemoryAtlasNodePlacement(
+      node: KnowledgeGraphNode(id: label, label: label, nodeType: .thing),
+      cluster: .thing,
+      normalizedPosition: .zero,
+      degree: degree,
+      clusterRank: 0
+    )
+  }
+
   private func sampleGraph() -> KnowledgeGraphResponse {
     KnowledgeGraphResponse(
       nodes: [
