@@ -112,9 +112,8 @@ enum ChatPromptTimelineMetrics {
     var best: (index: Int, distance: CGFloat)?
     for (index, position) in positions.enumerated() {
       let distance = abs(position - y)
-      if best == nil || distance < best!.distance {
-        best = (index, distance)
-      }
+      if let current = best, distance >= current.distance { continue }
+      best = (index, distance)
     }
     guard let best, best.distance <= selectionTolerance else { return nil }
     return best.index
