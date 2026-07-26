@@ -205,6 +205,81 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertEqual(snapshot.neighborIDsByNodeID["david"], ["omi"])
   }
 
+  // MARK: - Parallel edge merging (Fix 1)
+
+  func testParallelEdgesBetweenTheSamePairCollapseToOnePlacementWithWeightAndUnionedMemories() throws {
+    // Real example from a user's graph: the concept "Weekly Product Training
+    // Session" listed both "sang@stably.io — includes" and "— with" as two
+    // separate connections that are really one relationship described twice.
+    let graph = KnowledgeGraphResponse(
+      nodes: [
+        KnowledgeGraphNode(id: "david", label: "David", nodeType: .person),
+        KnowledgeGraphNode(id: "session", label: "Weekly Product Training Session", nodeType: .concept),
+        KnowledgeGraphNode(id: "sang", label: "sang@stably.io", nodeType: .person),
+      ],
+      edges: [
+        KnowledgeGraphEdge(id: "david-session", sourceId: "david", targetId: "session", label: "works_on"),
+        KnowledgeGraphEdge(
+          id: "includes", sourceId: "session", targetId: "sang", label: "includes", memoryIds: ["m1"]),
+        KnowledgeGraphEdge(id: "with", sourceId: "session", targetId: "sang", label: "with", memoryIds: ["m2"]),
+      ]
+    )
+
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+
+    let merged = try XCTUnwrap(snapshot.edgesByNodeID["session"]?.first { $0.edge.targetId == "sang" })
+    XCTAssertEqual(snapshot.edgesByNodeID["session"]?.count, 2, "one merged row for david, one for sang")
+    XCTAssertEqual(merged.weight, 2)
+    XCTAssertEqual(Set(merged.edge.memoryIds), ["m1", "m2"], "the union of both edges' citations, not just one")
+    XCTAssertEqual(snapshot.neighborIDsByNodeID["session"], ["david", "sang"])
+  }
+
+  func testParallelEdgesWithDistinctVerbsAreNotLostByTheMerge() throws {
+    let graph = KnowledgeGraphResponse(
+      nodes: [
+        KnowledgeGraphNode(id: "session", label: "Weekly Product Training Session", nodeType: .concept),
+        KnowledgeGraphNode(id: "sang", label: "sang@stably.io", nodeType: .person),
+      ],
+      edges: [
+        KnowledgeGraphEdge(id: "includes", sourceId: "session", targetId: "sang", label: "includes"),
+        KnowledgeGraphEdge(id: "with", sourceId: "session", targetId: "sang", label: "with"),
+        // A duplicate verb (different casing) must not appear twice.
+        KnowledgeGraphEdge(id: "includes-again", sourceId: "session", targetId: "sang", label: "Includes"),
+      ]
+    )
+
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+    let merged = try XCTUnwrap(snapshot.edges.first)
+
+    XCTAssertEqual(merged.weight, 3)
+    XCTAssertEqual(merged.relationshipLabels, ["includes", "with"], "case-insensitive duplicate verb is dropped")
+    XCTAssertEqual(
+      MemoryAtlasLayoutEngine.combinedRelationshipDisplayName(merged.relationshipLabels),
+      "includes & with"
+    )
+  }
+
+  func testParallelEdgeMergeIsDeterministicAcrossRepeatedSnapshots() {
+    let graph = KnowledgeGraphResponse(
+      nodes: [
+        KnowledgeGraphNode(id: "session", label: "Session", nodeType: .concept),
+        KnowledgeGraphNode(id: "sang", label: "Sang", nodeType: .person),
+      ],
+      edges: [
+        KnowledgeGraphEdge(id: "includes", sourceId: "session", targetId: "sang", label: "includes"),
+        KnowledgeGraphEdge(id: "with", sourceId: "sang", targetId: "session", label: "with"),
+      ]
+    )
+
+    let first = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+    let second = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+
+    XCTAssertEqual(first.edges.map(\.id), second.edges.map(\.id))
+    XCTAssertEqual(first.edges.map(\.relationshipLabels), second.edges.map(\.relationshipLabels))
+    XCTAssertEqual(first.edges.map(\.weight), second.edges.map(\.weight))
+    XCTAssertEqual(first.nodes.map(\.normalizedPosition), second.nodes.map(\.normalizedPosition))
+  }
+
   func testTimelineSpansCreatedAtRangeAndCountsEveryEntity() {
     let base = Date(timeIntervalSince1970: 1_700_000_000)
     let graph = KnowledgeGraphResponse(

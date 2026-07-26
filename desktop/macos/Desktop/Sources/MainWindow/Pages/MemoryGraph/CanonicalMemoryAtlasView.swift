@@ -244,6 +244,16 @@ struct MemoryAtlasEdgePlacement: Identifiable {
   let source: CGPoint
   let target: CGPoint
   let cluster: MemoryAtlasCluster
+  /// Distinct relationship labels merged from parallel server edges between
+  /// this pair (same endpoints, different verbs), in first-seen order. `edge`
+  /// carries the first label for callers that only read a single verb;
+  /// `MemoryAtlasLayoutEngine.combinedRelationshipDisplayName` renders all of
+  /// them together for the inspector.
+  let relationshipLabels: [String]
+  /// Count of underlying server edges collapsed into this placement.
+  /// Deliberately unused by rendering today — preserved as spring-strength
+  /// input for a future force-directed layout.
+  let weight: Int
 
   var id: String { edge.id }
 }
@@ -944,6 +954,53 @@ enum MemoryAtlasLayoutEngine {
     let activeClusters = MemoryAtlasCluster.allCases.filter { !(grouped[$0] ?? []).isEmpty }
     let clusterCenters = MemoryAtlasCluster.centers(for: activeClusters)
 
+    let canonicalID: (String) -> String = { id in
+      guard let anchorID = anchor?.id, collapsedIDs.contains(id) else { return id }
+      return anchorID
+    }
+
+    // Every id that will actually receive a placement: the anchor plus every
+    // grouped node. An edge naming anything else is either a dangling server
+    // reference to a node absent from `graph.nodes`, or was already folded
+    // into the anchor by `canonicalID`.
+    var placeableNodeIDs: Set<String> = []
+    if let anchor { placeableNodeIDs.insert(anchor.id) }
+    for groupNodes in grouped.values {
+      for node in groupNodes { placeableNodeIDs.insert(node.id) }
+    }
+
+    // Reroute every edge onto its canonical (post-collapse) endpoints before
+    // merging parallel edges, so a relationship the collapsed self-node had
+    // with some entity is considered for merging against the anchor's own
+    // edge to that same entity rather than kept as a separate pair.
+    let reroutedEdges: [KnowledgeGraphEdge] = edges.compactMap { edge in
+      let sourceId = canonicalID(edge.sourceId)
+      let targetId = canonicalID(edge.targetId)
+      // A relationship the collapsed self-node had with the anchor becomes a
+      // self-loop after rerouting — drop it rather than draw a node to itself.
+      guard sourceId != targetId else { return nil }
+      guard placeableNodeIDs.contains(sourceId), placeableNodeIDs.contains(targetId) else { return nil }
+      // Only rebuild the edge when an endpoint actually moved, so neighbor and
+      // evidence lookups resolve against the single center node.
+      if sourceId == edge.sourceId && targetId == edge.targetId { return edge }
+      return KnowledgeGraphEdge(
+        id: edge.id,
+        sourceId: sourceId,
+        targetId: targetId,
+        label: edge.label,
+        memoryIds: edge.memoryIds,
+        createdAt: edge.createdAt
+      )
+    }
+
+    // The server can emit several edges for what is really one relationship
+    // between two entities — e.g. "includes" and "with" for the same pair —
+    // which otherwise doubles both the drawn line and the inspector's
+    // Connections row for it. Merge by unordered endpoint pair so
+    // `edgesByNodeID`/`neighborIDsByNodeID` (built from this list by
+    // `MemoryAtlasSnapshot.init`) resolve to one placement per neighbor.
+    let mergedEdges = mergeParallelEdges(reroutedEdges)
+
     var placements: [MemoryAtlasNodePlacement] = []
     if let anchor {
       placements.append(
@@ -989,34 +1046,19 @@ enum MemoryAtlasLayoutEngine {
       lastWriteWins: placements.compactMap { placement in
         placement.cluster.map { (placement.id, $0) }
       })
-    let canonicalID: (String) -> String = { id in
-      guard let anchorID = anchor?.id, collapsedIDs.contains(id) else { return id }
-      return anchorID
-    }
-    let edgePlacements = edges.compactMap { edge -> MemoryAtlasEdgePlacement? in
-      let sourceId = canonicalID(edge.sourceId)
-      let targetId = canonicalID(edge.targetId)
-      // A relationship the collapsed self-node had with the anchor becomes a
-      // self-loop after rerouting — drop it rather than draw a node to itself.
-      guard sourceId != targetId else { return nil }
-      guard let source = positions[sourceId], let target = positions[targetId] else { return nil }
-      let cluster = clusters[sourceId] ?? clusters[targetId] ?? .concept
-      // Only rebuild the edge when an endpoint actually moved, so neighbor and
-      // evidence lookups resolve against the single center node.
-      let placedEdge: KnowledgeGraphEdge
-      if sourceId == edge.sourceId && targetId == edge.targetId {
-        placedEdge = edge
-      } else {
-        placedEdge = KnowledgeGraphEdge(
-          id: edge.id,
-          sourceId: sourceId,
-          targetId: targetId,
-          label: edge.label,
-          memoryIds: edge.memoryIds,
-          createdAt: edge.createdAt
-        )
-      }
-      return MemoryAtlasEdgePlacement(edge: placedEdge, source: source, target: target, cluster: cluster)
+
+    let edgePlacements = mergedEdges.map { merged -> MemoryAtlasEdgePlacement in
+      let source = positions[merged.edge.sourceId] ?? MemoryAtlasCluster.starCenter
+      let target = positions[merged.edge.targetId] ?? MemoryAtlasCluster.starCenter
+      let cluster = clusters[merged.edge.sourceId] ?? clusters[merged.edge.targetId] ?? .concept
+      return MemoryAtlasEdgePlacement(
+        edge: merged.edge,
+        source: source,
+        target: target,
+        cluster: cluster,
+        relationshipLabels: merged.relationshipLabels,
+        weight: merged.weight
+      )
     }
 
     return MemoryAtlasSnapshot(
@@ -1025,6 +1067,75 @@ enum MemoryAtlasLayoutEngine {
       anchorNodeID: anchor?.id,
       clusterCenters: clusterCenters
     )
+  }
+
+  /// One placement's worth of collapsed parallel edges: the representative
+  /// edge (first-seen orientation and id), every distinct relationship label
+  /// merged in, the union of citing memory ids, and how many raw edges fed
+  /// into it.
+  private struct MergedEdge {
+    private(set) var edge: KnowledgeGraphEdge
+    private(set) var relationshipLabels: [String]
+    private(set) var weight: Int
+    private var seenNormalizedLabels: Set<String>
+    private var memoryIds: [String]
+    private var seenMemoryIds: Set<String>
+
+    init(edge: KnowledgeGraphEdge) {
+      self.edge = edge
+      relationshipLabels = [edge.label]
+      seenNormalizedLabels = [MemoryAtlasLayoutEngine.normalizeRelationship(edge.label)]
+      weight = 1
+      memoryIds = edge.memoryIds
+      seenMemoryIds = Set(edge.memoryIds)
+    }
+
+    mutating func merge(_ other: KnowledgeGraphEdge) {
+      weight += 1
+      let normalized = MemoryAtlasLayoutEngine.normalizeRelationship(other.label)
+      if seenNormalizedLabels.insert(normalized).inserted {
+        relationshipLabels.append(other.label)
+      }
+      var memoryIdsChanged = false
+      for id in other.memoryIds where seenMemoryIds.insert(id).inserted {
+        memoryIds.append(id)
+        memoryIdsChanged = true
+      }
+      guard memoryIdsChanged else { return }
+      // Keep the representative edge's own `memoryIds` in sync with the
+      // union so a caller reading `edge.memoryIds` directly (evidence
+      // resolution) sees every citing memory, not just the first edge's.
+      edge = KnowledgeGraphEdge(
+        id: edge.id,
+        sourceId: edge.sourceId,
+        targetId: edge.targetId,
+        label: edge.label,
+        memoryIds: memoryIds,
+        createdAt: edge.createdAt
+      )
+    }
+  }
+
+  /// Collapses edges that share the same unordered endpoint pair into one
+  /// `MergedEdge`, preserving the order pairs were first encountered so the
+  /// result is deterministic for a fixed input order.
+  private static func mergeParallelEdges(_ edges: [KnowledgeGraphEdge]) -> [MergedEdge] {
+    var order: [String] = []
+    var groups: [String: MergedEdge] = [:]
+    for edge in edges {
+      let pairKey =
+        edge.sourceId <= edge.targetId
+        ? "\(edge.sourceId)\u{0}\(edge.targetId)"
+        : "\(edge.targetId)\u{0}\(edge.sourceId)"
+      if var existing = groups[pairKey] {
+        existing.merge(edge)
+        groups[pairKey] = existing
+      } else {
+        groups[pairKey] = MergedEdge(edge: edge)
+        order.append(pairKey)
+      }
+    }
+    return order.compactMap { groups[$0] }
   }
 
   private static func uniqueNodes(from nodes: [KnowledgeGraphNode]) -> [KnowledgeGraphNode] {
@@ -1055,6 +1166,16 @@ enum MemoryAtlasLayoutEngine {
 
   static func relationshipDisplayName(_ rawValue: String) -> String {
     normalizeRelationship(rawValue).replacingOccurrences(of: "_", with: " ")
+  }
+
+  /// Display text for a placement whose parallel edges carry more than one
+  /// distinct verb. A merged pair reads as one relationship described two
+  /// ways ("includes & with"), not two separate relationships, so the
+  /// Connections list shows a single combined row per neighbor rather than
+  /// one row per verb — that keeps the list's row count matching the actual
+  /// number of distinct entities a node touches.
+  static func combinedRelationshipDisplayName(_ rawValues: [String]) -> String {
+    rawValues.map(relationshipDisplayName).joined(separator: " & ")
   }
 
   private static func normalizeRelationship(_ value: String) -> String {
@@ -2492,7 +2613,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         id: edge.id,
         otherNodeID: otherID,
         otherLabel: other.node.label,
-        relationship: MemoryAtlasLayoutEngine.relationshipDisplayName(edge.edge.label),
+        relationship: MemoryAtlasLayoutEngine.combinedRelationshipDisplayName(edge.relationshipLabels),
         accent: other.cluster?.color ?? OmiColors.textTertiary
       )
     }
@@ -2540,7 +2661,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       subject: .relationship(
         sourceLabel: source?.node.label ?? edge.edge.sourceId,
         targetLabel: target?.node.label ?? edge.edge.targetId,
-        verb: MemoryAtlasLayoutEngine.relationshipDisplayName(edge.edge.label)
+        verb: MemoryAtlasLayoutEngine.combinedRelationshipDisplayName(edge.relationshipLabels)
       ),
       accent: edge.cluster.color,
       related: endpoints,
@@ -2593,7 +2714,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         return "\(placement.degree) connection\(placement.degree == 1 ? "" : "s")"
       }
       return
-        "\(sourceNode.node.label) \(MemoryAtlasLayoutEngine.relationshipDisplayName(primaryEdge.edge.label)) \(targetNode.node.label)"
+        "\(sourceNode.node.label) \(MemoryAtlasLayoutEngine.combinedRelationshipDisplayName(primaryEdge.relationshipLabels)) \(targetNode.node.label)"
     }()
 
     return HStack(spacing: 14) {
