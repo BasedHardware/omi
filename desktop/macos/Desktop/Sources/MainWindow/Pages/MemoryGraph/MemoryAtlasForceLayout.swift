@@ -1,0 +1,917 @@
+import CoreGraphics
+import Foundation
+import simd
+
+/// Where an entity sits on the atlas should mean something.
+///
+/// The atlas used to place every node with `f(type, salienceRank, hash(id))`.
+/// The edge list was never read, so the one thing the picture could not show
+/// was which entities belong together — and worse, type petals actively pulled
+/// related entities apart. A meeting and its five attendees are the most
+/// related cluster on the map and were guaranteed to land in different petals,
+/// rendering the strongest relationship in the graph as five long lines
+/// crossing the canvas.
+///
+/// This layout inverts the rule: relatedness decides position, type only tints
+/// and nudges. Neighbourhoods assemble themselves, which is the only way a
+/// pattern the user did not already know can appear.
+///
+/// Everything here is a pure function of its input. Swift seeds string hashing
+/// per process, so dictionary iteration order is *not* stable across launches —
+/// every traversal that can affect a coordinate walks a sorted array instead,
+/// or the same map would lay out differently on every start.
+enum MemoryAtlasForceLayout {
+
+  // MARK: - Inputs
+
+  /// One relationship the layout should honour, whichever signal produced it.
+  /// Undirected: the layout does not care who was named first.
+  struct Link: Equatable {
+    let a: String
+    let b: String
+    let weight: Double
+
+    init(a: String, b: String, weight: Double) {
+      // Canonical endpoint order makes merging and equality trivial, and keeps
+      // "A relates to B" from being a different link than "B relates to A".
+      if a <= b {
+        self.a = a
+        self.b = b
+      } else {
+        self.a = b
+        self.b = a
+      }
+      self.weight = weight
+    }
+
+    var key: String { "\(a)\u{1}\(b)" }
+  }
+
+  /// How a node was placed, so the caller can render it honestly. An entity
+  /// with no relationships has not been positioned by relatedness and should
+  /// not sit in the middle of the map implying that it was.
+  enum Role: Equatable {
+    /// Relaxed by the simulation.
+    case core
+    /// One relationship only: pinned beside the entity it belongs to.
+    case leaf(parentID: String)
+    /// No relationships at all: parked in the outer halo.
+    case isolate
+  }
+
+  struct Result {
+    /// Normalized canvas coordinates, 0...1 on both axes.
+    let positions: [String: CGPoint]
+    let roles: [String: Role]
+  }
+
+  // MARK: - Tunables
+
+  /// The relaxation runs a fixed number of steps because the cooling schedule
+  /// *is* the termination condition: displacement each step is capped at the
+  /// current temperature, so total movement tracks the schedule down instead of
+  /// falling below it. A convergence test was tried and removed — it never
+  /// fired, not even on a six-node ring.
+  ///
+  /// 90 steps is where quality stops paying for itself. Measured on a
+  /// 1,096-entity graph with planted communities, the share of a node's ten
+  /// nearest on-screen neighbours that genuinely belong to its community runs
+  /// 0.726 at 60 steps, 0.741 at 90, and 0.750 at 240 — against 0.023 for
+  /// chance. Nearly three times the work buys nine thousandths, and this runs
+  /// inside a SwiftUI `init`.
+  static let steps = 90
+
+  /// The type field is deliberately an order of magnitude weaker than the
+  /// relationship springs. It keeps the composition orientable — a people-ish
+  /// region, a concepts-ish region — without ever overruling the structure. A
+  /// person who only appears in one project must be free to drift into that
+  /// project's neighbourhood.
+  static let typeFieldStrength = 0.022
+
+  /// Pulls disconnected components back toward the middle. Without it they
+  /// repel each other to infinity and the fit collapses the interesting part
+  /// of the map into a dot.
+  static let centerGravity = 0.03
+
+  /// Barnes–Hut opening angle. Layout is an aesthetic computation, not a
+  /// physics result, so this runs looser than a simulation would.
+  static let theta = 0.9
+
+  /// How far the shorter axis may be stretched to fill the canvas. Enough to
+  /// stop a flat graph wasting half the viewport; far short of the point where
+  /// a neighbourhood reads as the wrong shape.
+  static let maximumAspectStretch = 1.6
+
+  /// A memory naming more entities than this is extraction noise (a calendar
+  /// invite with a wall of addresses), and it would contribute k² pairs of
+  /// spurious relatedness. Skipped rather than downweighted.
+  static let maximumEntitiesPerMemory = 20
+
+  /// Co-occurrence is dense by nature. Keeping only each entity's strongest
+  /// few partners is what turns it from a hairball into structure.
+  static let coOccurrenceNeighborsPerNode = 6
+
+  // MARK: - Deriving relatedness
+
+  /// Relationships the extractor actually drew.
+  ///
+  /// Weight blends how many distinct relationship kinds connect the pair with
+  /// how many memories assert them: two entities the extractor linked from
+  /// eleven separate memories are more related than two it linked once.
+  static func explicitLinks(
+    edges: [(sourceID: String, targetID: String, memoryCount: Int)]
+  ) -> [Link] {
+    merge(
+      edges.compactMap { edge in
+        guard edge.sourceID != edge.targetID else { return nil }
+        return Link(
+          a: edge.sourceID,
+          b: edge.targetID,
+          weight: 1 + log1p(Double(max(edge.memoryCount, 0)))
+        )
+      })
+  }
+
+  /// Relationships nobody drew.
+  ///
+  /// Every node carries the ids of the memories it was extracted from, which
+  /// means the client already holds a complete entity↔memory incidence
+  /// structure and has only ever used it to populate the evidence list.
+  /// Projecting it gives relatedness the edge list does not contain: two people
+  /// who appear in eleven of the same memories are related whether or not the
+  /// extractor happened to emit a verb between them.
+  ///
+  /// Each shared memory contributes `1 / (k - 1)`, the standard collaboration
+  /// weighting — otherwise one eight-person meeting would assert eight strong
+  /// friendships, and group events would dominate the whole map.
+  static func coOccurrenceLinks(memoryIDsByNodeID: [String: [String]]) -> [Link] {
+    var nodeIDsByMemoryID: [String: [String]] = [:]
+    for nodeID in memoryIDsByNodeID.keys.sorted() {
+      for memoryID in memoryIDsByNodeID[nodeID] ?? [] {
+        nodeIDsByMemoryID[memoryID, default: []].append(nodeID)
+      }
+    }
+
+    var weights: [String: Double] = [:]
+    var endpoints: [String: (String, String)] = [:]
+    for memoryID in nodeIDsByMemoryID.keys.sorted() {
+      let participants = (nodeIDsByMemoryID[memoryID] ?? []).sorted()
+      guard participants.count >= 2, participants.count <= maximumEntitiesPerMemory else { continue }
+      let share = 1 / Double(participants.count - 1)
+      for i in 0..<participants.count {
+        for j in (i + 1)..<participants.count {
+          let link = Link(a: participants[i], b: participants[j], weight: share)
+          weights[link.key, default: 0] += share
+          endpoints[link.key] = (link.a, link.b)
+        }
+      }
+    }
+
+    let all = weights.keys.sorted().compactMap { key -> Link? in
+      guard let pair = endpoints[key], let weight = weights[key] else { return nil }
+      return Link(a: pair.0, b: pair.1, weight: weight)
+    }
+    return strongestPerNode(all, limit: coOccurrenceNeighborsPerNode)
+  }
+
+  /// Sparsifies a dense weighted link set to each node's strongest partners.
+  /// A link survives if *either* endpoint counts it among its best, so a
+  /// popular hub cannot orphan a small entity whose only real relationship is
+  /// with that hub.
+  static func strongestPerNode(_ links: [Link], limit: Int) -> [Link] {
+    guard limit > 0 else { return [] }
+    var byNode: [String: [Link]] = [:]
+    for link in links {
+      byNode[link.a, default: []].append(link)
+      byNode[link.b, default: []].append(link)
+    }
+
+    var keptKeys: Set<String> = []
+    for nodeID in byNode.keys.sorted() {
+      let ranked = (byNode[nodeID] ?? []).sorted {
+        $0.weight == $1.weight ? $0.key < $1.key : $0.weight > $1.weight
+      }
+      for link in ranked.prefix(limit) { keptKeys.insert(link.key) }
+    }
+    return links.filter { keptKeys.contains($0.key) }
+  }
+
+  /// Sums duplicate pairs into one link. Callers combine signals by simply
+  /// concatenating link sets and merging.
+  static func merge(_ links: [Link]) -> [Link] {
+    var weights: [String: Double] = [:]
+    var order: [String] = []
+    var endpoints: [String: (String, String)] = [:]
+    for link in links where link.a != link.b {
+      if weights[link.key] == nil {
+        order.append(link.key)
+        endpoints[link.key] = (link.a, link.b)
+      }
+      weights[link.key, default: 0] += link.weight
+    }
+    return order.compactMap { key in
+      guard let pair = endpoints[key], let weight = weights[key] else { return nil }
+      return Link(a: pair.0, b: pair.1, weight: weight)
+    }
+  }
+
+  // MARK: - Layout
+
+  /// - Parameters:
+  ///   - nodeIDs: every node to place. Order is irrelevant; the layout sorts.
+  ///   - links: relatedness, already merged across signals.
+  ///   - anchorID: the account holder, pinned at the centre of the canvas.
+  ///   - typeTargets: the weak per-node field target, in normalized canvas
+  ///     coordinates. Nodes without one feel no type pull.
+  ///   - area: the normalized region the relaxed map may occupy. Isolates are
+  ///     parked in the margin outside it.
+  static func layout(
+    nodeIDs: [String],
+    links: [Link],
+    anchorID: String?,
+    typeTargets: [String: CGPoint],
+    area: CGRect,
+    steps: Int = MemoryAtlasForceLayout.steps
+  ) -> Result {
+    let identifiers = nodeIDs.sorted()
+    guard !identifiers.isEmpty else { return Result(positions: [:], roles: [:]) }
+
+    let known = Set(identifiers)
+    let merged = merge(links.filter { known.contains($0.a) && known.contains($0.b) })
+
+    var neighbors: [String: [(id: String, weight: Double)]] = [:]
+    for link in merged {
+      neighbors[link.a, default: []].append((link.b, link.weight))
+      neighbors[link.b, default: []].append((link.a, link.weight))
+    }
+    for key in neighbors.keys {
+      neighbors[key]?.sort { $0.weight == $1.weight ? $0.id < $1.id : $0.weight > $1.weight }
+    }
+
+    let roles = classify(identifiers: identifiers, neighbors: neighbors, anchorID: anchorID)
+    let coreIDs = identifiers.filter { roles[$0] == .core }
+
+    guard !coreIDs.isEmpty else {
+      // Nothing is related to anything. There is no structure to draw, so every
+      // node goes to the halo rather than to a fake constellation. An anchor
+      // that exists is always core, so reaching here means there is no anchor.
+      return Result(
+        positions: haloPositions(for: identifiers, area: area), roles: roles)
+    }
+
+    var indexOf: [String: Int] = [:]
+    for (index, id) in coreIDs.enumerated() { indexOf[id] = index }
+
+    let springs: [(i: Int, j: Int, weight: Double)] = merged.compactMap { link in
+      guard let i = indexOf[link.a], let j = indexOf[link.b] else { return nil }
+      return (i, j, link.weight)
+    }
+    let normalizedSprings = normalizeSpringWeights(springs)
+
+    var points = radialInitialPositions(
+      coreIDs: coreIDs, indexOf: indexOf, neighbors: neighbors, anchorID: anchorID)
+    let pinnedIndex = anchorID.flatMap { indexOf[$0] }
+    if let pinnedIndex { points[pinnedIndex] = .zero }
+
+    // The weak type field, resolved into the same working space the simulation
+    // uses. Canvas coordinates run 0...1 with y downward; the simulation works
+    // in a centred [-1, 1] box, so targets are mapped once up front.
+    let fieldTargets: [SIMD2<Double>?] = coreIDs.map { id in
+      guard let target = typeTargets[id] else { return nil }
+      return SIMD2<Double>((Double(target.x) - 0.5) * 2, (Double(target.y) - 0.5) * 2)
+    }
+
+    relax(
+      points: &points,
+      springs: normalizedSprings,
+      fieldTargets: fieldTargets,
+      pinnedIndex: pinnedIndex,
+      steps: steps)
+
+    orientCanonically(&points, coreIDs: coreIDs, neighbors: neighbors, pinnedIndex: pinnedIndex)
+
+    var positions = fit(
+      points: points, coreIDs: coreIDs, pinnedIndex: pinnedIndex, area: area)
+    separateCrowdedMarks(&positions, coreIDs: coreIDs, anchorID: anchorID, area: area)
+    placeLeaves(into: &positions, identifiers: identifiers, roles: roles, area: area)
+
+    let isolates = identifiers.filter { roles[$0] == .isolate }
+    for (id, point) in haloPositions(for: isolates, area: area) { positions[id] = point }
+
+    return Result(positions: positions, roles: roles)
+  }
+
+  // MARK: - Classification
+
+  /// A leaf's only spatial information is who its parent is. Spending a
+  /// simulation slot on it produces fog; pinning it beside its parent produces
+  /// a burr on a hub, which is both truer and cheaper.
+  ///
+  /// A degree-1 node whose only neighbour is *also* degree-1 stays core: the
+  /// pair is a two-node component, and hanging one off the other would leave
+  /// nothing to hang it from.
+  static func classify(
+    identifiers: [String],
+    neighbors: [String: [(id: String, weight: Double)]],
+    anchorID: String?
+  ) -> [String: Role] {
+    var roles: [String: Role] = [:]
+    for id in identifiers {
+      let adjacent = neighbors[id] ?? []
+      if id == anchorID {
+        roles[id] = .core
+      } else if adjacent.isEmpty {
+        roles[id] = .isolate
+      } else if adjacent.count == 1, (neighbors[adjacent[0].id] ?? []).count > 1 {
+        roles[id] = .leaf(parentID: adjacent[0].id)
+      } else {
+        roles[id] = .core
+      }
+    }
+    return roles
+  }
+
+  // MARK: - Initial positions
+
+  /// Breadth-first from the anchor: hop distance becomes radius, and each
+  /// node's angular slice is subdivided among its children.
+  ///
+  /// This matters more than it looks. An ego graph laid out radially is already
+  /// approximately right, so relaxation refines a sane picture instead of
+  /// untangling a random cloud — which is what lets the step budget be small
+  /// enough to run synchronously.
+  static func radialInitialPositions(
+    coreIDs: [String],
+    indexOf: [String: Int],
+    neighbors: [String: [(id: String, weight: Double)]],
+    anchorID: String?
+  ) -> [SIMD2<Double>] {
+    var points = [SIMD2<Double>](repeating: .zero, count: coreIDs.count)
+    var placed = [Bool](repeating: false, count: coreIDs.count)
+
+    // Components are seeded around a ring so they start apart rather than
+    // stacked on the origin, where repulsion would have to shove them past
+    // each other before any real structure could form.
+    var roots: [String] = []
+    if let anchorID, indexOf[anchorID] != nil { roots.append(anchorID) }
+    var componentIndex = 0
+
+    func sweep(from root: String, arcStart: Double, arcWidth: Double, origin: SIMD2<Double>) {
+      guard let rootIndex = indexOf[root], !placed[rootIndex] else { return }
+      points[rootIndex] = origin
+      placed[rootIndex] = true
+
+      var frontier: [(id: String, arcStart: Double, arcWidth: Double)] = [
+        (root, arcStart, arcWidth)
+      ]
+      var hop = 1
+      while !frontier.isEmpty && hop < 24 {
+        var next: [(id: String, arcStart: Double, arcWidth: Double)] = []
+        let radius = 0.28 * Double(hop)
+        for parent in frontier {
+          let children = (neighbors[parent.id] ?? []).filter { child in
+            guard let index = indexOf[child.id] else { return false }
+            return !placed[index]
+          }
+          guard !children.isEmpty else { continue }
+          let slice = parent.arcWidth / Double(children.count)
+          for (offset, child) in children.enumerated() {
+            guard let index = indexOf[child.id] else { continue }
+            placed[index] = true
+            let angle = parent.arcStart + slice * (Double(offset) + 0.5)
+            points[index] = origin + SIMD2<Double>(cos(angle) * radius, sin(angle) * radius)
+            next.append((child.id, parent.arcStart + slice * Double(offset), slice))
+          }
+        }
+        frontier = next
+        hop += 1
+      }
+    }
+
+    // Remaining components, largest first, so the biggest structure gets the
+    // most central seed.
+    let unseeded = coreIDs.filter { $0 != anchorID }
+      .sorted {
+        let lhs = (neighbors[$0] ?? []).count
+        let rhs = (neighbors[$1] ?? []).count
+        return lhs == rhs ? $0 < $1 : lhs > rhs
+      }
+    roots.append(contentsOf: unseeded)
+
+    for root in roots {
+      guard let index = indexOf[root], !placed[index] else { continue }
+      let origin: SIMD2<Double>
+      if root == anchorID {
+        origin = .zero
+      } else {
+        let angle = Double(componentIndex) * 2.399_963_229_728_653
+        let radius = 0.35 + 0.06 * Double(componentIndex)
+        origin = SIMD2<Double>(cos(angle) * radius, sin(angle) * radius)
+        componentIndex += 1
+      }
+      sweep(from: root, arcStart: 0, arcWidth: 2 * .pi, origin: origin)
+    }
+    return points
+  }
+
+  // MARK: - Relaxation
+
+  /// Compresses the weight range so the strongest relationship pulls harder
+  /// than the weakest without collapsing everything else into a point. A raw
+  /// weight range of 1...400 would make 99% of the graph behave identically.
+  static func normalizeSpringWeights(
+    _ springs: [(i: Int, j: Int, weight: Double)]
+  ) -> [(i: Int, j: Int, weight: Double)] {
+    guard let maximum = springs.map(\.weight).max(), maximum > 0 else { return springs }
+    let scale = log1p(maximum)
+    return springs.map { spring in
+      (spring.i, spring.j, 0.35 + 0.95 * (log1p(max(spring.weight, 0)) / scale))
+    }
+  }
+
+  /// Fruchterman–Reingold with Barnes–Hut repulsion and a cooling schedule.
+  private static func relax(
+    points: inout [SIMD2<Double>],
+    springs: [(i: Int, j: Int, weight: Double)],
+    fieldTargets: [SIMD2<Double>?],
+    pinnedIndex: Int?,
+    steps: Int
+  ) {
+    let count = points.count
+    guard count > 1 else { return }
+
+    // Ideal separation for the working box, the standard FR estimate.
+    let k = 2.0 / sqrt(Double(count))
+    let kSquared = k * k
+    var displacements = [SIMD2<Double>](repeating: .zero, count: count)
+    var traversal: [Int] = []
+    traversal.reserveCapacity(64)
+
+    for step in 0..<steps {
+      for i in 0..<count { displacements[i] = .zero }
+
+      let tree = Quadtree(points: points)
+      for i in 0..<count where i != pinnedIndex {
+        displacements[i] += tree.repulsion(
+          on: points[i], kSquared: kSquared, theta: theta, stack: &traversal)
+      }
+
+      for spring in springs {
+        let delta = points[spring.j] - points[spring.i]
+        let distance = simd_length(delta)
+        guard distance > 1e-9 else { continue }
+        let force = (delta / distance) * (spring.weight * distance * distance / k)
+        if spring.i != pinnedIndex { displacements[spring.i] += force }
+        if spring.j != pinnedIndex { displacements[spring.j] -= force }
+      }
+
+      for i in 0..<count where i != pinnedIndex {
+        if let target = fieldTargets[i] {
+          displacements[i] += (target - points[i]) * typeFieldStrength
+        }
+        displacements[i] -= points[i] * centerGravity
+      }
+
+      // Cooling: early steps may move a long way, later ones only settle.
+      let progress = Double(step) / Double(steps)
+      let temperature = 0.14 * pow(1 - progress, 1.5)
+      for i in 0..<count where i != pinnedIndex {
+        let magnitude = simd_length(displacements[i])
+        guard magnitude > 1e-12 else { continue }
+        points[i] += (displacements[i] / magnitude) * min(magnitude, temperature)
+      }
+    }
+  }
+
+  // MARK: - Canonical orientation
+
+  /// A force layout is rotation- and reflection-invariant, so adding one entity
+  /// can spin or mirror the whole map even though every neighbourhood survived.
+  /// Neighbourhoods are what the user navigates by, but "work is over on the
+  /// left" is worth keeping too, and it costs one pass: align the principal
+  /// axis with the wide axis of the canvas, then resolve the two remaining
+  /// ambiguities against the highest-degree nodes.
+  static func orientCanonically(
+    _ points: inout [SIMD2<Double>],
+    coreIDs: [String],
+    neighbors: [String: [(id: String, weight: Double)]],
+    pinnedIndex: Int?
+  ) {
+    let count = points.count
+    guard count > 2 else { return }
+
+    let pivot = pinnedIndex.map { points[$0] } ?? points.reduce(.zero, +) / Double(count)
+
+    var xx = 0.0
+    var xy = 0.0
+    var yy = 0.0
+    for point in points {
+      let delta = point - pivot
+      xx += delta.x * delta.x
+      xy += delta.x * delta.y
+      yy += delta.y * delta.y
+    }
+    guard xx + yy > 1e-9 else { return }
+
+    // Principal eigenvector of a 2×2 symmetric covariance matrix, closed form.
+    let angle = 0.5 * atan2(2 * xy, xx - yy)
+    let cosine = cos(-angle)
+    let sine = sin(-angle)
+    for i in 0..<count {
+      let delta = points[i] - pivot
+      points[i] =
+        pivot
+        + SIMD2<Double>(
+          delta.x * cosine - delta.y * sine,
+          delta.x * sine + delta.y * cosine)
+    }
+
+    // Rotation fixed the axis but not which end is which, and mirroring is
+    // still free. Both are pinned to the most connected entities, which are the
+    // landmarks a user would actually orient by.
+    let ranked = coreIDs.enumerated().sorted {
+      let lhs = (neighbors[$0.element] ?? []).count
+      let rhs = (neighbors[$1.element] ?? []).count
+      return lhs == rhs ? $0.element < $1.element : lhs > rhs
+    }.map(\.offset)
+
+    // Half a turn, not a mirror: the map keeps its handedness and the busiest
+    // entity always ends up on the same side.
+    if let primary = ranked.first(where: { abs(points[$0].x - pivot.x) > 1e-9 }),
+      points[primary].x < pivot.x
+    {
+      for i in 0..<count {
+        points[i] = pivot - (points[i] - pivot)
+      }
+    }
+    if let secondary = ranked.first(where: { abs(points[$0].y - pivot.y) > 1e-9 }),
+      points[secondary].y < pivot.y
+    {
+      for i in 0..<count {
+        points[i].y = 2 * pivot.y - points[i].y
+      }
+    }
+  }
+
+  // MARK: - Fitting
+
+  /// Maps the working box into normalized canvas coordinates.
+  ///
+  /// When there is an anchor it stays dead centre — "you" being the middle of
+  /// your own map is the one positional promise worth keeping — so the fit is
+  /// symmetric about it rather than a plain bounding box.
+  private static func fit(
+    points: [SIMD2<Double>],
+    coreIDs: [String],
+    pinnedIndex: Int?,
+    area: CGRect
+  ) -> [String: CGPoint] {
+    guard !points.isEmpty else { return [:] }
+
+    let center =
+      pinnedIndex.map { points[$0] }
+      ?? {
+        var minimum = points[0]
+        var maximum = points[0]
+        for point in points {
+          minimum = simd_min(minimum, point)
+          maximum = simd_max(maximum, point)
+        }
+        return (minimum + maximum) / 2
+      }()
+
+    // Scale to the bulk, not to the bounding box. A couple of loosely attached
+    // components drift a long way out, and letting them set the scale squashes
+    // the entire readable map into the middle third of the canvas.
+    let radiiX = points.map { abs($0.x - center.x) }.sorted()
+    let radiiY = points.map { abs($0.y - center.y) }.sorted()
+    let cut = min(max(Int(Double(points.count) * 0.98) - 1, 0), points.count - 1)
+    let extentX = max(radiiX[cut], 1e-6)
+    let extentY = max(radiiY[cut], 1e-6)
+
+    // Mostly one scale for both axes, so the shape the simulation found is the
+    // shape the user sees. But a graph with a strong principal axis — a chain,
+    // or anything the orientation pass has just laid on its side — comes out
+    // wide and flat, and a strictly uniform scale then leaves most of the
+    // vertical canvas empty while packing names into a band too thin to read
+    // them. A bounded stretch of the shorter axis spends that space without
+    // distortion anyone can see.
+    let fitX = Double(area.width) / 2 / extentX
+    let fitY = Double(area.height) / 2 / extentY
+    let uniform = min(fitX, fitY)
+    let scaleX = min(fitX, uniform * maximumAspectStretch)
+    let scaleY = min(fitY, uniform * maximumAspectStretch)
+
+    var positions: [String: CGPoint] = [:]
+    for (index, id) in coreIDs.enumerated() {
+      let delta = points[index] - center
+      positions[id] = CGPoint(
+        x: area.midX + CGFloat(softFold(delta.x * scaleX, limit: Double(area.width) / 2)),
+        y: area.midY + CGFloat(softFold(delta.y * scaleY, limit: Double(area.height) / 2)))
+    }
+    return positions
+  }
+
+  /// Keeps the far tail on the canvas without touching the bulk.
+  ///
+  /// Fitting to the 98th percentile means the last 2% would otherwise land off
+  /// the edge. A hard clamp would pile them on the frame in a straight line,
+  /// which reads as a UI bug; this is the identity below `knee` — so almost
+  /// every node is placed exactly where the simulation put it — and folds
+  /// smoothly into the remaining margin beyond it.
+  private static func softFold(_ value: Double, limit: Double) -> Double {
+    let knee = limit * 0.82
+    let magnitude = abs(value)
+    guard magnitude > knee else { return value }
+    let overshoot = magnitude - knee
+    let headroom = limit - knee
+    return (value < 0 ? -1 : 1) * (knee + headroom * tanh(overshoot / headroom))
+  }
+
+  /// Pushes apart marks that landed close enough to hide each other's name.
+  ///
+  /// Relaxation optimises for relationships, not for legibility, and it will
+  /// happily fold a chain so that entities several hops apart end up touching.
+  /// A map whose entities are anonymous dots has lost the argument regardless
+  /// of how good its structure is — on a 26-entity account, 16 of the names
+  /// went missing before this pass existed.
+  ///
+  /// The target is a fraction of the spacing an even scatter would have, so it only ever
+  /// resolves genuine crowding and never fights the layout for room. Movement
+  /// is local, so neighbourhoods survive it.
+  static func separateCrowdedMarks(
+    _ positions: inout [String: CGPoint],
+    coreIDs: [String],
+    anchorID: String?,
+    area: CGRect,
+    passes: Int = 12
+  ) {
+    let count = coreIDs.count
+    guard count > 1 else { return }
+
+    // Spent where it buys something, withdrawn where it would cost more than
+    // it returns. A small map shows every name, so it is worth spacing marks
+    // generously. A thousand-entity map shows almost none at overview zoom, and
+    // forcing even spacing there would flatten the density contrast that *is*
+    // the structure — measured on a planted-community graph, holding the small
+    // map's spacing at production scale dropped neighbourhood precision from
+    // 0.74 to 0.52.
+    let crowding = min(max((Double(count) - 60) / 340, 0), 1)
+    let evenSpacing = sqrt(Double(area.width) * Double(area.height) / Double(count))
+    let minimum = evenSpacing * (0.72 - 0.47 * crowding)
+    guard minimum > 0 else { return }
+
+    var points = coreIDs.map { positions[$0] ?? CGPoint(x: area.midX, y: area.midY) }
+    let anchorIndex = anchorID.flatMap { coreIDs.firstIndex(of: $0) }
+
+    for _ in 0..<passes {
+      // Bucketed at the separation distance, so each node only measures against
+      // the nine cells that could possibly hold something too close.
+      var buckets: [Int: [Int]] = [:]
+      func cell(_ point: CGPoint) -> (Int, Int) {
+        (Int(floor(Double(point.x) / minimum)), Int(floor(Double(point.y) / minimum)))
+      }
+      for (index, point) in points.enumerated() {
+        let (cx, cy) = cell(point)
+        buckets[cx &* 73_856_093 ^ cy &* 19_349_663, default: []].append(index)
+      }
+
+      var moved = false
+      for i in 0..<count {
+        let (cx, cy) = cell(points[i])
+        for dx in -1...1 {
+          for dy in -1...1 {
+            let key = (cx + dx) &* 73_856_093 ^ (cy + dy) &* 19_349_663
+            for j in buckets[key] ?? [] where j > i {
+              var delta = SIMD2<Double>(
+                Double(points[j].x - points[i].x), Double(points[j].y - points[i].y))
+              var distance = simd_length(delta)
+              if distance < 1e-9 {
+                // Exactly coincident: separate along a deterministic axis
+                // rather than leaving them stacked forever.
+                delta = SIMD2<Double>(minimum, 0)
+                distance = minimum
+              }
+              guard distance < minimum else { continue }
+              let push = (delta / distance) * ((minimum - distance) / 2)
+              if i != anchorIndex {
+                points[i].x -= CGFloat(push.x)
+                points[i].y -= CGFloat(push.y)
+              }
+              if j != anchorIndex {
+                points[j].x += CGFloat(push.x)
+                points[j].y += CGFloat(push.y)
+              }
+              moved = true
+            }
+          }
+        }
+      }
+      if !moved { break }
+    }
+
+    let bounds = area.insetBy(dx: -area.width * 0.04, dy: -area.height * 0.04)
+    for (index, id) in coreIDs.enumerated() {
+      positions[id] = clamp(points[index], to: bounds)
+    }
+  }
+
+  /// Leaves ride just outside their parent, fanned deterministically so a hub
+  /// with nine of them reads as a burr rather than a stack.
+  private static func placeLeaves(
+    into positions: inout [String: CGPoint],
+    identifiers: [String],
+    roles: [String: Role],
+    area: CGRect
+  ) {
+    var leavesByParent: [String: [String]] = [:]
+    for id in identifiers {
+      if case .leaf(let parentID) = roles[id] {
+        leavesByParent[parentID, default: []].append(id)
+      }
+    }
+
+    let stub = Double(min(area.width, area.height)) * 0.022
+    for parentID in leavesByParent.keys.sorted() {
+      guard let parent = positions[parentID] else { continue }
+      let leaves = (leavesByParent[parentID] ?? []).sorted()
+      // Fan outward from the map's centre so burrs grow away from the crowd
+      // instead of back through their own hub.
+      let outward = atan2(Double(parent.y - area.midY), Double(parent.x - area.midX))
+      let spread = min(Double.pi * 1.4, 0.5 * Double(leaves.count))
+      for (offset, id) in leaves.enumerated() {
+        let fraction = leaves.count == 1 ? 0.5 : Double(offset) / Double(leaves.count - 1)
+        let angle = outward - spread / 2 + spread * fraction
+        // A second, shorter ring once a hub has more leaves than one ring can
+        // hold without them touching.
+        let ring = 1 + Double(offset / 12) * 0.55
+        positions[id] = clamp(
+          CGPoint(
+            x: parent.x + CGFloat(cos(angle) * stub * ring),
+            y: parent.y + CGFloat(sin(angle) * stub * ring)),
+          to: area.insetBy(dx: -area.width * 0.03, dy: -area.height * 0.03))
+      }
+    }
+  }
+
+  /// Entities with no relationships at all. They carry no spatial information,
+  /// so scattering them through the middle would have the map assert structure
+  /// that is not there. A faint outer halo says what is true: present, not
+  /// connected to anything yet.
+  static func haloPositions(for identifiers: [String], area: CGRect) -> [String: CGPoint] {
+    let ordered = identifiers.sorted()
+    guard !ordered.isEmpty else { return [:] }
+
+    var positions: [String: CGPoint] = [:]
+    let perRing = 96
+    for (offset, id) in ordered.enumerated() {
+      let ring = offset / perRing
+      let indexInRing = offset % perRing
+      let occupancy = min(ordered.count - ring * perRing, perRing)
+      let angle = 2 * Double.pi * Double(indexInRing) / Double(max(occupancy, 1))
+
+      // Traced on a rectangle rather than an ellipse. An ellipse wide enough
+      // to clear the map's sides still cuts *inside* it near the diagonals,
+      // which would drop unconnected entities into the middle of the
+      // structure — exactly the claim the halo exists to avoid making.
+      let halfWidth = Double(area.width) / 2 * (1.08 + 0.06 * Double(ring))
+      let halfHeight = Double(area.height) / 2 * (1.08 + 0.06 * Double(ring))
+      let reach = 1 / max(abs(cos(angle)) / halfWidth, abs(sin(angle)) / halfHeight)
+
+      positions[id] = clamp(
+        CGPoint(
+          x: area.midX + CGFloat(cos(angle) * reach),
+          y: area.midY + CGFloat(sin(angle) * reach)),
+        to: CGRect(x: 0.02, y: 0.04, width: 0.96, height: 0.92))
+    }
+    return positions
+  }
+
+  private static func clamp(_ point: CGPoint, to rect: CGRect) -> CGPoint {
+    CGPoint(
+      x: min(max(point.x, rect.minX), rect.maxX),
+      y: min(max(point.y, rect.minY), rect.maxY))
+  }
+}
+
+// MARK: - Barnes–Hut
+
+/// Approximates all-pairs repulsion in O(n log n).
+///
+/// The atlas is built inside a SwiftUI `init`, so the whole layout has to fit
+/// in a frame's worth of main-thread time. Exact repulsion over ~1,000 nodes
+/// for a couple of hundred steps does not; this does, and at layout accuracy
+/// nobody can see the difference.
+private struct Quadtree {
+  private struct Cell {
+    var centerOfMass: SIMD2<Double> = .zero
+    var mass: Double = 0
+    var origin: SIMD2<Double> = .zero
+    var size: Double = 0
+    /// Index of the single body in a leaf cell, or -1 once it has subdivided.
+    var body: Int = -1
+    /// That body's own position. The cell's centre of mass already averages in
+    /// every later arrival, so it cannot be used to re-place the occupant when
+    /// the cell subdivides.
+    var bodyPoint: SIMD2<Double> = .zero
+    var children: SIMD4<Int32> = SIMD4<Int32>(repeating: -1)
+    var isLeaf: Bool { children[0] < 0 && children[1] < 0 && children[2] < 0 && children[3] < 0 }
+  }
+
+  private var cells: [Cell] = []
+
+  init(points: [SIMD2<Double>]) {
+    guard !points.isEmpty else { return }
+
+    var minimum = points[0]
+    var maximum = points[0]
+    for point in points {
+      minimum = simd_min(minimum, point)
+      maximum = simd_max(maximum, point)
+    }
+    let span = max(maximum.x - minimum.x, maximum.y - minimum.y)
+    let size = max(span, 1e-6) * 1.02
+
+    cells.reserveCapacity(points.count * 2)
+    cells.append(Cell(origin: minimum, size: size))
+    for (index, point) in points.enumerated() {
+      insert(point: point, body: index, into: 0, depth: 0)
+    }
+  }
+
+  private mutating func insert(point: SIMD2<Double>, body: Int, into cellIndex: Int, depth: Int) {
+    cells[cellIndex].mass += 1
+    cells[cellIndex].centerOfMass += point
+
+    // Coincident or near-coincident bodies would subdivide forever. At this
+    // depth the cell is far smaller than any visible distance, so they simply
+    // share it and repel each other as one mass.
+    guard depth < 22 else { return }
+
+    if cells[cellIndex].isLeaf {
+      let occupant = cells[cellIndex].body
+      if occupant < 0 {
+        cells[cellIndex].body = body
+        cells[cellIndex].bodyPoint = point
+        return
+      }
+      // Push the sitting tenant down a level, then fall through to place the
+      // newcomer alongside it.
+      let occupantPoint = cells[cellIndex].bodyPoint
+      cells[cellIndex].body = -1
+      subdivideAndInsert(point: occupantPoint, body: occupant, cellIndex: cellIndex, depth: depth)
+    }
+    subdivideAndInsert(point: point, body: body, cellIndex: cellIndex, depth: depth)
+  }
+
+  private mutating func subdivideAndInsert(
+    point: SIMD2<Double>, body: Int, cellIndex: Int, depth: Int
+  ) {
+    let origin = cells[cellIndex].origin
+    let half = cells[cellIndex].size / 2
+    let quadrant = (point.x >= origin.x + half ? 1 : 0) + (point.y >= origin.y + half ? 2 : 0)
+
+    var childIndex = Int(cells[cellIndex].children[quadrant])
+    if childIndex < 0 {
+      let childOrigin = SIMD2<Double>(
+        origin.x + (quadrant % 2 == 1 ? half : 0),
+        origin.y + (quadrant >= 2 ? half : 0))
+      cells.append(Cell(origin: childOrigin, size: half))
+      childIndex = cells.count - 1
+      cells[cellIndex].children[quadrant] = Int32(childIndex)
+    }
+    insert(point: point, body: body, into: childIndex, depth: depth + 1)
+  }
+
+  /// Sum of repulsive force on `point`, opening a cell only when it is close
+  /// enough that its internal structure could matter.
+  ///
+  /// `stack` is supplied by the caller and reused across every node in a step;
+  /// allocating a fresh traversal buffer per node per step costs more than the
+  /// force computation it serves.
+  func repulsion(
+    on point: SIMD2<Double>, kSquared: Double, theta: Double, stack: inout [Int]
+  ) -> SIMD2<Double> {
+    guard !cells.isEmpty else { return .zero }
+    var force = SIMD2<Double>.zero
+    stack.removeAll(keepingCapacity: true)
+    stack.append(0)
+    while let cellIndex = stack.popLast() {
+      let cell = cells[cellIndex]
+      guard cell.mass > 0 else { continue }
+      let centerOfMass = cell.centerOfMass / cell.mass
+      let delta = point - centerOfMass
+      let distance = simd_length(delta)
+      guard distance > 1e-9 else { continue }
+
+      if cell.isLeaf || cell.size / distance < theta {
+        force += (delta / distance) * (kSquared * cell.mass / distance)
+      } else {
+        for quadrant in 0..<4 where cell.children[quadrant] >= 0 {
+          stack.append(Int(cell.children[quadrant]))
+        }
+      }
+    }
+    return force
+  }
+}
