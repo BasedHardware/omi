@@ -130,6 +130,12 @@ final class RewindFlushFinalizationTests: XCTestCase {
 
     let joiningFlush = Task { try await encoder.flushCurrentChunk() }
     await barrier.waitUntilJoinerIsRegistered()
+
+    let finalizingStatus = await encoder.getBufferStatus()
+    XCTAssertEqual(finalizingStatus.lifecyclePhase, "finalizing")
+    XCTAssertEqual(finalizingStatus.finalizationWaiterBucket, "one")
+    XCTAssertFalse(finalizingStatus.hasStalenessTimer)
+
     barrier.releaseOwner()
 
     let ownerValue = try await ownerFlush.value

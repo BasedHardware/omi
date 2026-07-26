@@ -18,7 +18,10 @@ import re
 from typing import Any
 
 ARTIFACTS = ("Omi.zip", "omi.dmg")
-ZIP_SIGNATURES = {"Omi.zip": "edSignature"}
+# INV-BETA-1: releases that ship the side-by-side Omi Beta identity carry two
+# additional qualified artifacts; older single-identity releases remain valid.
+BETA_ARTIFACTS = ("Omi.Beta.zip", "omi-beta.dmg")
+ZIP_SIGNATURES = {"Omi.zip": "edSignature", "Omi.Beta.zip": "betaEdSignature"}
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -72,8 +75,9 @@ def build_evidence(
     metadata = _metadata(str(release.get("body") or ""))
     artifacts: dict[str, dict[str, str]] = {}
     required = {"Omi.zip", "omi.dmg"}
-    if set(files) != required:
-        _fail("does not contain the exact qualified Omi.zip and omi.dmg")
+    with_beta = required | set(BETA_ARTIFACTS)
+    if set(files) not in (required, with_beta):
+        _fail("does not contain the exact qualified Omi.zip and omi.dmg (plus both beta artifacts when present)")
     for name, path in files.items():
         if not path.is_file():
             _fail(f"is missing downloaded {name}")
@@ -168,8 +172,8 @@ def main() -> int:
     files: dict[str, Path] = {}
     for raw in args.asset:
         name, sep, path = raw.partition("=")
-        if not sep or name not in ARTIFACTS:
-            raise SystemExit("--asset must be NAME=PATH for a required release artifact")
+        if not sep or name not in (*ARTIFACTS, *BETA_ARTIFACTS):
+            raise SystemExit("--asset must be NAME=PATH for a qualified release artifact")
         files[name] = Path(path)
     if args.command == "build":
         if not args.candidate_gate:

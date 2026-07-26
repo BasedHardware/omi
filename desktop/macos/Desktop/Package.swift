@@ -12,7 +12,6 @@ let package = Package(
     .package(url: "https://github.com/getsentry/sentry-cocoa.git", exact: "8.58.0"),
     .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.24.0"),
     .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0"),
-    .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.0"),
     .package(
       url: "https://github.com/microsoft/onnxruntime-swift-package-manager.git", from: "1.20.0"),
     // FluidAudio removed the v0.14.8+ tags that its semantic requirement used.
@@ -80,7 +79,6 @@ let package = Package(
         .product(name: "Sentry", package: "sentry-cocoa"),
         .product(name: "GRDB", package: "GRDB.swift"),
         .product(name: "Sparkle", package: "Sparkle"),
-        .product(name: "MarkdownUI", package: "swift-markdown-ui"),
         .product(name: "onnxruntime", package: "onnxruntime-swift-package-manager"),
         .product(name: "FluidAudio", package: "FluidAudio"),
       ],
@@ -97,7 +95,8 @@ let package = Package(
       ],
       resources: [
         .process("GoogleService-Info.plist"),
-        // Bundles everything under Resources/ (incl. *_logo.png brand marks).
+        // Bundles everything under Resources/ (incl. *_logo.png brand marks,
+        // signin_bg.png, and Resources/Fonts/*.ttf — Geist / Geist Mono fonts).
         // NOTE: SwiftPM caches the resource manifest, so new files added to
         // Resources/ are only picked up when the manifest regenerates — editing
         // this file forces incremental builds to re-scan and include them.

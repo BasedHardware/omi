@@ -6,7 +6,7 @@ aiosignal==1.4.0
 aiostream==0.5.2
 alembic==1.13.2
 altair==5.5.0
-anthropic>=0.52.0
+anthropic>=0.111.0
 annotated-types==0.7.0
 antlr4-python3-runtime==4.9.3
 anyio==4.4.0

@@ -694,7 +694,12 @@ class TestVerifyCloudTasksOidc:
             with pytest.raises(RuntimeError):
                 cloud_tasks.enqueue_sync_job({'job_id': 'j'})
 
-    def test_backfill_uses_dedicated_queue_handler_and_audience(self):
+    def test_backfill_lane_still_uses_the_main_queue(self):
+        # An offline recording can never carry server capture proof, so every
+        # offline upload classifies as backfill. Routing that lane to the
+        # bounded historical-recovery worker sent the whole offline workload
+        # through a few dispatch slots, and Cloud Tasks backed the surplus off
+        # for hours. The lane label stays on the payload for metering.
         cloud_tasks = _load_cloud_tasks()
         env = {
             'SYNC_TASKS_QUEUE': 'sync-jobs',
@@ -707,11 +712,10 @@ class TestVerifyCloudTasksOidc:
             cloud_tasks.enqueue_sync_job({'job_id': 'job-1', 'lane': 'backfill'})
 
         enqueue.assert_called_once_with(
-            'sync-backfill',
-            'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+            'sync-jobs',
+            'https://backend-sync.example.com/v2/sync-jobs/run',
             'job-1',
             {'job_id': 'job-1', 'lane': 'backfill'},
-            audience='https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         )
 
     def test_enqueue_account_deletion_task_is_named_by_job_id(self):
@@ -1235,6 +1239,49 @@ def test_polling_stale_job_releases_retry_claim_through_owned_finalizer():
             run_lock_token='1:poll-lock',
         )
         module.release_job_run_lock.assert_called_once_with('job-1', '1:poll-lock')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = original
+
+
+def test_polling_never_dispatched_queued_job_finalizes_as_dispatch_lost():
+    """#10033: a queued cloud_tasks job whose task was lost finalizes with the
+    dispatch-lost code so it is separable from died-worker staleness."""
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    stale_job = {
+        'job_id': 'job-q',
+        'uid': 'test-uid',
+        'status': 'queued',
+        'content_id': 'content-q',
+        'stt_provider': 'deepgram',
+        'stt_model': 'nova-3',
+        'lane': 'fresh',
+        'dispatch_mode': 'cloud_tasks',
+        'ledger_fence_mode': 'active',
+        'started_at': None,
+    }
+    failed_job = {**stale_job, 'status': 'failed', 'reason_code': 'sync_dispatch_lost'}
+    try:
+        module.get_sync_ledger_fence_mode = MagicMock(return_value=module.SyncLedgerFenceMode.ACTIVE)
+        _enable_active_ledger_fence(module)
+        module.get_sync_job = MagicMock(side_effect=[stale_job, stale_job])
+        module.is_sync_job_stale = MagicMock(return_value=True)
+        module.try_acquire_sync_job_run_lock = MagicMock(return_value='1:poll-lock')
+        module.release_job_run_lock = MagicMock()
+        module.bind_or_converge_sync_ledger_completion = MagicMock(return_value=None)
+        module.delete_sync_job_run_lock_epoch = MagicMock()
+        module.finalize_sync_job_failure_now = MagicMock(return_value=failed_job)
+
+        response = module.get_sync_job_status('job-q', uid='test-uid')
+
+        assert response['status'] == 'failed'
+        assert response['reason_code'] == 'sync_dispatch_lost'
+        assert module.finalize_sync_job_failure_now.call_args.kwargs['error_code'] == 'sync_dispatch_lost'
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
@@ -2007,6 +2054,80 @@ async def test_sync_task_final_attempt_publishes_one_bounded_terminal_failure():
         module.fenced_mark_job_queued_for_retry.assert_not_called()
         module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
         module.release_job_run_lock.assert_called_once_with('job-1', '1:lock-token')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_task_non_retryable_failure_terminates_on_its_first_delivery():
+    """A permanent failure must not spend the retry budget returning 5xx."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    from utils.stt.outcomes import TranscriptionFailure
+
+    request = _configure_task_handler(
+        module,
+        pipeline_error=TranscriptionFailure(
+            module.TranscriptionOutcome.CONFIG_ERROR,
+            retryable=False,
+        ),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'unknown',
+            'stt_model': 'unknown',
+        },
+    )
+
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'failed_final'}
+        module._finalize_sync_job_failure.assert_awaited_once()
+        assert (
+            module._finalize_sync_job_failure.await_args.kwargs['outcome'] == module.TranscriptionOutcome.CONFIG_ERROR
+        )
+        module.fenced_mark_job_queued_for_retry.assert_not_called()
+        module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_task_retryable_failure_still_retries_before_exhaustion():
+    """The non-retryable short circuit must not collapse genuine transient retries."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=TimeoutError('transient upstream detail'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'parakeet',
+            'stt_model': 'parakeet',
+        },
+    )
+
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 500
+        assert json.loads(response.body) == {'status': 'retry'}
+        module._finalize_sync_job_failure.assert_not_awaited()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)

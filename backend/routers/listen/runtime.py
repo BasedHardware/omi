@@ -45,7 +45,7 @@ from utils.listen_session_bootstrap import finalize_listen_connect_context, load
 from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
-from utils.observability.journeys import JourneyAttempt, JourneyOutcome
+from utils.observability.transcription import LiveSTTAttempt
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.stt.streaming import get_stt_service_for_language
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
@@ -185,25 +185,30 @@ class ListenSessionRuntime:
 
     def start_live_transcription(self) -> None:
         """Accept the journey once the listen socket has received real audio."""
+        if self.use_custom_stt:
+            return
         if self.state.live_transcription_attempt is None:
-            self.state.live_transcription_attempt = JourneyAttempt('live_transcription')
+            self.state.live_transcription_attempt = LiveSTTAttempt(
+                provider=getattr(self.stt_service, 'value', self.stt_service),
+                platform=self.client_device_context.platform,
+            )
 
     def complete_live_transcription(self) -> None:
         """Record the first nonempty transcript successfully delivered to the client."""
         if self.state.live_transcription_attempt is not None:
-            self.state.live_transcription_attempt.finish('success')
+            self.state.live_transcription_attempt.finish('success', phase='transcript_delivery')
 
     def _finish_live_transcription(self) -> None:
         """Terminalize an accepted attempt that never delivered a transcript."""
         attempt = self.state.live_transcription_attempt
         if attempt is None:
             return
-        outcome: JourneyOutcome = (
+        outcome = (
             'failure'
             if self.state.live_transcription_failed or self.state.stt_terminal_failure or self.state.close_code == 1011
             else 'cancelled'
         )
-        attempt.finish(outcome)
+        attempt.finish(outcome, phase='teardown')
 
     async def _admit(self) -> bool:
         if not self.request.uid:
@@ -419,7 +424,16 @@ class ListenSessionRuntime:
         if self.state.fair_use_track_dg_usage and self.state.dg_usage_ms_pending:
             await self.persistence.call(record_dg_usage_ms, self.request.uid, self.state.dg_usage_ms_pending)
             self.state.dg_usage_ms_pending = 0
-        if self.use_custom_stt or not self.state.last_usage_record_timestamp:
+        if self.use_custom_stt:
+            # Exempt from transcription billing and live caps, but the speech
+            # still drives Omi-paid LLM post-processing — meter it in its own
+            # isolated fair-use lane so the spend is visible (#7690).
+            if FAIR_USE_ENABLED and self.receiver.vad_gate is not None:
+                custom_speech_ms = self.receiver.vad_gate.consume_speech_ms_delta()
+                if custom_speech_ms:
+                    await self.persistence.call(record_speech_ms, self.request.uid, custom_speech_ms, 'custom_stt')
+            return 0
+        if not self.state.last_usage_record_timestamp:
             return 0
         speech_seconds = 0
         if self.receiver.vad_gate is not None:

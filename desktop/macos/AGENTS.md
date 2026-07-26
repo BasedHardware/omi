@@ -18,7 +18,7 @@ Check errors in the latest (or specific) release using the **sentry-release skil
 ./scripts/sentry-release.sh --all        # include carryover issues
 ./scripts/sentry-release.sh --quota      # billing/quota status
 ```
-See `.claude/skills/sentry-release/SKILL.md` for full documentation.
+Run the script with `--help` for the full option list.
 
 ### User Issue Investigation
 When debugging issues for a specific user, check Sentry dashboard for crashes and PostHog for events.
@@ -54,16 +54,16 @@ Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.
 
 ## Release Pipeline
 
-Merging `desktop/macos/**` changes queues them for the next hourly candidate retry. A candidate advances to beta automatically only after every qualification gate passes:
+Beta candidates are cut **on every macOS-affecting merge to `main`** (`push` trigger on the releasable desktop paths, plus a 15-min `schedule` backstop). Each run tags the newest releasable `desktop/macos/**`/`codemagic.yaml` change since the last tag, binding the immutable tag to the Codemagic config that builds it. A candidate reaches beta only after qualification passes:
 
-1. **GitHub Actions** (`desktop_auto_release.yml`) — batches mainline changes, auto-increments the version, and pushes a `v*-macos` build-candidate tag. It is schedule-only and fails closed before changelog or tag mutation unless `Release Eligibility`, `Desktop Swift Build & Tests`, and `Desktop Swift Release Compile` all completed successfully for the exact newest queued releasable desktop SHA. Later backend/docs-only commits do not replace that immutable source with a SHA where desktop CI was skipped; the tag includes the newly consolidated release notes.
-2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — triggered by the tag, runs on Mac mini M2:
-   - Builds universal binary (arm64 + x86_64)
+1. **GitHub Actions** (`desktop_auto_release.yml`) — on that `push` (plus the 15-min `schedule` backstop and manual `workflow_dispatch`) it auto-increments the version and pushes a `v*-macos` tag. A ~60s quiet window (`AUTO_RELEASE_QUIET_SECONDS`) coalesces near-simultaneous merges; the one-active-release fence (Codemagic build status on the latest tag) admits one candidate at a time. Fails closed unless `Release Eligibility`, `Desktop Swift Build & Tests`, and `Desktop Swift Release Compile` all succeeded for the exact newest releasable SHA — so a candidate cuts once that SHA's CI is green (the push fires too early; the backstop catches it after CI settles).
+2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — triggered by the tag, runs on Mac mini M4:
+   - Builds the universal app and dSYM, UUID-checks and uploads symbols to Sentry, and publishes both
    - Signs with Developer ID, notarizes with Apple
    - Creates DMG + Sparkle ZIP
-   - Runs `scripts/smoke-signed-desktop-artifact.sh` on the signed app, Sparkle ZIP, and DMG before publishing, including a mandatory in-app synthetic Keychain write/read/delete canary
+   - Runs `scripts/smoke-signed-desktop-artifact.sh` (signed app, Sparkle ZIP, DMG) before publishing, with a mandatory in-app Keychain write/read/delete canary
    - Publishes an immutable non-live GitHub candidate with smoke evidence
-3. **Trusted macOS qualification runner** (`desktop_qualify_beta.yml`) — dispatched by Codemagic after candidate publication and restricted to the `self-hosted`, `macos`, `omi-desktop-qualification` runner. It verifies published asset digests against signed-smoke evidence, runs the static release checks, rebuilds the exact tag, runs hermetic T2 plus the fault-injection suite, and writes canonical `qualifiedBeta*` evidence metadata. The exact-SHA source clone and its direct SwiftPM `.build` path live together outside the Actions checkout, so checkout cleanup cannot delete them and retries/prewarms use identical absolute source and output paths. Reuse is fail-closed on SHA, `Package.swift`/`Package.resolved`, Xcode, Swift, macOS, architecture, symlinks, collisions, incomplete entries, or tracked source changes; only untrusted untracked residue outside `.build` is cleaned. SwiftPM still validates/rebuilds every requested product, and this cache is never release evidence. The runner must be an administrator-managed Mac with Docker Desktop; it must never execute pull-request or arbitrary-ref workflows.
+3. **Qualification** (`desktop_qualify_beta.yml`) — dispatched by Codemagic after candidate publication, but executed only by `qualify-m1-studio` (label `omi-qual-m1-studio`). The global non-cancelling `desktop-beta-qualification-m1` lock queues all candidates and never cancels local cleanup. It rebuilds the exact tag, runs hermetic T2 and fault injection, and writes evidence. No Codemagic or M4 path can qualify. See `desktop/macos/docs/qualification-environment.md` for lease, port, retention, and cleanup controls; its local stack reaps only matching lease-token/process-group/port provenance and leaves foreign listeners alone.
 4. **Automatic beta promotion** (`desktop_promote_beta.yml`) — a separate `workflow_run` starts only after successful qualification, derives and validates the immutable `v*-macos` tag against the qualification SHA, then invokes the same internal-only backend admission authority. The backend captures the server-owned Beta admission generation before validating digest-matched evidence, then atomically verifies that the reservation and pause state are unchanged while registering the immutable manifest and advancing the explicit beta pointer. If that handoff fails after qualification, use only `desktop_recover_beta.yml` with the exact tag, `confirm=recover-beta`, and a reason.
 
 The shared Python backend must contain the manifest/pointer endpoints before the first beta promotion. Deploy it separately with `gcp_backend.yml`; merging desktop code does not deploy the prod backend. Static GCS/CDN feed ownership remains follow-up work and is not the channel source of truth.
@@ -88,7 +88,7 @@ Stable is manual:
 Promotion from beta to stable is handled by `desktop_promote_prod.yml`, not Codemagic.
 
 ## Firebase Connection
-Use `/firebase` command or see `.claude/skills/firebase/SKILL.md`
+Use the `/firebase` command if your agent provides it.
 
 Quick connect:
 ```bash
@@ -234,7 +234,8 @@ do not hand-edit those paths to match a specific machine.
 - Local: `http://localhost:8080`
 
 ## Credentials
-See `.claude/settings.json` for connection details.
+Connection details come from your local agent configuration; they are deliberately not
+checked in. Ask the user for anything you are missing rather than guessing an endpoint.
 
 ## Development Workflow
 
@@ -244,20 +245,20 @@ See `.claude/settings.json` for connection details.
 - **Full dev run**: `./run.sh` — builds Swift app, starts Rust backend, starts Cloudflare tunnel, launches app
 - **Fast default dev run**: after one successful full named-bundle launch, ordinary Swift-only `./run.sh` calls reuse the installed bundle. The fast lane runs incremental SwiftPM, atomically replaces the executable and current desktop API URL, re-signs the app, and relaunches without copying/re-signing static agent/framework assets or resetting LaunchServices/auth. Named local profiles are eligible: their current disposable `.env` is refreshed on each patch and is never cached in the bundle fingerprint. Package metadata, resources, agent/runtime inputs, entitlements, and persistent launch configuration automatically take the full path. Force that path with `./run.sh --full` or `OMI_FORCE_FULL_BUNDLE=1`. `OMI_SCAN_STALE_BUNDLES=1` is an explicit stale-LaunchServices recovery scan; do not enable it in the normal loop.
 - **Focused feedback loop**: `./scripts/dev-feedback.py --once|--watch swift '<XCTest filter>'` or `... rust '<cargo filter>'` runs exactly the regression you selected and reports each iteration time. It watches only the matching component inputs, keeps watching after a failure, and never replaces the full component suite. Pre-push deliberately adds only `xcrun swift build -c debug`; never promote it to the full pinned-Xcode suite or release compile, because that push-time budget belongs to CI.
-- **Swift suite throughput**: `scripts/swift-test-suites.sh` isolates suite processes but now defaults to four workers (matching CI). Set `OMI_SWIFT_TEST_SUITE_WORKERS=1` only when diagnosing an order/concurrency-sensitive failure.
+- **Swift suite throughput**: Local suites default to four workers; CI pins one for the shared `.build` lock. Do not raise it without isolated builds. Set `OMI_SWIFT_TEST_SUITE_WORKERS=1` to diagnose concurrency failures.
 - **Local Rust backend**: direct `./run.sh` development uses Cargo debug output (`target/debug`) by default and reuses a healthy backend that this worktree owns when Rust source/config/profile have not changed. A compile failure leaves that healthy process alive. Use `OMI_DESKTOP_BACKEND_RELEASE=1` only for an explicit optimized local check; release/CI builds remain unchanged.
 - **Agent runtime preparation cache**: local `./run.sh` calls reuse validated agent packaging from the worktree-local `.harness/agent-runtime` cache when source, locks, preparation logic, pinned runtime, mode, OS/architecture, Node/npm versions, and every file copied from the prepared runtime are unchanged. Hits verify the complete agent `dist`, both packaged dependency trees, their symlinks, and staged Node; working `agent/node_modules` is not hashed. The script logs `Cache HIT`, `MISS`, or `BYPASS`; hits preserve output mtimes but spend roughly a second on a warm local filesystem hashing the packaged outputs for integrity (hardware/filesystem dependent). CI and `--skip-npm` always bypass the stamp. Set `OMI_AGENT_RUNTIME_FORCE_REBUILD=1` for an explicit local rebuild. Do not copy this cache between worktrees or treat it as a release artifact. The checksum-verified universal Node archives are separately shared at `~/Library/Caches/OmiDesktop/node-archives` (override with `OMI_AGENT_RUNTIME_ARCHIVE_CACHE_DIR`), so fresh linked worktrees reuse the download but still validate it before staging.
 - **Release builds**: Handled entirely by Codemagic CI (no local release script needed)
 - **DO NOT** use bare `swift build` — it will fail with SDK version mismatch
 - **DO NOT** use `xcodebuild` — there is no `.xcodeproj`
-- **DO NOT** launch the app directly from `build/` — always use `./run.sh` or `./reset-and-run.sh`. These scripts install to `/Applications/Omi Dev.app` and launch from there, which is required for macOS "Quit & Reopen" (after granting permissions) to find the correct binary. Launching from `build/` causes stale binaries to run after permission restarts.
+- **DO NOT** launch the app directly from `build/` — always use `./run.sh`. These scripts install to `/Applications/Omi Dev.app` and launch from there, which is required for macOS "Quit & Reopen" (after granting permissions) to find the correct binary. Launching from `build/` causes stale binaries to run after permission restarts.
 - **DO NOT** manually copy binaries into app bundles and launch them — this bypasses signing, `/Applications/` installation, and LaunchServices registration
 
 - **DO NOT** kill, delete, or interfere with running "Omi", "omi", or "Omi Beta" app bundles — these are production/release installs the user relies on
 
 ### App Names & Build Artifacts
 - `./run.sh` builds **"Omi Dev"** → installs to `/Applications/Omi Dev.app` (bundle ID: `com.omi.desktop-dev`)
-- **"Omi"** (bundle ID: `com.omi.computer-macos`) is built by Codemagic CI; Beta is an update-channel pointer for the same signed artifact
+- **"Omi"** stable (bundle ID: `com.omi.computer-macos`) and **"Omi Beta"** (bundle ID: `com.omi.computer-macos.beta`, isolated "Omi Beta" storage root, runs side-by-side with stable) are built by Codemagic CI only
 - To check which app is currently running: `ps aux | grep "Omi"`
 
 ### Testing with Named Bundles
@@ -508,7 +509,7 @@ agent-swift screenshot /tmp/evidence.png             # capture app window
 - Argument order: `get <property> <ref>`, `is <condition> <ref>`, `wait <condition> [<target>]`, `find <locator> <value>`.
 - 15 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `click`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
 - No app-side instrumentation needed — works via macOS Accessibility API on any Cocoa/SwiftUI app.
-- Dev bundle ID: `com.omi.desktop-dev`. Production: `com.omi.computer-macos` — never automate it.
+- Dev bundle ID: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos` (stable) and `com.omi.computer-macos.beta` (Omi Beta) — never automate prod.
 
 ### Changelog Entries
 

@@ -632,7 +632,8 @@ export function mcpServersForBinding(
   mcpServers: Record<string, unknown>[],
   sessionId: string,
   adapterId: string,
-  runtimeNodeId: string
+  runtimeNodeId: string,
+  workingDirectory?: string,
 ): Record<string, unknown>[] {
   return mcpServers.map((server) => {
     if (!server || typeof server !== "object" || Array.isArray(server)) {
@@ -644,7 +645,10 @@ export function mcpServersForBinding(
       const name = (entry as Record<string, unknown>).name;
       return typeof name !== "string" || !VOLATILE_MCP_ENV_KEYS.has(name) || name === "OMI_CONTEXT_FILE";
     });
-    normalized.env = upsertEnv(env, "OMI_CONTEXT_FILE", contextFileForBinding(sessionId, adapterId, runtimeNodeId));
+    const bindingEnv = upsertEnv(env, "OMI_CONTEXT_FILE", contextFileForBinding(sessionId, adapterId, runtimeNodeId));
+    normalized.env = workingDirectory
+      ? upsertEnv(bindingEnv, "OMI_WORKSPACE", workingDirectory)
+      : bindingEnv;
     return normalized;
   });
 }

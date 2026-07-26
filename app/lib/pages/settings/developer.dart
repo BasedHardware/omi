@@ -375,7 +375,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
+            const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
             const SizedBox(width: 6),
             Text(
               context.l10n.createKey,
@@ -416,7 +416,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
             child: Row(
               children: [
-                SizedBox(
+                const SizedBox(
                   width: 24,
                   height: 24,
                   child: Center(child: FaIcon(FontAwesomeIcons.microchip, color: Colors.white, size: 16)),
@@ -446,7 +446,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
               backgroundColor: const Color(0xFF0D0D0D),
               elevation: 0,
               leading: IconButton(
-                icon: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+                icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
                 onPressed: () => Navigator.of(context).pop(),
               ),
               title: Text(
@@ -785,7 +785,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                                     final name = f.uri.pathSegments.last;
                                                     return ListTile(
                                                       title: Text(name, style: const TextStyle(color: Colors.white)),
-                                                      trailing: FaIcon(
+                                                      trailing: const FaIcon(
                                                         FontAwesomeIcons.chevronRight,
                                                         color: Color(0xFF3C3C43),
                                                         size: 14,
@@ -852,7 +852,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                   ),
                                   child: Row(
                                     children: [
-                                      FaIcon(FontAwesomeIcons.trash, color: Colors.redAccent, size: 14),
+                                      const FaIcon(FontAwesomeIcons.trash, color: Colors.redAccent, size: 14),
                                       const SizedBox(width: 6),
                                       Text(
                                         context.l10n.clear,
@@ -1831,7 +1831,7 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
               decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
               child: Row(
                 children: [
-                  FaIcon(FontAwesomeIcons.file, color: Colors.deepPurple, size: 20),
+                  const FaIcon(FontAwesomeIcons.file, color: Colors.deepPurple, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(

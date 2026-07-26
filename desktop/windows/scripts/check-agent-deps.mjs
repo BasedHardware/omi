@@ -22,6 +22,7 @@
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { checkClaudeBinary } from './claude-binary-check.mjs'
 
 const CRITICAL_DEPS = [
   '@agentclientprotocol/claude-agent-acp', // dynamically imported by src/main/codingAgent/claude-acp-entry.mjs
@@ -66,6 +67,21 @@ try {
       message: err instanceof Error ? err.message : String(err)
     })
   }
+}
+
+// The Claude Code EXECUTABLE (claude.exe, from the binary-only optional
+// package @anthropic-ai/claude-agent-sdk-win32-x64) can be silently absent or
+// truncated after a failed optional download — pnpm still exits 0 and
+// import.meta.resolve() can't see a binary-only package. Without it, agent
+// tasks pass the ACP handshake and then have nothing to spawn. See
+// claude-binary-check.mjs (validated against a real failed install in
+// PR #9304 review).
+const binaryCheck = checkClaudeBinary(join(dirname(fileURLToPath(import.meta.url)), '..'))
+if (!binaryCheck.ok) {
+  missing.push({
+    dep: '@anthropic-ai/claude-agent-sdk-win32-x64/claude.exe',
+    message: binaryCheck.reason
+  })
 }
 
 if (missing.length > 0) {

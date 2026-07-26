@@ -91,6 +91,13 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Horizontal inset of the message column. Home passes 0 so bubbles align
   /// exactly with the ask bar's edges; other surfaces keep the default gutter.
   var horizontalContentPadding: CGFloat = OmiSpacing.xxl
+  /// Vertical transcript inset. Home uses a tighter value because its page
+  /// shell already provides the breathing room beneath the floating top bar.
+  var verticalContentPadding: CGFloat = OmiSpacing.xl
+  /// Extra trailing inset only. Home passes a small value so the macOS overlay
+  /// scrollbar doesn't clip right-aligned user pills when horizontalContentPadding
+  /// is 0; the left edge stays aligned with the ask bar. Default 0.
+  var trailingContentPadding: CGFloat = 0
   @ViewBuilder var welcomeContent: () -> WelcomeContent
 
   /// IDs of messages that are near-duplicates of an earlier message in the same session.
@@ -117,12 +124,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Tracks work items for delayed initial bottom scrolls so they can be
   /// canceled on user scroll or disappear.
   @State private var initialScrollWorkItems: [DispatchWorkItem] = []
-  /// Last visible scroll viewport size. When a chat panel opens, sidebars
-  /// resize, or the window is dragged wider/taller, SwiftUI can lay out the
-  /// transcript after our first scroll request; this lets us re-follow the
-  /// latest message while still respecting explicit user scrolls.
-  @State private var lastScrollViewportSize: CGSize = .zero
-
   // MARK: - Local Send Anchoring
 
   /// Last observed local send token generation. When it increments, we know
@@ -134,6 +135,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Whether the initial history load for this conversation has been handled.
   /// Prevents repeated initial bottom settling on subsequent messages.count changes.
   @State private var initialRestoreHandled = false
+  /// The one deferred initial restore waits for the first transcript layout.
+  /// Geometry changes during that interval must not introduce additional
+  /// bottom-scroll commands, or saved history visibly flies through the view.
+  @State private var isInitialRestorePending = false
+  @State private var initialRestoreWorkItem: DispatchWorkItem?
 
   // MARK: - Prepend Preservation (Load Earlier Messages)
 
@@ -171,10 +177,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         messageContent
       }
       .padding(.horizontal, horizontalContentPadding)
-      .padding(.vertical, OmiSpacing.xl)
+      .padding(.trailing, trailingContentPadding)
+      .padding(.vertical, verticalContentPadding)
       // Do not enable text selection on the whole stack. SelectionOverlay on every
       // chrome Text (agent card headers, tool summaries, timestamps) can peg the
-      // main thread in GraphHost layout. Message bodies opt in via SelectableMarkdown.
+      // main thread in GraphHost layout. Message bodies opt in via OmiMarkdown.
       .background(scrollDetectors)
 
       // Invisible anchor lives OUTSIDE the LazyVStack so it is always
@@ -190,6 +197,13 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // MARK: - React to message count changes
     .onChange(of: messages.count) { oldCount, newCount in
       handleMessagesCountChange(oldCount: oldCount, newCount: newCount, proxy: proxy)
+    }
+    // A journal restore may be populated by background events while the
+    // loader is still collecting its canonical snapshot. Reveal it only after
+    // loading completes, then make one initial placement at the live edge.
+    .onChange(of: isLoadingInitial) { wasLoading, isLoading in
+      guard wasLoading, !isLoading, !messages.isEmpty else { return }
+      handleInitialRestore(proxy: proxy)
     }
     // MARK: - React to streaming text changes
     .onChange(of: messages.last?.text) { _, _ in
@@ -249,14 +263,13 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       }
     }
     .onAppear {
-      if !messages.isEmpty {
+      if !isLoadingInitial, !messages.isEmpty {
         handleInitialRestore(proxy: proxy)
       }
     }
     .onDisappear {
       cancelAllPendingScrolls()
     }
-    .background(viewportResizeDetector(proxy: proxy))
   }
 
   // MARK: - Message Count Change Handler
@@ -267,6 +280,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// - New messages arriving while scrolled away (activity indicator)
   /// - Prepend detection (load earlier)
   private func handleMessagesCountChange(oldCount: Int, newCount: Int, proxy: ScrollViewProxy) {
+    // Saved journal rows are not live arrivals. The loading-complete observer
+    // above performs their one final placement after the snapshot is visible.
+    guard !isLoadingInitial else { return }
+
     if newCount > oldCount {
       // --- Initial restore: messages went from 0→N ---
       if oldCount == 0 && newCount > 0 {
@@ -290,6 +307,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   }
 
   private func handleLiveContentChange(proxy: ScrollViewProxy) {
+    guard !isLoadingInitial else { return }
+
     switch scrollMode {
     case .followingBottom:
       throttledScrollToBottom(proxy: proxy)
@@ -309,10 +328,18 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
     scrollMode = .followingBottom
     hasActivityBelow = false
-    scrollToBottom(proxy: proxy)
-    scheduleInitialScroll(proxy: proxy, delay: 0.05)
-    scheduleInitialScroll(proxy: proxy, delay: 0.18)
-    scheduleInitialScroll(proxy: proxy, delay: 0.45)
+    isInitialRestorePending = true
+
+    let work = DispatchWorkItem { [self] in
+      defer {
+        isInitialRestorePending = false
+        initialRestoreWorkItem = nil
+      }
+      guard scrollMode == .followingBottom, !userIsScrolling else { return }
+      scrollToBottom(proxy: proxy)
+    }
+    initialRestoreWorkItem = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
   }
 
   // MARK: - Local Send / Turn Anchoring
@@ -364,28 +391,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
   // MARK: - Scheduled Scrolls
 
-  private func handleViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy) {
-    guard size.width > 0, size.height > 0 else { return }
-    guard size != lastScrollViewportSize else { return }
-    lastScrollViewportSize = size
-
-    guard scrollMode == .followingBottom, !userIsScrolling, !messages.isEmpty else { return }
-    scrollToBottom(proxy: proxy)
-    scheduleInitialScroll(proxy: proxy, delay: 0.08)
-  }
-
-  private func viewportResizeDetector(proxy: ScrollViewProxy) -> some View {
-    GeometryReader { geometry in
-      Color.clear
-        .onAppear {
-          handleViewportSizeChange(geometry.size, proxy: proxy)
-        }
-        .onChange(of: geometry.size) { _, newSize in
-          handleViewportSizeChange(newSize, proxy: proxy)
-        }
-    }
-  }
-
   /// Schedules a delayed bottom scroll that is mode-aware and cancelable.
   private func scheduleInitialScroll(proxy: ScrollViewProxy, delay: TimeInterval) {
     var workItem: DispatchWorkItem?
@@ -410,6 +415,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     scrollThrottleWorkItem = nil
     userScrollEndWorkItem?.cancel()
     userScrollEndWorkItem = nil
+    initialRestoreWorkItem?.cancel()
+    initialRestoreWorkItem = nil
+    isInitialRestorePending = false
     for item in initialScrollWorkItems {
       item.cancel()
     }
@@ -444,7 +452,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
   @ViewBuilder
   private var messageContent: some View {
-    if isLoadingInitial && messages.isEmpty && sessionsLoadError == nil {
+    if isLoadingInitial && sessionsLoadError == nil {
       VStack(spacing: OmiSpacing.md) {
         ProgressView()
           .scaleEffect(0.8)

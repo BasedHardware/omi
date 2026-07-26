@@ -83,6 +83,35 @@ final class FloatingControlBarStateTests: XCTestCase {
     )
   }
 
+  func testNotchHoverMenuIsReservedForActiveSubagents() {
+    XCTAssertFalse(NotchAgentMenuPresentation.shouldPresent(agentCount: 0))
+    XCTAssertTrue(NotchAgentMenuPresentation.shouldPresent(agentCount: 1))
+    XCTAssertTrue(NotchAgentMenuPresentation.shouldPresent(agentCount: 8))
+  }
+
+  func testIdleNotchTapOpensMainChatOnlyWhenTheNotchIsIdle() {
+    var openCount = 0
+    let openMainChat = { openCount += 1 }
+
+    NotchIdleTapRoute.perform(
+      isVoicePresentationActive: false,
+      isShowingConversation: false,
+      openMainChat: openMainChat
+    )
+    NotchIdleTapRoute.perform(
+      isVoicePresentationActive: true,
+      isShowingConversation: false,
+      openMainChat: openMainChat
+    )
+    NotchIdleTapRoute.perform(
+      isVoicePresentationActive: false,
+      isShowingConversation: true,
+      openMainChat: openMainChat
+    )
+
+    XCTAssertEqual(openCount, 1)
+  }
+
   func testAgentSurfaceDoesNotDependOnMainChatContentOrHeight() {
     let state = FloatingControlBarState()
     let agentID = UUID()

@@ -179,7 +179,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                                   margin: const EdgeInsets.only(bottom: 10),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
-                                    side: BorderSide(color: Color(0xFF35343B), width: 1),
+                                    side: const BorderSide(color: Color(0xFF35343B), width: 1),
                                   ),
                                   elevation: 0,
                                   clipBehavior: Clip.antiAlias,

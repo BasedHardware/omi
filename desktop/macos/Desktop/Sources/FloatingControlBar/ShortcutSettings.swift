@@ -276,6 +276,13 @@ class ShortcutSettings: ObservableObject {
     modifiers: [.command, .shift]
   )
   static let askOmiCommandJShortcut = KeyboardShortcut(keyCode: 38, keyDisplay: "J", modifiers: .command)
+  // ⌘O is the default open hotkey again: it registers reliably via the
+  // dedicated Carbon hotkey (GlobalShortcutManager.registerCommandO), so it no
+  // longer collides with the universal "Open" shortcut the way a plain global
+  // registration did. ⌃⌥O stays defined as a conflict-free alternative users can
+  // bind, but is no longer the default or a preset.
+  static let askOmiControlOptionOShortcut = KeyboardShortcut(
+    keyCode: 31, keyDisplay: "O", modifiers: [.control, .option])
   static let defaultAskOmiShortcut = askOmiCommandOShortcut
 
   static let askOmiPresets: [KeyboardShortcut] = [
@@ -348,6 +355,12 @@ class ShortcutSettings: ObservableObject {
   /// like Wispr Flow. The track keeps playing silently rather than being paused.
   @Published var pttMuteSystemAudio: Bool {
     didSet { UserDefaults.standard.set(pttMuteSystemAudio, forKey: "shortcut_pttMuteSystemAudio") }
+  }
+
+  /// Empty means Automatic. A non-empty value is a stable CoreAudio device UID
+  /// selected specifically for push-to-talk, independent of the macOS default input.
+  @Published var pttInputDeviceUID: String {
+    didSet { UserDefaults.standard.set(pttInputDeviceUID, forKey: .shortcutPTTInputDeviceUID) }
   }
 
   /// Selected AI model for Ask Omi.
@@ -565,6 +578,9 @@ class ShortcutSettings: ObservableObject {
         legacyMapper: Self.legacyPTTShortcut
       ) ?? Self.pttPresets[0]
 
+    // ⌘O registers reliably now via the dedicated Carbon hotkey
+    // (GlobalShortcutManager.registerCommandO), so a saved ⌘O binding is honored
+    // as-is — no ⌘O → ⌃⌥O migration.
     self.askOmiShortcut =
       Self.loadShortcut(
         forKey: Self.askOmiShortcutDefaultsKey,
@@ -577,6 +593,7 @@ class ShortcutSettings: ObservableObject {
     self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
     self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
     self.pttMuteSystemAudio = UserDefaults.standard.object(forKey: "shortcut_pttMuteSystemAudio") as? Bool ?? true
+    self.pttInputDeviceUID = UserDefaults.standard.string(forKey: .shortcutPTTInputDeviceUID) ?? ""
     self.selectedModel = ModelQoS.Claude.sanitizedSelection(
       UserDefaults.standard.string(forKey: "shortcut_selectedModel")
     )

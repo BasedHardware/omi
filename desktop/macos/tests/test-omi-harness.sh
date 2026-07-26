@@ -101,11 +101,6 @@ freshness_match = re.search(r"state\.snapshotStale:\s*(true|false)", s1_block)
 if freshness_match:
     wait_expectations["state.snapshotStale"] = freshness_match.group(1) == "true"
 
-state_sequence = [
-    {"selectedSettingsSection": "Rewind", "snapshotStale": True},
-    {"selectedSettingsSection": "Rewind", "snapshotStale": False},
-]
-state_calls = []
 original_state_snapshot = module.state_snapshot
 wait_context = module.HarnessContext(
     base_url="http://127.0.0.1:59999",
@@ -118,12 +113,8 @@ wait_context = module.HarnessContext(
     bundle_id=None,
     process_match=None,
 )
-module.state_snapshot = lambda _ctx: state_calls.append(len(state_calls)) or state_sequence[min(len(state_calls) - 1, 1)]
-wait_ok, wait_state = module.wait_for_state(wait_context, wait_expectations, timeout=1.0)
-module.state_snapshot = original_state_snapshot
-assert wait_ok and wait_state["snapshotStale"] is False, (wait_ok, wait_state, wait_expectations, state_calls)
-assert len(state_calls) == 2, "rewind flow must not start its MainActor action from a stale cached state"
 assert "timeout_seconds: 30" in s1_block, "rewind freshness wait must remain bounded"
+assert "stability_window_seconds:" in s1_block, "rewind freshness must remain stable before action dispatch"
 assert "halt_on_failure: true" in s1_block, "failed rewind readiness must halt before the action"
 
 module.state_snapshot = lambda _ctx: {"selectedSettingsSection": "Rewind", "snapshotStale": True}
@@ -132,14 +123,26 @@ module.state_snapshot = original_state_snapshot
 assert not stale_ok and stale_state["snapshotStale"] is True, "persistent MainActor contention must still fail closed"
 
 
-def run_flow_case(s1_ok, s2_ok):
+def run_rewind_flow_case(state_sequence, action_response):
     flow = {
         "version": 2,
         "name": "rewind-settings-gating-contract",
         "steps": [
-            {"id": "S1", "name": "readiness", "halt_on_failure": True},
-            {"id": "S2", "name": "snapshot action"},
-            {"id": "S3", "name": "logs clean"},
+            {
+                "id": "S1",
+                "name": "readiness",
+                "bridge.navigate": {"target": "settings", "settingsSection": "Rewind"},
+                "wait": wait_expectations,
+                "timeout_seconds": 0.12,
+                "stability_window_seconds": 0.04,
+                "halt_on_failure": True,
+            },
+            {
+                "id": "S2",
+                "name": "snapshot action",
+                "bridge.action": {"name": "rewind_settings_snapshot"},
+                "expect": {"ok": True},
+            },
         ],
     }
     originals = {
@@ -149,37 +152,64 @@ def run_flow_case(s1_ok, s2_ok):
             "validate_flow_schema",
             "create_context",
             "request_json",
-            "execute_step",
             "collect_logs",
             "recent_traces",
         )
     }
-    executed = []
+    original_monotonic = module.time.monotonic
+    original_sleep = module.time.sleep
+    clock = [0.0]
+    navigation_started = [False]
+    state_calls = []
+    action_calls = []
 
-    def fake_request_json(_base_url, method, route, payload=None, timeout=20.0):
-        del payload, timeout
+    def fake_request_json(_base_url, method, route, body=None, authenticate=True):
+        del body, authenticate
         if method == "POST" and route == "/traces/clear":
             return {"ok": True}
         if method == "GET" and route == "/capabilities":
             return {"ok": True, "result": {}}
         if method == "GET" and route == "/state":
-            return {"ok": True, "result": {}}
+            if not navigation_started[0]:
+                return {"ok": True, "result": {"selectedSettingsSection": "Rewind", "snapshotStale": False}}
+            state_calls.append(len(state_calls))
+            state = state_sequence[min(len(state_calls) - 1, len(state_sequence) - 1)]
+            return {"ok": True, "result": state}
+        if method == "POST" and route == "/navigate":
+            navigation_started[0] = True
+            return {"ok": True}
+        if method == "POST" and route == "/action":
+            action_calls.append({"state_call_count": len(state_calls), "response": action_response})
+            return action_response
+        if method == "GET" and route == "/traces/recent":
+            return {"ok": True, "result": []}
         raise AssertionError((method, route))
 
-    def fake_execute_step(_ctx, _index, step):
-        step_id = step["id"]
-        executed.append(step_id)
-        ok = s1_ok if step_id == "S1" else s2_ok if step_id == "S2" else True
-        return {"id": step_id, "name": step["name"], "ok": ok, "duration_ms": 0.0}
+    def fake_sleep(seconds):
+        clock[0] += seconds
+
+    def fake_create_context(args, case_flow_path, run_dir, lane):
+        return module.HarnessContext(
+            base_url=f"http://127.0.0.1:{args.port}",
+            flow_path=case_flow_path,
+            run_dir=run_dir,
+            steps_dir=run_dir / "steps",
+            lane=lane,
+            log_path=Path("/private/tmp/omi/harness-test.log"),
+            log_start=0,
+            bundle_id=None,
+            process_match=None,
+        )
 
     try:
         module.read_yaml = lambda _path: flow
         module.validate_flow_schema = lambda _flow, _args: 2
-        module.create_context = lambda *_args: wait_context
+        module.create_context = fake_create_context
         module.request_json = fake_request_json
-        module.execute_step = fake_execute_step
         module.collect_logs = lambda _ctx: {"error_count": 0}
         module.recent_traces = lambda _ctx: []
+        module.time.monotonic = lambda: clock[0]
+        module.time.sleep = fake_sleep
         with tempfile.TemporaryDirectory() as out:
             args = argparse.Namespace(
                 flow=str(flow_path),
@@ -193,21 +223,42 @@ def run_flow_case(s1_ok, s2_ok):
     finally:
         for name, value in originals.items():
             setattr(module, name, value)
-    return code, executed, metrics
+        module.time.monotonic = original_monotonic
+        module.time.sleep = original_sleep
+    return code, metrics, state_calls, action_calls
 
 
-failed_readiness_code, failed_readiness_steps, _ = run_flow_case(False, True)
-assert failed_readiness_code == 1
-assert failed_readiness_steps == ["S1"], "failed readiness must execute zero subsequent actions"
+fresh_stale_fresh = [
+    {"selectedSettingsSection": "Rewind", "snapshotStale": False},
+    {"selectedSettingsSection": "Rewind", "snapshotStale": True},
+    {"selectedSettingsSection": "Rewind", "snapshotStale": False},
+]
+stable_code, stable_metrics, stable_state_calls, stable_action_calls = run_rewind_flow_case(
+    fresh_stale_fresh, {"ok": True, "result": {"accepted": True}}
+)
+assert stable_code == 0, stable_metrics
+assert len(stable_action_calls) == 1, "fresh-stale-fresh readiness must dispatch exactly once"
+assert stable_action_calls[0]["state_call_count"] >= 5, (
+    "action must wait for a fresh snapshot to remain stable across the configured window",
+    stable_state_calls,
+    stable_action_calls,
+)
 
-fresh_code, fresh_steps, _ = run_flow_case(True, True)
-assert fresh_code == 0
-assert fresh_steps.count("S2") == 1, "fresh readiness must execute the action exactly once"
+stale_code, stale_metrics, _, stale_action_calls = run_rewind_flow_case(
+    [{"selectedSettingsSection": "Rewind", "snapshotStale": True}],
+    {"ok": True, "result": {"accepted": True}},
+)
+assert stale_code == 1, stale_metrics
+assert not stale_action_calls, "permanently stale readiness must dispatch zero actions"
+assert [step["id"] for step in stale_metrics["steps"]] == ["S1"]
 
-action_failure_code, action_failure_steps, _ = run_flow_case(True, False)
-assert action_failure_code == 1
-assert action_failure_steps == ["S1", "S2", "S3"]
-assert action_failure_steps.count("S2") == 1, "action failure must be terminal and never retried"
+timeout_code, timeout_metrics, _, timeout_action_calls = run_rewind_flow_case(
+    [{"selectedSettingsSection": "Rewind", "snapshotStale": False}],
+    {"ok": False, "error": "connection_timeout: timed out"},
+)
+assert timeout_code == 1, timeout_metrics
+assert len(timeout_action_calls) == 1, "action timeout must remain terminal and single-attempt"
+assert [step["id"] for step in timeout_metrics["steps"]] == ["S1", "S2"]
 
 
 class FakeResponse:

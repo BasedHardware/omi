@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { ChatMessages } from '../../chat/ChatMessages'
+import { useLiveEdgeFollow } from '../../../hooks/useLiveEdgeFollow'
 import type { ChatMsg } from '../../../hooks/useChat'
 
 // The chat stage. It renders the app's ONE chat engine (useAppState().chat) through
@@ -22,21 +23,9 @@ export function HubChatPanel(props: {
   const scrollRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
 
-  // Pin the live edge. RevealMarkdown grows the streaming reply's text WITHOUT a
-  // history change, so watching `messages` alone would lag the reveal by a chunk —
-  // observe the content box and re-pin on every size change (mirrors BarChatSurface).
-  useEffect(() => {
-    const content = contentRef.current
-    if (!content) return
-    const pin = (): void => {
-      const el = scrollRef.current
-      if (el) el.scrollTop = el.scrollHeight
-    }
-    pin()
-    const ro = new ResizeObserver(pin)
-    ro.observe(content)
-    return () => ro.disconnect()
-  }, [])
+  // Pin the live edge while the reply streams, releasing as soon as the reader
+  // scrolls up to read earlier messages (shared with the bar surfaces).
+  useLiveEdgeFollow(scrollRef, contentRef)
 
   return (
     <div

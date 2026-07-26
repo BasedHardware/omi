@@ -82,36 +82,6 @@ enum AgentRuntimeStartupAdmission {
   }
 }
 
-/// Firebase credentials are mandatory for every production and model runtime
-/// start. The sole exception is a non-production journal-control start, whose
-/// owner-bound RPCs deliberately operate without a model credential. The
-/// fault suite supplies a separate, inert model token so its named test bundle
-/// can reach the local 5xx endpoint without contacting Firebase.
-enum AgentRuntimeCredentialPolicy {
-  static let hermeticFaultModelTokenEnvironmentKey = "OMI_FAULT_MODEL_AUTH_TOKEN"
-  static let hermeticFaultBundleIdentifier = "com.omi.omi-fault"
-
-  static func hermeticFaultModelToken(
-    isNonProduction: Bool,
-    bundleIdentifier: String,
-    environment: [String: String] = ProcessInfo.processInfo.environment
-  ) -> String? {
-    guard isNonProduction, bundleIdentifier == hermeticFaultBundleIdentifier else { return nil }
-    let token =
-      environment[hermeticFaultModelTokenEnvironmentKey]?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    return token.isEmpty ? nil : token
-  }
-
-  static func requiresManagedCredentials(
-    requestedCredentials: Bool,
-    isNonProduction: Bool,
-    hermeticFaultModelToken: String? = nil
-  ) -> Bool {
-    (requestedCredentials || !isNonProduction) && hermeticFaultModelToken == nil
-  }
-}
-
 /// Serializes the pipe read and sequence assignment performed by Foundation's
 /// readability callback. The callback may be re-entered on different threads;
 /// sequencing only after `availableData` would still allow a later read to be
@@ -572,6 +542,13 @@ actor AgentRuntimeProcess {
   /// an actor blocked writing to the frozen process. See DebugSuspendControl.
   private nonisolated let debugSuspend = DebugSuspendControl()
   private var lastExitWasOOM = false
+  private var startupBeganAt: Date?
+  private var startupBinaryPresent = false
+  private var startupBinaryPresentChecked = false
+  private var startupPermissionGrantedChecked = false
+  private var pendingStartFailureDiagnostics: DesktopErrorDiagnosticContext?
+  private var startupPermissionGranted = false
+  private var startupExitCode: Int32?
   private var clients: [String: ClientRegistration] = [:]
   private var activeRequests: [RuntimeMessage.RequestKey: ActiveRequest] = [:]
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
@@ -1948,10 +1925,14 @@ actor AgentRuntimeProcess {
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
     expectedGeneration: Int? = nil,
+    deleteBackend: Bool = true,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> Int {
     var payload: [String: Any] = [:]
     if let expectedGeneration { payload["expectedGeneration"] = expectedGeneration }
+    // Only send the flag when it diverges from the daemon default (true) so a
+    // local-only reset never deletes the user's server-side chat history.
+    if !deleteBackend { payload["deleteBackend"] = false }
     return try await journalOperation(
       type: "journal_clear_turns",
       operation: "clear",
@@ -2510,6 +2491,12 @@ actor AgentRuntimeProcess {
     admissionAuthorityEpoch: UInt64,
     requiresCredentials: Bool
   ) async throws -> StartupReceipt {
+    startupBeganAt = Date()
+    startupBinaryPresent = false
+    startupBinaryPresentChecked = false
+    startupPermissionGrantedChecked = false
+    startupPermissionGranted = false
+    startupExitCode = nil
     // `startProcess` owns the launch through `startupSingleFlight`. Do not use
     // the reducer's `.starting` state as a join signal here: the launch owner
     // intentionally sets it *before* this operation is scheduled.
@@ -2557,6 +2544,8 @@ actor AgentRuntimeProcess {
 
     let nodeExists = FileManager.default.isExecutableFile(atPath: nodePath)
     let bridgeExists = FileManager.default.fileExists(atPath: bridgePath)
+    startupBinaryPresentChecked = true
+    startupBinaryPresent = nodeExists && bridgeExists
     let bridgeDir = (bridgePath as NSString).deletingLastPathComponent
     let pkgJsonPath = ((bridgeDir as NSString).deletingLastPathComponent as NSString)
       .appendingPathComponent("package.json")
@@ -2625,7 +2614,11 @@ actor AgentRuntimeProcess {
         isNonProduction: AppBuild.isNonProduction,
         hermeticFaultModelToken: hermeticFaultModelToken)
     let authService = await MainActor.run { AuthService.shared }
-    let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled
+    let forceRefreshToken =
+      preferredAdapterId == .piMono
+      && AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(
+        isNonProduction: AppBuild.isNonProduction,
+        isDesktopLocalProfile: DesktopLocalProfile.isEnabled)
     let authHeader = try? await Self.startupAuthHeader(
       requiresCredentials: requiresPiMonoCredentials,
       fetchAuthHeader: {
@@ -2642,8 +2635,11 @@ actor AgentRuntimeProcess {
     } else if let authHeader,
       let token = Self.bearerToken(from: authHeader)
     {
+      startupPermissionGrantedChecked = requiresPiMonoCredentials
+      startupPermissionGranted = requiresPiMonoCredentials
       env["OMI_AUTH_TOKEN"] = token
     } else if requiresPiMonoCredentials {
+      startupPermissionGrantedChecked = true
       log("AgentRuntimeProcess: pi-mono start refused, Firebase ID token is missing")
       throw BridgeError.authMissing
     } else if preferredAdapterId == .piMono {
@@ -2946,6 +2942,50 @@ actor AgentRuntimeProcess {
         "recovery_action": "retry_start",
         "recovery_result": "exhausted",
       ])
+    pendingStartFailureDiagnostics = bridgeStartFailureContext(failure)
+  }
+
+  func consumePendingStartFailureDiagnostics() -> DesktopErrorDiagnosticContext? {
+    defer { pendingStartFailureDiagnostics = nil }
+    return pendingStartFailureDiagnostics
+  }
+
+  private func bridgeStartFailureContext(
+    _ failure: AgentRuntimeBridgeLifecycle.StartFailure
+  ) -> DesktopErrorDiagnosticContext {
+    let elapsedMs = startupBeganAt.map { Int(Date().timeIntervalSince($0) * 1_000) } ?? -1
+    return Self.startFailureDiagnostics(
+      failure: failure,
+      elapsedMs: elapsedMs,
+      exitCode: startupExitCode,
+      binaryPresent: startupBinaryPresent,
+      binaryPresentChecked: startupBinaryPresentChecked,
+      permissionGrantedChecked: startupPermissionGrantedChecked,
+      permissionGranted: startupPermissionGranted)
+  }
+
+  nonisolated static func startFailureDiagnostics(
+    failure: AgentRuntimeBridgeLifecycle.StartFailure,
+    elapsedMs: Int,
+    exitCode: Int32?,
+    binaryPresent: Bool,
+    binaryPresentChecked: Bool,
+    permissionGrantedChecked: Bool,
+    permissionGranted: Bool
+  ) -> DesktopErrorDiagnosticContext {
+    DesktopErrorDiagnosticContext([
+      "startup_stage": failure.rawValue,
+      "exit_code": exitCode.map(Int.init) ?? -1,
+      "elapsed_ms": elapsedMs,
+      "configured_timeout_ms": 30_000,
+      "binary_present_checked": binaryPresentChecked,
+      "binary_present": binaryPresent,
+      // The JSONL bridge has no TCP listener; report that the port precondition was not checked.
+      "port_bound_checked": false,
+      "port_bound": false,
+      "permission_granted_checked": permissionGrantedChecked,
+      "permission_granted": permissionGranted,
+    ])
   }
 
   private func cleanupFailedStart(process failedProcess: Process, error: Error) async {
@@ -3061,7 +3101,15 @@ actor AgentRuntimeProcess {
     handle.readabilityHandler = { [weak self] handle in
       let chunk = chunkReader.read(from: handle)
       guard !chunk.data.isEmpty else {
-        handle.readabilityHandler = nil
+        // Empty availableData usually means EOF. Only detach once the child
+        // has exited — clearing the handler while the agent is still alive
+        // stops Swift from draining stdout and can deadlock Node's writes.
+        Task { [weak self] in
+          let stillRunning = await self?.isAgentProcessRunning(generation: expectedGeneration) ?? false
+          if !stillRunning {
+            handle.readabilityHandler = nil
+          }
+        }
         return
       }
       Task { [weak self] in
@@ -3072,6 +3120,10 @@ actor AgentRuntimeProcess {
         )
       }
     }
+  }
+
+  private func isAgentProcessRunning(generation: UInt64) -> Bool {
+    generation == processGeneration && process?.isRunning == true
   }
 
   private func processStdoutData(_ data: Data, sequence: UInt64, generation: UInt64) {
@@ -3386,7 +3438,7 @@ actor AgentRuntimeProcess {
         case .succeeded = executionResult
       {
         DesktopDiagnosticsManager.shared.recordFallback(
-          area: "other",
+          area: "agent_runtime",
           from: "spawn_agent",
           to: command.canonicalToolName,
           reason: "other",
@@ -4016,6 +4068,9 @@ actor AgentRuntimeProcess {
     }
 
     let likelyOOM = lastExitWasOOM || oomDiagnosticLatch.isConfirmed(generation: processGeneration)
+    if bridgeLifecycle.state == .starting {
+      startupExitCode = exitCode
+    }
     let error: BridgeError = likelyOOM ? .outOfMemory : .processExited
     lastExitWasOOM = false
     oomDiagnosticLatch.reset(generation: processGeneration)

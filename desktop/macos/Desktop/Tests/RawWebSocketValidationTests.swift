@@ -11,10 +11,10 @@ final class RawWebSocketValidationTests: XCTestCase {
       queue: DispatchQueue(label: "raw-websocket-validation-test")
     )
 
-    webSocket.onError = { message in
+    webSocket.onError = { failure in
       XCTAssertTrue(
-        message.contains("invalid WebSocket port"),
-        "Unexpected error message: \(message)"
+        failure.message.contains("invalid WebSocket port"),
+        "Unexpected error message: \(failure.message)"
       )
       errorExpectation.fulfill()
     }

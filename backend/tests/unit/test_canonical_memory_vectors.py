@@ -54,6 +54,8 @@ from models.memory_search_gateway import SearchDecision, SearchMode, SearchVecto
 from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult
 
+_FIXTURE_NOW = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
+
 
 def _item(
     memory_id="mem_abc123",
@@ -287,6 +289,7 @@ def test_hydration_allows_missing_vector_source_freshness_when_authoritative_ite
         mode=SearchMode.default,
         required_projection_commit_id="commit-ledger",
         required_account_generation=item.account_generation,
+        now=_FIXTURE_NOW,
     )
 
     assert result.decisions[item.memory_id] == SearchDecision.allowed
@@ -314,6 +317,7 @@ def test_hydration_rejects_missing_vector_source_freshness_when_authoritative_it
         mode=SearchMode.default,
         required_projection_commit_id="commit-ledger",
         required_account_generation=item.account_generation,
+        now=_FIXTURE_NOW,
     )
 
     assert result.decisions[item.memory_id] == SearchDecision.stale_vector

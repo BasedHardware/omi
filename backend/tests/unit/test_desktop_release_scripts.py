@@ -238,7 +238,10 @@ def test_qualification_workflow_binds_immutable_controls_and_candidate_identity(
     qualification = QUALIFY_BETA_WORKFLOW.read_text(encoding="utf-8")
     assert '-f release_tag="$CM_TAG" --ref "$CM_TAG"' in codemagic
     assert "ref: ${{ inputs.release_tag }}" in qualification
-    assert "qualification-evidence-${RELEASE_TAG}.json" in qualification
+    # The release attachment is content-addressed from the exact checked-out
+    # candidate SHA and evidence digest, not a mutable tag-only filename.
+    assert 'asset="qualification-evidence-${TARGET_SHA}-${digest}.json"' in qualification
+    assert 'digest=$(shasum -a 256 "$QUALIFICATION_STAGE/qualification-evidence.json"' in qualification
     assert "gh release upload" in qualification
 
 
@@ -250,8 +253,9 @@ def test_codemagic_produces_canonical_app_and_strictly_verifiable_dmg():
     assert "xattr -d com.apple.FinderInfo" in workflow
     assert "xattr -d com.apple.ResourceFork" in workflow
     assert 'codesign --verify --deep --strict --verbose=2 "$STAGING_DIR/$APP_NAME.app"' in workflow
-    assert 'dmg_app="$DMG_MOUNTPOINT/Omi.app"' in smoke
-    assert "DMG-contained Omi.app failed deep strict codesign verification" in smoke
+    assert 'dmg_app_name="$(expected_app_bundle_name)"' in smoke
+    assert 'dmg_app="$DMG_MOUNTPOINT/$dmg_app_name"' in smoke
+    assert "DMG-contained $dmg_app_name failed deep strict codesign verification" in smoke
 
 
 def test_dmgbuild_does_not_attach_finder_info_to_the_signed_app():
@@ -330,6 +334,104 @@ def test_qualified_artifact_replacement_is_rejected_before_beta_or_stable_pointe
                 "a" * 40,
                 {name: qualification_evidence.file_sha256(path) for name, path in paths.items()},
             )
+
+
+def test_qualification_evidence_accepts_the_side_by_side_beta_artifact_pair():
+    # INV-BETA-1: releases shipping the Omi Beta identity qualify all four
+    # artifacts; the beta zip's appcast signature comes from betaEdSignature.
+    body = _release()["body"].replace(
+        "edSignature: signature", "edSignature: signature\nbetaEdSignature: beta-signature"
+    )
+    release = _release(body=body)
+    release["assets"] = [
+        {"name": name, "url": f"https://example.com/{name}", "digest": ""}
+        for name in ("Omi.zip", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg")
+    ]
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        paths = {}
+        for name, content in (
+            ("Omi.zip", b"stable zip"),
+            ("omi.dmg", b"stable dmg"),
+            ("Omi.Beta.zip", b"beta zip"),
+            ("omi-beta.dmg", b"beta dmg"),
+        ):
+            path = root / name
+            path.write_bytes(content)
+            paths[name] = path
+        gate = root / "gate.json"
+        gate.write_text(json.dumps({"passed": True, "release_tag": release["tagName"], "source_sha": "a" * 40}))
+        evidence = qualification_evidence.build_evidence(
+            release, release["tagName"], "a" * 40, {**paths, "__candidate_gate__": gate}
+        )
+        assert set(evidence["artifacts"]) == {"Omi.zip", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg"}
+        assert evidence["artifacts"]["Omi.Beta.zip"]["signature"] == "beta-signature"
+
+        # A partial beta pair must fail closed.
+        partial = dict(paths)
+        del partial["omi-beta.dmg"]
+        with pytest.raises(ValueError, match="exact qualified"):
+            qualification_evidence.build_evidence(
+                release, release["tagName"], "a" * 40, {**partial, "__candidate_gate__": gate}
+            )
+
+
+def test_qualification_evidence_cli_accepts_the_beta_artifact_pair_end_to_end():
+    # Regression: the qualify workflow passes --asset Omi.Beta.zip=…/omi-beta.dmg=…;
+    # the CLI must accept them through the same shape the workflow uses.
+    import subprocess
+    import sys
+
+    body = _release()["body"].replace(
+        "edSignature: signature", "edSignature: signature\nbetaEdSignature: beta-signature"
+    )
+    release = _release(body=body)
+    release["assets"] = [
+        {"name": name, "url": f"https://example.com/{name}", "digest": ""}
+        for name in ("Omi.zip", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg")
+    ]
+    script = Path(__file__).parents[3] / ".github/scripts/desktop_qualification_evidence.py"
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        release_json = root / "release.json"
+        # gh release view uses tagName; the CLI reads the same shape.
+        release_json.write_text(json.dumps(release))
+        asset_args = []
+        for name, content in (
+            ("Omi.zip", b"stable zip"),
+            ("omi.dmg", b"stable dmg"),
+            ("Omi.Beta.zip", b"beta zip"),
+            ("omi-beta.dmg", b"beta dmg"),
+        ):
+            path = root / name
+            path.write_bytes(content)
+            asset_args += ["--asset", f"{name}={path}"]
+        gate = root / "gate.json"
+        gate.write_text(json.dumps({"passed": True, "release_tag": release["tagName"], "source_sha": "a" * 40}))
+        evidence_out = root / "evidence.json"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "build",
+                "--release-json",
+                str(release_json),
+                "--release-tag",
+                release["tagName"],
+                "--source-sha",
+                "a" * 40,
+                "--candidate-gate",
+                str(gate),
+                *asset_args,
+                "--evidence",
+                str(evidence_out),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr or result.stdout
+        written = json.loads(evidence_out.read_text())
+        assert set(written["artifacts"]) == {"Omi.zip", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg"}
 
 
 def test_qualification_evidence_rejects_candidate_gate_from_a_different_source():
@@ -479,7 +581,9 @@ def test_qualification_is_serialized_by_tag_and_retried_without_release_body_sta
 
     assert "duplicate dispatches" in dispatch
     assert 'gh release edit "$CM_TAG"' not in dispatch
-    assert "group: desktop-beta-qualification-${{ inputs.release_tag }}" in qualification
+    # The sole M1 Studio is the serialized resource; a tag-scoped group would
+    # permit competing qualifications to use that same runner concurrently.
+    assert "group: desktop-beta-qualification-m1" in qualification
     assert "cancel-in-progress: false" in qualification
     assert "for attempt in 1 2 3" in dispatch
     assert "ERROR: qualification dispatch was not confirmed after bounded retry" in dispatch
@@ -487,7 +591,9 @@ def test_qualification_is_serialized_by_tag_and_retried_without_release_body_sta
         "exit 1"
     )
     assert "desktop_qualification_dispatch.py" not in qualification
-    assert "steps.candidate.outcome == 'success' && steps.qualify.outcome == 'success'" in qualification
+    # The verdict accepts a qualification only through the sole M1 job output.
+    assert "M1_QUALIFIED: ${{ needs.qualify-m1-studio.outputs.qualified }}" in qualification
+    assert 'test "$M1_QUALIFIED" = true' in qualification
 
 
 def test_qualification_publishes_the_single_artifact_pair_and_immutable_evidence_for_server_readback():
@@ -498,7 +604,8 @@ def test_qualification_publishes_the_single_artifact_pair_and_immutable_evidence
     assert "actions/upload-artifact@v7" in qualification
     assert "--qualification-run-id \"$GITHUB_RUN_ID\"" in qualification
     assert "gh release upload" in qualification
-    assert "qualification-evidence-${RELEASE_TAG}.json" in qualification
+    assert 'asset="qualification-evidence-${TARGET_SHA}-${digest}.json"' in qualification
+    assert '"$QUALIFICATION_STAGE/qualification-evidence.json#$asset"' in qualification
     assert "git tag -l 'v*-macos' --sort=-v:refname | head -1" not in qualification
 
 

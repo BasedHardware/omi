@@ -127,7 +127,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "1 - (\n  (sum(rate(parakeet_requests_total{namespace=\"prod-omi-backend\", status=~\"[45]..\"}[$__rate_interval])) or vector(0))\n  /\n  (sum(rate(parakeet_requests_total{namespace=\"prod-omi-backend\"}[$__rate_interval])) > 0)\n)",
+          "expr": "1 - (\n  (sum(rate(parakeet_requests_total{namespace=\"prod-omi-backend\", status=\"error\"}[$__rate_interval])) or vector(0))\n  /\n  (sum(rate(parakeet_requests_total{namespace=\"prod-omi-backend\"}[$__rate_interval])) > 0)\n)",
           "instant": true,
           "legendFormat": "Success Rate",
           "refId": "A"
@@ -1561,7 +1561,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(sum(rate(parakeet_requests_total{namespace=\"prod-omi-backend\", status=~\"[45]..\"}[$__rate_interval])) or vector(0))\n/\n(sum(rate(parakeet_requests_total{namespace=\"prod-omi-backend\"}[$__rate_interval])) > 0)",
+          "expr": "(sum(rate(parakeet_requests_total{namespace=\"prod-omi-backend\", status=\"error\"}[$__rate_interval])) or vector(0))\n/\n(sum(rate(parakeet_requests_total{namespace=\"prod-omi-backend\"}[$__rate_interval])) > 0)",
           "legendFormat": "Error Rate",
           "refId": "A"
         }

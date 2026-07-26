@@ -109,8 +109,17 @@ for _ in {1..1200}; do
     printf '%s\n' "$$" > "$LOCK_DIR/pid"
     break
   fi
-  if [[ ( -e "$LOCK_DIR" || -L "$LOCK_DIR" ) && ( -L "$LOCK_DIR" || ! -d "$LOCK_DIR" ) ]]; then
-    echo "qualification Swift cache: lock destination collision: $LOCK_DIR" >&2
+  # mkdir failed: either another prepare legitimately holds the lock (a
+  # directory) or a non-directory squats the path. Read the type with a single
+  # lstat. The previous check evaluated `-e` and `-d` as two separate stats, so
+  # a concurrent holder releasing the lock (rm -rf) between them left `-e` true
+  # and `-d` false and was misreported as a collision — the source of the
+  # intermittent "lock destination collision" failures. A symlink or regular
+  # file is a real, persistent squat and stays fatal; a vanished directory is
+  # transient and simply retried.
+  lock_type="$(stat -f '%HT' "$LOCK_DIR" 2>/dev/null || true)"
+  if [[ -n "$lock_type" && "$lock_type" != "Directory" ]]; then
+    echo "qualification Swift cache: lock destination collision (${lock_type}): $LOCK_DIR" >&2
     exit 1
   fi
   sleep 0.05

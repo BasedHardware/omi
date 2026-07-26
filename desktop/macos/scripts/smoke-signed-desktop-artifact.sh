@@ -14,6 +14,7 @@ EXPECTED_CHANNEL="${OMI_SIGNED_ARTIFACT_SMOKE_CHANNEL:-beta}"
 EXPECTED_TEAM_ID="${OMI_SIGNED_ARTIFACT_SMOKE_TEAM_ID:-9536L8KLMP}"
 EXPECTED_BUNDLE_ID="${OMI_SIGNED_ARTIFACT_SMOKE_BUNDLE_ID:-com.omi.computer-macos}"
 EXPECTED_URL_SCHEME="${OMI_SIGNED_ARTIFACT_SMOKE_URL_SCHEME:-omi-computer}"
+EXPECTED_FEED_URL="${OMI_SIGNED_ARTIFACT_SMOKE_FEED_URL:-https://api.omi.me/v2/desktop/appcast.xml}"
 EXPECTED_PYTHON_API_URL="${OMI_SIGNED_ARTIFACT_SMOKE_PYTHON_API_URL:-https://api.omi.me}"
 EXPECTED_DESKTOP_API_URL="${OMI_SIGNED_ARTIFACT_SMOKE_DESKTOP_API_URL:-https://desktop-backend-hhibjajaja-uc.a.run.app/}"
 IS_EXTERNAL_PREVIEW=false
@@ -56,6 +57,8 @@ Options:
   --expected-channel NAME    Expected channel label for result metadata (default: beta)
   --expected-bundle-id ID    Expected app bundle identifier
   --expected-url-scheme URL  Expected app URL scheme
+  --expected-feed-url URL    Expected SUFeedURL (default: plain shared appcast;
+                             the Omi Beta variant passes its identity-scoped feed)
   --expected-python-api-url URL
                              Expected OMI_PYTHON_API_URL in the artifact
   --expected-desktop-api-url URL
@@ -155,6 +158,7 @@ parse_args() {
       --expected-channel) require_option_value "$1" "${2:-}"; EXPECTED_CHANNEL="$2"; shift 2 ;;
       --expected-bundle-id) require_option_value "$1" "${2:-}"; EXPECTED_BUNDLE_ID="$2"; shift 2 ;;
       --expected-url-scheme) require_option_value "$1" "${2:-}"; EXPECTED_URL_SCHEME="$2"; shift 2 ;;
+      --expected-feed-url) require_option_value "$1" "${2:-}"; EXPECTED_FEED_URL="$2"; shift 2 ;;
       --expected-python-api-url) require_option_value "$1" "${2:-}"; EXPECTED_PYTHON_API_URL="$2"; shift 2 ;;
       --expected-desktop-api-url) require_option_value "$1" "${2:-}"; EXPECTED_DESKTOP_API_URL="$2"; shift 2 ;;
       --preview) IS_EXTERNAL_PREVIEW=true; shift ;;
@@ -186,6 +190,14 @@ version_from_tag() {
 build_from_tag() {
   [[ "$1" =~ ^v([0-9]+[.][0-9]+[.][0-9]+)[+]([0-9]+)-macos$ ]] || return 1
   printf '%s\n' "${BASH_REMATCH[2]}"
+}
+
+expected_app_bundle_name() {
+  case "$EXPECTED_BUNDLE_ID" in
+    com.omi.computer-macos) printf '%s\n' "Omi.app" ;;
+    com.omi.computer-macos.beta) printf '%s\n' "Omi Beta.app" ;;
+    *) basename "$APP_BUNDLE" ;;
+  esac
 }
 
 extract_zip_if_needed() {
@@ -356,6 +368,7 @@ assert_bundle_identity() {
   [[ -d "$APP_BUNDLE/Contents" ]] || fail "app bundle not found: $APP_BUNDLE"
 
   local bundle_id version build executable url_scheme feed_url external_preview_marker automatic_checks
+  local app_bundle_name required_app_bundle_name
   bundle_id="$(plist_read CFBundleIdentifier)"
   version="$(plist_read CFBundleShortVersionString)"
   build="$(plist_read CFBundleVersion)"
@@ -366,6 +379,10 @@ assert_bundle_identity() {
   automatic_checks="$(plist_read SUEnableAutomaticChecks)"
 
   [[ "$bundle_id" == "$EXPECTED_BUNDLE_ID" ]] || fail "bundle id must be $EXPECTED_BUNDLE_ID, got ${bundle_id:-missing}"
+  app_bundle_name="$(basename "$APP_BUNDLE")"
+  required_app_bundle_name="$(expected_app_bundle_name)"
+  [[ "$app_bundle_name" == "$required_app_bundle_name" ]] \
+    || fail "app bundle name for $EXPECTED_BUNDLE_ID must be $required_app_bundle_name, got $app_bundle_name"
   [[ "$url_scheme" == "$EXPECTED_URL_SCHEME" ]] || fail "URL scheme must be $EXPECTED_URL_SCHEME, got ${url_scheme:-missing}"
   if [[ "$IS_EXTERNAL_PREVIEW" == true ]]; then
     [[ "$bundle_id" =~ ^com[.]omi[.]preview[.][a-z0-9-]+$ ]] \
@@ -378,8 +395,10 @@ assert_bundle_identity() {
     [[ "$automatic_checks" == "false" || "$automatic_checks" == "0" ]] \
       || fail "external preview must disable automatic update checks"
   else
-    [[ "$feed_url" == "https://api.omi.me/v2/desktop/appcast.xml" ]] \
-      || fail "SUFeedURL mismatch: ${feed_url:-missing}"
+    # The Omi Beta variant carries an identity-scoped feed; the expected URL is
+    # passed per artifact (default: the plain shared feed).
+    [[ "$feed_url" == "$EXPECTED_FEED_URL" ]] \
+      || fail "SUFeedURL mismatch: expected $EXPECTED_FEED_URL, got ${feed_url:-missing}"
   fi
   [[ -n "$executable" && -x "$APP_BUNDLE/Contents/MacOS/$executable" ]] || fail "main executable missing or not executable"
 
@@ -486,12 +505,15 @@ assert_sparkle_and_artifacts() {
     DMG_MOUNTPOINT="$(mktemp -d "${TMPDIR:-/tmp}/omi-signed-smoke-dmg.XXXXXX")"
     hdiutil attach "$DMG_PATH" -nobrowse -readonly -mountpoint "$DMG_MOUNTPOINT" -quiet \
       || fail "DMG attach failed"
-    local dmg_app
-    dmg_app="$DMG_MOUNTPOINT/Omi.app"
-    [[ -d "$dmg_app/Contents" ]] || fail "DMG must contain canonical Omi.app"
+    local dmg_app_name dmg_app
+    dmg_app_name="$(expected_app_bundle_name)"
+    [[ "$dmg_app_name" == *.app && "$dmg_app_name" != ".app" ]] \
+      || fail "validated app bundle name must end in .app: $dmg_app_name"
+    dmg_app="$DMG_MOUNTPOINT/$dmg_app_name"
+    [[ -d "$dmg_app/Contents" ]] || fail "DMG must contain exact $dmg_app_name"
     codesign --verify --deep --strict --verbose=2 "$dmg_app" >/dev/null 2>&1 \
-      || fail "DMG-contained Omi.app failed deep strict codesign verification"
-    assert_bundle_matches_current "$dmg_app" "DMG"
+      || fail "DMG-contained $dmg_app_name failed deep strict codesign verification"
+    assert_bundle_matches_current "$dmg_app" "DMG-contained $dmg_app_name"
     record_artifact "dmg" "$DMG_PATH"
   fi
 

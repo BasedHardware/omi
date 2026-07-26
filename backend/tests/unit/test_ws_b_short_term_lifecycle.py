@@ -460,6 +460,32 @@ def test_expired_short_term_hidden_from_default_reads(monkeypatch):
     assert read_canonical_memories(uid, db_client=db) == []
 
 
+def test_canonical_read_uses_explicit_time_for_short_term_visibility(monkeypatch):
+    uid = "uid-canonical-read-clock"
+    _set_canonical_cohort(monkeypatch, uid)
+    db = _canonical_db_with_control(uid)
+    memory_id = _seed_canonical_short_term(
+        db,
+        uid=uid,
+        conversation_id="conv-read-clock",
+        content="Time-bounded note",
+        monkeypatch=monkeypatch,
+    )
+    path = f"users/{uid}/memory_items/{memory_id}"
+    read_time = datetime(2040, 1, 15, 12, 0, tzinfo=timezone.utc)
+    db.docs[path] |= {
+        "captured_at": (read_time - timedelta(days=1)).isoformat(),
+        "updated_at": (read_time - timedelta(days=1)).isoformat(),
+        "expires_at": (read_time + timedelta(hours=1)).isoformat(),
+    }
+
+    visible = read_canonical_memories(uid, db_client=db, now=read_time)
+    expired = read_canonical_memories(uid, db_client=db, now=read_time + timedelta(hours=1))
+
+    assert [memory.id for memory in visible] == [memory_id]
+    assert expired == []
+
+
 def test_legacy_uid_promotion_and_lifecycle_are_noop(monkeypatch):
     uid = "uid-legacy"
     assert resolve_memory_system(uid, db_client=_PromotionFakeDb()) == MemorySystem.LEGACY

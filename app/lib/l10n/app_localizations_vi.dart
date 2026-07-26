@@ -1796,20 +1796,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get lovingOmi => 'Bạn thích Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Giúp chúng tôi tiếp cận nhiều người hơn bằng cách để lại đánh giá trên App Store. Phản hồi của bạn có ý nghĩa rất lớn với chúng tôi!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Giúp chúng tôi tiếp cận nhiều người hơn bằng cách để lại đánh giá trên Google Play Store. Phản hồi của bạn có ý nghĩa rất lớn với chúng tôi!';
-
-  @override
-  String get rateOnAppStore => 'Đánh giá trên App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Đánh giá trên Google Play';
-
-  @override
   String get maybeLater => 'Có thể sau';
 
   @override
@@ -2142,6 +2128,18 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Chỉnh sửa bộ nhớ';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Tôi thích ăn kem...';

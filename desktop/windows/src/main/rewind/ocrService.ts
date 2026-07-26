@@ -1,7 +1,8 @@
-import { readFileSync } from 'fs'
 import { helperProcess } from '../ocr/helperProcess'
 import { unindexedRewindFrames } from '../ipc/db'
 import { persistFrameOcr } from './ocrPersist'
+import { rewindRoot } from './paths'
+import { readRewindFrame } from './frameFile'
 
 const BACKFILL_INTERVAL_MS = 4000
 const BATCH = 5
@@ -42,7 +43,7 @@ async function backfill(): Promise<void> {
       const context = { app: f.app, windowTitle: f.windowTitle }
       let jpeg: Buffer
       try {
-        jpeg = readFileSync(f.imagePath)
+        jpeg = await readRewindFrame(rewindRoot(), f.imagePath)
       } catch {
         persistFrameOcr(f.id, '', context) // image gone; mark indexed so we stop retrying
         continue

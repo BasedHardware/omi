@@ -41,13 +41,13 @@ def with_memory_env(payload: str) -> str:
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "OMI_LLM_GATEWAY_FEATURE_MODE", "value": "gateway"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "off"},
-        {"name": "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION", "value": "true"},
+        {"name": "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE", "value": "1.0"},
         {"name": "POSTHOG_HOST", "value": "https://app.posthog.com"},
-        {"name": "STT_PRERECORDED_MODEL", "value": "modulate-velma-2,parakeet"},
+        {"name": "STT_PRERECORDED_MODEL", "value": "parakeet,modulate-velma-2"},
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_ID", "value": "fake-public-client-id"},
@@ -97,6 +97,15 @@ def with_sync_ledger_fence_mode(payload: str) -> str:
     )
 
 
+def with_listen_finalization_orphan_env(payload: str) -> str:
+    """Keep offline Cloud Run state fixtures aligned with the reliability recovery setting."""
+    return payload.replace(
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS", "value": "900"},',
+    )
+
+
 GOOGLE_OAUTH_SECRETS = '''\
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
@@ -104,7 +113,9 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
-        with_backend_pusher_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+        with_backend_pusher_env(
+            with_listen_finalization_orphan_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+        )
     )
     return re.sub(
         r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
@@ -837,11 +848,11 @@ def test_retired_deepgram_model_requires_non_deepgram_defaults():
     assert validator._validate_prerecorded_stt_contract('prod', env_config) == [
         validator.ValidationError(
             'prod/gke/backend-listen',
-            'STT_PRERECORDED_MODEL requires non-empty MODULATE_API_KEY',
+            'STT_PRERECORDED_MODEL requires non-empty HOSTED_PARAKEET_API_URL',
         ),
         validator.ValidationError(
             'prod/gke/backend-listen',
-            'STT_PRERECORDED_MODEL requires non-empty HOSTED_PARAKEET_API_URL',
+            'STT_PRERECORDED_MODEL requires non-empty MODULATE_API_KEY',
         ),
     ]
 
@@ -863,7 +874,7 @@ def test_deployment_stt_models_must_match_the_central_serving_policy():
     assert validator._validate_stt_serving_model_policy('prod', env_config) == [
         validator.ValidationError(
             'prod/gke/backend-listen',
-            "STT_PRERECORDED_MODEL must match stt_provider_policy: expected 'modulate-velma-2,parakeet', got 'dg-nova-3'",
+            "STT_PRERECORDED_MODEL must match stt_provider_policy: expected 'parakeet,modulate-velma-2', got 'dg-nova-3'",
         ),
         validator.ValidationError(
             'prod/gke/backend-listen',
@@ -872,7 +883,7 @@ def test_deployment_stt_models_must_match_the_central_serving_policy():
     ]
 
 
-def test_repo_prod_manifest_rejects_any_parakeet_first_route(tmp_path):
+def test_repo_prod_manifest_rejects_noncanonical_model_order_for_every_surface(tmp_path):
     validator = load_validator()
     manifest = copy.deepcopy(validator._load_yaml(ROOT / 'deploy/runtime_env.yaml'))
     prod = manifest['environments']['prod']
@@ -883,7 +894,9 @@ def test_repo_prod_manifest_rejects_any_parakeet_first_route(tmp_path):
             for key in ('STT_SERVICE_MODELS', 'STT_PRERECORDED_MODEL'):
                 entry = (service.get('env') or {}).get(key)
                 if isinstance(entry, dict) and 'value' in entry:
-                    entry['value'] = 'parakeet,modulate-velma-2'
+                    entry['value'] = (
+                        'parakeet,modulate-velma-2' if key == 'STT_SERVICE_MODELS' else 'modulate-velma-2,parakeet'
+                    )
                     changed_scopes.append((f'prod/{platform}/{service_name}', key))
 
     path = tmp_path / 'runtime_env.yaml'
@@ -1271,7 +1284,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                     'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED': {'value': 'false'},
                                     'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE': {'value': '1.0'},
                                     'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'},
-                                    'STT_PRERECORDED_MODEL': {'value': 'modulate-velma-2,parakeet'},
+                                    'STT_PRERECORDED_MODEL': {'value': 'parakeet,modulate-velma-2'},
                                     'CUSTOM_MANIFEST_ONLY_MARKER': {'value': 'present'},
                                 },
                                 'secrets': {
@@ -1580,6 +1593,53 @@ def test_repo_rendered_cloud_run_matches_manifest():
 
     assert validator.validate_runtime_env(env='dev', check_rendered_cloud_run=True) == []
     assert validator.validate_runtime_env(env='prod', check_rendered_cloud_run=True) == []
+
+
+# Every service that deploys the backend image (`uvicorn main:app`) runs the
+# stale-processing reconciliation scheduler registered in main.py startup, so it
+# reads LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS. A scheduler surface that omits
+# it silently falls back to the code default, breaking the source-controlled
+# reliability contract. When a new main.py surface is added, extend this list.
+_MAIN_APP_SCHEDULER_SURFACES: dict[str, list[tuple[str, str]]] = {
+    'dev': [
+        ('gke', 'backend-listen'),
+        ('cloud_run', 'backend'),
+        ('cloud_run', 'backend-sync'),
+        ('cloud_run', 'backend-sync-backfill'),
+        ('cloud_run', 'backend-integration'),
+    ],
+    'prod': [
+        ('gke', 'backend-listen'),
+        ('cloud_run', 'backend'),
+        ('cloud_run', 'backend-sync'),
+        ('cloud_run', 'backend-sync-backfill'),
+        ('cloud_run', 'backend-integration'),
+    ],
+}
+
+
+def _scheduler_surface_env_block(env_config: dict, section: str, service: str) -> dict:
+    if section == 'gke':
+        return ((env_config.get('gke') or {}).get(service) or {}).get('env') or {}
+    services = (env_config.get('cloud_run') or {}).get('services') or {}
+    return (services.get(service) or {}).get('env') or {}
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_scheduler_runtime_surfaces_declare_orphan_stale_setting(env):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    env_config = manifest['environments'][env]
+    for section, service in _MAIN_APP_SCHEDULER_SURFACES[env]:
+        env_block = _scheduler_surface_env_block(env_config, section, service)
+        entry = env_block.get('LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS')
+        assert entry is not None, (
+            f'{env}/{section}/{service} runs the stale-processing scheduler but '
+            f'omits LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS'
+        )
+        assert (
+            entry.get('category') == 'reliability'
+        ), f'{env}/{section}/{service} must classify the recovery setting as reliability'
 
 
 def test_parakeet_selected_without_endpoint_is_rejected_for_all_cloud_run_validation_modes(tmp_path):

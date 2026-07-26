@@ -211,9 +211,56 @@ const PUBLIC_WEB_ROUTING_INSTRUCTION = "<omi_retrieval_policy>Web search is requ
 
 const EXPLICIT_WEB_REQUESTS = [
   "search the web", "search web", "search the internet", "search online",
-  "look it up online", "find it online", "google it", "browse the web",
+  "look it up online", "look this up online", "look that up online",
+  "find it online", "find this online", "find that online",
+  "google it", "google this", "google that", "browse the web",
   "web search", "internet search",
 ];
+
+const EXPLICIT_WEB_PROHIBITIONS = [
+  "don't call web search", "do not call web search",
+  "don't call the web search", "do not call the web search",
+  "don't call internet search", "do not call internet search",
+  "don't call the internet search", "do not call the internet search",
+  "don't use web search", "do not use web search",
+  "don't use the web search", "do not use the web search",
+  "don't use internet search", "do not use internet search",
+  "don't use the internet search", "do not use the internet search",
+  "don't search the web", "do not search the web",
+  "don't search the internet", "do not search the internet",
+  "without web search",
+];
+
+function explicitlyProhibitsPublicWeb(normalized: string): boolean {
+  if (EXPLICIT_WEB_PROHIBITIONS.some((phrase) => {
+    let searchStart = 0;
+    while (searchStart < normalized.length) {
+      const start = normalized.indexOf(phrase, searchStart);
+      if (start < 0) {
+        return false;
+      }
+      const suffix = normalized.slice(start + phrase.length).trimStart();
+      if (!/^results?\b/.test(suffix)) {
+        return true;
+      }
+      searchStart = start + phrase.length;
+    }
+    return false;
+  })) {
+    return true;
+  }
+  return ["web search tool", "internet search tool"].some((referent) => {
+    const start = normalized.indexOf(referent);
+    if (start < 0) {
+      return false;
+    }
+    const tail = normalized.slice(start + referent.length, start + referent.length + 160);
+    return [
+      "don't call it because", "do not call it because",
+      "don't call it again", "do not call it again",
+    ].some((phrase) => tail.includes(phrase));
+  });
+}
 
 const FRESH_PUBLIC_REQUESTS = [
   "latest news", "latest on", "what's the latest", "what is the latest",
@@ -235,12 +282,22 @@ const FRESH_PUBLIC_LOOKUP_TERMS = [
   "score", "weather", "price", "news", "release", "released", "election", "market",
 ];
 
+const RESEARCH_INTENT_VERBS = [
+  "find out", "look up", "look him up", "look her up", "look them up",
+  "research", "tell me about", "everything about", "everything on",
+  "all about", "information about", "information on", "who is", "who's",
+];
+
+const PUBLIC_WEB_LOCUS = ["online", "on the web", "on the internet"];
+const MAX_GENERIC_LOOKUP_CHARS = 240;
+const ALPHANUMERIC_CHAR = /[\p{L}\p{N}]/u;
+
 const EXPLICIT_PRIVATE_CONTEXT = [
   "my conversations", "our conversations", "my memories", "your memory of me",
   "my screen history", "my screen activity", "my calendar", "your calendar",
   "my email", "your email", "my files", "your files", "my tasks", "your tasks",
   "my action items", "my notes", "your notes", "what did i say", "what have i said",
-  "when did i", "what was i doing", "what do you remember about me",
+  "what did i do", "when did i", "what was i doing", "what do you remember about me",
 ];
 
 const PUBLIC_WEB_ACCESS_DENIAL = /\b(?:I\s+)?(?:do\s+not|don't|cannot|can't|can not)\s+(?:(?:have\s+)?(?:direct\s+)?(?:access\s+to\s+)?(?:the\s+)?(?:internet|web(?:[ -]?search)?|browser|real[- ]time(?:\s+\w+){0,2}(?:\s+data)?)(?:\s+(?:or|and)\s+(?:the\s+)?(?:internet|web(?:[ -]?search)?|browser|real[- ]time(?:\s+\w+){0,2}(?:\s+data)?))*|(?:have\s+)?(?:direct\s+)?(?:internet|web(?:[ -]?search)?|browser)\s+access|(?:browse|search)\s+(?:the\s+)?(?:web|internet))/i;
@@ -255,6 +312,40 @@ function currentUserInstruction(renderedPrompt: string): string {
   return delimiterIndex === -1
     ? renderedPrompt
     : renderedPrompt.slice(delimiterIndex + CURRENT_USER_MESSAGE_DELIMITER.length);
+}
+
+function containsWholeTerm(text: string, terms: string[]): boolean {
+  return terms.some((term) => {
+    let searchStart = 0;
+    while (searchStart < text.length) {
+      const start = text.indexOf(term, searchStart);
+      if (start < 0) return false;
+      const before = text[start - 1];
+      const after = text[start + term.length];
+      const beforeIsWord = before !== undefined && ALPHANUMERIC_CHAR.test(before);
+      const afterIsWord = after !== undefined && ALPHANUMERIC_CHAR.test(after);
+      if (!beforeIsWord && !afterIsWord) return true;
+      searchStart = start + term.length;
+    }
+    return false;
+  });
+}
+
+function normalizedLookupText(text: string): string {
+  return text
+    .trim()
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
+    .toLowerCase()
+    .replace(/[\u2018\u2019]/g, "'");
+}
+
+function utf8ByteLength(text: string): number {
+  let bytes = 0;
+  for (const char of text) {
+    const codePoint = char.codePointAt(0) ?? 0;
+    bytes += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
+  }
+  return bytes;
 }
 
 type PublicWebTurnState = {
@@ -275,17 +366,34 @@ export function routePromptForPublicWeb(message: string): string {
   // The adapter receives the full rendered prompt, including inherited context
   // and prior turns. Inspect only the current user instruction when deciding
   // whether this particular turn requires a public-web lookup.
-  const normalized = currentUserInstruction(message).trim().toLowerCase();
-  if (!normalized || EXPLICIT_PRIVATE_CONTEXT.some((phrase) => normalized.includes(phrase))) {
+  const normalized = normalizedLookupText(currentUserInstruction(message));
+  if (!normalized) return message;
+  const hasExplicitWebReference = EXPLICIT_WEB_REQUESTS.some(
+    (phrase) => normalized.includes(phrase)
+  );
+  if (
+    hasExplicitWebReference
+    && explicitlyProhibitsPublicWeb(normalized)
+  ) {
     return message;
   }
-  const hasFreshPublicTemporalLookup = FRESH_PUBLIC_TEMPORAL_QUALIFIERS.some(
+  const hasExplicitPrivateContext = EXPLICIT_PRIVATE_CONTEXT.some(
     (phrase) => normalized.includes(phrase)
-  ) && FRESH_PUBLIC_LOOKUP_TERMS.some((term) => normalized.includes(term));
-  const requiresWeb = EXPLICIT_WEB_REQUESTS.some((phrase) => normalized.includes(phrase))
-    || FRESH_PUBLIC_REQUESTS.some((phrase) => normalized.includes(phrase))
+  );
+  if (hasExplicitPrivateContext && !hasExplicitWebReference) return message;
+
+  const isShortLookup = utf8ByteLength(normalized) <= MAX_GENERIC_LOOKUP_CHARS;
+  const hasFreshPublicTemporalLookup = isShortLookup
+    && containsWholeTerm(normalized, FRESH_PUBLIC_TEMPORAL_QUALIFIERS)
+    && containsWholeTerm(normalized, FRESH_PUBLIC_LOOKUP_TERMS);
+  const hasResearchIntentLookup = isShortLookup
+    && containsWholeTerm(normalized, PUBLIC_WEB_LOCUS)
+    && RESEARCH_INTENT_VERBS.some((verb) => normalized.includes(verb));
+  const requiresWeb = hasExplicitWebReference
+    || containsWholeTerm(normalized, FRESH_PUBLIC_REQUESTS)
     || CURRENT_WEATHER_PREFIXES.some((phrase) => normalized.includes(phrase))
-    || hasFreshPublicTemporalLookup;
+    || hasFreshPublicTemporalLookup
+    || hasResearchIntentLookup;
   return requiresWeb ? `${PUBLIC_WEB_ROUTING_INSTRUCTION}\n\n${message}` : message;
 }
 

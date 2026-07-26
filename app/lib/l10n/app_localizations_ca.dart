@@ -1802,20 +1802,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get lovingOmi => 'T\'agrada Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Ajudeu-nos a arribar a més gent deixant una ressenya a l\'App Store. Els vostres comentaris són molt importants per a nosaltres!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Ajudeu-nos a arribar a més gent deixant una ressenya a Google Play Store. Els vostres comentaris són molt importants per a nosaltres!';
-
-  @override
-  String get rateOnAppStore => 'Valorar a l\'App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Valorar a Google Play';
-
-  @override
   String get maybeLater => 'Potser més tard';
 
   @override
@@ -2152,6 +2138,18 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Edita memòria';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'M\'agrada menjar gelat...';

@@ -658,6 +658,7 @@ export interface StartupReconciliationResult {
   repairedBindingProfileReferenceIds: string[];
   repairedLegacyJournalTurnIds: string[];
   reconciledJournalTurnIds: string[];
+  repairedBackendTurnOutboxIds: string[];
   recoveryDispatchIds: string[];
   clearedAttemptInstanceIds: number;
   clearedBindingInstanceIds: number;

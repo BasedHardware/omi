@@ -3,6 +3,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE_HELPER="$SCRIPT_DIR/../scripts/qualification-swift-cache.sh"
+# Pre-push hooks can export repository-local Git variables. This fixture creates
+# independent repositories and must never reinitialize the caller's worktree.
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
 TMP_ROOT_RAW="$(mktemp -d "${TMPDIR:-/tmp}/omi-qualification-swift-cache-test.XXXXXX")"
 TMP_ROOT="$(cd "$TMP_ROOT_RAW" && pwd -P)"
 trap 'rm -rf "$TMP_ROOT"' EXIT

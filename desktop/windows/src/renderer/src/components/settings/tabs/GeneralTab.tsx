@@ -7,7 +7,8 @@ import {
   Monitor,
   Power,
   Presentation,
-  ScanEye
+  ScanEye,
+  Zap
 } from 'lucide-react'
 import type { MeetingMode, RewindSettings } from '../../../../../shared/types'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../../lib/preferences'
@@ -23,6 +24,7 @@ export function GeneralTab(): React.JSX.Element {
       {/* macOS General leads with the capture-status cards (spec §3.1). */}
       <ScreenCaptureRow />
       <AudioRecordingRow />
+      <ActionAutomationRow />
       <ScreenAnalysisRow />
       <SettingRow
         icon={MessagesSquare}
@@ -54,6 +56,39 @@ export function GeneralTab(): React.JSX.Element {
       <LaunchAtLoginRow />
       <FontSizeCard />
     </>
+  )
+}
+
+function ActionAutomationRow(): React.JSX.Element {
+  const automationAvailable = window.omi.automationEnabled
+  const [autoConsent, setAutoConsent] = useState<boolean>(!!getPreferences().automationConsentedAt)
+  const toggleAutomation = (on: boolean): void => {
+    setAutoConsent(on)
+    setPreferences({ automationConsentedAt: on ? Date.now() : undefined })
+  }
+
+  return (
+    <SettingRow
+      icon={Zap}
+      dot={automationAvailable && autoConsent ? 'on' : 'off'}
+      title="Let Omi take actions"
+      subtitle={
+        !automationAvailable
+          ? 'Disabled in this build.'
+          : autoConsent
+            ? 'Omi can click and type in your apps when you ask.'
+            : 'Turn on to let Omi act in your apps when you ask.'
+      }
+      keywords="automation actions desktop control agent take action flaui approve"
+      control={
+        <Toggle
+          on={automationAvailable && autoConsent}
+          onChange={toggleAutomation}
+          disabled={!automationAvailable}
+          label="Let Omi take actions"
+        />
+      }
+    />
   )
 }
 

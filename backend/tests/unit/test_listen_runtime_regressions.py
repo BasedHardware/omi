@@ -209,38 +209,42 @@ def test_runtime_emits_speaker_suggestion_event():
     assert emitted_events[0].person_name == 'Avery'
 
 
-class _JourneyAttempt:
+class _LiveSTTAttempt:
     instances = []
 
-    def __init__(self, journey):
-        self.journey = journey
+    def __init__(self, *, provider, platform):
+        self.provider = provider
+        self.platform = platform
         self.finished = False
-        self.outcomes = []
+        self.terminals = []
         self.__class__.instances.append(self)
 
-    def finish(self, outcome):
+    def finish(self, outcome, *, phase):
         if self.finished:
             return
         self.finished = True
-        self.outcomes.append(outcome)
+        self.terminals.append((outcome, phase))
 
 
 def _live_transcription_runtime(*, close_code=1001, stt_terminal_failure=False, live_transcription_failed=False):
     runtime = object.__new__(ListenSessionRuntime)
+    runtime.use_custom_stt = False
     runtime.state = SimpleNamespace(
         close_code=close_code,
         stt_terminal_failure=stt_terminal_failure,
         live_transcription_failed=live_transcription_failed,
         live_transcription_attempt=None,
     )
+    runtime.stt_service = STTService.deepgram
+    runtime.client_device_context = SimpleNamespace(platform='ios')
     return runtime
 
 
 def test_live_transcription_journey_starts_once_and_success_wins_over_teardown(monkeypatch):
     import routers.listen.runtime as runtime_module
 
-    _JourneyAttempt.instances = []
-    monkeypatch.setattr(runtime_module, 'JourneyAttempt', _JourneyAttempt)
+    _LiveSTTAttempt.instances = []
+    monkeypatch.setattr(runtime_module, 'LiveSTTAttempt', _LiveSTTAttempt)
     runtime = _live_transcription_runtime(close_code=1011, stt_terminal_failure=True)
 
     runtime.start_live_transcription()
@@ -248,9 +252,25 @@ def test_live_transcription_journey_starts_once_and_success_wins_over_teardown(m
     runtime.complete_live_transcription()
     runtime._finish_live_transcription()
 
-    assert len(_JourneyAttempt.instances) == 1
-    assert _JourneyAttempt.instances[0].journey == 'live_transcription'
-    assert _JourneyAttempt.instances[0].outcomes == ['success']
+    assert len(_LiveSTTAttempt.instances) == 1
+    assert _LiveSTTAttempt.instances[0].provider == 'deepgram'
+    assert _LiveSTTAttempt.instances[0].platform == 'ios'
+    assert _LiveSTTAttempt.instances[0].terminals == [('success', 'transcript_delivery')]
+
+
+def test_custom_stt_does_not_create_a_backend_provider_attempt(monkeypatch):
+    import routers.listen.runtime as runtime_module
+
+    _LiveSTTAttempt.instances = []
+    monkeypatch.setattr(runtime_module, 'LiveSTTAttempt', _LiveSTTAttempt)
+    runtime = _live_transcription_runtime()
+    runtime.use_custom_stt = True
+
+    runtime.start_live_transcription()
+    runtime.complete_live_transcription()
+    runtime._finish_live_transcription()
+
+    assert _LiveSTTAttempt.instances == []
 
 
 @pytest.mark.parametrize(
@@ -267,8 +287,8 @@ def test_live_transcription_teardown_classifies_unsent_attempts_once(
 ):
     import routers.listen.runtime as runtime_module
 
-    _JourneyAttempt.instances = []
-    monkeypatch.setattr(runtime_module, 'JourneyAttempt', _JourneyAttempt)
+    _LiveSTTAttempt.instances = []
+    monkeypatch.setattr(runtime_module, 'LiveSTTAttempt', _LiveSTTAttempt)
     runtime = _live_transcription_runtime(
         close_code=close_code,
         stt_terminal_failure=stt_terminal_failure,
@@ -279,7 +299,7 @@ def test_live_transcription_teardown_classifies_unsent_attempts_once(
     runtime._finish_live_transcription()
     runtime._finish_live_transcription()
 
-    assert _JourneyAttempt.instances[0].outcomes == [expected]
+    assert _LiveSTTAttempt.instances[0].terminals == [(expected, 'teardown')]
 
 
 @pytest.mark.anyio
@@ -368,3 +388,41 @@ async def test_transcript_delivery_marks_live_transcription_success_only_after_a
 
 async def _async_result(value):
     return value
+
+
+@pytest.mark.anyio
+async def test_custom_stt_flush_meters_speech_in_isolated_lane(monkeypatch):
+    """#7690: a custom-STT session's speech reaches the fair-use meter under
+    the custom_stt lane — and nothing else: no transcription usage recording,
+    no realtime-lane write that live enforcement would read."""
+    import routers.listen.runtime as runtime_module
+
+    recorded = []
+    monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', True)
+    monkeypatch.setattr(
+        runtime_module, 'record_speech_ms', lambda uid, ms, source='realtime': recorded.append((uid, ms, source))
+    )
+    monkeypatch.setattr(
+        runtime_module, 'record_usage', lambda *a, **k: (_ for _ in ()).throw(AssertionError('billed custom STT'))
+    )
+
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = SimpleNamespace(uid='custom-stt-user')
+    runtime.use_custom_stt = True
+    runtime.persistence = _Persistence()
+    runtime.state = SimpleNamespace(
+        fair_use_track_dg_usage=False,
+        dg_usage_ms_pending=0,
+        last_usage_record_timestamp=123.0,
+        words_transcribed_since_last_record=7,
+        last_audio_received_time=124.0,
+    )
+    runtime.receiver = SimpleNamespace(vad_gate=SimpleNamespace(consume_speech_ms_delta=lambda: 4200))
+
+    assert await runtime._flush_usage(final=False) == 0
+    assert recorded == [('custom-stt-user', 4200, 'custom_stt')]
+
+    # No speech delta → no meter write either.
+    runtime.receiver = SimpleNamespace(vad_gate=SimpleNamespace(consume_speech_ms_delta=lambda: 0))
+    assert await runtime._flush_usage(final=True) == 0
+    assert recorded == [('custom-stt-user', 4200, 'custom_stt')]

@@ -41,8 +41,10 @@ import utils.retrieval.agentic as agentic  # noqa: E402
 import utils.other.chat_file as chat_file  # noqa: E402
 
 
-async def _collect_agentic_chunks(producer):
+async def _collect_agentic_chunks(producer, callback_data=None):
     """Drive the real public stream with deterministic setup dependencies."""
+    if callback_data is None:
+        callback_data = {}
     with ExitStack() as stack:
         stack.enter_context(patch.object(agentic, 'get_user_timezone', lambda _uid: 'UTC'))
         stack.enter_context(patch.object(agentic, '_get_agentic_qa_prompt', lambda *_args, **_kwargs: 'SYSTEM'))
@@ -55,7 +57,7 @@ async def _collect_agentic_chunks(producer):
         return [
             chunk
             async for chunk in agentic.execute_agentic_chat_stream(
-                'uid1', [], app=None, callback_data={}, chat_session=None
+                'uid1', [], app=None, callback_data=callback_data, chat_session=None
             )
         ]
 
@@ -320,6 +322,63 @@ async def test_agentic_stream_cancels_a_silent_producer_before_the_proxy_deadlin
 
     assert chunks == [f'error: {agentic.AGENT_STREAM_TIMEOUT_MESSAGE}']
     assert cancelled.is_set()
+
+
+async def test_agentic_stream_keeps_an_answer_streamed_before_the_deadline():
+    """A bounded stop must persist what the user already watched arrive, not discard it."""
+    callback_data = {}
+
+    async def stalls_after_answering(*args, **_kwargs):
+        callback, full_response = args[4], args[5]
+        await callback.put_data('the answer so far')
+        full_response.append('the answer so far')
+        await asyncio.Event().wait()
+
+    with patch.object(agentic, 'AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS', 0.01), patch.object(
+        agentic, 'AGENT_STREAM_MAX_DURATION_SECONDS', 0.05
+    ), patch.object(agentic, 'AGENT_STREAM_CANCEL_GRACE_SECONDS', 0.05):
+        chunks = await _collect_agentic_chunks(stalls_after_answering, callback_data)
+
+    # The terminal None is what makes the router persist instead of writing a
+    # canned error over the streamed answer.
+    assert chunks[-1] is None
+    assert f'error: {agentic.AGENT_STREAM_TIMEOUT_MESSAGE}' not in chunks
+    assert callback_data['answer'] == 'the answer so far'
+    assert callback_data['error'] == 'idle_timeout'
+
+
+async def test_agentic_stream_still_errors_when_nothing_was_streamed():
+    """With no partial answer there is nothing to keep, so the terminal error stands."""
+    callback_data = {}
+
+    async def stalled_producer(*_args, **_kwargs):
+        await asyncio.Event().wait()
+
+    with patch.object(agentic, 'AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 0.01), patch.object(
+        agentic, 'AGENT_STREAM_CANCEL_GRACE_SECONDS', 0.05
+    ):
+        chunks = await _collect_agentic_chunks(stalled_producer, callback_data)
+
+    assert chunks == [f'error: {agentic.AGENT_STREAM_TIMEOUT_MESSAGE}']
+    assert 'answer' not in callback_data
+
+
+async def test_agentic_stream_keeps_an_answer_streamed_before_a_producer_crash():
+    """A provider failure mid-answer must not discard the tokens already delivered."""
+    callback_data = {}
+
+    async def crashes_after_answering(*args, **_kwargs):
+        callback, full_response = args[4], args[5]
+        await callback.put_data('partial before crash')
+        full_response.append('partial before crash')
+        raise RuntimeError('simulated provider failure')
+
+    chunks = await _collect_agentic_chunks(crashes_after_answering, callback_data)
+
+    assert chunks[-1] is None
+    assert f'error: {agentic.AGENT_STREAM_FAILURE_MESSAGE}' not in chunks
+    assert callback_data['answer'] == 'partial before crash'
+    assert callback_data['error'] == 'RuntimeError'
 
 
 async def test_agentic_stream_surfaces_a_producer_crash_without_waiting_for_idle_timeout():

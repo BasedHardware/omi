@@ -4,6 +4,7 @@ tier: 2
 description: Ask Omi open + stubbed typed turn on the floating bar (distinct from perf benchmarks)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Chat/AgentCompletionVoiceDelivery.swift
   - desktop/macos/Desktop/Sources/Chat/ChatDraftStore.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AIResponseView.swift
   - desktop/macos/Desktop/Sources/MainWindow/ClickThroughView.swift
@@ -11,6 +12,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/DelayedActionScheduler.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarLaunchPolicy.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarPresentation.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarVoicePlaybackService.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarGeometry.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
@@ -19,6 +21,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTContextVocabularyProvider.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+AgentCompletionContext.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionDelegate.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionLifecycle.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+Tools.swift
@@ -39,6 +42,8 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBackgroundModifier.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceWaveformBars.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Tools.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarReceiptCard.swift
 preconditions:
   - automation_bridge_ready
 

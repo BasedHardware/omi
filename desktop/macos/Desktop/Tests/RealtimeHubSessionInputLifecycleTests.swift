@@ -10,6 +10,79 @@ import XCTest
 
   @MainActor
   final class RealtimeHubSessionInputLifecycleTests: XCTestCase {
+    func testTerminalReceiveFailureClosesOldGeminiTransportBeforeUsableReplacement() async {
+      let tracker = RealtimeTransportTracker()
+      let firstDelegate = RealtimeHubSessionDelegateSpy()
+      let firstConnected = expectation(description: "first session connected")
+      let firstFailed = expectation(description: "first session failed")
+      var firstTransport: ControllableRealtimeRawWebSocket?
+      firstDelegate.onConnect = { firstConnected.fulfill() }
+      firstDelegate.onError = { failure in
+        XCTAssertEqual(failure.kind, .localAddressUnavailable)
+        XCTAssertTrue(firstTransport?.closeRequested == true)
+        firstFailed.fulfill()
+      }
+      let first = makeSession(
+        provider: .gemini,
+        delegate: firstDelegate,
+        rawWebSocketFactory: { _, queue in
+          let transport = ControllableRealtimeRawWebSocket(queue: queue, tracker: tracker)
+          firstTransport = transport
+          return transport
+        })
+      first.start()
+      await fulfillment(of: [firstConnected], timeout: 1)
+
+      firstTransport?.fail(
+        NSError(
+          domain: NSPOSIXErrorDomain,
+          code: Int(POSIXErrorCode.EADDRNOTAVAIL.rawValue)))
+      await fulfillment(of: [firstFailed], timeout: 1)
+      let oldTransportDrained = expectation(description: "old transport drained")
+      Task {
+        await first.stopAndWait()
+        oldTransportDrained.fulfill()
+      }
+      await Task.yield()
+      XCTAssertEqual(tracker.liveCount, 1, "cancel request alone is not terminal acknowledgement")
+      firstTransport?.acknowledgeClose()
+      await fulfillment(of: [oldTransportDrained], timeout: 1)
+      XCTAssertEqual(tracker.liveCount, 0)
+
+      let replacementDelegate = RealtimeHubSessionDelegateSpy()
+      let replacementConnected = expectation(description: "replacement connected")
+      replacementDelegate.onConnect = { replacementConnected.fulfill() }
+      var replacementTransport: ControllableRealtimeRawWebSocket?
+      let replacement = makeSession(
+        provider: .gemini,
+        delegate: replacementDelegate,
+        rawWebSocketFactory: { _, queue in
+          let transport = ControllableRealtimeRawWebSocket(queue: queue, tracker: tracker)
+          replacementTransport = transport
+          return transport
+        })
+      replacement.start()
+      await fulfillment(of: [replacementConnected], timeout: 1)
+
+      let acceptedInput = expectation(description: "replacement accepted input")
+      replacementTransport?.onInputAccepted = { acceptedInput.fulfill() }
+      replacement.beginInputTurn()
+      replacement.sendAudio(Data([1, 2, 3, 4]))
+      replacement.commitInputTurn()
+      await fulfillment(of: [acceptedInput], timeout: 1)
+
+      XCTAssertEqual(tracker.maximumLiveCount, 1)
+      let replacementDrained = expectation(description: "replacement drained")
+      Task {
+        await replacement.stopAndWait()
+        replacementDrained.fulfill()
+      }
+      await Task.yield()
+      replacementTransport?.acknowledgeClose()
+      await fulfillment(of: [replacementDrained], timeout: 1)
+      XCTAssertEqual(tracker.liveCount, 0)
+    }
+
     func testLocalProfileTransportAuthorityIsExactSessionAndOwnerScoped() throws {
       let sourceA = NSObject()
       let sourceB = NSObject()
@@ -291,6 +364,42 @@ import XCTest
       XCTAssertFalse(committed.pendingCommit)
     }
 
+    func testBackgroundAgentContextDoesNotBufferBeforeTransportIsReady() async {
+      // Exactly-once contract: a completion must never be marked delivered while
+      // it is only sitting in an in-memory buffer that stop()/close() would drop.
+      // sendBackgroundAgentContext must therefore refuse (return false) instead of
+      // buffering when the session cannot deliver right now.
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .openai, delegate: delegate)
+
+      let acceptedBeforeReady = await session.sendBackgroundAgentContext("agent finished")
+      let coldSnapshot = await session.inputLifecycleSnapshot()
+      XCTAssertFalse(acceptedBeforeReady, "a closed socket must not accept background context")
+      XCTAssertEqual(coldSnapshot.pendingTextInputCount, 0, "background context must not be buffered")
+
+      session.markReadyForTesting()
+      let acceptedWhenReady = await session.sendBackgroundAgentContext("agent finished")
+      let readySnapshot = await session.inputLifecycleSnapshot()
+      XCTAssertTrue(acceptedWhenReady, "an open OpenAI session accepts background context immediately")
+      XCTAssertEqual(readySnapshot.pendingTextInputCount, 0, "an accepted send leaves nothing buffered")
+    }
+
+    func testGeminiBackgroundAgentContextRefusesWithoutAnActivityWindow() async {
+      // Gemini can only accept text inside an open activity window; without one,
+      // sendTextInput would buffer. Background context must instead refuse so the
+      // caller keeps its checkpoint unadvanced and retries when a window opens.
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .gemini, delegate: delegate)
+      session.markReadyForTesting()
+
+      let accepted = await session.sendBackgroundAgentContext("agent finished")
+      let snapshot = await session.inputLifecycleSnapshot()
+
+      XCTAssertFalse(snapshot.activityOpen)
+      XCTAssertFalse(accepted, "Gemini must refuse background context with no open activity window")
+      XCTAssertEqual(snapshot.pendingTextInputCount, 0, "refused background context must not be buffered")
+    }
+
     func testOpenAITransportCloseImmediatelyMakesSessionNonSendableBeforeControllerTeardown() async {
       let delegate = RealtimeHubSessionDelegateSpy()
       let session = makeSession(provider: .openai, delegate: delegate)
@@ -367,14 +476,52 @@ import XCTest
       XCTAssertEqual(completed.inputIdentityCount, 0)
     }
 
+    func testBackgroundAgentContextRefusesGeminiWhileWarmIdleThenSendsWhenWindowOpens() async {
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .gemini, delegate: delegate)
+      session.markReadyForTesting()
+
+      // Warm but idle (no activity window): must REFUSE — return false, never
+      // buffer-and-report-success. A buffered completion is dropped by
+      // stopOnQueue/abandonInputTurn, so reporting success would advance the
+      // exactly-once checkpoint on a completion that is then lost.
+      let refusedWhileIdle = await session.sendBackgroundAgentContext("agent finished")
+      XCTAssertFalse(refusedWhileIdle)
+
+      // A turn opens the activity window — now the session can accept context.
+      session.beginInputTurn()
+      let sentAfterWindow = await session.sendBackgroundAgentContext("agent finished")
+      XCTAssertTrue(sentAfterWindow)
+    }
+
+    func testBackgroundAgentContextReturnsFalseWhenTheConfirmedSendFails() async {
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .openai, delegate: delegate)
+      session.markReadyForTesting()
+
+      // The checkpoint advances on this `true`, so `true` must mean confirmed
+      // delivery: a failed provider send must report false, not fire-and-forget.
+      session.setTestingForcedSendError(RealtimeHubSessionTestError.forced)
+      let failedSend = await session.sendBackgroundAgentContext("agent finished")
+      XCTAssertFalse(failedSend)
+
+      session.setTestingForcedSendError(nil)
+      let confirmedSend = await session.sendBackgroundAgentContext("agent finished")
+      XCTAssertTrue(confirmedSend)
+    }
+
     private func makeSession(
       provider: RealtimeHubProvider,
-      delegate: RealtimeHubSessionDelegate
+      delegate: RealtimeHubSessionDelegate,
+      rawWebSocketFactory: @escaping (URL, DispatchQueue) -> RealtimeRawWebSocketTransport = {
+        RawWebSocket(url: $0, queue: $1)
+      }
     ) -> RealtimeHubSession {
       RealtimeHubSession(
         provider: provider,
         auth: .byokKey("fixture"),
         instructions: "fixture",
+        rawWebSocketFactory: rawWebSocketFactory,
         delegate: delegate)
     }
 
@@ -388,12 +535,19 @@ import XCTest
     }
   }
 
+  private enum RealtimeHubSessionTestError: Error { case forced }
+
   @MainActor
   private final class RealtimeHubSessionDelegateSpy: RealtimeHubSessionDelegate {
     private(set) var connectCount = 0
     private(set) var errors: [String] = []
+    var onConnect: (() -> Void)?
+    var onError: ((RealtimeHubTransportFailure) -> Void)?
 
-    func hubDidConnect(source: RealtimeHubSession) { connectCount += 1 }
+    func hubDidConnect(source: RealtimeHubSession) {
+      connectCount += 1
+      onConnect?()
+    }
     func hubDidReceiveInputTranscript(
       _ text: String, isFinal: Bool, identity: RealtimeHubEventIdentity?, source: RealtimeHubSession
     ) {}
@@ -411,6 +565,123 @@ import XCTest
       source: RealtimeHubSession
     ) {}
     func hubDidFinishTurn(identity: RealtimeHubEventIdentity?, source: RealtimeHubSession) {}
-    func hubDidError(_ message: String, source: RealtimeHubSession) { errors.append(message) }
+    func hubDidError(_ failure: RealtimeHubTransportFailure, source: RealtimeHubSession) {
+      errors.append(failure.message)
+      onError?(failure)
+    }
+  }
+
+  private final class RealtimeTransportTracker: @unchecked Sendable {
+    private let lock = NSLock()
+    private var live = 0
+    private var maximum = 0
+
+    var liveCount: Int {
+      lock.withLock { live }
+    }
+
+    var maximumLiveCount: Int {
+      lock.withLock { maximum }
+    }
+
+    func opened() {
+      lock.withLock {
+        live += 1
+        maximum = max(maximum, live)
+      }
+    }
+
+    func closed() {
+      lock.withLock {
+        live -= 1
+      }
+    }
+  }
+
+  private final class ControllableRealtimeRawWebSocket: RealtimeRawWebSocketTransport,
+    @unchecked Sendable
+  {
+    var onOpen: (() -> Void)?
+    var onMessage: ((Data) -> Void)?
+    var onClose: ((Int, String) -> Void)?
+    var onError: ((RealtimeRawWebSocketFailure) -> Void)?
+    var onInputAccepted: (() -> Void)?
+    private(set) var closeRequested = false
+
+    private let queue: DispatchQueue
+    private let tracker: RealtimeTransportTracker
+    private var open = false
+    private var setupCompleted = false
+    private var closeWaiters: [CheckedContinuation<Void, Never>] = []
+
+    init(queue: DispatchQueue, tracker: RealtimeTransportTracker) {
+      self.queue = queue
+      self.tracker = tracker
+    }
+
+    func connect() {
+      open = true
+      tracker.opened()
+      onOpen?()
+    }
+
+    func sendText(_ text: String, completion: (@Sendable (Error?) -> Void)?) {
+      guard open else {
+        completion?(NSError(domain: NSPOSIXErrorDomain, code: Int(POSIXErrorCode.ENOTCONN.rawValue)))
+        return
+      }
+      completion?(nil)
+      if !setupCompleted {
+        setupCompleted = true
+        onMessage?(Data(#"{"setupComplete":{}}"#.utf8))
+      } else if text.contains(#""realtimeInput""#) {
+        onInputAccepted?()
+        onInputAccepted = nil
+      }
+    }
+
+    func close() {
+      closeRequested = true
+    }
+
+    func closeAndWait() async {
+      await withCheckedContinuation { continuation in
+        queue.async { [weak self] in
+          guard let self else {
+            continuation.resume()
+            return
+          }
+          self.closeRequested = true
+          if !self.open {
+            continuation.resume()
+          } else {
+            self.closeWaiters.append(continuation)
+          }
+        }
+      }
+    }
+
+    func acknowledgeClose() {
+      queue.async { [weak self] in
+        guard let self, self.open else { return }
+        self.open = false
+        self.tracker.closed()
+        let waiters = self.closeWaiters
+        self.closeWaiters.removeAll()
+        for waiter in waiters {
+          waiter.resume()
+        }
+      }
+    }
+
+    func fail(_ error: Error) {
+      queue.async { [weak self] in
+        self?.onError?(
+          RealtimeRawWebSocketFailure(
+            phase: .receive,
+            message: "receive failed",
+            underlyingError: error))
+      }
+    }
   }
 #endif

@@ -414,7 +414,7 @@ def _invoke_surface_reader(surface_name, *, uid, db, rollout, policy, now):
             now=now,
         ).memories
     if surface_name == "agent_tools":
-        return tool_memories_service.get_memories_text(uid=uid, limit=50)
+        return tool_memories_service.get_memories_text(uid=uid, limit=50, now=now)
     if surface_name == "mcp":
         return MemoryService(db_client=db).search_mcp(uid, "coffee", limit=10)
     if surface_name == "product_search":
@@ -457,6 +457,12 @@ class TestSurfaceDefaultAccessMatrix:
 
             install_vector_search_fakes(monkeypatch, vector_db)
         db = fake_firestore
+        if surface_name == "agent_tools":
+            # get_memories_text reads through the client this module captured at import
+            # time, so bind it explicitly here. Without this the case only passes when an
+            # earlier test's fixture happened to rebind it, and standalone it reaches for
+            # real Firestore (#10423).
+            monkeypatch.setattr(tool_memories_service, "firestore_db", db)
         _seed_apply_control(db, uid)
         _seed_rollout_readiness(db, uid, grant_consumer=grant_consumer)
 

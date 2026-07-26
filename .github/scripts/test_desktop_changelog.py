@@ -72,15 +72,34 @@ class ChangelogRequirementTests(unittest.TestCase):
         for path in (
             "desktop/macos/docs/release.md",
             "desktop/macos/scripts/qualify-desktop-beta.sh",
+            # Sibling qualification-runner helper (EXEMPT_DESKTOP_PATHS).
+            "desktop/macos/scripts/qualification-swift-cache.sh",
+            # CI-only flow validation and its shared source inventory do not
+            # alter the desktop application users receive.
+            "desktop/macos/scripts/desktop-flow-lint.py",
+            "desktop/macos/scripts/desktop_flow_contract.py",
+            # Test files are never user-facing app changes (EXEMPT_DESKTOP_PATH_PREFIXES).
+            # #10374's timeout bump touched this file; without the exemption the
+            # post-merge push run of the changelog gate reddened main (#10387).
+            "desktop/macos/tests/test-qualify-desktop-beta-contract.sh",
+            "desktop/macos/tests/some-other-desktop-test.sh",
+            # Rust backend prefix.
+            "desktop/macos/Backend-Rust/src/main.rs",
+            # Generated Swift is derived from the OpenAPI contract, never a
+            # user-facing app note (EXEMPT_DESKTOP_PATH_PREFIXES).
+            "desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift",
         ):
             with self.subTest(path=path):
                 self.assertFalse(checker.is_desktop_change_requiring_changelog(path))
 
-        self.assertTrue(
-            checker.is_desktop_change_requiring_changelog(
-                "desktop/macos/Desktop/Sources/AppDelegate.swift"
-            )
-        )
+        # Product source still requires a changelog — the exemptions must not leak.
+        # Note the hand-written Sources file is NOT under Sources/Generated/.
+        for path in (
+            "desktop/macos/Desktop/Sources/AppDelegate.swift",
+            "desktop/macos/scripts/some-user-facing-script.sh",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(checker.is_desktop_change_requiring_changelog(path))
 
 
 if __name__ == "__main__":

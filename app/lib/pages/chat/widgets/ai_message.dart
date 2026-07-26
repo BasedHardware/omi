@@ -882,7 +882,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                               strokeWidth: 2,
                             ),
                           )
-                        : FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: Colors.white54),
+                        : const FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: Colors.white54),
                   ],
                 ),
               ),

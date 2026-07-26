@@ -32,7 +32,7 @@ environments:
             value: dev
             category: runtime_identity
           STT_PRERECORDED_MODEL:
-            value: modulate-velma-2,parakeet
+            value: parakeet,modulate-velma-2
             category: stt_policy
           GOOGLE_CLIENT_ID:
             config_map:
@@ -118,7 +118,7 @@ environments:
             value: 'off'
             category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-            value: 'true'
+            value: 'false'
             category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
             value: 'false'
@@ -161,6 +161,9 @@ environments:
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
+          LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+            value: '900'
+            category: reliability
       parakeet:
         values_file: backend/charts/parakeet/dev_omi_parakeet_values.yaml
         env:
@@ -222,7 +225,7 @@ environments:
             value: http://parakeet.omiapi.com
             category: service_discovery
           STT_PRERECORDED_MODEL:
-            value: modulate-velma-2,parakeet
+            value: parakeet,modulate-velma-2
             category: stt_policy
           STT_SERVICE_MODELS:
             value: modulate-velma-2,parakeet
@@ -314,7 +317,7 @@ environments:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             # Dev Cloud Run must stay within the dev Parakeet topology; never point this at
             # the production-only parakeet.omi.me endpoint.
@@ -348,7 +351,7 @@ environments:
               provisional: true
               category: service_auth
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
               value: 'false'
@@ -390,6 +393,9 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -448,7 +454,7 @@ environments:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omiapi.com
@@ -464,7 +470,7 @@ environments:
               value: 'off'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
               value: 'false'
@@ -510,6 +516,9 @@ environments:
               value: 'true'
               category: rollout
               provisional: true
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           forbidden_env:
             - HOSTED_PUSHER_API_URL
           secrets:
@@ -549,7 +558,7 @@ environments:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omiapi.com
@@ -565,7 +574,7 @@ environments:
               value: 'off'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
               value: 'false'
@@ -607,6 +616,9 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           forbidden_env:
             - HOSTED_PUSHER_API_URL
           secrets:
@@ -768,7 +780,7 @@ environments:
             value: prod
             category: runtime_identity
           STT_PRERECORDED_MODEL:
-            value: modulate-velma-2,parakeet
+            value: parakeet,modulate-velma-2
             category: stt_policy
           GOOGLE_CLIENT_ID:
             config_map:
@@ -867,7 +879,7 @@ environments:
               name: prod-omi-backend-secrets
               key: SERVICE_ACCOUNT_JSON
           OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: 'off'
+            value: gateway
             category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
@@ -876,7 +888,7 @@ environments:
             value: 'true'
             category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-            value: 'true'
+            value: 'false'
             category: rollout
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret:
@@ -904,6 +916,9 @@ environments:
             secret:
               name: prod-omi-backend-secrets
               key: MCP_OAUTH_CLIENTS_JSON
+          LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+            value: '900'
+            category: reliability
       parakeet:
         values_file: backend/charts/parakeet/prod_omi_parakeet_values.yaml
         env:
@@ -998,7 +1013,7 @@ environments:
             STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID:
               value: price_1TuIap1F8wnoWYvwHWq0EvNU
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me
@@ -1010,7 +1025,7 @@ environments:
               default: http://127.0.0.1:9
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
@@ -1027,7 +1042,7 @@ environments:
               value: 'true'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com
@@ -1059,6 +1074,9 @@ environments:
             MCP_OAUTH_CLAUDE_REDIRECT_URIS:
               env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
               category: oauth_metadata
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           secrets:
             DESKTOP_PREVIEW_PUBLISH_KEY:
               secret: DESKTOP_PREVIEW_PUBLISH_KEY
@@ -1159,7 +1177,7 @@ environments:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me
@@ -1169,7 +1187,7 @@ environments:
               default: http://127.0.0.1:9
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
@@ -1178,7 +1196,7 @@ environments:
               value: 'true'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com
@@ -1205,6 +1223,9 @@ environments:
               value: 'true'
               category: rollout
               provisional: true
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           secrets:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
@@ -1257,7 +1278,7 @@ environments:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me
@@ -1267,7 +1288,7 @@ environments:
               default: http://127.0.0.1:9
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
@@ -1276,7 +1297,7 @@ environments:
               value: 'true'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com
@@ -1299,6 +1320,9 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           secrets:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET

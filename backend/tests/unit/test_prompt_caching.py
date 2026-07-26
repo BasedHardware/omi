@@ -15,6 +15,7 @@ from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from models.conversation_photo import ConversationPhoto
 from utils.llm.conversation_processing import (
     _build_conversation_context,
+    _gpt56_cacheable_system_message,
     extract_action_items,
     get_transcript_structure,
 )
@@ -183,15 +184,16 @@ class TestPromptMessageOrdering:
     def _get_from_messages_calls(self, func):
         """Extract ChatPromptTemplate.from_messages call patterns from function source."""
         source = inspect.getsource(func)
-        return re.findall(r'from_messages\(\[(.*?)\]\)', source, re.DOTALL)
+        return re.findall(r'from_messages\(\s*\[(.*?)\]\s*\)', source, re.DOTALL)
 
     def test_get_transcript_structure_instructions_first(self):
         """Static instructions must be the first system message for cross-conversation caching."""
         calls = self._get_from_messages_calls(get_transcript_structure)
         assert len(calls) == 1, "Expected exactly one from_messages call"
         args = calls[0].strip()
-        # instructions_text should come before context_message
-        instructions_pos = args.index('instructions_text')
+        # The cached prefix is a concrete message so parser-schema braces are
+        # never treated as ChatPromptTemplate variables.
+        instructions_pos = args.index('_gpt56_cacheable_system_message(instructions_text')
         context_pos = args.index('context_message')
         assert instructions_pos < context_pos, "instructions_text must come before context_message"
 
@@ -200,7 +202,7 @@ class TestPromptMessageOrdering:
         calls = self._get_from_messages_calls(extract_action_items)
         assert len(calls) == 1, "Expected exactly one from_messages call"
         args = calls[0].strip()
-        instructions_pos = args.index('instructions_text')
+        instructions_pos = args.index('_gpt56_cacheable_system_message(instructions_text')
         context_pos = args.index('context_message')
         assert instructions_pos < context_pos, "instructions_text must come before context_message"
 
@@ -209,9 +211,8 @@ class TestPromptMessageOrdering:
         for func in [get_transcript_structure, extract_action_items]:
             calls = self._get_from_messages_calls(func)
             assert len(calls) == 1, f"{func.__name__}: expected one from_messages call"
-            # Count 'system' occurrences in the call
-            system_count = calls[0].count("'system'")
-            assert system_count == 2, f"{func.__name__}: expected 2 system messages, got {system_count}"
+            assert calls[0].count('_gpt56_cacheable_system_message(') == 1
+            assert calls[0].count("('system', context_message)") == 1
 
     def test_existing_items_context_not_in_instructions(self):
         """existing_items_context must be in the context message, not the instructions."""
@@ -224,7 +225,7 @@ class TestPromptMessageOrdering:
             '{existing_items_context}' not in instructions_content
         ), "existing_items_context should not be in instructions_text (breaks static prefix caching)"
         # Verify it IS in the context_message
-        context_match = re.search(r"context_message\s*=\s*['\"](.+?)['\"]", source)
+        context_match = re.search(r"context_message\s*=\s*'''(.*?)'''", source, re.DOTALL)
         assert context_match, "Could not find context_message definition"
         assert 'existing_items_context' in context_match.group(1), "existing_items_context should be in context_message"
 
@@ -237,7 +238,7 @@ class TestPromptMessageOrdering:
         assert (
             '{language_code}' not in instructions_content
         ), "language_code should not be in instructions_text (breaks static prefix caching for non-English)"
-        context_match = re.search(r"context_message\s*=\s*['\"](.+?)['\"]", source)
+        context_match = re.search(r"context_message\s*=\s*'''(.*?)'''", source, re.DOTALL)
         assert context_match, "Could not find context_message definition"
         assert 'language_code' in context_match.group(1), "language_code should be in context_message"
 
@@ -297,24 +298,42 @@ class TestPromptCacheRetention:
             assert 'prompt_cache_retention' not in block, f"prompt_cache_retention must not be in model_kwargs: {block}"
 
     def test_prompt_cache_key_in_structure_function(self):
-        """get_transcript_structure must pass cache_key='omi-transcript-structure' via get_llm."""
+        """The structure path keeps a fixed, non-user-derived cache routing key."""
         source = inspect.getsource(get_transcript_structure)
-        assert (
-            "cache_key='omi-transcript-structure'" in source
-        ), "get_transcript_structure missing cache_key in get_llm call"
+        assert "_cache_bucket_key('omi-transcript-structure')" in source
+        assert "cache_key = 'omi-transcript-structure'" in source
 
     def test_prompt_cache_key_in_action_items_function(self):
-        """extract_action_items must pass cache_key='omi-extract-actions' via get_llm."""
+        """The action-items path keeps a fixed, non-user-derived cache routing key."""
         source = inspect.getsource(extract_action_items)
-        assert "cache_key='omi-extract-actions'" in source, "extract_action_items missing cache_key in get_llm call"
+        assert "_cache_bucket_key('omi-extract-actions')" in source
+        assert "cache_key = 'omi-extract-actions'" in source
 
     def test_distinct_cache_keys_per_function(self):
         """Each function must have a distinct cache_key to avoid cache conflation."""
         source_structure = inspect.getsource(get_transcript_structure)
         source_actions = inspect.getsource(extract_action_items)
-        key_structure = re.search(r"cache_key='([^']+)'", source_structure)
-        key_actions = re.search(r"cache_key='([^']+)'", source_actions)
+        key_structure = re.search(r"_cache_bucket_key\('([^']+)'\)", source_structure)
+        key_actions = re.search(r"_cache_bucket_key\('([^']+)'\)", source_actions)
         assert key_structure and key_actions, "Both functions must have cache_key"
         assert key_structure.group(1) != key_actions.group(
             1
         ), f"Cache keys must be distinct: structure={key_structure.group(1)}, actions={key_actions.group(1)}"
+
+
+def test_explicit_cache_system_message_preserves_parser_schema_braces():
+    """A cached system message must bypass ChatPromptTemplate variable parsing."""
+    from langchain_core.prompts import ChatPromptTemplate
+
+    system_message = _gpt56_cacheable_system_message('{"title": "string"}', cache_enabled=True)
+    prompt = ChatPromptTemplate.from_messages([system_message, ('system', 'Content: {conversation_context}')])
+
+    messages = prompt.format_messages(conversation_context='Transcript: hello')
+
+    assert messages[0].content == [
+        {
+            'type': 'text',
+            'text': '{"title": "string"}',
+            'prompt_cache_breakpoint': {'mode': 'explicit'},
+        }
+    ]

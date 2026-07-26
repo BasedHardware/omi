@@ -47,9 +47,39 @@ require_text 'defaults write "$BUNDLE_ID" transcriptionEnabled -bool false' "$PR
 require_text '"$SCRIPT_DIR/prepare-qualification-profile.sh" "$BUNDLE"' "$QUALIFIER"
 require_text 'OMI_SKIP_SETTINGS_SEED=1'
 require_text 'make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice'
+# omi-test-quality: source-inspection -- static contract: detached qualification
+# launches must persist token-bound provenance and can never fall back to broad
+# bundle-id/app-name termination; an isolated live macOS launcher is not portable.
+require_text 'OMI_DESKTOP_LAUNCH_TOKEN="$DESKTOP_LAUNCH_TOKEN"'
+require_text 'secrets.token_urlsafe(24)'
+require_text 'record_owned_qualification_desktop'
+require_text 'validated_qualification_desktop_pid'
+require_text 'stop_recorded_qualification_desktop'
+require_text 'stat.S_IMODE(signal.stat().st_mode) != 0o600'
+require_text 'target.chmod(0o600)'
+require_text 'command_sha256'
+require_text 'lsof -nP -iTCP:"$AUTOMATION_PORT" -sTCP:LISTEN'
+require_text 'qualification automation port remains bound after owned app cleanup'
+require_text 'kill -KILL "$pid"'
+require_text 'refusing unproven qualification app cleanup'
+require_text 'cleanup failed; preserving qualification lease and preventing success evidence'
+if grep -Eq 'osascript|pkill|kill_process_tree|quit app id' "$QUALIFIER"; then
+  echo "FAIL: qualification cleanup must not use broad app-name or bundle-id termination" >&2
+  exit 1
+fi
+require_order "$QUALIFIER" \
+  'if ! record_owned_qualification_desktop; then' \
+  './scripts/desktop-core-harness.sh --tier 2' \
+  'if ! run_qualification_cleanup; then' \
+  'if [[ "$GITHUB_ACTIONS_ARTIFACT" -eq 1 ]]'
 require_text 'terminate_qualification_desktop "$BUNDLE"'
 require_text '--json tagName,isDraft,isPrerelease,publishedAt,assets,body'
 require_text 'WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"'
+require_text 'qualification-lease acquire'
+require_text 'qualification-lease release'
+require_text 'OMI_HARNESS_PORT_OFFSET="$QUALIFICATION_PORT_OFFSET"'
+require_text 'OMI_AUTOMATION_PORT="$((47777 + QUALIFICATION_PORT_OFFSET))"'
+require_text 'QUALIFICATION_RETAINED_RUNS="${OMI_QUALIFICATION_RETAINED_RUNS:-3}"'
 if grep -Fq 'worktree add' "$QUALIFIER" || grep -Fq 'rm -rf "$WORKTREE"' "$QUALIFIER"; then
   echo "FAIL: qualification must use the persistent exact-SHA source directly" >&2
   exit 1
@@ -71,19 +101,21 @@ require_text 'python3 "$KEYVALUE_PY" update-qualified-beta'
 require_text 'derive_omi_app_config "$BUNDLE"' "$CORE_HARNESS"
 require_text 'wrong bundle on port' "$CORE_HARNESS"
 
-# Static timing contract: cold preparation has its own bounded 3600-second phase
-# and run.sh explicitly signals successful launch dispatch before the separate
-# 900-second bridge readiness phase starts. The combined bound remains 4500
-# seconds. This guards https://github.com/BasedHardware/omi/actions/runs/29904736566,
-# where Swift was still compiling at 1107/1182 units when the 1800-second
-# preparation phase expired.
-require_text 'DESKTOP_PREPARE_WAIT_SECS=3600'
+# Static timing contract: cold preparation has its own bounded phase (env-
+# overridable via OMI_QUALIFY_PREPARE_WAIT_SECS) and run.sh explicitly signals
+# successful launch dispatch before the separate 900-second bridge readiness
+# phase starts. Default preparation budget 5400s; combined bound 6300s.
+# History: 1800s (compiling stalled at 1107/1182, run 29904736566) → 3600s,
+# which STILL expired at 1139/1190 on a cold M1 self-hosted build (run
+# 29965341760), timing out every fresh tag (v0.12.99–v0.12.113) and leaving no
+# reusable .build for the warm retry. 5400s covers the observed ~75-min cold path.
+require_text 'DESKTOP_PREPARE_WAIT_SECS="${OMI_QUALIFY_PREPARE_WAIT_SECS:-5400}"'
 require_text 'BRIDGE_WAIT_SECS=900'
-prepare_wait_secs="$(sed -n 's/^DESKTOP_PREPARE_WAIT_SECS=//p' "$QUALIFIER")"
+prepare_wait_secs="$(sed -n 's/.*OMI_QUALIFY_PREPARE_WAIT_SECS:-\([0-9]*\)}.*/\1/p' "$QUALIFIER")"
 bridge_wait_secs="$(sed -n 's/^BRIDGE_WAIT_SECS=//p' "$QUALIFIER")"
-if [[ "$prepare_wait_secs" -ne 3600 || "$bridge_wait_secs" -ne 900 \
-  || $((prepare_wait_secs + bridge_wait_secs)) -ne 4500 ]]; then
-  echo "FAIL: qualification timing bounds must remain 3600s preparation + 900s bridge = 4500s total" >&2
+if [[ "$prepare_wait_secs" -ne 5400 || "$bridge_wait_secs" -ne 900 \
+  || $((prepare_wait_secs + bridge_wait_secs)) -ne 6300 ]]; then
+  echo "FAIL: qualification timing bounds must remain 5400s preparation + 900s bridge = 6300s total" >&2
   exit 1
 fi
 require_text 'OMI_DESKTOP_LAUNCH_SIGNAL_FILE="$LAUNCH_SIGNAL_FILE"'

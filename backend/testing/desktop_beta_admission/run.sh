@@ -51,12 +51,12 @@ if [[ ! "$java_major" =~ ^[0-9]+$ || "$java_major" -lt 21 ]]; then
   exit 1
 fi
 
-emulator_port="$($node_bin -e 'const net = require("net"); const server = net.createServer(); server.listen(0, "127.0.0.1", () => { console.log(server.address().port); server.close(); });')"
 emulator_dir="$(mktemp -d "${TMPDIR:-/tmp}/omi-desktop-beta-admission.XXXXXX")"
 emulator_config="$emulator_dir/firebase.json"
+config_writer="$repo_root/backend/testing/desktop_beta_admission/emulator_config.mjs"
+supervisor="$repo_root/backend/testing/desktop_beta_admission/supervise.mjs"
 trap 'rm -rf "$emulator_dir"' EXIT
-$node_bin -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({emulators: {firestore: {host: "127.0.0.1", port: Number(process.argv[2])}}}))' \
-  "$emulator_config" "$emulator_port"
+read -r emulator_port websocket_port < <("$node_bin" "$config_writer" "$emulator_config")
 
 printf -v quoted_python_command ' %q' "${python_command[@]}"
 printf -v quoted_test_path '%q' "$repo_root/backend/testing/desktop_beta_admission/firestore_contention_test.py"
@@ -65,22 +65,7 @@ runner_command="FIRESTORE_EMULATOR_HOST=127.0.0.1:${emulator_port} GOOGLE_CLOUD_
 firebase_command=(npx --prefix "$repo_root" --yes "firebase-tools@${firebase_tools_version}" emulators:exec --only firestore --project demo-desktop-beta --config "$emulator_config" "$runner_command")
 
 # Firebase writes its debug logs to the current directory, so never launch it
-# from the checkout. The emulator process and test also have a hard timeout.
+# from the checkout. The supervisor owns and drains the Firebase process group,
+# including Firestore's JVM, before removing this isolated directory.
 cd "$emulator_dir"
-if command -v gtimeout >/dev/null 2>&1; then
-  gtimeout --preserve-status --kill-after=10s 180s "${firebase_command[@]}"
-else
-  "$node_bin" - "${firebase_command[@]}" <<'NODE'
-const {spawn} = require("child_process");
-const child = spawn(process.argv[2], process.argv.slice(3), {stdio: "inherit"});
-const timer = setTimeout(() => {
-  console.error("ERROR: desktop Beta admission emulator harness exceeded 180 seconds");
-  child.kill("SIGTERM");
-  setTimeout(() => child.kill("SIGKILL"), 10_000).unref();
-}, 180_000);
-child.on("exit", (code, signal) => {
-  clearTimeout(timer);
-  process.exitCode = code ?? (signal ? 1 : 0);
-});
-NODE
-fi
+exec "$node_bin" "$supervisor" --timeout-seconds 180 --cleanup-path "$emulator_dir" -- "${firebase_command[@]}"

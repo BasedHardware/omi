@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import OmiTheme
 import SwiftUI
 
@@ -208,10 +209,7 @@ private struct ConnectOptionCard: View {
         .fill(OmiColors.backgroundSecondary)
     )
     .task {
-      statuses[destination] =
-        destination == .chatgpt
-        ? await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
-        : await MemoryExportService.shared.status(for: destination)
+      statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: destination)
       await prepareMCPKeyIfNeeded()
     }
     .onReceive(permissionRefreshTimer) { _ in
@@ -219,7 +217,7 @@ private struct ConnectOptionCard: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       refreshPermissionStateIfNeeded()
-      refreshChatGPTDirectoryConnectionIfNeeded()
+      refreshCloudGrantConnectionIfNeeded()
     }
   }
 
@@ -228,10 +226,10 @@ private struct ConnectOptionCard: View {
     permissionRefreshID += 1
   }
 
-  private func refreshChatGPTDirectoryConnectionIfNeeded() {
-    guard destination == .chatgpt else { return }
+  private func refreshCloudGrantConnectionIfNeeded() {
+    guard destination.cloudOAuthClientID != nil else { return }
     Task {
-      statuses[.chatgpt] = await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
+      statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: destination)
     }
   }
 
@@ -270,10 +268,7 @@ private struct ConnectOptionCard: View {
         case .completed:
           resultMessage = .success(outcome.taskTitle)
         }
-        statuses[destination] =
-          destination == .chatgpt
-          ? await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
-          : await MemoryExportService.shared.status(for: destination)
+        statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: destination)
       } catch {
         resultMessage = .failure(setupFailureMessage(for: error))
       }

@@ -411,8 +411,10 @@ def check_codemagic_release_publishers() -> list[str]:
         return [*errors, "canonical and preview workflows must both have scripts"]
     if canonical_scripts is not preview_scripts:
         errors.append("preview scripts must be the exact YAML alias node used by the canonical workflow")
-    if len(canonical_scripts) != 21:
-        errors.append("canonical workflow must retain exactly 21 approved script steps")
+    # 22 = 21 hardening-approved steps + the INV-BETA-1 "Create Omi Beta variant"
+    # step (founder-reviewed re-land, PR #10317).
+    if len(canonical_scripts) != 22:
+        errors.append("canonical workflow must retain exactly 22 approved script steps")
 
     for scalar in _iter_semantic_strings(canonical):
         for forbidden_authority in _FORBIDDEN_NORMAL_RELEASE_GCP_AUTHORITIES:
@@ -503,6 +505,7 @@ def check_codemagic_release_publishers() -> list[str]:
 def main() -> int:
     errors: list[str] = []
     errors.extend(check_desktop_codemagic_release())
+    errors.extend(check_desktop_candidate_trigger_authority())
     errors.extend(check_codemagic_release_publishers())
     errors.extend(check_desktop_preview_publishing())
     errors.extend(check_desktop_qualification_runner())
@@ -533,8 +536,8 @@ def check_desktop_codemagic_release() -> list[str]:
 
     planner = ROOT / ".github/scripts/plan-desktop-release.py"
     planner_text = planner.read_text(encoding="utf-8")
-    if "AUTO_RELEASE_QUIET_SECONDS = 10 * 60" not in planner_text:
-        errors.append("desktop auto-release planner must keep a 10 minute quiet window before auto-tagging")
+    if "AUTO_RELEASE_QUIET_SECONDS = 60" not in planner_text:
+        errors.append("desktop auto-release planner must keep a short (60s) quiet window before auto-tagging")
     if "latest_change_age is None" not in planner_text:
         errors.append("desktop auto-release planner must fail closed when latest change age cannot be determined")
     if "RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60" not in planner_text:
@@ -555,6 +558,7 @@ def check_desktop_codemagic_release() -> list[str]:
     required_files = [
         "desktop/macos/scripts/prepare-agent-runtime.sh",
         "desktop/macos/scripts/prepare-desktop-bundle-native-deps.sh",
+        "desktop/macos/scripts/publish-desktop-debug-symbols.sh",
         "desktop/macos/scripts/audit-desktop-bundle-deps.sh",
         "desktop/macos/scripts/smoke-signed-desktop-artifact.sh",
         "desktop/macos/scripts/test-tool-surfaces.sh",
@@ -578,6 +582,15 @@ def check_desktop_codemagic_release() -> list[str]:
         desktop_workflow_body = ""
     else:
         desktop_workflow_body = desktop_workflow_match.group("body")
+
+    for required_fragment in (
+        "publish-desktop-debug-symbols.sh generate",
+        "publish-desktop-debug-symbols.sh upload",
+        '"$DSYM_ARCHIVE"',
+        "- build/*.dSYM",
+    ):
+        if required_fragment not in desktop_workflow_body:
+            errors.append(f"desktop release is missing fail-closed debug-symbol publication: {required_fragment}")
 
     smoke_index = desktop_workflow_body.find("Smoke signed desktop artifact")
     release_index = desktop_workflow_body.find("Create GitHub release")
@@ -675,6 +688,48 @@ def check_desktop_codemagic_release() -> list[str]:
         if required_fragment not in desktop_workflow_body:
             errors.append(f"desktop release is missing signed smoke result artifact fragment: {required_fragment}")
 
+    return errors
+
+
+def check_desktop_candidate_trigger_authority() -> list[str]:
+    """Keep the normal candidate lane on Codemagic's native immutable-tag trigger."""
+    errors: list[str] = []
+    codemagic = ROOT / "codemagic.yaml"
+    candidate_workflow = ROOT / ".github/workflows/desktop_auto_release.yml"
+    preview_workflow = ROOT / ".github/workflows/desktop_publish_preview.yml"
+    if not codemagic.exists() or not candidate_workflow.exists() or not preview_workflow.exists():
+        return ["desktop candidate trigger guard is missing its checked-in release surfaces"]
+
+    codemagic_text = codemagic.read_text(encoding="utf-8")
+    match = re.search(
+        r"\n  omi-desktop-swift-release:\n(?P<body>.*?)(?=\n  [A-Za-z0-9_-]+:\n|\Z)",
+        codemagic_text,
+        flags=re.DOTALL,
+    )
+    required_trigger = (
+        "    triggering:\n"
+        "      events:\n"
+        "        - tag\n"
+        "      tag_patterns:\n"
+        '        - pattern: "v*-macos"\n'
+        "          include: true"
+    )
+    if match is None or required_trigger not in match.group("body"):
+        errors.append("normal omi-desktop-swift-release candidate lane must natively trigger on v*-macos tags")
+
+    direct_build_endpoint = "https://api.codemagic.io/builds"
+    for workflow in sorted((ROOT / ".github/workflows").glob("*.yml")):
+        if direct_build_endpoint not in workflow.read_text(encoding="utf-8"):
+            continue
+        if workflow != preview_workflow:
+            errors.append(
+                f"normal desktop candidate lane must not start Codemagic with a direct builds API POST: "
+                f"{workflow.relative_to(ROOT)}"
+            )
+
+    preview_text = preview_workflow.read_text(encoding="utf-8")
+    if direct_build_endpoint not in preview_text or 'workflowId: "omi-desktop-swift-preview"' not in preview_text:
+        errors.append("the only checked-in direct Codemagic build API caller must remain the isolated preview lane")
     return errors
 
 
@@ -803,19 +858,19 @@ def check_desktop_qualification_runner() -> list[str]:
         "self-hosted",
         "macos",
         "omi-desktop-qualification",
-        "ref: ${{ inputs.release_tag }}",
-        "docker info",
+        'checkout --quiet --detach "refs/tags/$RELEASE_TAG"',
         "check-desktop-auto-beta-candidate.py",
         "--automatic",
         "actions/create-github-app-token@v3",
-        "desktop-beta-qualification-${{ inputs.release_tag }}",
+        "group: desktop-beta-qualification-m1",
         "cancel-in-progress: false",
-        "safe without a second release-body claim state machine",
     ):
         if required_fragment not in text:
             errors.append(f"desktop qualification runner is missing required guard fragment: {required_fragment}")
     if "desktop_promote_beta.yml" in text:
         errors.append("desktop qualification runner must not promote beta inside its own run")
+    if "qualify-m4-mini" in text or "plan-fallbacks" in text:
+        errors.append("desktop qualification runner must use only the global M1 fallback lane")
 
     promotion = ROOT / ".github/workflows/desktop_promote_beta.yml"
     promotion_text = promotion.read_text(encoding="utf-8") if promotion.exists() else ""

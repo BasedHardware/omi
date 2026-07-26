@@ -1699,22 +1699,6 @@
     "@lovingOmi": {
         "description": "Title for the app review prompt"
     },
-    "leaveReviewIos": "App Store లో సమీక్ష ఇవ్వడం ద్వారా మాకు మరిన్ని ప్రజలకు చేరుకోవడానికి సహాయం చేయండి. మీ ఫీడ్‌బ్యాక్ మాకు ప్రపంచానికి అర్థమైనది!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Google Play Store లో సమీక్ష ఇవ్వడం ద్వారా మాకు మరిన్ని ప్రజలకు చేరుకోవడానికి సహాయం చేయండి. మీ ఫీడ్‌బ్యాక్ మాకు ప్రపంచానికి అర్థమైనది!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "App Store లో రేట్ చేయండి",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Google Play లో రేట్ చేయండి",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
-    },
     "maybeLater": "బహుశా తర్వాత",
     "@maybeLater": {
         "description": "Button text to defer action"

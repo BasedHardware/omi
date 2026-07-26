@@ -53,6 +53,7 @@ from database.users import (
     set_user_transcription_preferences,
 )
 from config.stt_provider_policy import supports_live_multilingual_mode
+from utils.user_language import normalize_user_language
 from database.users import *
 from models.conversation import Conversation
 from models.geolocation import Geolocation
@@ -640,7 +641,8 @@ def update_person_name(
     value: str,  # = Field(min_length=2, max_length=40),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    update_person(uid, person_id, value)
+    if not update_person(uid, person_id, value):
+        raise HTTPException(status_code=404, detail="Person not found")
     return {'status': 'ok'}
 
 
@@ -808,9 +810,7 @@ def set_chat_message_analytics(
 def get_user_language(uid: str = Depends(auth.get_current_user_uid)):
     """Get the user's preferred language."""
     language = get_user_language_preference(uid)
-    if not language:
-        return {'language': None}
-    return {'language': language}
+    return {'language': language or None}
 
 
 class SetUserLanguageRequest(BaseModel):
@@ -820,9 +820,9 @@ class SetUserLanguageRequest(BaseModel):
 @router.patch('/v1/users/language', tags=['v1'], response_model=UserLanguageUpdateResponse)
 def set_user_language(data: SetUserLanguageRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Set the user's preferred language (e.g., 'en', 'vi', etc.)."""
-    language = data.language
+    language = normalize_user_language(data.language)
     if not language:
-        raise HTTPException(status_code=400, detail="Language is required")
+        raise HTTPException(status_code=400, detail="A supported language code is required")
     set_user_language_preference(uid, language)
     single_language_mode = not supports_live_multilingual_mode(language)
     set_user_transcription_preferences(uid, single_language_mode=single_language_mode)

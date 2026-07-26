@@ -3205,7 +3205,6 @@ describe("agent control tools", () => {
         runMode: "act",
       }),
     );
-
     expect(delegated.ok).toBe(true);
     expect(buildMcpServers).toHaveBeenCalledWith("act", "/tmp/delegate-cwd", undefined, {
       ownerId: "owner",
@@ -3233,6 +3232,10 @@ describe("agent control tools", () => {
             name: "OMI_CONTEXT_FILE",
             value: expect.stringContaining("omi-tools-context"),
           },
+          {
+            name: "OMI_WORKSPACE",
+            value: "/tmp/work",
+          },
         ],
       },
       {
@@ -3243,6 +3246,10 @@ describe("agent control tools", () => {
           {
             name: "OMI_CONTEXT_FILE",
             value: expect.stringContaining("omi-tools-context"),
+          },
+          {
+            name: "OMI_WORKSPACE",
+            value: "/tmp/work",
           },
         ],
       },

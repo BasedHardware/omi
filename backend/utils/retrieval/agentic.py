@@ -464,6 +464,11 @@ async def _run_anthropic_agent_stream(
                 messages=messages,
                 tools=tool_schemas,
                 max_tokens=8192,
+                # Anthropic moves this breakpoint to the last cacheable message
+                # block on every request. That incrementally caches both the
+                # append-only inter-turn history epoch and each agentic tool-loop
+                # iteration while the explicit system breakpoint remains stable.
+                cache_control={"type": "ephemeral", "ttl": "1h"},
             ) as stream:
                 async for event in stream:
                     # Stream text tokens
@@ -799,6 +804,26 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         )
     )
 
+    def keep_streamed_answer() -> bool:
+        """Preserve what already reached the user when the stream stops early.
+
+        The bounded deadline and failure paths cancel the producer, but the
+        tokens yielded before that are a real answer the user watched arrive.
+        Returns whether there was anything to keep.
+        """
+        if callback_data is None:
+            return False
+        streamed = ''.join(full_response)
+        if not streamed:
+            return False
+        callback_data['answer'] = streamed
+        callback_data['memories_found'] = conversations_collected if conversations_collected else []
+        callback_data['ask_for_nps'] = tool_usage_count > 0
+        chart_data_from_config = configurable.get('chart_data')
+        if chart_data_from_config:
+            callback_data['chart_data'] = chart_data_from_config
+        return True
+
     # Stream from callback queue
     try:
         started_at = asyncio.get_running_loop().time()
@@ -852,6 +877,9 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         await cancel_stream_task(task)
         if callback_data is not None:
             callback_data['error'] = 'idle_timeout'
+        if keep_streamed_answer():
+            yield None
+            return
         yield f'error: {AGENT_STREAM_TIMEOUT_MESSAGE}'
         return
     except asyncio.CancelledError:
@@ -862,6 +890,9 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         await cancel_stream_task(task)
         if callback_data is not None:
             callback_data['error'] = type(error).__name__
+        if keep_streamed_answer():
+            yield None
+            return
         yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
         return
     finally:

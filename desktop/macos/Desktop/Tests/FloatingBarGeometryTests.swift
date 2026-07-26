@@ -400,10 +400,10 @@ final class FloatingBarGeometryTests: XCTestCase {
       ))
   }
 
-  func testNotchHoverMenuKeepsBottomMarginWithoutSubagents() {
+  func testNotchHoverMenuHasNoHeightWithoutSubagents() {
     XCTAssertEqual(
       FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 0),
-      FloatingControlBarWindow.notchAgentListRowHeight + FloatingControlBarWindow.notchHoverMenuBottomMargin
+      0
     )
   }
 

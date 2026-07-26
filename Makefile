@@ -1,5 +1,12 @@
 HOOKS_DIR := $(shell git rev-parse --git-path hooks)
-PYTHON ?= $(shell bash -c 'source "$$(git rev-parse --show-toplevel)/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
+# Fall back to the working directory (where make runs, i.e. the repo root) when
+# `git rev-parse --show-toplevel` cannot resolve a work tree. In a linked
+# worktree whose git context resolves to a git dir rather than a work tree,
+# show-toplevel exits 128 and previously expanded to an empty prefix, turning
+# the source into `/scripts/dev-harness/_resolve_python.sh: No such file` and
+# breaking every target. The root stays computed in-shell (never interpolated
+# into recipe text) so a checkout path with quote/`$` characters cannot inject.
+PYTHON ?= $(shell bash -c 'source "$$(git rev-parse --show-toplevel 2>/dev/null || pwd)/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
 # Export so recipes use $$PYTHON (shell variable expansion) instead of $(PYTHON)
 # (Make text interpolation). Shell variable expansion treats the resolved path
 # as data and cannot be broken by quote or command-substitution characters in

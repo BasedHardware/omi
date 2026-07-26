@@ -169,7 +169,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               child: Padding(
                 padding: const EdgeInsets.only(left: 2, top: 1),
                 child: charging
-                    ? FaIcon(FontAwesomeIcons.chargingStation, color: Color.fromARGB(255, 0, 255, 8), size: 20)
+                    ? const FaIcon(FontAwesomeIcons.chargingStation, color: Color.fromARGB(255, 0, 255, 8), size: 20)
                     : FaIcon(
                         _getBatteryIcon(provider.batteryLevel),
                         color: _getBatteryColor(provider.batteryLevel),
@@ -401,7 +401,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
               child: Row(
                 children: [
-                  SizedBox(
+                  const SizedBox(
                     width: 24,
                     height: 24,
                     child: Padding(
@@ -457,7 +457,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
               child: Row(
                 children: [
-                  SizedBox(
+                  const SizedBox(
                     width: 24,
                     height: 24,
                     child: Padding(
@@ -516,7 +516,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                 child: Row(
                   children: [
-                    SizedBox(
+                    const SizedBox(
                       width: 24,
                       height: 24,
                       child: Padding(
@@ -657,7 +657,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             backgroundColor: const Color(0xFF0D0D0D),
             elevation: 0,
             leading: IconButton(
-              icon: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+              icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
               onPressed: () => Navigator.of(context).pop(),
             ),
           ),
@@ -738,14 +738,14 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      FaIcon(FontAwesomeIcons.bluetooth, color: Colors.grey, size: 14),
+                      const FaIcon(FontAwesomeIcons.bluetooth, color: Colors.grey, size: 14),
                       const SizedBox(width: 6),
                       Text(
                         '${captureProvider.bleReceiveRateKbps.toStringAsFixed(1)} kbps',
                         style: const TextStyle(color: Colors.grey, fontSize: 14),
                       ),
                       const SizedBox(width: 24),
-                      FaIcon(FontAwesomeIcons.signal, color: Colors.grey, size: 14),
+                      const FaIcon(FontAwesomeIcons.signal, color: Colors.grey, size: 14),
                       const SizedBox(width: 6),
                       Text(
                         '${captureProvider.wsSendRateKbps.toStringAsFixed(1)} kbps',

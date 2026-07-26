@@ -643,6 +643,10 @@ export interface BatchDeleteActionItemsResponse {
   status: string;
 }
 
+export interface BatchDeleteMemoriesRequest {
+  memory_ids: Array<string>;
+}
+
 export interface BatchMemoriesRequest {
   memories: Array<CreateMemoryRequest>;
 }
@@ -1016,6 +1020,15 @@ export interface ConversationActionItemsDeleteResponse {
 export interface ConversationActionItemsResponse {
   action_items: Array<ActionItemResponse>;
   conversation_id: string;
+}
+
+export interface ConversationAnalytics {
+  conversation_id: string;
+  speaker_count: number;
+  speakers?: Array<SpeakerAnalytics>;
+  total_seconds: number;
+  total_words: number;
+  words_per_minute: number;
 }
 
 export interface ConversationAudio {
@@ -2183,6 +2196,7 @@ export interface MemoryDB {
   headline?: string | null;
   id: string;
   invalid_at?: string | null;
+  is_baseline?: boolean;
   is_locked?: boolean;
   kg_extracted?: boolean;
   layer: string | null;
@@ -2901,6 +2915,16 @@ export interface SnapshotReceipt {
   expires_at: string;
   replaced: boolean;
   snapshot_id: string;
+}
+
+export interface SpeakerAnalytics {
+  is_user?: boolean;
+  person_id?: string | null;
+  speaker: string;
+  talk_seconds: number;
+  talk_share: number;
+  word_count: number;
+  words_per_minute: number;
 }
 
 export interface SpeechProfileMutationResponse {
@@ -3774,6 +3798,7 @@ export interface OmiApiSchemas {
   "BatchCreateActionItemsResponse": BatchCreateActionItemsResponse;
   "BatchDeleteActionItemsRequest": BatchDeleteActionItemsRequest;
   "BatchDeleteActionItemsResponse": BatchDeleteActionItemsResponse;
+  "BatchDeleteMemoriesRequest": BatchDeleteMemoriesRequest;
   "BatchMemoriesRequest": BatchMemoriesRequest;
   "BatchMemoriesResponse": BatchMemoriesResponse;
   "BatchMigrationRequest": BatchMigrationRequest;
@@ -3829,6 +3854,7 @@ export interface OmiApiSchemas {
   "ConversationActionItemsCountResponse": ConversationActionItemsCountResponse;
   "ConversationActionItemsDeleteResponse": ConversationActionItemsDeleteResponse;
   "ConversationActionItemsResponse": ConversationActionItemsResponse;
+  "ConversationAnalytics": ConversationAnalytics;
   "ConversationAudio": ConversationAudio;
   "ConversationAudioSpan": ConversationAudioSpan;
   "ConversationAudioSpanInfo": ConversationAudioSpanInfo;
@@ -4089,6 +4115,7 @@ export interface OmiApiSchemas {
   "SimpleStructured": SimpleStructured;
   "SimpleTranscriptSegment": SimpleTranscriptSegment;
   "SnapshotReceipt": SnapshotReceipt;
+  "SpeakerAnalytics": SpeakerAnalytics;
   "SpeechProfileMutationResponse": SpeechProfileMutationResponse;
   "SpeechProfileResponse": SpeechProfileResponse;
   "SpeechProfileUploadResponse": SpeechProfileUploadResponse;
@@ -5222,6 +5249,17 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/conversations/{conversation_id}/analytics": {
+    get: {
+      operationId: "get_conversation_analytics_v1_conversations__conversation_id__analytics_get";
+      responses: {
+        "200": ConversationAnalytics;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}": {
     patch: {
       operationId: "set_assignee_conversation_segment_v1_conversations__conversation_id__assign_speaker__speaker_id__patch";
@@ -5893,6 +5931,15 @@ export interface OmiApiPaths {
     };
   };
   "/v1/goals/{goal_id}": {
+    get: {
+      operationId: "get_goal_by_id_v1_goals__goal_id__get";
+      responses: {
+        "200": GoalResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
     patch: {
       operationId: "update_goal_v1_goals__goal_id__patch";
       responses: {
@@ -7918,6 +7965,14 @@ export interface OmiApiPaths {
         "422": HTTPValidationError;
       };
     };
+    delete: {
+      operationId: "delete_memories_batch_v3_memories_batch_delete";
+      responses: {
+        "200": MemoryMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
   };
   "/v3/memories/review-queue": {
     get: {
@@ -7962,6 +8017,17 @@ export interface OmiApiPaths {
     };
     delete: {
       operationId: "delete_memory_v3_memories__memory_id__delete";
+      responses: {
+        "200": MemoryMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v3/memories/{memory_id}/baseline": {
+    patch: {
+      operationId: "update_memory_baseline_v3_memories__memory_id__baseline_patch";
       responses: {
         "200": MemoryMutationResponse;
         "401": void;
@@ -10075,6 +10141,25 @@ export async function update_action_item_description_v1_conversations__conversat
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_conversation_analytics_v1_conversations__conversation_id__analytics_get(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ConversationAnalytics> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/analytics`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function set_assignee_conversation_segment_v1_conversations__conversation_id__assign_speaker__speaker_id__patch(path: { conversation_id: string, speaker_id: number }, query: { assign_type: string, value?: string | null, use_for_speech_training?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}/assign-speaker/${path.speaker_id}`;
@@ -11319,6 +11404,25 @@ export async function extract_and_update_progress_v1_goals_extract_progress_post
 export async function suggest_goal_v1_goals_suggest_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<GoalSuggestionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/goals/suggest`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_goal_by_id_v1_goals__goal_id__get(path: { goal_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<GoalResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/goals/${path.goal_id}`;
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "GET",
@@ -15289,6 +15393,27 @@ export async function create_memories_batch_v3_memories_batch_post(header: { aut
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function delete_memories_batch_v3_memories_batch_delete(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: BatchDeleteMemoriesRequest, init?: OmiApiClientInit): Promise<MemoryMutationResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v3/memories/batch`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function list_memory_review_queue_v3_memories_review_queue_get(query: { status?: string, limit?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<Record<string, unknown>>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v3/memories/review-queue`;
@@ -15381,6 +15506,28 @@ export async function delete_memory_v3_memories__memory_id__delete(path: { memor
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function update_memory_baseline_v3_memories__memory_id__baseline_patch(path: { memory_id: string }, query: { value: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<MemoryMutationResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v3/memories/${path.memory_id}/baseline`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
@@ -15541,4 +15688,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 381 client methods generated.
+// Total: 385 client methods generated.

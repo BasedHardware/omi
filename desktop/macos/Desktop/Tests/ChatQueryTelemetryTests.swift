@@ -36,7 +36,7 @@ final class ChatQueryTelemetryTests: XCTestCase {
       Set(payload.properties.keys),
       Set([
         "attempt_id", "surface", "harness", "duration_ms", "error_class", "error",
-        "partial_response", "telemetry_schema_version", "input_length_bucket",
+        "partial_response", "watchdog_fired", "telemetry_schema_version", "input_length_bucket",
         "attachment_count", "has_image",
       ])
     )
@@ -533,7 +533,7 @@ final class ChatQueryTelemetryTests: XCTestCase {
       eventSink: { browserEvents.append($0) }
     )
     XCTAssertTrue(browserAttempt.finish(stopReason: .browserExtensionMissing))
-    guard case .failed(_, _, let errorClass, _) = browserEvents.last else {
+    guard case .failed(_, _, let errorClass, _, _) = browserEvents.last else {
       return XCTFail("expected browser precondition failure")
     }
     XCTAssertEqual(errorClass, .browserExtensionMissing)
@@ -550,5 +550,55 @@ final class ChatQueryTelemetryTests: XCTestCase {
       return XCTFail("expected superseded cancellation")
     }
     XCTAssertEqual(reason, .superseded)
+  }
+
+  // T5: auth-blocked turns classify as authentication with session adapter + disposition.
+  @MainActor
+  func testAuthenticationFailureTelemetryIncludesSessionAdapterAndDisposition() {
+    var events: [ChatQueryTelemetryEvent] = []
+    let attempt = ChatQueryTelemetryAttempt(
+      attemptId: "attempt-auth-blocked",
+      surface: "main_chat",
+      harness: "piMono",
+      bridgeModePreference: "piMono",
+      sessionAdapterId: "acp",
+      eventSink: { events.append($0) }
+    )
+
+    XCTAssertTrue(attempt.fail(errorClass: .authentication))
+    guard let terminal = events.last,
+      case .failed(_, _, let errorClass, _, let watchdogFired) = terminal
+    else {
+      return XCTFail("expected failed terminal event")
+    }
+    XCTAssertEqual(errorClass, .authentication)
+    XCTAssertFalse(watchdogFired)
+
+    let payload = terminal.analyticsPayload
+    XCTAssertEqual(payload.properties["error_class"] as? String, "authentication")
+    XCTAssertEqual(payload.properties["session_adapter_id"] as? String, "acp")
+    XCTAssertEqual(payload.properties["harness"] as? String, "piMono")
+    XCTAssertEqual(payload.properties["bridge_mode_preference"] as? String, "piMono")
+    XCTAssertEqual(payload.properties["turn_disposition"] as? String, "auth_blocked")
+    XCTAssertEqual(payload.properties["root_cause"] as? String, "provider_claude")
+    XCTAssertEqual(payload.properties["adapter_harness_mismatch"] as? Bool, true)
+    XCTAssertEqual(payload.properties["watchdog_fired"] as? Bool, false)
+  }
+
+  @MainActor
+  func testRuntimeAuthenticationFailureClassifiesAsAuthentication() {
+    let failure = AgentRuntimeFailure(
+      code: "provider_auth_required",
+      failureCode: .authentication,
+      userMessage: "Claude sign-in is required to continue this chat."
+    )
+    let disposition = ChatQueryFailureDisposition.classify(
+      BridgeError.agentRuntimeFailure(failure)
+    )
+    guard case .failed(let errorClass) = disposition else {
+      return XCTFail("expected failed disposition")
+    }
+    XCTAssertEqual(errorClass, .authentication)
+    XCTAssertTrue(BridgeError.agentRuntimeFailure(failure).isSessionAuthenticationFailure)
   }
 }

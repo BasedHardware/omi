@@ -521,13 +521,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   Widget _buildChatToolChip(ChatTool tool) {
-    final color = Colors.grey;
+    const color = Colors.grey;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
       child: Text(
         _formatToolName(tool.name),
-        style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
+        style: const TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
       ),
     );
   }
@@ -577,7 +577,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   HapticFeedback.mediumImpact();
                   Navigator.pop(context);
                 },
-                icon: FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
+                icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
               ),
             ),
             actions: [
@@ -642,7 +642,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           )
-                        : FaIcon(FontAwesomeIcons.solidComments, size: 16.0, color: Colors.white),
+                        : const FaIcon(FontAwesomeIcons.solidComments, size: 16.0, color: Colors.white),
                   ),
                 ),
               ],
@@ -654,7 +654,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                   child: IconButton(
                     padding: EdgeInsets.zero,
-                    icon: FaIcon(FontAwesomeIcons.gear, size: 16.0, color: Colors.white),
+                    icon: const FaIcon(FontAwesomeIcons.gear, size: 16.0, color: Colors.white),
                     onPressed: () {
                       HapticFeedback.mediumImpact();
                       Navigator.push(context, MaterialPageRoute(builder: (context) => AppHomeWebPage(app: app)));
@@ -673,7 +673,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                           child: IconButton(
                             padding: EdgeInsets.zero,
-                            icon: FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
+                            icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
                             onPressed: () async {
                               HapticFeedback.mediumImpact();
                               PlatformManager.instance.analytics.track('App Shared', properties: {'appId': app.id});
@@ -709,7 +709,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
-                            icon: FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
+                            icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
                             onPressed: () async {
                               HapticFeedback.mediumImpact();
                               await showModalBottomSheet(
@@ -756,7 +756,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           ),
                         ),
                         placeholder: (context, url) => const CircularProgressIndicator(),
-                        errorWidget: (context, url, error) => FaIcon(FontAwesomeIcons.circleExclamation),
+                        errorWidget: (context, url, error) => const FaIcon(FontAwesomeIcons.circleExclamation),
                       ),
                       const SizedBox(width: 20),
                       Expanded(
@@ -791,7 +791,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                       ),
                                       if (app.official) ...[
                                         const SizedBox(width: 4),
-                                        FaIcon(
+                                        const FaIcon(
                                           FontAwesomeIcons.solidCircleCheck,
                                           size: 14,
                                           color: Colors.deepPurpleAccent,
@@ -814,7 +814,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     child: Row(
                                       children: [
                                         if (app.ratingCount > 0) ...[
-                                          FaIcon(FontAwesomeIcons.solidStar, size: 11, color: Color(0xFF8B5CF6)),
+                                          const FaIcon(FontAwesomeIcons.solidStar, size: 11, color: Color(0xFF8B5CF6)),
                                           const SizedBox(width: 4),
                                           Text(
                                             '${app.getRatingAvg()} (${app.ratingCount})',
@@ -986,7 +986,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                FaIcon(FontAwesomeIcons.circleInfo, color: Colors.grey, size: 18),
+                                const FaIcon(FontAwesomeIcons.circleInfo, color: Colors.grey, size: 18),
                                 const SizedBox(width: 10),
                                 SizedBox(
                                   width: MediaQuery.of(context).size.width * 0.78,
@@ -1007,7 +1007,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                FaIcon(FontAwesomeIcons.circleInfo, color: Colors.grey, size: 18),
+                                const FaIcon(FontAwesomeIcons.circleInfo, color: Colors.grey, size: 18),
                                 const SizedBox(width: 10),
                                 SizedBox(
                                   width: MediaQuery.of(context).size.width * 0.78,
@@ -1028,7 +1028,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.grey, size: 18),
+                                const FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.grey, size: 18),
                                 const SizedBox(width: 10),
                                 SizedBox(
                                   width: MediaQuery.of(context).size.width * 0.78,
@@ -1090,7 +1090,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                         ),
                                         child: Center(
                                           child: setupCompleted
-                                              ? FaIcon(FontAwesomeIcons.check, size: 14, color: Colors.green)
+                                              ? const FaIcon(FontAwesomeIcons.check, size: 14, color: Colors.green)
                                               : Text(
                                                   '${i + 1}',
                                                   style: TextStyle(
@@ -1173,7 +1173,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             }
                             checkSetupCompleted();
                           },
-                          trailing: Padding(
+                          trailing: const Padding(
                             padding: EdgeInsets.only(right: 12.0),
                             child: FaIcon(FontAwesomeIcons.chevronRight, size: 20, color: Colors.grey),
                           ),
@@ -1246,7 +1246,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                           color: Colors.grey[900],
                                           borderRadius: BorderRadius.circular(12),
                                         ),
-                                        child: FaIcon(FontAwesomeIcons.circleExclamation),
+                                        child: const FaIcon(FontAwesomeIcons.circleExclamation),
                                       ),
                                     ),
                                   ),
@@ -1378,7 +1378,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   children: [
                                     Row(
                                       children: [
-                                        Text(
+                                        const Text(
                                           'Reviews',
                                           style: TextStyle(
                                             color: Colors.white,

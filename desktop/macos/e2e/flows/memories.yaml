@@ -1,59 +1,55 @@
 version: 2
 name: memories
-tier: 2
-description: Memories page navigation and refresh via automation bridge
-app: non-prod
+tier: manual
+description: Memory menu — navigate full-width Memories, Conversations, and Brain Map destinations
+app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/MainWindow/MemoryHubDestination.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/OmiSearchField.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/PersonaPage.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/ForceDirectedSimulation.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
-  - desktop/macos/Desktop/Sources/ViewModelContainer.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryExportDestinationSheet.swift
-  - desktop/macos/Desktop/Sources/NotionConnect/NotionMCPConnector.swift
-  - desktop/macos/Desktop/Sources/NotionConnect/MemoryExportServiceNotion.swift
-  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Memories.swift
-  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+People.swift
-  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Persona.swift
 preconditions:
-  - automation_bridge_ready
+  - auth_ready
 
 steps:
   - id: S1
-    name: Navigate to Memories
-    bridge.navigate:
-      target: memories
-      activateApp: false
-    wait:
-      state.selectedTabIndex: 3
+    name: Open the Memory destination menu
+    do: "Click the Memory button in the top nav bar (agent-swift find text 'Memory' click). Verify its menu exposes Memories, Conversations, and Brain Map."
+    expect:
+      text_visible:
+        - Memories
+        - Conversations
+        - Brain Map
 
   - id: S2
-    name: Refresh data
-    bridge.action:
-      name: refresh_all_data
+    name: Select and verify Memories
+    do: "Choose Memories from the Memory menu. Verify the full-width page shows the shared search field ('Search memories'), filter buttons ('This device', 'All'), Add button, and memory rows with timestamps."
+    expect:
+      interactive_count: { min: 4 }
 
   - id: S3
-    name: Memories snapshot
-    bridge.action:
-      name: memories_snapshot
+    name: Select Conversations
+    do: "Open the Memory menu and choose Conversations. Verify the full-width Conversations page loads with the shared search field, filters, and a list grouped by date."
     expect:
-      result.detail.is_signed_in: "true"
-      result.detail.load_state: "loaded"
-      result.detail.memory_count_valid: "true"
-      # memory_count may be 0 on a fresh profile; happy_path alice seed has 22 default-scope memories.
+      text_visible:
+        - Conversations
 
   - id: S4
-    name: Search memories for common term
-    bridge.action:
-      name: memories_search
-      params:
-        query: "connector-import"
+    name: Verify conversation list features
+    do: "Check for Select and Quick Note buttons at the top. Verify conversation entries show title, date, duration, and star icon. Check for 'Load older conversations' at the bottom if scrolled down."
     expect:
-      result.detail.search_active: "true"
-      result.detail.result_count: { min: 1 }
+      interactive_count: { min: 3 }
 
   - id: S5
-    name: Logs clean
-    log.expect:
-      absent:
-        - "DesktopAutomationBridge: failed"
+    name: Select Brain Map
+    do: "Open the Memory menu and choose Brain Map. Verify Brain Map renders with an interactive node graph visualization showing connected entities."
+    expect:
+      text_visible:
+        - Brain Map
+
+  - id: S6
+    name: Return to Memories
+    do: "Open the Memory menu and choose Memories. Verify the memory list is visible with the shared search and filter controls."
+    expect:
+      text_visible:
+        - Memories

@@ -369,7 +369,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                         color: Colors.deepPurple.withValues(alpha: 0.8),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 16),
+                      child: const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 16),
                     )
             else
               Icon(Icons.lock_outline, color: Colors.grey.shade700, size: 20),
@@ -716,7 +716,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-                child: Center(child: FaIcon(FontAwesomeIcons.arrowsRotate, size: 16.0, color: Colors.white)),
+                child: const Center(child: FaIcon(FontAwesomeIcons.arrowsRotate, size: 16.0, color: Colors.white)),
               ),
             ),
           ),
@@ -728,7 +728,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
               itemBuilder: (context) => [
                 PullDownMenuItem(
                   title: context.l10n.deleteImportedData,
-                  iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
+                  iconWidget: const FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
                   onTap: () {
                     _showDeleteLimitlessDialog();
                   },
@@ -743,7 +743,8 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-                  child: Center(child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white)),
+                  child:
+                      const Center(child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white)),
                 ),
               ),
             ),

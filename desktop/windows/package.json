@@ -1,6 +1,6 @@
 {
   "name": "omi-windows",
-  "version": "1.0.1",
+  "version": "1.0.16",
   "description": "An Electron application with React and TypeScript",
   "main": "./out/main/index.js",
   "author": "Based Hardware",
@@ -32,8 +32,8 @@
     "vad:assets": "node scripts/copy-vad-assets.mjs",
     "build:unpack": "npm run build && electron-builder --dir --config electron-builder.config.mjs",
     "build:win": "npm run build && electron-builder --win --x64 --config electron-builder.config.mjs --publish never",
-    "build:mac": "electron-vite build && node scripts/bundle-pimono-extension.mjs && electron-builder --mac --config electron-builder.config.mjs",
-    "build:linux": "electron-vite build && node scripts/bundle-pimono-extension.mjs && electron-builder --linux --config electron-builder.config.mjs",
+    "build:mac": "electron-vite build && node scripts/bundle-pimono-extension.mjs && electron-builder --mac --config electron-builder.config.mjs --publish never",
+    "build:linux": "electron-vite build && node scripts/bundle-pimono-extension.mjs && electron-builder --linux --config electron-builder.config.mjs --publish never",
     "test": "vitest run",
     "test:watch": "vitest",
     "fixtures:audio": "node scripts/gen-audio-fixtures.mjs",

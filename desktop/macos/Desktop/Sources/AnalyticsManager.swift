@@ -14,8 +14,25 @@ class AnalyticsManager {
   }
 
   private var lastTranscriptionStartedAt: Date?
+  /// Main-actor-isolated test observation at the actual AnalyticsManager
+  /// boundary. It is nil in production and is deliberately not a mutable global
+  /// outside the actor, so tests can observe the real event/payload safely under
+  /// Swift concurrency.
+  private var memoryAssistantTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
 
   private init() {}
+
+  /// Install a scoped test observer for MemoryAssistant telemetry. Tests must
+  /// clear it in teardown; production behavior remains the PostHog call below.
+  func setMemoryAssistantTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    memoryAssistantTelemetryCaptureForTests = capture
+  }
+
+  private func captureMemoryAssistantTelemetryForTests(_ event: String, properties: [String: Any]) {
+    memoryAssistantTelemetryCaptureForTests?(event, properties)
+  }
 
   // MARK: - Initialization
 
@@ -567,12 +584,12 @@ class AnalyticsManager {
   func chatQueryTelemetry(_ event: ChatQueryTelemetryEvent) {
     let payload = event.analyticsPayload
     PostHogManager.shared.track(payload.eventName, properties: payload.properties)
-    if case .failed(_, _, let errorClass, _) = event {
+    if case .failed(_, _, let errorClass, _, _) = event {
       DesktopDiagnosticsManager.shared.recordChatFailure(errorClass: errorClass.rawValue)
     }
     let diagnosticKeys = [
       "duration_ms", "error_class", "cancel_reason", "partial_response",
-      "surface", "harness", "runtime_surface",
+      "surface", "harness", "runtime_surface", "session_adapter_id", "watchdog_fired",
     ]
     let diagnostics = diagnosticKeys.compactMap { key -> String? in
       guard let value = payload.properties[key] else { return nil }
@@ -580,6 +597,57 @@ class AnalyticsManager {
     }.joined(separator: " ")
     log(
       "Chat telemetry event=\(payload.eventName) attempt_id=\(payload.properties["attempt_id"] ?? "missing") \(diagnostics)"
+    )
+  }
+
+  func providerAuthRequired(
+    sessionAdapterId: String?,
+    harness: String,
+    bridgeMode: String,
+    oauthUrlValid: Bool
+  ) {
+    guard !Self.isDevBuild else { return }
+    var props: [String: Any] = [
+      "harness": boundedAnalyticsIdentifier(harness),
+      "bridge_mode": boundedAnalyticsIdentifier(bridgeMode),
+      "oauth_url_valid": oauthUrlValid,
+    ]
+    if let sessionAdapterId {
+      props["session_adapter_id"] = boundedAnalyticsIdentifier(sessionAdapterId)
+    }
+    PostHogManager.shared.track("provider_auth_required", properties: props)
+  }
+
+  func claudeOAuthBrowserOpened(harness: String, bridgeMode: String) {
+    guard !Self.isDevBuild else { return }
+    PostHogManager.shared.track(
+      "claude_oauth_browser_opened",
+      properties: [
+        "harness": boundedAnalyticsIdentifier(harness),
+        "bridge_mode": boundedAnalyticsIdentifier(bridgeMode),
+      ]
+    )
+  }
+
+  func claudeOAuthCallbackTimeout(harness: String, bridgeMode: String) {
+    guard !Self.isDevBuild else { return }
+    PostHogManager.shared.track(
+      "claude_oauth_callback_timeout",
+      properties: [
+        "harness": boundedAnalyticsIdentifier(harness),
+        "bridge_mode": boundedAnalyticsIdentifier(bridgeMode),
+      ]
+    )
+  }
+
+  func claudeOAuthCallbackReceived(harness: String, bridgeMode: String) {
+    guard !Self.isDevBuild else { return }
+    PostHogManager.shared.track(
+      "claude_oauth_callback_received",
+      properties: [
+        "harness": boundedAnalyticsIdentifier(harness),
+        "bridge_mode": boundedAnalyticsIdentifier(bridgeMode),
+      ]
     )
   }
 
@@ -750,7 +818,34 @@ class AnalyticsManager {
   }
 
   func memoryExtracted(memoryCount: Int) {
+    captureMemoryAssistantTelemetryForTests("Memory Extracted", properties: ["memory_count": memoryCount])
     PostHogManager.shared.memoryExtracted(memoryCount: memoryCount)
+  }
+
+  // MARK: - Memory Assistant Telemetry
+
+  /// Proactive MemoryAssistant setting change (the activation denominator). See
+  /// `MemoryAssistantTelemetry.Setting`. Emitted only on a real persisted change.
+  func memoryAssistantSettingChanged(setting: MemoryAssistantTelemetry.Setting, value: Bool) {
+    captureMemoryAssistantTelemetryForTests(
+      MemoryAssistantTelemetry.settingChangedEventName,
+      properties: MemoryAssistantTelemetry.settingChangedPayload(setting: setting, value: value)
+    )
+    PostHogManager.shared.memoryAssistantSettingChanged(setting: setting, value: value)
+  }
+
+  /// Proactive MemoryAssistant analysis-outcome funnel. See
+  /// `MemoryAssistantTelemetry.AnalysisOutcome`. One event per actual analysis
+  /// attempt; supplements (does not alter) the `Memory Extracted` success terminal.
+  func memoryAssistantAnalysisRun(
+    outcome: MemoryAssistantTelemetry.AnalysisOutcome,
+    confidence: Double? = nil
+  ) {
+    captureMemoryAssistantTelemetryForTests(
+      MemoryAssistantTelemetry.analysisRunEventName,
+      properties: MemoryAssistantTelemetry.analysisRunPayload(outcome: outcome, confidence: confidence)
+    )
+    PostHogManager.shared.memoryAssistantAnalysisRun(outcome: outcome, confidence: confidence)
   }
 
   func insightGenerated(category: String?) {

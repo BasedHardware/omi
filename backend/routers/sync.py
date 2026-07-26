@@ -1441,7 +1441,9 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
                             job_id=job_id,
                             uid=uid,
                             content_id=locked_job.get('content_id'),
-                            error_code='sync_worker_stale',
+                            error_code=(
+                                'sync_dispatch_lost' if locked_job.get('status') == 'queued' else 'sync_worker_stale'
+                            ),
                             outcome=TranscriptionOutcome.UPSTREAM_ERROR,
                             provider=locked_job.get('stt_provider', 'unknown'),
                             model=locked_job.get('stt_model', 'unknown'),
@@ -1755,7 +1757,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                     return JSONResponse(status_code=200, content={'status': 'done', 'reconciled': True})
             failure = failure_from_exception(e, provider=latest_job.get('stt_provider'))
             sync_model = latest_job.get('stt_model')
-            if task_retry_count >= max_attempts - 1:
+            if not failure.retryable or task_retry_count >= max_attempts - 1:
                 logger.error(
                     'event=sync_transcription_job outcome=%s status=failed_final lane=%s '
                     'attempt=%d exception_type=%s',

@@ -166,26 +166,39 @@ Every release also uploads a canonical `omi-setup.exe` asset (exact lowercase
 name — the Windows analog of macOS's `omi.dmg`). The backend resolves it:
 
 - `https://api.omi.me/v2/desktop/download/windows` — latest **stable** Windows
-  release, served as an auto-download landing page
-- `…/v2/desktop/download/windows?channel=beta` — latest beta
-- `…/v2/desktop/download/latest?platform=windows` — same, query-param form
+  release (or beta when no stable exists — see fallback below), served as an
+  auto-download landing page
+- `…/v2/desktop/download/windows?channel=beta` — latest beta (or stable when
+  the beta slot is empty)
+- `…/v2/desktop/download/latest?platform=windows` — same, but strict (404s
+  when the exact channel is empty; QA/tooling contract)
 
 Channel mapping is GitHub's own release state (`backend/routers/updates.py`):
 the auto-cut **prerelease is the beta channel**; clearing the prerelease flag
 (`gh release edit v<version>-windows --prerelease=false`) **promotes it to
 stable** — no KEY_VALUE block needed. Releases marked draft are never served.
 
-### windows.omi.me (one-time infra setup)
+Because promotion empties the beta slot until the next cut (and before the
+first promotion there is no stable at all), the `/v2/desktop/download/windows`
+public-link route falls back to the other channel instead of 404ing, records
+it via `record_fallback`, and the landing page shows the channel actually
+served. `/v2/desktop/download/latest` keeps strict channel semantics.
 
-`macos.omi.me` is a Namecheap A record (`registrar-servers.com` DNS) pointing
-at the GCP global load balancer in front of the backend, with a URL-map host
-rule that rewrites `/` to the download endpoint. To stand up `windows.omi.me`:
+### windows.omi.me (live infra)
 
-1. Namecheap: add an A record for `windows` → the existing LB IP (same as
-   `macos.omi.me`, currently `34.54.223.100`).
-2. GCP LB: add `windows.omi.me` to the managed certificate, and add a URL-map
-   host rule routing `/` to the backend service with path rewrite
-   `/v2/desktop/download/windows` (URL maps can't add query params — that's why
-   the dedicated route exists).
+Both `macos.omi.me` and `windows.omi.me` are Namecheap A records
+(`registrar-servers.com` DNS) pointing at the GCP global load balancer
+(`34.54.223.100`, project `based-hardware`), covered by its managed
+certificate. URL map `custom-domains-49a4` holds one `routeRules` matcher per
+host issuing 301 `urlRedirect`s (`pathRedirect` **can** carry a query string):
 
-Until then, the `api.omi.me` links above are the canonical distributable URLs.
+- `windows.omi.me/` → `api.omi.me/v2/desktop/download/windows`
+- `windows.omi.me/beta` → `api.omi.me/v2/desktop/download/windows?channel=beta`
+- (`macos.omi.me` mirrors this shape onto `/v2/desktop/download/latest`)
+
+Emergency pin: to serve a known-good installer while the backend or a release
+is broken, edit the matcher to redirect to the immutable GitHub asset
+(`hostRedirect: github.com`, `pathRedirect:
+/BasedHardware/omi/releases/download/v<version>-windows/omi-setup.exe`) — the
+shape the links launched with. `gcloud compute url-maps export/import
+custom-domains-49a4 --global` is the edit loop; export a backup first.

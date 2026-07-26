@@ -476,9 +476,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     await getDeviceInfo();
     SharedPreferencesUtil().deviceName = device.name;
 
-    // Wals
+    // Wals — pass the firmware resolved by getDeviceInfo() above so background
+    // discovery routes ring-buffer devices correctly; `device` here is the raw
+    // connect object whose firmwareRevision is often still 'Unknown'.
     final syncs = ServiceManager.instance().wal.getSyncs();
-    syncs.setDevice(device);
+    syncs.setDevice(device, firmwareVersion: currentFirmwareVersion);
     syncs.sdcard.setDevice(device);
     syncs.flashPage.setDevice(device);
     syncs.storage.setDevice(device);

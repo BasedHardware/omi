@@ -23,8 +23,15 @@ from utils.http_client import get_web_fetch_client
 REPOSITORY = "BasedHardware/omi"
 TAG_RE = re.compile(r"^v(?P<version>[0-9]+\.[0-9]+(?:\.[0-9]+)?)\+(?P<build>[1-9][0-9]*)-macos$")
 SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+QUALIFICATION_EVIDENCE_ASSET_RE = re.compile(
+    r"^qualification-evidence-(?P<source_sha>[0-9a-f]{40})-(?P<digest>[0-9a-f]{64})[.]json$"
+)
 UTC_RFC3339_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z$")
-RETIRED_ASSET_NAMES = frozenset({"Omi.Beta.zip", "omi-beta.dmg", "Omi Beta.zip", "Omi Beta.dmg"})
+# INV-BETA-1: the side-by-side Omi Beta app ships these two sanctioned assets on
+# every macOS candidate. Any OTHER "omi beta"-ish asset name is still a retired
+# identity and rejected. Kept in canonical form used by codemagic/updates.py.
+SANCTIONED_BETA_ASSET_NAMES = ("Omi.Beta.zip", "omi-beta.dmg")
+RETIRED_ASSET_NAMES = frozenset({"Omi Beta.zip", "Omi Beta.dmg"})
 QUALIFICATION_WORKFLOW = "desktop_qualify_beta.yml"
 QUALIFICATION_ARTIFACT_PREFIX = "desktop-qualification-evidence-"
 QUALIFICATION_EVIDENCE_FILE = "qualification-evidence.json"
@@ -207,6 +214,26 @@ def _asset_digest(asset: dict[str, Any]) -> str:
     if not isinstance(value, str) or not SHA256_RE.fullmatch(value):
         _fail("candidate asset is missing its GitHub SHA-256 digest")
     return value
+
+
+def _qualification_evidence_asset(assets: list[dict[str, Any]], *, source_sha: str) -> tuple[dict[str, Any], str]:
+    """Require one release evidence asset whose name binds its source and bytes."""
+
+    matches: list[tuple[dict[str, Any], str]] = []
+    for asset in assets:
+        name = _nonempty_string(asset.get("name"), "candidate GitHub release assets are invalid")
+        if not name.startswith("qualification-evidence-") or not name.endswith(".json"):
+            continue
+        parsed = QUALIFICATION_EVIDENCE_ASSET_RE.fullmatch(name)
+        if parsed is None or parsed.group("source_sha") != source_sha:
+            _fail("candidate qualification evidence name does not bind this source")
+        digest = _asset_digest(asset)
+        if digest != f"sha256:{parsed.group('digest')}":
+            _fail("candidate qualification evidence name does not bind its digest")
+        matches.append((asset, name))
+    if len(matches) != 1:
+        _fail("candidate qualification evidence asset is missing or ambiguous")
+    return matches[0]
 
 
 def _trusted_run_id(run: dict[str, Any]) -> int:
@@ -439,11 +466,23 @@ async def build_qualified_beta_manifest(
 
     assets = _release_assets(release.get("assets"))
     names = {asset.get("name") for asset in assets}
-    if names & RETIRED_ASSET_NAMES or any(isinstance(name, str) and "omi beta" in name.lower() for name in names):
+    # The sanctioned INV-BETA-1 pair is allowed; any other "omi beta" identity is
+    # still retired and rejected.
+    sanctioned_beta = set(SANCTIONED_BETA_ASSET_NAMES)
+    disallowed_beta = {
+        name for name in names if isinstance(name, str) and "omi beta" in name.lower() and name not in sanctioned_beta
+    }
+    if names & RETIRED_ASSET_NAMES or disallowed_beta:
         _fail("candidate contains a retired desktop identity")
+    has_beta_identity = sanctioned_beta.issubset(names)
     zip_asset, dmg_asset = _asset(assets, "Omi.zip"), _asset(assets, "omi.dmg")
-    evidence_name = f"qualification-evidence-{tag}.json"
-    evidence_asset = _asset(assets, evidence_name)
+    source_sha = await _read_github(source, "tag_sha", tag)
+    if not isinstance(source_sha, str):
+        _fail("candidate source is not a trusted merged source")
+    merged_source = await _read_github(source, "is_merged_source", source_sha)
+    if not re.fullmatch(r"[0-9a-f]{40}", source_sha) or merged_source is not True:
+        _fail("candidate source is not a trusted merged source")
+    evidence_asset, evidence_name = _qualification_evidence_asset(assets, source_sha=source_sha)
     zip_url, dmg_url, evidence_url = (
         _asset_url(zip_asset, tag, "Omi.zip"),
         _asset_url(dmg_asset, tag, "omi.dmg"),
@@ -454,12 +493,12 @@ async def build_qualified_beta_manifest(
         "omi.dmg": _asset_digest(dmg_asset),
         evidence_name: _asset_digest(evidence_asset),
     }
-    source_sha = await _read_github(source, "tag_sha", tag)
-    if not isinstance(source_sha, str):
-        _fail("candidate source is not a trusted merged source")
-    merged_source = await _read_github(source, "is_merged_source", source_sha)
-    if not re.fullmatch(r"[0-9a-f]{40}", source_sha) or merged_source is not True:
-        _fail("candidate source is not a trusted merged source")
+    beta_assets: dict[str, dict[str, Any]] = {}
+    if has_beta_identity:
+        for beta_name in SANCTIONED_BETA_ASSET_NAMES:
+            beta_asset = _asset(assets, beta_name)
+            beta_assets[beta_name] = beta_asset
+            expected_digests[beta_name] = _asset_digest(beta_asset)
     _, run_id = _select_qualification_run(await _read_github(source, "runs"), tag, source_sha, current_time)
     artifact_id = _qualification_artifact_id(await _read_github(source, "artifacts", run_id), tag)
     trusted_evidence_bytes = _evidence_from_artifact(await _read_github(source, "download_artifact", artifact_id))
@@ -473,8 +512,12 @@ async def build_qualified_beta_manifest(
         _fail("candidate trusted qualification evidence does not bind its run")
     if not _is_exact_integer(evidence.get("schema_version")) or evidence.get("schema_version") != 1:
         _fail("candidate trusted qualification evidence is invalid")
+    download_targets = [("Omi.zip", zip_url), ("omi.dmg", dmg_url), (evidence_name, evidence_url)]
+    for beta_name in SANCTIONED_BETA_ASSET_NAMES:
+        if beta_name in beta_assets:
+            download_targets.append((beta_name, _asset_url(beta_assets[beta_name], tag, beta_name)))
     downloaded: dict[str, bytes] = {}
-    for name, url in (("Omi.zip", zip_url), ("omi.dmg", dmg_url), (evidence_name, evidence_url)):
+    for name, url in download_targets:
         content = await _read_github(source, "download", url)
         if not isinstance(content, bytes):
             _fail("candidate GitHub asset is unavailable")
@@ -485,16 +528,22 @@ async def build_qualified_beta_manifest(
     if downloaded[evidence_name] != trusted_evidence_bytes:
         _fail("candidate release qualification evidence differs from its trusted run artifact")
     contract_release = _release_for_contract(release, assets)
+    # verify_evidence requires the digest set to equal the evidence's artifact set;
+    # when the beta identity ships, its two assets are in the evidence too.
+    verify_digests = {
+        "Omi.zip": actual_digests["Omi.zip"].removeprefix("sha256:"),
+        "omi.dmg": actual_digests["omi.dmg"].removeprefix("sha256:"),
+    }
+    for beta_name in SANCTIONED_BETA_ASSET_NAMES:
+        if beta_name in beta_assets:
+            verify_digests[beta_name] = actual_digests[beta_name].removeprefix("sha256:")
     try:
         verify_evidence(
             evidence,
             contract_release,
             tag,
             source_sha,
-            {
-                "Omi.zip": actual_digests["Omi.zip"].removeprefix("sha256:"),
-                "omi.dmg": actual_digests["omi.dmg"].removeprefix("sha256:"),
-            },
+            verify_digests,
         )
     except ValueError as exc:
         raise QualifiedBetaAdmissionError("candidate qualification evidence does not bind this release") from exc

@@ -407,14 +407,15 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
 def persist_processing_result_with_lifecycle(
     uid: str,
     conversation_data: dict,
-    *,
-    expected_statuses: set[str],
 ) -> bool:
-    """Persist a processor result only while its lifecycle generation remains current.
+    """Merge a processor result into its conversation.
 
-    A processor works from an in-memory snapshot.  This transaction fences that
-    snapshot against a concurrent discard, delete, or terminal transition before
-    merging generated content back into the conversation document.
+    Only deletion is refused.  Lifecycle state is not: a discard is the system's
+    own verdict that a conversation held nothing, and a status is bookkeeping
+    about which generation ran, and every processor re-derives what it writes
+    from the content in front of it.  Fencing on either stranded conversations a
+    later sync had filled with speech — transcribed, untitled, and invisible to
+    their owner — to prevent races that had never been observed.
     """
     conversation_data.pop('updated_at', None)
     if 'audio_base64_url' in conversation_data:
@@ -432,13 +433,12 @@ def persist_processing_result_with_lifecycle(
         existing_snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(existing_snapshot, 'exists', False):
             # A processor is never an authority to recreate a conversation.
-            # Treat deletion as the same terminal fence as a discard so a
-            # finalizer cannot resurrect it and emit derived side effects.
+            # Deleting one is a decision its owner made, and a merge write to a
+            # missing document would create it, so a late processor could bring
+            # back what they removed and emit derived side effects from it.
             return False
 
         existing = existing_snapshot.to_dict() or {}
-        if existing.get('discarded') or existing.get('status') not in expected_statuses:
-            return False
 
         # Generated processing content never owns user-managed fields.
         for field in ('starred', 'folder_id', 'visibility', 'user_title'):
@@ -710,6 +710,36 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict):
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
     doc_ref.update(prepared_data)
+
+
+def try_claim_conversation_memory_analytics(uid: str, conversation_id: str, firestore_client: Any = None) -> bool:
+    """Atomically claim the one analytics success slot for a conversation.
+
+    The marker lives in Firestore under the authoritative conversation document,
+    rather than in a best-effort cache. ``create`` is atomic: the caller that
+    creates the marker is the only caller allowed to capture the optional
+    analytics event; an existing marker means a retry/re-finalization must not
+    emit again. It deliberately has no TTL, so Redis loss, cache eviction, and
+    arbitrary retry windows cannot re-open the slot.
+
+    Callers must treat storage errors as *not acquired*. This is telemetry-only:
+    failing closed avoids a possible duplicate and must never interrupt the
+    underlying conversation extraction.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    marker_ref = (
+        client.collection('users')
+        .document(uid)
+        .collection(conversations_collection)
+        .document(conversation_id)
+        .collection('analytics_markers')
+        .document('conversation_memories_extracted')
+    )
+    try:
+        marker_ref.create({'created_at': firestore.SERVER_TIMESTAMP})
+        return True
+    except AlreadyExists:
+        return False
 
 
 def create_audio_files_from_chunks(
@@ -1524,6 +1554,21 @@ def store_conversation_photos(
 # ********************************
 
 
+def is_soft_deleted(conversation: Optional[dict]) -> bool:
+    """Whether a conversation is a soft-deleted tombstone.
+
+    A tombstone is invisible to the user, so any content operation that reads it
+    and writes derived state — merging its segments, or reprocessing to
+    regenerate structured data, action items, memories and embeddings —
+    resurrects data the user deleted. Such operations must reject a tombstone.
+
+    Shared predicate behind that contract (sync #10119 via `eligible_merge_target`,
+    merge #10262, reprocess). Deliberately distinct from `discarded`, which stays
+    revivable: the merge and reprocess paths intentionally revive a discarded row.
+    """
+    return bool(conversation) and bool(conversation.get('deleted'))
+
+
 def eligible_merge_target(conversation: Optional[dict]) -> bool:
     """Whether synced audio may merge into this conversation (#10033).
 
@@ -1532,7 +1577,7 @@ def eligible_merge_target(conversation: Optional[dict]) -> bool:
     conversation". Discarded rows stay eligible; the merge path reprocesses
     and revives them.
     """
-    return bool(conversation) and not conversation.get('deleted')
+    return bool(conversation) and not is_soft_deleted(conversation)
 
 
 def select_closest_conversation(conversations, start_timestamp: int, end_timestamp: int) -> Optional[dict]:

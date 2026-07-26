@@ -129,6 +129,7 @@ _SYS_MODULE_NAMES = [
     "langchain_core.runnables",
     "langchain_core.output_parsers",
     "langchain_core.prompts",
+    "langchain_core.messages",
     "models",
     "models.conversation",
     "models.app",
@@ -234,6 +235,8 @@ langchain_output_parsers = _stub_module("langchain_core.output_parsers")
 langchain_output_parsers.PydanticOutputParser = MagicMock()
 langchain_prompts = _stub_module("langchain_core.prompts")
 langchain_prompts.ChatPromptTemplate = MagicMock()
+langchain_messages = _stub_module("langchain_core.messages")
+langchain_messages.SystemMessage = MagicMock()
 
 # Stub pydantic (already installed, just need BaseModel/Field accessible)
 # pydantic is real, no stub needed

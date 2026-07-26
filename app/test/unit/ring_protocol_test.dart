@@ -316,7 +316,7 @@ void main() {
   group('end-to-end: NOTIFY_DATA reassembly + record decode', () {
     test('reconstructs a record split across two NOTIFY_DATA chunks and decodes audio', () {
       // Construct one record: ts=0xDEADBEEF, then two 80B opus-like frames.
-      final ts = 0xDEADBEEF;
+      const ts = 0xDEADBEEF;
       final f1 = List<int>.generate(80, (i) => 0xA0 + (i & 0x0F));
       final f2 = List<int>.generate(80, (i) => 0x50 + (i & 0x0F));
       final audio = <int>[80, ...f1, 80, ...f2];

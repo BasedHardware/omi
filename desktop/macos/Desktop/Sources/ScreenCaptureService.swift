@@ -130,27 +130,20 @@ final class ScreenCaptureService: Sendable {
 
   /// Open System Preferences to Screen Recording settings
   static func openScreenRecordingPreferences() {
-    Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+    guard
+      let url = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+    else { return }
 
-    if let url = URL(
-      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
-    {
-      let opened = NSWorkspace.shared.open(url)
-      if opened {
+    Task { @MainActor in
+      do {
+        let settingsApp = try await NSWorkspace.shared.open(url, configuration: .init())
         log("Opened Screen Recording preferences via URL scheme")
-        // Bring System Settings to front after a brief moment to ensure it's visible
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-          if let settingsApp = NSRunningApplication.runningApplications(
-            withBundleIdentifier: "com.apple.systempreferences"
-          ).first
-            ?? NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Preferences").first
-          {
-            settingsApp.activate()
-          }
-        }
-      } else {
+        settingsApp.activate()
+        await PermissionDragGuidance.presentDragToGrantHelper(
+          settingsPID: settingsApp.processIdentifier)
+      } catch {
         log("Failed to open Screen Recording preferences via URL scheme — trying fallback")
-        // Fallback: open System Settings directly
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:")!)
       }
     }
@@ -249,10 +242,6 @@ final class ScreenCaptureService: Sendable {
       }
     }
 
-    if !CGPreflightScreenCaptureAccess() {
-      Task { await PermissionDragGuidance.presentDragToGrantHelper() }
-    }
-
     // Note: callers are responsible for opening System Settings
     // (removed duplicate open that conflicted with caller's own open call)
   }
@@ -285,6 +274,34 @@ final class ScreenCaptureService: Sendable {
     case .systemSettings:
       requestAllScreenCapturePermissions()
       openScreenRecordingPreferences()
+    }
+  }
+
+  /// Perform one throwaway ScreenCaptureKit *capture* so macOS surfaces the
+  /// "…is requesting to bypass the system private window picker and directly
+  /// access your screen and audio" consent NOW, in-context on the permissions
+  /// step, instead of the first time a real capture runs (e.g. the onboarding
+  /// voice/screen demo, which is where users hit it).
+  ///
+  /// Enumerating shareable content (`SCShareableContent`) does NOT trigger this
+  /// consent — only an actual `SCScreenshotManager.captureImage` with an
+  /// app-built `SCContentFilter` does. So we do a minimal 2×2 display capture.
+  /// Best-effort: requires Screen Recording TCC already granted, and on some
+  /// macOS versions the consent recurs periodically regardless; errors are
+  /// swallowed so this never blocks or disrupts onboarding.
+  @available(macOS 14.0, *)
+  static func primeCaptureConsent() async {
+    do {
+      let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+      guard let display = content.displays.first else { return }
+      let filter = SCContentFilter(display: display, excludingWindows: [])
+      let config = SCStreamConfiguration()
+      config.width = 2
+      config.height = 2
+      _ = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+      log("Primed ScreenCaptureKit capture consent")
+    } catch {
+      log("primeCaptureConsent skipped: \(error.localizedDescription)")
     }
   }
 

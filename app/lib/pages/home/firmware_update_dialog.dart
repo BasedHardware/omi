@@ -105,7 +105,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  FaIcon(FontAwesomeIcons.circleExclamation, color: Color(0xFFFFB800), size: 20),
+                  const FaIcon(FontAwesomeIcons.circleExclamation, color: Color(0xFFFFB800), size: 20),
                   const SizedBox(width: 10),
                   Text(
                     context.l10n.beforeUpdateMakeSure,
@@ -334,7 +334,8 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                           ),
                         ],
                       ),
-                      child: Center(child: FaIcon(FontAwesomeIcons.chevronRight, color: Color(0xFF2A2A2E), size: 18)),
+                      child: const Center(
+                          child: FaIcon(FontAwesomeIcons.chevronRight, color: Color(0xFF2A2A2E), size: 18)),
                     ),
                   ),
                 ),

@@ -24,7 +24,6 @@ import { VoiceIntroStep } from '../components/onboarding/VoiceIntroStep'
 import { AskDemoStep } from '../components/onboarding/AskDemoStep'
 import { DataSourcesStep } from '../components/onboarding/DataSourcesStep'
 import { GoalStep } from '../components/onboarding/GoalStep'
-import { AutoCreatedTasksStep } from '../components/onboarding/AutoCreatedTasksStep'
 import { createGoal } from '../lib/goals'
 // Import BrainGraph DIRECTLY (not via LazyBrainGraph) for onboarding — matches
 // the f42497b version that rendered reliably. The lazy wrapper's Suspense +
@@ -39,7 +38,7 @@ import {
   useOnboardingGraph
 } from '../lib/onboardingGraph'
 
-const TOTAL_STEPS = 15
+const TOTAL_STEPS = 14
 
 export function Onboarding(): React.JSX.Element {
   // Resume where the user left off if they quit mid-onboarding. Clamped in case
@@ -101,22 +100,19 @@ export function Onboarding(): React.JSX.Element {
     next()
   }
 
+  const finishToChat = (): void => {
+    setPendingRoute('/chat')
+    completeOnboarding()
+  }
+
   const handleGoal = (goal: string): void => {
     setPreferences({ goal })
     // Best-effort sync to the Omi goals backend — never block onboarding on the
-    // network. Advance to the final "auto-created tasks" screen.
+    // network or delay the transition into Chat.
     void createGoal(goal).catch(() => {
       toast('Saved locally — goal sync will retry later', { tone: 'warn' })
     })
-    next()
-  }
-
-  // Finish onboarding and land on the Tasks tab. We record the destination
-  // first, then flip the gate flag — the app shell consumes the pending route on
-  // mount (navigating from here directly races the gate's redirect to /home).
-  const finishToTasks = (): void => {
-    setPendingRoute('/tasks')
-    completeOnboarding()
+    finishToChat()
   }
 
   // App names already revealed in the brain map (id prefix `app_`), used to
@@ -255,20 +251,15 @@ export function Onboarding(): React.JSX.Element {
         />
       )
     }
-    if (step === 13) {
-      return (
-        <GoalStep
-          stepIndex={step}
-          totalSteps={TOTAL_STEPS}
-          apps={appNames}
-          onContinue={handleGoal}
-          onSkip={next}
-        />
-      )
-    }
-    // Final screen: a preview of the auto-created tasks feature. Its button both
-    // completes onboarding and routes straight to the Tasks tab.
-    return <AutoCreatedTasksStep onFinish={finishToTasks} />
+    return (
+      <GoalStep
+        stepIndex={step}
+        totalSteps={TOTAL_STEPS}
+        apps={appNames}
+        onContinue={handleGoal}
+        onSkip={finishToChat}
+      />
+    )
   }
 
   // Persistent two-pane shell: omi logo + the swapping step card on the left, the

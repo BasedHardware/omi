@@ -64,7 +64,7 @@ never audio or transcript text.
 
 Scenarios:
 
-1. audio → streaming segment → stale live-session lifecycle → persisted content → completed inline job;
+1. audio → one bounded live-STT accepted attempt → streaming segment → one matching successful terminal (including after teardown replay) → stale live-session lifecycle → persisted content → completed inline job;
 2. completed native UUID reconnect replays the terminal binding without a new job;
 3. a stale empty desktop recording is removed by the next-session lifecycle path and creates no job;
 4. a pusher process loses the first 104 before claim, is restarted, and the
@@ -82,10 +82,26 @@ Scenarios:
    recovery path from #9960 enqueues one opaque Cloud Tasks task, then a real
    worker retry preserves `processing` until it completes the same job;
 8. a worker exhausting its two-attempt test budget atomically dead-letters the
-   job and marks the still-current conversation `failed`/`discarded`, while a
-   later duplicate delivery is fenced;
+   job with `terminal_outcome=failure` and marks the still-current conversation
+   `failed`/`discarded`, while a later duplicate delivery is fenced;
 9. an integration failure after processing retries only durable fanout, never
    re-runs completed conversation processing.
+10. in `RECORDING_SESSION_MODE=enforce`, one operation-scoped `completed`
+    envelope write fails before Firestore, emits no matching client event, and
+    leaves the durable phase/sequence at `processing`/`1`; a fault-free
+    same-controller retry, released only after those assertions, then persists
+    `completed`/`2` and emits exactly one matching sequenced event;
+11. `shadow` and `dual_write` repeat the same selected write failure and prove
+    only their documented unsequenced legacy compatibility event is emitted,
+    while the durable phase/sequence remains `processing`/`1`.
+
+The fault capability exists only in the harness listener entrypoint. Its
+`OMI_STACK_RECORDING_LIFECYCLE_FAULT` value is an exact JSON selector containing
+`uid`, `recording_session_id`, `conversation_id`, and `phase`; the matching
+write is failed once and only once. Production starts `main:app` directly and
+does not import this selector. The Phase 0A offline-sync replay harness does not
+consume this seam; later streaming replay work can opt into the listener
+entrypoint and operation selector.
 
 Inline source-close coverage uses a file-gated local provider leaf only to make
 the post-claim timing deterministic. It retains the real listener, pusher

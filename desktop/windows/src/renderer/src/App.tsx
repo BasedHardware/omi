@@ -69,8 +69,8 @@ function AppShellInner(): React.JSX.Element {
     window.omi?.setTitleBarSurface?.(isHome)
   }, [isHome])
 
-  // Honor a one-shot destination requested by onboarding (e.g. the final
-  // "Take me to my tasks" button). The shell mounts at /home after the
+  // Honor the one-shot destination requested when onboarding completes. The
+  // shell mounts at /home after the
   // onboarding gate redirects; we consume the pending route here and jump to it.
   useEffect(() => {
     const dest = consumePendingRoute()

@@ -65,6 +65,41 @@ def test_openai_usage_distinguishes_cache_hit_miss_and_unobserved_cache() -> Non
     assert no_cache_read is not None and no_cache_read.cache_status == CacheStatus.NO_CACHE_READ_OBSERVED
 
 
+def test_openai_usage_parses_cache_writes_and_prices_luna_write_tokens() -> None:
+    usage = openai_usage_from_response(
+        {
+            'id': 'chatcmpl-write',
+            'usage': {
+                'prompt_tokens': 1_000_000,
+                'completion_tokens': 1_000_000,
+                'prompt_tokens_details': {'cached_tokens': 200_000, 'cache_write_tokens': 400_000},
+            },
+        },
+        cache_requested=True,
+    ).usage
+    assert usage is not None
+    assert usage.cache_write_tokens == 400_000
+    assert usage.cache_write_ttl == '30m'
+    assert usage.uncached_input_tokens == 400_000
+
+    trace = AttemptTrace()
+    attempt = trace.record(
+        provider='openai',
+        configured_model='gpt-5.6-luna',
+        route_artifact_id='route.conv_action_items.model_config.001',
+        fallback_reason=None,
+        retry_ordinal=1,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(usage=usage),
+    )
+    event = build_accounting_event(_context(), attempt)
+
+    assert event.cache_write_tokens == 400_000
+    assert event.estimated_cost_micro_usd == 6_920_000
+    assert event.rate_card_id == 'openai.gpt-5.6-luna.2026-07-17'
+
+
 def test_empty_usage_object_is_unreported_not_a_zero_cost_completion() -> None:
     metadata = openai_usage_from_response({'id': 'chatcmpl-empty', 'model': 'gpt-5.4-nano', 'usage': {}})
     trace = AttemptTrace()
@@ -155,6 +190,14 @@ def test_anthropic_tool_cache_control_marks_an_explicit_cache_attempt() -> None:
     from llm_gateway.gateway.accounting import cache_requested_for_anthropic_request
 
     request = {'tools': [{'name': 'search', 'cache_control': {'type': 'ephemeral', 'ttl': '1h'}}]}
+    assert cache_requested_for_anthropic_request(request)
+    assert cache_write_ttl_for_anthropic_request(request) == '1h'
+
+
+def test_anthropic_automatic_cache_control_is_accounted() -> None:
+    from llm_gateway.gateway.accounting import cache_requested_for_anthropic_request
+
+    request = {'cache_control': {'type': 'ephemeral', 'ttl': '1h'}, 'messages': []}
     assert cache_requested_for_anthropic_request(request)
     assert cache_write_ttl_for_anthropic_request(request) == '1h'
 

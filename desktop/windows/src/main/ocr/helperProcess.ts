@@ -32,11 +32,21 @@ class HelperProcess {
     if (this.child || this.starting || this.unavailable) return
     this.starting = true
     const exe = resolveHelperPath()
-    // windowsHide: the helper is a console-subsystem .NET exe (OutputType=Exe).
-    // Electron main is a GUI process with no console, so without CREATE_NO_WINDOW
-    // the child allocates a NEW visible console — a stray taskbar window. Its
-    // stdio is piped, so hiding the console loses nothing.
-    const child = spawn(exe, [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
+    // The Linux helper is a Node script. Run it with Electron's OWN bundled Node
+    // (ELECTRON_RUN_AS_NODE) rather than relying on the `#!/usr/bin/env node`
+    // shebang finding a system `node` — which a packaged AppImage/deb user may
+    // not have installed. The Windows helper is a native .exe, spawned directly.
+    // windowsHide: the Windows helper is a console-subsystem .NET exe
+    // (OutputType=Exe). Electron main is a GUI process with no console, so without
+    // CREATE_NO_WINDOW the child allocates a NEW visible console — a stray taskbar
+    // window. Its stdio is piped, so hiding the console loses nothing.
+    const child =
+      process.platform === 'linux'
+        ? spawn(process.execPath, [exe], {
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+          })
+        : spawn(exe, [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
     this.child = child
     this.starting = false
 

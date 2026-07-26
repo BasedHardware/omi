@@ -19,7 +19,8 @@ const autoUpdater = vi.hoisted(() => ({
   autoInstallOnAppQuit: false,
   forceDevUpdateConfig: false,
   on: vi.fn(),
-  checkForUpdates: vi.fn().mockResolvedValue({ updateInfo: { version: '9.9.9' } })
+  checkForUpdates: vi.fn().mockResolvedValue({ updateInfo: { version: '9.9.9' } }),
+  quitAndInstall: vi.fn()
 }))
 vi.mock('electron-updater', () => ({ autoUpdater }))
 vi.mock('electron', () => ({
@@ -37,7 +38,7 @@ vi.mock('electron', () => ({
 }))
 vi.mock('./tray', () => ({ setTrayUpdateReady: vi.fn() }))
 
-import { initAutoUpdater } from './updater'
+import { initAutoUpdater, installUpdateNow, getPendingUpdate } from './updater'
 import { setAppSettings } from './appSettings'
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
@@ -72,5 +73,30 @@ describe('updater beta channel wiring', () => {
     expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled()
 
     vi.useRealTimers()
+  })
+})
+
+// #10509: "Restart to update" used to just quit the app and trust
+// autoInstallOnAppQuit, which installs without ever relaunching — and does
+// nothing at all when no update is staged, so users reopened on the old version.
+describe('installUpdateNow', () => {
+  it('does nothing when no update is staged', () => {
+    expect(getPendingUpdate()).toBeNull()
+    expect(installUpdateNow()).toBe(false)
+    expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled()
+  })
+
+  it('installs and relaunches once an update is downloaded', () => {
+    const downloaded = autoUpdater.on.mock.calls.find(
+      (c) => c[0] === 'update-downloaded'
+    )?.[1] as (info: { version: string }) => void
+    expect(downloaded).toBeTypeOf('function')
+    downloaded({ version: '2.0.0' })
+
+    expect(getPendingUpdate()).toEqual({ version: '2.0.0' })
+    expect(installUpdateNow()).toBe(true)
+    // isSilent + isForceRunAfter: install without a wizard, come back up on the
+    // new version instead of leaving the user with a closed app.
+    expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true)
   })
 })

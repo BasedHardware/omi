@@ -9,6 +9,7 @@
 import { app, type BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { setTrayUpdateReady } from './tray'
+import { markQuitting } from './lifecycle'
 import { getAppSettings, onAppSettingsChanged } from './appSettings'
 import { betaOptInToAllowPrerelease, resolveBetaChannelChange } from './updaterChannel'
 import type { UpdateCheckResult } from '../shared/types'
@@ -45,6 +46,23 @@ export async function checkForUpdatesNow(): Promise<UpdateCheckResult> {
     console.warn('[updater] manual check failed (non-fatal):', message)
     return { status: 'error', message }
   }
+}
+
+/**
+ * Install the staged update now (Settings → About "Restart to update"). Plain
+ * app.quit() relies on autoInstallOnAppQuit, which runs the NSIS installer
+ * *without* relaunching — the app just disappears and the user has to reopen it.
+ * quitAndInstall(silent, forceRunAfter) installs and comes back up on the new
+ * version, which is what the button promises.
+ *
+ * Returns false when nothing is actually staged (nothing to install), so the UI
+ * can say so instead of quitting the app for no reason.
+ */
+export function installUpdateNow(): boolean {
+  if (!started || !pendingUpdate) return false
+  markQuitting()
+  autoUpdater.quitAndInstall(true, true)
+  return true
 }
 
 export function initAutoUpdater(getMainWindow: () => BrowserWindow | null): void {

@@ -35,7 +35,29 @@ def test_parakeet_values_own_explicit_stream_capacity_and_allocation(environment
 
     assert env['PARAKEET_STREAM_CAPACITY'] == '25'
     assert env['PARAKEET_STREAM_ALLOCATION_PERCENT'] == '100'
+    assert env['PARAKEET_CUDA_GRAPHS'] == 'false'
     assert int(values['autoscaling']['requestsPerPod']) < int(env['PARAKEET_STREAM_CAPACITY'])
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_parakeet_probes_remove_and_recycle_fatal_gpu_workers(environment):
+    values = _values(environment)
+
+    assert values['readinessProbe'] == {
+        'httpGet': {'path': '/health', 'port': 8080},
+        'failureThreshold': 1,
+        'periodSeconds': 10,
+    }
+    assert values['livenessProbe'] == {
+        'httpGet': {'path': '/health', 'port': 8080},
+        'failureThreshold': 3,
+        'periodSeconds': 10,
+    }
+    assert values['startupProbe'] == {
+        'httpGet': {'path': '/health', 'port': 8080},
+        'failureThreshold': 60,
+        'periodSeconds': 10,
+    }
 
 
 def test_rendered_prod_deployment_contains_stream_admission_settings():
@@ -61,6 +83,12 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
 
     assert 'name: PARAKEET_STREAM_CAPACITY\n              value: "25"' in rendered
     assert 'name: PARAKEET_STREAM_ALLOCATION_PERCENT\n              value: "100"' in rendered
+    deployment = next(document for document in yaml.safe_load_all(rendered) if document.get('kind') == 'Deployment')
+    container = deployment['spec']['template']['spec']['containers'][0]
+    assert container['readinessProbe']['httpGet']['path'] == '/health'
+    assert container['readinessProbe']['failureThreshold'] == 1
+    assert container['livenessProbe']['httpGet']['path'] == '/health'
+    assert container['livenessProbe']['failureThreshold'] == 3
 
 
 def test_parakeet_deploy_workflow_selects_environment_owned_values_file():

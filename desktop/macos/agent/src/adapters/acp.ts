@@ -133,7 +133,8 @@ const RECOVERABLE_AUTH_ERROR_MARKERS = [
  * Restrict wrapped-error matching to known auth markers so unrelated internal
  * errors remain terminal instead of opening a surprise login flow.
  */
-export function isRecoverableAcpAuthError(error: unknown): boolean {
+/** Classifies ACP provider auth failures. Classification-only — never retry OAuth in-band. */
+export function isAcpProviderAuthFailure(error: unknown): boolean {
   if (!(error instanceof AcpError)) return false;
   if (error.code === -32000) return true;
   if (error.code !== -32603) return false;
@@ -149,6 +150,9 @@ export function isRecoverableAcpAuthError(error: unknown): boolean {
   const searchable = `${error.message}\n${data}`.toLowerCase();
   return RECOVERABLE_AUTH_ERROR_MARKERS.some((marker) => searchable.includes(marker));
 }
+
+/** @deprecated Renamed to {@link isAcpProviderAuthFailure}; classify-only, no in-band recovery. */
+export const isRecoverableAcpAuthError = isAcpProviderAuthFailure;
 
 const MAX_RECENT_STDERR_CHARS = 2_000;
 

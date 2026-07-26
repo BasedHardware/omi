@@ -55,7 +55,7 @@ final class EffectiveOwnerDatabaseBoundaryTests: XCTestCase {
     originalAuthOwner = UserDefaults.standard.string(forKey: .authUserId)
     originalOverride = UserDefaults.standard.string(forKey: .automationOwnerOverride)
     originalBackup = UserDefaults.standard.string(forKey: .automationOwnerABackup)
-    await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+    try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
       allowAutomationOverride: true,
       plannedNextOwner: { _, _ in nil }
     ) { defaults in
@@ -71,7 +71,7 @@ final class EffectiveOwnerDatabaseBoundaryTests: XCTestCase {
     let authOwner = originalAuthOwner
     let override = originalOverride
     let backup = originalBackup
-    await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+    try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
       allowAutomationOverride: true,
       plannedNextOwner: { _, _ in
         let normalizedOverride = override?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -161,11 +161,15 @@ final class EffectiveOwnerDatabaseBoundaryTests: XCTestCase {
   }
 
   private func setOwner(_ ownerID: String) async {
-    await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
-      allowAutomationOverride: false,
-      plannedNextOwner: { _, _ in ownerID }
-    ) { defaults in
-      defaults.set(ownerID, forKey: .authUserId)
+    do {
+      try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+        allowAutomationOverride: false,
+        plannedNextOwner: { _, _ in ownerID }
+      ) { defaults in
+        defaults.set(ownerID, forKey: .authUserId)
+      }
+    } catch {
+      XCTFail("owner transition failed: \(error)")
     }
   }
 

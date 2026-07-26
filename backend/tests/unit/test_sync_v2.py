@@ -400,8 +400,8 @@ class TestSyncJobsRedis:
         mock_redis.get.return_value = None
         assert mod.get_sync_job('nonexistent') is None
 
-    def test_get_sync_job_is_pure_for_stale_processing_job(self):
-        """Polling reads cannot publish a terminal state without a run lease."""
+    def test_get_sync_job_self_heals_stale_processing_job(self):
+        """A dead worker's job is finalized to failed on read so the client re-uploads."""
         mod, mock_redis = self._load_sync_jobs_module()
         stale_job = {
             'job_id': 'stale-1',
@@ -413,9 +413,9 @@ class TestSyncJobsRedis:
         mock_redis.get.return_value = json.dumps(stale_job).encode()
 
         result = mod.get_sync_job('stale-1')
-        assert result['status'] == 'processing'
-        assert mod.is_sync_job_stale(result) is True
-        mock_redis.set.assert_not_called()
+        assert result['status'] == 'failed'
+        assert result['error']
+        mock_redis.set.assert_called()
 
     def test_get_sync_job_does_not_mark_fresh_as_stale(self):
         """Processing jobs within threshold should not be marked failed."""
@@ -449,6 +449,28 @@ class TestSyncJobsRedis:
         assert result['status'] == 'queued'
         assert result.get('error') is None
         mock_redis.set.assert_not_called()
+
+    def test_never_dispatched_cloud_tasks_queued_job_goes_stale(self):
+        """#10033: a cloud_tasks job that never left 'queued' lost its task and
+        must become stale-eligible instead of zombieing until JOB_TTL expiry."""
+        mod, mock_redis = self._load_sync_jobs_module()
+        base = {
+            'job_id': 'q-lost',
+            'uid': 'uid',
+            'status': 'queued',
+            'dispatch_mode': 'cloud_tasks',
+            'started_at': None,
+            'created_at': time.time() - mod.QUEUED_DISPATCH_STALE_SECONDS - 100,
+            'updated_at': time.time() - mod.QUEUED_DISPATCH_STALE_SECONDS - 100,
+        }
+        assert mod.is_sync_job_stale(dict(base)) is True
+        # Under the dispatch threshold: not stale yet.
+        assert mod.is_sync_job_stale({**base, 'updated_at': time.time() - 60}) is False
+        # Inline queued jobs keep the #7469 contract at any age.
+        assert mod.is_sync_job_stale({**base, 'dispatch_mode': 'inline'}) is False
+        # A pending Cloud Tasks retry (worker re-queued between attempts) must
+        # never be flipped terminal by a poll, however long its backoff.
+        assert mod.is_sync_job_stale({**base, 'attempt': 2, 'started_at': time.time() - 4000}) is False
 
     def test_finalize_sync_job_sets_status(self):
         """finalize_sync_job must set correct terminal status."""
@@ -807,8 +829,8 @@ class TestSyncJobsRedisBoundary:
         result = mod.get_sync_job('j')
         assert result['status'] == 'processing'
 
-    def test_stale_just_over_threshold_is_reported_without_mutating_read(self):
-        """The owner-safe route finalizer, not the database read, owns failure."""
+    def test_stale_just_over_threshold_self_heals(self):
+        """A job one second past the stale bound is finalized to failed on read."""
         mod, mock_redis = self._load_sync_jobs_module()
         job = {
             'job_id': 'j',
@@ -818,11 +840,10 @@ class TestSyncJobsRedisBoundary:
         }
         mock_redis.get.return_value = json.dumps(job).encode()
         result = mod.get_sync_job('j')
-        assert result['status'] == 'processing'
-        assert mod.is_sync_job_stale(result) is True
+        assert result['status'] == 'failed'
 
-    def test_stale_read_never_persists_to_redis(self):
-        """A stale read alone cannot strand the content claim or telemetry."""
+    def test_stale_read_persists_failure(self):
+        """The self-heal is durable — the failed status is written back, not just returned."""
         mod, mock_redis = self._load_sync_jobs_module()
         job = {
             'job_id': 'j',
@@ -832,8 +853,8 @@ class TestSyncJobsRedisBoundary:
         }
         mock_redis.get.return_value = json.dumps(job).encode()
         result = mod.get_sync_job('j')
-        assert mod.is_sync_job_stale(result) is True
-        mock_redis.set.assert_not_called()
+        assert result['status'] == 'failed'
+        mock_redis.set.assert_called()
 
     def test_completed_job_not_stale_checked(self):
         """Terminal jobs must not be re-evaluated for staleness."""
@@ -2194,8 +2215,11 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_provider_empty_after_vad_releases_content_for_retry(self):
-        """VAD-positive empty STT must fail and leave the content ledger retryable."""
+    async def test_provider_empty_after_vad_completes_as_silence(self):
+        """A provider that returns no words for VAD-admitted audio is reporting
+        silence, not failing. The job completes, the content ledger is marked
+        done rather than left retryable, and no usage is billed — the client
+        stops re-uploading the same noise as a failed recording."""
         module, stubs = self._load_sync_module()
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
@@ -2213,11 +2237,11 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].get_prerecorded_service = MagicMock(return_value=('deepgram', 'multi', 'nova-3'))
             stubs['pipeline'].prerecorded = MagicMock(return_value=([], 'en'))
             terminal_events = []
-            stubs['pipeline'].release_sync_content_claim_after_job_retired.side_effect = (
-                lambda *_args: terminal_events.append('claim_released')
+            stubs['pipeline'].mark_sync_content_completed.side_effect = lambda *_a, **_k: (
+                terminal_events.append('content_completed') or True
             )
             stubs['sync_jobs'].finalize_sync_job.side_effect = lambda *_args: (
-                terminal_events.append('job_finalized') or {'status': 'partial_failure'}
+                terminal_events.append('job_finalized') or {'status': 'completed'}
             )
 
             await module._run_full_pipeline_background_async(
@@ -2231,16 +2255,16 @@ class TestAsyncCoordinatorBehavioral:
             )
 
             result = stubs['sync_jobs'].finalize_sync_job.call_args[0][1]
-            assert result['failed_segments'] == 1
-            assert result['errors'] == ['stt_empty_unexpected']
-            assert result['outcome'] == 'empty_unexpected'
-            stubs['pipeline'].mark_sync_content_completed.assert_not_called()
-            stubs['pipeline'].release_sync_content_claim_after_job_retired.assert_called_once_with(
-                'uid', 'content-empty', 'j-empty'
-            )
+            assert result['failed_segments'] == 0
+            assert result['errors'] == []
+            assert result['outcome'] == 'success'
+            # Marked complete, not released for a retry that would repeat identically.
+            stubs['pipeline'].mark_sync_content_completed.assert_called_once()
+            stubs['pipeline'].release_sync_content_claim_after_job_retired.assert_not_called()
             stubs['pipeline'].release_sync_content_claim.assert_not_called()
-            assert terminal_events[:2] == ['job_finalized', 'claim_released']
-            stubs['sync_jobs'].add_processed_segment.assert_not_called()
+            # No transcript was produced, so nothing is billed.
+            stubs['pipeline'].record_usage.assert_not_called()
+            assert 'content_completed' in terminal_events
         finally:
             self._cleanup(stubs['saved_modules'])
 

@@ -231,12 +231,16 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
     state = {'status': None, 'job_id': None, 'enqueue_attempts': 0, 'wipe_runs': 0}
 
     def persist_intent(_uid):
+        if state['job_id']:
+            return {'wipe_job_id': state['job_id'], 'dispatch_claimed': False}
         state['status'] = 'deleting_auth'
         state['job_id'] = 'job-1'
-        return state['job_id']
+        return {'wipe_job_id': state['job_id'], 'dispatch_claimed': True}
 
-    def mark_started(_uid):
+    def mark_started(_uid, job_id):
+        assert job_id == state['job_id']
         state['status'] = 'pending'
+        return True
 
     def mark_failed(_uid):
         state['status'] = 'failed'
@@ -262,8 +266,7 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
     monkeypatch.setitem(service_globals, 'is_account_deletion_dispatch_enabled', lambda: True)
     monkeypatch.setitem(service_globals, 'enqueue_account_deletion_wipe', enqueue_task)
 
-    with pytest.raises(RuntimeError, match='lost create-task acknowledgement'):
-        users_router.start_account_deletion('uid1')
+    assert users_router.start_account_deletion('uid1')['status'] == 'ok'
 
     assert state == {'status': 'failed', 'job_id': 'job-1', 'enqueue_attempts': 1, 'wipe_runs': 0}
 
@@ -373,3 +376,22 @@ def test_export_all_user_data_keeps_streaming_headers():
         return ''.join(parts)
 
     assert asyncio.run(_consume()) == '{"ok": true}\n'
+
+
+def test_update_person_name_missing_returns_404():
+    # A well-formed PATCH for a nonexistent/stale person id must 404, not 500. update_person now
+    # returns False for a missing person (instead of Firestore .update() raising NotFound).
+    with patch.object(users_router, 'update_person', MagicMock(return_value=False)):
+        with pytest.raises(HTTPException) as exc:
+            users_router.update_person_name(person_id='missing', value='Alice', uid='uid1')
+
+    assert exc.value.status_code == 404
+
+
+def test_update_person_name_existing_returns_ok():
+    update_person = MagicMock(return_value=True)
+    with patch.object(users_router, 'update_person', update_person):
+        result = users_router.update_person_name(person_id='p1', value='Alice', uid='uid1')
+
+    assert result == {'status': 'ok'}
+    update_person.assert_called_once_with('uid1', 'p1', 'Alice')

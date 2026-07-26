@@ -63,6 +63,34 @@ final class DesktopStorageIdentityTests: XCTestCase {
     XCTAssertTrue(RewindDatabase.shouldMigrateLegacyStorage(isolatedStorage: false))
   }
 
+  func testBetaProductionIdentityOwnsAnIsolatedRoot() {
+    let beta = DesktopStorageIdentity(
+      bundleIdentifier: DesktopStorageIdentity.betaProductionBundleIdentifier,
+      localProfileEnabled: false,
+      localProfileStorageName: nil)
+
+    XCTAssertTrue(beta.isBetaProductionBundle)
+    XCTAssertTrue(beta.usesIsolatedStorage)
+    XCTAssertEqual(beta.applicationSupportPathComponents, ["Omi Beta"])
+  }
+
+  func testBetaProductionIdentityIgnoresHarnessLocalProfile() {
+    // A shipped Omi Beta must never follow harness environment overrides into
+    // another storage root.
+    let beta = DesktopStorageIdentity(
+      bundleIdentifier: DesktopStorageIdentity.betaProductionBundleIdentifier,
+      localProfileEnabled: true,
+      localProfileStorageName: "Omi Harness")
+
+    XCTAssertEqual(beta.applicationSupportPathComponents, ["Omi Beta"])
+  }
+
+  func testBetaBundleIdentifierStaysInSyncWithAppBuild() {
+    XCTAssertEqual(
+      DesktopStorageIdentity.betaProductionBundleIdentifier,
+      AppBuild.betaProductionBundleIdentifier)
+  }
+
   func testRuntimeManifestIsOwnerOnlyAndContainsNoCredentials() throws {
     let root = FileManager.default.temporaryDirectory
       .appendingPathComponent("omi-runtime-manifest-\(UUID().uuidString)", isDirectory: true)

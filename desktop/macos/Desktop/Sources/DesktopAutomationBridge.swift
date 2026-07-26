@@ -617,6 +617,16 @@ private func ensureConversationsTabVisibleForAutomation() async throws {
   try await Task.sleep(nanoseconds: 150_000_000)
 }
 
+private func requestAutomationConversationOpen(conversationId: String, showTranscript: Bool) async {
+  await MainActor.run {
+    ConversationDetailAutomationState.shared.requestOpen(
+      conversationId: conversationId,
+      showTranscript: showTranscript
+    )
+    NotificationCenter.default.post(name: .desktopAutomationOpenConversationRequested, object: nil)
+  }
+}
+
 @MainActor
 final class DesktopAutomationActionRegistry {
   static let shared = DesktopAutomationActionRegistry()
@@ -1238,11 +1248,7 @@ final class DesktopAutomationActionRegistry {
       }
       let persisted = try? await TranscriptionStorage.shared.getCachedConversation(id: detail.id)
 
-      NotificationCenter.default.post(
-        name: .desktopAutomationOpenConversationRequested,
-        object: nil,
-        userInfo: ["conversationId": detail.id, "showTranscript": true]
-      )
+      await requestAutomationConversationOpen(conversationId: detail.id, showTranscript: true)
 
       return [
         "list_loaded": appState.conversations.isEmpty ? "false" : "true",
@@ -1539,7 +1545,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "home_close_panel",
-      summary: "Collapse Home back to the hub (same as Esc / the close buttons)"
+      summary: "Collapse Home back to its resting surface (same as Esc / the close buttons)"
     ) { _ in
       NotificationCenter.default.post(name: .homeStageClose, object: nil)
       return nil
@@ -1645,6 +1651,24 @@ final class DesktopAutomationActionRegistry {
         return ["error": error]
       }
       return ["reset": "true"]
+    }
+
+    register(
+      name: "present_onboarding_opener",
+      summary: "Compose and show the post-onboarding opener in the empty-chat slot (QA rendering seam)",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "present_onboarding_opener is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      provider.presentOnboardingOpener()
+      return [
+        "presented": "true",
+        "starter_count": "\(provider.onboardingOpener?.starters.count ?? 0)",
+      ]
     }
 
     // Send a message through the real main-window chat pipeline (ChatPage),
@@ -2547,11 +2571,7 @@ final class DesktopAutomationActionRegistry {
       }
       let showTranscript = boolParam(params["showTranscript"], default: false)
       try await ensureConversationsTabVisibleForAutomation()
-      NotificationCenter.default.post(
-        name: .desktopAutomationOpenConversationRequested,
-        object: nil,
-        userInfo: ["conversationId": conversationId, "showTranscript": showTranscript]
-      )
+      await requestAutomationConversationOpen(conversationId: conversationId, showTranscript: showTranscript)
       let timeoutMs = max(500, intParam(params["timeoutMs"], default: 5_000))
       let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000)
       while ConversationDetailAutomationState.shared.openConversationId != conversationId,
@@ -2596,11 +2616,7 @@ final class DesktopAutomationActionRegistry {
       }
       let showTranscript = boolParam(params["showTranscript"], default: false)
       try await ensureConversationsTabVisibleForAutomation()
-      NotificationCenter.default.post(
-        name: .desktopAutomationOpenConversationRequested,
-        object: nil,
-        userInfo: ["conversationId": conversationId, "showTranscript": showTranscript]
-      )
+      await requestAutomationConversationOpen(conversationId: conversationId, showTranscript: showTranscript)
       let timeoutMs = max(500, intParam(params["timeoutMs"], default: 5_000))
       let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000)
       while ConversationDetailAutomationState.shared.openConversationId != conversationId,
@@ -3991,16 +4007,10 @@ final class DesktopAutomationBridge: @unchecked Sendable {
   private func dispatchOpenConversation(_ payload: DesktopAutomationOpenConversationRequest) async throws {
     await activateMainWindowIfNeeded(payload.activateApp ?? true)
     try await ensureConversationsTabVisibleForAutomation()
-    await MainActor.run {
-      NotificationCenter.default.post(
-        name: .desktopAutomationOpenConversationRequested,
-        object: nil,
-        userInfo: [
-          "conversationId": payload.conversationId,
-          "showTranscript": payload.showTranscript ?? false,
-        ]
-      )
-    }
+    await requestAutomationConversationOpen(
+      conversationId: payload.conversationId,
+      showTranscript: payload.showTranscript ?? false
+    )
   }
 
   private func activateMainWindowIfNeeded(_ activateApp: Bool) async {
