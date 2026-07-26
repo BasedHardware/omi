@@ -90,13 +90,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Timer? _discoveryTimer;
   final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
+  final DeviceService _deviceService;
 
   void Function(BtDevice device)? onDeviceConnected;
   void Function(BtDevice device, int fileCount, int totalBytes)? onOfflineDataDetected;
 
-  DeviceProvider({BleDiagnosticsLoader? bleDiagnosticsLoader})
-      : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics {
-    ServiceManager.instance().device.subscribe(this, this);
+  DeviceProvider({
+    BleDiagnosticsLoader? bleDiagnosticsLoader,
+    DeviceService? deviceService,
+  })  : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
+        _deviceService = deviceService ?? ServiceManager.instance().device {
+    _deviceService.subscribe(this, this);
     BleBridge.instance.pairingLostCallback = _showPairingLostDialog;
   }
 
@@ -216,10 +220,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       }
     }
     notifyListeners();
-  }
-
-  Future _bleDisconnectDevice(BtDevice btDevice) async {
-    await ServiceManager.instance().device.disconnectDevice();
   }
 
   Future<int> _retrieveBatteryLevel(String deviceId) async {
@@ -473,7 +473,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _discoveryTimer?.cancel();
     _disconnectDebouncer.cancel();
     _connectDebouncer.cancel();
-    ServiceManager.instance().device.unsubscribe(this);
+    _deviceService.unsubscribe(this);
     super.dispose();
   }
 
@@ -992,12 +992,36 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   @override
   void onStatusChanged(DeviceServiceStatus status) {}
 
-  prepareDFU() {
+  Future<void> prepareDFU() async {
     if (!FirmwareUpdateBuildPolicy.current.allowsOmiFirmwareUpdate || connectedDevice == null) {
       return;
     }
+    final deviceId = connectedDevice!.id;
     setFirmwareUpdateInProgress(true);
-    _bleDisconnectDevice(connectedDevice!);
+    try {
+      await _deviceService.suspendConnectionForDfu(deviceId);
+    } catch (error, stackTrace) {
+      // Suspend is transactional. If disconnect succeeded but releasing the
+      // retired transport failed, DeviceService retains the exact-device lease
+      // so this rollback can restore normal ownership before surfacing the
+      // original suspend error.
+      try {
+        await _deviceService.resumeConnectionAfterDfu();
+      } catch (rollbackError) {
+        Logger.debug('Failed to roll back device connection after DFU suspend error: $rollbackError');
+      } finally {
+        resetFirmwareUpdateState();
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
+  Future<void> resumeConnectionAfterDFU() async {
+    try {
+      await _deviceService.resumeConnectionAfterDfu();
+    } finally {
+      resetFirmwareUpdateState();
+    }
   }
 
   // Reset firmware update state when update completes or fails

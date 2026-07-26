@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -1790,7 +1791,7 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
 
   @override
   void dispose() {
-    killMcuUpdateManager();
+    unawaited(finishDfuSession());
     super.dispose();
   }
 

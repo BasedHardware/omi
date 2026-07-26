@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -79,12 +81,11 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
 
   @override
   void dispose() {
-    killMcuUpdateManager();
+    unawaited(finishDfuSession());
     final provider = _deviceProvider;
     if (provider != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         provider.setOnFirmwareUpdatePage(false);
-        provider.resetFirmwareUpdateState();
       });
     }
     super.dispose();

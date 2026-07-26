@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,6 +8,8 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
@@ -351,6 +355,316 @@ void main() {
       expect(flag2, true, reason: 'Exactly 20% should not reset flag (needs > 20)');
     });
   });
+
+  group('DFU connection ownership', () {
+    const noRetryPolicy = DfuReconnectRetryPolicy(retryDelays: []);
+    late _DfuTestDeviceService deviceService;
+    late DeviceProvider provider;
+
+    setUp(() {
+      deviceService = _DfuTestDeviceService(retryPolicy: noRetryPolicy);
+      provider = DeviceProvider(deviceService: deviceService)
+        ..connectedDevice = BtDevice(name: 'Omi', id: 'device-123', type: DeviceType.omi, rssi: -40);
+    });
+
+    tearDown(() {
+      provider.dispose();
+    });
+
+    test('awaits one disconnect then force-reconnects the captured device exactly once', () async {
+      final disconnectGate = Completer<void>();
+      final reconnectGate = Completer<void>();
+      deviceService
+        ..disconnectGate = disconnectGate
+        ..reconnectGate = reconnectGate;
+
+      var prepareCompleted = false;
+      final firstPrepare = provider.prepareDFU().then((_) => prepareCompleted = true);
+      final duplicatePrepare = provider.prepareDFU();
+      await pumpEventQueue();
+
+      expect(deviceService.events, ['disconnect']);
+      expect(prepareCompleted, isFalse);
+      expect(provider.isFirmwareUpdateInProgress, isTrue);
+
+      disconnectGate.complete();
+      await Future.wait([firstPrepare, duplicatePrepare]);
+
+      final firstResume = provider.resumeConnectionAfterDFU();
+      final duplicateResume = provider.resumeConnectionAfterDFU();
+      await pumpEventQueue();
+
+      expect(deviceService.events, ['disconnect', 'release transport', 'reconnect:device-123:true']);
+      expect(provider.isFirmwareUpdateInProgress, isTrue);
+
+      reconnectGate.complete();
+      await Future.wait([firstResume, duplicateResume]);
+      expect(provider.isFirmwareUpdateInProgress, isFalse);
+
+      await provider.resumeConnectionAfterDFU();
+      expect(deviceService.events, ['disconnect', 'release transport', 'reconnect:device-123:true']);
+    });
+
+    test('a failed disconnect rolls the exact owner back and permits a later DFU', () async {
+      deviceService.disconnectError = StateError('disconnect failed');
+
+      await expectLater(provider.prepareDFU(), throwsStateError);
+      expect(provider.isFirmwareUpdateInProgress, isFalse);
+      expect(deviceService.events, ['disconnect', 'reconnect:device-123:true']);
+
+      deviceService.disconnectError = null;
+      await provider.prepareDFU();
+      await provider.resumeConnectionAfterDFU();
+
+      expect(deviceService.events, [
+        'disconnect',
+        'reconnect:device-123:true',
+        'disconnect',
+        'release transport',
+        'reconnect:device-123:true',
+      ]);
+      expect(provider.isFirmwareUpdateInProgress, isFalse);
+    });
+
+    test('a failed exact-device reconnect retains its lease for a later retry', () async {
+      deviceService.reconnectError = StateError('reconnect failed');
+      await provider.prepareDFU();
+
+      await expectLater(provider.resumeConnectionAfterDFU(), throwsStateError);
+      expect(provider.isFirmwareUpdateInProgress, isFalse);
+
+      deviceService.reconnectError = null;
+      await provider.resumeConnectionAfterDFU();
+      expect(deviceService.events, [
+        'disconnect',
+        'release transport',
+        'reconnect:device-123:true',
+        'reconnect:device-123:true',
+      ]);
+    });
+
+    test('production reclaim retries a transient null result and then releases the exact-device lease', () async {
+      final delays = <Duration>[];
+      provider.dispose();
+      deviceService = _DfuTestDeviceService(
+        retryPolicy: const DfuReconnectRetryPolicy(retryDelays: [Duration(milliseconds: 500)]),
+        reconnectDelay: (delay) async => delays.add(delay),
+      )..nullReconnectsRemaining = 1;
+      provider = DeviceProvider(deviceService: deviceService)
+        ..connectedDevice = BtDevice(name: 'Omi', id: 'device-retry', type: DeviceType.omi, rssi: -40);
+
+      await provider.prepareDFU();
+      await provider.resumeConnectionAfterDFU();
+      await provider.resumeConnectionAfterDFU();
+
+      expect(deviceService.events, [
+        'disconnect',
+        'release transport',
+        'reconnect:device-retry:true',
+        'reconnect:device-retry:true',
+      ]);
+      expect(delays, [const Duration(milliseconds: 500)]);
+      expect(provider.isFirmwareUpdateInProgress, isFalse);
+    });
+
+    test('duplicate resume callers share one bounded fail-then-success retry loop', () async {
+      final retryGate = Completer<void>();
+      provider.dispose();
+      deviceService = _DfuTestDeviceService(
+        retryPolicy: const DfuReconnectRetryPolicy(retryDelays: [Duration(milliseconds: 500)]),
+        reconnectDelay: (_) => retryGate.future,
+      )..nullReconnectsRemaining = 1;
+      provider = DeviceProvider(deviceService: deviceService)
+        ..connectedDevice = BtDevice(name: 'Omi', id: 'device-duplicate', type: DeviceType.omi, rssi: -40);
+
+      await provider.prepareDFU();
+      final terminalCallback = provider.resumeConnectionAfterDFU();
+      final pageDisposal = provider.resumeConnectionAfterDFU();
+      await pumpEventQueue();
+
+      expect(
+        deviceService.events.where((event) => event.startsWith('reconnect:')),
+        hasLength(1),
+      );
+
+      retryGate.complete();
+      await Future.wait([terminalCallback, pageDisposal]);
+
+      expect(
+        deviceService.events.where((event) => event.startsWith('reconnect:')),
+        hasLength(2),
+      );
+      await provider.resumeConnectionAfterDFU();
+      expect(
+        deviceService.events.where((event) => event.startsWith('reconnect:')),
+        hasLength(2),
+      );
+    });
+
+    test('exhausted bounded reclaim reports failure and retains the lease for a later explicit retry', () async {
+      final delays = <Duration>[];
+      provider.dispose();
+      deviceService = _DfuTestDeviceService(
+        retryPolicy: const DfuReconnectRetryPolicy(
+          retryDelays: [Duration(milliseconds: 500), Duration(milliseconds: 1500)],
+        ),
+        reconnectDelay: (delay) async => delays.add(delay),
+      )..nullReconnectsRemaining = 3;
+      provider = DeviceProvider(deviceService: deviceService)
+        ..connectedDevice = BtDevice(name: 'Omi', id: 'device-exhausted', type: DeviceType.omi, rssi: -40);
+
+      await provider.prepareDFU();
+      await expectLater(
+        provider.resumeConnectionAfterDFU(),
+        throwsA(isA<DeviceConnectionException>()),
+      );
+
+      expect(
+        deviceService.events.where((event) => event.startsWith('reconnect:')),
+        hasLength(3),
+      );
+      expect(
+        delays,
+        [
+          const Duration(milliseconds: 500),
+          const Duration(milliseconds: 1500),
+        ],
+      );
+      expect(provider.isFirmwareUpdateInProgress, isFalse);
+
+      await provider.resumeConnectionAfterDFU();
+      expect(
+        deviceService.events.where((event) => event.startsWith('reconnect:')),
+        hasLength(4),
+      );
+    });
+
+    test('post-disconnect release failure rolls back once and rethrows the original error to duplicate callers',
+        () async {
+      final releaseGate = Completer<void>();
+      final releaseError = StateError('transport release failed');
+      deviceService
+        ..releaseGate = releaseGate
+        ..releaseError = releaseError;
+
+      final firstPrepare = provider.prepareDFU();
+      final duplicatePrepare = provider.prepareDFU();
+      final firstExpectation = expectLater(firstPrepare, throwsA(same(releaseError)));
+      final duplicateExpectation = expectLater(duplicatePrepare, throwsA(same(releaseError)));
+      await pumpEventQueue();
+
+      expect(deviceService.events, ['disconnect', 'release transport']);
+      expect(provider.isFirmwareUpdateInProgress, isTrue);
+
+      releaseGate.complete();
+      await Future.wait([firstExpectation, duplicateExpectation]);
+
+      expect(deviceService.events, ['disconnect', 'release transport', 'reconnect:device-123:true']);
+      expect(provider.isFirmwareUpdateInProgress, isFalse);
+    });
+
+    test('rollback failure never replaces the original post-disconnect release error', () async {
+      final releaseError = StateError('transport release failed');
+      deviceService
+        ..releaseError = releaseError
+        ..reconnectError = StateError('rollback reconnect failed');
+
+      await expectLater(provider.prepareDFU(), throwsA(same(releaseError)));
+
+      expect(deviceService.events, ['disconnect', 'release transport', 'reconnect:device-123:true']);
+      expect(provider.isFirmwareUpdateInProgress, isFalse);
+    });
+
+    test('a null force-reconnect result is a failure and remains retryable', () async {
+      final nullReconnectService = _NullReconnectDeviceService();
+      final nullReconnectProvider = DeviceProvider(deviceService: nullReconnectService)
+        ..connectedDevice = BtDevice(name: 'Omi', id: 'device-null', type: DeviceType.omi, rssi: -40);
+      addTearDown(nullReconnectProvider.dispose);
+
+      await nullReconnectProvider.prepareDFU();
+
+      await expectLater(
+        nullReconnectProvider.resumeConnectionAfterDFU(),
+        throwsA(isA<DeviceConnectionException>()),
+      );
+      await expectLater(
+        nullReconnectProvider.resumeConnectionAfterDFU(),
+        throwsA(isA<DeviceConnectionException>()),
+      );
+
+      expect(nullReconnectService.reconnectAttempts, 2);
+      expect(nullReconnectProvider.isFirmwareUpdateInProgress, isFalse);
+    });
+  });
+}
+
+class _DfuTestDeviceService extends DeviceService {
+  _DfuTestDeviceService({
+    required DfuReconnectRetryPolicy retryPolicy,
+    DfuReconnectDelay? reconnectDelay,
+  }) : super(
+          dfuReconnectRetryPolicy: retryPolicy,
+          dfuReconnectDelay: reconnectDelay,
+        );
+
+  final List<String> events = [];
+  Completer<void>? disconnectGate;
+  Completer<void>? releaseGate;
+  Completer<void>? reconnectGate;
+  Object? disconnectError;
+  Object? releaseError;
+  Object? reconnectError;
+  int nullReconnectsRemaining = 0;
+
+  @override
+  Future<void> disconnectDevice() async {
+    events.add('disconnect');
+    final error = disconnectError;
+    if (error != null) throw error;
+    await disconnectGate?.future;
+  }
+
+  @override
+  Future<void> releaseSuspendedConnectionTransportForDfu(DeviceConnection? connection) async {
+    events.add('release transport');
+    await releaseGate?.future;
+    final error = releaseError;
+    if (error != null) throw error;
+  }
+
+  @override
+  Future<bool> reconnectSuspendedDeviceForDfu(String deviceId) async {
+    events.add('reconnect:$deviceId:true');
+    final error = reconnectError;
+    if (error != null) throw error;
+    await reconnectGate?.future;
+    if (nullReconnectsRemaining > 0) {
+      nullReconnectsRemaining--;
+      return false;
+    }
+    return true;
+  }
+}
+
+class _NullReconnectDeviceService extends DeviceService {
+  _NullReconnectDeviceService()
+      : super(
+          dfuReconnectRetryPolicy: const DfuReconnectRetryPolicy(retryDelays: []),
+        );
+
+  int reconnectAttempts = 0;
+
+  @override
+  Future<void> disconnectDevice() async {}
+
+  @override
+  Future<void> releaseSuspendedConnectionTransportForDfu(DeviceConnection? connection) async {}
+
+  @override
+  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
+    reconnectAttempts++;
+    return null;
+  }
 }
 
 class _TestAnalyticsAdapter implements AnalyticsAdapter {

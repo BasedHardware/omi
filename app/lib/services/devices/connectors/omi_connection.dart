@@ -12,8 +12,58 @@ import 'package:omi/services/devices/ble_packet_continuity.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
+import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/logger.dart';
+
+/// Serializes setup work associated with reconnect generations.
+///
+/// Duplicate delivery of one generation shares the same future. A newer
+/// generation waits behind an older in-flight action, so an older clock write
+/// can never complete after the newer generation's write and rewind the device
+/// timestamp.
+class _ReadyGenerationActionRunner {
+  int _lastScheduledGeneration = 0;
+  int _lastCompletedGeneration = 0;
+  Future<void> _tail = Future<void>.value();
+  final Map<int, Future<void>> _inFlight = {};
+
+  Future<void> run(int generation, Future<void> Function() action) {
+    if (generation <= _lastCompletedGeneration) return Future<void>.value();
+
+    final existing = _inFlight[generation];
+    if (existing != null) return existing;
+
+    if (generation < _lastScheduledGeneration) {
+      return Future<void>.value();
+    }
+    _lastScheduledGeneration = generation;
+
+    final completer = Completer<void>();
+    _inFlight[generation] = completer.future;
+    final predecessor = _tail;
+    final execution = () async {
+      try {
+        await predecessor;
+      } catch (_) {
+        // A failed generation must not prevent a later reconnect from syncing.
+      }
+      await action();
+    }();
+
+    _tail = execution.catchError((_) {});
+    execution
+        .then(
+      (_) => completer.complete(),
+      onError: (Object error, StackTrace stackTrace) => completer.completeError(error, stackTrace),
+    )
+        .whenComplete(() {
+      _lastCompletedGeneration = max(_lastCompletedGeneration, generation);
+      _inFlight.remove(generation);
+    });
+    return completer.future;
+  }
+}
 
 class OmiDeviceConnection extends DeviceConnection {
   static const String settingsServiceUuid = '19b10010-e8f2-537e-4f6c-d104768a1214';
@@ -23,20 +73,46 @@ class OmiDeviceConnection extends DeviceConnection {
   static const String featuresServiceUuid = '19b10020-e8f2-537e-4f6c-d104768a1214';
   static const String featuresCharacteristicUuid = '19b10021-e8f2-537e-4f6c-d104768a1214';
 
-  OmiDeviceConnection(super.device, super.transport);
+  final DateTime Function() _now;
+  final _ReadyGenerationActionRunner _readyGenerationRunner = _ReadyGenerationActionRunner();
+  StreamSubscription<int>? _readyGenerationSubscription;
+  int _fallbackReadyGeneration = 0;
+
+  OmiDeviceConnection(super.device, super.transport, {DateTime Function()? now}) : _now = now ?? DateTime.now {
+    final readySource = transport is DeviceReadyGenerationSource ? transport as DeviceReadyGenerationSource : null;
+    if (readySource != null) {
+      _readyGenerationSubscription = readySource.readyGenerationStream.listen((generation) {
+        unawaited(_syncTimeForReadyGeneration(generation));
+      });
+    }
+  }
 
   get deviceId => device.id;
 
   @override
   Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
+    final readySource = transport is DeviceReadyGenerationSource ? transport as DeviceReadyGenerationSource : null;
+    final generation = readySource?.readyGeneration ?? ++_fallbackReadyGeneration;
+    await _syncTimeForReadyGeneration(generation);
+  }
 
-    await performSyncTime();
+  Future<void> _syncTimeForReadyGeneration(int generation) {
+    return _readyGenerationRunner.run(generation, () async {
+      await performSyncTime();
+    });
+  }
+
+  @override
+  Future<void> disconnect() async {
+    await _readyGenerationSubscription?.cancel();
+    _readyGenerationSubscription = null;
+    await super.disconnect();
   }
 
   Future<bool> performSyncTime() async {
     try {
-      final epochSeconds = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+      final epochSeconds = _now().toUtc().millisecondsSinceEpoch ~/ 1000;
       final byteData = ByteData(4)..setUint32(0, epochSeconds, Endian.little);
 
       await transport.writeCharacteristic(

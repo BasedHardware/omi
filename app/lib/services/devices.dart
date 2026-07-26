@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -10,6 +11,7 @@ import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/services/devices/discovery/device_discoverer.dart';
 import 'package:omi/services/devices/discovery/native_bluetooth_discoverer.dart';
 import 'package:omi/services/devices/errors.dart';
+import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/mutex.dart';
@@ -17,6 +19,26 @@ import 'package:omi/utils/mutex.dart';
 enum DeviceServiceStatus { init, ready, scanning, stop }
 
 enum DeviceConnectionState { connected, connecting, disconnected }
+
+typedef DfuReconnectDelay = Future<void> Function(Duration delay);
+
+/// Bounded retry policy for reclaiming normal BLE ownership after DFU.
+class DfuReconnectRetryPolicy {
+  const DfuReconnectRetryPolicy({required this.retryDelays});
+
+  /// Delay after each failed attempt. The number of attempts is one greater
+  /// than this list's length.
+  final List<Duration> retryDelays;
+
+  int get maxAttempts => retryDelays.length + 1;
+
+  static const production = DfuReconnectRetryPolicy(
+    retryDelays: [
+      Duration(milliseconds: 500),
+      Duration(milliseconds: 1500),
+    ],
+  );
+}
 
 /// Feature flags for Omi device capabilities
 /// Must match the firmware definitions in features.h
@@ -42,8 +64,16 @@ abstract class IDeviceServiceSubsciption {
 }
 
 class DeviceService {
+  DeviceService({
+    DfuReconnectRetryPolicy dfuReconnectRetryPolicy = DfuReconnectRetryPolicy.production,
+    DfuReconnectDelay? dfuReconnectDelay,
+  })  : _dfuReconnectRetryPolicy = dfuReconnectRetryPolicy,
+        _dfuReconnectDelay = dfuReconnectDelay ?? Future<void>.delayed;
+
   DeviceServiceStatus _status = DeviceServiceStatus.init;
   List<BtDevice> _devices = [];
+  final DfuReconnectRetryPolicy _dfuReconnectRetryPolicy;
+  final DfuReconnectDelay _dfuReconnectDelay;
 
   final List<DeviceDiscoverer> _discoverers = [
     NativeBluetoothDiscoverer(),
@@ -54,6 +84,9 @@ class DeviceService {
   final Map<Object, IDeviceServiceSubsciption> _subscriptions = {};
 
   DeviceConnection? _connection;
+  String? _dfuSuspendedDeviceId;
+  Future<void>? _dfuSuspendFuture;
+  Future<void>? _dfuResumeFuture;
   List<BtDevice> get devices => _devices;
 
   DeviceServiceStatus get status => _status;
@@ -272,6 +305,120 @@ class DeviceService {
       await _connection?.disconnect();
       _connection = null;
     }
+  }
+
+  /// Temporarily relinquishes normal BLE ownership so a DFU plugin can use the
+  /// peripheral. Repeated prepares for the same device share the in-flight
+  /// disconnect; a different device cannot replace the captured owner.
+  Future<void> suspendConnectionForDfu(String deviceId) {
+    if (_dfuSuspendedDeviceId != null) {
+      if (_dfuSuspendedDeviceId != deviceId) {
+        throw StateError('A different device is already suspended for DFU');
+      }
+      return _dfuSuspendFuture ?? Future<void>.value();
+    }
+
+    _dfuSuspendedDeviceId = deviceId;
+    final suspendFuture = _suspendConnectionForDfu();
+    _dfuSuspendFuture = suspendFuture;
+    return suspendFuture;
+  }
+
+  Future<void> _suspendConnectionForDfu() async {
+    final suspendedConnection = _connection;
+    try {
+      await disconnectDevice();
+      // disconnectDevice clears the service's reference but intentionally keeps
+      // transports alive for ordinary native reconnect. DFU is different: its
+      // plugin becomes the sole owner, so unregister the retired Dart bridge
+      // before a fresh exact-device connection is created on resume.
+      await releaseSuspendedConnectionTransportForDfu(suspendedConnection);
+    } finally {
+      _dfuSuspendFuture = null;
+    }
+  }
+
+  /// Seams the post-disconnect transport release so suspend rollback can be
+  /// exercised without a live BLE stack.
+  @protected
+  Future<void> releaseSuspendedConnectionTransportForDfu(DeviceConnection? connection) async {
+    if (connection == null) return;
+    await releaseTransportForExclusiveOperation(connection.transport);
+  }
+
+  /// Reclaims normal BLE ownership for the exact device captured at suspend.
+  ///
+  /// Success, failure, plugin double callbacks, and page disposal all share one
+  /// bounded retry loop.
+  Future<void> resumeConnectionAfterDfu() {
+    final inFlight = _dfuResumeFuture;
+    if (inFlight != null) return inFlight;
+
+    final deviceId = _dfuSuspendedDeviceId;
+    if (deviceId == null) return Future<void>.value();
+
+    final resumeFuture = _resumeConnectionAfterDfu(deviceId);
+    _dfuResumeFuture = resumeFuture;
+    return resumeFuture;
+  }
+
+  Future<void> _resumeConnectionAfterDfu(String deviceId) async {
+    var resumed = false;
+    Object? lastError;
+    StackTrace? lastStackTrace;
+    try {
+      final suspendFuture = _dfuSuspendFuture;
+      if (suspendFuture != null) {
+        await suspendFuture;
+      }
+      if (_dfuSuspendedDeviceId != deviceId) return;
+
+      for (var attempt = 1; attempt <= _dfuReconnectRetryPolicy.maxAttempts; attempt++) {
+        try {
+          resumed = await reconnectSuspendedDeviceForDfu(deviceId);
+          if (resumed) break;
+          lastError = DeviceConnectionException(
+            'Failed to reclaim the DFU-suspended device $deviceId '
+            '(attempt $attempt/${_dfuReconnectRetryPolicy.maxAttempts})',
+          );
+          lastStackTrace = StackTrace.current;
+        } catch (error, stackTrace) {
+          lastError = error;
+          lastStackTrace = stackTrace;
+        }
+
+        if (attempt < _dfuReconnectRetryPolicy.maxAttempts) {
+          Logger.warning(
+            'DeviceService: DFU reclaim attempt $attempt/'
+            '${_dfuReconnectRetryPolicy.maxAttempts} failed for $deviceId; retrying',
+          );
+          await _dfuReconnectDelay(_dfuReconnectRetryPolicy.retryDelays[attempt - 1]);
+        }
+      }
+
+      if (!resumed) {
+        Logger.error(
+          'DeviceService: exhausted ${_dfuReconnectRetryPolicy.maxAttempts} '
+          'DFU reclaim attempts for $deviceId; retaining the exact-device lease',
+        );
+        Error.throwWithStackTrace(
+          lastError ?? DeviceConnectionException('Failed to reclaim the DFU-suspended device $deviceId'),
+          lastStackTrace ?? StackTrace.current,
+        );
+      }
+    } finally {
+      // Successful reclaim releases the lease. Exhaustion deliberately retains
+      // it so a later explicit retry can only target the same pendant.
+      if (resumed && _dfuSuspendedDeviceId == deviceId) {
+        _dfuSuspendedDeviceId = null;
+      }
+      _dfuResumeFuture = null;
+    }
+  }
+
+  @protected
+  Future<bool> reconnectSuspendedDeviceForDfu(String deviceId) async {
+    return await ensureConnection(deviceId, force: true) != null;
   }
 
   Future<void> forgetDevice(String deviceId) async {

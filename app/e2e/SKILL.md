@@ -42,6 +42,8 @@ agent-flutter snapshot -i --json    # see what's on screen
 ### Setup (iOS physical device)
 
 Full iOS physical-device playbook (setup, driving, verification, troubleshooting): [`IOS_DEVICE_TESTING.md`](./IOS_DEVICE_TESTING.md).
+For pendant reconnect, DFU handoff, timestamp, and backlog acceptance on Android and iOS, also run
+[`BLE_RELIABILITY_ACCEPTANCE.md`](./BLE_RELIABILITY_ACCEPTANCE.md).
 
 Verified 2026-07-11 on an iPhone XR (iOS 18.7.9), app 1.0.543, prod-flavor debug build, agent-flutter CLI + marionette MCP. iOS Simulator has no BLE — use a physical device for anything beyond onboarding/UI checks (see also iOS Simulator Known Limitations below).
 

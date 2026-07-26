@@ -10,12 +10,13 @@ import 'device_transport.dart';
 /// Uses the intent-based manageDevice/unmanageDevice API.
 /// Native owns the connection lifecycle (retry, reconnect, bonding).
 /// This transport is long-lived
-class NativeBleTransport extends DeviceTransport {
+class NativeBleTransport extends DeviceTransport implements DeviceReadyGenerationSource, ExclusiveOperationTransport {
   final String _peripheralUuid;
   final bool requiresBond;
-  final BleHostApi _hostApi = BleHostApi();
+  final BleHostApi _hostApi;
   final StreamController<DeviceTransportState> _connectionStateController =
       StreamController<DeviceTransportState>.broadcast();
+  final StreamController<int> _readyGenerationController = StreamController<int>.broadcast();
 
   /// Characteristic notification streams, keyed by "serviceUuid:charUuid" (lowercased).
   final Map<String, StreamController<List<int>>> _streamControllers = {};
@@ -26,8 +27,11 @@ class NativeBleTransport extends DeviceTransport {
   Completer<List<BleService>>? _deviceReadyCompleter;
 
   DeviceTransportState _state = DeviceTransportState.disconnected;
+  int _readyGeneration = 0;
+  bool _hasManageIntent = false;
 
-  NativeBleTransport(this._peripheralUuid, {this.requiresBond = false}) {
+  NativeBleTransport(this._peripheralUuid, {this.requiresBond = false, BleHostApi? hostApi})
+      : _hostApi = hostApi ?? BleHostApi() {
     BleBridge.instance.registerPeripheral(
       peripheralUuid: _peripheralUuid,
       onConnectionState: _handleConnectionState,
@@ -42,6 +46,12 @@ class NativeBleTransport extends DeviceTransport {
   @override
   Stream<DeviceTransportState> get connectionStateStream => _connectionStateController.stream;
 
+  @override
+  int get readyGeneration => _readyGeneration;
+
+  @override
+  Stream<int> get readyGenerationStream => _readyGenerationController.stream;
+
   // MARK: - Connection
 
   @override
@@ -53,7 +63,8 @@ class NativeBleTransport extends DeviceTransport {
     _deviceReadyCompleter = Completer<List<BleService>>();
 
     try {
-      _hostApi.manageDevice(_peripheralUuid, requiresBond);
+      await _hostApi.manageDevice(_peripheralUuid, requiresBond);
+      _hasManageIntent = true;
     } catch (e) {
       Logger.debug('[NativeBleTransport] manageDevice failed: $e');
       _deviceReadyCompleter = null;
@@ -68,6 +79,7 @@ class NativeBleTransport extends DeviceTransport {
       );
       _deviceReadyCompleter = null;
       _updateState(DeviceTransportState.connected);
+      _publishReadyGeneration();
     } catch (e) {
       Logger.debug('[NativeBleTransport] connect failed: $e');
       _deviceReadyCompleter = null;
@@ -77,17 +89,21 @@ class NativeBleTransport extends DeviceTransport {
   }
 
   @override
-  Future<void> disconnect() async {
-    if (_state == DeviceTransportState.disconnected) return;
+  Future<void> disconnect() => _releaseManagedConnection(propagateUnmanageFailure: false);
 
-    _updateState(DeviceTransportState.disconnecting);
+  @override
+  Future<void> releaseForExclusiveOperation() => _releaseManagedConnection(propagateUnmanageFailure: true);
 
+  Future<void> _releaseManagedConnection({required bool propagateUnmanageFailure}) async {
+    if (_state != DeviceTransportState.disconnected) {
+      _updateState(DeviceTransportState.disconnecting);
+    }
     // Unsubscribe all active streams
     for (final key in _streamControllers.keys.toList()) {
       final parts = key.split(':');
       if (parts.length == 2) {
         try {
-          _hostApi.unsubscribeCharacteristic(_peripheralUuid, parts[0], parts[1]);
+          await _hostApi.unsubscribeCharacteristic(_peripheralUuid, parts[0], parts[1]);
         } catch (_) {}
       }
     }
@@ -95,13 +111,23 @@ class NativeBleTransport extends DeviceTransport {
     _closeAllStreams();
     _services = [];
 
-    try {
-      _hostApi.unmanageDevice(_peripheralUuid);
-    } catch (e) {
-      Logger.debug('[NativeBleTransport] unmanageDevice failed: $e');
+    Object? unmanageError;
+    StackTrace? unmanageStackTrace;
+    if (_hasManageIntent) {
+      try {
+        await _hostApi.unmanageDevice(_peripheralUuid);
+        _hasManageIntent = false;
+      } catch (error, stackTrace) {
+        unmanageError = error;
+        unmanageStackTrace = stackTrace;
+        Logger.debug('[NativeBleTransport] unmanageDevice failed: $error');
+      }
     }
 
     _updateState(DeviceTransportState.disconnected);
+    if (propagateUnmanageFailure && unmanageError != null) {
+      Error.throwWithStackTrace(unmanageError, unmanageStackTrace!);
+    }
   }
 
   @override
@@ -200,6 +226,7 @@ class NativeBleTransport extends DeviceTransport {
     BleBridge.instance.unregisterPeripheral(_peripheralUuid);
     _closeAllStreams();
     await _connectionStateController.close();
+    await _readyGenerationController.close();
   }
 
   // MARK: - Private Helpers
@@ -209,6 +236,11 @@ class NativeBleTransport extends DeviceTransport {
       _state = newState;
       _connectionStateController.add(_state);
     }
+  }
+
+  void _publishReadyGeneration() {
+    _readyGeneration++;
+    _readyGenerationController.add(_readyGeneration);
   }
 
   void _closeAllStreams() {
@@ -281,6 +313,7 @@ class NativeBleTransport extends DeviceTransport {
       }
 
       _updateState(DeviceTransportState.connected);
+      _publishReadyGeneration();
     } catch (e) {
       Logger.debug('[NativeBleTransport] Failed to re-subscribe after reconnect: $e');
       _updateState(DeviceTransportState.disconnected);
