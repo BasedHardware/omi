@@ -9,6 +9,7 @@ recovery, control-response retention, and RTC trust after reboot.
 | Boundary | Contract |
 | --- | --- |
 | Frame packing | A rejected SD enqueue cannot consume, duplicate, or reorder the next Opus frame. |
+| Storage-first capture | Live preview never precedes local ownership; temporary storage backpressure retains the exact frame and terminal SD failure alone permits live fallback. |
 | Transfer completion | CRC32-extended `DONE` bytes stay pinned, and transient notify backpressure retains the response. |
 | SD commit ordering | Payload, barrier, CRC/header, barrier, metadata, barrier execute in that order. |
 | SD fault matrix | Each of the six write/sync stages is fault-injected before a successful retry. |

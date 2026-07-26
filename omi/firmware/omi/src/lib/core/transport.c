@@ -1413,6 +1413,11 @@ void pusher(void)
 {
     bool retained_tx_frame = false;
 
+#if defined(CONFIG_OMI_STORAGE_AUTHORITATIVE_CAPTURE)
+    LOG_WRN("Experimental storage-authoritative capture enabled (live preview=%s)",
+            IS_ENABLED(CONFIG_OMI_STORAGE_AUTHORITATIVE_LIVE_PREVIEW) ? "on" : "off");
+#endif
+
     k_msleep(500);
     while (!atomic_get(&pusher_stop_flag)) {
         k_sem_take(&tx_queue_sem, K_FOREVER);
@@ -1446,6 +1451,43 @@ void pusher(void)
                 }
             }
 
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+            report_and_clear_terminal_storage_tail();
+#endif
+
+#if defined(CONFIG_OMI_STORAGE_AUTHORITATIVE_CAPTURE)
+            bool storage_terminal = sd_storage_health() == SD_STORAGE_TERMINAL;
+            bool storage_accepted = false;
+            if (!storage_terminal && is_sd_on()) {
+                /*
+                 * Local ownership always precedes live preview. ACCEPTED means
+                 * the ordered packer/SD queue owns this frame; a blocked record
+                 * leaves tx_buffer intact so this exact frame retries first.
+                 */
+                storage_accepted = write_current_frame_to_storage();
+            }
+
+            audio_storage_first_decision_t decision =
+                audio_storage_first_decision(storage_accepted,
+                                             storage_terminal,
+                                             conn && is_subscribed,
+                                             IS_ENABLED(CONFIG_OMI_STORAGE_AUTHORITATIVE_LIVE_PREVIEW));
+            if (decision == AUDIO_STORAGE_FIRST_STORED_AND_LIVE) {
+                /*
+                 * Preview is opportunistic. Failure cannot revoke local
+                 * ownership and must not replay the frame into storage.
+                 */
+                (void) push_to_gatt(conn);
+            } else if (decision == AUDIO_STORAGE_FIRST_LIVE_FALLBACK) {
+                if (!push_to_gatt(conn)) {
+                    record_storage_rejection("SD terminal and live fallback unavailable");
+                }
+            } else if (decision == AUDIO_STORAGE_FIRST_RETAIN) {
+                retained_tx_frame = true;
+            } else if (decision == AUDIO_STORAGE_FIRST_DROP) {
+                record_storage_rejection("SD terminal and live delivery unavailable");
+            }
+#else
             bool sent_live = false;
             if (conn && is_subscribed) {
                 sent_live = push_to_gatt(conn);
@@ -1453,7 +1495,6 @@ void pusher(void)
 
             bool storage_available = false;
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-            report_and_clear_terminal_storage_tail();
             storage_available = is_sd_on() && sd_storage_health() != SD_STORAGE_TERMINAL;
 #endif
             audio_delivery_route_t route = audio_delivery_route(sent_live, storage_available);
@@ -1488,6 +1529,7 @@ void pusher(void)
                 retained_tx_frame = ring_storage_frame_should_retain(storage_terminal);
 #endif
             }
+#endif
 
             if (conn) {
                 bt_conn_unref(conn);

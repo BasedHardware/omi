@@ -10,6 +10,21 @@ audio_delivery_route_t audio_delivery_route(bool live_queued, bool storage_avail
     return storage_available ? AUDIO_DELIVERY_STORAGE : AUDIO_DELIVERY_DROP;
 }
 
+audio_storage_first_decision_t audio_storage_first_decision(bool storage_accepted,
+                                                            bool storage_terminal,
+                                                            bool live_available,
+                                                            bool live_preview_enabled)
+{
+    if (storage_accepted) {
+        return live_available && live_preview_enabled ? AUDIO_STORAGE_FIRST_STORED_AND_LIVE
+                                                      : AUDIO_STORAGE_FIRST_STORED;
+    }
+    if (!storage_terminal) {
+        return AUDIO_STORAGE_FIRST_RETAIN;
+    }
+    return live_available ? AUDIO_STORAGE_FIRST_LIVE_FALLBACK : AUDIO_STORAGE_FIRST_DROP;
+}
+
 static bool submit_record(audio_storage_packer_t *packer, audio_storage_writer_t writer, void *context)
 {
     if (packer->used == 0U) {

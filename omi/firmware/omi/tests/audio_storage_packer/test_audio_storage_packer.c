@@ -285,6 +285,19 @@ static void test_delivery_policy_falls_back_after_live_enqueue_failure(void)
     assert(audio_delivery_route(false, false) == AUDIO_DELIVERY_DROP);
 }
 
+static void test_storage_first_policy_never_previews_unowned_audio(void)
+{
+    assert(audio_storage_first_decision(true, false, false, false) == AUDIO_STORAGE_FIRST_STORED);
+    assert(audio_storage_first_decision(true, false, true, false) == AUDIO_STORAGE_FIRST_STORED);
+    assert(audio_storage_first_decision(true, false, true, true) == AUDIO_STORAGE_FIRST_STORED_AND_LIVE);
+
+    assert(audio_storage_first_decision(false, false, true, true) == AUDIO_STORAGE_FIRST_RETAIN);
+    assert(audio_storage_first_decision(false, false, false, false) == AUDIO_STORAGE_FIRST_RETAIN);
+
+    assert(audio_storage_first_decision(false, true, true, true) == AUDIO_STORAGE_FIRST_LIVE_FALLBACK);
+    assert(audio_storage_first_decision(false, true, false, true) == AUDIO_STORAGE_FIRST_DROP);
+}
+
 static void test_pre_pusher_queue_saturation_preserves_whole_frame(void)
 {
     audio_storage_packer_t packer;
@@ -1440,6 +1453,7 @@ int main(void)
     test_exact_fit_flushes_legacy_terminated_record_before_new_frame();
     test_invalid_frame_leaves_state_unchanged();
     test_delivery_policy_falls_back_after_live_enqueue_failure();
+    test_storage_first_policy_never_previews_unowned_audio();
     test_pre_pusher_queue_saturation_preserves_whole_frame();
     test_transfer_crc_and_done_notification_match_golden_wire_bytes();
     test_invalid_rtc_uses_zero_timestamp_without_rejecting_audio();

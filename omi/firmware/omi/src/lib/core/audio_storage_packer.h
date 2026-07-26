@@ -26,11 +26,32 @@ typedef enum {
     AUDIO_DELIVERY_STORAGE,
 } audio_delivery_route_t;
 
+typedef enum {
+    AUDIO_STORAGE_FIRST_DROP = 0,
+    AUDIO_STORAGE_FIRST_RETAIN,
+    AUDIO_STORAGE_FIRST_STORED,
+    AUDIO_STORAGE_FIRST_STORED_AND_LIVE,
+    AUDIO_STORAGE_FIRST_LIVE_FALLBACK,
+} audio_storage_first_decision_t;
+
 /**
  * Select the authoritative owner for one popped frame. A failed/unavailable
  * live enqueue must fall back to storage whenever storage is available.
  */
 audio_delivery_route_t audio_delivery_route(bool live_queued, bool storage_available);
+
+/**
+ * Resolve one frame after the storage-first path has attempted local ownership.
+ *
+ * Temporary storage failure retains the exact frame and never leaks it to the
+ * live preview ahead of durable ordering. Terminal storage failure is the only
+ * escape hatch: live BLE may then own the frame so simultaneous SD failure does
+ * not force avoidable loss.
+ */
+audio_storage_first_decision_t audio_storage_first_decision(bool storage_accepted,
+                                                            bool storage_terminal,
+                                                            bool live_available,
+                                                            bool live_preview_enabled);
 
 void audio_storage_packer_init(audio_storage_packer_t *packer);
 
