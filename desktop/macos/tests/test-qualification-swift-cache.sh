@@ -38,6 +38,16 @@ make_repo() {
   git -C "$path" commit -qm 'fixture'
 }
 
+source_from_json() {
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["source"])'
+}
+
+prepare_source() {
+  local source_sha="$1" repository="$2"
+  "$CACHE_HELPER" prepare "$source_sha" "$repository" "cache-test-${RANDOM}-${RANDOM}" "$$" \
+    | source_from_json
+}
+
 export OMI_QUALIFICATION_SWIFT_CACHE_ROOT="$TMP_ROOT/cache"
 export OMI_QUALIFICATION_SWIFT_CACHE_XCODE="Xcode 16.4\nBuild version 16F6"
 export OMI_QUALIFICATION_SWIFT_CACHE_SWIFT="Apple Swift version 6.1"
@@ -73,12 +83,15 @@ exec "$OMI_TEST_REAL_MV" "$@"
 SH
 chmod +x "$MV_SHIM_DIR/mv"
 for process in {1..16}; do
-  env PATH="$MV_SHIM_DIR:$PATH" \
-    OMI_TEST_MV_BARRIER="$MV_BARRIER" \
-    OMI_TEST_REAL_MV="$REAL_MV" \
-    OMI_QUALIFICATION_SWIFT_CACHE_ROOT="$CONCURRENT_CACHE" \
-    "$CACHE_HELPER" prepare "$SHA_A" "$REPO_A" \
-    >"$TMP_ROOT/concurrent-$process.out" 2>"$TMP_ROOT/concurrent-$process.err" &
+  (
+    env PATH="$MV_SHIM_DIR:$PATH" \
+      OMI_TEST_MV_BARRIER="$MV_BARRIER" \
+      OMI_TEST_REAL_MV="$REAL_MV" \
+      OMI_QUALIFICATION_SWIFT_CACHE_ROOT="$CONCURRENT_CACHE" \
+      "$CACHE_HELPER" prepare "$SHA_A" "$REPO_A" "cache-concurrent-$process" "$$" \
+      2>"$TMP_ROOT/concurrent-$process.err" \
+      | source_from_json >"$TMP_ROOT/concurrent-$process.out"
+  ) &
   concurrent_pids[$process]=$!
 done
 for process in {1..16}; do
@@ -97,9 +110,9 @@ mkdir -p "$TMP_ROOT/symlink-ancestor-target"
 ln -s "$TMP_ROOT/symlink-ancestor-target" "$TMP_ROOT/symlink-ancestor"
 expect_rejected symlink-ancestor "refusing symlinked cache path component" \
   env OMI_QUALIFICATION_SWIFT_CACHE_ROOT="$TMP_ROOT/symlink-ancestor/cache" \
-  "$CACHE_HELPER" prepare "$SHA_A" "$REPO_A"
+  "$CACHE_HELPER" prepare "$SHA_A" "$REPO_A" cache-symlink-ancestor "$$"
 
-first_source="$($CACHE_HELPER prepare "$SHA_A" "$REPO_A")"
+first_source="$(prepare_source "$SHA_A" "$REPO_A")"
 expected_source="$OMI_QUALIFICATION_SWIFT_CACHE_ROOT/$SHA_A/source"
 [[ "$first_source" == "$expected_source" ]] || fail "prepare must return the stable exact-SHA source path"
 [[ -d "$first_source/desktop/macos/Desktop/.build" ]] || fail "prepare must create a direct persistent SwiftPM build path"
@@ -109,7 +122,7 @@ expected_source="$OMI_QUALIFICATION_SWIFT_CACHE_ROOT/$SHA_A/source"
 printf 'compiled-output\n' > "$first_source/desktop/macos/Desktop/.build/probe.o"
 printf 'remove-me\n' > "$first_source/untrusted-untracked-file"
 
-retry_source="$($CACHE_HELPER prepare "$SHA_A" "$REPO_A_OTHER_PATH")"
+retry_source="$(prepare_source "$SHA_A" "$REPO_A_OTHER_PATH")"
 [[ "$retry_source" == "$first_source" ]] || fail "caller checkout paths must not affect the persistent source path"
 [[ "$(cat "$retry_source/desktop/macos/Desktop/.build/probe.o")" == "compiled-output" ]] \
   || fail "same-SHA retry did not retain direct SwiftPM output"
@@ -118,7 +131,7 @@ retry_source="$($CACHE_HELPER prepare "$SHA_A" "$REPO_A_OTHER_PATH")"
 # A dirty tracked source cannot be trusted even if HEAD still names the exact SHA.
 printf '%s\n' '// stale package' > "$first_source/desktop/macos/Desktop/Package.swift"
 expect_rejected stale-package "persistent source has tracked changes" \
-  "$CACHE_HELPER" prepare "$SHA_A" "$REPO_A"
+  "$CACHE_HELPER" prepare "$SHA_A" "$REPO_A" cache-stale-package "$$"
 git -C "$first_source" restore desktop/macos/Desktop/Package.swift
 
 MANIFEST="$OMI_QUALIFICATION_SWIFT_CACHE_ROOT/$SHA_A/manifest.json"
@@ -131,7 +144,7 @@ data["source_sha"] = "b" * 40
 open(p, "w", encoding="utf-8").write(json.dumps(data, indent=2, sort_keys=True) + "\n")
 PY
 expect_rejected wrong-sha "cache provenance mismatch" \
-  "$CACHE_HELPER" prepare "$SHA_A" "$REPO_A"
+  "$CACHE_HELPER" prepare "$SHA_A" "$REPO_A" cache-wrong-sha "$$"
 cp "$TMP_ROOT/manifest.good" "$MANIFEST"
 
 for field in package_swift_sha256 package_resolved_sha256 xcode swift macos architecture; do
@@ -144,34 +157,34 @@ data[field] = "stale"
 open(p, "w", encoding="utf-8").write(json.dumps(data, indent=2, sort_keys=True) + "\n")
 PY
   expect_rejected "stale-$field" "cache provenance mismatch" \
-    "$CACHE_HELPER" prepare "$SHA_A" "$REPO_A"
+    "$CACHE_HELPER" prepare "$SHA_A" "$REPO_A" "cache-stale-${field//_/-}" "$$"
 done
 cp "$TMP_ROOT/manifest.good" "$MANIFEST"
 
 for variable in XCODE SWIFT MACOS ARCH; do
   expect_rejected "changed-$variable" "cache provenance mismatch" \
     env "OMI_QUALIFICATION_SWIFT_CACHE_${variable}=different-host-identity" \
-    "$CACHE_HELPER" prepare "$SHA_A" "$REPO_A"
+    "$CACHE_HELPER" prepare "$SHA_A" "$REPO_A" "cache-changed-$variable" "$$"
 done
 
 : > "$OMI_QUALIFICATION_SWIFT_CACHE_ROOT/$SHA_A/complete"
 expect_rejected incomplete "incomplete exact-SHA cache entry" \
-  "$CACHE_HELPER" prepare "$SHA_A" "$REPO_A"
+  "$CACHE_HELPER" prepare "$SHA_A" "$REPO_A" cache-incomplete "$$"
 printf '%s\n' complete > "$OMI_QUALIFICATION_SWIFT_CACHE_ROOT/$SHA_A/complete"
 
 cp -R "$OMI_QUALIFICATION_SWIFT_CACHE_ROOT/$SHA_A" "$OMI_QUALIFICATION_SWIFT_CACHE_ROOT/$SHA_B"
 expect_rejected wrong-source "persistent source SHA $SHA_A does not match candidate $SHA_B" \
-  "$CACHE_HELPER" prepare "$SHA_B" "$REPO_A"
+  "$CACHE_HELPER" prepare "$SHA_B" "$REPO_A" cache-wrong-source "$$"
 rm -rf "$OMI_QUALIFICATION_SWIFT_CACHE_ROOT/$SHA_B"
 
 mkdir -p "$TMP_ROOT/symlink-target"
 ln -s "$TMP_ROOT/symlink-target" "$OMI_QUALIFICATION_SWIFT_CACHE_ROOT/$SHA_B"
 expect_rejected symlink "refusing symlinked exact-SHA cache entry" \
-  "$CACHE_HELPER" prepare "$SHA_B" "$REPO_A"
+  "$CACHE_HELPER" prepare "$SHA_B" "$REPO_A" cache-symlink "$$"
 
 SHA_C="cccccccccccccccccccccccccccccccccccccccc"
 printf collision > "$OMI_QUALIFICATION_SWIFT_CACHE_ROOT/$SHA_C"
 expect_rejected collision "exact-SHA cache destination collision" \
-  "$CACHE_HELPER" prepare "$SHA_C" "$REPO_A"
+  "$CACHE_HELPER" prepare "$SHA_C" "$REPO_A" cache-collision "$$"
 
 echo "qualification Swift cache tests passed"

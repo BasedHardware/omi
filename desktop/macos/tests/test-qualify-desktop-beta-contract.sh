@@ -75,7 +75,11 @@ require_order "$QUALIFIER" \
   'if [[ "$GITHUB_ACTIONS_ARTIFACT" -eq 1 ]]'
 require_text 'terminate_qualification_desktop "$BUNDLE"'
 require_text '--json tagName,isDraft,isPrerelease,publishedAt,assets,body'
-require_text 'WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"'
+require_text '"$SCRIPT_DIR/qualification-swift-cache.sh" prepare'
+require_text 'QUALIFICATION_CACHE_LEASE_ID'
+require_text 'QUALIFICATION_CACHE_LEASE_TOKEN'
+require_text '"$SCRIPT_DIR/qualification-swift-cache.sh" release'
+require_text 'qualification-cache-reclaim.py' "$SWIFT_CACHE"
 require_text 'qualification-lease "$action"' "$LEASE_COMMAND"
 require_text 'acquire)' "$LEASE_COMMAND"
 require_text 'release)' "$LEASE_COMMAND"

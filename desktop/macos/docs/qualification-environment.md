@@ -15,6 +15,8 @@ ports and has no qualification lease.
 - `OMI_QUALIFICATION_RETAINED_RUNS` and
   `OMI_QUALIFICATION_RETENTION_AGE_SECONDS` — bounded retention for completed,
   sentinel-proven state/log pairs (defaults: 3 runs and 14 days).
+- `OMI_QUALIFICATION_SWIFT_CACHE_ROOT` — owner-only exact-SHA SwiftPM cache.
+  Defaults to `~/Library/Caches/OmiDesktop/qualification-swiftpm-v2`.
 - `OMI_HARNESS_PORT_OFFSET` and `OMI_HARNESS_{FIRESTORE,AUTH,BACKEND,DESKTOP_BACKEND,REDIS,TYPESENSE}_PORT` — dev-harness controls. The qualifier exports the offset; direct per-service overrides remain available for debugging.
 
 The offset applies to Firestore, Firebase Auth, backend, desktop backend,
@@ -23,16 +25,28 @@ ports fail before launch.
 
 ## Runner capacity preflight
 
-Before the candidate checkout, the M1-only workflow writes
-`runner-capacity.json` in its run-isolated stage and requires at least 32 GiB
-of free filesystem blocks plus 65,536 free inodes. This is intentionally ahead
-of the checkout because a terminal runner loss can prevent later `always()`
-steps from producing cleanup evidence. The report records only capacity observed
-by this guard; it does not attribute a prior incident to a runner or host cause.
-On a controlled capacity failure, the workflow fails closed before fetching
-candidate assets, then its normal finalizer writes cleanup evidence and uploads
-both evidence files. The guard only observes capacity; it never deletes shared
-runner state or prior qualification evidence.
+Before expanding the candidate checkout, the M1-only workflow loads the reclaim
+authority from the exact immutable candidate and writes `runner-capacity.json`
+in its run-isolated stage. The guard still requires at least 32 GiB of free
+filesystem blocks plus 65,536 free inodes.
+
+When capacity is low, reclaim considers only owner-only
+`qualification-swiftpm-v2/<40-character-SHA>` entries with a valid v2 manifest,
+completion marker, matching Git HEAD, and direct SwiftPM build directory. It
+orders entries by last use and SHA, requires six hours of age, and removes at
+most eight entries or 64 GiB per run, stopping as soon as the unchanged capacity
+threshold passes. The active harness lease, live cache leases, and live process
+references protect their exact worktrees. A malformed entry, symlink, unknown
+lock, ambiguous harness lease, or live qualifier without an authoritative lease
+refuses the entire plan before deletion. Run staging, cleanup artifacts,
+qualification evidence, and release assets are outside the cache root and are
+never reclaim targets.
+
+On a controlled capacity failure, the workflow fails closed before candidate
+assets or the full source checkout are fetched, then its normal finalizer writes
+cleanup evidence and uploads both evidence files. The capacity report records
+the before/after observations and the bounded exact-SHA deletion list; it does
+not attribute a prior incident to a runner or host cause.
 
 ## Cleanup safety
 
@@ -51,6 +65,13 @@ process first; lease release is the fail-closed fallback for interruption paths.
 Before signaling it, release revalidates the owner-only state files, lease token,
 PID/process group, command marker, loopback URL, and exact listener PID. A
 listener that fails any check is retained and never signaled.
+
+The exact-SHA SwiftPM worktree has a separate owner-only, token-bound cache lease
+from publication through harness cleanup. Normal exit and the workflow finalizer
+release it only after the harness lease is safely released. `--keep-stack`
+retains both authorities. A terminally interrupted lease is treated as stale
+only when its recorded owner PID is dead; the harness worktree pointer remains a
+separate preservation authority.
 
 The main qualification app receives a separate run-unique launch token. `run.sh`
 writes an owner-only launch signal, which the qualifier verifies against exactly
