@@ -44,6 +44,9 @@ covers:
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Tools.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarReceiptCard.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NotchCardVoiceDelivery.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NotchSystemControlsView.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/SystemCaptureControls.swift
 preconditions:
   - automation_bridge_ready
 
