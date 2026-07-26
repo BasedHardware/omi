@@ -621,6 +621,7 @@ struct DashboardPage: View {
         onOpenAgentRef: { ref, completion in
           FloatingControlBarManager.shared.openAgentChatFromTimeline(ref: ref, completion: completion)
         },
+        contentColumnWidth: 760,
         welcomeContent: { dashboardChatWelcome }
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1121,6 +1122,7 @@ struct DashboardPage: View {
         horizontalContentPadding: 0,
         verticalContentPadding: OmiSpacing.sm,
         trailingContentPadding: OmiSpacing.md,
+        contentColumnWidth: 760,
         welcomeContent: { dashboardChatWelcome }
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
