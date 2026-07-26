@@ -618,9 +618,7 @@ struct DashboardPage: View {
         onOpenAgent: { agentID, completion in
           FloatingControlBarManager.shared.openAgentChatFromTimeline(agentID: agentID, completion: completion)
         },
-        onOpenAgentRef: { ref, completion in
-          FloatingControlBarManager.shared.openAgentChatFromTimeline(ref: ref, completion: completion)
-        },
+        onOpenAgentRef: FloatingControlBarManager.shared.openAgentChatFromTimeline(ref:completion:),
         contentColumnWidth: 760,
         welcomeContent: { dashboardChatWelcome }
       )

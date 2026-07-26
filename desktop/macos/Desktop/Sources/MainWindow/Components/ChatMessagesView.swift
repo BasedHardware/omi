@@ -206,6 +206,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       LazyVStack(spacing: OmiSpacing.lg) {
         loadMoreButton
         messageContent
+        workingIndicator
       }
       .padding(.horizontal, horizontalContentPadding)
       .padding(.trailing, trailingContentPadding)
@@ -545,6 +546,17 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           transcriptGeometry.setRowOffset(offset, for: message.id)
         }
       }
+    }
+  }
+
+  @ViewBuilder
+  private var workingIndicator: some View {
+    if contentColumnWidth != nil && (!messages.isEmpty || isSending) {
+      ChatWorkingIndicator(
+        label: isSending ? ChatWorkingStatus.label(for: messages.last) : nil,
+        motion: ChatWorkingStatus.motion(for: messages.last)
+      )
+      .frame(maxWidth: .infinity, alignment: .leading)
     }
   }
 
