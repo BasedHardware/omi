@@ -316,7 +316,7 @@ jobs:
           if-no-files-found: error
           overwrite: false
 
-      - name: Atomically tag exact live main source
+      - name: Publish immutable tag from exact live main source
         if: steps.recheck.outputs.should_release == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -327,12 +327,12 @@ jobs:
           EVIDENCE_PATH="${{ steps.identity.outputs.evidence_path }}"
 
           if [ -z "${GH_TOKEN:-}" ]; then
-            echo "Omi Bot token not available; cannot atomically publish a candidate tag." >&2
+            echo "Omi Bot token not available; cannot publish a candidate tag." >&2
             exit 1
           fi
-          # `updateRefs` publishes the tag only when GitHub still observes
-          # main at CANDIDATE_SHA; its `beforeOid` check and tag creation are
-          # one server-side atomic transaction, not a cached-ref comparison.
+          # The publisher refetches GitHub's authoritative main immediately
+          # before the documented create-only ref request. A moved main or an
+          # existing tag fails without creating or rewriting a candidate ref.
           python3 .github/scripts/publish-desktop-candidate-tag.py \
             --repository "${{ github.repository }}" \
             --release-tag "$RELEASE_TAG" \
