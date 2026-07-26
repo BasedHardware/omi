@@ -333,9 +333,9 @@ final class MemoryAtlasLayoutTests: XCTestCase {
       )
     }
     // Fanned deterministically, not stacked on one point.
-    let leafPositions = Set(
+    let leafPositions = try Set(
       ["leaf1", "leaf2", "leaf3", "leaf4", "leaf5"].map { id -> String in
-        let position = snapshot.nodeByID[id]!.normalizedPosition
+        let position = try XCTUnwrap(snapshot.nodeByID[id]).normalizedPosition
         return "\(position.x),\(position.y)"
       })
     XCTAssertEqual(leafPositions.count, 5)

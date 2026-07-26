@@ -708,8 +708,10 @@ enum MemoryAtlasForceLayout {
     var dense: [Int: Int] = [:]
     var partition = [Int](repeating: 0, count: count)
     for index in 0..<count {
-      if dense[group[index]] == nil { dense[group[index]] = dense.count }
-      partition[index] = dense[group[index]]!
+      let label = group[index]
+      let renumbered = dense[label] ?? dense.count
+      dense[label] = renumbered
+      partition[index] = renumbered
     }
     return (partition, dense.count)
   }
@@ -739,7 +741,9 @@ enum MemoryAtlasForceLayout {
       }
     }
     let rebuilt = collapsedEdges.map { edges in
-      edges.keys.sorted().map { (node: $0, weight: edges[$0]!) }
+      edges.keys.sorted().compactMap { node in
+        edges[node].map { (node: node, weight: $0) }
+      }
     }
     return (rebuilt, collapsedSelfLoops)
   }

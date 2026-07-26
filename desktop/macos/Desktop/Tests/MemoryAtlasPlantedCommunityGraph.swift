@@ -56,16 +56,23 @@ struct PlantedCommunityGraph {
     for (index, id) in ids.enumerated() { communityOf[id] = index % communities }
 
     var membersOf: [Int: [String]] = [:]
-    for id in ids where id != anchorID { membersOf[communityOf[id]!, default: []].append(id) }
+    for id in ids where id != anchorID {
+      guard let group = communityOf[id] else { continue }
+      membersOf[group, default: []].append(id)
+    }
 
     var memoryIDsByNodeID: [String: [String]] = [:]
     var drawn: [(sourceID: String, targetID: String, memoryCount: Int)] = []
     for index in 0..<memories {
-      var pool = membersOf[rng.int(communities)]!
+      // `default: []` cannot fire — every community index has members — but the
+      // draw must still happen exactly once per lookup either way, or the whole
+      // fixture shifts and the measured scores stop being comparable.
+      var pool = membersOf[rng.int(communities), default: []]
       // A minority of memories span two communities, which is what stops the
       // planted structure from being trivially separable.
-      if rng.unit() < 0.12 { pool += membersOf[rng.int(communities)]! }
+      if rng.unit() < 0.12 { pool += membersOf[rng.int(communities), default: []] }
 
+      guard !pool.isEmpty else { continue }
       var present: [String] = []
       for _ in 0..<(2 + rng.int(4)) { present.append(pool[rng.int(pool.count)]) }
       if rng.unit() < Self.anchorMemoryShare { present.append(anchorID) }

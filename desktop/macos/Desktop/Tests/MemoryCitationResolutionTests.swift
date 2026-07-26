@@ -8,7 +8,7 @@ import XCTest
 /// browse, so citations routinely fall outside it and the inspector reported
 /// them as "not loaded yet" while they sat on disk.
 final class MemoryCitationResolutionTests: XCTestCase {
-  private var userDir: URL!
+  private var userDir: URL?
 
   override func setUp() async throws {
     try await super.setUp()

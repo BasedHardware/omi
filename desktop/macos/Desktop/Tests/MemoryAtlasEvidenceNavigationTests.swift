@@ -8,8 +8,8 @@ import XCTest
 /// that memory exists.
 @MainActor
 final class MemoryAtlasEvidenceNavigationTests: XCTestCase {
-  private var userDir: URL!
-  private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot!
+  private var userDir: URL?
+  private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot?
 
   override func setUp() async throws {
     authSnapshot = RewindStorageTestIsolation.captureAuthSnapshot()
@@ -19,7 +19,9 @@ final class MemoryAtlasEvidenceNavigationTests: XCTestCase {
   }
 
   override func tearDown() async throws {
-    RewindStorageTestIsolation.restoreAuthSnapshot(authSnapshot)
+    if let authSnapshot {
+      RewindStorageTestIsolation.restoreAuthSnapshot(authSnapshot)
+    }
     await RewindStorageTestIsolation.tearDown(userDir: userDir)
   }
 

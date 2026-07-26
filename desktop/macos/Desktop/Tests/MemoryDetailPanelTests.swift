@@ -7,8 +7,8 @@ import XCTest
 /// after a save, and edit state carried between memories.
 @MainActor
 final class MemoryDetailPanelTests: XCTestCase {
-  private var userDir: URL!
-  private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot!
+  private var userDir: URL?
+  private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot?
 
   override func setUp() async throws {
     authSnapshot = RewindStorageTestIsolation.captureAuthSnapshot()
@@ -18,7 +18,9 @@ final class MemoryDetailPanelTests: XCTestCase {
   }
 
   override func tearDown() async throws {
-    RewindStorageTestIsolation.restoreAuthSnapshot(authSnapshot)
+    if let authSnapshot {
+      RewindStorageTestIsolation.restoreAuthSnapshot(authSnapshot)
+    }
     await RewindStorageTestIsolation.tearDown(userDir: userDir)
   }
 

@@ -13,8 +13,8 @@ import XCTest
 /// must reject blank content — mirroring the existing malformed-tier guard
 /// in the same function.
 final class MemoryEmptyContentGuardTests: XCTestCase {
-  private var testUserId: String!
-  private var userDir: URL!
+  private var testUserId: String?
+  private var userDir: URL?
 
   override func setUp() async throws {
     try await super.setUp()
