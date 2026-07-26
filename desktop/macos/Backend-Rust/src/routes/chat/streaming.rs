@@ -69,6 +69,16 @@ impl StreamedContentBlocks {
                     append_string_field(block, "thinking", thinking);
                 }
             }
+            // The signature is what makes a replayed thinking block valid. A
+            // pause_turn continuation resends this assistant turn to Anthropic,
+            // and a thinking block whose signature is missing or truncated is
+            // rejected upstream — dropping it here would fail the very turn the
+            // continuation exists to finish.
+            Some("signature_delta") => {
+                if let Some(signature) = delta.get("signature").and_then(Value::as_str) {
+                    append_string_field(block, "signature", signature);
+                }
+            }
             Some("input_json_delta") => {
                 if let Some(partial_json) = delta.get("partial_json").and_then(Value::as_str) {
                     self.input_json
