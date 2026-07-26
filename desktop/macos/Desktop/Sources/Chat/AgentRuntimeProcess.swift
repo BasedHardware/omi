@@ -1,13 +1,6 @@
 import Foundation
 import OmiSupport
 
-/// Sendable carrier for `[String: Any]` JSON payloads that must cross actor or
-/// isolation boundaries. The dictionary is parsed once and treated as immutable
-/// thereafter, so unchecked Sendable conformance is safe.
-struct RuntimeJSONPayloadBox: @unchecked Sendable {
-  let value: [String: Any]
-  init(_ value: [String: Any]) { self.value = value }
-}
 extension Notification.Name {
   /// Posted on MainActor after the runtime handshake makes direct control
   /// tools admissible. Carries no owner id or request content.
@@ -99,19 +92,6 @@ final class AgentRuntimeStdoutChunkReader: @unchecked Sendable {
       nextSequence &+= 1
     }
     return (sequence, data)
-  }
-}
-
-/// Journal writes use SQLite `BEGIN IMMEDIATE`, whose configured busy window is
-/// five seconds. Keep the client deadline strictly beyond that database window
-/// so a successful commit still has time to traverse the JSONL IPC boundary.
-struct AgentRuntimeJournalTimeoutPolicy {
-  static let sqliteBusyWindowNanoseconds: UInt64 = 5_000_000_000
-  static let ipcSlackNanoseconds: UInt64 = 5_000_000_000
-  static let deadlineNanoseconds = sqliteBusyWindowNanoseconds + ipcSlackNanoseconds
-
-  static func allowsCorrelatedResult(elapsedNanoseconds: UInt64) -> Bool {
-    elapsedNanoseconds < deadlineNanoseconds
   }
 }
 
