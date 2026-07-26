@@ -1234,6 +1234,101 @@ fn test_pause_turn_server_tool_response_decodes_and_preserves_raw_content() {
     );
 }
 
+/// Regression: a `pause_turn` continuation used to forward only its text, so a
+/// continuation that decided to call a client-side tool reached the client as
+/// `finish_reason: tool_calls` with no tool call to run — the requested action
+/// silently never happened. Web search is only injected when the client sends
+/// its own tools, so "search the web, then act on it" is the ordinary shape of
+/// a paused streaming turn.
+#[test]
+fn pause_turn_continuation_forwards_client_tool_calls() {
+    let resp: AnthropicResponse = serde_json::from_value(json!({
+        "id": "msg_cont",
+        "type": "message",
+        "model": "claude-sonnet-4-6",
+        "role": "assistant",
+        "content": [
+            {
+                "type": "server_tool_use",
+                "id": "srvtoolu_1",
+                "name": "web_search",
+                "input": {"query": "Hanoi weather"}
+            },
+            {
+                "type": "web_search_tool_result",
+                "tool_use_id": "srvtoolu_1",
+                "content": [{"type": "web_search_result", "title": "Weather"}]
+            },
+            {"type": "text", "text": "It is raining in Hanoi. Adding a reminder."},
+            {
+                "type": "tool_use",
+                "id": "toolu_1",
+                "name": "create_task",
+                "input": {"title": "Pack an umbrella"}
+            }
+        ],
+        "stop_reason": "tool_use",
+        "usage": {"input_tokens": 11, "output_tokens": 5}
+    }))
+    .expect("continuation response must decode");
+
+    let chunks = continuation_delta_chunks(&resp, "chatcmpl-msg_cont", 4200, "omi-sonnet", 0);
+
+    assert_eq!(chunks.len(), 2, "expected one text chunk and one tool call");
+    assert_eq!(
+        chunks[0]["choices"][0]["delta"]["content"],
+        "It is raining in Hanoi. Adding a reminder."
+    );
+
+    let tool_call = &chunks[1]["choices"][0]["delta"]["tool_calls"][0];
+    assert_eq!(tool_call["index"], 0);
+    assert_eq!(tool_call["id"], "toolu_1");
+    assert_eq!(tool_call["type"], "function");
+    assert_eq!(tool_call["function"]["name"], "create_task");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(
+            tool_call["function"]["arguments"].as_str().unwrap()
+        )
+        .unwrap(),
+        json!({"title": "Pack an umbrella"})
+    );
+    // Anthropic's own server-tool blocks stay gateway-side.
+    assert!(!chunks
+        .iter()
+        .any(|chunk| chunk.to_string().contains("web_search")));
+}
+
+/// Tool ordinals continue past any tool call already streamed before the pause,
+/// so a client accumulating by `index` never overwrites an earlier call.
+#[test]
+fn pause_turn_continuation_tool_ordinals_continue_from_the_streamed_prefix() {
+    let resp: AnthropicResponse = serde_json::from_value(json!({
+        "id": "msg_cont",
+        "type": "message",
+        "model": "claude-sonnet-4-6",
+        "role": "assistant",
+        "content": [
+            {"type": "tool_use", "id": "toolu_2", "name": "create_task", "input": {}},
+            {"type": "tool_use", "id": "toolu_3", "name": "send_email", "input": {}}
+        ],
+        "stop_reason": "tool_use",
+        "usage": {"input_tokens": 3, "output_tokens": 2}
+    }))
+    .expect("continuation response must decode");
+
+    let chunks = continuation_delta_chunks(&resp, "chatcmpl-msg_cont", 4200, "omi-sonnet", 1);
+
+    assert_eq!(chunks.len(), 2);
+    assert_eq!(
+        chunks[0]["choices"][0]["delta"]["tool_calls"][0]["index"],
+        1
+    );
+    assert_eq!(
+        chunks[1]["choices"][0]["delta"]["tool_calls"][0]["index"],
+        2
+    );
+}
+
 #[test]
 fn test_translate_request_degrades_when_web_search_disabled() {
     let mut req = test_request(vec![user_message("Search the web for HumanPost")]);
