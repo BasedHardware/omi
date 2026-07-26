@@ -693,6 +693,10 @@ export interface Body_import_limitless_data_v1_import_limitless_post {
   file: string;
 }
 
+export interface Body_migrate_app_owner_v1_apps_migrate_owner_post {
+  source_token?: string | null;
+}
+
 export interface Body_sync_local_files_v2_v2_sync_local_files_post {
   files: Array<string>;
 }
@@ -3808,6 +3812,7 @@ export interface OmiApiSchemas {
   "Body_create_app_v1_apps_post": Body_create_app_v1_apps_post;
   "Body_create_voice_message_stream_v2_voice_messages_post": Body_create_voice_message_stream_v2_voice_messages_post;
   "Body_import_limitless_data_v1_import_limitless_post": Body_import_limitless_data_v1_import_limitless_post;
+  "Body_migrate_app_owner_v1_apps_migrate_owner_post": Body_migrate_app_owner_v1_apps_migrate_owner_post;
   "Body_sync_local_files_v2_v2_sync_local_files_post": Body_sync_local_files_v2_v2_sync_local_files_post;
   "Body_update_app_v1_apps__app_id__patch": Body_update_app_v1_apps__app_id__patch;
   "Body_upload_app_thumbnail_endpoint_v1_app_thumbnails_post": Body_upload_app_thumbnail_endpoint_v1_app_thumbnails_post;
@@ -9060,7 +9065,7 @@ export async function add_mcp_server_v1_apps_mcp_post(header: { authorization?: 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function migrate_app_owner_v1_apps_migrate_owner_post(query: { old_id: unknown }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AppMigrationResponse> {
+export async function migrate_app_owner_v1_apps_migrate_owner_post(query: { old_id: unknown }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: Body_migrate_app_owner_v1_apps_migrate_owner_post, init?: OmiApiClientInit): Promise<AppMigrationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/apps/migrate-owner`;
   const _params = query ? Object.entries(query)
@@ -9070,6 +9075,7 @@ export async function migrate_app_owner_v1_apps_migrate_owner_post(query: { old_
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "POST",
     headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
@@ -9077,6 +9083,7 @@ export async function migrate_app_owner_v1_apps_migrate_owner_post(query: { old_
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
