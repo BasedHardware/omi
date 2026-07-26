@@ -197,6 +197,36 @@ actor MemoryStorage {
     }
   }
 
+  /// Fetch specific memories by their backend id.
+  ///
+  /// Deliberately unfiltered by tier, device scope, or dismissal: the caller
+  /// already knows exactly which memories it wants because something else
+  /// (a knowledge-graph edge, a citation) named them. Applying the list's
+  /// browsing filters here would silently drop cited evidence and make it look
+  /// like the memory does not exist.
+  func getMemories(backendIds: [String]) async throws -> [ServerMemory] {
+    let wanted = Array(Set(backendIds.filter { !$0.isEmpty }))
+    guard !wanted.isEmpty else { return [] }
+    let db = try await ensureInitialized()
+
+    // SQLite caps host parameters per statement, and an entity in a large graph
+    // can cite more ids than that, so read in chunks rather than one IN (...).
+    let chunkSize = 400
+    var found: [ServerMemory] = []
+    for start in stride(from: 0, to: wanted.count, by: chunkSize) {
+      let chunk = Array(wanted[start..<min(start + chunkSize, wanted.count)])
+      let records = try await db.read { database in
+        try MemoryRecord
+          .filter(Column("deleted") == false)
+          .filter(chunk.contains(Column("backendId")))
+          .order(Column("createdAt").desc)
+          .fetchAll(database)
+      }
+      found.append(contentsOf: records.compactMap { $0.toServerMemory() })
+    }
+    return found.sorted { $0.createdAt > $1.createdAt }
+  }
+
   /// Get memories matching ANY of the specified tags (OR logic)
   /// Used for filter dropdowns where selecting multiple tags shows items matching any tag
   func getFilteredMemories(
