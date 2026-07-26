@@ -320,6 +320,7 @@ jobs:
         id: identity
         run: |
           set -euo pipefail
+          RELEASE_TAG="${{ steps.version.outputs.release_tag }}"
           PLANNED_SOURCE_SHA="${{ steps.final-plan.outputs.source_sha }}"
           CHANGELOG_CHANGED="${{ steps.changelog.outputs.changed }}"
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
@@ -331,6 +332,7 @@ jobs:
             CHANGELOG_PARENT_SHA="$(git rev-parse "${CHANGELOG_COMMIT}^1")"
             CANDIDATE_SHA="$MAIN_SHA"
             python3 .github/scripts/desktop-release-source-identity.py \
+              --release-tag "$RELEASE_TAG" \
               --planned-source-sha "$PLANNED_SOURCE_SHA" \
               --candidate-source-sha "$CANDIDATE_SHA" \
               --origin-main-sha "$MAIN_SHA" \
@@ -341,6 +343,7 @@ jobs:
           else
             CANDIDATE_SHA="$MAIN_SHA"
             python3 .github/scripts/desktop-release-source-identity.py \
+              --release-tag "$RELEASE_TAG" \
               --planned-source-sha "$PLANNED_SOURCE_SHA" \
               --candidate-source-sha "$CANDIDATE_SHA" \
               --origin-main-sha "$MAIN_SHA" \
@@ -376,8 +379,8 @@ jobs:
             exit 1
           fi
           # The publisher refetches GitHub's authoritative main immediately
-          # before the documented create-only ref request. A moved main or an
-          # existing tag fails without creating or rewriting a candidate ref.
+          # before the native lightweight-tag push. A moved main or an existing
+          # tag fails without creating or rewriting a candidate ref.
           python3 .github/scripts/publish-desktop-candidate-tag.py \
             --repository "${{ github.repository }}" \
             --release-tag "$RELEASE_TAG" \
