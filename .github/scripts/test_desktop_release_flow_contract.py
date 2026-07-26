@@ -91,7 +91,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
 
     def test_m1_qualification_binds_the_immutable_tag(self) -> None:
         for fragment in (
-            'checkout --quiet --detach "refs/tags/$ref"',
+            'checkout --quiet --detach "refs/tags/$RELEASE_TAG"',
             "ref: ${{ inputs.release_tag }}",
             'test "$ref" = "$RELEASE_TAG"',
             'git rev-parse "$RELEASE_TAG^{commit}"',
@@ -123,7 +123,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             "OMI_QUALIFICATION_CLEANUP_CONTEXT",
             "Finalize only this authenticated qualification lease",
             "if: always()",
-            "qualification-lease release",
+            "qualification-lease-command.sh\" release",
             "runner-capacity.json",
             "M1 qualification runner capacity guard refused to start",
             "33554432",
