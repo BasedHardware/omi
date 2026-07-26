@@ -793,14 +793,26 @@ final class MemoryAtlasLayoutTests: XCTestCase {
 
     let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(
       graph: KnowledgeGraphResponse(nodes: nodes, edges: edges), userName: "David")
-    let first = try XCTUnwrap(snapshot.rankedEdges.first)
+    let ordered = snapshot.rankedEdges
+    let spokes = ordered.enumerated().filter {
+      $0.element.edge.sourceId == "david" || $0.element.edge.targetId == "david"
+    }
 
-    XCTAssertEqual(first.id, "pair", "A relationship between two other entities is drawn first")
-    XCTAssertTrue(
-      snapshot.rankedEdges.dropFirst().allSatisfy {
+    XCTAssertNotNil(
+      ordered.prefix(MemoryAtlasSnapshot.spokesDrawnOnMerit + 1).first { $0.id == "pair" },
+      "A relationship between two other entities is drawn early, not after a hundred spokes")
+    // But not *all* of them demoted: the one entity the user knows is connected
+    // to everything must not be drawn with no lines at all.
+    XCTAssertEqual(
+      spokes.prefix(while: { $0.offset < MemoryAtlasSnapshot.spokesDrawnOnMerit + 1 }).count,
+      MemoryAtlasSnapshot.spokesDrawnOnMerit,
+      "A handful of your strongest connections still compete on merit")
+    XCTAssertEqual(
+      ordered.suffix(nodes.count - 1 - MemoryAtlasSnapshot.spokesDrawnOnMerit).filter {
         $0.edge.sourceId == "david" || $0.edge.targetId == "david"
-      },
-      "Your own connections come last, however prominent their other end is")
+      }.count,
+      12 - MemoryAtlasSnapshot.spokesDrawnOnMerit,
+      "The rest come last, however prominent their other end is")
   }
 
   /// Entering a region has to actually arrive somewhere: close enough that its

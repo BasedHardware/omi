@@ -284,6 +284,68 @@ struct MemoryAtlasNeighbourhood: Identifiable, Equatable {
   var memberCount: Int { memberIDs.count }
 }
 
+/// Makes a region's name look pressable before it is pressed.
+///
+/// Set quietly enough to be a map label rather than a control — which is what
+/// it should look like at rest — a caption gives a sighted user no reason to
+/// think it does anything. Hover is where that gets said: the label lifts to
+/// full contrast and grows a scope, the same glyph the inspector's Focus
+/// control uses for the same act.
+private struct MemoryAtlasNeighbourhoodCaption: View {
+  let caption: String
+  let size: CGSize
+  let enter: () -> Void
+
+  @State private var isHovered = false
+
+  var body: some View {
+    Button(action: enter) {
+      HStack(spacing: 5) {
+        // Set in tracked upper case, the way an atlas sets a country against
+        // the towns inside it. Without that, a region's name is the same
+        // treatment as an entity's own, in a pill bigger than any node — so it
+        // reads as a very important entity rather than as the ground they
+        // stand on, and "Omi · pull request · GitHub" competes with the Omi
+        // and GitHub labels a few points away instead of describing them.
+        Text(caption.uppercased())
+          .scaledFont(size: 9, weight: .semibold)
+          .tracking(0.8)
+          .foregroundColor(isHovered ? OmiColors.textPrimary : OmiColors.textTertiary)
+          .lineLimit(1)
+          .truncationMode(.tail)
+
+        Image(systemName: "scope")
+          .scaledFont(size: 8, weight: .semibold)
+          .foregroundColor(OmiColors.textSecondary)
+          .opacity(isHovered ? 1 : 0)
+          .frame(width: isHovered ? 9 : 0)
+      }
+      .padding(.horizontal, 9)
+      // Sized to the box the placement pass reserved. Left to size itself, a
+      // caption grows past the width its collision test assumed and starts
+      // covering the neighbouring regions it was measured against.
+      .frame(width: size.width, height: size.height)
+      // A scrim, because the caption sits over the map rather than beside it
+      // and the dots underneath would read through the letters.
+      .background(
+        Capsule()
+          .fill(OmiColors.backgroundPrimary.opacity(isHovered ? 0.92 : 0.66))
+          .overlay(
+            Capsule().stroke(OmiColors.border.opacity(isHovered ? 0.4 : 0.14), lineWidth: 1))
+      )
+      .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    // Quiet enough at rest to be a map label rather than a control, which is
+    // what it should look like — so hover is where "this does something" gets
+    // said. The scope is the glyph the inspector's Focus control already uses
+    // for the same act.
+    .onHover { hovering in
+      withAnimation(OmiMotion.gated(.easeOut(duration: 0.12))) { isHovered = hovering }
+    }
+  }
+}
+
 /// Where a region's name goes, and whether it goes anywhere at all.
 ///
 /// Separate from the drawing so the tap target and the painted caption are
@@ -352,7 +414,8 @@ enum MemoryAtlasNeighbourhoodLabels {
       let center = project(region.center)
       let radii = CGSize(
         width: region.radius * scale.width, height: region.radius * scale.height)
-      let width = min(260, max(64, CGFloat(region.caption.count) * 6.1 + 20))
+      // Upper case at 9pt with tracking, plus room for the hover glyph.
+      let width = min(268, max(64, CGFloat(region.caption.count) * 6.6 + 30))
 
       // Above the region first, because a name over the top of a group reads as
       // a heading for it. The rest are fallbacks: on a real account most
@@ -424,9 +487,13 @@ struct MemoryAtlasSnapshot {
     let indexedNodes = Dictionary(lastWriteWins: nodes.map { ($0.id, $0) })
     nodeByID = indexedNodes
 
+    let keptSpokes = MemoryAtlasSnapshot.spokesWorthDrawing(
+      edges, nodes: indexedNodes, anchorID: anchorNodeID)
     let sortedEdges = edges.sorted { lhs, rhs in
-      let lhsRank = MemoryAtlasSnapshot.edgeRank(lhs, nodes: indexedNodes, anchorID: anchorNodeID)
-      let rhsRank = MemoryAtlasSnapshot.edgeRank(rhs, nodes: indexedNodes, anchorID: anchorNodeID)
+      let lhsRank = MemoryAtlasSnapshot.edgeRank(
+        lhs, nodes: indexedNodes, anchorID: anchorNodeID, keptSpokes: keptSpokes)
+      let rhsRank = MemoryAtlasSnapshot.edgeRank(
+        rhs, nodes: indexedNodes, anchorID: anchorNodeID, keptSpokes: keptSpokes)
       return lhsRank < rhsRank
     }
     rankedEdges = sortedEdges
@@ -479,16 +546,60 @@ struct MemoryAtlasSnapshot {
   /// one fact the user already knows: that everything here is theirs. The
   /// relationships between two other entities, which are the only ones that
   /// can tell them something, never made the cut.
+  /// How many of the account holder's own connections still compete for the
+  /// budget on merit.
+  ///
+  /// Not zero. Sending *every* spoke to the back leaves the one entity the user
+  /// is certain is connected to everything drawn with no lines at all — the
+  /// opposite lie from the starburst, and just as wrong. A handful, to their
+  /// most prominent partners, says "you are in this" without saying it a
+  /// hundred times.
+  static let spokesDrawnOnMerit = 6
+
+  static func spokesWorthDrawing(
+    _ edges: [MemoryAtlasEdgePlacement],
+    nodes: [String: MemoryAtlasNodePlacement],
+    anchorID: String?
+  ) -> Set<String> {
+    guard let anchorID else { return [] }
+    let partnerRank: (MemoryAtlasEdgePlacement) -> Int = { placement in
+      let other =
+        placement.edge.sourceId == anchorID ? placement.edge.targetId : placement.edge.sourceId
+      return nodes[other]?.clusterRank ?? .max
+    }
+    return Set(
+      edges
+        .filter { $0.edge.sourceId == anchorID || $0.edge.targetId == anchorID }
+        .sorted {
+          partnerRank($0) == partnerRank($1) ? $0.id < $1.id : partnerRank($0) < partnerRank($1)
+        }
+        .prefix(spokesDrawnOnMerit)
+        .map(\.id))
+  }
+
+  /// What gets drawn first when there is only room for a few dozen lines.
+  ///
+  /// The account holder's connections sort last beyond the first few, however
+  /// prominent their endpoints are. They used to sort *first* — the anchor's
+  /// rank is zero, so every edge touching it led the order — and the budget is
+  /// small enough (36 lines at overview) that on a real account it was spent
+  /// entirely on them. The map reported 1,377 connections and drew a hundred
+  /// copies of the one fact the user already knows: that everything here is
+  /// theirs. The relationships between two other entities, which are the only
+  /// ones that can tell them something, never made the cut.
   static func edgeRank(
     _ placement: MemoryAtlasEdgePlacement,
     nodes: [String: MemoryAtlasNodePlacement],
-    anchorID: String?
+    anchorID: String?,
+    keptSpokes: Set<String> = []
   ) -> (Int, Int, Int, String) {
     let sourceRank = nodes[placement.edge.sourceId]?.clusterRank ?? .max
     let targetRank = nodes[placement.edge.targetId]?.clusterRank ?? .max
-    let touchesAnchor =
-      anchorID != nil && (placement.edge.sourceId == anchorID || placement.edge.targetId == anchorID)
-    return (touchesAnchor ? 1 : 0, min(sourceRank, targetRank), max(sourceRank, targetRank), placement.id)
+    let demoted =
+      anchorID != nil
+      && (placement.edge.sourceId == anchorID || placement.edge.targetId == anchorID)
+      && !keptSpokes.contains(placement.id)
+    return (demoted ? 1 : 0, min(sourceRank, targetRank), max(sourceRank, targetRank), placement.id)
   }
 
   private static func maximumEndpointRank(
@@ -2673,26 +2784,11 @@ private struct CanonicalMemoryAtlasSurface: View {
     regions: [MemoryAtlasNeighbourhoodLabels.Placed]
   ) -> some View {
     ForEach(regions) { region in
-      Button {
-        enter(region)
-      } label: {
-        Text(region.caption)
-          .scaledFont(size: 10, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
-          .lineLimit(1)
-          .truncationMode(.tail)
-          .padding(.horizontal, 9)
-          // Sized to the box the placement pass reserved. Left to size itself,
-          // a caption grows past the width its collision test assumed and
-          // starts covering the neighbouring regions it was measured against.
-          .frame(width: region.rect.width, height: region.rect.height)
-          // A scrim, because the caption sits over the map rather than beside
-          // it and the dots underneath would read through the letters.
-          .omiControlSurface(
-            fill: OmiColors.backgroundPrimary.opacity(0.72), radius: 9,
-            stroke: OmiColors.border.opacity(0.22))
-      }
-      .buttonStyle(.plain)
+      MemoryAtlasNeighbourhoodCaption(
+        caption: region.caption,
+        size: region.rect.size,
+        enter: { enter(region) }
+      )
       .position(x: region.rect.midX, y: region.rect.midY)
       .help("Zoom into this neighbourhood")
       .accessibilityLabel("Neighbourhood around \(region.caption)")
