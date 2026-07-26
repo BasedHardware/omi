@@ -393,6 +393,7 @@ enum TopNavigationRoutes {
     TopNavigationItem(index: SidebarNavItem.dashboard.rawValue, title: "Home", icon: "house.fill"),
     TopNavigationItem(index: SidebarNavItem.conversations.rawValue, title: "Memory", icon: "brain"),
     TopNavigationItem(index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist"),
+    TopNavigationItem(index: SidebarNavItem.people.rawValue, title: "People", icon: "person.2.fill"),
     TopNavigationItem(index: SidebarNavItem.apps.rawValue, title: "Apps", icon: "puzzlepiece.fill"),
   ]
 

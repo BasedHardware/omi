@@ -851,6 +851,8 @@ struct DesktopHomeView: View {
       return .memories
     case "tasks":
       return .tasks
+    case "people":
+      return .people
     case "focus":
       return .focus
     case "insight":
@@ -1855,6 +1857,9 @@ private struct PageContentView: View {
         )
       case 10:
         PermissionsPage(appState: appState)
+      case 11:
+        constrainedListPage(
+          PeoplePage(viewModel: viewModelContainer.peopleViewModel))
       case 12:
         HelpPage()
       default:

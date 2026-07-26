@@ -62,6 +62,10 @@ enum DefaultsKey: String {
   // migration contract instead of repeating raw UserDefaults literals.
   case tasksCategoryOrder = "TasksCategoryOrder"
   case tasksSortOrderMigrated = "TasksSortOrderMigrated"
+  // People intelligence: on-device connector gates + LinkedIn CSV import path.
+  case peopleIMessageExport = "peopleIMessageExport"
+  case peopleGraphBuild = "peopleGraphBuild"
+  case peopleConnectorsLinkedInCSVPath = "peopleConnectorsLinkedInCSVPath"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is

@@ -20,6 +20,7 @@ class ViewModelContainer: ObservableObject {
   let tasksViewModel = TasksViewModel()
   let appProvider = AppProvider()
   let memoriesViewModel = MemoriesViewModel()
+  let peopleViewModel = PeopleViewModel()
   /// Brain-map graph — persistent so the SceneKit scene, force layout, and
   /// camera survive page navigation instead of rebuilding every visit.
   let memoryGraphViewModel = MemoryGraphViewModel()
