@@ -45,6 +45,13 @@ unrecorded processes are never killed. `--keep-stack` intentionally leaves the
 recorded lease for later safe reclamation. Retention removes only completed,
 sentinel-proven state and paired logs, never a live/incomplete or foreign root.
 
+The automatic fault suite keeps its fault-inject state under the same
+sentinel-protected lease root. Normal harness cleanup stops that token-bearing
+process first; lease release is the fail-closed fallback for interruption paths.
+Before signaling it, release revalidates the owner-only state files, lease token,
+PID/process group, command marker, loopback URL, and exact listener PID. A
+listener that fails any check is retained and never signaled.
+
 The main qualification app receives a separate run-unique launch token. `run.sh`
 writes an owner-only launch signal, which the qualifier verifies against exactly
 one token-bearing app process before writing a `0600` launch record. Cleanup

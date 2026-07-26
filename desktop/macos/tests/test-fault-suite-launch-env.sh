@@ -38,12 +38,14 @@ exercise_fault_suite_launch_command() {
   local fixture="$TMP_ROOT/fault-suite"
   local bin_dir="$TMP_ROOT/fault-suite-bin"
   local bridge_port fault_port fault_run_token capture ready_capture output
+  local qualification_fault_state
   bridge_port="47791"
   fault_port="19081"
   fault_run_token="faultsuitefixturetoken123456"
   capture="$fixture/fault-run.env"
   ready_capture="$fixture/fault-ready.env"
   output="$fixture/fault-suite.out"
+  qualification_fault_state="$fixture/qualification-state/fault"
 
   mkdir -p "$fixture/scripts" "$fixture/e2e/flows"
   ln -s "$CORE_HARNESS" "$fixture/scripts/desktop-core-harness.sh"
@@ -139,6 +141,7 @@ SH
 
   PATH="$bin_dir:$PATH" \
     OMI_FAULT_RUN_TOKEN="$fault_run_token" \
+    OMI_FAULT_STATE_DIR="$qualification_fault_state" \
     OMI_FAULT_APP_PID_FILE="$fixture/fault-app.pid" \
     OMI_FAULT_TEST_PORT="$fault_port" \
     OMI_FAULT_ENV_CAPTURE="$capture" \
@@ -148,6 +151,8 @@ SH
       cat "$output" >&2
       fail "fault suite fixture did not complete"
     }
+  [[ -d "$qualification_fault_state" ]] \
+    || fail "fault suite ignored the qualification-owned fault state directory"
 
   python3 - "$capture" "$ready_capture" "$bridge_port" "$fault_port" "$fault_run_token" "$fixture" <<'PY'
 import json
@@ -212,6 +217,7 @@ PY
   set +e
   PATH="$bin_dir:$PATH" \
     OMI_FAULT_RUN_TOKEN="$fault_run_token" \
+    OMI_FAULT_STATE_DIR="$qualification_fault_state" \
     OMI_FAULT_APP_PID_FILE="$fixture/fault-app.pid" \
     OMI_FAULT_TEST_PORT="$fault_port" \
     OMI_FAULT_ENV_CAPTURE="$capture" \

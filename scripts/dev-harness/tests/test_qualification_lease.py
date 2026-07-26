@@ -17,6 +17,7 @@ from dev_harness import qualification, safety
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+FAULT_INJECTOR = REPO_ROOT / "desktop" / "macos" / "scripts" / "omi-fault-inject.sh"
 
 
 def _stale_lease(root: Path, lease_id: str, pid: int, port: int) -> None:
@@ -35,6 +36,31 @@ def _stale_lease(root: Path, lease_id: str, pid: int, port: int) -> None:
     lease_path.write_text(json.dumps(lease), encoding="utf-8")
 
 
+def _free_port() -> int:
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    port = int(listener.getsockname()[1])
+    listener.close()
+    return port
+
+
+def _start_fault_injector(state: Path, token: str, port: int) -> int:
+    env = {
+        **os.environ,
+        "OMI_FAULT_STATE_DIR": str(state),
+        "OMI_FAULT_OWNERSHIP_TOKEN": token,
+    }
+    subprocess.run(
+        ["bash", str(FAULT_INJECTOR), "start", "error", "--port", str(port)],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=True,
+    )
+    return int((state / "pid").read_text(encoding="utf-8"))
+
+
 def test_active_lease_serializes_qualification_runs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     root = tmp_path / "qualification"
     monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
@@ -44,6 +70,71 @@ def test_active_lease_serializes_qualification_runs(monkeypatch: pytest.MonkeyPa
         qualification.acquire(repo_root=REPO_ROOT, lease_id="qualification-two", owner_pid=os.getpid(), port_offset=1001)
 
     qualification.release(repo_root=REPO_ROOT, lease_id="qualification-one", token=str(first["token"]))
+
+
+def test_release_stops_the_exact_lease_owned_fault_inject_listener(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = tmp_path / "qualification"
+    lease_id = "qualification-owned-fault"
+    monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
+    monkeypatch.setattr(qualification, "STOP_PHASES", ((signal.SIGTERM, 2), (signal.SIGKILL, 1)))
+    acquired = qualification.acquire(repo_root=REPO_ROOT, lease_id=lease_id, owner_pid=os.getpid(), port_offset=1000)
+    state = root / "state" / lease_id / qualification.FAULT_STATE_DIRNAME
+    state.mkdir(mode=0o700)
+    port = _free_port()
+    pid = _start_fault_injector(state, str(acquired["token"]), port)
+
+    qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
+
+    assert not safety.listening_pids(port)
+    deadline = time.monotonic() + 2
+    while safety.process_exists(pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not safety.process_exists(pid)
+    assert not (root / "qualification-lease.json").exists()
+    assert (root / "state" / lease_id / qualification.COMPLETION_FILENAME).is_file()
+
+
+def test_release_refuses_and_retains_an_unproven_listener_on_the_recorded_fault_port(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = tmp_path / "qualification"
+    lease_id = "qualification-foreign-fault"
+    monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
+    acquired = qualification.acquire(repo_root=REPO_ROOT, lease_id=lease_id, owner_pid=os.getpid(), port_offset=1000)
+    state = root / "state" / lease_id / qualification.FAULT_STATE_DIRNAME
+    state.mkdir(mode=0o700)
+    port = _free_port()
+    owned_pid = _start_fault_injector(state, str(acquired["token"]), port)
+    os.killpg(owned_pid, signal.SIGTERM)
+    deadline = time.monotonic() + 5
+    while safety.process_exists(owned_pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    foreign = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import socket,time; s=socket.socket(); s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1); "
+            "s.bind(('127.0.0.1',int(__import__('sys').argv[1]))); s.listen(); time.sleep(60)",
+            str(port),
+        ],
+        start_new_session=True,
+    )
+    try:
+        deadline = time.monotonic() + 5
+        while foreign.pid not in safety.listening_pids(port) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        with pytest.raises(qualification.QualificationLeaseError, match="lease lineage is unproven"):
+            qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
+        assert foreign.poll() is None
+        assert (root / "qualification-lease.json").is_file()
+        assert (state / "meta").is_file()
+        assert not (root / "state" / lease_id / qualification.COMPLETION_FILENAME).exists()
+    finally:
+        if foreign.poll() is None:
+            foreign.terminate()
+            foreign.wait(timeout=10)
 
 
 def test_stale_owned_stack_is_reclaimed_without_touching_foreign_listener(

@@ -975,7 +975,10 @@ if [[ "$FAULT_SUITE" -eq 1 ]]; then
   mkdir -p "$RUN_DIR"
   chmod 700 "$RUN_DIR"
   FAULT_RUN_DIR="$RUN_DIR"
-  FAULT_STATE_DIR="$RUN_DIR/fault-inject"
+  # Qualification binds this state to its sentinel-protected lease root. Honor
+  # that handoff so authenticated lease release can reclaim the exact tokened
+  # listener if this harness is interrupted before its normal stop path.
+  FAULT_STATE_DIR="${OMI_FAULT_STATE_DIR:-$RUN_DIR/fault-inject}"
   mkdir -p "$FAULT_STATE_DIR"
   chmod 700 "$FAULT_STATE_DIR"
   FAULT_RUN_TOKEN="$(fault_token_for_run)"
