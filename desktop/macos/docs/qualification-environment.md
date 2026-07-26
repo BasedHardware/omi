@@ -36,6 +36,43 @@ All three classes remain fail-closed. The classification only makes a
 non-product host prerequisite precise and early; it does not convert it to
 passing evidence.
 
+## Local M1 lifecycle proof
+
+From the canonical repository on an Apple Silicon Mac, install the backend
+virtual environment once and check out the exact local release tag:
+
+```bash
+make setup-backend
+git checkout --detach refs/tags/vX.Y.Z+BUILD-macos
+desktop/macos/scripts/qualification-local-proof.sh \
+  --offline \
+  --fast \
+  --result "$PWD/.local/qualification-proof.json" \
+  vX.Y.Z+BUILD-macos
+```
+
+Prerequisites are `git`, Python 3, `nc`, `lsof`, `ps`, and the backend virtual
+environment created by `make setup-backend`. Fetch the tag before entering
+offline mode if it is not already local. The proof itself does not use GitHub
+Actions or Codemagic credentials, production credentials, release APIs, channel
+pointers, publication, Beta/Stable bundles, or `/Applications/Omi.app`.
+
+A successful `0600` result has `status: "passed"`, `mode: "offline-fast"`,
+the tag's exact `source_sha`, `cleanup_status: "released"`, and these completed
+boundaries in order: release-tag validation, lease/provenance acquisition,
+disposable fault-listener start, runner-hygiene preflight, and cleanup
+finalization. The adjacent
+`.local/qualification-proof-fault-listener.json` is the redacted provenance
+cleanup report. Missing or foreign listener provenance, an unreclaimable stale
+owned process, or incomplete cleanup fails closed before any long UI flow and
+retains the unknown process.
+
+The workflow runs this exact entry point as a separate fast M1 job. Only a
+passing proof dispatches the canonical qualification job; the result and
+fault-listener report are retained as an artifact even on failure. This proof
+does not run or replace signed-identity, Tier-2, behavioral fault, manifest, or
+evidence gates.
+
 ## Runner capacity preflight
 
 Before the candidate checkout, the M1-only workflow writes
