@@ -36,9 +36,6 @@ jobs:
           git -C "$PROOF_STAGE/source" remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
           GIT_TERMINAL_PROMPT=0 git -C "$PROOF_STAGE/source" fetch --force --prune --tags origin
           git -C "$PROOF_STAGE/source" checkout --quiet --detach "refs/tags/$RELEASE_TAG"
-      - name: Install local qualification proof prerequisites
-        working-directory: ${{ runner.temp }}/desktop-beta-local-proof/${{ github.run_id }}-${{ github.run_attempt }}/source
-        run: make setup-backend
       - name: Prove offline qualification lifecycle before canonical dispatch
         working-directory: ${{ runner.temp }}/desktop-beta-local-proof/${{ github.run_id }}-${{ github.run_attempt }}/source
         env:
