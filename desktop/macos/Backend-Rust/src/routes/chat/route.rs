@@ -1,7 +1,7 @@
 use axum::{
     body::Body,
     extract::{DefaultBodyLimit, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, HeaderValue, StatusCode},
     response::Response,
     routing::post,
     Json, Router,
@@ -116,7 +116,7 @@ fn attach_request_id(response: &mut Response, request_id: &str) {
 fn attach_chat_contract_version(response: &mut Response) {
     response.headers_mut().insert(
         OMI_CHAT_CONTRACT_HEADER,
-        OMI_CHAT_CONTRACT_VERSION.parse().unwrap(),
+        HeaderValue::from_static(OMI_CHAT_CONTRACT_VERSION),
     );
 }
 
