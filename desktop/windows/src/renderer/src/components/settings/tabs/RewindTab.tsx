@@ -9,14 +9,20 @@ import {
   X,
   Mic,
   Trash2,
-  Target
+  Target,
+  ScanText
 } from 'lucide-react'
 import { runScreenSynthesisOnce } from '../../../lib/screenSynthesis'
 import { BUILT_IN_EXCLUDED_APPS } from '../../../../../shared/rewindExclusions'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
-import type { RewindSettings, ScreenSynthState, InsightSettings } from '../../../../../shared/types'
+import type {
+  RewindSettings,
+  RewindCaptureQuality,
+  ScreenSynthState,
+  InsightSettings
+} from '../../../../../shared/types'
 
 // Preset cadences offered for proactive insights (minutes). Each run is a Gemini
 // call via Omi's proxy, so longer intervals mean less backend cost.
@@ -166,6 +172,33 @@ export function RewindTab(): React.JSX.Element {
             </option>
             <option value={10000} className="bg-neutral-900">
               Every 10s
+            </option>
+          </select>
+        }
+      />
+      <SettingRow
+        icon={ScanText}
+        title="Capture quality"
+        subtitle="Higher quality makes small on-screen text readable (better search and OCR), and uses more CPU and disk."
+        keywords="rewind resolution quality ocr sharpness readable text"
+        control={
+          <select
+            value={rewind?.captureQuality ?? 'standard'}
+            onChange={(e) =>
+              rewind &&
+              saveRewind({ ...rewind, captureQuality: e.target.value as RewindCaptureQuality })
+            }
+            disabled={!rewind}
+            className="rounded-md bg-white/10 px-2 py-1.5 text-sm text-white focus:outline-none disabled:opacity-40"
+          >
+            <option value="standard" className="bg-neutral-900">
+              Standard (720p)
+            </option>
+            <option value="high" className="bg-neutral-900">
+              High (1080p)
+            </option>
+            <option value="max" className="bg-neutral-900">
+              Maximum (1440p)
             </option>
           </select>
         }
