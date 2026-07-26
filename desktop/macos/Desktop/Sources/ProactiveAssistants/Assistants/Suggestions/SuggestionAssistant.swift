@@ -228,10 +228,11 @@ actor SuggestionAssistant: ProactiveAssistant {
   /// search noise.
   private static func groundingSearchTerm(for frame: CapturedFrame) -> String? {
     guard let normalized = ContextDetection.normalizeWindowTitle(frame.windowTitle) else { return nil }
-    let trimmed = normalized.trimmingCharacters(in: .whitespacesAndNewlines)
+    // Must be sanitized before it reaches FTS5 — see SuggestionSearchTerm.
+    let sanitized = SuggestionSearchTerm.sanitize(normalized)
     // Very short titles ("Inbox", "New Tab") carry no signal worth searching on.
-    guard trimmed.count >= 4 else { return nil }
-    return trimmed
+    guard sanitized.count >= 4 else { return nil }
+    return sanitized
   }
 
   // MARK: - Judgment

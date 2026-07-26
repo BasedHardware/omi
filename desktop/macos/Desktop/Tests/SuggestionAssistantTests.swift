@@ -135,6 +135,41 @@ final class SuggestionDeduplicationTests: XCTestCase {
   }
 }
 
+/// Regression: a live run against a Safari window titled `Start Page (Private Browsing)`
+/// raised `fts5: syntax error near "("` and silently dropped screen-history grounding.
+/// `RewindDatabase.search` does not sanitize its query, so the caller must.
+final class SuggestionSearchTermTests: XCTestCase {
+  func testParenthesesAreStrippedSoFTS5DoesNotRaise() {
+    XCTAssertEqual(
+      SuggestionSearchTerm.sanitize("Start Page (Private Browsing)"),
+      "Start Page Private Browsing"
+    )
+  }
+
+  func testFTS5OperatorCharactersAreRemoved() {
+    for raw in ["a \"quoted\" title", "title: subtitle", "foo* AND bar", "a-b^c", "x OR (y)"] {
+      let sanitized = SuggestionSearchTerm.sanitize(raw)
+      for forbidden in ["(", ")", "\"", ":", "*", "^", "-"] {
+        XCTAssertFalse(
+          sanitized.contains(forbidden),
+          "sanitized \"\(sanitized)\" from \"\(raw)\" still contains \(forbidden)"
+        )
+      }
+    }
+  }
+
+  func testMeaningfulTokensSurvive() {
+    XCTAssertEqual(SuggestionSearchTerm.sanitize("Sarah Chen — Messages"), "Sarah Chen Messages")
+    XCTAssertEqual(SuggestionSearchTerm.sanitize("PR #10581: fix the thing"), "PR 10581 fix the thing")
+  }
+
+  func testCollapsesWhitespaceRatherThanLeavingEmptyTokens() {
+    XCTAssertEqual(SuggestionSearchTerm.sanitize("a   ---   b"), "a b")
+    XCTAssertEqual(SuggestionSearchTerm.sanitize("((()))"), "")
+    XCTAssertEqual(SuggestionSearchTerm.sanitize(""), "")
+  }
+}
+
 /// The grounding bundle is what makes a suggestion carry information the user does not
 /// already have. An empty section must be omitted entirely rather than rendered as an
 /// encouraging-looking but vacuous heading the model might try to fill.

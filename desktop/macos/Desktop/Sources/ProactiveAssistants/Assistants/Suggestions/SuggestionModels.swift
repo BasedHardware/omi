@@ -135,6 +135,27 @@ enum SuggestionGatePolicy {
   }
 }
 
+// MARK: - Search Term Sanitization
+
+/// Window titles become search terms, and they routinely contain characters FTS5 treats as
+/// syntax — parentheses, quotes, colons, hyphens. `RewindDatabase.search` passes the query
+/// through to FTS5 without sanitizing it (unlike `ActionItemStorage.searchFTS`, which
+/// strips its own), so an unsanitized title like `Start Page (Private Browsing)` raises
+/// `fts5: syntax error near "("` and the whole grounding source silently drops out.
+enum SuggestionSearchTerm {
+  /// Reduce arbitrary window-title text to bare alphanumeric tokens joined by spaces.
+  /// Safe for FTS5 MATCH and for the `LIKE` path used by memory search.
+  static func sanitize(_ raw: String) -> String {
+    let mapped = raw.map { character -> Character in
+      character.isLetter || character.isNumber ? character : " "
+    }
+    return String(mapped)
+      .split(separator: " ")
+      .map(String.init)
+      .joined(separator: " ")
+  }
+}
+
 // MARK: - Duplicate Suppression
 
 /// Suppresses repeats of recent suggestions. Comparison is token-overlap based rather
