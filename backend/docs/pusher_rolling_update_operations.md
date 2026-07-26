@@ -100,6 +100,22 @@ rebuilt (verified against `{dev,prod}_omi_pusher_values.yaml`):
   `activeConnectionsPerPod: 30`; dev `minReplicas: 1`, `maxReplicas: 3`.
 - `podDisruptionBudget.minAvailable: 80%` in both charts.
 
+### Dedicated development Pusher capacity
+
+Development Pusher alone tolerates `dedicated=pusher:NoSchedule`. Its existing
+required node affinity still requires matching `service=pusher` and `env=dev`
+labels, so that toleration does not admit LLM Gateway, Agent Proxy, or other
+workloads to the pool. Production deliberately retains no corresponding
+toleration; it is a separate configuration boundary.
+
+Before a dev Pusher rollout, an external approved GKE operation must provide
+**two Ready, schedulable Pusher-capable nodes** matching that affinity, each
+tainted `dedicated=pusher:NoSchedule`. Two matching nodes leave room for the
+single serving pod and its `maxSurge: 1` replacement during a rolling update.
+Helm only renders the workload toleration: it does not create, label, taint, or
+scale GKE node capacity. Dev HPA remains `minReplicas: 1`, `maxReplicas: 3`,
+and its rolling-update settings remain `maxSurge: 1`, `maxUnavailable: 0`.
+
 Fail-closed rollout gates (preflight scripts that must pass before a deploy) are
 listed in [Operator runbook](#operator-runbook) and the blocking signals in
 [Rollout quality gates (fail-closed)](#rollout-quality-gates-fail-closed).
@@ -172,7 +188,8 @@ helm template pusher backend/charts/pusher \
 Confirm in the rendered output: `readinessProbe.httpGet.path: /ready`,
 `livenessProbe`/`startupProbe` on `/health`, the BackendConfig `healthCheck` on
 `/health` plus `connectionDraining`, `preStop` calling `/__internal/drain`, and
-`progressDeadlineSeconds: 9600`.
+`progressDeadlineSeconds: 9600`. Confirm the dev Deployment has the
+`dedicated=pusher:NoSchedule` toleration and the prod Deployment does not.
 
 ### 2. Run the fail-closed preflight
 

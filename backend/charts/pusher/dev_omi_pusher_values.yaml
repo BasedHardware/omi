@@ -398,7 +398,13 @@ volumeMounts: []
 
 nodeSelector: {}
 
-tolerations: []
+# The dedicated dev Pusher pool is tainted to keep other workloads out. The
+# existing affinity below still confines this workload to matching Pusher nodes.
+tolerations:
+  - key: dedicated
+    operator: Equal
+    value: pusher
+    effect: NoSchedule
 
 affinity:
   nodeAffinity:
