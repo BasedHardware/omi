@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 from datetime import datetime, timezone
@@ -19,11 +20,16 @@ SECRET_PATTERNS = (
     re.compile(r"(?i)(bearer\s+)\S+"),
     re.compile(r"\b(?:gh[oprsu]_[A-Za-z0-9]+|github_pat_[A-Za-z0-9_]+)\b"),
     re.compile(r"(?i)((?:access_)?token=)[^&\s]+"),
+    re.compile(r"(?i)(https?://[^:/\s]+:)[^@/\s]+(@)"),
 )
 
 
 class GitHubApiError(RuntimeError):
     """A bounded, credential-safe GitHub CLI failure."""
+
+
+class GitTransportError(RuntimeError):
+    """A bounded, credential-safe native Git publication failure."""
 
 
 def sanitize_api_diagnostic(value: str) -> str:
@@ -66,6 +72,27 @@ def run_gh_json(args: list[str], payload: dict[str, object] | None = None) -> di
     return decoded
 
 
+def run_git(
+    args: list[str], *, stdin: str | None = None, environment: dict[str, str] | None = None
+) -> str:
+    """Run the native Git transport without exposing credentials in failures."""
+    if environment is None:
+        environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    result = subprocess.run(
+        ["git", *args],
+        check=False,
+        input=stdin,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=environment,
+    )
+    if result.returncode:
+        detail = sanitize_api_diagnostic(result.stderr or result.stdout)
+        raise GitTransportError(f"Git tag publication failed (exit {result.returncode}): {detail}")
+    return result.stdout
+
+
 def validate_inputs(repository: str, release_tag: str, candidate_sha: str) -> None:
     owner, separator, name = repository.partition("/")
     if not owner or not separator or not name or "/" in name:
@@ -76,23 +103,24 @@ def validate_inputs(repository: str, release_tag: str, candidate_sha: str) -> No
         raise ValueError("candidate_sha must be a 40-character lowercase SHA")
 
 
-def create_annotated_tag_object(
-    *, repository: str, release_tag: str, candidate_sha: str, evidence: str, timestamp: str
-) -> str:
-    response = run_gh_json(
-        ["api", "--method", "POST", f"repos/{repository}/git/tags"],
-        {
-            "tag": release_tag,
-            "message": evidence,
-            "object": candidate_sha,
-            "type": "commit",
-            "tagger": {"name": TAGGER_NAME, "email": TAGGER_EMAIL, "date": timestamp},
-        },
+def create_local_annotated_tag(
+    *, release_tag: str, candidate_sha: str, evidence: str, timestamp: str
+) -> None:
+    """Create an evidence-bearing tag locally; it is not a candidate until pushed."""
+    tagger_environment = {
+        # Git hooks export repository-scoped GIT_* variables. The publisher
+        # can be tested from a disposable repository, so never inherit a
+        # caller's index, directory, or worktree into local tag creation.
+        **{key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
+        "GIT_COMMITTER_NAME": TAGGER_NAME,
+        "GIT_COMMITTER_EMAIL": TAGGER_EMAIL,
+        "GIT_COMMITTER_DATE": timestamp,
+    }
+    run_git(
+        ["tag", "--annotate", "--file=-", release_tag, candidate_sha],
+        stdin=evidence,
+        environment=tagger_environment,
     )
-    tag_object_sha = response.get("sha")
-    if not isinstance(tag_object_sha, str) or not SHA_RE.fullmatch(tag_object_sha):
-        raise ValueError("GitHub did not return the annotated tag object SHA")
-    return tag_object_sha
 
 
 def live_main_sha(repository: str) -> str:
@@ -106,21 +134,12 @@ def live_main_sha(repository: str) -> str:
     return sha
 
 
-def create_immutable_tag_ref(*, repository: str, release_tag: str, tag_object_sha: str) -> None:
-    """Create the candidate ref once; conflicts fail without rewriting a tag."""
-    expected_ref = f"refs/tags/{release_tag}"
-    response = run_gh_json(
-        ["api", "--method", "POST", f"repos/{repository}/git/refs"],
-        {
-            "ref": expected_ref,
-            "sha": tag_object_sha,
-        },
-    )
-    target = response.get("object")
-    if response.get("ref") != expected_ref or not isinstance(target, dict):
-        raise ValueError("GitHub returned an unexpected candidate tag ref")
-    if target.get("sha") != tag_object_sha:
-        raise ValueError("GitHub candidate tag ref does not target the annotated tag object")
+def publish_immutable_tag_ref(release_tag: str) -> None:
+    """Publish through Git's tag push so Codemagic sees its native tag trigger."""
+    tag_ref = f"refs/tags/{release_tag}"
+    # No force refspec: an existing remote candidate makes Git fail rather
+    # than rewriting immutable tag evidence or retrying a stale candidate.
+    run_git(["push", "origin", f"{tag_ref}:{tag_ref}"])
 
 
 def publish_candidate_tag(
@@ -132,10 +151,9 @@ def publish_candidate_tag(
     timestamp: str,
 ) -> None:
     validate_inputs(repository, release_tag, candidate_sha)
-    # A tag object alone is unreachable and is not a candidate. The only
-    # candidate-creating action is the create-only ref request below.
-    tag_object_sha = create_annotated_tag_object(
-        repository=repository,
+    # A local tag is not a candidate. It becomes one only through the native
+    # Git tag push below, which is the provider-visible Codemagic boundary.
+    create_local_annotated_tag(
         release_tag=release_tag,
         candidate_sha=candidate_sha,
         evidence=evidence,
@@ -145,13 +163,9 @@ def publish_candidate_tag(
     if observed_main_sha != candidate_sha:
         raise ValueError(
             "GitHub main moved before candidate publication; "
-            f"expected {candidate_sha}, observed {observed_main_sha}; tag ref was not created"
+            f"expected {candidate_sha}, observed {observed_main_sha}; tag was not pushed"
         )
-    create_immutable_tag_ref(
-        repository=repository,
-        release_tag=release_tag,
-        tag_object_sha=tag_object_sha,
-    )
+    publish_immutable_tag_ref(release_tag)
 
 
 def main() -> int:
