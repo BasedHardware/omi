@@ -7,6 +7,6 @@
     ".github/scripts/check-desktop-backend-release-policy.py"
   ],
   "evidence_prs": [9952],
-  "scope_hints": [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", ".github/workflows/desktop_backend_*.yml", "backend/scripts/**"],
+  "scope_hints": [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", "backend/scripts/**"],
   "status": "open"
 }
