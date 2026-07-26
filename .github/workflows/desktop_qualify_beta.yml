@@ -150,6 +150,8 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
           QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
           OMI_QUALIFICATION_CLEANUP_CONTEXT: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/lease-context.json
+          OMI_QUALIFICATION_TIMINGS_FILE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/phase-timings.json
+          OMI_QUALIFICATION_FAULT_PREFLIGHT_REPORT: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/fault-listener-preflight.json
         run: |
           set -euo pipefail
           desktop/macos/scripts/qualify-desktop-beta.sh --automatic --github-actions-artifact --signed-smoke-result "$QUALIFICATION_STAGE/desktop-smoke-result.json" --candidate-gate-result "$QUALIFICATION_STAGE/candidate-gate.json" "$RELEASE_TAG"
@@ -220,6 +222,8 @@ jobs:
           path: |
             ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/runner-capacity.json
             ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/cleanup-evidence.json
+            ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/fault-listener-preflight.json
+            ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/phase-timings.json
           if-no-files-found: error
           overwrite: false
 
