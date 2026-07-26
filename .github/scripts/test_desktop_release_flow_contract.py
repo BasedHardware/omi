@@ -89,7 +89,9 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
 
     def test_m1_qualification_binds_the_immutable_tag(self) -> None:
         for fragment in (
-            'checkout --quiet --detach "refs/tags/$RELEASE_TAG"',
+            'checkout --quiet --detach "refs/tags/$ref"',
+            "ref: ${{ inputs.release_tag }}",
+            'test "$ref" = "$RELEASE_TAG"',
             'git rev-parse "$RELEASE_TAG^{commit}"',
             "git rev-parse 'HEAD^{commit}'",
             "check-desktop-auto-beta-candidate.py",
@@ -145,6 +147,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
                 "GITHUB_SERVER_URL": server.as_uri(),
                 "GITHUB_REPOSITORY": "BasedHardware/omi",
                 "RELEASE_TAG": RELEASE_TAG,
+                "ref": RELEASE_TAG,
                 "OMI_QUALIFICATION_MINIMUM_FREE_KIB": "1",
                 "OMI_QUALIFICATION_MINIMUM_FREE_INODES": "1",
             }
