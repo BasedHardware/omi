@@ -36,6 +36,10 @@ class OracleFailure(AssertionError):
     """A bounded LC3 replay contract assertion failed."""
 
 
+class MutantRejected(OracleFailure):
+    """The test-only decoder mutant reached the asserted contract boundary."""
+
+
 class PrerequisiteFailure(RuntimeError):
     """The locked Linux x86_64 execution path is unavailable."""
 
@@ -242,6 +246,29 @@ class _ObservedDecoder:
         return decoded
 
 
+class _DecoderBypass:
+    """Test-only mutant that returns compressed bytes in place of decoded PCM."""
+
+    def __init__(self, encoded_frame: bytes) -> None:
+        self._encoded_frame = encoded_frame
+        self.calls = 0
+        self.output_sizes: list[int] = []
+
+    def decode(self, _data: bytes, **_kwargs: Any) -> bytes:
+        self.calls += 1
+        self.output_sizes.append(len(self._encoded_frame))
+        return self._encoded_frame
+
+
+def _assert_frame_cadence(*, decoded_sizes: list[int], stt_audio_sizes: list[int]) -> None:
+    """Assert the decoder output and third-frame STT flush contract."""
+
+    if decoded_sizes != [320, 320, 320, 320]:
+        raise OracleFailure("LC3 decoder output did not have four canonical PCM frame sizes")
+    if stt_audio_sizes != [960]:
+        raise OracleFailure("three decoded frames did not produce one 960-byte third-frame flush")
+
+
 async def _new_runtime(
     client: _LoopbackClient,
 ) -> tuple[ListenSessionRuntime, tuple[bytes, ...], dict[str, str], _ObservedDecoder]:
@@ -308,12 +335,11 @@ async def _run_receiver(*, decoder_bypass: bool) -> dict[str, Any]:
     client = _LoopbackClient(frames=(), wait_for_provider_close=not decoder_bypass)
     runtime, encoded_frames, metadata_hashes, observed_decoder = await _new_runtime(client)
     client._frames = encoded_frames if not decoder_bypass else encoded_frames[:3]
+    bypass_decoder: _DecoderBypass | None = None
 
     if decoder_bypass:
-        encoded_frame = encoded_frames[0]
-        runtime.receiver.lc3_decoder = type(
-            "DecoderBypass", (), {"decode": lambda _self, _data, **_kwargs: encoded_frame}
-        )()
+        bypass_decoder = _DecoderBypass(encoded_frames[0])
+        runtime.receiver.lc3_decoder = bypass_decoder
 
     async with _LoopbackParakeet(close_after_first_send=not decoder_bypass) as upstream:
         with _configured_parakeet_endpoint(upstream.api_url), _loopback_only_egress_guard():
@@ -328,16 +354,19 @@ async def _run_receiver(*, decoder_bypass: bool) -> dict[str, Any]:
             await asyncio.wait_for(runtime.receiver.receive_data(), timeout=8)
 
     if decoder_bypass:
-        if upstream.audio_sizes == [960]:
-            raise OracleFailure("decoder-bypass mutant unexpectedly met the flush contract")
-        raise OracleFailure("decoder-bypass mutant violated decoded-size/flush-index contract")
+        if bypass_decoder is None or bypass_decoder.calls != 3 or bypass_decoder.output_sizes != [30, 30, 30]:
+            raise OracleFailure("decoder-bypass mutant was not invoked for each test frame")
+        if upstream.audio_sizes != [90]:
+            raise OracleFailure("decoder-bypass mutant did not produce the expected forced-tail STT send")
+        try:
+            _assert_frame_cadence(decoded_sizes=bypass_decoder.output_sizes, stt_audio_sizes=upstream.audio_sizes)
+        except OracleFailure as error:
+            raise MutantRejected("decoder-bypass mutant concretely violated the frame-cadence contract") from error
+        raise OracleFailure("decoder-bypass mutant unexpectedly met the frame-cadence contract")
 
-    if observed_decoder.decoded_sizes != [320, 320, 320, 320]:
-        raise OracleFailure("real LC3 decoder did not produce 320-byte PCM frames")
+    _assert_frame_cadence(decoded_sizes=observed_decoder.decoded_sizes, stt_audio_sizes=upstream.audio_sizes)
     if upstream.connections != 1:
         raise OracleFailure("provider connection count was not exactly one")
-    if upstream.audio_sizes != [960]:
-        raise OracleFailure("three decoded frames did not produce one 960-byte third-frame flush")
     if len(client.statuses) != 1 or len(client.closes) != 1:
         raise OracleFailure("terminal handling did not emit exactly one status and one close")
     status = client.statuses[0]
@@ -370,7 +399,7 @@ async def run_oracle() -> dict[str, Any]:
         evidence = await _run_receiver(decoder_bypass=False)
         try:
             await _run_receiver(decoder_bypass=True)
-        except OracleFailure:
+        except MutantRejected:
             pass
         else:
             raise OracleFailure("decoder-bypass mutant was not rejected")
