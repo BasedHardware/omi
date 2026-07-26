@@ -93,5 +93,6 @@ def test_source_closure_excludes_builder_stage_copies() -> None:
 
 def test_liblc3_source_is_pinned() -> None:
     dockerfile = (REPO / "backend/pusher/Dockerfile").read_text(encoding="utf-8")
-    assert "ARG LIBLC3_COMMIT=ce2e41faf8c06d038df9f32504c61109a14130be" in dockerfile
+    assert "ENV LIBLC3_COMMIT=ce2e41faf8c06d038df9f32504c61109a14130be" in dockerfile
+    assert "ARG LIBLC3_COMMIT" not in dockerfile
     assert 'git -C liblc3 fetch --depth=1 origin "${LIBLC3_COMMIT}"' in dockerfile

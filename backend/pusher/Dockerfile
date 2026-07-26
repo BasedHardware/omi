@@ -1,11 +1,10 @@
 ARG PYTHON_BASE_IMAGE=gcr.io/based-hardware-dev/python:3.11-slim-forky
 ARG UV_VERSION=0.11.13
-ARG LIBLC3_COMMIT=ce2e41faf8c06d038df9f32504c61109a14130be
 
 FROM ${PYTHON_BASE_IMAGE} AS builder
 
 ARG UV_VERSION
-ARG LIBLC3_COMMIT
+ENV LIBLC3_COMMIT=ce2e41faf8c06d038df9f32504c61109a14130be
 
 RUN python -m venv /opt/venv
 RUN python3 -m pip install --no-cache-dir "uv==${UV_VERSION}"
