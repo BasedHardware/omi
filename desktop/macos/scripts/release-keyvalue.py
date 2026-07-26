@@ -104,6 +104,14 @@ def check_manifest(manifest_path: Path) -> None:
         raise SystemExit(f"manifest provider_mode must be 'offline', got {provider_mode!r}")
 
 
+def check_fault_manifest(manifest_path: Path) -> None:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("passed") is not True:
+        raise SystemExit("fault-suite manifest passed=false")
+    if manifest.get("tier") != "fault":
+        raise SystemExit(f"fault-suite manifest tier must be 'fault', got {manifest.get('tier')!r}")
+
+
 def update_qualification_keys(
     body_path: Path,
     *,
@@ -181,6 +189,10 @@ def _self_test() -> int:
         json.dumps({"passed": True, "tier": 1, "provider_mode": "offline"}),
         encoding="utf-8",
     )
+    passing_fault_manifest = Path("/tmp/release-keyvalue-pass-fault-manifest.json")
+    failing_fault_manifest = Path("/tmp/release-keyvalue-fail-fault-manifest.json")
+    passing_fault_manifest.write_text(json.dumps({"passed": True, "tier": "fault"}), encoding="utf-8")
+    failing_fault_manifest.write_text(json.dumps({"passed": False, "tier": "fault"}), encoding="utf-8")
 
     try:
         check_manifest(passing_manifest)
@@ -214,6 +226,21 @@ def _self_test() -> int:
             ok("check-manifest rejects non-T2 tier")
         else:
             fail("check-manifest wrong tier", f"unexpected exit: {exc}")
+
+    try:
+        check_fault_manifest(passing_fault_manifest)
+        ok("check-fault-manifest passing manifest exits 0")
+    except SystemExit as exc:
+        fail("check-fault-manifest passing manifest", f"unexpected exit {exc.code}: {exc}")
+
+    try:
+        check_fault_manifest(failing_fault_manifest)
+        fail("check-fault-manifest failing manifest", "expected SystemExit")
+    except SystemExit as exc:
+        if exc.code != 0 and str(exc) == "fault-suite manifest passed=false":
+            ok("check-fault-manifest rejects a failed user-visible fault flow")
+        else:
+            fail("check-fault-manifest failing manifest", f"unexpected exit {exc.code}: {exc}")
 
     sample_body = """Release notes
 
@@ -336,6 +363,8 @@ def main(argv: list[str] | None = None) -> int:
 
     check = sub.add_parser("check-manifest", help="Exit 0 when harness manifest passed")
     check.add_argument("manifest")
+    check_fault = sub.add_parser("check-fault-manifest", help="Exit 0 when the user-visible fault suite passed")
+    check_fault.add_argument("manifest")
 
     update = sub.add_parser(
         "update-qualified-beta",
@@ -356,6 +385,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "check-manifest":
         check_manifest(Path(args.manifest))
+        return 0
+    if args.command == "check-fault-manifest":
+        check_fault_manifest(Path(args.manifest))
         return 0
     if args.command == "update-qualified-beta":
         update_qualification_keys(

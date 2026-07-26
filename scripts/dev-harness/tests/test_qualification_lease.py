@@ -4,6 +4,7 @@ import json
 import os
 import signal
 import socket
+import stat
 import subprocess
 import sys
 import time
@@ -94,6 +95,106 @@ def test_release_stops_the_exact_lease_owned_fault_inject_listener(
     assert not safety.process_exists(pid)
     assert not (root / "qualification-lease.json").exists()
     assert (root / "state" / lease_id / qualification.COMPLETION_FILENAME).is_file()
+
+
+def test_fault_listener_preflight_proves_cleanup_before_retaining_the_active_lease(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = tmp_path / "qualification"
+    lease_id = "qualification-owned-fault-preflight"
+    report_path = tmp_path / "fault-listener-preflight.json"
+    monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
+    monkeypatch.setattr(qualification, "STOP_PHASES", ((signal.SIGTERM, 2), (signal.SIGKILL, 1)))
+    acquired = qualification.acquire(
+        repo_root=REPO_ROOT,
+        lease_id=lease_id,
+        owner_pid=os.getpid(),
+        port_offset=1000,
+    )
+    state = root / "state" / lease_id / qualification.FAULT_STATE_DIRNAME
+    state.mkdir(mode=0o700)
+    port = _free_port()
+    pid = _start_fault_injector(state, str(acquired["token"]), port)
+
+    report = qualification.preflight_fault_cleanup(
+        repo_root=REPO_ROOT,
+        lease_id=lease_id,
+        token=str(acquired["token"]),
+        result_path=report_path,
+    )
+
+    assert report["status"] == "passed"
+    assert report["port"] == port
+    assert json.loads(report_path.read_text(encoding="utf-8")) == report
+    assert stat.S_IMODE(report_path.stat().st_mode) == 0o600
+    assert not safety.listening_pids(port)
+    deadline = time.monotonic() + 2
+    while safety.process_exists(pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not safety.process_exists(pid)
+    assert not (state / "pid").exists()
+    assert not (state / "meta").exists()
+    assert (root / "qualification-lease.json").is_file()
+
+    qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
+
+
+def test_fault_listener_preflight_retains_replaced_listener_and_reports_host_prerequisite(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = tmp_path / "qualification"
+    lease_id = "qualification-foreign-fault-preflight"
+    report_path = tmp_path / "fault-listener-preflight.json"
+    monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
+    acquired = qualification.acquire(
+        repo_root=REPO_ROOT,
+        lease_id=lease_id,
+        owner_pid=os.getpid(),
+        port_offset=1000,
+    )
+    state = root / "state" / lease_id / qualification.FAULT_STATE_DIRNAME
+    state.mkdir(mode=0o700)
+    port = _free_port()
+    owned_pid = _start_fault_injector(state, str(acquired["token"]), port)
+    os.killpg(owned_pid, signal.SIGTERM)
+    deadline = time.monotonic() + 5
+    while safety.process_exists(owned_pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    foreign = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import socket,time; s=socket.socket(); s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1); "
+            "s.bind(('127.0.0.1',int(__import__('sys').argv[1]))); s.listen(); time.sleep(60)",
+            str(port),
+        ],
+        start_new_session=True,
+    )
+    try:
+        deadline = time.monotonic() + 5
+        while foreign.pid not in safety.listening_pids(port) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        with pytest.raises(qualification.QualificationLeaseError, match="lease lineage is unproven"):
+            qualification.preflight_fault_cleanup(
+                repo_root=REPO_ROOT,
+                lease_id=lease_id,
+                token=str(acquired["token"]),
+                result_path=report_path,
+            )
+
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        assert report["status"] == "failed"
+        assert report["failure_reason"] == "unproven-listener-lineage"
+        assert report["classification"] == "runner-hygiene-cleanup"
+        assert foreign.poll() is None
+        assert (root / "qualification-lease.json").is_file()
+        assert (state / "pid").is_file()
+        assert (state / "meta").is_file()
+        assert not (root / "state" / lease_id / qualification.COMPLETION_FILENAME).exists()
+    finally:
+        if foreign.poll() is None:
+            foreign.terminate()
+            foreign.wait(timeout=10)
 
 
 def test_release_refuses_and_retains_an_unproven_listener_on_the_recorded_fault_port(

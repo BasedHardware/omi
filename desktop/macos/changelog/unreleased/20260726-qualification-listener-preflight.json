@@ -1,0 +1,3 @@
+{
+  "change": "Made macOS Beta qualification detect unsafe runner listener state before the long behavioral suite."
+}
