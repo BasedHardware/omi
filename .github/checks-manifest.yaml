@@ -378,7 +378,7 @@ checks:
     command: ["python3", ".github/scripts/test_publish_desktop_candidate_tag.py"]
     triggers: [".github/scripts/publish-desktop-candidate-tag.py", ".github/scripts/test_publish_desktop_candidate_tag.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "SCA-129 requires GitHub to atomically verify live main before creating an immutable candidate tag"
+    reason: "SCA-136 requires a fresh authoritative main check plus create-only immutable candidate tag publication"
   - id: desktop-manifest-routes
     command: ["python3", ".github/scripts/test_desktop_manifest_routes.py"]
     triggers: [".github/workflows/desktop-swift-ci.yml", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_manifest_routes.py"]

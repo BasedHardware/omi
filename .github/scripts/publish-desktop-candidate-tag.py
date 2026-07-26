@@ -1,93 +1,79 @@
 #!/usr/bin/env python3
-"""Atomically publish an annotated macOS candidate tag against live main."""
+"""Publish an immutable annotated macOS candidate tag from exact live main."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-
-ZERO_OID = "0" * 40
 TAGGER_NAME = "github-actions[bot]"
 TAGGER_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
-
-REPOSITORY_ID_QUERY = """
-query RepositoryId($owner: String!, $name: String!) {
-  repository(owner: $owner, name: $name) { id }
-}
-"""
-
-UPDATE_REFS_MUTATION = """
-mutation PublishCandidateTag(
-  $repositoryId: ID!,
-  $mainBefore: GitObjectID!,
-  $mainAfter: GitObjectID!,
-  $tagName: GitRefname!,
-  $tagObject: GitObjectID!,
-  $zeroOid: GitObjectID!
-) {
-  updateRefs(input: {
-    repositoryId: $repositoryId,
-    refUpdates: [
-      {
-        name: "refs/heads/main",
-        beforeOid: $mainBefore,
-        afterOid: $mainAfter,
-        force: false
-      },
-      {
-        name: $tagName,
-        beforeOid: $zeroOid,
-        afterOid: $tagObject,
-        force: false
-      }
-    ]
-  }) {
-    clientMutationId
-  }
-}
-"""
+SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+RELEASE_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+-macos$")
+SECRET_PATTERNS = (
+    re.compile(r"(?i)(authorization:\s*bearer\s+)\S+"),
+    re.compile(r"(?i)(bearer\s+)\S+"),
+    re.compile(r"\b(?:gh[oprsu]_[A-Za-z0-9]+|github_pat_[A-Za-z0-9_]+)\b"),
+    re.compile(r"(?i)((?:access_)?token=)[^&\s]+"),
+)
 
 
-def run_gh_json(args: list[str], payload: dict[str, object]) -> dict[str, object]:
-    """Call the authenticated GitHub CLI without exposing structured input to a shell."""
+class GitHubApiError(RuntimeError):
+    """A bounded, credential-safe GitHub CLI failure."""
+
+
+def sanitize_api_diagnostic(value: str) -> str:
+    """Retain actionable API context without echoing credentials."""
+    sanitized = " ".join(value.split())
+    for pattern in SECRET_PATTERNS:
+        replacement = r"\1<redacted>" if pattern.groups else "<redacted>"
+        sanitized = pattern.sub(replacement, sanitized)
+    return sanitized[:1000] or "no diagnostic text returned"
+
+
+def run_gh_json(args: list[str], payload: dict[str, object] | None = None) -> dict[str, object]:
+    """Call the authenticated GitHub CLI without exposing input to a shell."""
+    command = ["gh", *args]
+    stdin = None
+    if payload is not None:
+        command.extend(["--input", "-"])
+        stdin = json.dumps(payload)
     result = subprocess.run(
-        ["gh", *args, "--input", "-"],
-        check=True,
-        input=json.dumps(payload),
+        command,
+        check=False,
+        input=stdin,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+    if result.returncode:
+        detail = sanitize_api_diagnostic(result.stderr or result.stdout)
+        raise GitHubApiError(f"GitHub API request failed (exit {result.returncode}): {detail}")
     try:
         decoded = json.loads(result.stdout)
     except json.JSONDecodeError as error:
-        raise ValueError("GitHub API returned invalid JSON") from error
+        detail = sanitize_api_diagnostic(result.stdout)
+        raise GitHubApiError(f"GitHub API returned invalid JSON: {detail}") from error
     if not isinstance(decoded, dict):
         raise ValueError("GitHub API returned an unexpected JSON payload")
     if decoded.get("errors"):
-        raise ValueError(f"GitHub GraphQL rejected the ref transaction: {decoded['errors']}")
+        detail = sanitize_api_diagnostic(json.dumps(decoded["errors"], sort_keys=True))
+        raise GitHubApiError(f"GitHub API rejected the request: {detail}")
     return decoded
 
 
-def repository_id(repository: str) -> str:
+def validate_inputs(repository: str, release_tag: str, candidate_sha: str) -> None:
     owner, separator, name = repository.partition("/")
     if not owner or not separator or not name or "/" in name:
         raise ValueError("repository must be in owner/name form")
-    response = run_gh_json(
-        ["api", "graphql"],
-        {"query": REPOSITORY_ID_QUERY, "variables": {"owner": owner, "name": name}},
-    )
-    data = response.get("data")
-    if not isinstance(data, dict) or not isinstance(data.get("repository"), dict):
-        raise ValueError("GitHub did not return a repository node")
-    identifier = data["repository"].get("id")
-    if not isinstance(identifier, str) or not identifier:
-        raise ValueError("GitHub did not return a repository ID")
-    return identifier
+    if not RELEASE_TAG_RE.fullmatch(release_tag):
+        raise ValueError("release_tag must be an exact v<version>+<build>-macos tag")
+    if not SHA_RE.fullmatch(candidate_sha):
+        raise ValueError("candidate_sha must be a 40-character lowercase SHA")
 
 
 def create_annotated_tag_object(
@@ -104,40 +90,50 @@ def create_annotated_tag_object(
         },
     )
     tag_object_sha = response.get("sha")
-    if not isinstance(tag_object_sha, str) or len(tag_object_sha) != 40:
+    if not isinstance(tag_object_sha, str) or not SHA_RE.fullmatch(tag_object_sha):
         raise ValueError("GitHub did not return the annotated tag object SHA")
     return tag_object_sha
 
 
-def atomic_publish_tag_ref(
-    *, repository_id_value: str, release_tag: str, candidate_sha: str, tag_object_sha: str
-) -> None:
-    """Publish only if live main still points at the identity-validated SHA.
+def live_main_sha(repository: str) -> str:
+    response = run_gh_json(["api", "--method", "GET", f"repos/{repository}/git/ref/heads/main"])
+    target = response.get("object")
+    if not isinstance(target, dict):
+        raise ValueError("GitHub did not return the live main ref target")
+    sha = target.get("sha")
+    if not isinstance(sha, str) or not SHA_RE.fullmatch(sha):
+        raise ValueError("GitHub did not return the live main commit SHA")
+    return sha
 
-    GitHub's `updateRefs` mutation evaluates every `beforeOid` and applies all
-    ref updates as one transaction. Keeping main unchanged still makes its
-    current OID a server-enforced precondition for adding the immutable tag.
-    """
-    run_gh_json(
-        ["api", "graphql"],
+
+def create_immutable_tag_ref(*, repository: str, release_tag: str, tag_object_sha: str) -> None:
+    """Create the candidate ref once; conflicts fail without rewriting a tag."""
+    expected_ref = f"refs/tags/{release_tag}"
+    response = run_gh_json(
+        ["api", "--method", "POST", f"repos/{repository}/git/refs"],
         {
-            "query": UPDATE_REFS_MUTATION,
-            "variables": {
-                "repositoryId": repository_id_value,
-                "mainBefore": candidate_sha,
-                "mainAfter": candidate_sha,
-                "tagName": f"refs/tags/{release_tag}",
-                "tagObject": tag_object_sha,
-                "zeroOid": ZERO_OID,
-            },
+            "ref": expected_ref,
+            "sha": tag_object_sha,
         },
     )
+    target = response.get("object")
+    if response.get("ref") != expected_ref or not isinstance(target, dict):
+        raise ValueError("GitHub returned an unexpected candidate tag ref")
+    if target.get("sha") != tag_object_sha:
+        raise ValueError("GitHub candidate tag ref does not target the annotated tag object")
 
 
-def publish_candidate_tag(*, repository: str, release_tag: str, candidate_sha: str, evidence: str, timestamp: str) -> None:
-    repo_id = repository_id(repository)
+def publish_candidate_tag(
+    *,
+    repository: str,
+    release_tag: str,
+    candidate_sha: str,
+    evidence: str,
+    timestamp: str,
+) -> None:
+    validate_inputs(repository, release_tag, candidate_sha)
     # A tag object alone is unreachable and is not a candidate. The only
-    # candidate-creating action is the atomic ref transaction below.
+    # candidate-creating action is the create-only ref request below.
     tag_object_sha = create_annotated_tag_object(
         repository=repository,
         release_tag=release_tag,
@@ -145,10 +141,15 @@ def publish_candidate_tag(*, repository: str, release_tag: str, candidate_sha: s
         evidence=evidence,
         timestamp=timestamp,
     )
-    atomic_publish_tag_ref(
-        repository_id_value=repo_id,
+    observed_main_sha = live_main_sha(repository)
+    if observed_main_sha != candidate_sha:
+        raise ValueError(
+            "GitHub main moved before candidate publication; "
+            f"expected {candidate_sha}, observed {observed_main_sha}; tag ref was not created"
+        )
+    create_immutable_tag_ref(
+        repository=repository,
         release_tag=release_tag,
-        candidate_sha=candidate_sha,
         tag_object_sha=tag_object_sha,
     )
 

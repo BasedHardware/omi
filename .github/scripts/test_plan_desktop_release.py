@@ -401,7 +401,7 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertEqual(workflow.count("--source-check-poll-seconds 30"), 2)
         self.assertLess(
             workflow.index("Create and regular-merge PR to sync changelog back to main"),
-            workflow.index("Atomically tag exact live main source"),
+            workflow.index("Publish immutable tag from exact live main source"),
         )
         self.assertIn('git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main', workflow)
         self.assertEqual(workflow.count('CANDIDATE_SHA="$MAIN_SHA"'), 2)
