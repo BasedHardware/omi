@@ -66,6 +66,9 @@ for _ in $(seq 1 120); do
   if grep -q OMI_BSIM_FAIL "$RUN_DIR/omi.log" "$RUN_DIR/client.log"; then
     break
   fi
+  if ! kill -0 "${PIDS[1]}" 2>/dev/null; then
+    break
+  fi
   sleep 1
 done
 
