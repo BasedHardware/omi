@@ -46,6 +46,10 @@ def _assert_contract_rejects(errors: list[str]) -> None:
     assert any("contract" in error or "fixture" in error for error in errors), errors
 
 
+def test_desktop_qualification_runner_accepts_run_isolated_tag_checkout():
+    assert GUARDS.check_desktop_qualification_runner() == []
+
+
 def _load_parent_guard(tmp_path: Path, revision: str = REVIEWED_PARENT):
     """Load the reviewed parent to prove its narrower lock accepted known bypasses."""
     parent_script = tmp_path / "parent-guard.py"
