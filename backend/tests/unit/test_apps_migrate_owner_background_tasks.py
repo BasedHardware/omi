@@ -20,6 +20,10 @@ pool, but the functions it calls are monkeypatched to pure Python fakes.
 
 import asyncio
 import logging
+from types import SimpleNamespace
+
+import pytest
+from fastapi import HTTPException
 
 import routers.apps as apps_mod
 import utils.executors as executors_mod
@@ -42,6 +46,7 @@ def test_migrate_owner_schedules_tracked_background_tasks(monkeypatch, caplog):
     monkeypatch.setattr(apps_mod, 'migrate_app_owner_id_db', fake_migrate_app_owner_id_db)
     monkeypatch.setattr(apps_mod, 'migrate_memories', fake_migrate_memories)
     monkeypatch.setattr(apps_mod, 'update_omi_persona_connected_accounts', fake_update_persona)
+    monkeypatch.setattr(apps_mod.auth, 'get_user', lambda _uid: SimpleNamespace(disabled=False, provider_data=[]))
 
     # Spy on asyncio.create_task (used directly by the buggy code, and internally by
     # start_background_task in the fixed code) so the test can await whatever tasks get
@@ -80,3 +85,70 @@ def test_migrate_owner_schedules_tracked_background_tasks(monkeypatch, caplog):
     assert 'background_task failed' in caplog.text, 'a failed background migration must be logged, not dropped'
     assert 'boom-migrate-memories' in caplog.text
     assert 'boom-persona-sync' in caplog.text
+
+
+@pytest.mark.parametrize(
+    ('old_id', 'source_user'),
+    [
+        ('registered-uid', SimpleNamespace(disabled=False, provider_data=[SimpleNamespace(provider_id='google.com')])),
+        ('disabled-anonymous-uid', SimpleNamespace(disabled=True, provider_data=[])),
+    ],
+)
+def test_migrate_owner_rejects_ineligible_source_before_any_effect(monkeypatch, old_id, source_user):
+    effects = []
+
+    monkeypatch.setattr(apps_mod.auth, 'get_user', lambda _uid: source_user)
+    monkeypatch.setattr(apps_mod, 'migrate_app_owner_id_db', lambda *_args: effects.append('database'))
+    monkeypatch.setattr(apps_mod, 'start_background_task', lambda *_args, **_kwargs: effects.append('background'))
+
+    async def scenario():
+        with pytest.raises(HTTPException) as exc_info:
+            await apps_mod.migrate_app_owner(old_id, uid='authenticated-uid')
+        return exc_info.value
+
+    error = asyncio.run(scenario())
+
+    assert error.status_code == 403
+    assert effects == []
+
+
+def test_migrate_owner_rejects_same_identity_before_any_effect(monkeypatch):
+    effects = []
+
+    monkeypatch.setattr(
+        apps_mod.auth, 'get_user', lambda _uid: (_ for _ in ()).throw(AssertionError('lookup should not run'))
+    )
+    monkeypatch.setattr(apps_mod, 'migrate_app_owner_id_db', lambda *_args: effects.append('database'))
+    monkeypatch.setattr(apps_mod, 'start_background_task', lambda *_args, **_kwargs: effects.append('background'))
+
+    async def scenario():
+        with pytest.raises(HTTPException) as exc_info:
+            await apps_mod.migrate_app_owner('authenticated-uid', uid='authenticated-uid')
+        return exc_info.value
+
+    error = asyncio.run(scenario())
+
+    assert error.status_code == 400
+    assert effects == []
+
+
+@pytest.mark.parametrize('lookup_error', [LookupError('missing'), RuntimeError('firebase unavailable')])
+def test_migrate_owner_fails_closed_when_source_identity_lookup_fails(monkeypatch, lookup_error):
+    effects = []
+
+    def fail_lookup(_uid):
+        raise lookup_error
+
+    monkeypatch.setattr(apps_mod.auth, 'get_user', fail_lookup)
+    monkeypatch.setattr(apps_mod, 'migrate_app_owner_id_db', lambda *_args: effects.append('database'))
+    monkeypatch.setattr(apps_mod, 'start_background_task', lambda *_args, **_kwargs: effects.append('background'))
+
+    async def scenario():
+        with pytest.raises(HTTPException) as exc_info:
+            await apps_mod.migrate_app_owner('anonymous-uid', uid='authenticated-uid')
+        return exc_info.value
+
+    error = asyncio.run(scenario())
+
+    assert error.status_code == 403
+    assert effects == []

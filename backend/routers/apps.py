@@ -15,7 +15,14 @@ from fastapi.responses import HTMLResponse
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.apps import fetch_app_chat_tools_from_manifest
-from utils.executors import db_executor, llm_executor, storage_executor, run_blocking, start_background_task
+from utils.executors import (
+    critical_executor,
+    db_executor,
+    llm_executor,
+    storage_executor,
+    run_blocking,
+    start_background_task,
+)
 from utils.http_client import get_webhook_client
 from utils.multipart import APP_IMAGE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 from utils.mcp_client import (
@@ -1681,6 +1688,24 @@ def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_curre
 
 @router.post('/v1/apps/migrate-owner', tags=['v1'], response_model=AppMigrationResponse)
 async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid)):
+    # The client calls this after it has exchanged an anonymous Firebase session for
+    # an existing linked account.  ``old_id`` is untrusted input: only Firebase
+    # Admin's provider representation can establish that it is still an anonymous
+    # source identity.  In Firebase, an anonymous account has no provider entries;
+    # any entry means this source has already been linked and must not be migrated.
+    if old_id == uid:
+        raise HTTPException(status_code=400, detail='Source identity must differ from the authenticated identity')
+
+    try:
+        source_user = await run_blocking(critical_executor, auth.get_user, old_id)
+    except Exception:
+        # Missing/deleted users and Admin lookup failures are deliberately
+        # indistinguishable to callers.  Neither may reach a mutating operation.
+        raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
+
+    if source_user.disabled or source_user.provider_data:
+        raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
+
     await run_blocking(db_executor, migrate_app_owner_id_db, uid, old_id)
 
     # Tracked background tasks (not bare asyncio.create_task): keeps a live reference
