@@ -1,0 +1,22 @@
+desktop/macos/Desktop/Tests/RewindSearchQueryExpansionTests.swift
+  s_7918275f8e3531::t_ebbc6c1d847077 1-67
+desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
+  s_7918275f8e3531::t_4a93da10946fa5 3206-3208,3215,3232-3236
+  s_7918275f8e3531::t_18795d144904e1 3249,3270
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "cd2252b0deac6fb5c389d9815f59a8acbafb9e41",
+  "prompts": {},
+  "sessions": {
+    "s_7918275f8e3531": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "739fdbb2-b061-4a85-8520-85d2527f5698",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

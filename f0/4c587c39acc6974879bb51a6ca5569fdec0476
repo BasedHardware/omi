@@ -1,0 +1,23 @@
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  s_7918275f8e3531::t_ffe71222eea848 293-298
+desktop/macos/Desktop/Tests/FloatingBarGeometryTests.swift
+  s_7918275f8e3531::t_7e952b55c20c32 414-436,438,440-441
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  s_7918275f8e3531::t_f24d4c08d661c5 118-125,128-130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "f04c587c39acc6974879bb51a6ca5569fdec0476",
+  "prompts": {},
+  "sessions": {
+    "s_7918275f8e3531": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "739fdbb2-b061-4a85-8520-85d2527f5698",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

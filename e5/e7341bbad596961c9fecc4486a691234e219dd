@@ -1,0 +1,41 @@
+desktop/macos/Desktop/Tests/SuggestionAssistantTests.swift
+  s_7918275f8e3531::t_7202dab18fd36b 1-171
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionAssistantSettings.swift
+  s_7918275f8e3531::t_173da6842c7e7b 1-163
+desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift
+  s_7918275f8e3531::t_6429e172d90945 40
+  s_7918275f8e3531::t_078881cd482b82 383-386
+  s_7918275f8e3531::t_dc204e20317965 387-388
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  s_7918275f8e3531::t_750300647c4332 556-557,563-599
+  s_7918275f8e3531::t_95960917e908c3 600-601
+desktop/macos/changelog/unreleased/20260725-live-proactive-suggestions.json
+  s_7918275f8e3531::t_3a21901f3f2c5c 1-3
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionModels.swift
+  s_7918275f8e3531::t_0ced1ad6094f39 1-170
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionAssistant.swift
+  s_7918275f8e3531::t_3deddfac8d1832 140-149,153-182,184-185,190-198,202-234
+  s_7918275f8e3531::t_a80955475cb12f 1-139,150-152,183,186-189,199-201,235-381
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-floatingcontrolbar.json
+  s_7918275f8e3531::t_28ff4c38f3d771 4
+  s_7918275f8e3531::t_3c72a9e16b2320 12
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-proactiveassistants.json
+  s_7918275f8e3531::t_dff10ed4199ca2 4
+  s_7918275f8e3531::t_630c18c8e6ca00 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "e5e7341bbad596961c9fecc4486a691234e219dd",
+  "prompts": {},
+  "sessions": {
+    "s_7918275f8e3531": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "739fdbb2-b061-4a85-8520-85d2527f5698",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
