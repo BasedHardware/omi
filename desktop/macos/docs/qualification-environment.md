@@ -21,6 +21,18 @@ The offset applies to Firestore, Firebase Auth, backend, desktop backend,
 Redis, and Typesense. The script also derives `OMI_AUTOMATION_PORT`; invalid
 ports fail before launch.
 
+## Runner capacity preflight
+
+Before the candidate checkout, the M1-only workflow writes
+`runner-capacity.json` in its run-isolated stage and requires at least 32 GiB
+of free filesystem blocks plus 65,536 free inodes. This is intentionally ahead
+of the checkout because an `ENOSPC` while the Actions worker writes its own
+diagnostic trace can terminate that worker before later `always()` steps run.
+On a controlled capacity failure, the workflow fails closed before fetching
+candidate assets, then its normal finalizer writes cleanup evidence and uploads
+both evidence files. The guard only observes capacity; it never deletes shared
+runner state or prior qualification evidence.
+
 ## Cleanup safety
 
 On normal exit, `INT`, `TERM`, `HUP`, or the workflow `always()` finalizer,
