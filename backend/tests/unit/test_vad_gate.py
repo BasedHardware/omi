@@ -1295,8 +1295,21 @@ class TestOnnxStateAndConcurrency:
                 assert errors[i] is None, f'Caller {i} got error: {errors[i]}'
                 assert results[i] is not None, f'Caller {i} got no result (deadlock?)'
 
+            # Calibrate the bound on this machine: under heavy CPU contention even bare
+            # sleeping threads take multiples of sleep_sec, so a fixed bound reports
+            # serialization that the gate did not cause.
+            baseline_threads = [threading.Thread(target=time.sleep, args=(sleep_sec,)) for _ in range(num_callers)]
+            baseline_start = time.perf_counter()
+            for t in baseline_threads:
+                t.start()
+            for t in baseline_threads:
+                t.join(timeout=10)
+            baseline = time.perf_counter() - baseline_start
+
             # ONNX is truly concurrent (no pool), so all should complete in ~1x sleep time
-            assert elapsed < sleep_sec * 3, f'Took {elapsed:.3f}s — unexpected serialization'
+            assert elapsed < max(
+                sleep_sec * 3, baseline * 1.5
+            ), f'Took {elapsed:.3f}s against a {baseline:.3f}s bare-thread baseline — unexpected serialization'
 
 
 @pytest.mark.slow
