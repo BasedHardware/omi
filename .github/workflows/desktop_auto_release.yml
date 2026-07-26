@@ -391,11 +391,14 @@ jobs:
           git fetch --no-tags origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
           test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$CANDIDATE_SHA"
 
-      - name: Assert native Codemagic tag intake
+      - name: Verify native Codemagic tag intake or dispatch fenced fallback
         if: steps.final-plan.outputs.should_release == 'true'
         env:
           CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
         run: |
+          # The helper waits the complete native-intake budget first. It posts at
+          # most one tag-bound fallback only after a final all-state same-tag
+          # absence fence; any existing same-tag build remains canonical.
           python3 .github/scripts/check-codemagic-tag-intake.py \
             --app-id "66c95e6ec76853c447b8bcbb" \
             --workflow-id "omi-desktop-swift-release" \
@@ -403,6 +406,7 @@ jobs:
             --source-sha "${{ steps.identity.outputs.candidate_sha }}" \
             --timeout-seconds 600 \
             --poll-seconds 15 \
+            --dispatch-fallback-on-absence \
             --evidence "$RUNNER_TEMP/codemagic-native-tag-intake.json"
 
       - name: Retain native Codemagic tag intake evidence
