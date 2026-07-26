@@ -103,6 +103,90 @@ struct PlantedCommunityGraph {
       memoryIDsByNodeID: memoryIDsByNodeID, excluding: anchorID)
   }
 
+  /// Of the entities drawn inside a community's own patch of canvas, the share
+  /// belonging to a *different* community.
+  ///
+  /// A different question from `communityPrecision`, and the map needs both. A
+  /// group can be perfectly recovered — every member's nearest neighbours its
+  /// own — while still being drawn on top of two other groups, because
+  /// precision only ever looks at the ten entities closest to a subject and
+  /// never asks what else is sharing the space. That is the difference between
+  /// structure the layout found and structure a person can see.
+  ///
+  /// Read against the neighbourhoods the layout reports rather than the planted
+  /// ones, because those are what the map names and draws. Measured against the
+  /// planted communities it would mostly be reporting how far detection strays
+  /// from the plant, which `communityPrecision` already covers.
+  ///
+  /// The patch is the one the UI draws: the centroid, and the radius covering
+  /// four fifths of the members.
+  func neighbourhoodIntrusion(of result: MemoryAtlasForceLayout.Result) -> Double {
+    let drawn = result.communities
+    var membersOf: [Int: [String]] = [:]
+    for id in nodeIDs where id != anchorID {
+      guard result.roles[id] == .core, let group = drawn[id] else { continue }
+      membersOf[group, default: []].append(id)
+    }
+    let placed = nodeIDs.compactMap { id -> (id: String, point: CGPoint)? in
+      guard result.roles[id] == .core, let point = result.positions[id] else { return nil }
+      return (id, point)
+    }
+
+    var foreign = 0
+    var inside = 0
+    for (group, members) in membersOf.sorted(by: { $0.key < $1.key }) where members.count >= 6 {
+      let points = members.compactMap { result.positions[$0] }
+      guard points.count >= 6 else { continue }
+      let centerX = points.map { Double($0.x) }.reduce(0, +) / Double(points.count)
+      let centerY = points.map { Double($0.y) }.reduce(0, +) / Double(points.count)
+      let radii = points.map { hypot(Double($0.x) - centerX, Double($0.y) - centerY) }.sorted()
+      let radius = radii[min(Int(Double(radii.count) * 0.8), radii.count - 1)]
+      guard radius > 1e-9 else { continue }
+
+      for entry in placed
+      where hypot(Double(entry.point.x) - centerX, Double(entry.point.y) - centerY) <= radius {
+        inside += 1
+        if drawn[entry.id] != group { foreign += 1 }
+      }
+    }
+    return inside == 0 ? 0 : Double(foreign) / Double(inside)
+  }
+
+  /// How much room the account holder has around them: the median gap between
+  /// them and the twenty entities drawn nearest, in units of the gap a typical
+  /// entity keeps from its own nearest neighbour.
+  ///
+  /// Stated as a ratio because the layout picks its own scale, and measured at
+  /// account size because that is the only place the question means anything —
+  /// the crowding exists in proportion to how many entities keep a tether, so a
+  /// fixture with forty of them has nothing to show.
+  func anchorClearing(of result: MemoryAtlasForceLayout.Result) -> Double {
+    guard let anchor = result.positions[anchorID] else { return 0 }
+    let placed = nodeIDs.filter { $0 != anchorID && result.roles[$0] == .core }
+      .compactMap { result.positions[$0] }
+    guard placed.count > 40 else { return 0 }
+
+    let toAnchor =
+      placed
+      .map { hypot(Double($0.x - anchor.x), Double($0.y - anchor.y)) }
+      .sorted().prefix(20)
+
+    // Sampled rather than exhaustive: the median is stable long before the
+    // thousandth point, and every pair would be a million distances.
+    var nearest: [Double] = []
+    for (index, point) in placed.enumerated() where index % 7 == 0 {
+      var best = Double.infinity
+      for other in placed where other != point {
+        best = min(best, hypot(Double(point.x - other.x), Double(point.y - other.y)))
+      }
+      if best.isFinite { nearest.append(best) }
+    }
+    nearest.sort()
+    guard !nearest.isEmpty else { return 0 }
+    let typical = nearest[nearest.count / 2]
+    return typical > 1e-9 ? Array(toAnchor)[toAnchor.count / 2] / typical : 0
+  }
+
   /// Of the ten entities drawn nearest to a subject, the share that belong to
   /// its community, averaged over a sample of subjects.
   ///

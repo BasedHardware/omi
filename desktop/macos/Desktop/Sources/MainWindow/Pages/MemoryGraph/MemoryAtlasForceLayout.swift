@@ -146,6 +146,36 @@ enum MemoryAtlasForceLayout {
   /// all.
   static let anchorTetherStrength = 0.1
 
+  /// How much room the account holder keeps around themselves, as a multiple of
+  /// the repulsion an ordinary entity carries.
+  ///
+  /// They are pinned at the centre and nearly everything retains some tether to
+  /// them, so the middle of the map is where the crowd is pressed hardest and
+  /// least readable — the one place a person looks first. As a plain node they
+  /// push back with a single entity's worth of repulsion against several hundred
+  /// entities' worth of pull.
+  ///
+  /// Weighting only their repulsion, and leaving `anchorTetherStrength` alone,
+  /// keeps the two halves of the account holder's treatment separable: the
+  /// tether still says who is related to them, this only says how close anyone
+  /// needs to stand to make that point.
+  ///
+  /// Measured as the gap between the account holder and the twenty entities
+  /// nearest them, in units of the typical gap between neighbours anywhere on
+  /// the map: 5.76 without this and 6.85 with it on the account-shaped fixture.
+  /// It costs a little community precision and returns a little of it in how
+  /// far the map's outliers reach, because a crowd pushed off the centre fills
+  /// the middle of the canvas rather than the rim.
+  ///
+  /// A share of the map rather than a fixed weight, because the crowd being
+  /// held off *is* the map and its size varies by three orders of magnitude
+  /// between accounts. A thousand-entity account comes to roughly forty
+  /// entities' worth of push; a twenty-six entity one comes to none, which is
+  /// correct — it has no crowding to fix. Fixed at forty instead, that small
+  /// map is blown apart hard enough to collide its own labels, which is how
+  /// this came to be a share.
+  static let anchorRepulsionShare = 0.04
+
   /// How hard a detected neighbourhood pulls itself together, against the
   /// spreading the rest of the simulation does.
   ///
@@ -155,6 +185,71 @@ enum MemoryAtlasForceLayout {
   /// too — 0.756 / 0.773 / 0.762 across those three — so tighter groups past
   /// this point are bought by putting the wrong entities in them.
   static let communityCohesion = 1.0
+
+  /// How hard two neighbourhoods push each other apart when they overlap.
+  ///
+  /// Cohesion alone cannot separate anything: it holds each group to its own
+  /// radius, and two groups satisfy that perfectly while sitting on top of one
+  /// another. Everything keeping them apart was the same repulsion every
+  /// individual entity feels, which knows nothing about groups — so several
+  /// heavily interlinked neighbourhoods land in one place and read as a single
+  /// mess, exactly where the map is busiest and legibility matters most.
+  ///
+  /// Deliberately a resolution of *overlap* rather than a force at all
+  /// distances. Groups already well apart feel nothing, so the parts of the map
+  /// that were legible stay where they are and the correction is spent only
+  /// where two groups are genuinely claiming the same space.
+  ///
+  /// Measured as the share of entities sitting inside a neighbourhood's drawn
+  /// disc that belong to a *different* neighbourhood, over six seeds of two
+  /// fixtures — the even one, and one shaped like the case this exists for,
+  /// three large heavily cross-linked groups amid a long tail of small ones:
+  ///
+  /// - even: 0.483 without separation, 0.390 with
+  /// - large-cluster: 0.530 without, 0.477 with
+  ///
+  /// Community precision does not pay for it (0.740 → 0.738 and 0.912 → 0.905),
+  /// which is what should happen: this moves whole groups, so it cannot change
+  /// which entities are near each other inside one.
+  ///
+  /// Held well below the point where the metric peaks, and deliberately. Pushed
+  /// harder the groups do read as more distinct, but the map pays for it in a
+  /// way no per-group measure catches: the bulk of the entities bunch toward the
+  /// middle while the sparse tail is fitted to the canvas edge, and the result
+  /// is a dense blob ringed by scattered specks. That shows up as the ratio of
+  /// the 95th-percentile radius to the median, which at 1.0 here reached 2.6 on
+  /// the large-cluster fixture against 2.0 left alone; at this strength it is
+  /// 2.1, and on the even fixture it is unchanged at 1.95.
+  static let communitySeparation = 0.4
+
+  /// The smallest group the separation force will move.
+  ///
+  /// Deliberately the same six the UI uses to decide a group is worth naming
+  /// (`MemoryAtlasLayoutEngine.neighbourhoods`), because the two answer the same
+  /// question: is this a place on the map, or a few entities that happen to be
+  /// adjacent? Pushing apart groups the map will never name spends the canvas on
+  /// distinctions the user is never shown.
+  static let namedGroupFloor = 6.0
+
+  /// The background left between two neighbourhoods once their edges clear, as
+  /// a multiple of the *smaller* one's extent.
+  ///
+  /// A gap rather than merely touching: a row of tangent discs still reads as
+  /// one continuous field, and the map only separates into places when there is
+  /// space between them.
+  ///
+  /// Scaled by the smaller of the two, which is what keeps the rim clean. Scaled
+  /// by the pair's combined size instead, every small group in the account is
+  /// required to clear the largest group's whole radius with half as much again
+  /// on top — a distance that has nothing to do with the small group and puts it
+  /// off the edge of the map. Since the push is split by population the small
+  /// group does all of that moving, so dozens of them end up flung into a ring
+  /// of debris around a centre that never opened up.
+  ///
+  /// It also gives "bigger clusters separate more" for free: two large
+  /// neighbourhoods clear each other's full extent *and* take the wide margin,
+  /// while a handful of entities beside a large group takes a narrow one.
+  static let communityClearance = 0.6
 
   // MARK: - Deriving relatedness
 
@@ -779,12 +874,30 @@ enum MemoryAtlasForceLayout {
     // Ideal separation for the working box, the standard FR estimate.
     let k = 2.0 / sqrt(Double(count))
     let kSquared = k * k
+
+    // The crowd the account holder is holding off is the map itself, so that is
+    // what their push is scaled to. The quadtree already gives them an ordinary
+    // node's worth, so this is only the excess on top — which on a map small
+    // enough not to have the problem comes out at nothing.
+    let anchorExcessRepulsion =
+      pinnedIndex == nil ? 0 : max(0, Double(count) * anchorRepulsionShare - 1)
     var displacements = [SIMD2<Double>](repeating: .zero, count: count)
     var traversal: [Int] = []
     traversal.reserveCapacity(64)
     var centroids = [SIMD2<Double>](repeating: .zero, count: max(communityCount, 1))
     var populations = [Double](repeating: 0, count: max(communityCount, 1))
     var radii = [Double](repeating: 0, count: max(communityCount, 1))
+    // The room a group *wants* and the room it actually takes up are different
+    // numbers, and separation needs the second one. `radii` is the ideal-spacing
+    // estimate the containment wall is built from; cohesion then packs the group
+    // far tighter than that, so asking two neighbourhoods to clear each other's
+    // ideal radius demands more of the canvas than exists and the force spends
+    // itself in a stalemate against centre gravity.
+    var extents = [Double](repeating: 0, count: max(communityCount, 1))
+    // One displacement per group rather than per member: separation has to move
+    // a neighbourhood without deforming it, or it would be fighting the very
+    // cohesion that made the group worth drawing.
+    var groupShifts = [SIMD2<Double>](repeating: .zero, count: max(communityCount, 1))
     // Skipped for a single group: holding one group together is centre gravity
     // by another name, and there is nothing for it to be held apart *from*.
     // Not load-bearing — containment is what keeps a lone group from
@@ -798,6 +911,19 @@ enum MemoryAtlasForceLayout {
       for i in 0..<count where i != pinnedIndex {
         displacements[i] += tree.repulsion(
           on: points[i], kSquared: kSquared, theta: theta, stack: &traversal)
+      }
+
+      // The account holder repels as if they were a crowd. The quadtree has
+      // already counted them once as an ordinary node, so only the excess is
+      // added here, in the same form the tree uses.
+      if let pinnedIndex, anchorExcessRepulsion > 0 {
+        let anchor = points[pinnedIndex]
+        for i in 0..<count where i != pinnedIndex {
+          let delta = points[i] - anchor
+          let distance = simd_length(delta)
+          guard distance > 1e-9 else { continue }
+          displacements[i] += (delta / distance) * (kSquared * anchorExcessRepulsion / distance)
+        }
       }
 
       for spring in springs {
@@ -828,6 +954,65 @@ enum MemoryAtlasForceLayout {
           // re-scatters the wreckage on an even grid and every trace of
           // structure is gone.
           radii[index] = k * sqrt(populations[index] / .pi)
+          extents[index] = 0
+        }
+
+        // Root-mean-square spread, which for a group spread evenly over a disc
+        // is its radius over √2 — so scaling back up recovers the edge of the
+        // group as drawn. A mean would understate it and a true maximum would
+        // let one strayed member speak for the whole neighbourhood.
+        for i in 0..<count where communities[i] >= 0 {
+          extents[communities[i]] += simd_length_squared(points[i] - centroids[communities[i]])
+        }
+        for index in 0..<extents.count where populations[index] > 0 {
+          extents[index] = sqrt(2 * extents[index] / populations[index])
+        }
+
+        // Only groups big enough for the map to name as a region take part. The
+        // force exists to make those regions legible, so a pair of them is the
+        // only thing it should be rearranging — and the extent it works from
+        // treats a group as a disc, which a handful of entities strung along a
+        // chain is not. Applied to those, it reads their length as a radius and
+        // shoves far harder than their size warrants, which on a small account
+        // is enough to push names into each other.
+        for index in 0..<groupShifts.count { groupShifts[index] = .zero }
+        for a in 0..<centroids.count where populations[a] >= namedGroupFloor {
+          for b in (a + 1)..<centroids.count where populations[b] >= namedGroupFloor {
+            let delta = centroids[b] - centroids[a]
+            let distance = simd_length(delta)
+            let wanted =
+              extents[a] + extents[b] + min(extents[a], extents[b]) * communityClearance
+            guard distance < wanted else { continue }
+
+            // Two groups sitting on the same point have no direction to
+            // separate along. Any choice will do provided it is the same one on
+            // every machine, so it is derived from the pair rather than drawn.
+            let direction: SIMD2<Double>
+            if distance > 1e-9 {
+              direction = delta / distance
+            } else {
+              let angle = Double(a &* 31 &+ b) * 2.399_963_229_728_653
+              direction = SIMD2<Double>(cos(angle), sin(angle))
+            }
+
+            // Capped by the smaller neighbourhood's own size, which is what
+            // decides where the pair comes to rest: uncapped, a handful of
+            // entities overlapping a very large region is told to clear that
+            // region's entire radius, and since the push is split by population
+            // it is the handful that travels. Dozens of small groups then settle
+            // in a ring at the edge of the canvas. Capped, a small group drifts
+            // to the large one's edge and stops, and two large groups — where
+            // the cap is large — still separate the whole way.
+            let smaller = min(extents[a], extents[b])
+            let push = min(wanted - distance, smaller) * communitySeparation
+
+            // Split by population, so the smaller neighbourhood does most of
+            // the moving. Without this a two-entity fragment would shove a
+            // hundred-entity region across the map.
+            let total = populations[a] + populations[b]
+            groupShifts[a] -= direction * (push * populations[b] / total)
+            groupShifts[b] += direction * (push * populations[a] / total)
+          }
         }
       }
 
@@ -841,6 +1026,7 @@ enum MemoryAtlasForceLayout {
           if stray > 0 {
             displacements[i] -= (offset / simd_length(offset)) * stray * communityCohesion
           }
+          displacements[i] += groupShifts[communities[i]]
         }
         displacements[i] -= points[i] * centerGravity
       }

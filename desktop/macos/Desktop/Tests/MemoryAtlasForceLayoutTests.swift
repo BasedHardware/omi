@@ -560,6 +560,65 @@ final class MemoryAtlasForceLayoutTests: XCTestCase {
       19)
   }
 
+  /// Whether a neighbourhood is a *place* rather than a smear, which is a
+  /// different question from whether the layout recovered it — and, like that
+  /// one, statistical. A pair of dense groups drift apart under any weighting,
+  /// so a small fixture demonstrates nothing here either; it takes an
+  /// account-shaped graph, where dozens of groups compete for the same canvas
+  /// and the ones that share members pile up on each other.
+  ///
+  /// Measured as the share of entities inside a group's own patch that belong to
+  /// some other group. Holding each group together is not enough to fix this on
+  /// its own — two groups both sit at their ideal radius while covering the same
+  /// ground — and with nothing but per-entity repulsion between them the fixture
+  /// scores 0.385. Pushing overlapping groups apart scores 0.267.
+  ///
+  /// The ceiling is set between the two rather than at the measured value, so
+  /// ordinary tuning does not read as a regression while losing the force
+  /// entirely still does.
+  func testNeighbourhoodsAreDrawnAsPlacesRatherThanOnTopOfEachOther() throws {
+    let graph = PlantedCommunityGraph(nodeCount: 1096, communities: 44, memories: 1044)
+
+    let result = Layout.layout(
+      nodeIDs: graph.nodeIDs,
+      links: Layout.merge(graph.explicitLinks + graph.coOccurrenceLinks),
+      anchorID: graph.anchorID,
+      typeTargets: graph.typeTargets,
+      area: area)
+
+    XCTAssertLessThan(
+      graph.neighbourhoodIntrusion(of: result), 0.33,
+      "Neighbourhoods drawn through one another are not somewhere the user can go")
+  }
+
+  /// Nearly everything in an account keeps some relationship to the account
+  /// holder, so the middle of the map — the first place anyone looks — is where
+  /// the crowd presses hardest and reads worst. They are pinned there and push
+  /// back with one entity's worth of repulsion against hundreds of entities'
+  /// worth of pull, so the room around them has to be granted rather than
+  /// competed for.
+  ///
+  /// Measured at account size, because the crowding is proportional to how many
+  /// entities keep a tether and the force is scaled to match: on this fixture
+  /// the twenty entities nearest the account holder sit 5.76 typical gaps away
+  /// when they push back as an ordinary node, and 6.85 when weighted to the map
+  /// they sit in the middle of. A forty-entity fixture shows nothing either way,
+  /// which is how the scaling came to be written that way.
+  func testTheAccountHolderIsGivenRoomToBeSeenIn() throws {
+    let graph = PlantedCommunityGraph(nodeCount: 1096, communities: 44, memories: 1044)
+
+    let result = Layout.layout(
+      nodeIDs: graph.nodeIDs,
+      links: Layout.merge(graph.explicitLinks + graph.coOccurrenceLinks),
+      anchorID: graph.anchorID,
+      typeTargets: graph.typeTargets,
+      area: area)
+
+    XCTAssertGreaterThan(
+      graph.anchorClearing(of: result), 6.2,
+      "The account holder needs more room than the crowd tethered to them will leave")
+  }
+
   func testAGraphWithNoRelationshipsAtAllDrawsNoFakeConstellation() {
     let result = Layout.layout(
       nodeIDs: ["a", "b", "c"], links: [], anchorID: nil, typeTargets: [:], area: area)
