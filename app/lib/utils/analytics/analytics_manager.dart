@@ -1936,6 +1936,8 @@ class AnalyticsManager {
 
   void connectDevicePageOpened() => track('Connect Device Page Opened');
 
+  void getOmiDeviceClicked() => track('Get Omi Device Clicked');
+
   void connectionGuideOpened() => track('Connection Guide Opened');
 
   void connectionGuideDeviceTapped(String deviceId) =>
