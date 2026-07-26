@@ -237,7 +237,7 @@ exercise_fault_launcher_without_backend_env() {
   local output="$TMP_ROOT/fault-launcher.out"
   local status
 
-  mkdir -p "$fixture/Backend-Rust" "$TMP_ROOT/fault-launcher/scripts" "$bin_dir"
+  mkdir -p "$TMP_ROOT/fault-launcher/scripts" "$bin_dir"
   ln -s "$RUN_SH" "$fixture/run.sh"
   ln -s "$MACOS_DIR/scripts" "$fixture/scripts"
   ln -s "$REPO_ROOT/scripts/dev-instance.sh" "$TMP_ROOT/fault-launcher/scripts/dev-instance.sh"
@@ -305,10 +305,10 @@ SH
   fi
   if grep -Fq 'No .env file found' "$output"; then
     cat "$output" >&2
-    fail "fault launcher required Backend-Rust/.env despite explicit remote fault endpoints"
+    fail "fault launcher required a backend .env despite explicit remote fault endpoints"
   fi
   grep -Fq 'Skipping backend (OMI_SKIP_BACKEND=1)' "$output" \
-    || fail "fault launcher attempted normal local Backend-Rust startup"
+    || fail "fault launcher attempted normal local backend startup"
 }
 
 exercise_fault_suite_launch_command

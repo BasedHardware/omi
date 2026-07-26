@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from fastapi import BackgroundTasks
+from fastapi import BackgroundTasks, HTTPException
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 if str(BACKEND_DIR) not in sys.path:
@@ -65,6 +65,21 @@ async def test_status_restarts_stopped_vm_and_returns_provisioning(monkeypatch):
     assert response.ip is None
     assert writes[0][2] == "provisioning"
     assert len(tasks.tasks) == 1
+
+
+@pytest.mark.asyncio
+async def test_agent_vm_rejects_paywalled_desktop_user(monkeypatch):
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "is_trial_paywalled", lambda uid, platform: True)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_agent_vm._authorized_desktop_user("user")
+
+    assert error.value.status_code == 402
+    assert error.value.detail == "trial_expired"
 
 
 async def _stopped_instance():

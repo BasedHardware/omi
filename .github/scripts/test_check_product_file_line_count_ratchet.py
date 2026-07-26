@@ -105,7 +105,6 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
             "backend/tests/test_big.py",
             "backend/routers/generated.gen.py",
             "desktop/macos/Desktop/Generated/Big.swift",
-            "desktop/macos/Backend-Rust/vendor/big.rs",
         ]
 
         for relative in excluded:

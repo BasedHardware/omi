@@ -13,6 +13,7 @@ from database.screen_activity import upsert_screen_activity
 from database.vector_db import upsert_screen_activity_vectors
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid, get_user
+from utils.subscription import is_trial_paywalled
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -29,11 +30,22 @@ class ScreenActivityRow(BaseModel):
     app_name: str = Field(default="", alias="appName")
     window_title: str = Field(default="", alias="windowTitle")
     ocr_text: str = Field(default="", alias="ocrText")
+    device_name: str | None = Field(default=None, alias="deviceName")
+    client_device_id: str | None = Field(default=None, alias="clientDeviceId")
     embedding: list[float] | None = None
+
+    def storage_id(self) -> str:
+        return f"{self.client_device_id}-{self.id}" if self.client_device_id else str(self.id)
 
 
 class ScreenActivitySyncRequest(BaseModel):
     rows: list[ScreenActivityRow]
+
+
+async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> str:
+    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop"):
+        raise HTTPException(status_code=402, detail="trial_expired")
+    return uid
 
 
 def _empty_unread_response() -> dict[str, Any]:
@@ -85,13 +97,13 @@ async def _find_session(email: str, website_id: str, headers: dict[str, str]) ->
 
 @router.post("/v1/screen-activity/sync")
 async def sync_screen_activity(
-    request: ScreenActivitySyncRequest, uid: str = Depends(get_current_user_uid)
+    request: ScreenActivitySyncRequest, uid: str = Depends(_authorized_desktop_user)
 ) -> dict[str, int]:
     if len(request.rows) > 100:
         raise HTTPException(status_code=400, detail="Maximum 100 rows per batch")
     if not request.rows:
         return {"synced": 0, "last_id": 0}
-    rows = [row.model_dump(by_alias=True) for row in request.rows]
+    rows = [{**row.model_dump(by_alias=True), "storageId": row.storage_id()} for row in request.rows]
     try:
         written = await run_blocking(db_executor, upsert_screen_activity, uid, rows)
     except Exception as exc:

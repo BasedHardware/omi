@@ -7,14 +7,54 @@ from collections.abc import AsyncIterator, Mapping
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.routing import APIRoute
 
+from database import llm_usage as llm_usage_db
+from database import redis_db
+from utils.byok import get_byok_key
+from utils.executors import critical_executor, db_executor, run_blocking
 from utils.llm.clients import anthropic_client
 from utils.other import endpoints as auth
 from utils.subscription import enforce_chat_quota
 
-router = APIRouter()
+_MAX_BODY_BYTES = 16 * 1024 * 1024
+_RATE_LIMIT_PER_MINUTE = 120
+
+
+class _BoundedChatRoute(APIRoute):
+    def get_route_handler(self):
+        route_handler = super().get_route_handler()
+
+        async def bounded_route_handler(request: Request):
+            content_length = request.headers.get('content-length')
+            if content_length is not None:
+                try:
+                    if int(content_length) > _MAX_BODY_BYTES:
+                        raise HTTPException(status_code=413, detail='Request body is too large')
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail='Invalid Content-Length') from exc
+            received = 0
+            receive = request.receive
+
+            async def bounded_receive():
+                nonlocal received
+                message = await receive()
+                if message.get('type') == 'http.request':
+                    body = message.get('body', b'')
+                    if isinstance(body, bytes):
+                        received += len(body)
+                        if received > _MAX_BODY_BYTES:
+                            raise HTTPException(status_code=413, detail='Request body is too large')
+                return message
+
+            return await route_handler(Request(request.scope, receive=bounded_receive))
+
+        return bounded_route_handler
+
+
+router = APIRouter(route_class=_BoundedChatRoute)
 
 _MODEL_ROUTES = {
     'omi-sonnet': 'claude-sonnet-4-6',
@@ -207,7 +247,31 @@ def _message_response(message: object, public_model: str) -> dict[str, object]:
     }
 
 
-async def _stream(payload: dict[str, object], public_model: str) -> AsyncIterator[str]:
+def _usage_values(usage: object) -> tuple[int, int, int, int]:
+    return (
+        int(getattr(usage, 'input_tokens', 0)),
+        int(getattr(usage, 'output_tokens', 0)),
+        int(getattr(usage, 'cache_read_input_tokens', 0)),
+        int(getattr(usage, 'cache_creation_input_tokens', 0)),
+    )
+
+
+async def _record_usage(uid: str, usage: object) -> None:
+    input_tokens, output_tokens, cache_read_tokens, cache_write_tokens = _usage_values(usage)
+    await run_blocking(
+        db_executor,
+        llm_usage_db.record_llm_usage_bucket,
+        uid,
+        input_tokens,
+        output_tokens,
+        cache_read_tokens,
+        cache_write_tokens,
+        input_tokens + output_tokens + cache_read_tokens + cache_write_tokens,
+        0.0,
+    )
+
+
+async def _stream(payload: dict[str, object], public_model: str, uid: str) -> AsyncIterator[str]:
     stream_id = f'chatcmpl-{uuid4()}'
     created = int(time.time())
     yield _sse(
@@ -305,6 +369,7 @@ async def _stream(payload: dict[str, object], public_model: str) -> AsyncIterato
                     )
                     usage = getattr(event, 'usage', None)
                     if usage is not None:
+                        await _record_usage(uid, usage)
                         yield _sse(
                             {
                                 'id': stream_id,
@@ -324,25 +389,69 @@ def _sse(value: dict[str, object]) -> str:
     return f'data: {json.dumps(value, separators=(",", ":"))}\n\n'
 
 
+async def _meter_server_request(uid: str) -> None:
+    if get_byok_key('anthropic'):
+        return
+    try:
+        allowed, _, retry_after = await run_blocking(
+            critical_executor, redis_db.check_rate_limit, uid, 'desktop_chat', _RATE_LIMIT_PER_MINUTE, 60
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Chat metering is temporarily unavailable') from exc
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail={'error': {'message': 'Rate limit exceeded', 'type': 'rate_limit_error', 'code': 429}},
+            headers={'Retry-After': str(retry_after)},
+        )
+
+
 @router.post('/v2/chat/completions', response_model=None)
 async def chat_completions(
     body: dict[str, object],
     uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
+    x_omi_chat_contract_version: str | None = Header(None, alias='X-Omi-Chat-Contract-Version'),
+    x_omi_request_id: str | None = Header(None, alias='X-Omi-Request-Id'),
 ) -> JSONResponse | StreamingResponse:
+    if x_omi_chat_contract_version not in {None, '1'}:
+        raise HTTPException(status_code=426, detail='Unsupported chat contract version')
     try:
         enforce_chat_quota(uid, platform=x_app_platform)
+        await _meter_server_request(uid)
         public_model, payload = _request(body)
     except HTTPException:
         raise
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    request_id = x_omi_request_id or str(uuid4())
+    await run_blocking(
+        db_executor,
+        llm_usage_db.record_chat_quota_question,
+        uid,
+        f'desktop_chat_completions:{request_id}',
+        'desktop_chat_completions',
+        platform=x_app_platform,
+    )
     if body.get('stream') is True:
         return StreamingResponse(
-            _stream(payload, public_model), media_type='text/event-stream', headers={'Cache-Control': 'no-cache'}
+            _stream(payload, public_model, uid),
+            media_type='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Omi-Chat-Contract-Version': '1',
+                'X-Request-Id': request_id,
+            },
         )
     try:
         message = await anthropic_client.messages.create(**payload)
     except Exception as exc:
         raise HTTPException(status_code=502, detail='Upstream provider error') from exc
-    return JSONResponse(_message_response(message, public_model))
+    await _record_usage(uid, getattr(message, 'usage', None))
+    return JSONResponse(
+        _message_response(message, public_model),
+        headers={
+            'X-Omi-Chat-Contract-Version': '1',
+            'X-Request-Id': request_id,
+        },
+    )

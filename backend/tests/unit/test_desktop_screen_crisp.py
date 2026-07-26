@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
-from fastapi import FastAPI
+import pytest
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from routers import desktop_screen_crisp
@@ -27,7 +28,13 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
         "/v1/screen-activity/sync",
         json={
             "rows": [
-                {"id": 4, "timestamp": "2026-07-26T00:00:00Z", "appName": "Safari", "embedding": [0.1]},
+                {
+                    "id": 4,
+                    "timestamp": "2026-07-26T00:00:00Z",
+                    "appName": "Safari",
+                    "clientDeviceId": "mac-a",
+                    "embedding": [0.1],
+                },
                 {"id": 7, "timestamp": "2026-07-26T00:01:00Z", "ocrText": "hello"},
             ]
         },
@@ -45,7 +52,10 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
                     "appName": "Safari",
                     "windowTitle": "",
                     "ocrText": "",
+                    "deviceName": None,
+                    "clientDeviceId": "mac-a",
                     "embedding": [0.1],
+                    "storageId": "mac-a-4",
                 },
                 {
                     "id": 7,
@@ -53,7 +63,10 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
                     "appName": "",
                     "windowTitle": "",
                     "ocrText": "hello",
+                    "deviceName": None,
+                    "clientDeviceId": None,
                     "embedding": None,
+                    "storageId": "7",
                 },
             ],
         ),
@@ -67,7 +80,10 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
                     "appName": "Safari",
                     "windowTitle": "",
                     "ocrText": "",
+                    "deviceName": None,
+                    "clientDeviceId": "mac-a",
                     "embedding": [0.1],
+                    "storageId": "mac-a-4",
                 }
             ],
         ),
@@ -82,6 +98,14 @@ def test_screen_activity_sync_rejects_batches_larger_than_rust_contract():
 
     assert response.status_code == 400
     assert response.json() == {"detail": "Maximum 100 rows per batch"}
+
+
+def test_screen_activity_storage_ids_are_device_scoped():
+    first = desktop_screen_crisp.ScreenActivityRow(id=1, timestamp="2026-07-26T00:00:00Z", clientDeviceId="mac-a")
+    second = desktop_screen_crisp.ScreenActivityRow(id=1, timestamp="2026-07-26T00:00:00Z", clientDeviceId="mac-b")
+
+    assert first.storage_id() == "mac-a-1"
+    assert second.storage_id() == "mac-b-1"
 
 
 def test_crisp_unread_preserves_operator_text_shape(monkeypatch):
@@ -126,3 +150,18 @@ def test_crisp_unread_is_empty_when_unconfigured(monkeypatch):
     monkeypatch.delenv("CRISP_WEBSITE_ID", raising=False)
 
     assert make_client().get("/v1/crisp/unread").json() == {"unread_count": 0, "messages": []}
+
+
+@pytest.mark.asyncio
+async def test_screen_activity_rejects_paywalled_desktop_user(monkeypatch):
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_screen_crisp, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_screen_crisp, "is_trial_paywalled", lambda uid, platform: True)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_screen_crisp._authorized_desktop_user("user")
+
+    assert error.value.status_code == 402
+    assert error.value.detail == "trial_expired"

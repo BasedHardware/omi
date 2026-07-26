@@ -22,6 +22,33 @@
             }
         },
         {
+            "name": "desktop-backend",
+            "dockerfile": "backend/Dockerfile.desktop_backend",
+            "deployment_workflows": [".github/workflows/desktop_backend_auto_dev.yml"],
+            "build_context": ".",
+            "source_root": "backend",
+            "workdir": "/app",
+            "entrypoints": ["desktop_backend"],
+            "image_import_smoke": false,
+            "dependency_probe_smoke": true,
+            "pull_request_smoke": true,
+            "dependency_probe_exclusions": {
+                "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; backend images use its built-in fallback."
+            }
+        },
+        {
+            "name": "agent-vm",
+            "dockerfile": "backend/agent_vm/Dockerfile",
+            "deployment_workflows": [".github/workflows/desktop_backend_auto_dev.yml"],
+            "build_context": ".",
+            "source_root": "backend/agent_vm",
+            "workdir": "/app",
+            "entrypoints": ["main"],
+            "image_import_smoke": true,
+            "dependency_probe_smoke": true,
+            "pull_request_smoke": true
+        },
+        {
             "name": "pusher",
             "dockerfile": "backend/pusher/Dockerfile",
             "deployment_workflows": [

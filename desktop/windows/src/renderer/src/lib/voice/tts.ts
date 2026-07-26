@@ -1,6 +1,6 @@
 // Rust-backend TTS proxy client (Phase 6): POST /v1/tts/synthesize
 // { text, voice_id } → audio/mpeg bytes (contract verified in
-// Backend-Rust/src/routes/tts.rs — 4096-char cap, allowlisted OpenAI voices).
+// Desktop TTS contract — 4096-char cap, allowlisted OpenAI voices).
 // Playback goes through the voice controller's gated output path so spoken
 // non-realtime replies get the same echo protection as realtime audio.
 

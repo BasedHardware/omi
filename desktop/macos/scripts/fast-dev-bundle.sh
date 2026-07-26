@@ -88,8 +88,6 @@ for path in [
     "Desktop/Sources/GoogleService-Info.plist",
     "Desktop/Sources/GoogleService-Info-Dev.plist",
     "Desktop/Sources/GoogleService-Info-Local.plist",
-    "Backend-Rust/.env.app",
-    "Backend-Rust/.env.app.dev",
     "scripts/app-config.sh",
     "scripts/prepare-agent-runtime.sh",
     "scripts/agent-runtime-cache.sh",

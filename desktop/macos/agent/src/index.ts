@@ -2,8 +2,8 @@
  * ACP Bridge — translates between OMI's JSON-lines protocol and the
  * Agent Client Protocol (ACP) used by claude-code-acp.
  *
- * THIS IS THE DESKTOP APP FLOW. It is unrelated to the VM/agent-cloud flow
- * (agent-cloud/agent.mjs), which runs Claude Code SDK on a remote VM for
+ * THIS IS THE DESKTOP APP FLOW. It is unrelated to the VM agent flow, which
+ * runs the Claude Agent SDK on a remote VM for
  * the Omi Agent feature. This bridge runs locally on the user's Mac.
  *
  * Session lifecycle:

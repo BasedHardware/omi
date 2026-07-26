@@ -121,9 +121,42 @@ def test_execute_sql_serializes_sqlite_rows(tmp_path: Path) -> None:
     }
 
 
+def test_sync_groups_rows_by_present_columns(tmp_path: Path) -> None:
+    app, module = load_app(tmp_path)
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE TABLE screenshots (id TEXT PRIMARY KEY, appName TEXT, ocrText TEXT)")
+    connection.commit()
+    connection.close()
+    assert module.runtime.open_database()
+    with TestClient(app) as client:
+        response = client.post(
+            "/sync?token=test-token",
+            json={
+                "table": "screenshots",
+                "rows": [
+                    {"id": "one", "appName": "Safari"},
+                    {"id": "two", "appName": "Terminal", "ocrText": "build passed"},
+                    {},
+                ],
+            },
+        )
+        rows = [
+            tuple(row) for row in module.runtime.db.execute("SELECT id, appName, ocrText FROM screenshots ORDER BY id")
+        ]
+
+    assert response.status_code == 200
+    assert response.json() == {"applied": 2, "table": "screenshots"}
+    assert rows == [
+        ("one", "Safari", None),
+        ("two", "Terminal", "build passed"),
+    ]
+
+
 def test_dynamic_tool_keeps_complete_json_schema_and_announces_sdk_session(tmp_path: Path, monkeypatch) -> None:
     _, module = load_app(tmp_path)
-    sqlite3.connect(module.runtime.db_path).close()
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE TABLE screenshots (id TEXT)")
+    connection.close()
     assert module.runtime.open_database()
     schema = {
         "type": "object",
@@ -155,8 +188,9 @@ def test_dynamic_tool_keeps_complete_json_schema_and_announces_sdk_session(tmp_p
             yield {"type": "system", "session_id": "sdk-session"}
             yield {"type": "result", "subtype": "success", "result": "", "total_cost_usd": 0}
 
+    options = {}
     fake_sdk = types.SimpleNamespace(
-        ClaudeAgentOptions=lambda **kwargs: kwargs,
+        ClaudeAgentOptions=lambda **kwargs: options.update(kwargs) or kwargs,
         ClaudeSDKClient=Client,
         create_sdk_mcp_server=lambda *_args, **_kwargs: object(),
         tool=tool,
@@ -180,3 +214,56 @@ def test_dynamic_tool_keeps_complete_json_schema_and_announces_sdk_session(tmp_p
     events = asyncio.run(run())
     assert captured["get_calendar_events"] == schema
     assert {"type": "init", "sessionId": "sdk-session"} in events
+    assert "screenshots:" in options["system_prompt"]
+    assert "WebSearch" in options["allowed_tools"]
+
+
+def test_agent_session_adds_configured_playwright_mcp_server(tmp_path: Path, monkeypatch) -> None:
+    _, module = load_app(tmp_path)
+    sqlite3.connect(module.runtime.db_path).close()
+    assert module.runtime.open_database()
+    monkeypatch.setenv("PLAYWRIGHT_MCP_COMMAND", "bunx")
+    options = {}
+
+    class Client:
+        def __init__(self, **_):
+            return None
+
+        async def connect(self):
+            return None
+
+        async def query(self, _):
+            return None
+
+        async def disconnect(self):
+            return None
+
+        async def receive_response(self):
+            yield {"type": "result", "subtype": "success", "result": "", "total_cost_usd": 0}
+
+    def tool(*_):
+        return lambda function: function
+
+    fake_sdk = types.SimpleNamespace(
+        ClaudeAgentOptions=lambda **kwargs: options.update(kwargs) or kwargs,
+        ClaudeSDKClient=Client,
+        create_sdk_mcp_server=lambda *_args, **_kwargs: object(),
+        tool=tool,
+    )
+    monkeypatch.setitem(sys.modules, "claude_agent_sdk", fake_sdk)
+
+    class Socket:
+        async def send_json(self, _):
+            return None
+
+    async def run():
+        session = module.AgentSession(Socket())
+        assert await session.prewarm()
+        await session.close()
+
+    asyncio.run(run())
+    assert options["mcp_servers"]["playwright"] == {
+        "type": "stdio",
+        "command": "bunx",
+        "args": ["@playwright/mcp", "--user-data-dir", "/app/chrome-profile", "--headless", "--no-sandbox"],
+    }

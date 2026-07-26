@@ -16,7 +16,9 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-_SPEC = importlib.util.spec_from_file_location("desktop_changelog", Path(__file__).with_name("desktop-changelog.py"))
+_SPEC = importlib.util.spec_from_file_location(
+    "desktop_changelog", Path(__file__).with_name("desktop-changelog.py")
+)
 changelog = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(changelog)
 
@@ -69,12 +71,7 @@ class ChangelogRequirementTests(unittest.TestCase):
     def test_internal_release_controls_are_exempt_but_product_source_is_not(self) -> None:
         for path in (
             "desktop/macos/docs/release.md",
-            "desktop/macos/docs/qualification-environment.md",
             "desktop/macos/scripts/qualify-desktop-beta.sh",
-            "desktop/macos/scripts/qualification-cache-reclaim.py",
-            # #10759 M1 self-clean/watchdog helpers (EXEMPT_DESKTOP_PATHS).
-            "desktop/macos/scripts/qualification-runner-self-clean.py",
-            "desktop/macos/scripts/qualification-watchdog.py",
             # Sibling qualification-runner helper (EXEMPT_DESKTOP_PATHS).
             "desktop/macos/scripts/qualification-swift-cache.sh",
             "desktop/macos/scripts/qualification-lease-command.sh",
@@ -87,12 +84,6 @@ class ChangelogRequirementTests(unittest.TestCase):
             # post-merge push run of the changelog gate reddened main (#10387).
             "desktop/macos/tests/test-qualify-desktop-beta-contract.sh",
             "desktop/macos/tests/some-other-desktop-test.sh",
-            # Swift package tests live under Desktop/Tests rather than the
-            # legacy lowercase tests directory.
-            "desktop/macos/Desktop/Tests/PTTInputDeviceProbeTests.swift",
-            "desktop/macos/Desktop/Tests/Services/SyncTests.swift",
-            # Rust backend prefix.
-            "desktop/macos/Backend-Rust/src/main.rs",
             # Generated Swift is derived from the OpenAPI contract, never a
             # user-facing app note (EXEMPT_DESKTOP_PATH_PREFIXES).
             "desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift",

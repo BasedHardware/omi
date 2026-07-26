@@ -532,43 +532,6 @@ def _start_process(
     print(f"{service}: started pid={proc.pid} log={log_path}")
 
 
-def _desktop_backend_dir(cfg: config.HarnessConfig) -> Path:
-    return cfg.repo_root / "desktop" / "macos" / "Backend-Rust"
-
-
-def _ensure_desktop_backend_binary(cfg: config.HarnessConfig) -> Path:
-    backend_dir = _desktop_backend_dir(cfg)
-    release = os.environ.get("OMI_DESKTOP_BACKEND_RELEASE", "").strip() in {"1", "true", "yes"}
-    profile = "release" if release else "debug"
-    binary = backend_dir / "target" / profile / "omi-desktop-backend"
-    stale_markers = ("src", "Cargo.toml", "Cargo.lock")
-
-    def _is_stale(marker: str) -> bool:
-        path = backend_dir / marker
-        if not path.exists():
-            return False
-        if path.is_file():
-            return path.stat().st_mtime > binary.stat().st_mtime
-        newer = subprocess.run(
-            ["find", str(path), "-newer", str(binary)],
-            cwd=backend_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            check=False,
-        )
-        return bool(newer.stdout.strip())
-
-    if binary.is_file() and not any(_is_stale(marker) for marker in stale_markers):
-        return binary
-    build_cmd = ["cargo", "build"]
-    if release:
-        build_cmd.append("--release")
-    print(f"desktop-backend: building ({' '.join(build_cmd)})...")
-    subprocess.run(build_cmd, cwd=backend_dir, check=True)
-    return binary
-
-
 def _firebase_command(cfg: config.HarnessConfig) -> list[str]:
     config_path = cfg.layout.services_dir / "firebase" / "firebase.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -709,12 +672,11 @@ def _start_services(cfg: config.HarnessConfig) -> None:
         log_name="backend.log",
         port=cfg.backend_port,
     )
-    desktop_binary = _ensure_desktop_backend_binary(cfg)
     _start_process(
         cfg,
         "desktop-backend",
-        [str(desktop_binary)],
-        cwd=_desktop_backend_dir(cfg),
+        [sys.executable, "-m", "uvicorn", "desktop_backend:app", "--host", "127.0.0.1", "--port", str(cfg.desktop_backend_port)],
+        cwd=cfg.repo_root / "backend",
         log_name="desktop-backend.log",
         port=cfg.desktop_backend_port,
         env=config.desktop_backend_child_env_for(cfg),
