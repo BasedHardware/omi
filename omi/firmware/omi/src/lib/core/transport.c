@@ -46,9 +46,7 @@ static bool storage_full_warned = false;
 #endif
 
 extern bool is_connected;
-#ifdef CONFIG_OMI_ENABLE_BATTERY
 extern bool is_charging;
-#endif
 #ifdef CONFIG_OMI_ENABLE_CAPTURE_LED
 extern bool is_capturing;
 #endif
@@ -724,13 +722,7 @@ static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_
 // Battery Service Handlers
 //
 
-#ifdef CONFIG_OMI_ENABLE_BATTERY
-#define BATTERY_REFRESH_INTERVAL_CONNECTED 5000     // 5 seconds
-#define BATTERY_REFRESH_INTERVAL_DISCONNECTED 10000 // 10 seconds
-#define CONFIG_OMI_BATTERY_CRITICAL_MV 3500         // mV
-uint8_t battery_percentage = 0;
 static int8_t charging_status_last_notified = -1;
-void broadcast_battery_level(struct k_work *work_item);
 
 static int notify_charging_status(struct bt_conn *conn, bool force_notify)
 {
@@ -757,6 +749,13 @@ static int notify_charging_status(struct bt_conn *conn, bool force_notify)
     LOG_INF("Charging status notified: %u", charging_status);
     return 0;
 }
+
+#ifdef CONFIG_OMI_ENABLE_BATTERY
+#define BATTERY_REFRESH_INTERVAL_CONNECTED 5000     // 5 seconds
+#define BATTERY_REFRESH_INTERVAL_DISCONNECTED 10000 // 10 seconds
+#define CONFIG_OMI_BATTERY_CRITICAL_MV 3500         // mV
+uint8_t battery_percentage = 0;
+void broadcast_battery_level(struct k_work *work_item);
 
 K_WORK_DELAYABLE_DEFINE(battery_work, broadcast_battery_level);
 
