@@ -397,12 +397,17 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
         self.assertEqual(planner.SOURCE_CHECK_WAIT_SECONDS, 20 * 60)
-        self.assertEqual(workflow.count("--source-check-wait-seconds 1200"), 2)
-        self.assertEqual(workflow.count("--source-check-poll-seconds 30"), 2)
+        self.assertEqual(workflow.count("--source-check-wait-seconds 1200"), 3)
+        self.assertEqual(workflow.count("--source-check-poll-seconds 30"), 3)
         self.assertLess(
             workflow.index("Create and regular-merge PR to sync changelog back to main"),
             workflow.index("Publish immutable tag from exact live main source"),
         )
+        self.assertIn("Replan release source after changelog sync", workflow)
+        self.assertIn("git checkout --detach origin/main", workflow)
+        self.assertIn('SHOULD_RELEASE="${{ steps.replan.outputs.should_release }}"', workflow)
+        self.assertIn('PLANNED_SOURCE_SHA="${{ steps.final-plan.outputs.source_sha }}"', workflow)
+        self.assertIn("if: steps.final-plan.outputs.should_release == 'true'", workflow)
         self.assertIn('git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main', workflow)
         self.assertEqual(workflow.count('CANDIDATE_SHA="$MAIN_SHA"'), 2)
         self.assertIn('BRANCH="changelog/v${VERSION}-${PLANNED_SOURCE_SHA:0:12}"', workflow)

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -48,12 +49,17 @@ def releasable_desktop_paths(paths: list[str]) -> list[str]:
 
 
 def git(repository_root: Path, args: list[str], *, check: bool = True) -> str:
+    # The caller can be a Git hook or another repository-scoped tool. Do not
+    # inherit its GIT_DIR/index/worktree state when proving a different,
+    # explicit repository root.
+    environment = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
     result = subprocess.run(
         ["git", "-C", str(repository_root), *args],
         check=check,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        env=environment,
     )
     return result.stdout.strip()
 
@@ -126,6 +132,19 @@ def ensure_candidate_history_is_safe(
         actual_parent = git(repository_root, ["rev-parse", f"{changelog_commit}^1"])
         if actual_parent != changelog_parent_sha:
             raise ValueError("merged changelog parent does not match its recorded source SHA")
+        if changelog_parent_sha != planned_source_sha:
+            # A changelog merge may race a newer releasable desktop merge. The
+            # workflow is allowed to replan in that narrow case, but only from
+            # a source descended from the immutable changelog parent. This
+            # keeps the original source evidence intact without allowing an
+            # unrelated or stale changelog branch to be repurposed.
+            try:
+                git(
+                    repository_root,
+                    ["merge-base", "--is-ancestor", changelog_parent_sha, planned_source_sha],
+                )
+            except subprocess.CalledProcessError as error:
+                raise ValueError("replanned source must descend from the changelog parent SHA") from error
 
 
 def build_evidence(
@@ -143,7 +162,10 @@ def build_evidence(
     later non-desktop commits, which are admitted only after the caller proves
     ancestry and confirms there is no newer releasable desktop input. A
     consolidated changelog records its own parent, not the merge commit's first
-    parent: concurrent non-desktop main commits are valid merge parents.
+    parent: concurrent non-desktop main commits are valid merge parents. If a
+    newer releasable desktop change races that merge, the workflow replans from
+    the newer checked source and preserves the changelog's original parent in
+    a distinct evidence mode.
     """
     planned_source_sha = require_sha("planned_source_sha", planned_source_sha)
     candidate_source_sha = require_sha("candidate_source_sha", candidate_source_sha)
@@ -157,13 +179,11 @@ def build_evidence(
             raise ValueError("merged changelog evidence requires commit, PR URL, and first parent")
         changelog_commit = require_sha("changelog_commit", changelog_commit)
         changelog_parent_sha = require_sha("changelog_parent_sha", changelog_parent_sha)
-        if changelog_parent_sha != planned_source_sha:
-            raise ValueError("merged changelog parent must match the planner source SHA")
         if not re.fullmatch(r"https://github\.com/[^/]+/[^/]+/pull/[1-9][0-9]*", changelog_pr):
             raise ValueError("changelog_pr must be a canonical GitHub pull request URL")
-        return {
+        evidence = {
             "schema": SCHEMA,
-            "mode": "merged-changelog",
+            "mode": "merged-changelog" if changelog_parent_sha == planned_source_sha else "replanned-changelog",
             "planned_source_sha": planned_source_sha,
             "candidate_source_sha": candidate_source_sha,
             "origin_main_sha": origin_main_sha,
@@ -171,6 +191,9 @@ def build_evidence(
             "changelog_pr": changelog_pr,
             "changelog_parent_sha": changelog_parent_sha,
         }
+        if changelog_parent_sha != planned_source_sha:
+            evidence["replanned_from_source_sha"] = changelog_parent_sha
+        return evidence
 
     return {
         "schema": SCHEMA,
