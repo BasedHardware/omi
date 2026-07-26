@@ -1,0 +1,35 @@
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionModels.swift
+  s_7918275f8e3531::t_886524ec34153d 115-120
+  s_7918275f8e3531::t_089f8050344f5c 176-177,179-229
+  s_7918275f8e3531::t_d0348bcbd7bbc1 1,3-4
+  s_7918275f8e3531::t_270e7fbbe4366c 129-132,139-143,148,152,157-175
+  s_7918275f8e3531::t_a210b143498e0f 178
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionAssistant.swift
+  s_7918275f8e3531::t_110fafbbb88371 111-113,118,120-124,128-131,138-141,143-151
+  s_7918275f8e3531::t_e7b56050a27ff7 82
+  s_7918275f8e3531::t_ae5779a44b7677 273,276
+  s_7918275f8e3531::t_45fcda3d58e128 41-51,54
+  s_7918275f8e3531::t_7ff7677605b7ca 55
+desktop/macos/Desktop/Tests/SuggestionAssistantTests.swift
+  s_7918275f8e3531::t_52720b85c7c13f 154-158,161,163-164,170-173,176-177,180,184-187,190-191
+  s_7918275f8e3531::t_bfc2d45003e14a 88-153,159-160,162,165-169,174-175,178-179,181-183,188-189,192-200
+  s_7918275f8e3531::t_5b368f82cc5525 17-21,29-33
+desktop/macos/Desktop/Sources/ModelQoS.swift
+  s_7918275f8e3531::t_05fbb7c36499d1 99-111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "6ab158cf88e0132ef98426b551780d1d2caa6697",
+  "prompts": {},
+  "sessions": {
+    "s_7918275f8e3531": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "739fdbb2-b061-4a85-8520-85d2527f5698",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
