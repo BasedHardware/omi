@@ -250,6 +250,12 @@ if _http_mod is not None and not hasattr(_http_mod, '__file__'):
     _http_mod.get_webhook_semaphore = MagicMock(return_value=_asyncio.Semaphore(64))
     _http_mod.latest_wins_start = MagicMock(return_value=1)
     _http_mod.latest_wins_check = MagicMock(return_value=True)
+    _http_mod.safe_request_target = MagicMock(side_effect=lambda url: (url, {'headers': {}, 'extensions': {}}))
+
+    class _UnsafeWebhookURLError(Exception):
+        pass
+
+    _http_mod.UnsafeWebhookURLError = _UnsafeWebhookURLError
 
 # Stub executors — db_executor is a sentinel; run_blocking is a pass-through that
 # actually invokes fn so the production code path runs end to end.

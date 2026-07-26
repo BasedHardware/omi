@@ -121,7 +121,7 @@ from utils.other.storage import (
     delete_user_person_speech_sample,
 )
 from utils.webhooks import webhook_first_time_setup
-from utils.byok import has_byok_keys, invalidate_byok_state_cache
+from utils.byok import has_byok_keys, invalidate_byok_state_cache, peppered_fingerprint
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1108,7 +1108,7 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
             raise HTTPException(
                 status_code=400, detail=f"Invalid fingerprint for {provider}: expected lowercase hex SHA-256 (64 chars)"
             )
-    users_db.set_byok_active(uid, data.fingerprints)
+    users_db.set_byok_active(uid, {p: peppered_fingerprint(fp) for p, fp in data.fingerprints.items()})
     invalidate_byok_state_cache(uid)
     clear_trial_paywall_cache(uid)
     return {"active": True}
