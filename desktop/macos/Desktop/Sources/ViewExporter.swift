@@ -160,6 +160,12 @@ enum ViewExporter {
         { MemoryAtlasExportPreview.inspectorSurface() },
         CGSize(width: 1400, height: 820)
       ),
+
+      (
+        "19-brain-map-connection",
+        { MemoryAtlasExportPreview.connectionInspectorSurface() },
+        CGSize(width: 1400, height: 820)
+      ),
     ]
 
     guard index >= 0 && index < views.count else { return nil }
@@ -167,7 +173,7 @@ enum ViewExporter {
     return (entry.0, entry.1(), entry.2)
   }
 
-  static var standaloneViewCount: Int { 17 }
+  static var standaloneViewCount: Int { 18 }
 
   private static let onboardingExportSteps: [(String, Int)] = [
     ("01-name", 0),

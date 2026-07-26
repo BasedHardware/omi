@@ -1373,7 +1373,21 @@ private struct MemoryHubPage: View {
         // earlier behavior switched the hub to Memories, which threw away the
         // camera, the time cursor, and the selection just to read one memory.
         evidenceProvider: { memoryIds in
-          MemoryAtlasEvidence.resolve(memoryIds, in: memoriesViewModel.memories)
+          // Resolved against the local cache, not the visible page: that page
+          // is a tier-filtered, device-scoped slice, so an entity's evidence
+          // was routinely reported missing while sitting on disk.
+          MemoryAtlasEvidence.resolve(
+            memoryIds, in: await memoriesViewModel.memories(withIDs: memoryIds))
+        },
+        // Reading evidence stays in the Brain Map; acting on a memory does not.
+        // The destination only changes once the memory is actually open, so a
+        // citation the cache cannot resolve never strands the user on the
+        // Memories page with nothing selected.
+        onOpenMemory: { memoryId in
+          Task { @MainActor in
+            guard await memoriesViewModel.openMemory(id: memoryId) else { return }
+            destinationRawValue = MemoryHubDestination.memories.rawValue
+          }
         }
       )
     case .legacyBrainMap:
@@ -1493,7 +1507,16 @@ private struct PageContentView: View {
             onBack: { isShowingMemoryAtlasPage = false },
             evidenceProvider: { memoryIds in
               MemoryAtlasEvidence.resolve(
-                memoryIds, in: viewModelContainer.memoriesViewModel.memories)
+                memoryIds,
+                in: await viewModelContainer.memoriesViewModel.memories(withIDs: memoryIds))
+            },
+            onOpenMemory: { memoryId in
+              Task { @MainActor in
+                guard await viewModelContainer.memoriesViewModel.openMemory(id: memoryId) else {
+                  return
+                }
+                isShowingMemoryAtlasPage = false
+              }
             }
           )
         } else {

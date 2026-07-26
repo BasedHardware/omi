@@ -188,6 +188,54 @@ final class MemoryHubBrainMapRoutingTests: XCTestCase {
       "Reading evidence must not reach into the Memories page's selection")
   }
 
+  func testStaticCheckerEvidenceIsResolvedFromTheCacheNotTheVisiblePage() throws {
+    // STATIC CHECKER. Which collection the provider reads is a wiring decision
+    // in a SwiftUI view builder; the cache lookup it must use is covered
+    // behaviorally in MemoryCitationResolutionTests.
+    //
+    // `memoriesViewModel.memories` is one page of a tier-filtered,
+    // device-scoped browse. Resolving citations against it reported evidence as
+    // missing while it sat in the local cache.
+    let source = try desktopHomeViewSource()
+    let atlasBlock = String(
+      (source.components(separatedBy: "CanonicalMemoryAtlasTabView(").last ?? "").prefix(1000))
+
+    XCTAssertTrue(
+      atlasBlock.contains("memoriesViewModel.memories(withIDs: memoryIds)"),
+      "Citations must resolve against the local cache")
+    XCTAssertFalse(
+      atlasBlock.contains("in: memoriesViewModel.memories)"),
+      "Citations must not resolve against the paginated visible page")
+  }
+
+  func testStaticCheckerMemoryDetailPanelDoesNotCarrySheetSizing() throws {
+    // STATIC CHECKER. Clipping is a layout outcome that needs a rendered
+    // window to observe. The defect was structural: a modal sheet pinned to
+    // 450×600 was reused as a side panel, so its content laid out wider than
+    // the column and was clipped mid-word while its background stopped short
+    // of the window bottom.
+    let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Pages/MemoriesPage.swift")
+    let source = try String(contentsOf: url, encoding: .utf8)
+
+    guard let start = source.range(of: "struct MemoryDetailPanel: View {") else {
+      return XCTFail("The Memories detail surface must be a panel, not a sheet")
+    }
+    let panel = String(source[start.lowerBound...].prefix(12000))
+
+    XCTAssertFalse(
+      panel.contains(".frame(width: 450)"),
+      "The panel must size to the column it is given, not to a sheet width")
+    XCTAssertFalse(
+      panel.contains(".frame(maxHeight: 600)"),
+      "The panel must fill the window height, not stop at a sheet height")
+    XCTAssertFalse(
+      source.contains("MemoryDetailSheet"),
+      "The modal sheet has no remaining caller; leaving it behind is a second source of truth")
+  }
+
   private func makeMemory(id: String, content: String) -> ServerMemory {
     ServerMemory(
       id: id,

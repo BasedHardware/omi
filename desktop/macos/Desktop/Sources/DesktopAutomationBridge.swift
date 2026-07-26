@@ -3099,15 +3099,34 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "memory_graph_snapshot",
       summary: "Return knowledge graph node/edge counts (no SceneKit rendering)",
-      params: []
-    ) { _ in
+      params: ["label"]
+    ) { params in
       do {
         let graph = try await APIClient.shared.getKnowledgeGraph()
-        return [
+        var detail = [
           "node_count": "\(graph.nodes.count)",
           "edge_count": "\(graph.edges.count)",
           "is_empty": graph.nodes.isEmpty ? "true" : "false",
         ]
+        // `label` resolves a human-typed name to the ids the inspector needs,
+        // so a cursor-free check can both drive a selection and state what it
+        // expects the panel to show.
+        if let query = params["label"]?.lowercased(), !query.isEmpty {
+          if let match = graph.nodes.first(where: { $0.label.lowercased().contains(query) }) {
+            let edges = graph.edges.filter { $0.sourceId == match.id || $0.targetId == match.id }
+            detail["match_id"] = match.id
+            detail["match_label"] = match.label
+            detail["match_edge_count"] = "\(edges.count)"
+            detail["match_cited_memory_count"] = "\(Set(edges.flatMap(\.memoryIds)).count)"
+            if let first = edges.first {
+              detail["match_first_edge_id"] = first.id
+              detail["match_first_edge_memory_count"] = "\(first.memoryIds.count)"
+            }
+          } else {
+            detail["match_id"] = ""
+          }
+        }
+        return detail
       } catch {
         return [
           "node_count": "0",
@@ -3117,6 +3136,48 @@ final class DesktopAutomationActionRegistry {
           "error_message": error.localizedDescription,
         ]
       }
+    }
+
+    register(
+      name: "memory_atlas_select",
+      summary: "Select a Brain Map entity or connection so the inspector can be checked cursor-free",
+      params: ["target", "node_id", "edge_id", "clear"]
+    ) { params in
+      let target = params["target"] == "inline" ? "inline" : "page"
+      var userInfo: [String: Any] = ["target": target]
+      if let nodeID = params["node_id"], !nodeID.isEmpty { userInfo["node_id"] = nodeID }
+      if let edgeID = params["edge_id"], !edgeID.isEmpty { userInfo["edge_id"] = edgeID }
+      if params["clear"] == "true" { userInfo["clear"] = true }
+      await MainActor.run {
+        NotificationCenter.default.post(
+          name: .desktopAutomationMemoryAtlasSelectRequested,
+          object: nil,
+          userInfo: userInfo
+        )
+      }
+      return [
+        "posted": "true",
+        "target": target,
+        "node_id": params["node_id"] ?? "",
+        "edge_id": params["edge_id"] ?? "",
+        "clear": params["clear"] ?? "false",
+      ]
+    }
+
+    register(
+      name: "memories_open_detail",
+      summary: "Open a memory's detail panel by backend id (omit the id to close it)",
+      params: ["memory_id"]
+    ) { params in
+      let memoryId = params["memory_id"] ?? ""
+      await MainActor.run {
+        NotificationCenter.default.post(
+          name: .desktopAutomationMemoryDetailOpenRequested,
+          object: nil,
+          userInfo: memoryId.isEmpty ? [:] : ["memory_id": memoryId]
+        )
+      }
+      return ["posted": "true", "memory_id": memoryId]
     }
 
     register(

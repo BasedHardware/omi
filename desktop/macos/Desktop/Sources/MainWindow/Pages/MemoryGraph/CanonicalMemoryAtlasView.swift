@@ -19,6 +19,12 @@ extension Notification.Name {
   static let desktopAutomationMemoryAtlasTimeRequested = Notification.Name(
     "desktopAutomationMemoryAtlasTimeRequested"
   )
+  /// Selecting an entity or a connection is otherwise only reachable by
+  /// clicking the canvas, which puts the inspector out of reach of every
+  /// cursor-free check.
+  static let desktopAutomationMemoryAtlasSelectRequested = Notification.Name(
+    "desktopAutomationMemoryAtlasSelectRequested"
+  )
 }
 
 // MARK: - Atlas Layout
@@ -879,7 +885,11 @@ enum MemoryAtlasLayoutEngine {
     }
 
     let normalizedUserName = userName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    let anchor =
+
+    // Entities that stand in for the account holder rather than naming them.
+    let selfSynonyms: Set<String> = ["user", "me", "myself", "i", "the user"]
+
+    let rawAnchor =
       nodes.first {
         $0.nodeType == .person && normalizedUserName != nil && $0.label.lowercased() == normalizedUserName
       } ?? nodes.filter { $0.nodeType == .person }.max {
@@ -889,12 +899,30 @@ enum MemoryAtlasLayoutEngine {
         (degree[$0.id] ?? 0) < (degree[$1.id] ?? 0)
       }
 
+    // The center of your own map should say your name. The extractor writes a
+    // generic "The User" whenever no memory happens to name you, and collapsing
+    // the synonyms onto that node still left the anchor labelled "The User" —
+    // the one dot the user can identify on sight was the one not identified.
+    // The generic label survives as an alias so search still finds it.
+    let anchor = rawAnchor.map { node -> KnowledgeGraphNode in
+      guard let userName, !userName.isEmpty, selfSynonyms.contains(node.label.lowercased())
+      else { return node }
+      return KnowledgeGraphNode(
+        id: node.id,
+        label: userName,
+        nodeType: node.nodeType,
+        aliases: node.aliases + [node.label],
+        memoryIds: node.memoryIds,
+        createdAt: node.createdAt,
+        updatedAt: node.updatedAt
+      )
+    }
+
     // Collapse every entity that stands in for the account holder — a generic
     // "User"/"Me" node, or a second person node sharing the user's name — into
     // the single anchor. Two ego nodes ("User" floating apart from "David") read
     // as a data bug; the atlas should have exactly one unmistakable "you" at the
     // center. Their relationships are rerouted onto the anchor below.
-    let selfSynonyms: Set<String> = ["user", "me", "myself", "i", "the user"]
     let collapsedIDs: Set<String> = {
       guard let anchor else { return [] }
       return Set(
@@ -1134,20 +1162,70 @@ struct MemoryAtlasEvidence: Identifiable, Equatable {
   }
 }
 
-/// Right-hand inspector for the selected entity.
+/// What the inspector is describing.
+///
+/// The Brain Map has two things worth clicking — the entities and the
+/// connections between them — and both answer the same three questions: what
+/// is this, what does it touch, and which memories produced it. One panel
+/// shape for both keeps traversal continuous instead of making a relationship
+/// a dead end.
+enum MemoryAtlasInspectorSubject: Equatable {
+  case entity(title: String, typeName: String?, connectionSummary: String)
+  case relationship(sourceLabel: String, targetLabel: String, verb: String)
+
+  var title: String {
+    switch self {
+    case .entity(let title, _, _):
+      return title
+    case .relationship(let sourceLabel, let targetLabel, _):
+      return "\(sourceLabel) → \(targetLabel)"
+    }
+  }
+
+  var subtitle: String {
+    switch self {
+    case .entity(_, let typeName, let connectionSummary):
+      return [typeName, connectionSummary].compactMap { $0 }.joined(separator: " · ")
+    case .relationship(_, _, let verb):
+      return verb
+    }
+  }
+
+  /// Header for the section listing what this subject connects to.
+  var relatedSectionTitle: String {
+    switch self {
+    case .entity: return "Connections"
+    case .relationship: return "Between"
+    }
+  }
+}
+
+/// Right-hand inspector for the current selection.
 ///
 /// Replaces the "View evidence" jump to Memories: selecting a node used to
 /// change pages, which lost the camera, the time cursor, and the selection.
 struct MemoryAtlasDetailPanel: View {
-  let title: String
-  let typeName: String?
+  let subject: MemoryAtlasInspectorSubject
   let accent: Color
-  let connectionSummary: String
-  let relationships: [MemoryAtlasRelationshipRow]
+  let related: [MemoryAtlasRelationshipRow]
   let evidence: [MemoryAtlasEvidence]
+  let evidenceIsLoading: Bool
   let unresolvedEvidenceCount: Int
+  let onOpenRelated: (MemoryAtlasRelationshipRow) -> Void
+  /// Opens a cited memory on the Memories page with its detail panel showing.
+  /// The inspector deliberately shows the whole memory in place, but a memory
+  /// is also a thing you act on — edit it, check its provenance, delete it —
+  /// and none of that belongs in a graph inspector.
+  let onOpenMemory: (MemoryAtlasEvidence) -> Void
+  /// Present once the user has followed a connection. Traversal without a way
+  /// back turns every hop into a dead end you can only escape by hunting for
+  /// the previous dot on the canvas.
+  let onBack: (() -> Void)?
   let onFocus: () -> Void
   let onClose: () -> Void
+
+  @State private var hoveredRelatedID: String?
+  @State private var hoveredEvidenceID: String?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -1157,34 +1235,22 @@ struct MemoryAtlasDetailPanel: View {
 
       ScrollView {
         VStack(alignment: .leading, spacing: 18) {
-          if !relationships.isEmpty {
-            section("Connections") {
-              ForEach(relationships) { row in
-                relationshipRow(row)
+          if !related.isEmpty {
+            section(subject.relatedSectionTitle) {
+              VStack(alignment: .leading, spacing: 2) {
+                ForEach(related) { row in
+                  relatedRow(row)
+                }
               }
+              // Rows carry their own inset so the hover fill reads as a
+              // target; pulling it back keeps their text on the same margin
+              // as the section title.
+              .padding(.horizontal, -6)
             }
           }
 
           section("From your memories") {
-            if evidence.isEmpty && unresolvedEvidenceCount == 0 {
-              Text("Source memories are still being linked for this entity.")
-                .scaledFont(size: 11)
-                .foregroundColor(OmiColors.textQuaternary)
-                .fixedSize(horizontal: false, vertical: true)
-            } else {
-              ForEach(evidence) { item in
-                evidenceRow(item)
-              }
-              if unresolvedEvidenceCount > 0 {
-                // Memories page in, so an entity can cite one that has not been
-                // fetched yet. Saying so beats silently showing a short list.
-                Text(
-                  "\(unresolvedEvidenceCount) more memory\(unresolvedEvidenceCount == 1 ? "" : " entries") not loaded yet"
-                )
-                .scaledFont(size: 10)
-                .foregroundColor(OmiColors.textQuaternary)
-              }
-            }
+            evidenceSection
           }
         }
         .padding(16)
@@ -1198,21 +1264,69 @@ struct MemoryAtlasDetailPanel: View {
     .accessibilityIdentifier("memory_atlas_detail_panel")
   }
 
+  @ViewBuilder
+  private var evidenceSection: some View {
+    if evidenceIsLoading && evidence.isEmpty {
+      HStack(spacing: 7) {
+        ProgressView()
+          .controlSize(.small)
+          .tint(OmiColors.textTertiary)
+        Text("Reading your memories…")
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textQuaternary)
+      }
+    } else if evidence.isEmpty && unresolvedEvidenceCount == 0 {
+      Text("Source memories are still being linked for this entity.")
+        .scaledFont(size: 11)
+        .foregroundColor(OmiColors.textQuaternary)
+        .fixedSize(horizontal: false, vertical: true)
+    } else {
+      ForEach(evidence) { item in
+        evidenceRow(item)
+      }
+      if unresolvedEvidenceCount > 0 {
+        // Evidence resolves against the full local cache, so a remaining gap
+        // means the cited memory genuinely is not on this device — not that
+        // the list simply had not paged far enough yet.
+        Text(
+          "\(unresolvedEvidenceCount) cited memor\(unresolvedEvidenceCount == 1 ? "y" : "ies") could not be found on this device"
+        )
+        .scaledFont(size: 10)
+        .foregroundColor(OmiColors.textQuaternary)
+        .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+  }
+
   private var header: some View {
     HStack(alignment: .top, spacing: 10) {
+      if let onBack {
+        Button(action: onBack) {
+          Image(systemName: "chevron.left")
+            .scaledFont(size: 11, weight: .semibold)
+            .foregroundColor(OmiColors.textSecondary)
+            .frame(width: 22, height: 30)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Back to the previous entity")
+        .accessibilityIdentifier("memory_atlas_inspector_back")
+      }
+
       Circle()
         .fill(accent.opacity(0.14))
         .overlay(Circle().stroke(accent, lineWidth: 1.5))
         .frame(width: 30, height: 30)
 
       VStack(alignment: .leading, spacing: 3) {
-        Text(title)
+        Text(subject.title)
           .scaledFont(size: 15, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
           .fixedSize(horizontal: false, vertical: true)
-        Text([typeName, connectionSummary].compactMap { $0 }.joined(separator: " · "))
+        Text(subject.subtitle)
           .scaledFont(size: 11)
           .foregroundColor(OmiColors.textTertiary)
+          .fixedSize(horizontal: false, vertical: true)
       }
 
       Spacer(minLength: 4)
@@ -1258,51 +1372,162 @@ struct MemoryAtlasDetailPanel: View {
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
-  private func relationshipRow(_ row: MemoryAtlasRelationshipRow) -> some View {
-    HStack(alignment: .top, spacing: 8) {
-      Circle()
-        .fill(row.accent)
-        .frame(width: 5, height: 5)
-        .padding(.top, 5)
-      VStack(alignment: .leading, spacing: 1) {
-        Text(row.otherLabel)
-          .scaledFont(size: 12, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
-          .fixedSize(horizontal: false, vertical: true)
-        Text(row.relationship)
-          .scaledFont(size: 10)
+  /// A connection is a way through the graph, not a caption. Clicking one
+  /// moves the inspector to the entity on the other end, so following a chain
+  /// of relationships never requires hunting for the next dot on the canvas.
+  private func relatedRow(_ row: MemoryAtlasRelationshipRow) -> some View {
+    let isHovered = hoveredRelatedID == row.id
+    return Button {
+      onOpenRelated(row)
+    } label: {
+      HStack(alignment: .top, spacing: 8) {
+        Circle()
+          .fill(row.accent)
+          .frame(width: 5, height: 5)
+          .padding(.top, 5)
+        VStack(alignment: .leading, spacing: 1) {
+          Text(row.otherLabel)
+            .scaledFont(size: 12, weight: .medium)
+            .foregroundColor(isHovered ? OmiColors.textPrimary : OmiColors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+          Text(row.relationship)
+            .scaledFont(size: 10)
+            .foregroundColor(OmiColors.textQuaternary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        Spacer(minLength: 4)
+        Image(systemName: "chevron.right")
+          .scaledFont(size: 9, weight: .semibold)
           .foregroundColor(OmiColors.textQuaternary)
+          .opacity(isHovered ? 1 : 0)
+          .padding(.top, 3)
       }
-      Spacer(minLength: 0)
+      .padding(.vertical, 5)
+      .padding(.horizontal, 6)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(
+        RoundedRectangle(cornerRadius: 7, style: .continuous)
+          .fill(isHovered ? OmiColors.backgroundRaised.opacity(0.7) : Color.clear)
+      )
+      .contentShape(Rectangle())
     }
+    .buttonStyle(.plain)
+    .onHover { hovering in
+      if hovering {
+        hoveredRelatedID = row.id
+      } else if hoveredRelatedID == row.id {
+        hoveredRelatedID = nil
+      }
+    }
+    .help("Open \(row.otherLabel)")
+    .accessibilityIdentifier("memory_atlas_connection_row")
   }
 
   private func evidenceRow(_ item: MemoryAtlasEvidence) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Text(item.content)
-        .scaledFont(size: 11.5)
-        .foregroundColor(OmiColors.textSecondary)
-        .fixedSize(horizontal: false, vertical: true)
-      if let createdAt = item.createdAt {
-        Text(createdAt.formatted(date: .abbreviated, time: .shortened))
-          .scaledFont(size: 9.5)
-          .foregroundColor(OmiColors.textQuaternary)
+    let isHovered = hoveredEvidenceID == item.id
+    return Button {
+      onOpenMemory(item)
+    } label: {
+      VStack(alignment: .leading, spacing: 4) {
+        Text(item.content)
+          .scaledFont(size: 11.5)
+          .foregroundColor(isHovered ? OmiColors.textPrimary : OmiColors.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(maxWidth: .infinity, alignment: .leading)
+        // The date holds this row whether or not the cursor is here, so the
+        // "Open" affordance can fade in without the row changing height.
+        HStack(spacing: 4) {
+          if let createdAt = item.createdAt {
+            Text(createdAt.formatted(date: .abbreviated, time: .shortened))
+              .scaledFont(size: 9.5)
+              .foregroundColor(OmiColors.textQuaternary)
+          }
+          Spacer(minLength: 4)
+          HStack(spacing: 3) {
+            Text("Open")
+              .scaledFont(size: 9.5, weight: .medium)
+            Image(systemName: "arrow.up.right")
+              .scaledFont(size: 8, weight: .semibold)
+          }
+          .foregroundColor(OmiColors.textTertiary)
+          .opacity(isHovered ? 1 : 0)
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(10)
+      .background(
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+          .fill(OmiColors.backgroundRaised.opacity(isHovered ? 0.95 : 0.6))
+      )
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .onHover { hovering in
+      if hovering {
+        hoveredEvidenceID = item.id
+      } else if hoveredEvidenceID == item.id {
+        hoveredEvidenceID = nil
       }
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(10)
-    .background(
-      RoundedRectangle(cornerRadius: 10, style: .continuous)
-        .fill(OmiColors.backgroundRaised.opacity(0.6))
-    )
+    .help("Open this memory on the Memories page")
+    .accessibilityIdentifier("memory_atlas_evidence_row")
   }
 }
 
 struct MemoryAtlasRelationshipRow: Identifiable, Equatable {
   let id: String
+  /// Where clicking this row goes. Without it the inspector could name the
+  /// entity on the other end but not open it.
+  let otherNodeID: String
   let otherLabel: String
   let relationship: String
   let accent: Color
+}
+
+/// Picking a painted connection out of the atlas.
+///
+/// Lives outside the view so the two rules that matter — a line is only picked
+/// when the click is genuinely on it, and the nearest one wins — are testable
+/// without a window or a gesture.
+enum MemoryAtlasHitTesting {
+  struct Segment {
+    let id: String
+    let start: CGPoint
+    let end: CGPoint
+  }
+
+  static func distance(from point: CGPoint, toSegmentFrom start: CGPoint, to end: CGPoint) -> CGFloat {
+    let run = end.x - start.x
+    let rise = end.y - start.y
+    let lengthSquared = run * run + rise * rise
+    // A zero-length segment is a point; projecting onto it would divide by zero.
+    guard lengthSquared > 0 else { return hypot(point.x - start.x, point.y - start.y) }
+    let projection = ((point.x - start.x) * run + (point.y - start.y) * rise) / lengthSquared
+    let clamped = min(1, max(0, projection))
+    let nearest = CGPoint(x: start.x + clamped * run, y: start.y + clamped * rise)
+    return hypot(point.x - nearest.x, point.y - nearest.y)
+  }
+
+  /// How far off a painted line a click may land and still count, in points.
+  /// Connections are drawn under 2pt wide, so this is forgiveness for aim, not
+  /// a hit area wide enough to steal clicks from a neighbouring line.
+  static let connectionTolerance: CGFloat = 5
+
+  static func nearestSegment(
+    to point: CGPoint,
+    among segments: [Segment],
+    within tolerance: CGFloat
+  ) -> String? {
+    var best: (id: String, distance: CGFloat)?
+    for segment in segments {
+      let distance = distance(from: point, toSegmentFrom: segment.start, to: segment.end)
+      guard distance <= tolerance else { continue }
+      if best.map({ distance < $0.distance }) ?? true {
+        best = (segment.id, distance)
+      }
+    }
+    return best?.id
+  }
 }
 
 // MARK: - Canonical Atlas Containers
@@ -1310,7 +1535,9 @@ struct MemoryAtlasRelationshipRow: Identifiable, Equatable {
 struct CanonicalMemoryAtlasPage: View {
   @ObservedObject var viewModel: MemoryGraphViewModel
   let onBack: () -> Void
-  let evidenceProvider: ([String]) -> [MemoryAtlasEvidence]
+  let evidenceProvider: ([String]) async -> [MemoryAtlasEvidence]
+  /// Opens a cited memory on the Memories surface this page came from.
+  let onOpenMemory: (String) -> Void
 
   var body: some View {
     VStack(spacing: 0) {
@@ -1350,6 +1577,7 @@ struct CanonicalMemoryAtlasPage: View {
         graph: viewModel.graphResponse,
         compact: false,
         evidenceProvider: evidenceProvider,
+        onOpenMemory: onOpenMemory,
         onRebuild: { Task { await viewModel.rebuildGraph() } },
         isRebuilding: viewModel.isRebuilding
       )
@@ -1374,13 +1602,16 @@ struct CanonicalMemoryAtlasPage: View {
 /// for users still on the legacy graph.
 struct CanonicalMemoryAtlasTabView: View {
   @ObservedObject var viewModel: MemoryGraphViewModel
-  let evidenceProvider: ([String]) -> [MemoryAtlasEvidence]
+  let evidenceProvider: ([String]) async -> [MemoryAtlasEvidence]
+  /// Opens a cited memory on the hub's Memories destination.
+  let onOpenMemory: (String) -> Void
 
   var body: some View {
     CanonicalMemoryAtlasSurface(
       graph: viewModel.graphResponse,
       compact: false,
       evidenceProvider: evidenceProvider,
+      onOpenMemory: onOpenMemory,
       onRebuild: { Task { await viewModel.rebuildGraph() } },
       isRebuilding: viewModel.isRebuilding
     )
@@ -1403,7 +1634,13 @@ private struct CanonicalMemoryAtlasSurface: View {
   /// Resolves the memory ids an entity cites into readable evidence for the
   /// inspector. The surface stays independent of the memories layer; callers
   /// that have no memories to offer (offscreen exports) return nothing.
-  let evidenceProvider: ([String]) -> [MemoryAtlasEvidence]
+  ///
+  /// Asynchronous because resolving a citation is a cache read, not a scan of
+  /// whatever the memories list happens to be showing.
+  let evidenceProvider: ([String]) async -> [MemoryAtlasEvidence]
+  /// Leaves the atlas for a cited memory. Absent on surfaces with nowhere to
+  /// go (offscreen exports, the inline preview).
+  let onOpenMemory: ((String) -> Void)?
   /// Regenerating the server-side graph. Absent on surfaces that have no
   /// view model to drive it (the inline preview, offscreen export renders).
   let onRebuild: (() -> Void)?
@@ -1416,9 +1653,22 @@ private struct CanonicalMemoryAtlasSurface: View {
   /// Deterministic offscreen renders (ViewExporter QA) pin the time cursor and
   /// suppress auto-play so the timeline captures a stable frame.
   private let previewTimeCursor: Double?
+  private let previewEvidence: [MemoryAtlasEvidence]
 
   @State private var searchText = ""
   @State private var selectedNodeID: String?
+  /// Set when the user clicked a painted connection rather than an entity.
+  /// `selectedNodeID` still holds one endpoint so the map keeps its existing
+  /// neighborhood emphasis; this only redirects the inspector to the
+  /// relationship itself.
+  @State private var selectedEdgeID: String?
+  /// Entities the user followed connections away from, most recent last.
+  @State private var selectionTrail: [String] = []
+  @State private var evidence: [MemoryAtlasEvidence] = []
+  @State private var evidenceIsLoading = false
+  /// The ids the current evidence answers, so "how many are missing" compares
+  /// against what was actually asked for rather than the live selection.
+  @State private var requestedEvidenceIDs: [String] = []
   @State private var zoom: CGFloat = 1
   @State private var settledZoom: CGFloat = 1
   @State private var pan: CGSize = .zero
@@ -1442,22 +1692,35 @@ private struct CanonicalMemoryAtlasSurface: View {
   init(
     graph: KnowledgeGraphResponse,
     compact: Bool,
-    evidenceProvider: @escaping ([String]) -> [MemoryAtlasEvidence] = { _ in [] },
+    evidenceProvider: @escaping ([String]) async -> [MemoryAtlasEvidence] = { _ in [] },
+    onOpenMemory: ((String) -> Void)? = nil,
     onRebuild: (() -> Void)? = nil,
     isRebuilding: Bool = false,
     previewTimeCursor: Double? = nil,
     /// Deterministic offscreen renders open the inspector, which is otherwise
     /// only reachable by tapping the canvas.
-    previewSelectedNodeID: String? = nil
+    previewSelectedNodeID: String? = nil,
+    /// Selecting a connection, for the render that has to prove the
+    /// relationship inspector exists.
+    previewSelectedEdgeID: String? = nil,
+    /// Offscreen renders capture a frame before an asynchronous cache read
+    /// could land, so the export seeds the inspector's evidence directly
+    /// instead of photographing a spinner.
+    previewEvidence: [MemoryAtlasEvidence] = []
   ) {
     self.graph = graph
     self.compact = compact
     self.evidenceProvider = evidenceProvider
+    self.onOpenMemory = onOpenMemory
     self.onRebuild = onRebuild
     self.isRebuilding = isRebuilding
     self.previewTimeCursor = previewTimeCursor
+    self.previewEvidence = previewEvidence
     _timeCursor = State(initialValue: previewTimeCursor ?? 1)
     _selectedNodeID = State(initialValue: previewSelectedNodeID)
+    _selectedEdgeID = State(initialValue: previewSelectedEdgeID)
+    _evidence = State(initialValue: previewEvidence)
+    _requestedEvidenceIDs = State(initialValue: previewEvidence.map(\.id))
     let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
     let atlasSnapshot = MemoryAtlasLayoutEngine.makeSnapshot(
       graph: graph,
@@ -1487,6 +1750,35 @@ private struct CanonicalMemoryAtlasSurface: View {
   private var selectedEdges: [MemoryAtlasEdgePlacement] {
     guard let selectedNodeID else { return [] }
     return snapshot.edgesByNodeID[selectedNodeID] ?? []
+  }
+
+  /// Selecting an edge always anchors `selectedNodeID` to one of its endpoints,
+  /// so the lookup stays within that node's degree instead of the whole graph.
+  private var selectedEdge: MemoryAtlasEdgePlacement? {
+    guard let selectedEdgeID else { return nil }
+    return selectedEdges.first { $0.id == selectedEdgeID }
+  }
+
+  /// The memory ids the current selection cites, newest-relationship-first and
+  /// de-duplicated. An edge answers for itself; an entity answers for all of
+  /// its connections.
+  private var citedMemoryIDs: [String] {
+    if let selectedEdge { return selectedEdge.edge.memoryIds }
+    var seen = Set<String>()
+    var ordered: [String] = []
+    for id in selectedEdges.flatMap(\.edge.memoryIds) where seen.insert(id).inserted {
+      ordered.append(id)
+    }
+    return ordered
+  }
+
+  /// Changing either half of the selection is a new evidence question.
+  private var evidenceSelectionKey: String {
+    "\(selectedNodeID ?? "")|\(selectedEdgeID ?? "")"
+  }
+
+  private var unresolvedEvidenceCount: Int {
+    evidenceIsLoading ? 0 : max(0, requestedEvidenceIDs.count - evidence.count)
   }
 
   private var recentConnectionCount: Int {
@@ -1540,11 +1832,44 @@ private struct CanonicalMemoryAtlasSurface: View {
       mapColumn
 
       if !compact, let selectedNode {
-        detailPanel(for: selectedNode)
+        inspector(anchoredAt: selectedNode)
           .transition(.move(edge: .trailing).combined(with: .opacity))
       }
     }
     .animation(OmiMotion.gated(.easeOut(duration: 0.18)), value: selectedNodeID)
+    .task(id: evidenceSelectionKey) { await loadEvidence() }
+  }
+
+  @ViewBuilder
+  private func inspector(anchoredAt placement: MemoryAtlasNodePlacement) -> some View {
+    if let selectedEdge {
+      relationshipPanel(for: selectedEdge, anchor: placement)
+    } else {
+      detailPanel(for: placement)
+    }
+  }
+
+  /// Resolves the selection's citations through the provider.
+  ///
+  /// Stale evidence is cleared before the read rather than after it, so
+  /// switching entities never shows the previous entity's memories under the
+  /// new entity's name while the lookup is in flight.
+  private func loadEvidence() async {
+    guard previewEvidence.isEmpty else { return }
+    let ids = citedMemoryIDs
+    guard !ids.isEmpty else {
+      evidence = []
+      requestedEvidenceIDs = []
+      evidenceIsLoading = false
+      return
+    }
+    evidence = []
+    requestedEvidenceIDs = ids
+    evidenceIsLoading = true
+    let resolved = await evidenceProvider(ids)
+    guard !Task.isCancelled else { return }
+    evidence = resolved
+    evidenceIsLoading = false
   }
 
   private var mapColumn: some View {
@@ -1578,7 +1903,7 @@ private struct CanonicalMemoryAtlasSurface: View {
             .simultaneousGesture(magnificationGesture(in: proxy.size))
             .simultaneousGesture(
               SpatialTapGesture().onEnded { value in
-                selectNearestNode(to: value.location, in: proxy.size)
+                selectAtlasElement(at: value.location, in: proxy.size, plan: plan)
               }
             )
 
@@ -1648,7 +1973,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       guard isInlineTarget == compact else { return }
       if notification.userInfo?["reset"] as? Bool == true {
         resetViewport()
-        selectedNodeID = nil
+        clearSelection()
         return
       }
       if let requestedZoom = notification.userInfo?["zoom"] as? Double {
@@ -1665,6 +1990,34 @@ private struct CanonicalMemoryAtlasSurface: View {
           height: CGFloat(requestedPanY ?? Double(pan.height))
         )
         settledPan = pan
+      }
+    }
+    .onReceive(
+      NotificationCenter.default.publisher(for: .desktopAutomationMemoryAtlasSelectRequested)
+    ) { notification in
+      let target = notification.userInfo?["target"] as? String ?? "page"
+      guard (target == "inline") == compact else { return }
+      if notification.userInfo?["clear"] as? Bool == true {
+        clearSelection()
+        return
+      }
+      // Drives the same state a canvas click would, so an automated check
+      // exercises the real inspector rather than a parallel preview path.
+      if let edgeID = notification.userInfo?["edge_id"] as? String,
+        let edge = snapshot.edges.first(where: { $0.id == edgeID }),
+        snapshot.nodeByID[edge.edge.sourceId] != nil
+      {
+        selectionTrail.removeAll()
+        selectedNodeID = edge.edge.sourceId
+        selectedEdgeID = edgeID
+        return
+      }
+      if let nodeID = notification.userInfo?["node_id"] as? String,
+        snapshot.nodeByID[nodeID] != nil
+      {
+        selectionTrail.removeAll()
+        selectedEdgeID = nil
+        selectedNodeID = nodeID
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationMemoryAtlasTimeRequested)) {
@@ -2078,6 +2431,8 @@ private struct CanonicalMemoryAtlasSurface: View {
     let hitDiameter = max(diameter, 24)
 
     return Button {
+      selectionTrail.removeAll()
+      selectedEdgeID = nil
       selectedNodeID = selected ? nil : placement.id
     } label: {
       ZStack {
@@ -2123,16 +2478,19 @@ private struct CanonicalMemoryAtlasSurface: View {
     .accessibilityValue(placement.node.nodeType.rawValue)
   }
 
+  /// `nil` collapses the header's back affordance; the ternary needs the
+  /// explicit optional-closure type to stay unambiguous.
+  private var backAction: (() -> Void)? {
+    selectionTrail.isEmpty ? nil : { goBack() }
+  }
+
   private func detailPanel(for placement: MemoryAtlasNodePlacement) -> some View {
-    let accent = placement.cluster?.color ?? OmiColors.textPrimary
-    let edges = selectedEdges
-    let evidenceIds = Array(Set(edges.flatMap(\.edge.memoryIds)))
-    let evidence = evidenceProvider(evidenceIds)
-    let relationships: [MemoryAtlasRelationshipRow] = edges.compactMap { edge in
+    let relationships: [MemoryAtlasRelationshipRow] = selectedEdges.compactMap { edge in
       let otherID = edge.edge.sourceId == placement.id ? edge.edge.targetId : edge.edge.sourceId
       guard let other = snapshot.nodeByID[otherID] else { return nil }
       return MemoryAtlasRelationshipRow(
         id: edge.id,
+        otherNodeID: otherID,
         otherLabel: other.node.label,
         relationship: MemoryAtlasLayoutEngine.relationshipDisplayName(edge.edge.label),
         accent: other.cluster?.color ?? OmiColors.textTertiary
@@ -2140,23 +2498,96 @@ private struct CanonicalMemoryAtlasSurface: View {
     }
 
     return MemoryAtlasDetailPanel(
-      title: placement.node.label,
-      typeName: placement.cluster?.title,
-      accent: accent,
-      connectionSummary: "\(placement.degree) connection\(placement.degree == 1 ? "" : "s")",
-      relationships: relationships,
+      subject: .entity(
+        title: placement.node.label,
+        typeName: placement.cluster?.title,
+        connectionSummary: "\(placement.degree) connection\(placement.degree == 1 ? "" : "s")"
+      ),
+      accent: placement.cluster?.color ?? OmiColors.textPrimary,
+      related: relationships,
       evidence: evidence,
-      unresolvedEvidenceCount: max(0, evidenceIds.count - evidence.count),
+      evidenceIsLoading: evidenceIsLoading,
+      unresolvedEvidenceCount: unresolvedEvidenceCount,
+      onOpenRelated: openRelated,
+      onOpenMemory: openCitedMemory,
+      onBack: backAction,
       onFocus: { focus(on: placement) },
-      onClose: { selectedNodeID = nil }
+      onClose: clearSelection
     )
+  }
+
+  /// Inspector for a single connection: which two entities it joins, and the
+  /// memories that produced that specific claim rather than everything either
+  /// endpoint happens to be involved in.
+  private func relationshipPanel(
+    for edge: MemoryAtlasEdgePlacement,
+    anchor: MemoryAtlasNodePlacement
+  ) -> some View {
+    let source = snapshot.nodeByID[edge.edge.sourceId]
+    let target = snapshot.nodeByID[edge.edge.targetId]
+    let endpoints: [MemoryAtlasRelationshipRow] = [source, target].compactMap { endpoint in
+      guard let endpoint else { return nil }
+      return MemoryAtlasRelationshipRow(
+        id: "endpoint-\(endpoint.id)",
+        otherNodeID: endpoint.id,
+        otherLabel: endpoint.node.label,
+        relationship: endpoint.cluster?.title ?? "Entity",
+        accent: endpoint.cluster?.color ?? OmiColors.textTertiary
+      )
+    }
+
+    return MemoryAtlasDetailPanel(
+      subject: .relationship(
+        sourceLabel: source?.node.label ?? edge.edge.sourceId,
+        targetLabel: target?.node.label ?? edge.edge.targetId,
+        verb: MemoryAtlasLayoutEngine.relationshipDisplayName(edge.edge.label)
+      ),
+      accent: edge.cluster.color,
+      related: endpoints,
+      evidence: evidence,
+      evidenceIsLoading: evidenceIsLoading,
+      unresolvedEvidenceCount: unresolvedEvidenceCount,
+      onOpenRelated: openRelated,
+      onOpenMemory: openCitedMemory,
+      onBack: backAction,
+      onFocus: { focus(on: anchor) },
+      onClose: clearSelection
+    )
+  }
+
+  /// A cited memory is readable here, but acting on it — editing, checking its
+  /// provenance, deleting it — belongs on the Memories page. Opening it there
+  /// with its detail panel showing is the one hop that does not lose the thread.
+  private func openCitedMemory(_ item: MemoryAtlasEvidence) {
+    onOpenMemory?(item.id)
+  }
+
+  private func openRelated(_ row: MemoryAtlasRelationshipRow) {
+    guard snapshot.nodeByID[row.otherNodeID] != nil else { return }
+    if let current = selectedNodeID, current != row.otherNodeID {
+      selectionTrail.append(current)
+    }
+    selectedEdgeID = nil
+    selectedNodeID = row.otherNodeID
+  }
+
+  private func goBack() {
+    guard let previous = selectionTrail.popLast() else { return }
+    selectedEdgeID = nil
+    selectedNodeID = previous
+  }
+
+  private func clearSelection() {
+    selectionTrail.removeAll()
+    selectedEdgeID = nil
+    selectedNodeID = nil
   }
 
   private func selectionStrip(for placement: MemoryAtlasNodePlacement) -> some View {
     let primaryEdge = selectedEdges.first
     let sourceNode = primaryEdge.flatMap { snapshot.nodeByID[$0.edge.sourceId] }
     let targetNode = primaryEdge.flatMap { snapshot.nodeByID[$0.edge.targetId] }
-    let evidenceIds = Array(Set(selectedEdges.flatMap(\.edge.memoryIds)))
+    let evidenceIds = citedMemoryIDs
     let relationshipText: String = {
       guard let primaryEdge, let sourceNode, let targetNode else {
         return "\(placement.degree) connection\(placement.degree == 1 ? "" : "s")"
@@ -2206,7 +2637,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       .foregroundColor(OmiColors.textQuaternary)
 
       Button {
-        selectedNodeID = nil
+        clearSelection()
       } label: {
         Image(systemName: "xmark")
           .scaledFont(size: 10, weight: .semibold)
@@ -2659,7 +3090,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     else {
       return
     }
-    self.selectedNodeID = nil
+    clearSelection()
   }
 
   private func updateSearchMatches(_ query: String) {
@@ -2681,13 +3112,53 @@ private struct CanonicalMemoryAtlasSurface: View {
 
   private func selectFirstSearchResult() {
     guard let matchingNodeIDs, !matchingNodeIDs.isEmpty else { return }
+    selectionTrail.removeAll()
+    selectedEdgeID = nil
     selectedNodeID =
       snapshot.nodes.first {
         matchingNodeIDs.contains($0.id) && nodeIsVisibleAtCurrentTime($0)
       }?.id
   }
 
-  private func selectNearestNode(to location: CGPoint, in size: CGSize) {
+  /// Routes a click on the canvas to whatever it landed on.
+  ///
+  /// Entities are tested first and win outright: every dot sits on at least one
+  /// line, so letting a line take the hit near a dot would make dots feel
+  /// unclickable at the exact places they matter most.
+  private func selectAtlasElement(at location: CGPoint, in size: CGSize, plan: MemoryAtlasRenderPlan) {
+    if let node = nearestNode(to: location, in: size) {
+      // Reaching for something on the canvas starts a fresh trail; only
+      // following a listed connection extends one.
+      selectionTrail.removeAll()
+      selectedEdgeID = nil
+      selectedNodeID = node.id
+      return
+    }
+
+    let segments = plan.visibleEdges.map {
+      MemoryAtlasHitTesting.Segment(
+        id: $0.id,
+        start: point(for: $0.source, in: size),
+        end: point(for: $0.target, in: size)
+      )
+    }
+    guard
+      let hitID = MemoryAtlasHitTesting.nearestSegment(
+        to: location,
+        among: segments,
+        within: MemoryAtlasHitTesting.connectionTolerance
+      ),
+      let hit = plan.visibleEdges.first(where: { $0.id == hitID }),
+      // The inspector anchors to an endpoint for map emphasis, so a connection
+      // whose endpoint is not in the snapshot cannot be presented.
+      snapshot.nodeByID[hit.edge.sourceId] != nil
+    else { return }
+    selectionTrail.removeAll()
+    selectedNodeID = hit.edge.sourceId
+    selectedEdgeID = hit.id
+  }
+
+  private func nearestNode(to location: CGPoint, in size: CGSize) -> MemoryAtlasNodePlacement? {
     let hitRadius = max(12, 18 / zoom)
     var nearest: (placement: MemoryAtlasNodePlacement, distance: CGFloat)?
     for placement in snapshot.nodes where nodeIsVisibleAtCurrentTime(placement) {
@@ -2697,7 +3168,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         nearest = (placement, distance)
       }
     }
-    if let nearest { selectedNodeID = nearest.placement.id }
+    return nearest?.placement
   }
 
   private func updateZoom(_ value: CGFloat) {
@@ -2759,7 +3230,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     searchText = ""
     matchingNodeIDs = nil
     matchingEdges = nil
-    selectedNodeID = nil
+    clearSelection()
   }
 }
 
@@ -2992,18 +3463,39 @@ enum MemoryAtlasExportPreview {
       CanonicalMemoryAtlasSurface(
         graph: singleTypeGraph(),
         compact: false,
-        evidenceProvider: { ids in
-          ids.prefix(3).enumerated().map { index, id in
-            MemoryAtlasEvidence(
-              id: id,
-              content: Self.sampleEvidence[index % Self.sampleEvidence.count],
-              createdAt: Date(timeIntervalSince1970: 1_752_000_000 - Double(index) * 86_400)
-            )
-          }
-        },
         onRebuild: {},
         previewTimeCursor: 1,
-        previewSelectedNodeID: "concept-2"
+        previewSelectedNodeID: "concept-2",
+        previewEvidence: Self.sampleEvidence.enumerated().map { index, content in
+          MemoryAtlasEvidence(
+            id: "evidence-\(index)",
+            content: content,
+            createdAt: Date(timeIntervalSince1970: 1_752_000_000 - Double(index) * 86_400)
+          )
+        }
+      )
+    )
+  }
+
+  /// Same atlas with a connection selected rather than an entity. Connections
+  /// are clickable, so the relationship inspector is a real destination and
+  /// gets a real render.
+  static func connectionInspectorSurface() -> AnyView {
+    AnyView(
+      CanonicalMemoryAtlasSurface(
+        graph: singleTypeGraph(),
+        compact: false,
+        onRebuild: {},
+        previewTimeCursor: 1,
+        previewSelectedNodeID: "david",
+        previewSelectedEdgeID: "edge-concept-2",
+        previewEvidence: Self.sampleEvidence.prefix(2).enumerated().map { index, content in
+          MemoryAtlasEvidence(
+            id: "evidence-\(index)",
+            content: content,
+            createdAt: Date(timeIntervalSince1970: 1_752_000_000 - Double(index) * 86_400)
+          )
+        }
       )
     )
   }
