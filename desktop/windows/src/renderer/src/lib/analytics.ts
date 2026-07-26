@@ -1,5 +1,5 @@
 // Mirrors the macOS desktop app's PostHogManager: best-effort analytics sent to
-// the same PostHog project via its HTTP capture API (no SDK needed). The project
+// the same PostHog project via its HTTP ingestion API (no SDK needed). The project
 // key is a publishable client key — safe to embed, exactly as the desktop app
 // hardcodes it. Every call is fire-and-forget and never blocks or surfaces errors.
 import { auth } from './firebase'
@@ -10,14 +10,19 @@ const POSTHOG_KEY =
 
 export function trackEvent(event: string, properties: Record<string, unknown> = {}): void {
   const distinctId = auth.currentUser?.uid ?? 'anonymous'
-  void fetch(`${POSTHOG_HOST}/capture/`, {
+  void fetch(`${POSTHOG_HOST}/i/v0/e/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       api_key: POSTHOG_KEY,
       event,
       distinct_id: distinctId,
-      properties
+      properties: {
+        ...properties,
+        $lib: 'omi-windows',
+        $os: 'Windows',
+        platform: 'windows'
+      }
     })
   }).catch(() => {
     // Analytics is best-effort — swallow network/auth failures silently.
