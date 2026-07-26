@@ -257,6 +257,33 @@ enum MemoryAtlasForceLayout {
   /// 2.1, and on the even fixture it is unchanged at 1.95.
   static let communitySeparation = 0.4
 
+  /// How far past the drawing area the unconnected entities ring the map, as a
+  /// fraction of its half-extent.
+  ///
+  /// Enough to read as "outside", and no more. This used to be 0.07 with a
+  /// further 0.05 per ring on top, which put a lone entity most of a
+  /// canvas-width from anything it could be compared to — the map looked like
+  /// it had shed debris. The floor is the drawing area itself and cannot go
+  /// lower: everything the relaxation placed is fitted inside it, so coming any
+  /// closer would put an entity with no relationships among entities whose
+  /// positions mean something.
+  static let haloClearance = 0.05
+
+  /// What share of the map the fit is required to fit.
+  ///
+  /// Not all of it, and now not almost all of it either. The relaxation leaves a
+  /// thin tail of loosely attached stragglers a long way out, and scaling so
+  /// that *they* land on the edge squeezes everything worth reading into the
+  /// middle — which is the same defect twice over: the structure looks like a
+  /// clump, and the ring of unconnected entities outside the drawing area then
+  /// sits an absurd distance from it.
+  ///
+  /// The tail is not discarded; it is drawn past the area, which the canvas has
+  /// room for. Measured on the account-shaped fixtures as the share of entities
+  /// inside the drawing area, this moves the bulk outward without pushing more
+  /// than a few percent of the map past the edge.
+  static let fittedShare = 0.90
+
   /// The smallest group the separation force will move.
   ///
   /// Deliberately the same six the UI uses to decide a group is worth naming
@@ -1204,7 +1231,7 @@ enum MemoryAtlasForceLayout {
     // account and did exactly that.
     let radiiX = points.map { abs($0.x - center.x) }.sorted()
     let radiiY = points.map { abs($0.y - center.y) }.sorted()
-    let cut = min(max(Int(Double(points.count) * 0.98) - 1, 0), points.count - 1)
+    let cut = min(max(Int(Double(points.count) * fittedShare) - 1, 0), points.count - 1)
     let extentX = max(radiiX[cut], 1e-6)
     let extentY = max(radiiY[cut], 1e-6)
 
@@ -1421,17 +1448,22 @@ enum MemoryAtlasForceLayout {
       let wobble = (stableFraction("halo-\(group.first ?? "")") - 0.5) * 0.9
       let angle = 2 * Double.pi * (Double(indexInRing) + 0.5 + wobble) / Double(max(occupancy, 1))
 
-      // Traced on a rectangle rather than an ellipse. An ellipse wide enough
-      // to clear the map's sides still cuts *inside* it near the diagonals,
-      // which would drop unconnected entities into the middle of the
-      // structure — exactly the claim the halo exists to avoid making.
-      // Depth, not just angle. The rim follows a rectangle, so every seat along
-      // one edge shares an identical x (or y) — a run of singletons then draws
-      // an exactly straight, evenly spaced column of dots down the side of the
-      // canvas, which reads as a rendering artefact. Varying each seat's
-      // distance turns the rim into a scattered band instead of a ruled line.
+      // Seated just outside where the structure actually reaches in *this*
+      // direction, rather than on a fixed rim around everything.
+      //
+      // The map is not a disc and its shape changes with the account. A rim at
+      // a constant multiple of the drawing area strands an unconnected entity
+      // halfway across empty canvas whenever the structure happens to stop
+      // early on that side — which is most sides, since the fit only guarantees
+      // the *furthest* entities reach the edge. Following the silhouette keeps
+      // the same claim (outside everything, connected to nothing) at a distance
+      // that reads as deliberate instead of as debris.
+      //
+      // Depth still varies per seat: the band has to look scattered, or a run
+      // of singletons draws an evenly spaced arc that reads as a rendering
+      // artefact rather than as content.
       let depth = 0.98 + 0.16 * stableFraction("depth-\(group.first ?? "")")
-      let spread = (1.07 + 0.05 * Double(ring)) * depth
+      let spread = (1.0 + haloClearance + 0.03 * Double(ring)) * depth
       let halfWidth = Double(area.width) / 2 * spread
       let halfHeight = Double(area.height) / 2 * spread
       let reach = 1 / max(abs(cos(angle)) / halfWidth, abs(sin(angle)) / halfHeight)

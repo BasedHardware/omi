@@ -280,6 +280,15 @@ struct MemoryAtlasNeighbourhood: Identifiable, Equatable {
   /// Normalized radius covering most of them. Strays are meant to fall outside
   /// it — a region is where a neighbourhood mostly is, not a claim of a border.
   let radius: CGFloat
+  /// Of the entities standing inside this region, the share that belong to it.
+  ///
+  /// Whether the region is a place or merely an average. A neighbourhood can be
+  /// perfectly well detected and still be smeared through two others, and the
+  /// difference is invisible in the caption: both are a list of names over a
+  /// patch of canvas. This is what the map checks before drawing an outline,
+  /// because an outline is a claim about a border and drawing one around a
+  /// patch that is half other people's entities states something untrue.
+  let purity: Double
 
   var memberCount: Int { memberIDs.count }
 }
@@ -361,7 +370,22 @@ enum MemoryAtlasNeighbourhoodLabels {
     /// The region's centre and extent on screen, for the tint behind it.
     let center: CGPoint
     let radii: CGSize
+    /// Carried through from the neighbourhood so the renderer can decide
+    /// whether this region has a border worth drawing.
+    let purity: Double
   }
+
+  /// How much of a region has to actually be its own before the map draws a
+  /// line around it.
+  ///
+  /// Below this the tint is still painted — the region is a real place and the
+  /// eye should find it — but without an edge, because at that point the edge
+  /// would be the least true thing on the map. On a mature account this is the
+  /// difference between the handful of neighbourhoods that are genuinely
+  /// somewhere and the large central ones that overlap each other; outlining
+  /// all of them alike drew a stack of enormous rings that said less than the
+  /// tint alone.
+  static let borderedAbovePurity = 0.62
 
   /// Past this the captions are the map. Eight territories is already more
   /// than anyone holds in their head at a glance.
@@ -444,7 +468,9 @@ enum MemoryAtlasNeighbourhoodLabels {
 
       occupied.append(rect)
       placed.append(
-        Placed(id: region.id, caption: region.caption, rect: rect, center: center, radii: radii))
+        Placed(
+          id: region.id, caption: region.caption, rect: rect, center: center, radii: radii,
+          purity: region.purity))
     }
     return placed
   }
@@ -1412,6 +1438,18 @@ enum MemoryAtlasLayoutEngine {
       let distances = points.map { hypot($0.x - center.x, $0.y - center.y) }.sorted()
       let radius = distances[min(distances.count - 1, Int(Double(distances.count) * 0.8))]
 
+      let own = Set(members)
+      var inside = 0
+      var mine = 0
+      for placement in placements
+      where hypot(
+        placement.normalizedPosition.x - center.x,
+        placement.normalizedPosition.y - center.y) <= radius
+      {
+        inside += 1
+        if own.contains(placement.id) { mine += 1 }
+      }
+
       // Most connected first, so the caption names the entities a person would
       // actually recognise the region by.
       let ranked =
@@ -1430,7 +1468,8 @@ enum MemoryAtlasLayoutEngine {
           memberIDs: members,
           caption: caption(from: ranked, count: captionMembers),
           center: center,
-          radius: max(radius, 0.01)
+          radius: max(radius, 0.01),
+          purity: inside == 0 ? 0 : Double(mine) / Double(inside)
         )
       )
     }
@@ -2759,17 +2798,34 @@ private struct CanonicalMemoryAtlasSurface: View {
         width: region.radii.width * 2,
         height: region.radii.height * 2
       )
+      let shape = Path(ellipseIn: bounds)
+      let reach = max(region.radii.width, region.radii.height)
+
+      // A plateau rather than a peak. A gradient falling away from the centre
+      // reads as a smudge under the densest part of the group and says nothing
+      // about where the group stops; holding the tint flat across most of the
+      // radius and releasing it near the rim is what makes the region a shape
+      // instead of a glow.
       context.fill(
-        Path(ellipseIn: bounds),
+        shape,
         with: .radialGradient(
-          Gradient(colors: [
-            OmiColors.textPrimary.opacity(0.038), OmiColors.textPrimary.opacity(0),
+          Gradient(stops: [
+            .init(color: OmiColors.textPrimary.opacity(0.055), location: 0),
+            .init(color: OmiColors.textPrimary.opacity(0.05), location: 0.72),
+            .init(color: OmiColors.textPrimary.opacity(0), location: 1),
           ]),
           center: region.center,
           startRadius: 0,
-          endRadius: max(region.radii.width, region.radii.height)
+          endRadius: reach
         )
       )
+
+      // The edge itself, and only where it is true. Faint enough to read as the
+      // boundary of a territory rather than a drawn container, but the only
+      // thing on the map that says one neighbourhood ends here and the next
+      // begins — which is worth saying exactly when it is the case.
+      guard region.purity >= MemoryAtlasNeighbourhoodLabels.borderedAbovePurity else { continue }
+      context.stroke(shape, with: .color(OmiColors.textPrimary.opacity(0.11)), lineWidth: 1)
     }
   }
 

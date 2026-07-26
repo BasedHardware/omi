@@ -725,15 +725,70 @@ final class MemoryAtlasLayoutTests: XCTestCase {
   /// Regions on a real account mostly overlap near the middle, so a caption
   /// that cannot have its first choice takes another spot on its own territory
   /// rather than going unnamed — but never one that is already spoken for.
+  /// A region's outline is a claim about a border, so the map only draws one
+  /// where the border is real. A tight group that owns its patch is a place; a
+  /// sprawling one whose patch is mostly other people's entities is an average,
+  /// and ringing it states something untrue about the map.
+  func testOnlyRegionsThatOwnTheirGroundReportABorderWorthDrawing() {
+    var nodes: [KnowledgeGraphNode] = []
+    var edges: [KnowledgeGraphEdge] = []
+    // One group that only ever meets itself, and two that are thoroughly mixed
+    // through each other.
+    for (group, prefix) in [(0, "tight"), (1, "mixedA"), (2, "mixedB")] {
+      for index in 0..<10 {
+        nodes.append(
+          KnowledgeGraphNode(
+            id: "\(prefix)\(index)", label: "\(prefix) \(index)", nodeType: .concept))
+        if index > 0 {
+          edges.append(
+            KnowledgeGraphEdge(
+              id: "\(prefix)e\(index)", sourceId: "\(prefix)0", targetId: "\(prefix)\(index)",
+              label: "related_to"))
+        }
+      }
+      _ = group
+    }
+    for index in 0..<9 {
+      edges.append(
+        KnowledgeGraphEdge(
+          id: "cross\(index)", sourceId: "mixedA\(index)", targetId: "mixedB\(index)",
+          label: "related_to"))
+    }
+
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(
+      graph: KnowledgeGraphResponse(nodes: nodes, edges: edges), userName: "David")
+
+    XCTAssertFalse(snapshot.neighbourhoods.isEmpty, "The fixture has groups to find")
+    for region in snapshot.neighbourhoods {
+      XCTAssertGreaterThanOrEqual(region.purity, 0)
+      XCTAssertLessThanOrEqual(region.purity, 1)
+    }
+    // Whatever the detector made of it, a region reported as ownable must
+    // genuinely be mostly its own — that is the only thing the border promises.
+    for region in snapshot.neighbourhoods
+    where region.purity >= MemoryAtlasNeighbourhoodLabels.borderedAbovePurity {
+      let own = Set(region.memberIDs)
+      let inside = snapshot.nodes.filter {
+        hypot($0.normalizedPosition.x - region.center.x, $0.normalizedPosition.y - region.center.y)
+          <= region.radius
+      }
+      let mine = inside.filter { own.contains($0.id) }.count
+      XCTAssertGreaterThan(
+        Double(mine) / Double(max(inside.count, 1)), 0.5,
+        "A bordered region is mostly itself")
+    }
+  }
+
   func testRegionNamesNeverOverlapAndNeverLeaveTheCanvas() {
     let size = CGSize(width: 800, height: 600)
     let stacked = (0..<3).map {
       MemoryAtlasNeighbourhood(
         id: $0, memberIDs: ["m"], caption: "Region \($0)",
-        center: CGPoint(x: 0.5, y: 0.5), radius: 0.1)
+        center: CGPoint(x: 0.5, y: 0.5), radius: 0.1, purity: 1)
     }
     let offscreen = MemoryAtlasNeighbourhood(
-      id: 9, memberIDs: ["m"], caption: "Far away", center: CGPoint(x: 14, y: 14), radius: 0.1)
+      id: 9, memberIDs: ["m"], caption: "Far away", center: CGPoint(x: 14, y: 14), radius: 0.1,
+      purity: 1)
     let taken = CGRect(x: 340, y: 380, width: 120, height: 20)
 
     let placed = MemoryAtlasNeighbourhoodLabels.place(
@@ -760,7 +815,7 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     let many = (0..<40).map { index in
       MemoryAtlasNeighbourhood(
         id: index, memberIDs: ["m"], caption: "R\(index)",
-        center: CGPoint(x: 0.1 + 0.02 * CGFloat(index), y: 0.5), radius: 0.005)
+        center: CGPoint(x: 0.1 + 0.02 * CGFloat(index), y: 0.5), radius: 0.005, purity: 1)
     }
 
     let placed = MemoryAtlasNeighbourhoodLabels.place(
