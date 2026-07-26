@@ -1,0 +1,19 @@
+desktop/macos/Desktop/Tests/ScreenRecordingPermissionPolicyTests.swift
+  s_7918275f8e3531::t_9dc10f79b3247e 53-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "5e06aff8cfd574c7e3a5ae2cdd330e1dca88bde9",
+  "prompts": {},
+  "sessions": {
+    "s_7918275f8e3531": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "739fdbb2-b061-4a85-8520-85d2527f5698",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
