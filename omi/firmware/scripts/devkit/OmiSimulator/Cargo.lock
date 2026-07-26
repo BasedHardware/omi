@@ -3191,6 +3191,7 @@ version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "328c4789d42200f1eeec05bd86c9c13c7f091d2ba9a6ea35acdf51f31bc0f043"
 dependencies = [
+ "cc",
  "pkg-config",
 ]
 
@@ -3904,6 +3905,7 @@ dependencies = [
  "btleplug",
  "crepuscularity-gpui",
  "ctrlc",
+ "dbus",
  "futures",
  "gpui",
  "omi-firmware-core",

@@ -21,6 +21,7 @@ gpui = { version = "=0.2.2", default-features = false, features = ["font-kit", "
 
 [target.'cfg(target_os = "linux")'.dependencies]
 crepuscularity-gpui = { version = "0.5.8", features = ["x11"] }
+dbus = { version = "0.9", features = ["vendored"] }
 gpui = { version = "=0.2.2", default-features = false, features = ["font-kit", "x11"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
