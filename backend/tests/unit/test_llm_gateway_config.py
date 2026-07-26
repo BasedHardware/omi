@@ -51,7 +51,7 @@ def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
 def test_translation_uses_the_gateway_translation_capability():
     config = load_gateway_config(prod_mode=True)
 
-    assert get_model('translation') == 'gemini-3.1-flash-lite'
+    assert get_model('translation') == 'gemini-2.5-flash-lite'
     assert get_provider('translation') == 'gemini'
     lane = config.lanes['omi:auto:translation']
     assert lane.capabilities.translation is True

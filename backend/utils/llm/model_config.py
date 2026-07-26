@@ -95,7 +95,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'app_integration': ('gemini-2.5-flash-lite', 'gemini'),
         'persona_clone': ('gpt-5.4-mini', 'openai'),
         'trends': ('gemini-2.5-flash-lite', 'gemini'),
-        'translation': ('gemini-3.1-flash-lite', 'gemini'),
+        'translation': ('gemini-2.5-flash-lite', 'gemini'),
         # Anthropic (used via get_model() + anthropic_client)
         'chat_agent': ('claude-sonnet-4-6', 'anthropic'),
         # Persona
@@ -149,7 +149,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'app_integration': ('gpt-4.1-mini', 'openai'),
         'persona_clone': ('gpt-5.4', 'openai'),
         'trends': ('gpt-4.1-mini', 'openai'),
-        'translation': ('gemini-3.1-flash-lite', 'gemini'),
+        'translation': ('gemini-2.5-flash-lite', 'gemini'),
         # Anthropic
         'chat_agent': ('claude-sonnet-4-6', 'anthropic'),
         # Persona
@@ -202,7 +202,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'app_integration': ('gpt-4.1-mini', 'openai'),
         'persona_clone': ('gpt-5.4', 'openai'),
         'trends': ('gpt-4.1-mini', 'openai'),
-        'translation': ('gemini-3.1-flash-lite', 'gemini'),
+        'translation': ('gemini-2.5-flash-lite', 'gemini'),
         # Anthropic
         'chat_agent': ('claude-sonnet-4-6', 'anthropic'),
         # Persona
