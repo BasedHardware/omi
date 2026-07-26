@@ -49,8 +49,6 @@ def releasable_desktop_paths(paths: list[str]) -> list[str]:
             continue
         if path.startswith("desktop/macos/changelog/"):
             continue
-        if path.startswith("desktop/macos/Backend-Rust/"):
-            continue
         releasable.append(path)
     return releasable
 

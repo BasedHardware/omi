@@ -320,7 +320,6 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(resolve_impact([path], event="push").includes("desktop-ci-only"))
         for path in (
-            "desktop/macos/Backend-Rust/src/main.rs",
             "desktop/macos/changelog/2026-07-25.json",
             "desktop/macos/CHANGELOG.json",
             "desktop/macos/AGENTS.md",

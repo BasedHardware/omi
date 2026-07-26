@@ -84,11 +84,48 @@ async def test_stream_emits_openai_terminal_event(monkeypatch):
     monkeypatch.setattr(
         desktop_chat, 'anthropic_client', SimpleNamespace(messages=SimpleNamespace(stream=lambda **_: Stream()))
     )
+
+    async def record_usage(*_):
+        return None
+
+    monkeypatch.setattr(desktop_chat, '_record_usage', record_usage)
     events = [
         event
         async for event in desktop_chat._stream(
-            {'model': 'claude-sonnet-4-6', 'max_tokens': 1, 'messages': []}, 'omi-sonnet'
+            {'model': 'claude-sonnet-4-6', 'max_tokens': 1, 'messages': []}, 'omi-sonnet', 'user'
         )
     ]
     assert json.loads(events[1][6:])['choices'][0]['delta'] == {'content': 'hello'}
     assert events[-1] == 'data: [DONE]\n\n'
+
+
+@pytest.mark.asyncio
+async def test_server_metering_fails_closed_and_byok_bypasses(monkeypatch):
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_chat, 'run_blocking', run_blocking)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
+    monkeypatch.setattr(desktop_chat.redis_db, 'check_rate_limit', lambda *_: (_ for _ in ()).throw(RuntimeError()))
+
+    with pytest.raises(desktop_chat.HTTPException) as error:
+        await desktop_chat._meter_server_request('user')
+    assert error.value.status_code == 503
+
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: 'key')
+    await desktop_chat._meter_server_request('user')
+
+
+@pytest.mark.asyncio
+async def test_server_metering_rejects_exhausted_user(monkeypatch):
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_chat, 'run_blocking', run_blocking)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
+    monkeypatch.setattr(desktop_chat.redis_db, 'check_rate_limit', lambda *_: (False, 0, 37))
+
+    with pytest.raises(desktop_chat.HTTPException) as error:
+        await desktop_chat._meter_server_request('user')
+    assert error.value.status_code == 429
+    assert error.value.headers == {'Retry-After': '37'}

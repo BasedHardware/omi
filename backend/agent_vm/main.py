@@ -172,23 +172,27 @@ def json_value(value: Any) -> Any:
 def run_sync(table: str, rows: list[dict[str, Any]]) -> int:
     if runtime.db is None:
         raise RuntimeError("Database not loaded. Upload omi.db first.")
-    columns = list(rows[0])
-    if not columns or any(set(row) != set(columns) for row in rows):
-        raise ValueError("All rows must have the same columns")
     table_sql = quoted(table)
-    column_sql = [quoted(column) for column in columns]
+    groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+    for row in rows:
+        columns = tuple(sorted(row))
+        if columns:
+            groups.setdefault(columns, []).append(row)
+    if not groups:
+        return 0
     with runtime.lock:
         existing = {row[1] for row in runtime.db.execute(f"PRAGMA table_info({table_sql})")}
         if not existing:
             raise ValueError(f"Table '{table}' does not exist")
-        for column, column_name in zip(columns, column_sql):
+        for column in {column for columns in groups for column in columns}:
             if column not in existing:
-                runtime.db.execute(f"ALTER TABLE {table_sql} ADD COLUMN {column_name}")
-        placeholders = ", ".join("?" for _ in columns)
-        statement = f"INSERT OR REPLACE INTO {table_sql} ({', '.join(column_sql)}) VALUES ({placeholders})"
-        values = []
-        for row in rows:
-            values.append(
+                runtime.db.execute(f"ALTER TABLE {table_sql} ADD COLUMN {quoted(column)}")
+        applied = 0
+        for columns, grouped_rows in groups.items():
+            column_sql = [quoted(column) for column in columns]
+            placeholders = ", ".join("?" for _ in columns)
+            statement = f"INSERT OR REPLACE INTO {table_sql} ({', '.join(column_sql)}) VALUES ({placeholders})"
+            values = [
                 tuple(
                     (
                         base64.b64decode(row[column], validate=True)
@@ -197,10 +201,12 @@ def run_sync(table: str, rows: list[dict[str, Any]]) -> int:
                     )
                     for column in columns
                 )
-            )
-        runtime.db.executemany(statement, values)
+                for row in grouped_rows
+            ]
+            runtime.db.executemany(statement, values)
+            applied += len(values)
         runtime.db.commit()
-    return len(rows)
+    return applied
 
 
 async def upload_database(request: Request) -> tuple[int, int]:
@@ -377,6 +383,48 @@ def daily_recap(days_ago: int = 0) -> str:
         return json.dumps({"error": str(exc)})
 
 
+def database_schema() -> str:
+    if runtime.db is None:
+        return "No database is loaded."
+    try:
+        with runtime.lock:
+            tables = runtime.db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' "
+                "AND name NOT LIKE 'grdb_%' ORDER BY name"
+            ).fetchall()
+            entries = []
+            for table in tables:
+                name = table[0]
+                columns = runtime.db.execute(f"PRAGMA table_info({quoted(name)})").fetchall()
+                count = runtime.db.execute(f"SELECT COUNT(*) FROM {quoted(name)}").fetchone()[0]
+                entries.append(
+                    f"{name}:\n" + "\n".join(f"  {column[1]} {column[2]}" for column in columns) + f"\n  ({count} rows)"
+                )
+        return "\n\n".join(entries)
+    except sqlite3.Error:
+        return "Schema unavailable."
+
+
+def system_prompt() -> str:
+    return """You are an AI assistant with access to the user's OMI desktop database and connected services.
+This database contains their screen history, tasks, transcriptions, memories, and focus sessions.
+
+DATABASE SCHEMA:
+%s
+
+TOOLS:
+- execute_sql: Run read-only SQL queries. SELECT auto-limits to 200 rows. Use it for structured queries.
+- semantic_search: Search screenshot OCR text by semantic similarity for fuzzy or conceptual queries.
+- get_daily_recap: Use this for what the user did today, yesterday, or this week.
+- Backend tools: Use these for calendar, email, health, conversations, memories, action items, and web search.
+
+GUIDELINES:
+- For activity summaries, use get_daily_recap before issuing multiple SQL queries.
+- For time-filtered screenshots, use timestamp range comparisons instead of date() or strftime() in WHERE clauses.
+- Key tables include screenshots, action_items, memories, transcription_sessions, transcription_segments, focus_sessions, observations, and staged_tasks.
+- Be concise and helpful. Format results clearly.""" % database_schema()
+
+
 def message_payload(message: Any) -> dict[str, Any]:
     if hasattr(message, "model_dump"):
         return message.model_dump()
@@ -453,10 +501,24 @@ class AgentSession:
                 build_tool(name, str(definition.get("description") or f"Backend tool: {name}"), copy.deepcopy(schema))
             )
         server = create_sdk_mcp_server("omi-tools", "1.0", tools=tools)
+        mcp_servers: dict[str, Any] = {"omi-tools": server}
+        playwright_command = os.environ.get("PLAYWRIGHT_MCP_COMMAND")
+        if playwright_command:
+            mcp_servers["playwright"] = {
+                "type": "stdio",
+                "command": playwright_command,
+                "args": json.loads(
+                    os.environ.get(
+                        "PLAYWRIGHT_MCP_ARGS",
+                        '["@playwright/mcp", "--user-data-dir", "/app/chrome-profile", "--headless", "--no-sandbox"]',
+                    )
+                ),
+            }
         options = ClaudeAgentOptions(
             model="claude-sonnet-4-6",
-            system_prompt="You are an Omi assistant with access to the user's uploaded local database and connected services.",
-            mcp_servers={"omi-tools": server},
+            system_prompt=system_prompt(),
+            allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"],
+            mcp_servers=mcp_servers,
             permission_mode="bypassPermissions",
             cwd=os.environ.get("HOME", "/"),
         )

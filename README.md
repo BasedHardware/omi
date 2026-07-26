@@ -58,7 +58,7 @@ For local development with the full backend stack:
 
 ```bash
 xcode-select --install
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+uv --version
 ```
 
 2. Clone and configure
@@ -66,7 +66,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```bash
 git clone https://github.com/BasedHardware/omi.git
 cd omi/desktop/macos
-cp Backend-Rust/.env.example Backend-Rust/.env
+cp ../../backend/.env.example ../../backend/.env
 ```
 
 3. Build and run

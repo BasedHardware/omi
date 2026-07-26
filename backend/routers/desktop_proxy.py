@@ -9,7 +9,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 
 from llm_gateway.gateway.providers import VertexAccessTokenSupplier
+from database import redis_db
 from utils.byok import get_byok_key
+from utils.executors import critical_executor, db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import is_trial_paywalled
 
@@ -21,6 +23,8 @@ _VERTEX_MODELS = frozenset({"gemini-2.5-flash", "gemini-2.5-pro", "gemini-embedd
 _MAX_BODY_BYTES = 5 * 1024 * 1024
 _MAX_OUTPUT_TOKENS = 8192
 _DEFAULT_THINKING_BUDGET = 1024
+_BURST_LIMIT = 30
+_DAILY_HARD_LIMIT = 1500
 _vertex_tokens = VertexAccessTokenSupplier()
 
 
@@ -135,6 +139,33 @@ async def _upstream(
     return _studio_url(path), {}, {"key": os.getenv("GEMINI_API_KEY", ""), **query}, False
 
 
+async def _meter_server_request(uid: str, path: str, model: str, action: str) -> str:
+    if get_byok_key("gemini"):
+        return path
+    try:
+        burst_allowed, _, _ = await run_blocking(
+            critical_executor, redis_db.check_rate_limit, uid, "desktop_gemini_burst", _BURST_LIMIT, 60
+        )
+        if not burst_allowed:
+            raise HTTPException(status_code=429, detail="Gemini request rate limit exceeded")
+        current, _ = await run_blocking(
+            critical_executor,
+            redis_db._RATE_LIMIT_LUA,
+            keys=[f"rl:desktop_gemini_daily:{uid}"],
+            args=[86_400],
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Gemini rate limiter is unavailable") from exc
+    if int(current) > _DAILY_HARD_LIMIT:
+        raise HTTPException(status_code=429, detail="Gemini daily request limit exceeded")
+    soft_limit = 300 if os.getenv("OMI_MODEL_TIER", "").strip().lower() == "max" else 30
+    if int(current) > soft_limit and action not in {"embedContent", "batchEmbedContents"} and model == "gemini-2.5-pro":
+        return f"models/gemini-2.5-flash:{action}"
+    return path
+
+
 def _vertex_embedding_request(body: bytes) -> bytes:
     payload = json.loads(body)
     try:
@@ -165,11 +196,13 @@ async def _stream_response(client: httpx.AsyncClient, context: Any, upstream: ht
         await client.aclose()
 
 
-async def _proxy(request: Request, path: str, streaming: bool) -> Response:
+async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Response:
     body = await request.body()
     if len(body) > _MAX_BODY_BYTES:
         raise HTTPException(status_code=413, detail="Request body is too large")
     path, model, action = _path_parts(path)
+    path = await _meter_server_request(uid, path, model, action)
+    _, model, action = _path_parts(path)
     body = _sanitize(body, action)
     url, headers, params, using_vertex = await _upstream(path, model, action, dict(request.query_params))
     if using_vertex and action == "embedContent":
@@ -207,17 +240,17 @@ async def _proxy(request: Request, path: str, streaming: bool) -> Response:
         raise HTTPException(status_code=502, detail="Gemini upstream request failed") from exc
 
 
-def _authorized_desktop_user(request: Request, uid: str = Depends(get_current_user_uid)) -> str:
-    if is_trial_paywalled(uid, request.headers.get("X-App-Platform")):
+async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> str:
+    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop"):
         raise HTTPException(status_code=402, detail="trial_expired")
     return uid
 
 
 @router.post("/v1/proxy/gemini/{path:path}")
-async def gemini_proxy(request: Request, path: str, _: str = Depends(_authorized_desktop_user)) -> Response:
-    return await _proxy(request, path, False)
+async def gemini_proxy(request: Request, path: str, uid: str = Depends(_authorized_desktop_user)) -> Response:
+    return await _proxy(request, path, False, uid)
 
 
 @router.post("/v1/proxy/gemini-stream/{path:path}")
-async def gemini_stream_proxy(request: Request, path: str, _: str = Depends(_authorized_desktop_user)) -> Response:
-    return await _proxy(request, path, True)
+async def gemini_stream_proxy(request: Request, path: str, uid: str = Depends(_authorized_desktop_user)) -> Response:
+    return await _proxy(request, path, True, uid)

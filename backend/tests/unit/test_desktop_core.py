@@ -1,3 +1,7 @@
+import hashlib
+import hmac
+import json
+
 import redis
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -93,3 +97,67 @@ def test_api_keys_require_firebase_auth_and_omit_unset_values(monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == {"firebase_api_key": "firebase-key"}
+
+
+def test_apple_domain_and_sentry_installation_are_public(monkeypatch):
+    monkeypatch.setenv("SENTRY_WEBHOOK_SECRET", "secret")
+    client = make_client()
+
+    assert client.get("/.well-known/apple-developer-domain-association.txt").text == ""
+    assert client.post("/v1/webhooks/sentry", headers={"sentry-hook-resource": "installation"}).json() == {
+        "status": "ok"
+    }
+
+
+def test_sentry_webhook_fails_closed_and_creates_feedback_item(monkeypatch):
+    monkeypatch.setenv("SENTRY_WEBHOOK_SECRET", "secret")
+    monkeypatch.setenv("SENTRY_ADMIN_UID", "admin")
+    created = []
+    monkeypatch.setattr(desktop_core.action_items_db, "get_action_items", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        desktop_core.action_items_db,
+        "create_action_item",
+        lambda uid, data, key: created.append((uid, data, key)),
+    )
+    client = make_client()
+    payload = {"action": "created", "data": {"issue": {"id": "42", "shortId": "O-42", "issueCategory": "feedback"}}}
+
+    assert client.post("/v1/webhooks/sentry", json=payload).status_code == 401
+    content = json.dumps(payload, separators=(",", ":")).encode()
+    signature = hmac.new(b"secret", content, hashlib.sha256).hexdigest()
+    body = client.post(
+        "/v1/webhooks/sentry",
+        content=content,
+        headers={"content-type": "application/json", "sentry-hook-signature": signature},
+    )
+
+    assert body.status_code == 200
+    assert body.json() == {"status": "created"}
+    assert created[0][0] == "admin"
+    assert created[0][1]["metadata"]["sentry_issue_id"] == "42"
+
+
+def test_sentry_poll_classifies_auth_failure(monkeypatch):
+    class Response:
+        is_success = False
+        status_code = 403
+
+    class Client:
+        async def get(self, *_args, **_kwargs):
+            return Response()
+
+    monkeypatch.setenv("SENTRY_ADMIN_UID", "admin")
+    monkeypatch.setenv("SENTRY_AUTH_TOKEN", "token")
+    monkeypatch.setattr(desktop_core, "get_webhook_client", Client)
+
+    response = make_client().post("/v1/webhooks/sentry/poll")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "skipped",
+        "reason": "sentry_auth_error",
+        "sentry_status": 403,
+        "created": 0,
+        "skipped": 0,
+        "total_fetched": 0,
+    }

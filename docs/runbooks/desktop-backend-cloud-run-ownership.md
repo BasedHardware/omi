@@ -64,13 +64,12 @@ Firestore access plus the managed Gemini path are exercised on the zero-traffic
 candidate before traffic can move.
 
 Local macOS development remains intentionally separate: `desktop/macos/run.sh`
-builds and runs `Backend-Rust/target/release/omi-desktop-backend` on localhost
-when the explicit optimized local mode is selected. Do not replace that local
+runs the Python `desktop_backend:app` on localhost. Do not replace that local
 workflow with a Cloud Run dependency.
 
 ## Retired GKE plane
 
-`desktop/macos/Backend-Rust/charts/desktop-backend/` is retired. It must not be
+`backend/charts/desktop-backend/` is retired. It must not be
 reintroduced, and `desktop-api.omi.me` must not be recreated as a GKE Ingress,
 NEG, managed certificate, DNS target, Helm release, Deployment, Service, or
 ServiceAccount for the desktop backend. The production data-plane routing guard

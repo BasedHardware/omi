@@ -14,7 +14,7 @@
     "backend/charts/agent-vm-reaper/**",
     "backend/scripts/agent_vm_reaper.py",
     "backend/scripts/apply-agent-vm-reaper.sh",
-    "desktop/macos/Backend-Rust/src/routes/agent.rs"
+    "backend/routers/desktop_agent_vm.py"
   ],
   "status": "open"
 }

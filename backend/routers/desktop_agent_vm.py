@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from database._client import get_firestore_client
 from utils.executors import db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid
+from utils.subscription import is_trial_paywalled
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -45,6 +46,12 @@ class ProvisionAgentResponse(BaseModel):
 
 def _agent_disabled() -> bool:
     return os.getenv("ENVIRONMENT") == "local-dev-harness"
+
+
+async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> str:
+    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop"):
+        raise HTTPException(status_code=402, detail="trial_expired")
+    return uid
 
 
 def _now() -> str:
@@ -254,7 +261,7 @@ def _response(vm: dict[str, Any]) -> AgentVmResponse:
 
 @router.post("/v2/agent/provision", response_model=ProvisionAgentResponse)
 async def provision_agent_vm(
-    background_tasks: BackgroundTasks, uid: str = Depends(get_current_user_uid)
+    background_tasks: BackgroundTasks, uid: str = Depends(_authorized_desktop_user)
 ) -> ProvisionAgentResponse:
     if _agent_disabled():
         raise HTTPException(status_code=503, detail="Agent VM provisioning is disabled")
@@ -285,7 +292,7 @@ async def provision_agent_vm(
 
 @router.get("/v2/agent/status", response_model=AgentVmResponse | None)
 async def get_agent_status(
-    background_tasks: BackgroundTasks, uid: str = Depends(get_current_user_uid)
+    background_tasks: BackgroundTasks, uid: str = Depends(_authorized_desktop_user)
 ) -> AgentVmResponse | None:
     if _agent_disabled():
         return None

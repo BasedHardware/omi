@@ -53,3 +53,37 @@ def test_vertex_embedding_translation_round_trip():
     assert json.loads(
         desktop_proxy._vertex_embedding_response(b'{"predictions":[{"embeddings":{"values":[1,2]}}]}')
     ) == {"embedding": {"values": [1, 2]}}
+
+
+@pytest.mark.asyncio
+async def test_gemini_proxy_rejects_paywalled_desktop_user(monkeypatch):
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_proxy, "is_trial_paywalled", lambda uid, platform: True)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy._authorized_desktop_user("user")
+
+    assert error.value.status_code == 402
+    assert error.value.detail == "trial_expired"
+
+
+@pytest.mark.asyncio
+async def test_server_gemini_meter_downgrades_pro_after_the_soft_limit(monkeypatch):
+    async def run_blocking(_, function, *args, **kwargs):
+        if function is desktop_proxy.redis_db.check_rate_limit:
+            return True, 1, 60
+        return 31, 86_400
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.delenv("OMI_MODEL_TIER", raising=False)
+
+    assert (
+        await desktop_proxy._meter_server_request(
+            "user", "models/gemini-2.5-pro:generateContent", "gemini-2.5-pro", "generateContent"
+        )
+        == "models/gemini-2.5-flash:generateContent"
+    )

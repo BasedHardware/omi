@@ -810,17 +810,18 @@ def upsert_screen_activity_vectors(uid: str, rows: List[Dict[str, Any]]) -> int:
             if isinstance(ts_value, str)
             else int(ts_value)
         )
+        metadata = {
+            "uid": uid,
+            "screenshot_id": str(row.get("storageId") or row['id']),
+            "timestamp": timestamp,
+            "appName": row.get('appName', ''),
+        }
+        if row.get('deviceName'):
+            metadata['deviceName'] = row['deviceName']
+        if row.get('clientDeviceId'):
+            metadata['clientDeviceId'] = row['clientDeviceId']
         vectors.append(
-            {
-                "id": f'{uid}-sa-{row["id"]}',
-                "values": embedding,
-                "metadata": {
-                    "uid": uid,
-                    "screenshot_id": str(row['id']),
-                    "timestamp": timestamp,
-                    "appName": row.get('appName', ''),
-                },
-            }
+            {"id": f'{uid}-sa-{row.get("storageId") or row["id"]}', "values": embedding, "metadata": metadata}
         )
 
     if not vectors:

@@ -727,43 +727,6 @@ check_desktop_swift_if_needed() {
   )
 }
 
-check_desktop_rust_if_needed() {
-  local -a rust_files=()
-  local file
-
-  if [ "${PRE_PUSH_SKIP_DESKTOP_RUST:-}" = "1" ]; then
-    echo "Skipping desktop Rust checks because PRE_PUSH_SKIP_DESKTOP_RUST=1."
-    return
-  fi
-
-  if ! changed_matches \
-    'desktop/macos/Backend-Rust/*' \
-    'desktop/macos/Backend-Rust/**/*' \
-    '.github/workflows/repo-checks.yml' \
-    '.github/workflows/desktop-checks.yml' \
-    '.github/actions/detect-changes/*' \
-    '.github/actions/detect-changes/**/*'
-  then
-    return
-  fi
-
-  for file in "${CHANGED_FILES[@]}"; do
-    case "$file" in
-      desktop/macos/Backend-Rust/*.rs|desktop/macos/Backend-Rust/**/*.rs)
-        [ ! -f "$file" ] || rust_files+=("${file#desktop/macos/Backend-Rust/}")
-        ;;
-    esac
-  done
-
-  (
-    cd desktop/macos/Backend-Rust
-    if [ "${#rust_files[@]}" -gt 0 ]; then
-      rustfmt --edition 2021 --check "${rust_files[@]}"
-    fi
-    cargo check --locked
-  )
-}
-
 check_desktop_launcher_tests_if_needed() {
   if [ "${PRE_PUSH_SKIP_DESKTOP_LAUNCHER_TESTS:-}" = "1" ]; then
     echo "Skipping desktop launcher tests because PRE_PUSH_SKIP_DESKTOP_LAUNCHER_TESTS=1."
@@ -824,7 +787,6 @@ run_step check_flutter_generated_if_needed
 run_step check_desktop_flow_lint_if_needed
 run_step check_windows_kgworker_native_closure_if_needed
 run_step check_desktop_swift_if_needed
-run_step check_desktop_rust_if_needed
 run_step check_desktop_launcher_tests_if_needed
 run_step check_desktop_tool_surfaces_if_needed
 run_step check_gauntlet_evidence_if_needed

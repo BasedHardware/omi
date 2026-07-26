@@ -371,7 +371,7 @@ checks:
     reason: "backend production Python changes must retain import-time purity"
   - id: backend-runtime-image-source-closure
     command: ["python3", "backend/scripts/runtime_image_contracts.py", "check"]
-    triggers: ["backend/**/*.py", "backend/**/Dockerfile*", "backend/runtime_images.json", "backend/scripts/runtime_image_contracts.py", ".github/workflows/runtime_image_contracts.yml", ".github/workflows/gcp_backend*.yml", ".github/workflows/gcp_diarizer.yml", ".github/workflows/gcp_models.yml", ".github/workflows/gcp_parakeet.yml", ".github/workflows/gcp_nllb_translation.yml", ".github/workflows/gcp_memory_maintenance_job*.yml", ".github/workflows/gcp_notifications_job.yml", ".github/workflows/gcp_plugins.yml", "plugins/**/*.py", "plugins/Dockerfile"]
+    triggers: ["backend/**/*.py", "backend/**/Dockerfile*", "backend/runtime_images.json", "backend/scripts/runtime_image_contracts.py", ".github/workflows/runtime_image_contracts.yml", ".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/gcp_backend*.yml", ".github/workflows/gcp_diarizer.yml", ".github/workflows/gcp_models.yml", ".github/workflows/gcp_parakeet.yml", ".github/workflows/gcp_nllb_translation.yml", ".github/workflows/gcp_memory_maintenance_job*.yml", ".github/workflows/gcp_notifications_job.yml", ".github/workflows/gcp_plugins.yml", "plugins/**/*.py", "plugins/Dockerfile"]
     lanes: ["local", "ci"]
     reason: "#9857: deployable Python images must contain the transitive first-party imports of their runtime entrypoints"
   - id: backend-module-isolation
@@ -574,7 +574,7 @@ checks:
     reason: "#10163 mutation-tests branch bypass and GITHUB_SHA image mislabeling"
   - id: production-data-plane-routing
     command: ["python3", ".github/scripts/test_check_mobile_production_routing.py"]
-    triggers: ["codemagic.yaml", "app/lib/env/dev_env.dart", "app/lib/env/prod_env.dart", "app/lib/main.dart", "app/lib/utils/environment_detector.dart", "desktop/macos/Desktop/Sources/AppBuild.swift", "desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift", "desktop/macos/Desktop/Sources/GoogleService-Info*.plist", "desktop/macos/Backend-Rust/charts/**", "backend/charts/**", ".github/workflows/**", "docs/runbooks/desktop-backend-cloud-run-ownership.md", ".github/scripts/check-mobile-production-routing.py", ".github/scripts/test_check_mobile_production_routing.py", ".github/checks-manifest.yaml"]
+    triggers: ["codemagic.yaml", "app/lib/env/dev_env.dart", "app/lib/env/prod_env.dart", "app/lib/main.dart", "app/lib/utils/environment_detector.dart", "desktop/macos/Desktop/Sources/AppBuild.swift", "desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift", "desktop/macos/Desktop/Sources/GoogleService-Info*.plist", "backend/charts/**", ".github/workflows/**", "docs/runbooks/desktop-backend-cloud-run-ownership.md", ".github/scripts/check-mobile-production-routing.py", ".github/scripts/test_check_mobile_production_routing.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "INV-DATA-1 mutation-tests every production-family mobile and desktop routing authority and rejects retired GKE desktop-backend ownership"
   - id: desktop-backend-release-boundary

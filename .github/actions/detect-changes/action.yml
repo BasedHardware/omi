@@ -38,8 +38,6 @@ outputs:
     value: ${{ steps.changed.outputs.has_app_compile_smoke }}
   has_app_dart:
     value: ${{ steps.changed.outputs.has_app_dart }}
-  has_desktop_rust:
-    value: ${{ steps.changed.outputs.has_desktop_rust }}
   has_desktop_auth_session_ratchet:
     value: ${{ steps.changed.outputs.has_desktop_auth_session_ratchet }}
   has_format:
