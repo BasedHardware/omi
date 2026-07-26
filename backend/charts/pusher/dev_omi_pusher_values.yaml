@@ -181,11 +181,6 @@ env:
     value: "true"
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
     value: "syncing-local-development"
-  - name: GOOGLE_APPLICATION_CREDENTIALS
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: GOOGLE_APPLICATION_CREDENTIALS
   - name: ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:
@@ -289,7 +284,7 @@ env:
         name: dev-omi-backend-secrets
         key: SERVICE_ACCOUNT_JSON
   - name: GOOGLE_CLOUD_PROJECT
-    value: "based-hardware"
+    value: "based-hardware-dev"
   - name: METRICS_SECRET
     valueFrom:
       secretKeyRef:

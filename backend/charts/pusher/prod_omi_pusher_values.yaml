@@ -183,11 +183,6 @@ env:
     value: "true"
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
     value: "syncing-local"
-  - name: GOOGLE_APPLICATION_CREDENTIALS
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: GOOGLE_APPLICATION_CREDENTIALS
   - name: ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:
