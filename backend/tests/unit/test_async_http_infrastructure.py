@@ -557,7 +557,7 @@ class TestPrivateCloudQueueCap:
         import os
 
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        with open(os.path.join(backend_dir, 'routers', 'pusher.py'), encoding='utf-8') as f:
+        with open(os.path.join(backend_dir, 'routers', 'pusher_protocol.py'), encoding='utf-8') as f:
             src = f.read()
 
         tree = ast.parse(src)
