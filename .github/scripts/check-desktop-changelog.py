@@ -28,6 +28,16 @@ EXEMPT_DESKTOP_PATHS = {
     # Pre-tag readiness gate script: internal release infrastructure (runs on the
     # trusted M1 before tagging), no user-facing app surface.
     "desktop/macos/scripts/pre-tag-readiness.sh",
+    # CI-only offline M1 qualification lifecycle proof: internal release
+    # infrastructure (pre-dispatch before canonical qualification), no
+    # user-facing app surface.
+    "desktop/macos/scripts/qualification-local-proof.sh",
+    # Release-keyvalue metadata tooling: internal release-channel metadata,
+    # never ships in the desktop app.
+    "desktop/macos/scripts/release-keyvalue.py",
+    # Internal qualification environment documentation for CI runners; not a
+    # user-facing app note.
+    "desktop/macos/docs/qualification-environment.md",
     # CI-only flow-validation script and its shared action-source inventory do
     # not alter the desktop application a user receives.
     "desktop/macos/scripts/desktop-flow-lint.py",
