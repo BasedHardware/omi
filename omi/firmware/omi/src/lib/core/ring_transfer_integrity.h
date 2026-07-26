@@ -40,6 +40,15 @@ bool ring_control_response_should_retain(bool connected, int notify_error);
 
 bool ring_snapshot_retry_required(bool connection_active, bool commit_succeeded);
 
+/** Temporary storage gaps retain the frame; terminal storage must let live processing continue. */
+bool ring_storage_frame_should_retain(bool storage_terminal);
+
+/** Terminal storage has already made buffered-tail loss explicit, so flush is resolved without retry. */
+bool ring_storage_terminal_flush_resolved(bool storage_terminal);
+
+/** No command may mutate or sync media after the write path reaches terminal. */
+bool ring_storage_media_mutation_allowed(bool storage_terminal);
+
 /**
  * A failed power-on enqueue/remount remains pending until either the card is
  * mounted or a newer desired-power-off intent supersedes it.

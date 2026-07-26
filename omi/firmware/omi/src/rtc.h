@@ -15,7 +15,8 @@
 /**
  * @brief Initialize application timekeeping.
  *
- * Restores RTC from persisted settings if available.
+ * Loads any persisted epoch as historical context only. The clock remains
+ * invalid until live synchronization establishes current time after reboot.
  */
 void init_rtc(void);
 
@@ -38,13 +39,6 @@ bool rtc_is_valid(void);
  * stable increasing time while running.
  */
 int rtc_set_utc_time(uint64_t utc_epoch_s);
-
-/**
- * @brief Set/synchronize UTC epoch in milliseconds.
- *
- * @param utc_epoch_ms UTC epoch milliseconds since 1970-01-01.
- */
-int rtc_set_utc_time_ms(uint64_t utc_epoch_ms);
 
 /**
  * @brief Get UTC epoch milliseconds.

@@ -352,6 +352,7 @@ static uint8_t storage_status_from_error(int err, uint8_t fallback_status)
     case -EBUSY:
     case -ECANCELED:
     case -EAGAIN:
+    case -EROFS:
         return STORAGE_NOT_READY;
     default:
         return fallback_status;
@@ -698,7 +699,8 @@ static void storage_write(void)
             if (!conn) {
                 info_requested = 0;
                 info_deadline = 0;
-            } else if (sd_is_ready() && transport_storage_snapshot_ready()) {
+            } else if (sd_is_ready() &&
+                       (transport_storage_snapshot_ready() || sd_storage_health() == SD_STORAGE_TERMINAL)) {
                 int ret = send_ring_info_response(conn);
                 if (ret == 0) {
                     info_requested = 0;
@@ -753,7 +755,8 @@ static void storage_write(void)
             if (!conn) {
                 read_request_pending = 0;
                 read_deadline = 0;
-            } else if (sd_is_ready() && transport_storage_snapshot_ready()) {
+            } else if (sd_is_ready() &&
+                       (transport_storage_snapshot_ready() || sd_storage_health() == SD_STORAGE_TERMINAL)) {
                 int ret = start_pending_read(conn);
                 if (ret == 0 || send_ack(conn, storage_status_from_error(ret, STORAGE_NOT_READY)) == 0) {
                     read_request_pending = 0;

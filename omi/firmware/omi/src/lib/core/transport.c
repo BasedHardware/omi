@@ -1260,6 +1260,7 @@ static audio_storage_packer_t storage_packer;
 K_MUTEX_DEFINE(storage_packer_mutex);
 static uint32_t storage_rejected_frames;
 static int64_t storage_rejection_log_deadline_ms;
+static bool storage_terminal_reported;
 
 static void record_storage_rejection(const char *reason)
 {
@@ -1272,6 +1273,25 @@ static void record_storage_rejection(const char *reason)
     if (now >= storage_rejection_log_deadline_ms) {
         LOG_ERR("Audio storage rejected frame: %s, rejected=%u", reason, storage_rejected_frames);
         storage_rejection_log_deadline_ms = now + 2000;
+    }
+}
+
+static void report_and_clear_terminal_storage_tail(void)
+{
+    if (storage_terminal_reported || sd_storage_health() != SD_STORAGE_TERMINAL) {
+        return;
+    }
+
+    k_mutex_lock(&storage_packer_mutex, K_FOREVER);
+    size_t at_risk_bytes = audio_storage_packer_pending_bytes(&storage_packer);
+    audio_storage_packer_init(&storage_packer);
+    k_mutex_unlock(&storage_packer_mutex);
+
+    storage_terminal_reported = true;
+    if (at_risk_bytes > 0U) {
+        record_storage_rejection("SD terminal with buffered packer tail");
+        LOG_ERR("SD terminal: explicitly abandoning %u non-durable packer byte(s) so live BLE can continue",
+                (unsigned) at_risk_bytes);
     }
 }
 
@@ -1306,10 +1326,20 @@ static bool write_current_frame_to_storage(void)
 
 static bool flush_storage_tail_for_sync(void)
 {
+    bool storage_terminal = sd_storage_health() == SD_STORAGE_TERMINAL;
+    if (ring_storage_terminal_flush_resolved(storage_terminal)) {
+        report_and_clear_terminal_storage_tail();
+        return true;
+    }
+
     int64_t deadline = k_uptime_get() + STORAGE_PACKER_FLUSH_TIMEOUT_MS;
     bool flushed = false;
 
     while (!atomic_get(&pusher_stop_flag) && is_sd_on()) {
+        if (ring_storage_terminal_flush_resolved(sd_storage_health() == SD_STORAGE_TERMINAL)) {
+            report_and_clear_terminal_storage_tail();
+            return true;
+        }
         k_mutex_lock(&storage_packer_mutex, K_FOREVER);
         flushed = audio_storage_packer_flush(&storage_packer, enqueue_storage_record, NULL);
         k_mutex_unlock(&storage_packer_mutex);
@@ -1392,6 +1422,12 @@ void pusher(void)
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
         bool flush_after_drain = atomic_cas(&storage_flush_requested, 1, 0);
+        /*
+         * A terminal transition can occur with an empty TX queue and a partial
+         * packer tail. Resolve it before the drain loop so connect/shutdown
+         * flushes cannot retry that rejected tail forever.
+         */
+        report_and_clear_terminal_storage_tail();
 #endif
 
         while (retained_tx_frame || read_from_tx_queue()) {
@@ -1417,7 +1453,8 @@ void pusher(void)
 
             bool storage_available = false;
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-            storage_available = is_sd_on();
+            report_and_clear_terminal_storage_tail();
+            storage_available = is_sd_on() && sd_storage_health() != SD_STORAGE_TERMINAL;
 #endif
             audio_delivery_route_t route = audio_delivery_route(sent_live, storage_available);
             if (route == AUDIO_DELIVERY_STORAGE) {
@@ -1439,8 +1476,16 @@ void pusher(void)
 #endif
             } else if (route == AUDIO_DELIVERY_DROP) {
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-                record_storage_rejection("live delivery and SD unavailable");
-                retained_tx_frame = true;
+                bool storage_terminal = sd_storage_health() == SD_STORAGE_TERMINAL;
+                record_storage_rejection(storage_terminal ? "SD terminal and live delivery unavailable"
+                                                          : "live delivery and SD unavailable");
+                /*
+                 * A temporary SD/power gap retains the exact frame. Once the
+                 * bounded SD recovery policy reaches terminal, retaining one
+                 * frame forever would wedge every later live frame too. The
+                 * rejection above is intentionally counted and loud.
+                 */
+                retained_tx_frame = ring_storage_frame_should_retain(storage_terminal);
 #endif
             }
 
@@ -1499,6 +1544,14 @@ int transport_begin_shutdown(void)
     }
     if (atomic_get(&pusher_stop_flag)) {
         return -ESHUTDOWN;
+    }
+    if (sd_storage_health() == SD_STORAGE_TERMINAL) {
+        /*
+         * The pusher drain resolves and reports any buffered tail without
+         * touching media. Do not remount a card whose recovery budget is
+         * already exhausted merely to shut it down.
+         */
+        return 0;
     }
 
     /*

@@ -28,6 +28,11 @@ file(GLOB core_sources
     src/lib/core/config.h
     src/lib/core/codec.c
     src/lib/core/ring_transfer_integrity.c
+    src/lib/core/rtc_elapsed_recovery.c
+    src/lib/core/rtc_time_state.c
+    src/lib/core/sd_ring_durability.c
+    src/lib/core/sd_ring_recovery.c
+    src/lib/core/sd_write_recovery.c
     src/lib/core/transport.c
     src/lib/core/button.c
     src/lib/core/monitor.c

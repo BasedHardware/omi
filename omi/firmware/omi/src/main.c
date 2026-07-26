@@ -38,7 +38,7 @@ bool is_charging = false;
 bool is_off = false;
 bool blink_toggle = false;
 
-static void print_reset_reason(void)
+static uint32_t take_and_print_reset_reason(void)
 {
     uint32_t reas;
 
@@ -60,6 +60,7 @@ static void print_reset_reason(void)
     } else {
         printk("Power-on-reset\n");
     }
+    return reas;
 }
 
 static void codec_handler(uint8_t *data, size_t len)
@@ -190,8 +191,8 @@ int main(void)
     int ret;
     printk("Starting omi ...\n");
 
-    // print reset reason at startup
-    print_reset_reason();
+    // Capture reset provenance before clearing the hardware latch.
+    uint32_t reset_reason = take_and_print_reset_reason();
 
     // Initialize watchdog first to catch any early freezes
     ret = watchdog_init();
@@ -245,7 +246,12 @@ int main(void)
         LOG_WRN("UTC time not synchronized yet");
     }
 
-    (void) lsm6dsl_time_boot_adjust_rtc();
+    /*
+     * Mixed reset causes are not trusted. A watchdog/soft/pin reset that also
+     * inherited OFF must fail closed and wait for live synchronization.
+     */
+    bool verified_system_off_wake = reset_reason == NRF_RESET_RESETREAS_OFF_MASK;
+    (void) lsm6dsl_time_boot_adjust_rtc(verified_system_off_wake);
 
 #ifdef CONFIG_OMI_ENABLE_MONITOR
     // Initialize monitoring system

@@ -2,9 +2,10 @@
 
 #include <errno.h>
 
+#include "rtc_time_state.h"
+
 #define RING_NOTIFY_DONE 0x04U
 #define CRC32_IEEE_POLYNOMIAL 0xEDB88320U
-#define MIN_VALID_UTC_TIMESTAMP 1700000000U
 
 uint32_t ring_transfer_crc32_update(uint32_t crc, const uint8_t *data, size_t length)
 {
@@ -25,7 +26,7 @@ uint32_t ring_transfer_crc32_update(uint32_t crc, const uint8_t *data, size_t le
 
 uint32_t ring_record_timestamp_or_zero(bool rtc_valid, uint32_t utc_time)
 {
-    return rtc_valid && utc_time >= MIN_VALID_UTC_TIMESTAMP ? utc_time : 0U;
+    return rtc_valid && (uint64_t) utc_time >= RTC_TIME_MIN_VALID_EPOCH_S ? utc_time : 0U;
 }
 
 bool ring_storage_flush_retry_due(bool dirty, int64_t now_ms, int64_t next_attempt_ms)
@@ -41,6 +42,21 @@ bool ring_control_response_should_retain(bool connected, int notify_error)
 bool ring_snapshot_retry_required(bool connection_active, bool commit_succeeded)
 {
     return connection_active && !commit_succeeded;
+}
+
+bool ring_storage_frame_should_retain(bool storage_terminal)
+{
+    return !storage_terminal;
+}
+
+bool ring_storage_terminal_flush_resolved(bool storage_terminal)
+{
+    return storage_terminal;
+}
+
+bool ring_storage_media_mutation_allowed(bool storage_terminal)
+{
+    return !storage_terminal;
 }
 
 bool ring_power_on_reconcile_required(bool desired_power_on, bool mounted, int last_result)

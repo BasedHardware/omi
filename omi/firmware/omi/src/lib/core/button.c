@@ -470,8 +470,11 @@ void turnoff_all()
         return;
     }
 
-    /* Persist an IMU timestamp base so we can estimate time across system_off. */
-    lsm6dsl_time_prepare_for_system_off();
+    /* Consume any legacy marker before system_off; wake waits for live sync. */
+    rc = lsm6dsl_time_prepare_for_system_off();
+    if (rc < 0) {
+        LOG_WRN("System-off time marker unavailable; next boot will wait for live time sync (%d)", rc);
+    }
     k_msleep(1000);
     LOG_INF("Entering system off; press usr_btn to restart");
 

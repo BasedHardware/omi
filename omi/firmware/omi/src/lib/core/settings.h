@@ -1,6 +1,7 @@
 #ifndef SETTINGS_H
 #define SETTINGS_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <zephyr/drivers/rtc.h>
 
@@ -61,8 +62,8 @@ struct rtc_time app_settings_get_rtc_timestamp(void);
 /**
  * @brief Save the UTC epoch time base (seconds).
  *
- * This is used by the application timekeeping layer to provide a stable
- * increasing UTC time while the device is running.
+ * This records the most recent live synchronization for historical context.
+ * Loading it after reboot never makes RTC time valid.
  *
  * @param epoch_s UTC time in seconds since 1970-01-01.
  * @return 0 on success, negative error code otherwise.
@@ -77,10 +78,11 @@ int app_settings_save_rtc_epoch(uint64_t epoch_s);
 uint64_t app_settings_get_rtc_epoch(void);
 
 /**
- * @brief Save an LSM6DSL timestamp base for timekeeping across system_off.
+ * @brief Save or consume the legacy LSM6DSL elapsed-time marker.
  *
- * When epoch_s is non-zero, the base becomes valid; when epoch_s is zero, the
- * stored base is cleared.
+ * A zero epoch consumes the marker. CV1 production does not create a new
+ * marker because its unbounded system-off interval cannot be recovered safely
+ * from the wrapping 24-bit counter.
  */
 int app_settings_save_lsm6dsl_time_base(uint64_t epoch_s, uint32_t imu_timestamp);
 
@@ -91,5 +93,37 @@ int app_settings_save_lsm6dsl_time_base(uint64_t epoch_s, uint32_t imu_timestamp
  * @param imu_timestamp Output IMU timestamp counter.
  */
 int app_settings_get_lsm6dsl_time_base(uint64_t *epoch_s, uint32_t *imu_timestamp);
+
+typedef struct {
+    uint64_t affected_start_seq;
+    uint64_t replacement_start_seq;
+    uint64_t attempted_write_seq;
+    uint64_t metadata_generation;
+    uint64_t baseline_read_seq;
+    uint64_t baseline_write_seq;
+    uint64_t baseline_dropped_packets;
+    uint32_t capacity_packets;
+    uint32_t batch_packets;
+    uint32_t preimage_crc32;
+    bool active;
+} app_sd_ring_quarantine_t;
+
+/**
+ * Persist a one-time write-ahead quarantine for a legacy CRC-less SD batch.
+ * This marker lives in MCU NVS, outside the failing SD data path.
+ */
+int app_settings_save_sd_ring_quarantine(uint64_t affected_start_seq,
+                                         uint64_t replacement_start_seq,
+                                         uint64_t attempted_write_seq,
+                                         uint64_t metadata_generation,
+                                         uint64_t baseline_read_seq,
+                                         uint64_t baseline_write_seq,
+                                         uint64_t baseline_dropped_packets,
+                                         uint32_t capacity_packets,
+                                         uint32_t batch_packets,
+                                         uint32_t preimage_crc32);
+int app_settings_clear_sd_ring_quarantine(void);
+app_sd_ring_quarantine_t app_settings_get_sd_ring_quarantine(void);
+int app_settings_get_sd_ring_quarantine_load_error(void);
 
 #endif // SETTINGS_H
