@@ -14,6 +14,7 @@ covers:
   - desktop/macos/Desktop/Sources/Bluetooth/Transports/BLEPhysicalDriver.swift
   - desktop/macos/Desktop/Sources/Bluetooth/Transports/DeviceTransport.swift
   - desktop/macos/Desktop/Sources/Bluetooth/BluetoothManager.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/DeviceType.swift
   - desktop/macos/Desktop/Sources/Bluetooth/Session/BluetoothConnectionLease.swift
   - desktop/macos/Desktop/Sources/Bluetooth/Session/DeviceAudioStreamController.swift
   - desktop/macos/Desktop/Sources/Bluetooth/Session/DeviceCommandQueue.swift
