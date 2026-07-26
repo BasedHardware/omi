@@ -1,0 +1,20 @@
+desktop/macos/Desktop/Sources/FloatingControlBar/NotchCardVoiceDelivery.swift
+  s_7918275f8e3531::t_974683bfa0fb25 78-82
+  s_7918275f8e3531::t_324b577bc11f89 94-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "f959bbd04cba9f3ec9ed7c29747eb19489d4b246",
+  "prompts": {},
+  "sessions": {
+    "s_7918275f8e3531": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "739fdbb2-b061-4a85-8520-85d2527f5698",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
