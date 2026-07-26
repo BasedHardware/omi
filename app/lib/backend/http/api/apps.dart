@@ -686,11 +686,11 @@ Future<bool> deleteApiKeyServer(String appId, String keyId) async {
   }
 }
 
-Future<bool> migrateAppOwnerId(String oldId) async {
+Future<bool> migrateAppOwnerId(String oldId, String sourceToken) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps/migrate-owner?old_id=$oldId',
-    headers: {},
-    body: '',
+    headers: {'Content-Type': 'application/json'},
+    body: jsonEncode({'source_token': sourceToken}),
     method: 'POST',
   );
   try {

@@ -4511,6 +4511,23 @@
         "title": "Body_import_limitless_data_v1_import_limitless_post",
         "type": "object"
       },
+      "Body_migrate_app_owner_v1_apps_migrate_owner_post": {
+        "properties": {
+          "source_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Token"
+          }
+        },
+        "title": "Body_migrate_app_owner_v1_apps_migrate_owner_post",
+        "type": "object"
+      },
       "Body_sync_local_files_v2_v2_sync_local_files_post": {
         "properties": {
           "files": {
@@ -26784,6 +26801,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_migrate_app_owner_v1_apps_migrate_owner_post"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -39150,7 +39176,7 @@
     },
     "/v1/integrations/{app_key}": {
       "delete": {
-        "description": "Delete an integration connection.",
+        "description": "Delete an integration connection.\n\nDeleting a derived integration deletes the grant it rides on — there is no\nseparate token to revoke.",
         "operationId": "delete_integration_v1_integrations__app_key__delete",
         "parameters": [
           {
@@ -39231,7 +39257,7 @@
         ]
       },
       "get": {
-        "description": "Get integration connection status for the current user.",
+        "description": "Get integration connection status for the current user.\n\nGmail has no grant of its own — it rides the Google Calendar OAuth grant and is\nconnected only when that grant actually carries the Gmail scope.",
         "operationId": "get_integration_v1_integrations__app_key__get",
         "parameters": [
           {
@@ -39416,7 +39442,7 @@
     },
     "/v1/integrations/{app_key}/oauth-url": {
       "get": {
-        "description": "Get OAuth authorization URL for an integration.\nFrontend opens this URL in browser to start OAuth flow.\nUses secure random state tokens to prevent CSRF attacks.",
+        "description": "Get OAuth authorization URL for an integration.\nFrontend opens this URL in browser to start OAuth flow.\nUses secure random state tokens to prevent CSRF attacks.\n\nA derived integration (Gmail) authorizes through the grant it rides on, so the\nwhole flow — state, provider config and callback — runs under the source key.",
         "operationId": "get_oauth_url_v1_integrations__app_key__oauth_url_get",
         "parameters": [
           {
