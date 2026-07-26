@@ -1,0 +1,16 @@
+name: Validate 10604 BabbleSim
+
+on:
+  push:
+    branches:
+      - codex/validate-10604-bsim
+
+permissions:
+  contents: read
+
+jobs:
+  babblesim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: bash omi/firmware/scripts/ci/check-bsim.sh
