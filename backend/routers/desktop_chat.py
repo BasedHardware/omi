@@ -4,7 +4,7 @@ import base64
 import json
 import time
 from collections.abc import AsyncIterator, Mapping
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -219,8 +219,14 @@ def _usage(usage: object) -> dict[str, object]:
     return result
 
 
+def _stop_reason(value: object) -> str:
+    return {'end_turn': 'stop', 'max_tokens': 'length', 'tool_use': 'tool_calls', 'stop_sequence': 'stop'}.get(
+        value if isinstance(value, str) else '', 'stop'
+    )
+
+
 def _message_response(message: object, public_model: str) -> dict[str, object]:
-    content: list[dict[str, object]] = list(getattr(message, 'content', []))
+    content: list[Any] = list(getattr(message, 'content', []))
     tool_calls = [
         {
             'id': block.id,
@@ -231,9 +237,7 @@ def _message_response(message: object, public_model: str) -> dict[str, object]:
         if getattr(block, 'type', None) == 'tool_use'
     ]
     text = ''.join(block.text for block in content if getattr(block, 'type', None) == 'text')
-    stop_reason = {'end_turn': 'stop', 'max_tokens': 'length', 'tool_use': 'tool_calls', 'stop_sequence': 'stop'}.get(
-        getattr(message, 'stop_reason', None), 'stop'
-    )
+    stop_reason = _stop_reason(getattr(message, 'stop_reason', None))
     response_message: dict[str, object] = {'role': 'assistant', 'content': text or None}
     if tool_calls:
         response_message['tool_calls'] = tool_calls
@@ -288,7 +292,7 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
             async for event in stream:
                 event_type = getattr(event, 'type', '')
                 if event_type == 'content_block_delta':
-                    delta = getattr(event, 'delta', None)
+                    delta = cast(Any, getattr(event, 'delta', None))
                     if getattr(delta, 'type', '') == 'text_delta':
                         yield _sse(
                             {
@@ -352,12 +356,7 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
                         }
                     )
                 elif event_type == 'message_delta':
-                    reason = {
-                        'end_turn': 'stop',
-                        'max_tokens': 'length',
-                        'tool_use': 'tool_calls',
-                        'stop_sequence': 'stop',
-                    }.get(getattr(getattr(event, 'delta', None), 'stop_reason', None), 'stop')
+                    reason = _stop_reason(getattr(getattr(event, 'delta', None), 'stop_reason', None))
                     yield _sse(
                         {
                             'id': stream_id,

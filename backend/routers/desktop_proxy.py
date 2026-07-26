@@ -148,11 +148,13 @@ async def _meter_server_request(uid: str, path: str, model: str, action: str) ->
         )
         if not burst_allowed:
             raise HTTPException(status_code=429, detail="Gemini request rate limit exceeded")
-        current, _ = await run_blocking(
+        _, current, _ = await run_blocking(
             critical_executor,
-            redis_db._RATE_LIMIT_LUA,
-            keys=[f"rl:desktop_gemini_daily:{uid}"],
-            args=[86_400],
+            redis_db.check_rate_limit,
+            uid,
+            "desktop_gemini_daily",
+            _DAILY_HARD_LIMIT,
+            86_400,
         )
     except HTTPException:
         raise

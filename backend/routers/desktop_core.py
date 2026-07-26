@@ -4,7 +4,7 @@ import json
 import os
 from typing import Any
 
-import redis
+from redis.exceptions import AuthenticationError, AuthorizationError, DataError, RedisError, ResponseError
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, PlainTextResponse
 
@@ -57,9 +57,9 @@ def redis_readiness_response(configured: bool, probe: bool | Exception | None) -
             "redis": {"status": "unexpected_response", "failure_class": "command_data"},
         }
     failure_class = "transport"
-    if isinstance(probe, (redis.exceptions.AuthenticationError, redis.exceptions.AuthorizationError)):
+    if isinstance(probe, (AuthenticationError, AuthorizationError)):
         failure_class = "auth_config"
-    elif isinstance(probe, (redis.exceptions.ResponseError, redis.exceptions.DataError)):
+    elif isinstance(probe, (ResponseError, DataError)):
         failure_class = "command_data"
     return status.HTTP_503_SERVICE_UNAVAILABLE, {
         "status": "not_ready",
@@ -81,7 +81,7 @@ async def readiness_check() -> JSONResponse:
     if configured:
         try:
             probe = await run_blocking(critical_executor, redis_db.r.ping)
-        except redis.exceptions.RedisError as error:
+        except RedisError as error:
             probe = error
     status_code, response = redis_readiness_response(configured, probe)
     return JSONResponse(status_code=status_code, content=response)
@@ -148,11 +148,15 @@ async def _sentry_event_details(issue_id: str) -> tuple[str, str, str, dict[str,
     contexts = event.get("contexts") or event.get("context") or {}
     feedback = contexts.get("feedback") if isinstance(contexts, dict) else {}
     feedback = feedback if isinstance(feedback, dict) else {}
-    message = feedback.get("message") if isinstance(feedback.get("message"), str) else ""
-    name = feedback.get("name") if isinstance(feedback.get("name"), str) else ""
-    email = feedback.get("contact_email") if isinstance(feedback.get("contact_email"), str) else ""
+    message_value = feedback.get("message")
+    name_value = feedback.get("name")
+    email_value = feedback.get("contact_email")
+    message = message_value if isinstance(message_value, str) else ""
+    name = name_value if isinstance(name_value, str) else ""
+    email = email_value if isinstance(email_value, str) else ""
     if not email and isinstance(event.get("user"), dict):
-        email = event["user"].get("email") if isinstance(event["user"].get("email"), str) else ""
+        user_email = event["user"].get("email")
+        email = user_email if isinstance(user_email, str) else ""
     metadata: dict[str, Any] = {}
     if isinstance(event.get("tags"), list):
         metadata["tags"] = event["tags"]
