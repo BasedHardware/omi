@@ -6,8 +6,8 @@ import pytest
 import yaml
 
 from llm_gateway.gateway.config_loader import ConfigValidationError, load_gateway_config
-from llm_gateway.gateway.schemas import Surface
-from utils.llm.model_config import get_all_configured_features, get_model
+from llm_gateway.gateway.schemas import Capabilities, StructuredOutputMode, Surface
+from utils.llm.model_config import get_all_configured_features, get_model, get_provider
 
 LANE_ID = 'omi:auto:chat-structured'
 ACTIVE_ROUTE = 'route.chat_structured.2026_06_27.001'
@@ -46,6 +46,27 @@ def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
     assert chat_agent_lane.surface == Surface.ANTHROPIC_MESSAGES
     assert chat_agent_lane.capabilities.streaming is True
     assert chat_agent_lane.capabilities.tools is True
+
+
+def test_translation_uses_the_gateway_translation_capability():
+    config = load_gateway_config(prod_mode=True)
+
+    assert get_model('translation') == 'gemini-3.1-flash-lite'
+    assert get_provider('translation') == 'gemini'
+    lane = config.lanes['omi:auto:translation']
+    assert lane.capabilities.translation is True
+    assert lane.capabilities.structured_output.value == 'json_schema'
+
+
+def test_translation_capability_requires_json_schema_output():
+    with pytest.raises(ValueError, match='translation lanes require json_schema'):
+        Capabilities(
+            text_input=True,
+            streaming=False,
+            structured_output=StructuredOutputMode.NONE,
+            tools=False,
+            translation=True,
+        )
 
 
 def test_unknown_gateway_route_override_fails(tmp_path):

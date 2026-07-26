@@ -14,7 +14,7 @@ import httpx
 from pydantic import BaseModel
 
 from config.translation import TranslationProfile, TranslationProvider
-from utils.llm.providers import get_or_create_gemini_llm
+from utils.llm.clients import get_llm
 from utils.observability.fallback import record_fallback
 from utils.translation_core.metrics import TranslationMetrics, get_translation_metrics
 from utils.translation_language import (
@@ -292,7 +292,7 @@ def _create_nllb_client(profile: TranslationProfile) -> httpx.Client:
 
 
 def _create_gemini_translation_client() -> Any:
-    return get_or_create_gemini_llm('gemini-3.1-flash-lite')
+    return get_llm('translation')
 
 
 def _translation_prompt(contents: list[str], target_language: str, source_language: str) -> str:
