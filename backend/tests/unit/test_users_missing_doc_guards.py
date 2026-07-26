@@ -41,7 +41,12 @@ def users():
     fakes = {
         "google.cloud.firestore": firestore,
         "google.cloud.firestore_v1": firestore_v1,
-        "database._client": _module("database._client", db=MagicMock(), document_id_from_seed=lambda seed: "id"),
+        "database._client": _module(
+            "database._client",
+            db=MagicMock(),
+            delete_collection_recursive=MagicMock(),
+            document_id_from_seed=lambda seed: "id",
+        ),
         "database.firestore_cache": _module(
             "database.firestore_cache", CachePolicy=MagicMock(), get_or_fetch=MagicMock(), invalidate=MagicMock()
         ),

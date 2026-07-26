@@ -44,6 +44,10 @@ from resilience import circuit_open, classify_error  # noqa: E402
 
 HISTORY_LIMIT = 10
 GCE_PROJECT = "based-hardware"
+# Legacy placeholder that earlier builds persisted as agentVm.ip when the GCE
+# IP poll timed out. Never written any more; still read so already-poisoned
+# records heal on the next connect instead of resetting a healthy VM forever.
+UNRESOLVED_VM_IP = "unknown"
 VM_KEEPALIVE_INTERVAL = 120  # seconds — ping VM every 2 min during active WS
 # Wait this long for the VM's session_state hello before deciding whether to seed
 # history on the first query. The VM sends it synchronously on connect, so this is a
@@ -164,38 +168,43 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
 
     t0 = time.monotonic()
     token = await run_blocking(critical_executor, _get_gce_access_token)
+    instance_url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
     start_url = (
         f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}/start"
     )
 
     async with httpx.AsyncClient(timeout=180) as client:
-        resp = await client.post(start_url, headers={"Authorization": f"Bearer {token}"}, content=b"")
-        if resp.status_code not in (200, 204):
-            raise Exception(f"GCE start failed: {resp.status_code} {resp.text}")
-        t_start = time.monotonic() - t0
-        logger.info(f"[vm-start] {vm_name} start API call: {t_start:.1f}s")
+        instance_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
+        already_running = instance_resp.status_code == 200 and instance_resp.json().get("status") == "RUNNING"
+        if already_running:
+            logger.info(f"[vm-start] {vm_name} is already RUNNING; resolving its external IP")
+        else:
+            resp = await client.post(start_url, headers={"Authorization": f"Bearer {token}"}, content=b"")
+            if resp.status_code not in (200, 204):
+                raise Exception(f"GCE start failed: {resp.status_code} {resp.text}")
+            t_start = time.monotonic() - t0
+            logger.info(f"[vm-start] {vm_name} start API call: {t_start:.1f}s")
 
-        op_name = resp.json().get("name")
-        if not op_name:
-            raise Exception("Missing operation name in GCE start response")
+            op_name = resp.json().get("name")
+            if not op_name:
+                raise Exception("Missing operation name in GCE start response")
 
-        op_url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/operations/{op_name}"
-        for i in range(24):
-            await asyncio.sleep(5)
-            token = await run_blocking(critical_executor, _get_gce_access_token)
-            status_resp = await client.get(op_url, headers={"Authorization": f"Bearer {token}"})
-            status = status_resp.json()
-            if status.get("status") == "DONE":
-                if "error" in status:
-                    raise Exception(f"GCE start operation failed: {status['error']}")
-                t_op = time.monotonic() - t0
-                logger.info(f"[vm-start] {vm_name} operation done after {i + 1} polls: {t_op:.1f}s")
-                break
+            op_url = (
+                f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/operations/{op_name}"
+            )
+            for i in range(24):
+                await asyncio.sleep(5)
+                token = await run_blocking(critical_executor, _get_gce_access_token)
+                status_resp = await client.get(op_url, headers={"Authorization": f"Bearer {token}"})
+                status = status_resp.json()
+                if status.get("status") == "DONE":
+                    if "error" in status:
+                        raise Exception(f"GCE start operation failed: {status['error']}")
+                    t_op = time.monotonic() - t0
+                    logger.info(f"[vm-start] {vm_name} operation done after {i + 1} polls: {t_op:.1f}s")
+                    break
 
         # Poll for a valid external IP (may take a few seconds after operation completes)
-        instance_url = (
-            f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
-        )
         ip = None
         for attempt in range(6):
             token = await run_blocking(critical_executor, _get_gce_access_token)
@@ -217,17 +226,40 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
         if not ip:
             t_fail = time.monotonic() - t0
             logger.error(f"[vm-start] {vm_name} failed to get IP after 6 attempts: {t_fail:.1f}s")
-            ip = "unknown"
+            raise RuntimeError(f"VM {vm_name} started but never reported an external IP")
 
         return ip
+
+
+def _is_usable_vm_ip(ip: Any) -> bool:
+    """True when `ip` is an address the proxy can actually dial.
+
+    `UNRESOLVED_VM_IP` is truthy, so a stored placeholder satisfies every
+    `if ip:` reader on the connect path while resolving to nothing.
+    """
+    return isinstance(ip, str) and bool(ip) and ip != UNRESOLVED_VM_IP
 
 
 def _update_firestore_vm(
     uid: str, ip: str | None, status: str, *, restart_failed: bool = False, restart_succeeded: bool = False
 ) -> None:
-    """Update the user's agentVm fields in Firestore (incl. circuit-breaker state)."""
+    """Update the user's agentVm fields in Firestore (incl. circuit-breaker state).
+
+    `agentVm.ip` is the address every later connect dials, so this writer is
+    the one place that decides what may become that address. A placeholder
+    must never be persisted: it is truthy, so it passes the `status == "ready"
+    and vm_ip` fast path, fails the health probe, and sends `_ensure_vm_running`
+    down the `health_failed` branch — which finds GCE reporting RUNNING and
+    hard-resets a healthy VM, then writes the same placeholder back. Nothing
+    else repairs the field, so the user is stuck in that loop permanently.
+    """
+    if status == "ready" and not _is_usable_vm_ip(ip):
+        raise ValueError(f"refusing to persist ready agentVm without usable ip for uid={uid}")
+
     update: Dict[str, Any] = {"agentVm.status": status}
-    if ip:
+    if ip is not None:
+        if not _is_usable_vm_ip(ip):
+            raise ValueError(f"refusing to persist unusable agentVm.ip for uid={uid}")
         update["agentVm.ip"] = ip
     if restart_failed:
         update["agentVm.restartFailures"] = Increment(1)
@@ -294,7 +326,10 @@ async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool =
         )
         return None
 
-    if fs_status == "ready":
+    # A record whose stored IP is the legacy placeholder can never be repaired by
+    # the reset branch below — it writes the same value back. Fall through to a
+    # full restart so `_start_vm_and_wait` resolves a real address.
+    if fs_status == "ready" and _is_usable_vm_ip(vm.get("ip")):
         # Verify it's actually running
         try:
             gce_status = await _check_gce_status(vm_name, zone)
@@ -541,7 +576,7 @@ async def agent_ws(websocket: WebSocket):
 
     # Fast path: if Firestore says ready with an IP, try connecting directly (skip GCE check).
     # Only fall back to GCE check + restart if the VM isn't reachable.
-    if vm.get("status") == "ready" and vm_ip:
+    if vm.get("status") == "ready" and _is_usable_vm_ip(vm_ip):
         try:
             async with httpx.AsyncClient(timeout=3) as client:
                 resp = await client.get(f"http://{vm_ip}:8080/health")

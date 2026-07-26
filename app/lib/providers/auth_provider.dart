@@ -19,6 +19,21 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
+/// Runs a provider-link helper, then migrates only the anonymous source proof
+/// it returned after the destination account has been established.
+Future<ProviderLinkResult?> completeProviderLinkAndMigrate({
+  required Future<ProviderLinkResult?> Function() linkProvider,
+  required Future<bool> Function(String sourceUid, String sourceToken) migrate,
+}) async {
+  final result = await linkProvider();
+  final source = result?.anonymousSourceMigration;
+  final destinationUid = result?.destinationUid;
+  if (source != null && destinationUid != null && destinationUid != source.uid) {
+    await migrate(source.uid, source.token);
+  }
+  return result;
+}
+
 class AuthenticationProvider extends BaseProvider {
   FirebaseAuth get _auth => FirebaseAuth.instance;
 
@@ -255,22 +270,15 @@ class AuthenticationProvider extends BaseProvider {
   Future<void> linkWithGoogle() async {
     setLoading(true);
     try {
-      final result = await AuthService.instance.linkWithGoogle();
+      final result = await completeProviderLinkAndMigrate(
+        linkProvider: AuthService.instance.linkWithGoogle,
+        migrate: migrateAppOwnerId,
+      );
       if (result == null) {
         setLoading(false);
         return;
       }
     } catch (e) {
-      if (e is FirebaseAuthException && e.code == 'credential-already-in-use') {
-        final oldUserId = FirebaseAuth.instance.currentUser?.uid;
-        if (oldUserId != null) {
-          final newUserId = FirebaseAuth.instance.currentUser?.uid;
-          if (newUserId != null) {
-            await migrateAppOwnerId(oldUserId);
-          }
-        }
-        return;
-      }
       AppSnackbar.showSnackbarError(
         globalNavigatorKey.currentContext?.l10n.authFailedToLinkGoogle ??
             'Failed to link with Google, please try again.',
@@ -294,6 +302,7 @@ class AuthenticationProvider extends BaseProvider {
           // Get existing user credentials
           final existingCred = e.credential;
           final oldUserId = FirebaseAuth.instance.currentUser?.uid;
+          final sourceToken = await FirebaseAuth.instance.currentUser?.getIdToken();
 
           // Sign out current anonymous user
           AuthService.instance.handleAuthUserChanged(null);
@@ -309,8 +318,8 @@ class AuthenticationProvider extends BaseProvider {
           SharedPreferencesUtil().uid = newUserId ?? '';
           SharedPreferencesUtil().email = FirebaseAuth.instance.currentUser?.email ?? '';
           SharedPreferencesUtil().givenName = FirebaseAuth.instance.currentUser?.displayName?.split(' ')[0] ?? '';
-          if (oldUserId != null && newUserId != null) {
-            await migrateAppOwnerId(oldUserId);
+          if (oldUserId != null && newUserId != null && sourceToken != null) {
+            await migrateAppOwnerId(oldUserId, sourceToken);
           }
           return;
         }
@@ -331,7 +340,7 @@ class AuthenticationProvider extends BaseProvider {
     }
   }
 
-  Future<bool> migrateAppOwnerId(String oldId) async {
-    return await apps_api.migrateAppOwnerId(oldId);
+  Future<bool> migrateAppOwnerId(String oldId, String sourceToken) async {
+    return await apps_api.migrateAppOwnerId(oldId, sourceToken);
   }
 }

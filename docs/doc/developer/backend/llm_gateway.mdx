@@ -63,7 +63,7 @@ Those lanes involve streaming, tool use, retrieval quality, citations, and user-
 The current backend keeps model/provider routing in `backend/utils/llm/model_config.py`, constructs clients in `backend/utils/llm/providers.py`, and exposes callers through `backend/utils/llm/clients.py`. That remains the source of truth for feature routing, but the new auto-route execution brain should be isolated as a service because:
 
 - backend and pusher both run LLM workloads and should share one runtime policy;
-- route artifacts need deploy-time validation and runtime fallback independent of product code;
+- route artifacts need deploy-time validation and gateway-owned route fallback independent of product code;
 - route observability needs one consistent set of labels;
 - future surfaces can call the same OpenAI-compatible gateway without learning provider details;
 - rollback must be config-only and not require desktop or mobile releases.
@@ -142,7 +142,7 @@ Promotion model:
 
 1. Start with no live product traffic while service startup, readiness, config validation, and service auth are verified.
 2. Route non-embedding features through the gateway in shadow mode (`OMI_LLM_GATEWAY_DEV_SHADOW_ALL_*` and feature shadow flags).
-3. Promote **dev** to gateway-serving with `OMI_LLM_GATEWAY_FEATURE_MODE=gateway`. When serving is on, turn shadow flags **off** so callers do not double-hit the gateway. Keep hard direct surfaces (BYOK, Anthropic agentic chat, Assistants/file chat, omni realtime) on providers via `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=true`. Backend wraps gateway clients with legacy fallback on hard transport failures (timeout / 5xx / connection).
+3. Promote **dev** to gateway-serving with `OMI_LLM_GATEWAY_FEATURE_MODE=gateway`. When serving is on, turn shadow flags **off** so callers do not double-hit the gateway. Keep `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=false`: gateway-mode model calls fail closed and never fall back to a provider from product code.
 4. Run prod shadow before prod serving when the feature touches user content or user-visible behavior. Prod serving also requires `OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true` and an explicit gateway URL.
 5. Promote prod serving only after rollback has been tested and the route artifact has suitable eval evidence.
 
@@ -295,7 +295,7 @@ PROD readiness order:
 3. Run the prod values validation command.
 4. Manually dispatch `gcp_llm_gateway.yml` to `prod`.
 5. Run prod `/ready` and chat-completions smoke checks from the prod GKE network.
-6. Deploy backend-listen and the Cloud Run callers after gateway prod smoke passes; keep `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=true` so acknowledged direct surfaces retain their existing provider routes.
+6. Deploy backend-listen and the Cloud Run callers after gateway prod smoke passes; keep `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=false`.
 
 ## Major Library Choices
 
@@ -599,7 +599,7 @@ Runtime fail-open means active route failure may use LKG only for failure classe
 - maps typed gateway exceptions to OpenAI-style error envelopes with `error.message`, `error.type`, `error.param`, and `error.code`;
 - rejects unknown auto lanes, bare provider model names, streaming, tools, unsupported capabilities, and unknown top-level request parameters before provider execution.
 
-Background callers can use the gateway for latency-insensitive structured decisions and post-processing work, then fall back to their legacy LLM path if the gateway returns invalid output, times out, or fails. Shadow callers still use the legacy result for product behavior while emitting bounded comparison metrics.
+Background callers use the gateway for latency-insensitive structured decisions and post-processing work. Serving requests fail closed when the gateway returns invalid output, times out, or fails; only non-authoritative shadow comparisons may continue to use a legacy result while emitting bounded metrics.
 
 The default provider registry includes the OpenAI-compatible adapter for the checked-in `openai` provider route. It is cached per process, closed during FastAPI lifespan shutdown, uses `OPENAI_API_KEY`, optional `OPENAI_BASE_URL`, and optional `OPENAI_MAX_RESPONSE_BYTES`, posts to `/chat/completions` with `httpx.AsyncClient`, and fails closed with `invalid_route_config` when the managed key is absent or rejected. Tests can still override the registry with fake providers.
 

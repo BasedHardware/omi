@@ -909,15 +909,22 @@ fn test_translate_request_with_tools() {
     )
     .unwrap();
     let tools = result.tools.unwrap();
-    // Keep ordinary agentic calls on their normal incremental streaming
-    // path; the server-side search tool is added only when retrieval
-    // policy requires fresh public information.
-    assert_eq!(tools.len(), 1);
-    let custom = serde_json::to_value(&tools[0]).unwrap();
+    // The model chooses web_search from the normal tool set. This keeps the
+    // stream incremental instead of pre-routing a turn to the buffered
+    // server-tool continuation path.
+    assert_eq!(tools.len(), 2);
+    assert_eq!(
+        serde_json::to_value(&tools[0]).unwrap()["name"],
+        "web_search"
+    );
+    let custom = serde_json::to_value(&tools[1]).unwrap();
     assert_eq!(custom["name"], "get_weather");
     assert_eq!(custom["description"], "Get weather for a location");
     assert!(custom.get("input_schema").is_some());
-    assert!(!result.requires_public_web);
+    assert!(!serde_json::to_value(&result.messages)
+        .unwrap()
+        .to_string()
+        .contains("omi_retrieval_policy"));
 }
 
 #[test]
@@ -961,7 +968,10 @@ fn test_translate_request_web_search_disabled() {
 }
 
 #[test]
-fn test_translate_request_forces_required_web_search_without_client_tools() {
+fn test_translate_request_anaphoric_lookup_stays_tool_free_without_client_tools() {
+    // "look it up" must not force a buffered server-tool turn. Tool-less
+    // utility requests stay tool-free; agentic requests receive web_search
+    // through the normal model-selected path above.
     let req = test_request(vec![
         user_message("I'm working on humanpost.co now"),
         assistant_message("Is HumanPost separate from Vost or part of it?"),
@@ -975,16 +985,11 @@ fn test_translate_request_forces_required_web_search_without_client_tools() {
         ReasoningEffort::Unspecified,
     )
     .unwrap();
-    let tools = result.tools.unwrap();
-    assert_eq!(tools.len(), 1);
-    assert_eq!(
-        serde_json::to_value(&tools[0]).unwrap()["name"],
-        "web_search"
-    );
-    assert_eq!(result.tool_choice, Some(json!({"type": "auto"})));
-    let latest = result.messages.last().unwrap().content.to_string();
-    assert!(latest.contains("Public web search is required"));
-    assert!(latest.contains("look it up"));
+    assert!(result.tools.is_none());
+    assert!(!serde_json::to_value(&result.messages)
+        .unwrap()
+        .to_string()
+        .contains("omi_retrieval_policy"));
 }
 
 #[test]
@@ -993,7 +998,15 @@ fn test_injected_web_search_tool_uses_direct_compatible_version() {
     // the live provider route, so selecting web_search directly returned 400
     // before the model could answer. The gateway parser owns the basic direct
     // server-tool contract, so keep its definition on that compatible version.
-    let req = test_request(vec![user_message("search the web for HumanPost")]);
+    let mut req = test_request(vec![user_message("search the web for HumanPost")]);
+    req.tools = Some(vec![ToolDefinition {
+        tool_type: "function".to_string(),
+        function: FunctionDefinition {
+            name: "search_memories".to_string(),
+            description: Some("Search Omi memories".to_string()),
+            parameters: None,
+        },
+    }]);
 
     let result = translate_request_inner(
         &req,
@@ -1015,10 +1028,10 @@ fn test_injected_web_search_tool_uses_direct_compatible_version() {
 }
 
 #[test]
-fn test_translate_request_forces_web_search_for_location_qualified_weather() {
-    // This is the same gateway request shape used by both the main
-    // pi-mono session and default delegated pi-mono child sessions. The
-    // server-side tool avoids giving either process a credential directly.
+fn test_retrieval_policy_uses_model_selected_web_search_for_current_weather() {
+    // Regression: current-weather requests previously forced the gateway down
+    // a buffered server-tool continuation. The model still receives web_search,
+    // but this streaming turn must never be marked for that buffered path.
     let mut req = test_request(vec![user_message("What's the weather in NYC right now?")]);
     req.tools = Some(vec![ToolDefinition {
         tool_type: "function".to_string(),
@@ -1028,14 +1041,6 @@ fn test_translate_request_forces_web_search_for_location_qualified_weather() {
             parameters: None,
         },
     }]);
-    // A client may have requested one of its own functions, but a fresh
-    // public lookup must retain a provider-compatible automatic choice so
-    // the server-side web tool can run before any client tool.
-    req.tool_choice = Some(json!({
-        "type": "function",
-        "function": {"name": "search_memories"}
-    }));
-
     let result = translate_request_inner(
         &req,
         "claude-sonnet-4-6",
@@ -1052,15 +1057,94 @@ fn test_translate_request_forces_web_search_for_location_qualified_weather() {
         serde_json::to_value(&tools[1]).unwrap()["name"],
         "search_memories"
     );
-    assert_eq!(result.tool_choice, Some(json!({"type": "auto"})));
-    assert!(result.requires_public_web);
-    assert!(result
-        .messages
-        .last()
+    assert!(result.tool_choice.is_none());
+    assert!(!serde_json::to_value(&result.messages)
         .unwrap()
-        .content
         .to_string()
-        .contains("Public web search is required"));
+        .contains("omi_retrieval_policy"));
+}
+
+#[test]
+fn test_pause_turn_stream_accumulator_preserves_raw_content_for_continuation() {
+    let mut blocks = StreamedContentBlocks::default();
+    blocks.start_block(0, json!({"type": "text", "text": "Searching"}));
+    blocks.append_delta(0, &json!({"type": "text_delta", "text": "..."}));
+    blocks.stop_block(0);
+    blocks.start_block(
+        1,
+        json!({
+            "type": "server_tool_use",
+            "id": "srvtoolu_123",
+            "name": "web_search",
+            "input": {}
+        }),
+    );
+    blocks.append_delta(
+        1,
+        &json!({"type": "input_json_delta", "partial_json": "{\"query\":"}),
+    );
+    blocks.append_delta(
+        1,
+        &json!({"type": "input_json_delta", "partial_json": "\"NYC weather\"}"}),
+    );
+    blocks.stop_block(1);
+
+    assert_eq!(
+        blocks.into_value(),
+        json!([
+            {"type": "text", "text": "Searching..."},
+            {
+                "type": "server_tool_use",
+                "id": "srvtoolu_123",
+                "name": "web_search",
+                "input": {"query": "NYC weather"}
+            }
+        ])
+    );
+}
+
+/// Regression: a thinking block replayed on a `pause_turn` continuation must carry the
+/// signature Anthropic streamed for it. The accumulator handled `text_delta`,
+/// `thinking_delta` and `input_json_delta` but dropped `signature_delta`, so an adaptive
+/// (typed-chat) turn that paused mid web search was resent with an unsigned thinking block
+/// and rejected upstream — the user saw the partial answer end in an "Upstream provider
+/// error" instead of the searched answer.
+#[test]
+fn test_pause_turn_stream_accumulator_preserves_thinking_signature() {
+    let mut blocks = StreamedContentBlocks::default();
+    blocks.start_block(0, json!({"type": "thinking", "thinking": ""}));
+    blocks.append_delta(0, &json!({"type": "thinking_delta", "thinking": "Check "}));
+    blocks.append_delta(0, &json!({"type": "thinking_delta", "thinking": "the web"}));
+    blocks.append_delta(0, &json!({"type": "signature_delta", "signature": "ErrU"}));
+    blocks.append_delta(0, &json!({"type": "signature_delta", "signature": "hd8="}));
+    blocks.stop_block(0);
+    blocks.start_block(
+        1,
+        json!({
+            "type": "server_tool_use",
+            "id": "srvtoolu_123",
+            "name": "web_search",
+            "input": {}
+        }),
+    );
+    blocks.append_delta(
+        1,
+        &json!({"type": "input_json_delta", "partial_json": "{\"query\":\"NYC weather\"}"}),
+    );
+    blocks.stop_block(1);
+
+    assert_eq!(
+        blocks.into_value(),
+        json!([
+            {"type": "thinking", "thinking": "Check the web", "signature": "ErrUhd8="},
+            {
+                "type": "server_tool_use",
+                "id": "srvtoolu_123",
+                "name": "web_search",
+                "input": {"query": "NYC weather"}
+            }
+        ])
+    );
 }
 
 #[test]
@@ -1101,7 +1185,6 @@ fn test_pause_turn_continuation_preserves_raw_assistant_content_and_tools() {
         serde_json::to_value(&continuation.tools).unwrap(),
         original_tools
     );
-    assert!(continuation.requires_public_web);
 }
 
 #[test]
@@ -1151,38 +1234,179 @@ fn test_pause_turn_server_tool_response_decodes_and_preserves_raw_content() {
     );
 }
 
+/// Regression: a `pause_turn` continuation used to forward only its text, so a
+/// continuation that decided to call a client-side tool reached the client as
+/// `finish_reason: tool_calls` with no tool call to run — the requested action
+/// silently never happened. Web search is only injected when the client sends
+/// its own tools, so "search the web, then act on it" is the ordinary shape of
+/// a paused streaming turn.
 #[test]
-fn test_translate_request_required_web_search_fails_closed_when_disabled() {
-    let req = test_request(vec![user_message("Search the web for HumanPost")]);
-    let error = translate_request_inner(
+fn pause_turn_continuation_forwards_client_tool_calls() {
+    let resp: AnthropicResponse = serde_json::from_value(json!({
+        "id": "msg_cont",
+        "type": "message",
+        "model": "claude-sonnet-4-6",
+        "role": "assistant",
+        "content": [
+            {
+                "type": "server_tool_use",
+                "id": "srvtoolu_1",
+                "name": "web_search",
+                "input": {"query": "Hanoi weather"}
+            },
+            {
+                "type": "web_search_tool_result",
+                "tool_use_id": "srvtoolu_1",
+                "content": [{"type": "web_search_result", "title": "Weather"}]
+            },
+            {"type": "text", "text": "It is raining in Hanoi. Adding a reminder."},
+            {
+                "type": "tool_use",
+                "id": "toolu_1",
+                "name": "create_task",
+                "input": {"title": "Pack an umbrella"}
+            }
+        ],
+        "stop_reason": "tool_use",
+        "usage": {"input_tokens": 11, "output_tokens": 5}
+    }))
+    .expect("continuation response must decode");
+
+    let chunks = continuation_delta_chunks(&resp, "chatcmpl-msg_cont", 4200, "omi-sonnet", 0);
+
+    assert_eq!(chunks.len(), 2, "expected one text chunk and one tool call");
+    assert_eq!(
+        chunks[0]["choices"][0]["delta"]["content"],
+        "It is raining in Hanoi. Adding a reminder."
+    );
+
+    let tool_call = &chunks[1]["choices"][0]["delta"]["tool_calls"][0];
+    assert_eq!(tool_call["index"], 0);
+    assert_eq!(tool_call["id"], "toolu_1");
+    assert_eq!(tool_call["type"], "function");
+    assert_eq!(tool_call["function"]["name"], "create_task");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(
+            tool_call["function"]["arguments"].as_str().unwrap()
+        )
+        .unwrap(),
+        json!({"title": "Pack an umbrella"})
+    );
+    // Anthropic's own server-tool blocks stay gateway-side.
+    assert!(!chunks
+        .iter()
+        .any(|chunk| chunk.to_string().contains("web_search")));
+}
+
+/// Tool ordinals continue past any tool call already streamed before the pause,
+/// so a client accumulating by `index` never overwrites an earlier call.
+#[test]
+fn pause_turn_continuation_tool_ordinals_continue_from_the_streamed_prefix() {
+    let resp: AnthropicResponse = serde_json::from_value(json!({
+        "id": "msg_cont",
+        "type": "message",
+        "model": "claude-sonnet-4-6",
+        "role": "assistant",
+        "content": [
+            {"type": "tool_use", "id": "toolu_2", "name": "create_task", "input": {}},
+            {"type": "tool_use", "id": "toolu_3", "name": "send_email", "input": {}}
+        ],
+        "stop_reason": "tool_use",
+        "usage": {"input_tokens": 3, "output_tokens": 2}
+    }))
+    .expect("continuation response must decode");
+
+    let chunks = continuation_delta_chunks(&resp, "chatcmpl-msg_cont", 4200, "omi-sonnet", 1);
+
+    assert_eq!(chunks.len(), 2);
+    assert_eq!(
+        chunks[0]["choices"][0]["delta"]["tool_calls"][0]["index"],
+        1
+    );
+    assert_eq!(
+        chunks[1]["choices"][0]["delta"]["tool_calls"][0]["index"],
+        2
+    );
+}
+
+/// Regression: a paused turn used to report only its continuation's usage, so the
+/// leg that actually ran the web search — its output tokens and its billed
+/// `web_search_requests` — was never recorded. Every paused turn under-billed.
+#[test]
+fn paused_turn_usage_totals_the_streamed_leg_and_the_continuation() {
+    let initial: AnthropicUsage = serde_json::from_value(json!({
+        "input_tokens": 100,
+        "cache_read_input_tokens": 20
+    }))
+    .expect("message_start usage must decode");
+    let streamed_final: AnthropicUsage = serde_json::from_value(json!({
+        "output_tokens": 40,
+        "server_tool_use": {"web_search_requests": 1}
+    }))
+    .expect("message_delta usage must decode");
+    let continuation: AnthropicUsage = serde_json::from_value(json!({
+        "input_tokens": 130,
+        "output_tokens": 25,
+        "server_tool_use": {"web_search_requests": 1}
+    }))
+    .expect("continuation usage must decode");
+
+    let total = paused_turn_total_usage(Some(&initial), Some(&streamed_final), &continuation);
+
+    assert_eq!(total.input_tokens, 230);
+    assert_eq!(total.cache_read_input_tokens, 20);
+    assert_eq!(
+        total.output_tokens, 65,
+        "the paused leg's output is billable"
+    );
+    assert_eq!(
+        total
+            .server_tool_use
+            .as_ref()
+            .map(|tool_use| tool_use.web_search_requests),
+        Some(2),
+        "both legs' web searches are billed per request"
+    );
+}
+
+/// A `message_delta` may carry no usage at all. The turn then totals what
+/// `message_start` reported plus the continuation, never less than before.
+#[test]
+fn paused_turn_usage_falls_back_to_message_start_when_the_pause_reported_none() {
+    let initial: AnthropicUsage =
+        serde_json::from_value(json!({"input_tokens": 90})).expect("usage must decode");
+    let continuation: AnthropicUsage =
+        serde_json::from_value(json!({"input_tokens": 110, "output_tokens": 7}))
+            .expect("usage must decode");
+
+    let total = paused_turn_total_usage(Some(&initial), None, &continuation);
+
+    assert_eq!(total.input_tokens, 200);
+    assert_eq!(total.output_tokens, 7);
+    assert!(total.server_tool_use.is_none());
+}
+
+#[test]
+fn test_translate_request_degrades_when_web_search_disabled() {
+    let mut req = test_request(vec![user_message("Search the web for HumanPost")]);
+    req.tools = Some(vec![ToolDefinition {
+        tool_type: "function".to_string(),
+        function: FunctionDefinition {
+            name: "search_memories".to_string(),
+            description: Some("Search Omi memories".to_string()),
+            parameters: None,
+        },
+    }]);
+    assert!(should_record_web_search_fallback(&req, false));
+    let result = translate_request_inner(
         &req,
         "claude-sonnet-4-6",
         false,
         ReasoningEffort::Unspecified,
     )
-    .unwrap_err();
-    assert!(error.contains("required public web search is unavailable"));
-}
-
-#[test]
-fn test_translate_request_honors_explicit_web_search_prohibition() {
-    let req = test_request(vec![user_message(
-        "Do you know why the web search tool times out? Don't call it because it will time out again.",
-    )]);
-
-    let result = translate_request_inner(
-        &req,
-        "claude-sonnet-4-6",
-        true,
-        ReasoningEffort::Unspecified,
-    )
     .unwrap();
-    assert!(result.tools.is_none());
-    assert!(result.tool_choice.is_none());
-    let prompt = serde_json::to_value(&result.messages[0])
-        .unwrap()
-        .to_string();
-    assert!(!prompt.contains("omi_retrieval_policy"), "{prompt}");
+    assert_eq!(server_tool_available_from(&result.tools), "model_knowledge");
+    assert_eq!(result.tools.unwrap().len(), 1);
 }
 
 #[test]
@@ -1212,7 +1436,7 @@ fn test_translate_request_guessed_freshness_answers_without_web_search() {
 }
 
 #[test]
-fn test_translate_request_private_lookup_excludes_server_web_search() {
+fn test_translate_request_private_lookup_keeps_web_search_available_to_the_model() {
     let mut req = test_request(vec![user_message("Search my conversations for HumanPost")]);
     req.tools = Some(vec![ToolDefinition {
         tool_type: "function".to_string(),
@@ -1231,9 +1455,13 @@ fn test_translate_request_private_lookup_excludes_server_web_search() {
     )
     .unwrap();
     let tools = result.tools.unwrap();
-    assert_eq!(tools.len(), 1);
+    assert_eq!(tools.len(), 2);
     assert_eq!(
         serde_json::to_value(&tools[0]).unwrap()["name"],
+        "web_search"
+    );
+    assert_eq!(
+        serde_json::to_value(&tools[1]).unwrap()["name"],
         "search_conversations"
     );
     assert!(result.tool_choice.is_none());
@@ -1902,6 +2130,7 @@ async fn incremental_translation_preserves_split_utf8_tool_chunks_usage_and_done
             upstream_model: "claude-sonnet-4-6".to_string(),
             firestore: None,
         },
+        None,
     )
     .collect::<Vec<_>>()
     .await;
@@ -1958,6 +2187,7 @@ async fn incremental_translation_terminates_a_partial_stream_at_eof() {
             upstream_model: "claude-sonnet-4-6".to_string(),
             firestore: None,
         },
+        None,
     )
     .collect::<Vec<_>>()
     .await;
@@ -2102,6 +2332,7 @@ async fn thinking_deltas_stream_as_reasoning_content() {
             upstream_model: "claude-sonnet-4-6".to_string(),
             firestore: None,
         },
+        None,
     )
     .collect::<Vec<_>>()
     .await;

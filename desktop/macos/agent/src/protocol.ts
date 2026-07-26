@@ -641,7 +641,7 @@ export interface RuntimeFailurePayload {
 export interface ToolActivityMessage extends QueryScopedOutbound {
   type: "tool_activity";
   name: string;
-  status: "started" | "progress" | "completed" | "failed";
+  status: "started" | "progress" | "completed" | "failed" | "cancelled" | "interrupted";
   toolUseId?: string;
   input?: Record<string, unknown>;
 }

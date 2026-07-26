@@ -159,6 +159,22 @@ enum ChatTelemetryDimension {
     return base
   }
 
+  /// Closed outcome vocabulary for a terminal tool call. `ToolCallStatus`
+  /// collapses `cancelled`/`interrupted` into `.failed` for UI purposes, but
+  /// telemetry must keep them apart: a user Stop is not a tool defect, and
+  /// merging them would repeat the "stop counted as error" mistake that made
+  /// the legacy `chat_agent_error` corpus unreadable. Anything unrecognized
+  /// reports `unknown` rather than inflating successful completions.
+  static func toolOutcome(_ bridgeStatus: String) -> String {
+    switch bridgeStatus {
+    case "completed": return "completed"
+    case "failed": return "failed"
+    case "cancelled": return "cancelled"
+    case "interrupted": return "interrupted"
+    default: return "unknown"
+    }
+  }
+
   static func screenFailureCode(_ rawValue: String) -> String {
     let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     return allowedScreenFailureCodes.contains(normalized)

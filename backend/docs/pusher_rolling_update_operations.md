@@ -100,6 +100,22 @@ rebuilt (verified against `{dev,prod}_omi_pusher_values.yaml`):
   `activeConnectionsPerPod: 30`; dev `minReplicas: 1`, `maxReplicas: 3`.
 - `podDisruptionBudget.minAvailable: 80%` in both charts.
 
+### Dedicated development Pusher capacity
+
+Development Pusher alone tolerates `dedicated=pusher:NoSchedule`. Its existing
+required node affinity still requires matching `service=pusher` and `env=dev`
+labels, so that toleration does not admit LLM Gateway, Agent Proxy, or other
+workloads to the pool. Production deliberately retains no corresponding
+toleration; it is a separate configuration boundary.
+
+Before a dev Pusher rollout, an external approved GKE operation must provide
+**two Ready, schedulable Pusher-capable nodes** matching that affinity, each
+tainted `dedicated=pusher:NoSchedule`. Two matching nodes leave room for the
+single serving pod and its `maxSurge: 1` replacement during a rolling update.
+Helm only renders the workload toleration: it does not create, label, taint, or
+scale GKE node capacity. Dev HPA remains `minReplicas: 1`, `maxReplicas: 3`,
+and its rolling-update settings remain `maxSurge: 1`, `maxUnavailable: 0`.
+
 Fail-closed rollout gates (preflight scripts that must pass before a deploy) are
 listed in [Operator runbook](#operator-runbook) and the blocking signals in
 [Rollout quality gates (fail-closed)](#rollout-quality-gates-fail-closed).
@@ -158,17 +174,22 @@ Render dev and prod and eyeball the values that drive availability:
 ```bash
 helm template pusher backend/charts/pusher \
   -f backend/charts/pusher/dev_omi_pusher_values.yaml \
-  --set image.tag=<immutable-tag> > /tmp/pusher-dev.yaml
+  --set-string image.digest=sha256:<64-lowercase-hex> \
+  --set-string image.tag= \
+  --set-string image.pullPolicy=IfNotPresent > /tmp/pusher-dev.yaml
 
 helm template pusher backend/charts/pusher \
   -f backend/charts/pusher/prod_omi_pusher_values.yaml \
-  --set image.tag=<immutable-tag> > /tmp/pusher-prod.yaml
+  --set-string image.digest=sha256:<64-lowercase-hex> \
+  --set-string image.tag= \
+  --set-string image.pullPolicy=IfNotPresent > /tmp/pusher-prod.yaml
 ```
 
 Confirm in the rendered output: `readinessProbe.httpGet.path: /ready`,
 `livenessProbe`/`startupProbe` on `/health`, the BackendConfig `healthCheck` on
 `/health` plus `connectionDraining`, `preStop` calling `/__internal/drain`, and
-`progressDeadlineSeconds: 9600`.
+`progressDeadlineSeconds: 9600`. Confirm the dev Deployment has the
+`dedicated=pusher:NoSchedule` toleration and the prod Deployment does not.
 
 ### 2. Run the fail-closed preflight
 
@@ -201,7 +222,56 @@ rollout cannot be judged healthy against telemetry that does not exist. It does
 not scrape live values; use `... rollback --env <env>` for the rollback-mode
 contract check. Do not weaken the chart to make a check pass; fix the input.
 
-### 3. Shared ConfigMap/Secret migration guard (required on key changes)
+### 3. Live production gate and development-qualified digest promotion
+
+The automatic development Pusher workflow builds once, resolves the pushed
+`sha256` digest, runs the ConfigMap reference and live capacity gates, waits for
+the rollout, and only then uploads `pusher-dev-qualification`. Production remains
+manual: it requires that digest plus the successful development run ID. The
+production workflow downloads the attestation, verifies its exact GitHub run and
+main source SHA, rejects Pusher source/chart drift since that bake, copies the
+same digest into the production registry, and deploys `repository@sha256:...`.
+It never rebuilds a production Pusher image.
+
+Immediately before Helm, `verify_pusher_live_deployment_gate.py` renders that
+exact digest and reads only Kubernetes metadata. It fails closed unless the next
+`maxSurge` wave fits on a Ready, schedulable node matching Pusher's affinity and
+tolerations. This is capacity evidence, not a claim that the rollout has product
+traffic or user-success proof.
+
+The dev Pusher dashboard is backed by the isolated dev Prometheus scrape. It
+shows existing connection, readiness/drain, reconnect/recovery and
+backend-listen circuit-breaker aggregates, plus target health, without creating
+traffic. Pod health alone is not product-success evidence.
+
+#### Read-only development evidence boundary
+
+The development Prometheus jobs discover only `dev-omi-backend` pods carrying
+the `env=dev` workload label. They retain the existing bearer-token file
+reference; do not fetch `/metrics` directly, inspect the token, copy headers, or
+weaken authentication. The dashboard contains only low-cardinality aggregates
+and target labels (`job`, `namespace`, and `pod`), never connection IDs, user
+data, or request payloads.
+
+For a passive development-bake check in the permitted read-only operator plane,
+use the Pusher dashboard or these equivalent PromQL expressions:
+
+- active Pusher WebSockets: `sum(pusher_active_ws_connections{job="pusher-metrics"})`
+- sessions currently reconnecting or degraded:
+  `sum(pusher_sessions_degraded{job="backend-listen-metrics"})`
+- reconnect circuit state and rejected attempts:
+  `pusher_circuit_breaker_state{job="backend-listen-metrics"}` and
+  `sum(rate(pusher_circuit_breaker_rejections_total{job="backend-listen-metrics"}[5m]))`
+- authenticated scrape target health:
+  `up{job=~"pusher-metrics|backend-listen-metrics"}`
+
+`up == 1` proves only that Prometheus authenticated and scraped a target; it is
+not connection, drain, or recovery proof. A recovery aggregate can move only
+when a real client reconnects. If no real connection exists during the passive
+window, record reconnect/recovery as **unproven**—do not generate synthetic
+traffic to turn the signal non-zero.
+
+### 4. Shared ConfigMap/Secret migration guard (required on key changes)
 
 The 2026-07-22 production Pusher outage was a *non-atomic cross-resource
 migration*: the shared key `REDIS_DB_HOST` stopped materializing in its source
@@ -231,7 +301,9 @@ ConfigMap/Secret source or key the proposed state removes or reclassifies.
   # Render the proposed state (--rendered is repeatable across envs/workloads):
   helm template pusher backend/charts/pusher \
       -f backend/charts/pusher/prod_omi_pusher_values.yaml \
-      --set image.tag=<immutable-tag> > /tmp/pusher-prod.yaml
+      --set-string image.digest=sha256:<64-lowercase-hex> \
+      --set-string image.tag= \
+      --set-string image.pullPolicy=IfNotPresent > /tmp/pusher-prod.yaml
 
   # Capture the CURRENT live key names in the guard's inventory format
   # ({configmaps: {<obj>: [key,...]}, secrets: {...}} — names only, never values):
@@ -369,22 +441,16 @@ finalization drain) end to end before any prod consideration.
 
 How to qualify on dev (pusher dev: 1-3 pods, `maxUnavailable: 0 / maxSurge: 1`):
 
-1. **Render and preflight** exactly as in the
-   [Operator runbook](#operator-runbook), against the dev values and the dev
-   immutable tag.
-2. **Exercise the choreography under synthetic load.** Use privacy-safe
-   synthetic pusher capability checks that reuse the existing LLM-gateway smoke
-   precedent (the family that validates a ready Kubernetes workload, its
-   ingress/ILB attachment, and a Cloud Run VPC smoke route via
-   `backend/scripts/verify-llm-gateway-serving.py` and
-   `probe-llm-gateway-from-cloud-run.sh`). The pusher equivalents must open a
-   WebSocket session, confirm `/ready` flips to 503 on drain, confirm new
-   connections go to a healthy pod, and confirm background finalization
-   completes inside the grace window — without using real user data.
-3. **Hold the minimum capability/session counts and bounded error/latency
-   thresholds** from [Rollout quality gates (fail-closed)](#rollout-quality-gates-fail-closed).
-   Dev must serve the minimum session/capability counts, not just run for an
-   elapsed time.
+1. **Build once and render the digest** exactly as in the
+   [Operator runbook](#operator-runbook). The automatic workflow records its
+   digest only after the development rollout succeeds.
+2. **Observe the passive bake.** Use the dev Pusher dashboard's connection,
+   readiness/drain, and reconnect-circuit panels. Do not manufacture traffic or
+   infer product success only from readiness.
+3. **Use the resulting attestation for a manual production request.** Supply
+   the exact digest and development qualification run ID; the production workflow
+   validates the evidence, live ConfigMap references, exact digest render, and
+   real next-wave capacity before Helm mutation.
 4. **Record the evidence** (commands, output, gate result) in the PR, per the
    root `AGENTS.md` Definition of Done.
 
@@ -397,28 +463,11 @@ proof gated on SCA-40 and a healthy pusher prod baseline.
 
 ---
 
-## Relationship to SCA-40
+## Follow-up deployment controls
 
-This hardening is deliberately scoped to **native `RollingUpdate` availability**
-and does not duplicate SCA-40's work. SCA-40 owns and is still building:
-
-- **Digest chart support** (`image.digest` / `@sha256`) so a rollout pins an
-  immutable image by content digest, not just a mutable tag.
-- **Chart-only / reuse-image deploy mode** so a chart change can be applied
-  without rebuilding or re-pushing the image.
-- The immediate **`REDIS_DB_HOST` recovery preflight.**
-- **Rollback evidence** recording.
-
-Consequences for this document:
-
-- This PR does **not** add an `image.digest` chart field, a digest-promotion
-  pipeline, a chart-only deploy mode, or a rollback-evidence recorder.
-- Build-once **digest promotion** (deploying the same built image across stages by
-  digest) is deferred to stack on SCA-40; it is out of scope here.
-- The rollback described in the [Operator runbook](#operator-runbook) is
-  re-pointing the chart at the prior immutable **tag**, which is safe by the
-  N/N-1 contract. Digest-pinned rollback and recorded rollback evidence arrive
-  with SCA-40.
-
-In short: this hardening makes the native rolling update honest and bounded;
-SCA-40 makes image identity and rollback evidence durable.
+SCA-115 completes the bounded follow-up to the native RollingUpdate hardening:
+digest identity is selected from a completed dev rollout, promotion preserves
+that exact manifest digest, and the production workflow gates the live cluster's
+next surge capacity before changing the Pusher release. The existing rollback
+contract remains a separate operator action; this workflow does not auto-roll
+back traffic or data.

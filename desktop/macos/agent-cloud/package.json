@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node agent.mjs --serve",
+    "test": "node sync-e2e.mjs",
     "cli": "node agent.mjs",
     "test": "vitest run",
     "deploy": "bash scripts/deploy.sh",

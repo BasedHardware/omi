@@ -7,7 +7,13 @@ from google.cloud import firestore
 from database.document_ids import document_id_from_seed
 from database.google_credentials import prepare_google_credentials
 
-__all__ = ["db", "document_id_from_seed", "get_firestore_client", "get_users_uid"]
+__all__ = [
+    "db",
+    "delete_collection_recursive",
+    "document_id_from_seed",
+    "get_firestore_client",
+    "get_users_uid",
+]
 
 _firestore_client = None
 _firestore_client_lock = Lock()
@@ -49,6 +55,32 @@ class _LazyFirestoreClient:
 
 
 db = _LazyFirestoreClient()
+
+
+def delete_collection_recursive(collection_ref: Any, *, client: Any, batch_size: int = 450) -> None:
+    """Delete every document under a collection, descending into nested subcollections first.
+
+    Firestore does not cascade: deleting a document leaves its subcollections in
+    place as data no query can reach (the parent no longer exists, so it is not
+    returned by a collection query either). Any caller that deletes a parent
+    document must purge its children through this helper.
+    """
+    while True:
+        docs = list(collection_ref.limit(batch_size).stream())
+        if not docs:
+            return
+
+        for doc in docs:
+            for sub in doc.reference.collections():
+                delete_collection_recursive(sub, client=client, batch_size=batch_size)
+
+        batch = client.batch()
+        for doc in docs:
+            batch.delete(doc.reference)
+        batch.commit()
+
+        if len(docs) < batch_size:
+            return
 
 
 def get_users_uid() -> list[str]:

@@ -43,6 +43,7 @@ def _install_stub(name, mod):
 # not use the db singleton at all (it receives doc_ref as an argument).
 _fake_client_mod = types.ModuleType('database._client')
 setattr(_fake_client_mod, 'db', MagicMock())
+setattr(_fake_client_mod, 'delete_collection_recursive', MagicMock())
 setattr(_fake_client_mod, 'document_id_from_seed', MagicMock())
 _install_stub('database._client', _fake_client_mod)
 

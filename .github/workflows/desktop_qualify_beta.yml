@@ -23,25 +23,89 @@ jobs:
     outputs:
       qualified: ${{ steps.publish.outputs.qualified }}
     steps:
-      - uses: actions/checkout@v7
-        with:
+      - name: Create run-isolated qualification staging
+        working-directory: ${{ runner.temp }}
+        env:
+          QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          expected="$RUNNER_TEMP/desktop-beta-qualification/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          test "$QUALIFICATION_STAGE" = "$expected"
+          test ! -e "$QUALIFICATION_STAGE" || { echo "Refusing reused qualification staging directory" >&2; exit 1; }
+          (umask 077; mkdir -p "$QUALIFICATION_STAGE/assets")
+          test ! -L "$QUALIFICATION_STAGE"
+          test "$(python3 -c 'import os, stat, sys; print(oct(stat.S_IMODE(os.stat(sys.argv[1]).st_mode))[2:])' "$QUALIFICATION_STAGE")" = 700
+          # This must run before the candidate checkout: a terminal runner loss can
+          # prevent later `always()` steps from producing cleanup evidence.
+          # Detect constrained capacity early enough to preserve a per-run report.
+          # Keep the guard here instead of a checked-in helper because this workflow
+          # deliberately has no repository checkout before its candidate binding.
+          python3 - "$RUNNER_TEMP" "$QUALIFICATION_STAGE/runner-capacity.json" <<'PY'
+          import json
+          import os
+          import sys
+
+          path, report_path = sys.argv[1:]
+          minimum_free_kib = int(os.environ.get("OMI_QUALIFICATION_MINIMUM_FREE_KIB", "33554432"))
+          minimum_free_inodes = int(os.environ.get("OMI_QUALIFICATION_MINIMUM_FREE_INODES", "65536"))
+          if minimum_free_kib < 1 or minimum_free_inodes < 1:
+              raise SystemExit("Qualification capacity minimums must be positive")
+
+          filesystem = os.statvfs(path)
+          available_kib = (filesystem.f_bavail * filesystem.f_frsize) // 1024
+          available_inodes = filesystem.f_favail
+          failures = []
+          if available_kib < minimum_free_kib:
+              failures.append("insufficient-free-kib")
+          if available_inodes < minimum_free_inodes:
+              failures.append("insufficient-free-inodes")
+          report = {
+              "available_inodes": available_inodes,
+              "available_kib": available_kib,
+              "failure_reasons": failures,
+              "guard": "runner-capacity-preflight",
+              "minimum_free_inodes": minimum_free_inodes,
+              "minimum_free_kib": minimum_free_kib,
+              "schema_version": 1,
+              "status": "failed" if failures else "passed",
+          }
+          with open(report_path, "w", encoding="utf-8") as handle:
+              json.dump(report, handle, sort_keys=True)
+              handle.write("\n")
+
+          if failures:
+              print(
+                  "::error::M1 qualification runner capacity guard refused to start "
+                  f"(available_kib={available_kib}, required_kib={minimum_free_kib}, "
+                  f"available_inodes={available_inodes}, required_inodes={minimum_free_inodes})"
+              )
+              raise SystemExit(1)
+          PY
+      - name: Checkout candidate into this run only
+        working-directory: ${{ runner.temp }}
+        env:
+          QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
           ref: ${{ inputs.release_tag }}
-          fetch-depth: 0
+        run: |
+          set -euo pipefail
+          source_dir="$QUALIFICATION_STAGE/source"
+          test -d "$QUALIFICATION_STAGE"
+          test ! -e "$source_dir"
+          test -n "$ref"
+          test "$ref" = "$RELEASE_TAG"
+          git init --quiet "$source_dir"
+          git -C "$source_dir" remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          GIT_TERMINAL_PROMPT=0 git -C "$source_dir" fetch --force --prune --tags origin
+          git -C "$source_dir" checkout --quiet --detach "refs/tags/$RELEASE_TAG"
       - id: app-token
         uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
-      - name: Create run-isolated qualification staging
-        id: stage
-        run: |
-          set -euo pipefail
-          stage_dir="$RUNNER_TEMP/desktop-beta-qualification/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          test ! -e "$stage_dir" || { echo "Refusing reused staging directory" >&2; exit 1; }
-          mkdir -p "$stage_dir/assets"
-          echo "stage_dir=$stage_dir" >> "$GITHUB_OUTPUT"
       - name: Bind tag and checkout to the same immutable commit
         id: candidate
+        working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
@@ -51,9 +115,10 @@ jobs:
           test "$TARGET_SHA" = "$(git rev-parse 'HEAD^{commit}')"
           echo "target_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
       - name: Fetch candidate release inputs into this run only
+        working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          QUALIFICATION_STAGE: ${{ steps.stage.outputs.stage_dir }}
+          QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           REPO: ${{ github.repository }}
         run: |
@@ -68,8 +133,9 @@ jobs:
             gh release download "$RELEASE_TAG" --repo "$REPO" --pattern Omi.Beta.zip --pattern omi-beta.dmg --dir "$QUALIFICATION_STAGE/assets"
           fi
       - name: Validate candidate evidence
+        working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source
         env:
-          QUALIFICATION_STAGE: ${{ steps.stage.outputs.stage_dir }}
+          QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           TARGET_SHA: ${{ steps.candidate.outputs.target_sha }}
         run: |
@@ -78,18 +144,20 @@ jobs:
           python3 .github/scripts/check-desktop-auto-beta-candidate.py --release-json "$QUALIFICATION_STAGE/release.json" --smoke-result "$QUALIFICATION_STAGE/desktop-smoke-result.json" --beta-smoke-result "$QUALIFICATION_STAGE/desktop-smoke-result-beta.json" --release-tag "$RELEASE_TAG" --latest-tag "$LATEST_TAG" --tag-sha "$TARGET_SHA" --checkout-sha "$TARGET_SHA" --output "$QUALIFICATION_STAGE/candidate-gate.json"
       - name: Qualify exact candidate on the M1 Studio hermetic stack
         id: qualify
+        working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
-          QUALIFICATION_STAGE: ${{ steps.stage.outputs.stage_dir }}
-          OMI_QUALIFICATION_CLEANUP_CONTEXT: ${{ steps.stage.outputs.stage_dir }}/lease-context.json
+          QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
+          OMI_QUALIFICATION_CLEANUP_CONTEXT: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/lease-context.json
         run: |
           set -euo pipefail
           desktop/macos/scripts/qualify-desktop-beta.sh --automatic --github-actions-artifact --signed-smoke-result "$QUALIFICATION_STAGE/desktop-smoke-result.json" --candidate-gate-result "$QUALIFICATION_STAGE/candidate-gate.json" "$RELEASE_TAG"
       - name: Create immutable qualification evidence
         id: evidence
+        working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source
         env:
-          QUALIFICATION_STAGE: ${{ steps.stage.outputs.stage_dir }}
+          QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           TARGET_SHA: ${{ steps.candidate.outputs.target_sha }}
         run: |
@@ -102,14 +170,15 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: desktop-qualification-evidence-${{ inputs.release_tag }}-m1-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ steps.stage.outputs.stage_dir }}/qualification-evidence.json
+          path: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/qualification-evidence.json
           if-no-files-found: error
           overwrite: false
       - name: Attach immutable qualification evidence
         id: publish
+        working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          QUALIFICATION_STAGE: ${{ steps.stage.outputs.stage_dir }}
+          QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           REPO: ${{ github.repository }}
           TARGET_SHA: ${{ steps.candidate.outputs.target_sha }}
@@ -123,17 +192,23 @@ jobs:
           echo "qualified=true" >> "$GITHUB_OUTPUT"
       - name: Finalize only this authenticated qualification lease
         if: always()
+        working-directory: ${{ runner.temp }}
         env:
-          QUALIFICATION_STAGE: ${{ steps.stage.outputs.stage_dir }}
+          QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
+          expected="$RUNNER_TEMP/desktop-beta-qualification/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          test -n "$QUALIFICATION_STAGE"
+          test "$QUALIFICATION_STAGE" = "$expected"
+          test -d "$QUALIFICATION_STAGE"
+          test ! -L "$QUALIFICATION_STAGE"
           context="$QUALIFICATION_STAGE/lease-context.json"
           cleanup="$QUALIFICATION_STAGE/cleanup-evidence.json"
           if [ -f "$context" ]; then
             worktree=$(jq -r .worktree "$context"); lease_id=$(jq -r .lease_id "$context"); token=$(jq -r .token "$context")
             retained=$(jq -r .retained_runs "$context"); age=$(jq -r .retention_age_seconds "$context")
             echo "::add-mask::$token"
-            (cd "$worktree" && OMI_HARNESS_OWNERSHIP_TOKEN="$token" PYTHONPATH=scripts/dev-harness python3 -m dev_harness.cli qualification-lease release --lease-id "$lease_id" --token "$token" --retained-runs "$retained" --retention-age-seconds "$age")
+            OMI_HARNESS_OWNERSHIP_TOKEN="$token" "$worktree/desktop/macos/scripts/qualification-lease-command.sh" release "$worktree" "$lease_id" "$token" "$retained" "$age"
             jq -n --arg lease_id "$lease_id" '{lease_id: $lease_id, cleanup_status: "released"}' > "$cleanup"
           else
             printf '%s\n' '{"cleanup_status":"no-lease-acquired"}' > "$cleanup"
@@ -142,7 +217,9 @@ jobs:
         if: always()
         with:
           name: desktop-qualification-cleanup-${{ inputs.release_tag }}-m1-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ steps.stage.outputs.stage_dir }}/cleanup-evidence.json
+          path: |
+            ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/runner-capacity.json
+            ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/cleanup-evidence.json
           if-no-files-found: error
           overwrite: false
 

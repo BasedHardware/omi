@@ -5,7 +5,7 @@ from typing import Literal, Optional, TypedDict
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
-from ._client import db, document_id_from_seed
+from ._client import db, delete_collection_recursive, document_id_from_seed
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from database.redis_db import try_acquire_client_device_write_lock, try_acquire_user_platform_write_lock
@@ -1150,26 +1150,6 @@ def update_person_speech_samples_version(uid: str, person_id: str, version: int)
     return True
 
 
-def _delete_collection_recursive(collection_ref, batch_size: int = 450):
-    """Delete every document under a collection, descending into nested subcollections first."""
-    while True:
-        docs = list(collection_ref.limit(batch_size).stream())
-        if not docs:
-            return
-
-        for doc in docs:
-            for sub in doc.reference.collections():
-                _delete_collection_recursive(sub, batch_size)
-
-        batch = db.batch()
-        for doc in docs:
-            batch.delete(doc.reference)
-        batch.commit()
-
-        if len(docs) < batch_size:
-            return
-
-
 def delete_user_data(uid: str):
     user_ref = db.collection('users').document(uid)
     root_exists = user_ref.get().exists
@@ -1184,7 +1164,7 @@ def delete_user_data(uid: str):
     # messages, and any future additions).
     for sub in user_ref.collections():
         logger.info(f"Deleting subcollection {sub.id} for user {uid}")
-        _delete_collection_recursive(sub)
+        delete_collection_recursive(sub, client=db)
 
     if root_exists:
         logger.info(f"Deleting user document: {uid}")

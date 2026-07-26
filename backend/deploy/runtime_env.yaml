@@ -118,7 +118,7 @@ environments:
             value: 'off'
             category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-            value: 'true'
+            value: 'false'
             category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
             value: 'false'
@@ -351,7 +351,7 @@ environments:
               provisional: true
               category: service_auth
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
               value: 'false'
@@ -470,7 +470,7 @@ environments:
               value: 'off'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
               value: 'false'
@@ -574,7 +574,7 @@ environments:
               value: 'off'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
               value: 'false'
@@ -879,7 +879,7 @@ environments:
               name: prod-omi-backend-secrets
               key: SERVICE_ACCOUNT_JSON
           OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: 'off'
+            value: gateway
             category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
@@ -888,7 +888,7 @@ environments:
             value: 'true'
             category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-            value: 'true'
+            value: 'false'
             category: rollout
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret:
@@ -1042,7 +1042,7 @@ environments:
               value: 'true'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com
@@ -1196,7 +1196,7 @@ environments:
               value: 'true'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com
@@ -1297,7 +1297,7 @@ environments:
               value: 'true'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com

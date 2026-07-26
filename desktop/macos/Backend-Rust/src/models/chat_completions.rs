@@ -204,11 +204,6 @@ pub struct AnthropicRequest {
     pub tools: Option<Vec<AnthropicToolDef>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<serde_json::Value>,
-    /// Gateway-owned execution metadata. A public-web turn may use Anthropic's
-    /// long-running server tool and therefore needs internal pause-turn
-    /// continuation before an OpenAI-compatible response is emitted.
-    #[serde(skip)]
-    pub requires_public_web: bool,
 }
 
 /// A tool definition in an Anthropic request: either a client-executed custom

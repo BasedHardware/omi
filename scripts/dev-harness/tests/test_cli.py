@@ -14,6 +14,14 @@ from dev_harness import config, safety
 from dev_harness import cli
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+DEV_HARNESS_ROOT = REPO_ROOT / "scripts" / "dev-harness"
+
+
+def _prepend_dev_harness_pythonpath(env: dict[str, str]) -> None:
+    entries = [str(DEV_HARNESS_ROOT)]
+    if existing := env.get("PYTHONPATH"):
+        entries.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(entries)
 
 
 def test_offline_check_skips_provider_credentials(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -62,7 +70,7 @@ def test_reset_command_is_idempotent_with_temp_state(tmp_path: Path) -> None:
     env = os.environ.copy()
     env["PROVIDER_MODE"] = "offline"
     env["OMI_LOCAL_STATE_ROOT"] = str(tmp_path / "state")
-    env["PYTHONPATH"] = f"{REPO_ROOT / 'scripts' / 'dev-harness'}:{env.get('PYTHONPATH', '')}"
+    _prepend_dev_harness_pythonpath(env)
 
     for _ in range(2):
         result = subprocess.run(
@@ -86,7 +94,7 @@ def test_status_reports_seeded_scenario_and_summary_path(tmp_path: Path) -> None
     env = os.environ.copy()
     env["PROVIDER_MODE"] = "offline"
     env["OMI_LOCAL_STATE_ROOT"] = str(tmp_path / "state")
-    env["PYTHONPATH"] = f"{REPO_ROOT / 'scripts' / 'dev-harness'}:{env.get('PYTHONPATH', '')}"
+    _prepend_dev_harness_pythonpath(env)
 
     seed = subprocess.run(
         [sys.executable, "scripts/dev-harness/seed-memory-scenario.py", "happy_path", "--dry-run"],
@@ -119,7 +127,7 @@ def test_session_summary_is_local_emulator_non_activation(tmp_path: Path) -> Non
     env = os.environ.copy()
     env["PROVIDER_MODE"] = "offline"
     env["OMI_LOCAL_STATE_ROOT"] = str(tmp_path / "state")
-    env["PYTHONPATH"] = f"{REPO_ROOT / 'scripts' / 'dev-harness'}:{env.get('PYTHONPATH', '')}"
+    _prepend_dev_harness_pythonpath(env)
 
     seed = subprocess.run(
         [sys.executable, "scripts/dev-harness/seed-memory-scenario.py", "happy_path", "--dry-run"],
