@@ -1,0 +1,28 @@
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_7918275f8e3531::t_d1594d4387b4d1 1170-1173,1175
+  s_7918275f8e3531::t_b0919999d8ee52 1185-1186
+desktop/macos/Desktop/Sources/FloatingControlBar/NotchSystemControlsView.swift
+  s_7918275f8e3531::t_5af6d5d42c3214 2
+  s_7918275f8e3531::t_58b03fe59e21fa 50
+  s_7918275f8e3531::t_760becf1365173 1,3-49,51-117
+desktop/macos/Desktop/Sources/FloatingControlBar/SystemCaptureControls.swift
+  s_7918275f8e3531::t_1ef98ed24130cb 1-96
+desktop/macos/Desktop/Tests/SystemCaptureControlsTests.swift
+  s_7918275f8e3531::t_0a0c8f30346413 1-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "98635dbb1b195a46d1ced30458c807c56baa4dfb",
+  "prompts": {},
+  "sessions": {
+    "s_7918275f8e3531": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "739fdbb2-b061-4a85-8520-85d2527f5698",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
