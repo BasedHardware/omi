@@ -45,7 +45,13 @@ def format_keyvalue_lines(metadata: dict[str, str]) -> list[str]:
     return [f"{key}: {metadata[key]}" for key in metadata]
 
 
+def validate_macos_release_tag(tag: str) -> None:
+    if not MACOS_RELEASE_TAG_RE.fullmatch(tag):
+        raise SystemExit(f"not a macOS release tag: {tag}")
+
+
 def preflight_release(release_json_path: Path, tag: str) -> None:
+    validate_macos_release_tag(tag)
     release = json.loads(release_json_path.read_text(encoding="utf-8"))
     if not isinstance(release, dict):
         raise SystemExit("release JSON must be an object")
@@ -88,8 +94,6 @@ def preflight_release(release_json_path: Path, tag: str) -> None:
         raise SystemExit(f"candidate isLive must be false, got {metadata.get('isLive')!r}")
     if metadata.get("channel") == "beta" and is_live not in {"true", "1", "yes"}:
         raise SystemExit(f"beta isLive must be true, got {metadata.get('isLive')!r}")
-    if not MACOS_RELEASE_TAG_RE.match(tag):
-        raise SystemExit(f"not a macOS release tag: {tag}")
 
 
 def check_manifest(manifest_path: Path) -> None:
@@ -360,6 +364,8 @@ def main(argv: list[str] | None = None) -> int:
     preflight = sub.add_parser("preflight-release", help="Validate a macOS beta release from gh JSON")
     preflight.add_argument("release_json")
     preflight.add_argument("tag")
+    validate_tag = sub.add_parser("validate-tag", help="Validate canonical macOS release-tag syntax")
+    validate_tag.add_argument("tag")
 
     check = sub.add_parser("check-manifest", help="Exit 0 when harness manifest passed")
     check.add_argument("manifest")
@@ -382,6 +388,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "preflight-release":
         preflight_release(Path(args.release_json), args.tag)
         print("release preflight OK")
+        return 0
+    if args.command == "validate-tag":
+        validate_macos_release_tag(args.tag)
+        print("release tag OK")
         return 0
     if args.command == "check-manifest":
         check_manifest(Path(args.manifest))

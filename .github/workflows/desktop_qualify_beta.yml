@@ -16,7 +16,68 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  local-proof-m1:
+    runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m1-studio]
+    permissions:
+      contents: read
+    steps:
+      - name: Create isolated local-proof staging
+        working-directory: ${{ runner.temp }}
+        env:
+          PROOF_STAGE: ${{ runner.temp }}/desktop-beta-local-proof/${{ github.run_id }}-${{ github.run_attempt }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          expected="$RUNNER_TEMP/desktop-beta-local-proof/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          test "$PROOF_STAGE" = "$expected"
+          test ! -e "$PROOF_STAGE" || { echo "Refusing reused local-proof staging directory" >&2; exit 1; }
+          (umask 077; mkdir -p "$PROOF_STAGE/source")
+          git -C "$PROOF_STAGE/source" init --quiet
+          git -C "$PROOF_STAGE/source" remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          GIT_TERMINAL_PROMPT=0 git -C "$PROOF_STAGE/source" fetch --force --prune --tags origin
+          git -C "$PROOF_STAGE/source" checkout --quiet --detach "refs/tags/$RELEASE_TAG"
+      - name: Install local qualification proof prerequisites
+        working-directory: ${{ runner.temp }}/desktop-beta-local-proof/${{ github.run_id }}-${{ github.run_attempt }}/source
+        run: make setup-backend
+      - name: Prove offline qualification lifecycle before canonical dispatch
+        working-directory: ${{ runner.temp }}/desktop-beta-local-proof/${{ github.run_id }}-${{ github.run_attempt }}/source
+        env:
+          PROOF_STAGE: ${{ runner.temp }}/desktop-beta-local-proof/${{ github.run_id }}-${{ github.run_attempt }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          desktop/macos/scripts/qualification-local-proof.sh \
+            --offline \
+            --fast \
+            --result "$PROOF_STAGE/local-qualification-proof.json" \
+            "$RELEASE_TAG"
+      - name: Retain redacted local qualification proof
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: desktop-local-qualification-proof-${{ inputs.release_tag }}-m1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/desktop-beta-local-proof/${{ github.run_id }}-${{ github.run_attempt }}/local-qualification-proof.json
+            ${{ runner.temp }}/desktop-beta-local-proof/${{ github.run_id }}-${{ github.run_attempt }}/local-qualification-proof-fault-listener.json
+          if-no-files-found: error
+          overwrite: false
+      - name: Remove isolated local-proof staging
+        if: always()
+        working-directory: ${{ runner.temp }}
+        env:
+          PROOF_STAGE: ${{ runner.temp }}/desktop-beta-local-proof/${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          expected="$RUNNER_TEMP/desktop-beta-local-proof/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          test "$PROOF_STAGE" = "$expected"
+          if [ -e "$PROOF_STAGE" ]; then
+            test -d "$PROOF_STAGE"
+            test ! -L "$PROOF_STAGE"
+            rm -rf "$PROOF_STAGE"
+          fi
+
   qualify-m1-studio:
+    needs: local-proof-m1
     runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m1-studio]
     permissions:
       contents: write
