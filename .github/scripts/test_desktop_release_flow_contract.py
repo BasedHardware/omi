@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import subprocess
@@ -18,6 +19,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.workflow = (ROOT / ".github/workflows/desktop_qualify_beta.yml").read_text(encoding="utf-8")
         self.codemagic = (ROOT / "codemagic.yaml").read_text(encoding="utf-8")
+        self.release_guard = (ROOT / ".github/scripts/check-release-process-guards.py").read_text(encoding="utf-8")
 
     def _workflow_script(self, step_name: str) -> str:
         marker = f"      - name: {step_name}\n"
@@ -100,6 +102,19 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             "cancel-in-progress: false",
         ):
             self.assertIn(fragment, self.workflow)
+
+    def test_release_process_guard_accepts_the_run_isolated_tag_checkout(self) -> None:
+        tree = ast.parse(self.release_guard)
+        guard = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "check_desktop_qualification_runner"
+        )
+        fragments = {
+            node.value for node in ast.walk(guard) if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        }
+        self.assertIn('checkout --quiet --detach "refs/tags/$RELEASE_TAG"', fragments)
+        self.assertNotIn("ref: ${{ inputs.release_tag }}", fragments)
 
     def test_run_staging_evidence_and_cleanup_are_isolated_and_rerun_safe(self) -> None:
         for fragment in (
