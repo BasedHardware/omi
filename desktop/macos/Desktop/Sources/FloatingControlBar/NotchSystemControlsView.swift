@@ -12,6 +12,7 @@ struct NotchSystemControlsView: View {
   let progress: CGFloat
 
   @ObservedObject private var focusStorage = FocusStorage.shared
+  @ObservedObject private var shortcuts = ShortcutSettings.shared
   /// Toggle state lives in UserDefaults and plugin state rather than in an observable, so
   /// it is sampled when the surface opens and after each toggle instead of being bound.
   @State private var screenCaptureOn = false
@@ -28,6 +29,8 @@ struct NotchSystemControlsView: View {
       if let currentAppName {
         currentAppRow(currentAppName)
       }
+
+      shortcutLegend
 
       HStack(spacing: OmiSpacing.xs) {
         controlButton(
@@ -69,6 +72,51 @@ struct NotchSystemControlsView: View {
     }
     .accessibilityElement(children: .combine)
     .accessibilityLabel(screenCaptureOn ? "Omi is watching \(name)" : "Omi is not watching \(name)")
+  }
+
+  // MARK: - Shortcut legend
+
+  /// What you can say/press and the keys that do it. Read-only by design: this is a
+  /// legend, not a second route into chat or settings — the duplicate entry points that
+  /// used to live here were removed for exactly that reason (FC-split-mutation-authority).
+  private var shortcutLegend: some View {
+    VStack(alignment: .trailing, spacing: 3) {
+      if shortcuts.pttEnabled {
+        shortcutRow("Talk", keys: shortcuts.pttShortcut.displayTokens)
+      }
+      if shortcuts.askOmiEnabled {
+        shortcutRow("Ask", keys: shortcuts.askOmiShortcut.displayTokens)
+      }
+      shortcutRow("Summon", keys: ["⌃", "⌘", "O"])
+    }
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel("Keyboard shortcuts")
+  }
+
+  private func shortcutRow(_ title: String, keys: [String]) -> some View {
+    HStack(spacing: 3) {
+      Text(title)
+        .scaledFont(size: 8, weight: .semibold)
+        .foregroundStyle(.white.opacity(0.54))
+      shortcutKeys(keys)
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("\(title): \(keys.joined(separator: " "))")
+  }
+
+  private func shortcutKeys(_ keys: [String]) -> some View {
+    ForEach(ShortcutHintLayout.visibleTokens(for: keys), id: \.self) { key in
+      Text(key)
+        .scaledFont(size: 8, weight: .medium)
+        .foregroundStyle(.white.opacity(0.75))
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .padding(.horizontal, key.count > 1 ? 3 : 0)
+        .frame(minWidth: 12, minHeight: 12)
+        .background(Color.white.opacity(0.12))
+        .cornerRadius(OmiChrome.stripRadius)
+    }
+    .fixedSize(horizontal: true, vertical: false)
   }
 
   private func controlButton(icon: String, label: String, isOn: Bool, action: @escaping () -> Void) -> some View {

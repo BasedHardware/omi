@@ -112,9 +112,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       + CGFloat(max(0, visibleCount - 1)) * notchAgentListRowSpacing
       + notchAgentListBottomMargin
   }
+  /// Height reserved for the shortcut legend + capture controls on the trailing side.
+  /// The panel is always present, so the hover surface always has height.
+  static let notchControlPanelHeight: CGFloat = 92
   static func notchHoverMenuHeight(agentCount: Int) -> CGFloat {
     guard NotchAgentMenuPresentation.shouldPresent(agentCount: agentCount) else { return 0 }
-    return notchAgentListHeight(agentCount: agentCount) + notchHoverMenuBottomMargin
+    let agentRows =
+      NotchAgentMenuPresentation.hasAgentRows(agentCount: agentCount)
+      ? notchAgentListHeight(agentCount: agentCount) : 0
+    return max(agentRows, notchControlPanelHeight) + notchHoverMenuBottomMargin
   }
   static let expandedBarSize = NSSize(width: 210, height: 50)
   /// Center gap between the two chrome lobes on displays without a notch —

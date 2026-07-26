@@ -142,10 +142,21 @@ enum NotchHoverSurfacePolicy {
   }
 }
 
-/// The compact idle notch has an explicit route to the main chat, while its
-/// expanded hover surface remains reserved for actionable subagents only.
+/// The compact idle notch has an explicit route to the main chat. Its expanded hover
+/// surface shows actionable subagents when there are any, and always shows the shortcut
+/// legend and capture controls — so hovering the notch is never a no-op.
+///
+/// The surface was previously agent-only because the rows it carried were duplicate entry
+/// points into chat and settings (`FC-split-mutation-authority`). The legend is a
+/// read-only reference and the capture toggles route through the single
+/// `SystemCaptureControls` owner, so neither reintroduces a second authority.
 enum NotchAgentMenuPresentation {
   static func shouldPresent(agentCount: Int) -> Bool {
+    true
+  }
+
+  /// Whether the agent row list itself has anything to draw.
+  static func hasAgentRows(agentCount: Int) -> Bool {
     agentCount > 0
   }
 }

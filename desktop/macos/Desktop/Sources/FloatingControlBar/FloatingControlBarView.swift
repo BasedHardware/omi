@@ -286,6 +286,20 @@ struct FloatingControlBarView: View {
           .frame(width: notchChromeLayoutWidth, height: notchChromeHeight + notchHoverMenuHeight)
           .allowsHitTesting(notchSwitcherProgress > 0.6)
 
+          // Shortcut legend + capture controls, hugging the trailing edge of the
+          // expanded surface — the notch's right side, revealed on hover.
+          VStack {
+            NotchSystemControlsView(progress: notchSwitcherProgress)
+              .padding(.top, notchChromeHeight + OmiSpacing.xs)
+              .padding(.trailing, OmiSpacing.md)
+            Spacer(minLength: 0)
+          }
+          .frame(
+            width: notchChromeLayoutWidth,
+            height: notchChromeHeight + notchHoverMenuHeight,
+            alignment: .topTrailing
+          )
+
           notchAgentLogoHitTarget
             .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)
         }

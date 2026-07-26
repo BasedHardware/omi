@@ -400,11 +400,24 @@ final class FloatingBarGeometryTests: XCTestCase {
       ))
   }
 
-  func testNotchHoverMenuHasNoHeightWithoutSubagents() {
+  /// The hover surface used to collapse to nothing without subagents. It now always
+  /// carries the shortcut legend and capture controls, so hovering the notch is never a
+  /// no-op — but it must still be tall enough for the agent rows when there are any.
+  func testNotchHoverMenuAlwaysReservesRoomForTheControlPanel() {
     XCTAssertEqual(
       FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 0),
-      0
+      FloatingControlBarWindow.notchControlPanelHeight
+        + FloatingControlBarWindow.notchHoverMenuBottomMargin
     )
+  }
+
+  func testNotchHoverMenuGrowsToFitSubagentsBeyondTheControlPanel() {
+    let empty = FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 0)
+    let many = FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 8)
+    XCTAssertGreaterThan(many, empty, "eight agent rows must not be clipped to the control-panel height")
+
+    // A single row is shorter than the panel, so the panel sets the floor.
+    XCTAssertEqual(FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 1), empty)
   }
 
   func testNotchChromeHeightUsesMeasuredAuxiliaryAreaHeight() {
