@@ -251,7 +251,8 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             self.assertFalse((stage / "source").exists(), "capacity failure must precede candidate checkout")
             capacity = json.loads((stage / "runner-capacity.json").read_text(encoding="utf-8"))
             self.assertEqual(capacity["status"], "failed")
-            self.assertEqual(capacity["failure_class"], "runner-filesystem-capacity")
+            self.assertEqual(capacity["guard"], "runner-capacity-preflight")
+            self.assertNotIn("failure_class", capacity)
             self.assertIn("insufficient-free-kib", capacity["failure_reasons"])
             self.assertEqual(capacity["minimum_free_kib"], 2**63 - 1)
 
